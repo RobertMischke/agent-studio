@@ -1,4 +1,5 @@
 import { Component, OnInit, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { JobColumnComponent } from './components/job-column';
 import { JobDetailComponent } from './components/job-detail';
 import { JobService } from './services/job.service';
@@ -6,7 +7,7 @@ import { JobDetail, JobInfo } from './models/job.model';
 
 @Component({
   selector: 'app-root',
-  imports: [JobColumnComponent, JobDetailComponent],
+  imports: [JobColumnComponent, JobDetailComponent, FormsModule],
   template: `
     <div class="app">
       <header class="header">
@@ -16,6 +17,9 @@ import { JobDetail, JobInfo } from './models/job.model';
           <span class="header__subtitle">AI Work Monitor</span>
         </div>
         <div class="header__actions">
+          <button class="btn btn--create" (click)="openCreate()">
+            ＋ New Task
+          </button>
           <button class="btn btn--refresh" (click)="refresh()" [disabled]="jobService.loading()">
             {{ jobService.loading() ? '⏳' : '🔄' }} Refresh
           </button>
@@ -34,10 +38,50 @@ import { JobDetail, JobInfo } from './models/job.model';
         @if (selectedJob(); as detail) {
           <aside class="detail-panel" [style.width.px]="panelWidth()">
             <div class="detail-panel__resize" (mousedown)="startResize($event)"></div>
-            <app-job-detail [detail]="detail" (back)="closeDetail()" />
+            <app-job-detail [detail]="detail" (back)="closeDetail()" (fileSaved)="onFileSaved()" />
           </aside>
         }
       </div>
+
+      @if (showCreate()) {
+        <div class="overlay" (click)="cancelCreate()">
+          <div class="create-dialog" (click)="$event.stopPropagation()">
+            <h2 class="create-dialog__title">New Task</h2>
+            <label class="field">
+              <span class="field__label">Title</span>
+              <input class="field__input" [(ngModel)]="newTitle" placeholder="Task title" />
+            </label>
+            <label class="field">
+              <span class="field__label">Project</span>
+              <select class="field__input" [(ngModel)]="newWatchPath">
+                @for (wp of watchPaths(); track wp) {
+                  <option [value]="wp">{{ projectName(wp) }}</option>
+                }
+              </select>
+            </label>
+            <label class="field">
+              <span class="field__label">Priority</span>
+              <select class="field__input" [(ngModel)]="newPriority">
+                <option value="low">Low</option>
+                <option value="normal">Normal</option>
+                <option value="high">High</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="field__label">Agent</span>
+              <input class="field__input" [(ngModel)]="newAgent" placeholder="copilot" />
+            </label>
+            <label class="field">
+              <span class="field__label">Prompt (optional)</span>
+              <textarea class="field__input field__textarea" [(ngModel)]="newPrompt" rows="5" placeholder="Task description..."></textarea>
+            </label>
+            <div class="create-dialog__actions">
+              <button class="btn" (click)="cancelCreate()">Cancel</button>
+              <button class="btn btn--primary" (click)="submitCreate()" [disabled]="!newTitle.trim()">Create</button>
+            </div>
+          </div>
+        </div>
+      }
 
       @if (jobService.error(); as err) {
         <div class="error-bar">⚠️ {{ err }}</div>
@@ -78,6 +122,49 @@ import { JobDetail, JobInfo } from './models/job.model';
     }
     .btn:hover { background: rgba(255,255,255,0.1); }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn--create {
+      background: rgba(139,92,246,0.15);
+      border-color: rgba(139,92,246,0.3);
+      color: #a78bfa;
+    }
+    .btn--create:hover { background: rgba(139,92,246,0.25); }
+    .btn--primary {
+      background: #6366f1;
+      border-color: #6366f1;
+      color: white;
+    }
+    .btn--primary:hover { background: #5558e6; }
+
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      display: grid;
+      place-items: center;
+      z-index: 100;
+    }
+    .create-dialog {
+      background: #1e1e2e;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 16px;
+      padding: 24px;
+      width: 480px;
+      max-width: 90vw;
+    }
+    .create-dialog__title { margin: 0 0 20px; font-size: 18px; }
+    .create-dialog__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+    .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+    .field__label { font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
+    .field__input {
+      background: rgba(0,0,0,0.3);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: #e2e8f0;
+      padding: 8px 12px;
+      border-radius: 8px;
+      font-size: 13px;
+    }
+    .field__input:focus { outline: none; border-color: #6366f1; }
+    .field__textarea { font-family: 'Consolas', monospace; resize: vertical; }
 
     .layout {
       display: flex;
@@ -138,11 +225,25 @@ import { JobDetail, JobInfo } from './models/job.model';
 export class App implements OnInit {
   readonly selectedJob = signal<JobDetail | null>(null);
   readonly panelWidth = signal(+(localStorage.getItem('panelWidth') ?? 520));
+  readonly showCreate = signal(false);
+  readonly watchPaths = signal<string[]>([]);
+
+  newTitle = '';
+  newWatchPath = '';
+  newPriority = 'normal';
+  newAgent = 'copilot';
+  newPrompt = '';
 
   constructor(readonly jobService: JobService) {}
 
   ngOnInit() {
     this.refresh();
+    this.jobService.getWatchPaths().subscribe({
+      next: (paths) => {
+        this.watchPaths.set(paths);
+        if (paths.length > 0) this.newWatchPath = paths[0];
+      }
+    });
   }
 
   refresh() {
@@ -164,6 +265,51 @@ export class App implements OnInit {
       next: () => this.refresh(),
       error: (err) => this.jobService.error.set(err.message || 'Failed to move job'),
     });
+  }
+
+  openCreate() {
+    this.showCreate.set(true);
+  }
+
+  cancelCreate() {
+    this.showCreate.set(false);
+    this.newTitle = '';
+    this.newPrompt = '';
+    this.newPriority = 'normal';
+    this.newAgent = 'copilot';
+  }
+
+  submitCreate() {
+    this.jobService.createJob({
+      title: this.newTitle.trim(),
+      watchPath: this.newWatchPath,
+      priority: this.newPriority,
+      agent: this.newAgent || 'copilot',
+      promptMarkdown: this.newPrompt.trim() || undefined
+    }).subscribe({
+      next: () => {
+        this.cancelCreate();
+        this.refresh();
+      },
+      error: (err) => this.jobService.error.set(err.error || 'Failed to create job'),
+    });
+  }
+
+  projectName(watchPath: string): string {
+    const parts = watchPath.replace(/\\/g, '/').split('/').filter(Boolean);
+    // watchPath ends in .orchestrator/jobs → project = 2 levels up
+    const idx = parts.indexOf('.orchestrator');
+    return idx > 0 ? parts[idx - 1] : parts[parts.length - 1];
+  }
+
+  onFileSaved() {
+    // Re-fetch detail to reflect changes
+    const current = this.selectedJob();
+    if (current) {
+      this.jobService.getDetail(current.info.id).subscribe({
+        next: (detail) => this.selectedJob.set(detail),
+      });
+    }
   }
 
   startResize(event: MouseEvent) {

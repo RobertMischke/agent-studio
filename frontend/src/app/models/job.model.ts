@@ -6,6 +6,7 @@ export interface JobInfo {
   agent: string;
   createdAt: string;
   watchPath: string;
+  projectName: string;
   folderPath: string;
   lastActivity: string;
   totalSizeBytes: number;
@@ -30,4 +31,13 @@ export interface GroupedJobs {
   progress: JobInfo[];
   review: JobInfo[];
   completed: JobInfo[];
+}
+
+export interface CreateJobRequest {
+  id?: string;
+  title: string;
+  priority: string;
+  agent: string;
+  watchPath: string;
+  promptMarkdown?: string;
 }

@@ -9,6 +9,7 @@ public record JobInfo
     public string Agent { get; init; } = "";
     public DateTime CreatedAt { get; init; }
     public string WatchPath { get; init; } = "";
+    public string ProjectName { get; init; } = "";
     public string FolderPath { get; init; } = "";
     public DateTime LastActivity { get; init; }
     public long TotalSizeBytes { get; init; }
@@ -32,6 +33,22 @@ public record JobLogEntry
 public record MoveJobRequest
 {
     public string TargetState { get; init; } = "";
+}
+
+public record CreateJobRequest
+{
+    public string Id { get; init; } = "";
+    public string Title { get; init; } = "";
+    public string Priority { get; init; } = "normal";
+    public string Agent { get; init; } = "copilot";
+    public string WatchPath { get; init; } = "";
+    public string? PromptMarkdown { get; init; }
+}
+
+public record UpdateJobFileRequest
+{
+    public string FileName { get; init; } = "";
+    public string Content { get; init; } = "";
 }
 
 public static class JobStates

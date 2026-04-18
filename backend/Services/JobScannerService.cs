@@ -69,6 +69,7 @@ public class JobScannerService
                 Agent = raw.TryGetProperty("agent", out var agent) ? agent.GetString() ?? "" : "",
                 CreatedAt = raw.TryGetProperty("createdAt", out var created) && created.TryGetDateTime(out var dt) ? dt : File.GetCreationTime(jobJsonPath),
                 WatchPath = watchPath,
+                ProjectName = GetProjectName(watchPath),
                 FolderPath = jobDir,
                 LastActivity = lastActivity,
                 TotalSizeBytes = totalSize
@@ -218,6 +219,78 @@ public class JobScannerService
 
     private static string? ReadFileOrNull(string path) =>
         File.Exists(path) ? File.ReadAllText(path) : null;
+
+    /// <summary>Derives a short project name from the watch path (grandparent of .orchestrator/jobs).</summary>
+    private static string GetProjectName(string watchPath)
+    {
+        // watchPath = "C:\Projects\Foo\.orchestrator\jobs" → project root = "C:\Projects\Foo" → name = "Foo"
+        try
+        {
+            var dir = new DirectoryInfo(watchPath);
+            // Go up: jobs → .orchestrator → project root
+            var projectRoot = dir.Parent?.Parent;
+            return projectRoot?.Name ?? dir.Name;
+        }
+        catch { return Path.GetFileName(watchPath); }
+    }
+
+    public string? CreateJob(CreateJobRequest req)
+    {
+        var watchPaths = GetWatchPaths();
+        var watchPath = string.IsNullOrEmpty(req.WatchPath)
+            ? watchPaths.FirstOrDefault()
+            : watchPaths.FirstOrDefault(w => w == req.WatchPath);
+
+        if (watchPath == null) return null;
+
+        // Sanitize ID: lowercase, replace spaces with dashes, only allow safe chars
+        var jobId = string.IsNullOrWhiteSpace(req.Id)
+            ? req.Title.ToLowerInvariant().Replace(' ', '-')
+            : req.Id;
+        jobId = System.Text.RegularExpressions.Regex.Replace(jobId, @"[^a-z0-9\-]", "");
+        if (string.IsNullOrEmpty(jobId)) return null;
+
+        var jobDir = Path.Combine(watchPath, JobStates.Preparation, jobId);
+        if (Directory.Exists(jobDir)) return null; // already exists
+
+        Directory.CreateDirectory(jobDir);
+
+        var jobJson = new
+        {
+            id = jobId,
+            title = req.Title,
+            createdAt = DateTime.UtcNow.ToString("o"),
+            state = JobStates.Preparation,
+            priority = req.Priority,
+            agent = req.Agent
+        };
+        File.WriteAllText(Path.Combine(jobDir, "job.json"),
+            JsonSerializer.Serialize(jobJson, new JsonSerializerOptions { WriteIndented = true }));
+
+        if (!string.IsNullOrWhiteSpace(req.PromptMarkdown))
+            File.WriteAllText(Path.Combine(jobDir, "prompt.md"), req.PromptMarkdown);
+
+        File.WriteAllText(Path.Combine(jobDir, "status.md"),
+            $"# Status\n\n- State: Preparation\n- Created: {DateTime.UtcNow:yyyy-MM-dd HH:mm}\n");
+
+        return jobId;
+    }
+
+    public bool UpdateJobFile(string jobId, string fileName, string content)
+    {
+        var allowed = new[] { "prompt.md", "status.md" };
+        if (!allowed.Contains(fileName)) return false;
+
+        var info = ScanAllJobs().FirstOrDefault(j => j.Id == jobId);
+        if (info == null) return false;
+
+        // Don't allow editing while in progress
+        if (info.State == JobStates.Progress) return false;
+
+        var filePath = Path.Combine(info.FolderPath, fileName);
+        File.WriteAllText(filePath, content);
+        return true;
+    }
 
     private static List<JobLogEntry> BuildLog(string dir)
     {

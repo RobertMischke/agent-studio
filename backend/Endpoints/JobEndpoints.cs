@@ -59,6 +59,21 @@ public static class JobEndpoints
             return content is null ? Results.NotFound() : Results.Text(content);
         });
 
+        group.MapPost("/", (CreateJobRequest req, JobScannerService scanner) =>
+        {
+            if (string.IsNullOrWhiteSpace(req.Title))
+                return Results.BadRequest("Title is required");
+
+            var jobId = scanner.CreateJob(req);
+            return jobId is null ? Results.Conflict("Job already exists or invalid input") : Results.Ok(new { id = jobId });
+        });
+
+        group.MapPut("/{jobId}/files/{fileName}", (string jobId, string fileName, UpdateJobFileRequest req, JobScannerService scanner) =>
+        {
+            var success = scanner.UpdateJobFile(jobId, fileName, req.Content);
+            return success ? Results.Ok() : Results.BadRequest("Cannot edit (job in progress or not found)");
+        });
+
         app.MapGet("/api/watch-paths", (JobScannerService scanner) =>
         {
             return Results.Ok(scanner.GetWatchPaths());

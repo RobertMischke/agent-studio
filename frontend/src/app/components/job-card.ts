@@ -7,7 +7,7 @@ import { JobInfo } from '../models/job.model';
   template: `
     <div class="job-card" [class]="'job-card--' + job().state">
       <div class="job-card__header">
-        <span class="job-card__state">{{ stateLabel() }}</span>
+        <span class="job-card__project">{{ job().projectName }}</span>
         <span class="job-card__priority" [class]="'priority--' + job().priority">{{ job().priority }}</span>
       </div>
       <h3 class="job-card__title">{{ job().title || job().id }}</h3>
@@ -46,12 +46,15 @@ import { JobInfo } from '../models/job.model';
       align-items: center;
       margin-bottom: 8px;
     }
-    .job-card__state {
+    .job-card__project {
       font-size: 11px;
       text-transform: uppercase;
       letter-spacing: 0.05em;
-      color: var(--state-color);
+      color: #8b5cf6;
       font-weight: 600;
+      background: rgba(139,92,246,0.1);
+      padding: 1px 6px;
+      border-radius: 4px;
     }
     .job-card__priority {
       font-size: 10px;
