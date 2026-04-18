@@ -1,0 +1,34 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Frontend: Start",
+			"type": "npm",
+			"script": "start",
+			"path": "frontend",
+			"isBackground": true,
+			"problemMatcher": {
+				"owner": "typescript",
+				"pattern": "$tsc",
+				"background": {
+					"activeOnStart": true,
+					"beginsPattern": {
+						"regexp": "Changes detected"
+					},
+					"endsPattern": {
+						"regexp": "bundle generation (complete|failed)"
+					}
+				}
+			}
+		},
+		{
+			"label": "Frontend: Start",
+			"type": "shell",
+			"command": "npm start --prefix frontend",
+			"isBackground": true,
+			"problemMatcher": [
+				"$tsc"
+			]
+		}
+	]
+}

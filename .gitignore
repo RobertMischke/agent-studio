@@ -1,1 +1,3 @@
 frontend/build_log.txt
+.api.pid
+.api.log*
