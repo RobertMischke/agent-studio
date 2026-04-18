@@ -7,7 +7,11 @@ import { JobCardComponent } from './job-card';
   standalone: true,
   imports: [JobCardComponent],
   template: `
-    <div class="column">
+    <div class="column"
+         [class.column--dragover]="isDragOver"
+         (dragover)="onDragOver($event)"
+         (dragleave)="onDragLeave($event)"
+         (drop)="onDrop($event)">
       <div class="column__header">
         <span class="column__icon">{{ icon() }}</span>
         <h2 class="column__title">{{ title() }}</h2>
@@ -15,7 +19,11 @@ import { JobCardComponent } from './job-card';
       </div>
       <div class="column__body">
         @for (job of jobs(); track job.id) {
-          <app-job-card [job]="job" (click)="jobClick.emit(job)" />
+          <app-job-card
+            [job]="job"
+            (click)="jobClick.emit(job)"
+            draggable="true"
+            (dragstart)="onDragStart($event, job)" />
         }
         @if (jobs().length === 0) {
           <div class="column__empty">No jobs</div>
@@ -33,6 +41,12 @@ import { JobCardComponent } from './job-card';
       display: flex;
       flex-direction: column;
       gap: 12px;
+      transition: outline 0.15s;
+    }
+    .column--dragover {
+      outline: 2px solid rgba(99, 102, 241, 0.6);
+      outline-offset: -2px;
+      background: rgba(99, 102, 241, 0.05);
     }
     .column__header {
       display: flex;
@@ -73,6 +87,32 @@ import { JobCardComponent } from './job-card';
 export class JobColumnComponent {
   readonly title = input.required<string>();
   readonly icon = input<string>('');
+  readonly state = input.required<string>();
   readonly jobs = input.required<JobInfo[]>();
   readonly jobClick = output<JobInfo>();
+  readonly jobDrop = output<{ jobId: string; targetState: string }>();
+
+  isDragOver = false;
+
+  onDragStart(event: DragEvent, job: JobInfo) {
+    event.dataTransfer?.setData('text/plain', job.id);
+  }
+
+  onDragOver(event: DragEvent) {
+    event.preventDefault();
+    this.isDragOver = true;
+  }
+
+  onDragLeave(event: DragEvent) {
+    this.isDragOver = false;
+  }
+
+  onDrop(event: DragEvent) {
+    event.preventDefault();
+    this.isDragOver = false;
+    const jobId = event.dataTransfer?.getData('text/plain');
+    if (jobId) {
+      this.jobDrop.emit({ jobId, targetState: this.state() });
+    }
+  }
 }

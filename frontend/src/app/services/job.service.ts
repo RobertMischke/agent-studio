@@ -7,7 +7,7 @@ export class JobService {
   private readonly baseUrl = 'http://localhost:5030/api';
 
   readonly jobs = signal<JobInfo[]>([]);
-  readonly grouped = signal<GroupedJobs>({ active: [], review: [], completed: [], failed: [], idle: [] });
+  readonly grouped = signal<GroupedJobs>({ preparation: [], ready: [], progress: [], review: [], completed: [] });
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
 
@@ -38,7 +38,11 @@ export class JobService {
   }
 
   updateState(jobId: string, state: string) {
-    return this.http.put(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/state`, { state });
+    return this.http.put(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/state`, { targetState: state });
+  }
+
+  moveJob(jobId: string, targetState: string) {
+    return this.http.post(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/move`, { targetState });
   }
 
   getWatchPaths() {

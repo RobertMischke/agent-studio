@@ -47,29 +47,29 @@ public record JobTimelineEntry
     public string? Detail { get; init; }
 }
 
-public record UpdateStateRequest
+public record MoveJobRequest
 {
-    public string State { get; init; } = "";
+    public string TargetState { get; init; } = "";
 }
 
 public static class JobStates
 {
-    public const string Draft = "draft";
-    public const string Running = "running";
-    public const string ReviewNeeded = "review-needed";
-    public const string Accepted = "accepted";
-    public const string Rejected = "rejected";
-    public const string Archived = "archived";
+    public const string Preparation = "preparation";
+    public const string Ready = "ready";
+    public const string Progress = "progress";
+    public const string Review = "review";
+    public const string Completed = "completed";
 
-    public static readonly string[] All = [Draft, Running, ReviewNeeded, Accepted, Rejected, Archived];
+    public static readonly string[] All = [Preparation, Ready, Progress, Review, Completed];
 
-    public static string Categorize(string state) => state switch
+    public static string MapLegacyState(string state) => state switch
     {
-        Running => "active",
-        ReviewNeeded => "review",
-        Accepted or Archived => "completed",
-        Rejected => "failed",
-        Draft => "idle",
-        _ => "idle"
+        "draft" => Preparation,
+        "running" => Progress,
+        "review-needed" => Review,
+        "accepted" => Completed,
+        "rejected" => Completed,
+        "archived" => Completed,
+        _ => Preparation
     };
 }

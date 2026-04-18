@@ -34,12 +34,11 @@ import { JobInfo } from '../models/job.model';
       transform: translateY(-2px);
       box-shadow: 0 4px 12px rgba(0,0,0,0.3);
     }
-    .job-card--running { --state-color: #3b82f6; }
-    .job-card--review-needed { --state-color: #f59e0b; }
-    .job-card--accepted { --state-color: #10b981; }
-    .job-card--rejected { --state-color: #ef4444; }
-    .job-card--draft { --state-color: #6b7280; }
-    .job-card--archived { --state-color: #9ca3af; }
+    .job-card--preparation { --state-color: #8b5cf6; }
+    .job-card--ready { --state-color: #06b6d4; }
+    .job-card--progress { --state-color: #3b82f6; }
+    .job-card--review { --state-color: #f59e0b; }
+    .job-card--completed { --state-color: #10b981; }
 
     .job-card__header {
       display: flex;

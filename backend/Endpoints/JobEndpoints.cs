@@ -20,11 +20,11 @@ public static class JobEndpoints
             var jobs = scanner.ScanAllJobs();
             var grouped = new
             {
-                Active = jobs.Where(j => JobStates.Categorize(j.State) == "active").ToList(),
-                Review = jobs.Where(j => JobStates.Categorize(j.State) == "review").ToList(),
-                Completed = jobs.Where(j => JobStates.Categorize(j.State) == "completed").ToList(),
-                Failed = jobs.Where(j => JobStates.Categorize(j.State) == "failed").ToList(),
-                Idle = jobs.Where(j => JobStates.Categorize(j.State) == "idle").ToList()
+                Preparation = jobs.Where(j => j.State == JobStates.Preparation).ToList(),
+                Ready = jobs.Where(j => j.State == JobStates.Ready).ToList(),
+                Progress = jobs.Where(j => j.State == JobStates.Progress).ToList(),
+                Review = jobs.Where(j => j.State == JobStates.Review).ToList(),
+                Completed = jobs.Where(j => j.State == JobStates.Completed).ToList()
             };
             return Results.Ok(grouped);
         });
@@ -35,12 +35,21 @@ public static class JobEndpoints
             return detail is null ? Results.NotFound() : Results.Ok(detail);
         });
 
-        group.MapPut("/{jobId}/state", (string jobId, UpdateStateRequest req, JobScannerService scanner) =>
+        group.MapPut("/{jobId}/state", (string jobId, MoveJobRequest req, JobScannerService scanner) =>
         {
-            if (!JobStates.All.Contains(req.State))
+            if (!JobStates.All.Contains(req.TargetState))
                 return Results.BadRequest($"Invalid state. Allowed: {string.Join(", ", JobStates.All)}");
 
-            var success = scanner.UpdateJobState(jobId, req.State);
+            var success = scanner.MoveJob(jobId, req.TargetState);
+            return success ? Results.Ok() : Results.NotFound();
+        });
+
+        group.MapPost("/{jobId}/move", (string jobId, MoveJobRequest req, JobScannerService scanner) =>
+        {
+            if (!JobStates.All.Contains(req.TargetState))
+                return Results.BadRequest($"Invalid state. Allowed: {string.Join(", ", JobStates.All)}");
+
+            var success = scanner.MoveJob(jobId, req.TargetState);
             return success ? Results.Ok() : Results.NotFound();
         });
 

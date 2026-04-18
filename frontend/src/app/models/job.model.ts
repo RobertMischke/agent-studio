@@ -42,9 +42,9 @@ export interface JobTimelineEntry {
 }
 
 export interface GroupedJobs {
-  active: JobInfo[];
+  preparation: JobInfo[];
+  ready: JobInfo[];
+  progress: JobInfo[];
   review: JobInfo[];
   completed: JobInfo[];
-  failed: JobInfo[];
-  idle: JobInfo[];
 }

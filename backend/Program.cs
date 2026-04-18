@@ -22,6 +22,10 @@ var app = builder.Build();
 
 app.UseCors();
 
+// Ensure state folders exist and migrate legacy flat jobs
+var scanner = app.Services.GetRequiredService<JobScannerService>();
+scanner.EnsureStateFoldersAndMigrate();
+
 // Wire up FileSystemWatcher → SignalR push
 var watcher = app.Services.GetRequiredService<JobWatcherService>();
 var hubContext = app.Services.GetRequiredService<IHubContext<JobHub>>();

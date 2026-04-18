@@ -28,10 +28,11 @@ import { JobDetail, JobInfo } from './models/job.model';
         </main>
       } @else {
         <main class="dashboard">
-          <app-job-column title="Active" icon="🔵" [jobs]="jobService.grouped().active" (jobClick)="openDetail($event)" />
-          <app-job-column title="Awaiting Review" icon="🟡" [jobs]="jobService.grouped().review" (jobClick)="openDetail($event)" />
-          <app-job-column title="Completed" icon="🟢" [jobs]="jobService.grouped().completed" (jobClick)="openDetail($event)" />
-          <app-job-column title="Failed / Idle" icon="🔴" [jobs]="[...jobService.grouped().failed, ...jobService.grouped().idle]" (jobClick)="openDetail($event)" />
+          <app-job-column title="In Preparation" icon="📋" state="preparation" [jobs]="jobService.grouped().preparation" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" />
+          <app-job-column title="Ready" icon="📦" state="ready" [jobs]="jobService.grouped().ready" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" />
+          <app-job-column title="In Progress" icon="🔵" state="progress" [jobs]="jobService.grouped().progress" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" />
+          <app-job-column title="Review" icon="🟡" state="review" [jobs]="jobService.grouped().review" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" />
+          <app-job-column title="Completed" icon="🟢" state="completed" [jobs]="jobService.grouped().completed" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" />
         </main>
       }
 
@@ -119,5 +120,12 @@ export class App implements OnInit {
 
   closeDetail() {
     this.selectedJob.set(null);
+  }
+
+  onJobDrop(event: { jobId: string; targetState: string }) {
+    this.jobService.moveJob(event.jobId, event.targetState).subscribe({
+      next: () => this.refresh(),
+      error: (err) => this.jobService.error.set(err.message || 'Failed to move job'),
+    });
   }
 }
