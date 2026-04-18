@@ -121,6 +121,44 @@ public class JobScannerService
         }
     }
 
+    public bool ChangeProject(string jobId, string targetWatchPath)
+    {
+        var entries = GetWatchPaths();
+        var targetEntry = entries.FirstOrDefault(e => e.Path == targetWatchPath);
+        if (targetEntry == null) return false;
+
+        var info = ScanAllJobs().FirstOrDefault(j => j.Id == jobId);
+        if (info == null) return false;
+        if (info.WatchPath == targetWatchPath) return true;
+
+        var jobFolderName = Path.GetFileName(info.FolderPath);
+        var targetDir = Path.Combine(targetWatchPath, info.State, jobFolderName);
+
+        if (Directory.Exists(targetDir)) return false;
+
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(targetDir)!);
+            CopyDirectory(info.FolderPath, targetDir);
+            Directory.Delete(info.FolderPath, true);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to change project for job {JobId} to {Path}", jobId, targetWatchPath);
+            return false;
+        }
+    }
+
+    private static void CopyDirectory(string sourceDir, string targetDir)
+    {
+        Directory.CreateDirectory(targetDir);
+        foreach (var file in Directory.GetFiles(sourceDir))
+            File.Copy(file, Path.Combine(targetDir, Path.GetFileName(file)));
+        foreach (var dir in Directory.GetDirectories(sourceDir))
+            CopyDirectory(dir, Path.Combine(targetDir, Path.GetFileName(dir)));
+    }
+
     public void EnsureStateFoldersAndMigrate()
     {
         foreach (var entry in GetWatchPaths())

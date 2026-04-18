@@ -47,7 +47,7 @@ import { JobDetail, JobInfo, GroupedJobs, WatchPathEntry } from './models/job.mo
         @if (selectedJob(); as detail) {
           <aside class="detail-panel" [style.width.px]="panelWidth()">
             <div class="detail-panel__resize" (mousedown)="startResize($event)"></div>
-            <app-job-detail [detail]="detail" (back)="closeDetail()" (fileSaved)="onFileSaved()" />
+            <app-job-detail [detail]="detail" [watchPaths]="watchPaths()" (back)="closeDetail()" (fileSaved)="onFileSaved()" (projectChanged)="onProjectChanged()" />
           </aside>
         }
       </div>
@@ -361,6 +361,21 @@ export class App implements OnInit {
       this.jobService.getDetail(current.info.id).subscribe({
         next: (detail) => this.selectedJob.set(detail),
       });
+    }
+  }
+
+  onProjectChanged() {
+    const current = this.selectedJob();
+    this.closeDetail();
+    this.jobService.refresh();
+    if (current) {
+      // Re-open detail after refresh
+      setTimeout(() => {
+        this.jobService.getDetail(current.info.id).subscribe({
+          next: (detail) => this.selectedJob.set(detail),
+          error: () => {} // job might not be found if moved across drives
+        });
+      }, 500);
     }
   }
 

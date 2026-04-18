@@ -60,4 +60,8 @@ export class JobService {
   reorderJobs(jobIds: string[]) {
     return this.http.post(`${this.baseUrl}/jobs/reorder`, { jobIds });
   }
+
+  changeProject(jobId: string, targetWatchPath: string) {
+    return this.http.post(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/change-project`, { targetWatchPath });
+  }
 }

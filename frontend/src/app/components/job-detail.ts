@@ -1,6 +1,6 @@
 import { Component, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { JobDetail } from '../models/job.model';
+import { JobDetail, WatchPathEntry } from '../models/job.model';
 import { JobService } from '../services/job.service';
 
 @Component({
@@ -18,7 +18,13 @@ import { JobService } from '../services/job.service';
       </div>
 
       <div class="detail__meta">
-        <span>📁 {{ detail().info.projectName }}</span>
+        <select class="detail__project-select"
+                [ngModel]="detail().info.watchPath"
+                (ngModelChange)="onProjectChange($event)">
+          @for (wp of watchPaths(); track wp.path) {
+            <option [value]="wp.path">{{ wp.name }}</option>
+          }
+        </select>
         <span>🤖 {{ detail().info.agent }}</span>
         <span>#{{ detail().info.order }}</span>
         <span>{{ formatDate(detail().info.createdAt) }}</span>
@@ -127,7 +133,19 @@ import { JobService } from '../services/job.service';
       margin-bottom: 24px;
       padding-bottom: 16px;
       border-bottom: 1px solid rgba(255,255,255,0.06);
+      align-items: center;
     }
+    .detail__project-select {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: #e2e8f0;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    .detail__project-select:hover { border-color: rgba(255,255,255,0.2); }
+    .detail__project-select:focus { outline: none; border-color: #6366f1; }
 
     .section { margin-bottom: 24px; }
     .section__header {
@@ -201,8 +219,10 @@ import { JobService } from '../services/job.service';
 })
 export class JobDetailComponent {
   readonly detail = input.required<JobDetail>();
+  readonly watchPaths = input<WatchPathEntry[]>([]);
   readonly back = output<void>();
   readonly fileSaved = output<void>();
+  readonly projectChanged = output<void>();
 
   readonly editingPrompt = signal(false);
   readonly editingStatus = signal(false);
@@ -256,5 +276,13 @@ export class JobDetailComponent {
 
   formatDate(dateStr: string): string {
     return new Date(dateStr).toLocaleDateString();
+  }
+
+  onProjectChange(targetWatchPath: string) {
+    if (targetWatchPath === this.detail().info.watchPath) return;
+    this.jobService.changeProject(this.detail().info.id, targetWatchPath).subscribe({
+      next: () => this.projectChanged.emit(),
+      error: () => {} // select will revert on refresh
+    });
   }
 }

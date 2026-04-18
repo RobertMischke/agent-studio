@@ -80,6 +80,12 @@ public static class JobEndpoints
             return success ? Results.Ok() : Results.BadRequest("Reorder failed");
         });
 
+        group.MapPost("/{jobId}/change-project", (string jobId, ChangeProjectRequest req, JobScannerService scanner) =>
+        {
+            var success = scanner.ChangeProject(jobId, req.TargetWatchPath);
+            return success ? Results.Ok() : Results.BadRequest("Failed to change project");
+        });
+
         app.MapGet("/api/watch-paths", (JobScannerService scanner) =>
         {
             var entries = scanner.GetWatchPaths();

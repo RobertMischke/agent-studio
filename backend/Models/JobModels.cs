@@ -50,6 +50,11 @@ public record ReorderRequest
     public List<string> JobIds { get; init; } = [];
 }
 
+public record ChangeProjectRequest
+{
+    public string TargetWatchPath { get; init; } = "";
+}
+
 public record UpdateJobFileRequest
 {
     public string FileName { get; init; } = "";
