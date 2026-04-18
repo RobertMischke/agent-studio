@@ -1,0 +1,16 @@
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.dll
+*.pdb
+*.exe
+.vs/
+
+# Logs & PID
+.api.*
+
+# Dev settings
+appsettings.Development.json
