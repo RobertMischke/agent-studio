@@ -92,12 +92,7 @@ public class JobScannerService
             Info = info,
             PromptMarkdown = ReadFileOrNull(Path.Combine(dir, "prompt.md")),
             StatusMarkdown = ReadFileOrNull(Path.Combine(dir, "status.md")),
-            ReviewMarkdown = ReadFileOrNull(Path.Combine(dir, "review.md")),
-            Metrics = ReadMetrics(Path.Combine(dir, "metrics.json")),
-            Artifacts = ListFiles(Path.Combine(dir, "artifacts")),
-            Screenshots = ListFiles(Path.Combine(dir, "screenshots")),
-            Logs = ListFiles(Path.Combine(dir, "logs")),
-            Timeline = BuildTimeline(dir)
+            Log = BuildLog(dir)
         };
     }
 
@@ -215,7 +210,7 @@ public class JobScannerService
         var info = ScanAllJobs().FirstOrDefault(j => j.Id == jobId);
         if (info == null) return null;
 
-        var allowed = new[] { "prompt.md", "status.md", "review.md", "metrics.json", "job.json" };
+        var allowed = new[] { "prompt.md", "status.md", "job.json" };
         if (!allowed.Contains(fileName)) return null;
 
         return ReadFileOrNull(Path.Combine(info.FolderPath, fileName));
@@ -224,61 +219,50 @@ public class JobScannerService
     private static string? ReadFileOrNull(string path) =>
         File.Exists(path) ? File.ReadAllText(path) : null;
 
-    private static JobMetrics? ReadMetrics(string path)
+    private static List<JobLogEntry> BuildLog(string dir)
     {
-        if (!File.Exists(path)) return null;
-        try
-        {
-            return JsonSerializer.Deserialize<JobMetrics>(File.ReadAllText(path), JsonOpts);
-        }
-        catch { return null; }
-    }
+        var entries = new List<JobLogEntry>();
 
-    private static List<string> ListFiles(string dir)
-    {
-        if (!Directory.Exists(dir)) return [];
-        return Directory.GetFiles(dir, "*", SearchOption.AllDirectories)
-            .Select(f => Path.GetRelativePath(dir, f).Replace('\\', '/'))
-            .OrderBy(f => f)
-            .ToList();
-    }
-
-    private static List<JobTimelineEntry> BuildTimeline(string dir)
-    {
-        var entries = new List<JobTimelineEntry>();
-
-        // job.json creation = job created
         var jobJson = Path.Combine(dir, "job.json");
         if (File.Exists(jobJson))
         {
-            entries.Add(new JobTimelineEntry
+            entries.Add(new JobLogEntry
             {
                 Timestamp = File.GetCreationTime(jobJson),
                 Event = "Job created"
             });
         }
 
-        // status.md last modified
+        var promptMd = Path.Combine(dir, "prompt.md");
+        if (File.Exists(promptMd))
+        {
+            entries.Add(new JobLogEntry
+            {
+                Timestamp = File.GetLastWriteTime(promptMd),
+                Event = "Prompt written"
+            });
+        }
+
         var statusMd = Path.Combine(dir, "status.md");
         if (File.Exists(statusMd))
         {
-            entries.Add(new JobTimelineEntry
+            entries.Add(new JobLogEntry
             {
                 Timestamp = File.GetLastWriteTime(statusMd),
                 Event = "Status updated"
             });
         }
 
-        // artifacts
-        var artifactsDir = Path.Combine(dir, "artifacts");
-        if (Directory.Exists(artifactsDir))
+        // Pick up any files in a logs/ subfolder as log entries
+        var logsDir = Path.Combine(dir, "logs");
+        if (Directory.Exists(logsDir))
         {
-            foreach (var f in Directory.GetFiles(artifactsDir, "*", SearchOption.AllDirectories).Take(20))
+            foreach (var f in Directory.GetFiles(logsDir, "*", SearchOption.AllDirectories).Take(30))
             {
-                entries.Add(new JobTimelineEntry
+                entries.Add(new JobLogEntry
                 {
                     Timestamp = File.GetLastWriteTime(f),
-                    Event = "Artifact produced",
+                    Event = "Log entry",
                     Detail = Path.GetFileName(f)
                 });
             }

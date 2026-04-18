@@ -4,39 +4,22 @@
       <stop offset="0%" stop-color="#1e1e3a"/>
       <stop offset="100%" stop-color="#0f0f1a"/>
     </linearGradient>
-    <linearGradient id="accent" x1="0" y1="0" x2="0" y2="1">
+    <linearGradient id="board" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0%" stop-color="#818cf8"/>
       <stop offset="100%" stop-color="#6366f1"/>
     </linearGradient>
-    <linearGradient id="lens" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0%" stop-color="#38bdf8"/>
-      <stop offset="100%" stop-color="#6366f1"/>
-    </linearGradient>
   </defs>
-  <!-- Background rounded square -->
   <rect width="512" height="512" rx="108" fill="url(#bg)"/>
-  <!-- Telescope — scaled up and centered -->
-  <g transform="translate(256,230) rotate(-35)">
-    <!-- Main tube -->
-    <rect x="-180" y="-34" width="360" height="68" rx="16" fill="url(#accent)" opacity="0.95"/>
-    <!-- Lens housing -->
-    <circle cx="-195" cy="0" r="62" fill="url(#lens)" opacity="0.9"/>
-    <circle cx="-195" cy="0" r="42" fill="#0f0f1a" opacity="0.6"/>
-    <circle cx="-195" cy="0" r="26" fill="url(#lens)" opacity="0.5"/>
-    <!-- Lens flare -->
-    <circle cx="-205" cy="-12" r="8" fill="#fff" opacity="0.25"/>
-    <!-- Eyepiece -->
-    <rect x="168" y="-22" width="52" height="44" rx="10" fill="#a5b4fc" opacity="0.85"/>
-  </g>
-  <!-- Tripod legs — thicker -->
-  <line x1="256" y1="290" x2="160" y2="440" stroke="#4f46e5" stroke-width="14" stroke-linecap="round" opacity="0.75"/>
-  <line x1="256" y1="290" x2="352" y2="440" stroke="#4f46e5" stroke-width="14" stroke-linecap="round" opacity="0.75"/>
-  <line x1="256" y1="290" x2="256" y2="448" stroke="#4f46e5" stroke-width="14" stroke-linecap="round" opacity="0.75"/>
-  <!-- Stars — bigger -->
-  <circle cx="390" cy="90" r="7" fill="#fbbf24" opacity="0.9"/>
-  <circle cx="430" cy="145" r="5" fill="#fbbf24" opacity="0.75"/>
-  <circle cx="95" cy="75" r="6" fill="#fbbf24" opacity="0.85"/>
-  <circle cx="145" cy="120" r="4" fill="#fbbf24" opacity="0.65"/>
-  <circle cx="340" cy="60" r="3.5" fill="#e2e8f0" opacity="0.55"/>
-  <circle cx="450" cy="80" r="4" fill="#e2e8f0" opacity="0.45"/>
+  <!-- Kanban board: 3 bold columns -->
+  <rect x="72" y="100" width="108" height="312" rx="20" fill="url(#board)" opacity="0.3"/>
+  <rect x="202" y="100" width="108" height="312" rx="20" fill="url(#board)" opacity="0.3"/>
+  <rect x="332" y="100" width="108" height="312" rx="20" fill="url(#board)" opacity="0.3"/>
+  <!-- Cards in columns -->
+  <rect x="88" y="128" width="76" height="52" rx="12" fill="#818cf8"/>
+  <rect x="88" y="196" width="76" height="52" rx="12" fill="#818cf8" opacity="0.6"/>
+  <rect x="218" y="128" width="76" height="52" rx="12" fill="#38bdf8"/>
+  <rect x="218" y="196" width="76" height="72" rx="12" fill="#38bdf8" opacity="0.6"/>
+  <rect x="348" y="128" width="76" height="52" rx="12" fill="#34d399"/>
+  <!-- Check mark on completed card -->
+  <polyline points="366,150 380,164 400,140" fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

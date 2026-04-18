@@ -15,27 +15,10 @@ export interface JobDetail {
   info: JobInfo;
   promptMarkdown: string | null;
   statusMarkdown: string | null;
-  reviewMarkdown: string | null;
-  metrics: JobMetrics | null;
-  artifacts: string[];
-  screenshots: string[];
-  logs: string[];
-  timeline: JobTimelineEntry[];
+  log: JobLogEntry[];
 }
 
-export interface JobMetrics {
-  durationMinutes: number;
-  filesChanged: number;
-  linesAdded: number;
-  linesRemoved: number;
-  screenshotsProduced: number;
-  acceptedFirstTry: boolean;
-  reworkCount: number;
-  buildSuccess: boolean | null;
-  testSuccess: boolean | null;
-}
-
-export interface JobTimelineEntry {
+export interface JobLogEntry {
   timestamp: string;
   event: string;
   detail: string | null;

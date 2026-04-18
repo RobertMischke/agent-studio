@@ -19,28 +19,10 @@ public record JobDetail
     public JobInfo Info { get; init; } = new();
     public string? PromptMarkdown { get; init; }
     public string? StatusMarkdown { get; init; }
-    public string? ReviewMarkdown { get; init; }
-    public JobMetrics? Metrics { get; init; }
-    public List<string> Artifacts { get; init; } = [];
-    public List<string> Screenshots { get; init; } = [];
-    public List<string> Logs { get; init; } = [];
-    public List<JobTimelineEntry> Timeline { get; init; } = [];
+    public List<JobLogEntry> Log { get; init; } = [];
 }
 
-public record JobMetrics
-{
-    public int DurationMinutes { get; init; }
-    public int FilesChanged { get; init; }
-    public int LinesAdded { get; init; }
-    public int LinesRemoved { get; init; }
-    public int ScreenshotsProduced { get; init; }
-    public bool AcceptedFirstTry { get; init; }
-    public int ReworkCount { get; init; }
-    public bool? BuildSuccess { get; init; }
-    public bool? TestSuccess { get; init; }
-}
-
-public record JobTimelineEntry
+public record JobLogEntry
 {
     public DateTime Timestamp { get; init; }
     public string Event { get; init; } = "";
