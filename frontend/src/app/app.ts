@@ -32,7 +32,8 @@ import { JobDetail, JobInfo } from './models/job.model';
         </main>
 
         @if (selectedJob(); as detail) {
-          <aside class="detail-panel">
+          <aside class="detail-panel" [style.width.px]="panelWidth()">
+            <div class="detail-panel__resize" (mousedown)="startResize($event)"></div>
             <app-job-detail [detail]="detail" (back)="closeDetail()" />
           </aside>
         }
@@ -92,14 +93,30 @@ import { JobDetail, JobInfo } from './models/job.model';
       min-width: 0;
     }
     .detail-panel {
-      width: 420px;
-      min-width: 420px;
+      width: 520px;
+      min-width: 320px;
+      max-width: 60vw;
       background: #181825;
       border-left: 1px solid rgba(255,255,255,0.06);
       padding: 24px;
       overflow-y: auto;
       max-height: calc(100vh - 70px);
       animation: slideIn 0.25s ease;
+      position: relative;
+      flex-shrink: 0;
+    }
+    .detail-panel__resize {
+      position: absolute;
+      left: 0; top: 0; bottom: 0;
+      width: 5px;
+      cursor: col-resize;
+      background: transparent;
+      z-index: 10;
+      transition: background 0.15s;
+    }
+    .detail-panel__resize:hover,
+    .detail-panel__resize:active {
+      background: rgba(99,102,241,0.5);
     }
     @keyframes slideIn {
       from { transform: translateX(20px); opacity: 0; }
@@ -120,6 +137,7 @@ import { JobDetail, JobInfo } from './models/job.model';
 })
 export class App implements OnInit {
   readonly selectedJob = signal<JobDetail | null>(null);
+  readonly panelWidth = signal(+(localStorage.getItem('panelWidth') ?? 520));
 
   constructor(readonly jobService: JobService) {}
 
@@ -146,5 +164,30 @@ export class App implements OnInit {
       next: () => this.refresh(),
       error: (err) => this.jobService.error.set(err.message || 'Failed to move job'),
     });
+  }
+
+  startResize(event: MouseEvent) {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = this.panelWidth();
+
+    const onMove = (e: MouseEvent) => {
+      const delta = startX - e.clientX;
+      const newWidth = Math.min(Math.max(startWidth + delta, 320), window.innerWidth * 0.6);
+      this.panelWidth.set(newWidth);
+    };
+
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+      localStorage.setItem('panelWidth', String(this.panelWidth()));
+    };
+
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
   }
 }
