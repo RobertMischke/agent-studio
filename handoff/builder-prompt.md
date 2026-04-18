@@ -1,73 +1,36 @@
-# Builder Prompt
+# Builder Prompt (Historical)
 
-Create a local .NET + Angular application that watches workspace job folders and turns agent filesystem activity into a professional task dashboard with approvals, screenshots, metrics and history.
+> **Note:** This was the original scaffold prompt used to bootstrap the app. The actual system has evolved significantly. See `.github/copilot-instructions.md` for current guidelines.
 
-## Architektur-Trennung (KRITISCH!)
+## What was built
 
-Die App (Backend + Frontend) lebt in `/App-Orchestrator/backend/` und `/App-Orchestrator/frontend/`.
+Local .NET 10 + Angular 21 Kanban board that watches external project job folders via `WatchPaths` config.
 
-Die Jobs, die sie beobachtet, liegen NICHT in der App, sondern im **Ziel-Projekt** unter:
+- Backend: ASP.NET Core API on `http://localhost:5030`, SignalR hub
+- Frontend: Angular standalone components, signals, PWA on `http://localhost:4010`
+- 5-column Kanban: Preparation → Ready → Progress → Review → Completed
+- Drag-and-drop state transitions (physically moves job folders)
+- Resizable detail side sheet with prompt, status/protocol, and log
+- FileSystemWatcher for real-time updates
+
+## Architecture Separation
+
+The app (backend + frontend) lives in this repo. The jobs it watches live in **external projects** under:
 ```
 <Ziel-Projekt>/.orchestrator/jobs/
 ```
 
-Der Watch-Path wird per `appsettings.json` konfiguriert:
-```json
-{
-  "WatchPaths": ["C:\\Projects\\MeinProjekt\\.orchestrator\\jobs"]
-}
+## Job Folder Contract
+
+```
+<job-name>/
+  job.json    — metadata (id, title, state, priority, agent)
+  prompt.md   — task description
+  status.md   — processing protocol
+  logs/       — optional log files
 ```
 
-## Non-Goals
-- Do not control Copilot internals.
-- Do not orchestrate agent execution logic.
-- Do not depend on private APIs.
-- Do NOT store job data inside the App-Orchestrator source tree.
-
-## Required Contract
-Watch folder (external, configured):
-- `<watch-path>/` contains job folders
-
-Per job folder schema:
-- job.json
-- prompt.md
-- status.md
-- artifacts/
-- screenshots/
-- logs/
-- repo/
-- review.md
-- metrics.json
-
-## Required Features
-1. Folder watcher (create/update/delete, timestamps, size growth)
-2. Progress estimator (active/idle/likely-finished/blocked)
-3. Approval workflow (Draft, Running, Review Needed, Accepted, Rejected, Archived)
-4. Artifact viewer (files, logs, markdown, screenshots)
-5. Optional verification runner (Playwright if verify script/config exists)
-6. Metrics (duration, changed files/lines, rework count, acceptance quality)
-
-## UI
-Dashboard columns:
-- Active Jobs
-- Awaiting Review
-- Completed
-- Failed/Idle
-
-Job detail tabs:
-- Overview
-- Files
-- Diff
-- Screenshots
-- Logs
-- Metrics
-- Review Notes
-- Timeline
-
-## Build Sequence
-Phase 1: scanner, dashboard, states, job detail
-Phase 2: screenshots, diffs, approvals
-Phase 3: metrics, summaries, trend analytics
+States: `1-preparation` → `2-ready` → `3-progress` → `4-review` → `5-completed`
 
 ## Principle
 Filesystem first. Convention over integration. Visibility over control.

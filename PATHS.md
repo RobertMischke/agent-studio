@@ -1,53 +1,53 @@
-# App-Orchestrator Paths
+# Agent-Taskboard Paths
 
 ## Trennung: App-Code vs. Beobachtete Daten
 
-Die App-Orchestrator-Pfade teilen sich in zwei Bereiche:
-1. **App-Source** — der Code der Orchestrator-App selbst (dieses Repo)
+Die Pfade teilen sich in zwei Bereiche:
+1. **App-Source** — der Code der Taskboard-App selbst (dieses Repo)
 2. **Watch-Target** — die Job-Ordner im Ziel-Projekt, die der Agent bearbeitet
 
 ---
 
 ## 1. App-Source (dieses Repo)
-- `/App-Orchestrator/`
 
-### Konzept & Handoff
-- `/App-Orchestrator/NEW-I.md`
-- `/App-Orchestrator/PATHS.md`
-- `/App-Orchestrator/README.md`
-- `/App-Orchestrator/handoff/builder-prompt.md`
+### Code
+- `backend/` — ASP.NET Core 10 API
+- `frontend/` — Angular 21 Dashboard (PWA)
 
-### App-Code (wird in Phase 1 scaffolded)
-- `/App-Orchestrator/backend/` — .NET API
-- `/App-Orchestrator/frontend/` — Angular Dashboard
-
-### Docs
-- `/App-Orchestrator/docs/filesystem-contract.md` — Job-Ordner-Kontrakt + Template
+### Config & Docs
+- `.github/copilot-instructions.md` — Copilot-Anweisungen für dieses Repo
+- `.github/prompts/` — Reusable Prompts (z.B. Sync abhängiger Projekte)
+- `docs/filesystem-contract.md` — Job-Ordner-Kontrakt + Template
+- `NEW-I.md` — Initiative & Mission
+- `api.ps1` — Backend start/stop/restart/status Script
 
 ---
 
 ## 2. Watch-Target (im Ziel-Projekt, NICHT hier!)
 
-Pfad wird per Config angegeben. Aktuell:
+Pfad wird per Config angegeben (`WatchPaths` in `appsettings.json`). Aktuell:
 ```
 C:\Projects\Runbook\App\.orchestrator\jobs\
 ```
 
-Der Orchestrator hat keinen eigenen Jobort — er zeigt auf Ziel-Apps.
+### Ordnerstruktur (nummerierte State-Ordner)
+```
+.orchestrator/jobs/
+  1-preparation/        ← Jobs in Vorbereitung
+    <job-name>/
+      job.json
+      prompt.md
+      status.md
+      logs/             ← optional
+  2-ready/              ← Bereit zur Bearbeitung
+  3-progress/           ← In Bearbeitung
+  4-review/             ← Zur Prüfung
+  5-completed/          ← Abgeschlossen
+```
 
-### Job-Ordner-Struktur (pro Job)
-- `<watch-path>/<job-name>/job.json`
-- `<watch-path>/<job-name>/prompt.md`
-- `<watch-path>/<job-name>/status.md`
-- `<watch-path>/<job-name>/review.md`
-- `<watch-path>/<job-name>/metrics.json`
-- `<watch-path>/<job-name>/artifacts/`
-- `<watch-path>/<job-name>/screenshots/`
-- `<watch-path>/<job-name>/logs/`
-- `<watch-path>/<job-name>/repo/`
-
-### Template (lebt in den Docs der App, wird ins Ziel kopiert)
-- `/App-Orchestrator/docs/filesystem-contract.md` — enthält das Template + Anleitung
+### Copilot-Instruktionen im Ziel-Projekt
+- `<Ziel-Projekt>/.github/copilot-instructions.md` — enthält den Autopilot-Workflow
+- Wird vom Taskboard aus per Prompt synchronisiert (`/sync-target-instructions`)
 
 ### Beispiel-Jobs (Runtime, im Ziel-Projekt)
 - `C:\Projects\MeinProjekt\.orchestrator\jobs\feature-login\`
