@@ -23,7 +23,8 @@ Jeder Job ist ein Ordner unter `.orchestrator/jobs/<job-name>/` mit folgender St
 <job-name>/
   job.json          # Metadaten (ID, Titel, State, Order, Agent)
   prompt.md         # Aufgabenbeschreibung für den Agenten
-  status.md         # Fortschrittsliste / Verarbeitungsprotokoll
+  status.md         # Completion Report (✅/❌/⚠️ Format)
+  results/          # Screenshots & visuelle Nachweise (optional, verlinkt aus status.md)
   logs/             # Optionale Log-Dateien (Build-Outputs etc.)
 ```
 
