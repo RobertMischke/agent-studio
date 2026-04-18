@@ -22,19 +22,21 @@ import { JobDetail, JobInfo } from './models/job.model';
         </div>
       </header>
 
-      @if (selectedJob(); as detail) {
-        <main class="main">
-          <app-job-detail [detail]="detail" (back)="closeDetail()" />
-        </main>
-      } @else {
+      <div class="layout" [class.layout--panel-open]="selectedJob()">
         <main class="dashboard">
-          <app-job-column title="In Preparation" icon="📋" state="preparation" [jobs]="jobService.grouped().preparation" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" />
-          <app-job-column title="Ready" icon="📦" state="ready" [jobs]="jobService.grouped().ready" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" />
-          <app-job-column title="In Progress" icon="🔵" state="progress" [jobs]="jobService.grouped().progress" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" />
-          <app-job-column title="Review" icon="🟡" state="review" [jobs]="jobService.grouped().review" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" />
-          <app-job-column title="Completed" icon="🟢" state="completed" [jobs]="jobService.grouped().completed" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" />
+          <app-job-column title="In Preparation" icon="📋" state="1-preparation" [jobs]="jobService.grouped().preparation" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" />
+          <app-job-column title="Ready" icon="📦" state="2-ready" [jobs]="jobService.grouped().ready" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" />
+          <app-job-column title="In Progress" icon="🔵" state="3-progress" [jobs]="jobService.grouped().progress" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" />
+          <app-job-column title="Review" icon="🟡" state="4-review" [jobs]="jobService.grouped().review" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" />
+          <app-job-column title="Completed" icon="🟢" state="5-completed" [jobs]="jobService.grouped().completed" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" />
         </main>
-      }
+
+        @if (selectedJob(); as detail) {
+          <aside class="detail-panel">
+            <app-job-detail [detail]="detail" (back)="closeDetail()" />
+          </aside>
+        }
+      </div>
 
       @if (jobService.error(); as err) {
         <div class="error-bar">⚠️ {{ err }}</div>
@@ -76,15 +78,32 @@ import { JobDetail, JobInfo } from './models/job.model';
     .btn:hover { background: rgba(255,255,255,0.1); }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
+    .layout {
+      display: flex;
+      min-height: calc(100vh - 70px);
+      transition: all 0.3s ease;
+    }
     .dashboard {
       display: flex;
       gap: 16px;
       padding: 24px;
       overflow-x: auto;
-      min-height: calc(100vh - 70px);
+      flex: 1;
+      min-width: 0;
     }
-    .main {
+    .detail-panel {
+      width: 420px;
+      min-width: 420px;
+      background: #181825;
+      border-left: 1px solid rgba(255,255,255,0.06);
       padding: 24px;
+      overflow-y: auto;
+      max-height: calc(100vh - 70px);
+      animation: slideIn 0.25s ease;
+    }
+    @keyframes slideIn {
+      from { transform: translateX(20px); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
     }
     .error-bar {
       position: fixed;

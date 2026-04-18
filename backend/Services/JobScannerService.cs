@@ -134,6 +134,18 @@ public class JobScannerService
                 Directory.CreateDirectory(watchPath);
             }
 
+            // Rename old unnumbered state folders to numbered ones
+            foreach (var (oldName, newName) in JobStates.LegacyFolderMap)
+            {
+                var oldDir = Path.Combine(watchPath, oldName);
+                var newDir = Path.Combine(watchPath, newName);
+                if (Directory.Exists(oldDir) && !Directory.Exists(newDir))
+                {
+                    Directory.Move(oldDir, newDir);
+                    _logger.LogInformation("Renamed state folder {Old} → {New}", oldName, newName);
+                }
+            }
+
             // Create state folders
             foreach (var state in JobStates.All)
             {
@@ -145,6 +157,7 @@ public class JobScannerService
             {
                 var dirName = Path.GetFileName(jobDir);
                 if (JobStates.All.Contains(dirName)) continue; // skip state folders themselves
+                if (JobStates.LegacyFolderMap.ContainsKey(dirName)) continue; // skip old state folders
                 if (dirName.StartsWith('_')) continue;
 
                 var jobJsonPath = Path.Combine(jobDir, "job.json");

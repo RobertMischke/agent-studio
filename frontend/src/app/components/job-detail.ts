@@ -134,11 +134,11 @@ import { JobDetail } from '../models/job.model';
       border-radius: 6px;
       font-weight: 600;
     }
-    .state--running { background: rgba(59,130,246,0.15); color: #3b82f6; }
-    .state--review-needed { background: rgba(245,158,11,0.15); color: #f59e0b; }
-    .state--accepted { background: rgba(16,185,129,0.15); color: #10b981; }
-    .state--rejected { background: rgba(239,68,68,0.15); color: #ef4444; }
-    .state--draft { background: rgba(107,114,128,0.15); color: #6b7280; }
+    .state--1-preparation { background: rgba(139,92,246,0.15); color: #8b5cf6; }
+    .state--2-ready { background: rgba(6,182,212,0.15); color: #06b6d4; }
+    .state--3-progress { background: rgba(59,130,246,0.15); color: #3b82f6; }
+    .state--4-review { background: rgba(245,158,11,0.15); color: #f59e0b; }
+    .state--5-completed { background: rgba(16,185,129,0.15); color: #10b981; }
 
     .detail__tabs {
       display: flex;

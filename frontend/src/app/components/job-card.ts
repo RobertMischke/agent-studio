@@ -34,11 +34,11 @@ import { JobInfo } from '../models/job.model';
       transform: translateY(-2px);
       box-shadow: 0 4px 12px rgba(0,0,0,0.3);
     }
-    .job-card--preparation { --state-color: #8b5cf6; }
-    .job-card--ready { --state-color: #06b6d4; }
-    .job-card--progress { --state-color: #3b82f6; }
-    .job-card--review { --state-color: #f59e0b; }
-    .job-card--completed { --state-color: #10b981; }
+    .job-card--1-preparation { --state-color: #8b5cf6; }
+    .job-card--2-ready { --state-color: #06b6d4; }
+    .job-card--3-progress { --state-color: #3b82f6; }
+    .job-card--4-review { --state-color: #f59e0b; }
+    .job-card--5-completed { --state-color: #10b981; }
 
     .job-card__header {
       display: flex;
@@ -86,7 +86,9 @@ export class JobCardComponent {
   readonly job = input.required<JobInfo>();
 
   stateLabel(): string {
-    return this.job().state.replace('-', ' ');
+    const state = this.job().state;
+    const name = state.includes('-') ? state.substring(state.indexOf('-') + 1) : state;
+    return name.replace(/-/g, ' ');
   }
 
   formatSize(bytes: number): string {

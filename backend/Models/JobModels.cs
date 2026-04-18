@@ -54,13 +54,23 @@ public record MoveJobRequest
 
 public static class JobStates
 {
-    public const string Preparation = "preparation";
-    public const string Ready = "ready";
-    public const string Progress = "progress";
-    public const string Review = "review";
-    public const string Completed = "completed";
+    public const string Preparation = "1-preparation";
+    public const string Ready = "2-ready";
+    public const string Progress = "3-progress";
+    public const string Review = "4-review";
+    public const string Completed = "5-completed";
 
     public static readonly string[] All = [Preparation, Ready, Progress, Review, Completed];
+
+    /// <summary>Maps old unnumbered folder names to new numbered ones.</summary>
+    public static readonly Dictionary<string, string> LegacyFolderMap = new()
+    {
+        ["preparation"] = Preparation,
+        ["ready"] = Ready,
+        ["progress"] = Progress,
+        ["review"] = Review,
+        ["completed"] = Completed,
+    };
 
     public static string MapLegacyState(string state) => state switch
     {
@@ -72,4 +82,8 @@ public static class JobStates
         "archived" => Completed,
         _ => Preparation
     };
+
+    /// <summary>Returns the display name without the number prefix.</summary>
+    public static string DisplayName(string state) =>
+        state.Contains('-') ? state[(state.IndexOf('-') + 1)..] : state;
 }
