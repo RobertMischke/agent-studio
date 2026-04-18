@@ -41,3 +41,8 @@ export interface CreateJobRequest {
   watchPath: string;
   promptMarkdown?: string;
 }
+
+export interface WatchPathEntry {
+  name: string;
+  path: string;
+}

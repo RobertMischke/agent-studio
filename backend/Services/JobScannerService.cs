@@ -15,23 +15,23 @@ public class JobScannerService
         _logger = logger;
     }
 
-    public List<string> GetWatchPaths() =>
-        _config.GetSection("WatchPaths").Get<List<string>>() ?? [];
+    public List<WatchPathEntry> GetWatchPaths() =>
+        _config.GetSection("WatchPaths").Get<List<WatchPathEntry>>() ?? [];
 
     public List<JobInfo> ScanAllJobs()
     {
         var jobs = new List<JobInfo>();
-        foreach (var watchPath in GetWatchPaths())
+        foreach (var entry in GetWatchPaths())
         {
-            if (!Directory.Exists(watchPath))
+            if (!Directory.Exists(entry.Path))
             {
-                _logger.LogWarning("Watch path does not exist: {Path}", watchPath);
+                _logger.LogWarning("Watch path does not exist: {Path}", entry.Path);
                 continue;
             }
 
             foreach (var state in JobStates.All)
             {
-                var stateDir = Path.Combine(watchPath, state);
+                var stateDir = Path.Combine(entry.Path, state);
                 if (!Directory.Exists(stateDir)) continue;
 
                 foreach (var jobDir in Directory.GetDirectories(stateDir))
@@ -39,7 +39,7 @@ public class JobScannerService
                     var dirName = Path.GetFileName(jobDir);
                     if (dirName.StartsWith('_')) continue;
 
-                    var job = ScanJobFolder(jobDir, watchPath, state);
+                    var job = ScanJobFolder(jobDir, entry, state);
                     if (job != null) jobs.Add(job);
                 }
             }
@@ -47,7 +47,7 @@ public class JobScannerService
         return jobs;
     }
 
-    public JobInfo? ScanJobFolder(string jobDir, string watchPath, string state)
+    public JobInfo? ScanJobFolder(string jobDir, WatchPathEntry entry, string state)
     {
         var jobJsonPath = Path.Combine(jobDir, "job.json");
         if (!File.Exists(jobJsonPath)) return null;
@@ -68,8 +68,8 @@ public class JobScannerService
                 Order = raw.TryGetProperty("order", out var ord) && ord.TryGetInt32(out var orderVal) ? orderVal : 999,
                 Agent = raw.TryGetProperty("agent", out var agent) ? agent.GetString() ?? "" : "",
                 CreatedAt = raw.TryGetProperty("createdAt", out var created) && created.TryGetDateTime(out var dt) ? dt : File.GetCreationTime(jobJsonPath),
-                WatchPath = watchPath,
-                ProjectName = GetProjectName(watchPath),
+                WatchPath = entry.Path,
+                ProjectName = entry.Name,
                 FolderPath = jobDir,
                 LastActivity = lastActivity,
                 TotalSizeBytes = totalSize
@@ -123,8 +123,9 @@ public class JobScannerService
 
     public void EnsureStateFoldersAndMigrate()
     {
-        foreach (var watchPath in GetWatchPaths())
+        foreach (var entry in GetWatchPaths())
         {
+            var watchPath = entry.Path;
             if (!Directory.Exists(watchPath))
             {
                 Directory.CreateDirectory(watchPath);
@@ -220,28 +221,14 @@ public class JobScannerService
     private static string? ReadFileOrNull(string path) =>
         File.Exists(path) ? File.ReadAllText(path) : null;
 
-    /// <summary>Derives a short project name from the watch path (grandparent of .orchestrator/jobs).</summary>
-    private static string GetProjectName(string watchPath)
-    {
-        // watchPath = "C:\Projects\Foo\.orchestrator\jobs" → project root = "C:\Projects\Foo" → name = "Foo"
-        try
-        {
-            var dir = new DirectoryInfo(watchPath);
-            // Go up: jobs → .orchestrator → project root
-            var projectRoot = dir.Parent?.Parent;
-            return projectRoot?.Name ?? dir.Name;
-        }
-        catch { return Path.GetFileName(watchPath); }
-    }
-
     public string? CreateJob(CreateJobRequest req)
     {
         var watchPaths = GetWatchPaths();
-        var watchPath = string.IsNullOrEmpty(req.WatchPath)
+        var entry = string.IsNullOrEmpty(req.WatchPath)
             ? watchPaths.FirstOrDefault()
-            : watchPaths.FirstOrDefault(w => w == req.WatchPath);
+            : watchPaths.FirstOrDefault(w => w.Path == req.WatchPath);
 
-        if (watchPath == null) return null;
+        if (entry == null) return null;
 
         // Sanitize ID: lowercase, replace spaces with dashes, only allow safe chars
         var jobId = string.IsNullOrWhiteSpace(req.Id)
@@ -250,7 +237,7 @@ public class JobScannerService
         jobId = System.Text.RegularExpressions.Regex.Replace(jobId, @"[^a-z0-9\-]", "");
         if (string.IsNullOrEmpty(jobId)) return null;
 
-        var jobDir = Path.Combine(watchPath, JobStates.Preparation, jobId);
+        var jobDir = Path.Combine(entry.Path, JobStates.Preparation, jobId);
         if (Directory.Exists(jobDir)) return null; // already exists
 
         Directory.CreateDirectory(jobDir);

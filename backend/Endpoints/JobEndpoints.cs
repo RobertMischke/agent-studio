@@ -82,7 +82,8 @@ public static class JobEndpoints
 
         app.MapGet("/api/watch-paths", (JobScannerService scanner) =>
         {
-            return Results.Ok(scanner.GetWatchPaths());
+            var entries = scanner.GetWatchPaths();
+            return Results.Ok(entries);
         });
 
         app.MapGet("/healthz", () => Results.Ok("ok"));

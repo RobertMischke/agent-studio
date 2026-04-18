@@ -56,6 +56,12 @@ public record UpdateJobFileRequest
     public string Content { get; init; } = "";
 }
 
+public record WatchPathEntry
+{
+    public string Name { get; init; } = "";
+    public string Path { get; init; } = "";
+}
+
 public static class JobStates
 {
     public const string Preparation = "1-preparation";

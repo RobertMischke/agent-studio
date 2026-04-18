@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo } from '../models/job.model';
+import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry } from '../models/job.model';
 
 @Injectable({ providedIn: 'root' })
 export class JobService {
@@ -46,7 +46,7 @@ export class JobService {
   }
 
   getWatchPaths() {
-    return this.http.get<string[]>(`${this.baseUrl}/watch-paths`);
+    return this.http.get<WatchPathEntry[]>(`${this.baseUrl}/watch-paths`);
   }
 
   createJob(req: CreateJobRequest) {

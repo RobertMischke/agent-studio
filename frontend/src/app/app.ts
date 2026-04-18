@@ -1,9 +1,9 @@
-import { Component, OnInit, signal } from '@angular/core';
+import { Component, computed, OnInit, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { JobColumnComponent } from './components/job-column';
 import { JobDetailComponent } from './components/job-detail';
 import { JobService } from './services/job.service';
-import { JobDetail, JobInfo } from './models/job.model';
+import { JobDetail, JobInfo, GroupedJobs, WatchPathEntry } from './models/job.model';
 
 @Component({
   selector: 'app-root',
@@ -15,6 +15,15 @@ import { JobDetail, JobInfo } from './models/job.model';
           <span class="header__icon">🔭</span>
           <h1 class="header__title">Orchestrator</h1>
           <span class="header__subtitle">AI Work Monitor</span>
+        </div>
+        <div class="header__filters">
+          @for (name of projectNames(); track name) {
+            <button class="filter-chip"
+                    [class.filter-chip--active]="isProjectActive(name)"
+                    (click)="toggleProject(name)">
+              {{ name }}
+            </button>
+          }
         </div>
         <div class="header__actions">
           <button class="btn btn--create" (click)="openCreate()">
@@ -28,11 +37,11 @@ import { JobDetail, JobInfo } from './models/job.model';
 
       <div class="layout" [class.layout--panel-open]="selectedJob()">
         <main class="dashboard">
-          <app-job-column title="In Preparation" icon="📋" state="1-preparation" [jobs]="jobService.grouped().preparation" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
-          <app-job-column title="Ready" icon="📦" state="2-ready" [jobs]="jobService.grouped().ready" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
-          <app-job-column title="In Progress" icon="🔵" state="3-progress" [jobs]="jobService.grouped().progress" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
-          <app-job-column title="Review" icon="🟡" state="4-review" [jobs]="jobService.grouped().review" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
-          <app-job-column title="Completed" icon="🟢" state="5-completed" [jobs]="jobService.grouped().completed" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
+          <app-job-column title="In Preparation" icon="📋" state="1-preparation" [jobs]="filteredGrouped().preparation" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
+          <app-job-column title="Ready" icon="📦" state="2-ready" [jobs]="filteredGrouped().ready" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
+          <app-job-column title="In Progress" icon="🔵" state="3-progress" [jobs]="filteredGrouped().progress" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
+          <app-job-column title="Review" icon="🟡" state="4-review" [jobs]="filteredGrouped().review" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
+          <app-job-column title="Completed" icon="🟢" state="5-completed" [jobs]="filteredGrouped().completed" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
         </main>
 
         @if (selectedJob(); as detail) {
@@ -54,8 +63,8 @@ import { JobDetail, JobInfo } from './models/job.model';
             <label class="field">
               <span class="field__label">Project</span>
               <select class="field__input" [(ngModel)]="newWatchPath">
-                @for (wp of watchPaths(); track wp) {
-                  <option [value]="wp">{{ projectName(wp) }}</option>
+                @for (wp of watchPaths(); track wp.path) {
+                  <option [value]="wp.path">{{ wp.name }}</option>
                 }
               </select>
             </label>
@@ -104,6 +113,25 @@ import { JobDetail, JobInfo } from './models/job.model';
     .header__title { margin: 0; font-size: 20px; font-weight: 700; }
     .header__subtitle { font-size: 13px; color: #64748b; }
     .header__actions { display: flex; gap: 12px; }
+    .header__filters { display: flex; gap: 8px; align-items: center; }
+    .filter-chip {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: #94a3b8;
+      padding: 5px 14px;
+      border-radius: 20px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      transition: all 0.15s;
+    }
+    .filter-chip:hover { background: rgba(255,255,255,0.1); color: #e2e8f0; }
+    .filter-chip--active {
+      background: rgba(139,92,246,0.2);
+      border-color: rgba(139,92,246,0.4);
+      color: #c4b5fd;
+    }
+    .filter-chip--active:hover { background: rgba(139,92,246,0.3); }
     .btn {
       background: rgba(255,255,255,0.06);
       border: 1px solid rgba(255,255,255,0.08);
@@ -219,7 +247,26 @@ export class App implements OnInit {
   readonly selectedJob = signal<JobDetail | null>(null);
   readonly panelWidth = signal(+(localStorage.getItem('panelWidth') ?? 520));
   readonly showCreate = signal(false);
-  readonly watchPaths = signal<string[]>([]);
+  readonly watchPaths = signal<WatchPathEntry[]>([]);
+  readonly activeProjects = signal<Set<string>>(new Set(JSON.parse(localStorage.getItem('activeProjects') ?? '[]')));
+
+  readonly projectNames = computed(() => {
+    return this.watchPaths().map(wp => wp.name);
+  });
+
+  readonly filteredGrouped = computed(() => {
+    const grouped = this.jobService.grouped();
+    const active = this.activeProjects();
+    if (active.size === 0) return grouped;
+    const filterJobs = (jobs: JobInfo[]) => jobs.filter(j => active.has(j.projectName));
+    return {
+      preparation: filterJobs(grouped.preparation),
+      ready: filterJobs(grouped.ready),
+      progress: filterJobs(grouped.progress),
+      review: filterJobs(grouped.review),
+      completed: filterJobs(grouped.completed),
+    } as GroupedJobs;
+  });
 
   newTitle = '';
   newWatchPath = '';
@@ -231,9 +278,9 @@ export class App implements OnInit {
   ngOnInit() {
     this.refresh();
     this.jobService.getWatchPaths().subscribe({
-      next: (paths) => {
-        this.watchPaths.set(paths);
-        if (paths.length > 0) this.newWatchPath = paths[0];
+      next: (entries) => {
+        this.watchPaths.set(entries);
+        if (entries.length > 0) this.newWatchPath = entries[0].path;
       }
     });
   }
@@ -292,11 +339,19 @@ export class App implements OnInit {
     });
   }
 
-  projectName(watchPath: string): string {
-    const parts = watchPath.replace(/\\/g, '/').split('/').filter(Boolean);
-    // watchPath ends in .orchestrator/jobs → project = 2 levels up
-    const idx = parts.indexOf('.orchestrator');
-    return idx > 0 ? parts[idx - 1] : parts[parts.length - 1];
+  toggleProject(name: string) {
+    const current = new Set(this.activeProjects());
+    if (current.has(name)) {
+      current.delete(name);
+    } else {
+      current.add(name);
+    }
+    this.activeProjects.set(current);
+    localStorage.setItem('activeProjects', JSON.stringify([...current]));
+  }
+
+  isProjectActive(name: string): boolean {
+    return this.activeProjects().has(name);
   }
 
   onFileSaved() {
