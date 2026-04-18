@@ -23,13 +23,8 @@ Jeder Job ist ein Ordner unter `.orchestrator/jobs/<job-name>/` mit folgender St
 <job-name>/
   job.json          # Metadaten (ID, Titel, State, Priorität, Agent)
   prompt.md         # Aufgabenbeschreibung für den Agenten
-  status.md         # Fortschrittsliste, vom Agenten aktualisiert
-  review.md         # Review-Entscheidung (Accept/Reject/Rework)
-  metrics.json      # Mess-Kennzahlen (Dauer, Änderungen, Qualität)
-  artifacts/        # Generierte Dateien, Outputs
-  screenshots/      # Screenshot-Evidenz (optional, Playwright)
-  logs/             # Agent-Logs, Build-Outputs
-  repo/             # Optionaler Git-Klon oder Worktree
+  status.md         # Fortschrittsliste / Verarbeitungsprotokoll
+  logs/             # Optionale Log-Dateien (Build-Outputs etc.)
 ```
 
 ---
@@ -49,7 +44,7 @@ Jeder Job ist ein Ordner unter `.orchestrator/jobs/<job-name>/` mit folgender St
 }
 ```
 
-**States:** `draft` → `running` → `review-needed` → `accepted` | `rejected` → `archived`
+**States:** `1-preparation` → `2-ready` → `3-progress` → `4-review` → `5-completed`
 
 ### prompt.md
 
@@ -75,49 +70,17 @@ Build feature X.
 ```markdown
 # Status
 
-- State: Draft
+- State: Preparation
 - Last update: <ISO-8601>
-- Current step: Initialized
-- Notes:
-  - Job folder created from template.
-```
 
-### review.md
-
-```markdown
-# Review
-
-## Decision
-- Pending
-
-## Notes
-- Add acceptance or rework notes here.
-
-## Approver
-- Name:
-- Date:
-```
-
-### metrics.json
-
-```json
-{
-  "durationMinutes": 0,
-  "filesChanged": 0,
-  "linesAdded": 0,
-  "linesRemoved": 0,
-  "screenshotsProduced": 0,
-  "acceptedFirstTry": false,
-  "reworkCount": 0,
-  "buildSuccess": null,
-  "testSuccess": null
-}
+## Protocol
+- Job folder created.
 ```
 
 ## Schnellstart: Neuen Job anlegen
 
 ```bash
 # Im Ziel-Projekt:
-mkdir -p .orchestrator/jobs/mein-neuer-job/{artifacts,screenshots,logs,repo}
-# Dann job.json, prompt.md, status.md, review.md, metrics.json anlegen (siehe Templates oben)
+mkdir -p .orchestrator/jobs/mein-neuer-job/logs
+# Dann job.json, prompt.md, status.md anlegen (siehe Templates oben)
 ```

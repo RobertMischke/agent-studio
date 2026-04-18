@@ -7,132 +7,79 @@ import { JobDetail } from '../models/job.model';
   template: `
     <div class="detail">
       <div class="detail__header">
-        <button class="detail__back" (click)="back.emit()">← Back</button>
+        <button class="detail__back" (click)="back.emit()">←</button>
         <h2 class="detail__title">{{ detail().info.title || detail().info.id }}</h2>
-        <span class="detail__state" [class]="'state--' + detail().info.state">{{ detail().info.state }}</span>
+        <span class="detail__state" [class]="'state--' + detail().info.state">
+          {{ stateLabel(detail().info.state) }}
+        </span>
       </div>
 
-      <div class="detail__tabs">
-        @for (tab of tabs; track tab.id) {
-          <button class="tab" [class.tab--active]="activeTab === tab.id" (click)="activeTab = tab.id">
-            {{ tab.icon }} {{ tab.label }}
-          </button>
-        }
+      <div class="detail__meta">
+        <span>{{ detail().info.agent }}</span>
+        <span>{{ detail().info.priority }}</span>
+        <span>{{ formatDate(detail().info.createdAt) }}</span>
       </div>
 
-      <div class="detail__content">
-        @switch (activeTab) {
-          @case ('overview') {
-            <div class="section">
-              <h3>Prompt</h3>
-              <pre class="md-content">{{ detail().promptMarkdown || 'No prompt.md found' }}</pre>
-            </div>
-            <div class="section">
-              <h3>Status</h3>
-              <pre class="md-content">{{ detail().statusMarkdown || 'No status.md found' }}</pre>
-            </div>
-          }
-          @case ('files') {
-            <div class="section">
-              <h3>Artifacts ({{ detail().artifacts.length }})</h3>
-              <ul class="file-list">
-                @for (f of detail().artifacts; track f) {
-                  <li>📄 {{ f }}</li>
+      @if (detail().promptMarkdown) {
+        <section class="section">
+          <h3 class="section__title">Prompt</h3>
+          <pre class="section__body">{{ detail().promptMarkdown }}</pre>
+        </section>
+      }
+
+      @if (detail().statusMarkdown) {
+        <section class="section">
+          <h3 class="section__title">Status</h3>
+          <pre class="section__body">{{ detail().statusMarkdown }}</pre>
+        </section>
+      }
+
+      @if (detail().log.length > 0) {
+        <section class="section">
+          <h3 class="section__title">Protocol</h3>
+          <div class="log">
+            @for (entry of detail().log; track entry.timestamp) {
+              <div class="log__row">
+                <span class="log__time">{{ formatTime(entry.timestamp) }}</span>
+                <span class="log__event">{{ entry.event }}</span>
+                @if (entry.detail) {
+                  <span class="log__detail">{{ entry.detail }}</span>
                 }
-              </ul>
-              @if (detail().artifacts.length === 0) {
-                <p class="empty">No artifacts yet</p>
-              }
-            </div>
-          }
-          @case ('screenshots') {
-            <div class="section">
-              <h3>Screenshots ({{ detail().screenshots.length }})</h3>
-              @for (s of detail().screenshots; track s) {
-                <div class="screenshot-name">🖼️ {{ s }}</div>
-              }
-              @if (detail().screenshots.length === 0) {
-                <p class="empty">No screenshots</p>
-              }
-            </div>
-          }
-          @case ('logs') {
-            <div class="section">
-              <h3>Logs ({{ detail().logs.length }})</h3>
-              <ul class="file-list">
-                @for (l of detail().logs; track l) {
-                  <li>📋 {{ l }}</li>
-                }
-              </ul>
-              @if (detail().logs.length === 0) {
-                <p class="empty">No logs</p>
-              }
-            </div>
-          }
-          @case ('metrics') {
-            @if (detail().metrics; as m) {
-              <div class="metrics-grid">
-                <div class="metric"><span class="metric__value">{{ m.durationMinutes }}</span><span class="metric__label">Minutes</span></div>
-                <div class="metric"><span class="metric__value">{{ m.filesChanged }}</span><span class="metric__label">Files changed</span></div>
-                <div class="metric"><span class="metric__value">+{{ m.linesAdded }}</span><span class="metric__label">Lines added</span></div>
-                <div class="metric"><span class="metric__value">-{{ m.linesRemoved }}</span><span class="metric__label">Lines removed</span></div>
-                <div class="metric"><span class="metric__value">{{ m.reworkCount }}</span><span class="metric__label">Reworks</span></div>
-                <div class="metric"><span class="metric__value">{{ m.buildSuccess === null ? '–' : m.buildSuccess ? '✅' : '❌' }}</span><span class="metric__label">Build</span></div>
               </div>
-            } @else {
-              <p class="empty">No metrics available</p>
             }
-          }
-          @case ('review') {
-            <div class="section">
-              <pre class="md-content">{{ detail().reviewMarkdown || 'No review.md found' }}</pre>
-            </div>
-          }
-          @case ('timeline') {
-            <div class="timeline">
-              @for (entry of detail().timeline; track entry.timestamp) {
-                <div class="timeline__entry">
-                  <span class="timeline__time">{{ formatTime(entry.timestamp) }}</span>
-                  <span class="timeline__event">{{ entry.event }}</span>
-                  @if (entry.detail) {
-                    <span class="timeline__detail">{{ entry.detail }}</span>
-                  }
-                </div>
-              }
-              @if (detail().timeline.length === 0) {
-                <p class="empty">No timeline entries</p>
-              }
-            </div>
-          }
-        }
-      </div>
+          </div>
+        </section>
+      }
     </div>
   `,
   styles: [`
     .detail { padding: 0; }
+
     .detail__header {
       display: flex;
       align-items: center;
-      gap: 16px;
-      margin-bottom: 20px;
+      gap: 12px;
+      margin-bottom: 8px;
     }
     .detail__back {
       background: rgba(255,255,255,0.06);
       border: none;
       color: #94a3b8;
-      padding: 8px 14px;
+      width: 32px; height: 32px;
       border-radius: 8px;
       cursor: pointer;
-      font-size: 13px;
+      font-size: 16px;
+      display: grid; place-items: center;
     }
     .detail__back:hover { background: rgba(255,255,255,0.1); }
-    .detail__title { margin: 0; font-size: 20px; color: #e2e8f0; flex: 1; }
+    .detail__title { margin: 0; font-size: 18px; color: #e2e8f0; flex: 1; }
     .detail__state {
-      font-size: 12px;
+      font-size: 11px;
       text-transform: uppercase;
       padding: 4px 10px;
       border-radius: 6px;
       font-weight: 600;
+      letter-spacing: 0.4px;
     }
     .state--1-preparation { background: rgba(139,92,246,0.15); color: #8b5cf6; }
     .state--2-ready { background: rgba(6,182,212,0.15); color: #06b6d4; }
@@ -140,99 +87,65 @@ import { JobDetail } from '../models/job.model';
     .state--4-review { background: rgba(245,158,11,0.15); color: #f59e0b; }
     .state--5-completed { background: rgba(16,185,129,0.15); color: #10b981; }
 
-    .detail__tabs {
+    .detail__meta {
       display: flex;
-      gap: 4px;
-      margin-bottom: 20px;
-      border-bottom: 1px solid rgba(255,255,255,0.06);
-      padding-bottom: 8px;
-      overflow-x: auto;
-    }
-    .tab {
-      background: none;
-      border: none;
+      gap: 16px;
+      font-size: 12px;
       color: #64748b;
-      padding: 8px 12px;
-      border-radius: 8px;
-      cursor: pointer;
-      font-size: 13px;
-      white-space: nowrap;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
     }
-    .tab:hover { background: rgba(255,255,255,0.04); }
-    .tab--active { background: rgba(255,255,255,0.08); color: #e2e8f0; font-weight: 600; }
 
-    .section { margin-bottom: 20px; }
-    .section h3 { font-size: 14px; color: #94a3b8; margin: 0 0 8px; }
-    .md-content {
+    .section { margin-bottom: 24px; }
+    .section__title {
+      font-size: 12px;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin: 0 0 8px;
+    }
+    .section__body {
       background: rgba(0,0,0,0.2);
       padding: 16px;
       border-radius: 8px;
       white-space: pre-wrap;
+      word-break: break-word;
       font-size: 13px;
+      line-height: 1.6;
       color: #cbd5e1;
       border: 1px solid rgba(255,255,255,0.04);
-    }
-    .file-list {
-      list-style: none;
-      padding: 0;
       margin: 0;
     }
-    .file-list li {
-      padding: 6px 10px;
-      font-size: 13px;
-      color: #94a3b8;
-      border-bottom: 1px solid rgba(255,255,255,0.04);
-    }
-    .empty { color: #4a5568; font-size: 13px; text-align: center; padding: 20px; }
 
-    .metrics-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-      gap: 12px;
-    }
-    .metric {
-      background: rgba(0,0,0,0.2);
-      border-radius: 10px;
-      padding: 16px;
-      text-align: center;
-      border: 1px solid rgba(255,255,255,0.04);
-    }
-    .metric__value { display: block; font-size: 24px; font-weight: 700; color: #e2e8f0; }
-    .metric__label { display: block; font-size: 11px; color: #64748b; margin-top: 4px; }
-
-    .timeline { display: flex; flex-direction: column; gap: 8px; }
-    .timeline__entry {
+    .log { display: flex; flex-direction: column; gap: 2px; }
+    .log__row {
       display: flex;
       gap: 12px;
       align-items: baseline;
       padding: 8px 12px;
       background: rgba(0,0,0,0.15);
-      border-radius: 8px;
+      border-radius: 6px;
+      font-size: 13px;
     }
-    .timeline__time { font-size: 11px; color: #64748b; min-width: 120px; }
-    .timeline__event { font-size: 13px; color: #e2e8f0; }
-    .timeline__detail { font-size: 12px; color: #94a3b8; }
-
-    .screenshot-name { padding: 8px; font-size: 13px; color: #94a3b8; }
+    .log__time { font-size: 11px; color: #64748b; min-width: 70px; font-variant-numeric: tabular-nums; }
+    .log__event { color: #e2e8f0; }
+    .log__detail { color: #94a3b8; font-size: 12px; }
   `]
 })
 export class JobDetailComponent {
   readonly detail = input.required<JobDetail>();
   readonly back = output<void>();
 
-  activeTab = 'overview';
-
-  tabs = [
-    { id: 'overview', label: 'Overview', icon: '📋' },
-    { id: 'files', label: 'Files', icon: '📄' },
-    { id: 'screenshots', label: 'Screenshots', icon: '🖼️' },
-    { id: 'logs', label: 'Logs', icon: '📝' },
-    { id: 'metrics', label: 'Metrics', icon: '📊' },
-    { id: 'review', label: 'Review', icon: '✅' },
-    { id: 'timeline', label: 'Timeline', icon: '⏱️' },
-  ];
+  stateLabel(state: string): string {
+    return state.replace(/^\d+-/, '');
+  }
 
   formatTime(dateStr: string): string {
-    return new Date(dateStr).toLocaleString();
+    return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  formatDate(dateStr: string): string {
+    return new Date(dateStr).toLocaleDateString();
   }
 }
