@@ -65,7 +65,7 @@ public class JobScannerService
                 Id = raw.TryGetProperty("id", out var id) ? id.GetString() ?? Path.GetFileName(jobDir) : Path.GetFileName(jobDir),
                 Title = raw.TryGetProperty("title", out var title) ? title.GetString() ?? "" : "",
                 State = state,
-                Priority = raw.TryGetProperty("priority", out var prio) ? prio.GetString() ?? "normal" : "normal",
+                Order = raw.TryGetProperty("order", out var ord) && ord.TryGetInt32(out var orderVal) ? orderVal : 999,
                 Agent = raw.TryGetProperty("agent", out var agent) ? agent.GetString() ?? "" : "",
                 CreatedAt = raw.TryGetProperty("createdAt", out var created) && created.TryGetDateTime(out var dt) ? dt : File.GetCreationTime(jobJsonPath),
                 WatchPath = watchPath,
@@ -261,7 +261,7 @@ public class JobScannerService
             title = req.Title,
             createdAt = DateTime.UtcNow.ToString("o"),
             state = JobStates.Preparation,
-            priority = req.Priority,
+            order = req.Order,
             agent = req.Agent
         };
         File.WriteAllText(Path.Combine(jobDir, "job.json"),
@@ -290,6 +290,46 @@ public class JobScannerService
         var filePath = Path.Combine(info.FolderPath, fileName);
         File.WriteAllText(filePath, content);
         return true;
+    }
+
+    public bool ReorderJobs(List<string> jobIds)
+    {
+        var allJobs = ScanAllJobs();
+        for (int i = 0; i < jobIds.Count; i++)
+        {
+            var info = allJobs.FirstOrDefault(j => j.Id == jobIds[i]);
+            if (info == null) continue;
+            UpdateOrderInJobJson(info.FolderPath, i + 1);
+        }
+        return true;
+    }
+
+    private void UpdateOrderInJobJson(string jobDir, int order)
+    {
+        var jobJsonPath = Path.Combine(jobDir, "job.json");
+        if (!File.Exists(jobJsonPath)) return;
+
+        try
+        {
+            var json = File.ReadAllText(jobJsonPath);
+            var doc = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json, JsonOpts)
+                      ?? new Dictionary<string, JsonElement>();
+
+            var updated = new Dictionary<string, object>();
+            foreach (var kv in doc)
+            {
+                if (kv.Key == "order") updated["order"] = order;
+                else if (kv.Key == "priority") continue; // drop legacy priority
+                else updated[kv.Key] = kv.Value;
+            }
+            if (!updated.ContainsKey("order")) updated["order"] = order;
+
+            File.WriteAllText(jobJsonPath, JsonSerializer.Serialize(updated, new JsonSerializerOptions { WriteIndented = true }));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to update order in job.json at {Dir}", jobDir);
+        }
     }
 
     private static List<JobLogEntry> BuildLog(string dir)

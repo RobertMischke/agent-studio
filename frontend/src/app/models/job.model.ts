@@ -2,7 +2,7 @@ export interface JobInfo {
   id: string;
   title: string;
   state: string;
-  priority: string;
+  order: number;
   agent: string;
   createdAt: string;
   watchPath: string;
@@ -36,7 +36,7 @@ export interface GroupedJobs {
 export interface CreateJobRequest {
   id?: string;
   title: string;
-  priority: string;
+  order?: number;
   agent: string;
   watchPath: string;
   promptMarkdown?: string;

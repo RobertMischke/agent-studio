@@ -8,7 +8,7 @@ import { JobInfo } from '../models/job.model';
     <div class="job-card" [class]="'job-card--' + job().state">
       <div class="job-card__header">
         <span class="job-card__project">{{ job().projectName }}</span>
-        <span class="job-card__priority" [class]="'priority--' + job().priority">{{ job().priority }}</span>
+        <span class="job-card__order">#{{ job().order }}</span>
       </div>
       <h3 class="job-card__title">{{ job().title || job().id }}</h3>
       <div class="job-card__meta">
@@ -56,15 +56,15 @@ import { JobInfo } from '../models/job.model';
       padding: 1px 6px;
       border-radius: 4px;
     }
-    .job-card__priority {
-      font-size: 10px;
+    .job-card__order {
+      font-size: 11px;
       padding: 2px 6px;
       border-radius: 4px;
       background: rgba(255,255,255,0.08);
+      color: #94a3b8;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
     }
-    .priority--high { color: #ef4444; }
-    .priority--normal { color: #9ca3af; }
-    .priority--low { color: #6b7280; }
 
     .job-card__title {
       margin: 0 0 8px;

@@ -28,11 +28,11 @@ import { JobDetail, JobInfo } from './models/job.model';
 
       <div class="layout" [class.layout--panel-open]="selectedJob()">
         <main class="dashboard">
-          <app-job-column title="In Preparation" icon="📋" state="1-preparation" [jobs]="jobService.grouped().preparation" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" />
-          <app-job-column title="Ready" icon="📦" state="2-ready" [jobs]="jobService.grouped().ready" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" />
-          <app-job-column title="In Progress" icon="🔵" state="3-progress" [jobs]="jobService.grouped().progress" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" />
-          <app-job-column title="Review" icon="🟡" state="4-review" [jobs]="jobService.grouped().review" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" />
-          <app-job-column title="Completed" icon="🟢" state="5-completed" [jobs]="jobService.grouped().completed" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" />
+          <app-job-column title="In Preparation" icon="📋" state="1-preparation" [jobs]="jobService.grouped().preparation" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
+          <app-job-column title="Ready" icon="📦" state="2-ready" [jobs]="jobService.grouped().ready" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
+          <app-job-column title="In Progress" icon="🔵" state="3-progress" [jobs]="jobService.grouped().progress" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
+          <app-job-column title="Review" icon="🟡" state="4-review" [jobs]="jobService.grouped().review" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
+          <app-job-column title="Completed" icon="🟢" state="5-completed" [jobs]="jobService.grouped().completed" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
         </main>
 
         @if (selectedJob(); as detail) {
@@ -57,14 +57,6 @@ import { JobDetail, JobInfo } from './models/job.model';
                 @for (wp of watchPaths(); track wp) {
                   <option [value]="wp">{{ projectName(wp) }}</option>
                 }
-              </select>
-            </label>
-            <label class="field">
-              <span class="field__label">Priority</span>
-              <select class="field__input" [(ngModel)]="newPriority">
-                <option value="low">Low</option>
-                <option value="normal">Normal</option>
-                <option value="high">High</option>
               </select>
             </label>
             <label class="field">
@@ -111,6 +103,7 @@ import { JobDetail, JobInfo } from './models/job.model';
     .header__icon { font-size: 24px; }
     .header__title { margin: 0; font-size: 20px; font-weight: 700; }
     .header__subtitle { font-size: 13px; color: #64748b; }
+    .header__actions { display: flex; gap: 12px; }
     .btn {
       background: rgba(255,255,255,0.06);
       border: 1px solid rgba(255,255,255,0.08);
@@ -230,7 +223,6 @@ export class App implements OnInit {
 
   newTitle = '';
   newWatchPath = '';
-  newPriority = 'normal';
   newAgent = 'copilot';
   newPrompt = '';
 
@@ -267,6 +259,13 @@ export class App implements OnInit {
     });
   }
 
+  onJobReorder(event: { state: string; jobIds: string[] }) {
+    this.jobService.reorderJobs(event.jobIds).subscribe({
+      next: () => this.refresh(),
+      error: (err) => this.jobService.error.set(err.message || 'Failed to reorder'),
+    });
+  }
+
   openCreate() {
     this.showCreate.set(true);
   }
@@ -275,7 +274,6 @@ export class App implements OnInit {
     this.showCreate.set(false);
     this.newTitle = '';
     this.newPrompt = '';
-    this.newPriority = 'normal';
     this.newAgent = 'copilot';
   }
 
@@ -283,7 +281,6 @@ export class App implements OnInit {
     this.jobService.createJob({
       title: this.newTitle.trim(),
       watchPath: this.newWatchPath,
-      priority: this.newPriority,
       agent: this.newAgent || 'copilot',
       promptMarkdown: this.newPrompt.trim() || undefined
     }).subscribe({

@@ -20,7 +20,7 @@ import { JobService } from '../services/job.service';
       <div class="detail__meta">
         <span>📁 {{ detail().info.projectName }}</span>
         <span>🤖 {{ detail().info.agent }}</span>
-        <span>{{ detail().info.priority }}</span>
+        <span>#{{ detail().info.order }}</span>
         <span>{{ formatDate(detail().info.createdAt) }}</span>
       </div>
 

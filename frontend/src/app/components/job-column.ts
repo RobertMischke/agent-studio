@@ -18,13 +18,25 @@ import { JobCardComponent } from './job-card';
         <span class="column__count">{{ jobs().length }}</span>
       </div>
       <div class="column__body">
-        @for (job of jobs(); track job.id) {
+        @for (job of jobs(); track job.id; let i = $index) {
+          <div class="column__drop-zone"
+               [class.column__drop-zone--active]="dropIndex === i"
+               (dragover)="onCardDragOver($event, i)"
+               (dragleave)="onCardDragLeave()"
+               (drop)="onCardDrop($event, i)">
+          </div>
           <app-job-card
             [job]="job"
             (click)="jobClick.emit(job)"
             draggable="true"
             (dragstart)="onDragStart($event, job)" />
         }
+        <div class="column__drop-zone column__drop-zone--last"
+             [class.column__drop-zone--active]="dropIndex === jobs().length"
+             (dragover)="onCardDragOver($event, jobs().length)"
+             (dragleave)="onCardDragLeave()"
+             (drop)="onCardDrop($event, jobs().length)">
+        </div>
         @if (jobs().length === 0) {
           <div class="column__empty">No jobs</div>
         }
@@ -82,6 +94,15 @@ import { JobCardComponent } from './job-card';
       font-size: 13px;
       padding: 24px 0;
     }
+    .column__drop-zone {
+      height: 4px;
+      border-radius: 2px;
+      transition: height 0.15s, background 0.15s;
+    }
+    .column__drop-zone--active {
+      height: 8px;
+      background: rgba(99, 102, 241, 0.5);
+    }
   `]
 })
 export class JobColumnComponent {
@@ -91,11 +112,14 @@ export class JobColumnComponent {
   readonly jobs = input.required<JobInfo[]>();
   readonly jobClick = output<JobInfo>();
   readonly jobDrop = output<{ jobId: string; targetState: string }>();
+  readonly jobReorder = output<{ state: string; jobIds: string[] }>();
 
   isDragOver = false;
+  dropIndex = -1;
 
   onDragStart(event: DragEvent, job: JobInfo) {
     event.dataTransfer?.setData('text/plain', job.id);
+    event.dataTransfer?.setData('application/x-source-state', job.state);
   }
 
   onDragOver(event: DragEvent) {
@@ -107,9 +131,45 @@ export class JobColumnComponent {
     this.isDragOver = false;
   }
 
+  onCardDragOver(event: DragEvent, index: number) {
+    event.preventDefault();
+    event.stopPropagation();
+    this.dropIndex = index;
+  }
+
+  onCardDragLeave() {
+    this.dropIndex = -1;
+  }
+
+  onCardDrop(event: DragEvent, index: number) {
+    event.preventDefault();
+    event.stopPropagation();
+    this.isDragOver = false;
+    this.dropIndex = -1;
+    const jobId = event.dataTransfer?.getData('text/plain');
+    const sourceState = event.dataTransfer?.getData('application/x-source-state');
+    if (!jobId) return;
+
+    if (sourceState === this.state()) {
+      // Reorder within same column
+      const currentIds = this.jobs().map(j => j.id);
+      const fromIndex = currentIds.indexOf(jobId);
+      if (fromIndex >= 0) {
+        currentIds.splice(fromIndex, 1);
+        const insertAt = index > fromIndex ? index - 1 : index;
+        currentIds.splice(insertAt, 0, jobId);
+      }
+      this.jobReorder.emit({ state: this.state(), jobIds: currentIds });
+    } else {
+      // Cross-column move
+      this.jobDrop.emit({ jobId, targetState: this.state() });
+    }
+  }
+
   onDrop(event: DragEvent) {
     event.preventDefault();
     this.isDragOver = false;
+    this.dropIndex = -1;
     const jobId = event.dataTransfer?.getData('text/plain');
     if (jobId) {
       this.jobDrop.emit({ jobId, targetState: this.state() });

@@ -20,11 +20,11 @@ public static class JobEndpoints
             var jobs = scanner.ScanAllJobs();
             var grouped = new
             {
-                Preparation = jobs.Where(j => j.State == JobStates.Preparation).ToList(),
-                Ready = jobs.Where(j => j.State == JobStates.Ready).ToList(),
-                Progress = jobs.Where(j => j.State == JobStates.Progress).ToList(),
-                Review = jobs.Where(j => j.State == JobStates.Review).ToList(),
-                Completed = jobs.Where(j => j.State == JobStates.Completed).ToList()
+                Preparation = jobs.Where(j => j.State == JobStates.Preparation).OrderBy(j => j.Order).ToList(),
+                Ready = jobs.Where(j => j.State == JobStates.Ready).OrderBy(j => j.Order).ToList(),
+                Progress = jobs.Where(j => j.State == JobStates.Progress).OrderBy(j => j.Order).ToList(),
+                Review = jobs.Where(j => j.State == JobStates.Review).OrderBy(j => j.Order).ToList(),
+                Completed = jobs.Where(j => j.State == JobStates.Completed).OrderBy(j => j.Order).ToList()
             };
             return Results.Ok(grouped);
         });
@@ -72,6 +72,12 @@ public static class JobEndpoints
         {
             var success = scanner.UpdateJobFile(jobId, fileName, req.Content);
             return success ? Results.Ok() : Results.BadRequest("Cannot edit (job in progress or not found)");
+        });
+
+        group.MapPost("/reorder", (ReorderRequest req, JobScannerService scanner) =>
+        {
+            var success = scanner.ReorderJobs(req.JobIds);
+            return success ? Results.Ok() : Results.BadRequest("Reorder failed");
         });
 
         app.MapGet("/api/watch-paths", (JobScannerService scanner) =>

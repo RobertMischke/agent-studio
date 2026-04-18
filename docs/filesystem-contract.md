@@ -21,7 +21,7 @@ Jeder Job ist ein Ordner unter `.orchestrator/jobs/<job-name>/` mit folgender St
 
 ```
 <job-name>/
-  job.json          # Metadaten (ID, Titel, State, Priorität, Agent)
+  job.json          # Metadaten (ID, Titel, State, Order, Agent)
   prompt.md         # Aufgabenbeschreibung für den Agenten
   status.md         # Fortschrittsliste / Verarbeitungsprotokoll
   logs/             # Optionale Log-Dateien (Build-Outputs etc.)
@@ -39,7 +39,7 @@ Jeder Job ist ein Ordner unter `.orchestrator/jobs/<job-name>/` mit folgender St
   "title": "<Beschreibung>",
   "createdAt": "<ISO-8601>",
   "state": "draft",
-  "priority": "high",
+  "order": 1,
   "agent": "copilot"
 }
 ```

@@ -56,4 +56,8 @@ export class JobService {
   updateJobFile(jobId: string, fileName: string, content: string) {
     return this.http.put(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/files/${encodeURIComponent(fileName)}`, { content });
   }
+
+  reorderJobs(jobIds: string[]) {
+    return this.http.post(`${this.baseUrl}/jobs/reorder`, { jobIds });
+  }
 }

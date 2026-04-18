@@ -5,7 +5,7 @@ public record JobInfo
     public string Id { get; init; } = "";
     public string Title { get; init; } = "";
     public string State { get; init; } = "draft";
-    public string Priority { get; init; } = "normal";
+    public int Order { get; init; } = 999;
     public string Agent { get; init; } = "";
     public DateTime CreatedAt { get; init; }
     public string WatchPath { get; init; } = "";
@@ -39,10 +39,15 @@ public record CreateJobRequest
 {
     public string Id { get; init; } = "";
     public string Title { get; init; } = "";
-    public string Priority { get; init; } = "normal";
+    public int Order { get; init; } = 999;
     public string Agent { get; init; } = "copilot";
     public string WatchPath { get; init; } = "";
     public string? PromptMarkdown { get; init; }
+}
+
+public record ReorderRequest
+{
+    public List<string> JobIds { get; init; } = [];
 }
 
 public record UpdateJobFileRequest

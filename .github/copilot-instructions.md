@@ -34,7 +34,7 @@ Only restart the backend (`.\api.ps1 restart`) when backend code was changed. Sk
 ## Job Folder Contract
 
 Each job folder contains:
-- `job.json` — metadata (id, title, state, priority, agent)
+- `job.json` — metadata (id, title, state, order, agent)
 - `prompt.md` — task description
 - `status.md` — processing protocol / log
 - `logs/` — optional log files
@@ -49,3 +49,10 @@ See `docs/filesystem-contract.md` for full details.
 - All components are standalone (no NgModules)
 - Dark theme UI with Catppuccin-inspired color palette
 - Detail view is a simple protocol view (no tabs, no metrics grids)
+
+## Orchestrator Self-Orchestration
+
+This project itself uses the orchestrator pattern. Jobs for the taskboard live in `.orchestrator/jobs/`.
+The shared autopilot workflow is defined in `docs/autopilot-prompt.md` — this is the **single source of truth** for all monitored projects.
+
+When onboarding a new project, use the sync prompt (`.github/prompts/sync-target-instructions.prompt.md`) to copy the autopilot workflow into the target project's `.github/copilot-instructions.md`.
