@@ -87,13 +87,15 @@ public class TaskRunnerService : BackgroundService
         return true;
     }
 
-    public async Task<CliExecution?> StartJobAsync(string jobId, CancellationToken ct = default)
+    public async Task<(CliExecution? Execution, string? Error)> StartJobAsync(string jobId, CancellationToken ct = default)
     {
         var info = _scanner.ScanAllJobs().FirstOrDefault(j => j.Id == jobId);
-        if (info == null) return null;
+        if (info == null) return (null, "Job not found");
 
         var runner = _runners.Values.FirstOrDefault(r => r.Entry.Name == info.ProjectName);
-        if (runner == null) return null;
+        if (runner == null) return (null, $"No runner configured for project '{info.ProjectName}' — check RootPath in WatchPaths config");
+
+        if (!_cli.IsAvailable()) return (null, "Copilot CLI is not installed or not on PATH");
 
         return await runner.StartJobManualAsync(jobId, ct);
     }
@@ -191,25 +193,25 @@ public class ProjectRunner
         await StartJobInternalAsync(nextJob.Id, ct);
     }
 
-    public async Task<CliExecution?> StartJobManualAsync(string jobId, CancellationToken ct)
+    public async Task<(CliExecution? Execution, string? Error)> StartJobManualAsync(string jobId, CancellationToken ct)
     {
         if (_activeJobId != null)
         {
             _logger.LogWarning("Runner '{Project}' already has active job {JobId}", ProjectName, _activeJobId);
-            return null;
+            return (null, $"Runner '{ProjectName}' is already executing job '{_activeJobId}'");
         }
 
         return await StartJobInternalAsync(jobId, ct);
     }
 
-    private async Task<CliExecution?> StartJobInternalAsync(string jobId, CancellationToken ct)
+    private async Task<(CliExecution? Execution, string? Error)> StartJobInternalAsync(string jobId, CancellationToken ct)
     {
         _processing = true;
         try
         {
             // Move job to 3-progress
             var info = _scanner.ScanAllJobs().FirstOrDefault(j => j.Id == jobId);
-            if (info == null) return null;
+            if (info == null) return (null, "Job not found");
 
             if (info.State == JobStates.Ready)
             {
@@ -234,9 +236,10 @@ public class ProjectRunner
             {
                 _activeJobId = null;
                 NotifyStatus();
+                return (null, "Failed to start Copilot CLI process — check that 'copilot' is installed, authenticated, and the project root is a trusted directory");
             }
 
-            return execution;
+            return (execution, null);
         }
         finally
         {

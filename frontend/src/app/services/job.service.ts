@@ -24,7 +24,11 @@ export class JobService {
         this.loading.set(false);
       },
       error: (err) => {
-        this.error.set(err.message || 'Failed to load jobs');
+        if (err.status === 0) {
+          this.error.set('Backend not reachable — is the API running on localhost:5030?');
+        } else {
+          this.error.set(err.error?.error || err.message || 'Failed to load jobs');
+        }
         this.loading.set(false);
       }
     });

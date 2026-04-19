@@ -87,10 +87,19 @@ public static class JobEndpoints
         });
 
         // CLI execution endpoints
-        group.MapPost("/{jobId}/start", async (string jobId, TaskRunnerService runner, CancellationToken ct) =>
+        group.MapPost("/{jobId}/start", async (string jobId, TaskRunnerService runner, JobScannerService scanner, CancellationToken ct) =>
         {
-            var execution = await runner.StartJobAsync(jobId, ct);
-            return execution is null ? Results.BadRequest("Cannot start job (not found, no runner, or already running)") : Results.Ok(execution);
+            var job = scanner.ScanAllJobs().FirstOrDefault(j => j.Id == jobId);
+            if (job == null)
+                return Results.NotFound(new { error = "Job not found" });
+
+            if (job.State is not (JobStates.Ready or JobStates.Progress))
+                return Results.BadRequest(new { error = $"Job is in state '{job.State}' — only jobs in 'ready' or 'progress' can be started" });
+
+            var (execution, error) = await runner.StartJobAsync(jobId, ct);
+            return execution is not null
+                ? Results.Ok(execution)
+                : Results.BadRequest(new { error = error ?? "Cannot start job" });
         });
 
         group.MapPost("/{jobId}/stop", (string jobId, TaskRunnerService runner) =>

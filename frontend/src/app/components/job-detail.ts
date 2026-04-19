@@ -40,8 +40,18 @@ import { CliConsoleComponent } from './cli-console';
             </div>
             <button class="btn-exec btn-exec--stop" (click)="stopJob()">⏹ Stop</button>
           } @else {
-            <button class="btn-exec btn-exec--start" (click)="startJob()">▶ Start CLI</button>
+            <button class="btn-exec btn-exec--start" (click)="startJob()" [disabled]="starting()">
+              {{ starting() ? '⏳ Starting...' : '▶ Start CLI' }}
+            </button>
           }
+        </div>
+      }
+
+      @if (errorMsg(); as err) {
+        <div class="detail__error">
+          <span class="detail__error-icon">⚠️</span>
+          <span class="detail__error-text">{{ err }}</span>
+          <button class="detail__error-close" (click)="errorMsg.set(null)">✕</button>
         </div>
       }
 
@@ -285,6 +295,36 @@ import { CliConsoleComponent } from './cli-console';
       border: 1px solid rgba(239,68,68,0.3);
     }
     .btn-exec--stop:hover { background: rgba(239,68,68,0.25); }
+    .btn-exec:disabled { opacity: 0.5; cursor: wait; }
+
+    .detail__error {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      background: rgba(239,68,68,0.1);
+      border: 1px solid rgba(239,68,68,0.25);
+      border-radius: 8px;
+      margin-bottom: 20px;
+      animation: fadeIn 0.2s ease;
+    }
+    .detail__error-icon { font-size: 14px; flex-shrink: 0; }
+    .detail__error-text { font-size: 13px; color: #fca5a5; flex: 1; }
+    .detail__error-close {
+      background: none;
+      border: none;
+      color: #f87171;
+      cursor: pointer;
+      font-size: 14px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      flex-shrink: 0;
+    }
+    .detail__error-close:hover { background: rgba(239,68,68,0.15); }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
   `]
 })
 export class JobDetailComponent implements OnDestroy {
@@ -302,6 +342,8 @@ export class JobDetailComponent implements OnDestroy {
   readonly isRunning = signal(false);
   readonly startedAt = signal<Date | null>(null);
   readonly elapsedTime = signal('');
+  readonly errorMsg = signal<string | null>(null);
+  readonly starting = signal(false);
 
   promptDraftValue = '';
   statusDraftValue = '';
@@ -311,6 +353,7 @@ export class JobDetailComponent implements OnDestroy {
 
   private detailEffect = effect(() => {
     const d = this.detail();
+    this.errorMsg.set(null);
     if (d.info.state === '3-progress') {
       // Try to load existing output
       this.jobService.getJobOutput(d.info.id).subscribe({
@@ -322,7 +365,10 @@ export class JobDetailComponent implements OnDestroy {
             this.startElapsedTimer();
           }
         },
-        error: () => {}
+        error: (err) => {
+          if (err.status !== 0) return; // silent for 404 etc
+          this.showError(err);
+        }
       });
     }
   });
@@ -338,26 +384,45 @@ export class JobDetailComponent implements OnDestroy {
   }
 
   startJob(): void {
+    this.errorMsg.set(null);
+    this.starting.set(true);
     this.jobService.startJob(this.detail().info.id).subscribe({
       next: (exec) => {
+        this.starting.set(false);
         this.isRunning.set(true);
         this.startedAt.set(new Date(exec.startedAt));
         this.cliOutput.set([]);
         this.startElapsedTimer();
         this.pollOutput();
       },
-      error: () => {}
+      error: (err) => {
+        this.starting.set(false);
+        this.showError(err);
+      }
     });
   }
 
   stopJob(): void {
+    this.errorMsg.set(null);
     this.jobService.stopJob(this.detail().info.id).subscribe({
       next: () => {
         this.isRunning.set(false);
         if (this.elapsedTimer) clearInterval(this.elapsedTimer);
       },
-      error: () => {}
+      error: (err) => this.showError(err)
     });
+  }
+
+  private showError(err: any): void {
+    if (err.status === 0) {
+      this.errorMsg.set('Backend not reachable — is the API running on localhost:5030?');
+    } else if (err.error?.error) {
+      this.errorMsg.set(err.error.error);
+    } else if (typeof err.error === 'string') {
+      this.errorMsg.set(err.error);
+    } else {
+      this.errorMsg.set(`Request failed (${err.status || 'unknown'}): ${err.statusText || err.message || 'Unknown error'}`);
+    }
   }
 
   private startElapsedTimer(): void {
@@ -418,7 +483,8 @@ export class JobDetailComponent implements OnDestroy {
         if (fileName === 'prompt.md') this.editingPrompt.set(false);
         else this.editingStatus.set(false);
         this.fileSaved.emit();
-      }
+      },
+      error: (err) => this.showError(err)
     });
   }
 
@@ -438,7 +504,7 @@ export class JobDetailComponent implements OnDestroy {
     if (targetWatchPath === this.detail().info.watchPath) return;
     this.jobService.changeProject(this.detail().info.id, targetWatchPath).subscribe({
       next: () => this.projectChanged.emit(),
-      error: () => {} // select will revert on refresh
+      error: (err) => this.showError(err)
     });
   }
 }
