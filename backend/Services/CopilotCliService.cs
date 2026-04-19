@@ -7,25 +7,37 @@ namespace OrchestratorApi.Services;
 public class CopilotCliService
 {
     private readonly ILogger<CopilotCliService> _logger;
+    private readonly IConfiguration _configuration;
     private readonly ConcurrentDictionary<string, CliProcessInfo> _processes = new();
+    private string? _cliPathOverride;
 
     public event Action<string, CliOutputLine>? OnOutput;
     public event Action<string, CliExecution>? OnStarted;
     public event Action<string, CliExecution>? OnFinished;
 
-    public CopilotCliService(ILogger<CopilotCliService> logger)
+    public CopilotCliService(ILogger<CopilotCliService> logger, IConfiguration configuration)
     {
         _logger = logger;
+        _configuration = configuration;
     }
 
-    public bool IsAvailable()
+    public string GetCliPath() => _cliPathOverride ?? _configuration["CliPath"] ?? "copilot";
+
+    public void SetCliPath(string path)
     {
+        _cliPathOverride = string.IsNullOrWhiteSpace(path) ? null : path.Trim();
+        _logger.LogInformation("CLI path set to: {Path}", GetCliPath());
+    }
+
+    public (bool Available, string? Version, string Path) TestCliPath(string? path = null)
+    {
+        var testPath = path?.Trim() ?? GetCliPath();
         try
         {
             using var proc = new Process();
             proc.StartInfo = new ProcessStartInfo
             {
-                FileName = "copilot",
+                FileName = testPath,
                 Arguments = "--version",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -33,13 +45,20 @@ public class CopilotCliService
                 CreateNoWindow = true
             };
             proc.Start();
+            var version = proc.StandardOutput.ReadToEnd().Trim();
             proc.WaitForExit(5000);
-            return proc.ExitCode == 0;
+            return (proc.ExitCode == 0, version, testPath);
         }
-        catch
+        catch (Exception ex)
         {
-            return false;
+            return (false, ex.Message, testPath);
         }
+    }
+
+    public bool IsAvailable()
+    {
+        var (available, _, _) = TestCliPath();
+        return available;
     }
 
     public async Task<CliExecution?> StartAsync(string jobId, string prompt, string workingDirectory, CancellationToken ct = default)
@@ -54,7 +73,7 @@ public class CopilotCliService
 
         var psi = new ProcessStartInfo
         {
-            FileName = "copilot",
+            FileName = GetCliPath(),
             Arguments = $"-p \"{EscapeArg(promptArg)}\" --autopilot --yolo",
             WorkingDirectory = workingDirectory,
             RedirectStandardOutput = true,

@@ -1,6 +1,6 @@
 import { Component, input, output, signal, effect, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { JobDetail, WatchPathEntry, CliOutputLine } from '../models/job.model';
+import { JobDetail, WatchPathEntry, CliOutputLine, CliSettings } from '../models/job.model';
 import { JobService } from '../services/job.service';
 import { CliConsoleComponent } from './cli-console';
 
@@ -51,7 +51,49 @@ import { CliConsoleComponent } from './cli-console';
         <div class="detail__error">
           <span class="detail__error-icon">⚠️</span>
           <span class="detail__error-text">{{ err }}</span>
-          <button class="detail__error-close" (click)="errorMsg.set(null)">✕</button>
+          @if (isCliError()) {
+            <button class="detail__error-action" (click)="openCliConfig()">🔧 Configure</button>
+          }
+          <button class="detail__error-close" (click)="dismissError()">✕</button>
+        </div>
+      }
+
+      @if (showCliConfig()) {
+        <div class="cli-config">
+          <div class="cli-config__header">
+            <span class="cli-config__title">🔧 CLI Path Configuration</span>
+            <button class="detail__error-close" (click)="showCliConfig.set(false)">✕</button>
+          </div>
+          @if (cliStatus()) {
+            <div class="cli-config__status" [class.cli-config__status--ok]="cliStatus()!.available"
+                 [class.cli-config__status--err]="!cliStatus()!.available">
+              @if (cliStatus()!.available) {
+                ✅ {{ cliStatus()!.version }} — {{ cliStatus()!.path }}
+              } @else {
+                ❌ Not found at: {{ cliStatus()!.path }}
+              }
+            </div>
+          }
+          <div class="cli-config__row">
+            <input class="cli-config__input" type="text"
+                   [value]="cliPathDraft()"
+                   (input)="cliPathDraft.set($any($event.target).value)"
+                   placeholder="z.B. copilot, C:\\Program Files\\GitHub\\copilot.exe" />
+            <button class="btn-sm" (click)="testCliPath()" [disabled]="cliTesting()">
+              {{ cliTesting() ? '⏳' : '🧪 Test' }}
+            </button>
+            <button class="btn-sm btn-sm--primary" (click)="saveCliPath()" [disabled]="cliTesting()">💾 Save</button>
+          </div>
+          @if (cliTestResult(); as result) {
+            <div class="cli-config__status" [class.cli-config__status--ok]="result.available"
+                 [class.cli-config__status--err]="!result.available">
+              @if (result.available) {
+                ✅ Found: {{ result.version }}
+              } @else {
+                ❌ {{ result.version || 'Not found at this path' }}
+              }
+            </div>
+          }
         </div>
       }
 
@@ -321,6 +363,72 @@ import { CliConsoleComponent } from './cli-console';
       flex-shrink: 0;
     }
     .detail__error-close:hover { background: rgba(239,68,68,0.15); }
+    .detail__error-action {
+      background: rgba(99,102,241,0.15);
+      border: 1px solid rgba(99,102,241,0.3);
+      color: #a5b4fc;
+      cursor: pointer;
+      font-size: 12px;
+      padding: 3px 10px;
+      border-radius: 4px;
+      font-weight: 600;
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .detail__error-action:hover { background: rgba(99,102,241,0.25); }
+
+    .cli-config {
+      background: rgba(99,102,241,0.06);
+      border: 1px solid rgba(99,102,241,0.15);
+      border-radius: 8px;
+      padding: 14px;
+      margin-bottom: 20px;
+      animation: fadeIn 0.2s ease;
+    }
+    .cli-config__header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+    .cli-config__title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #c4b5fd;
+    }
+    .cli-config__row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .cli-config__input {
+      flex: 1;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+      color: #e2e8f0;
+      padding: 6px 10px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-family: 'Cascadia Code', 'Fira Code', monospace;
+    }
+    .cli-config__input:focus {
+      outline: none;
+      border-color: #6366f1;
+    }
+    .cli-config__status {
+      font-size: 12px;
+      padding: 6px 10px;
+      border-radius: 6px;
+      margin-top: 8px;
+    }
+    .cli-config__status--ok {
+      background: rgba(34,197,94,0.1);
+      color: #4ade80;
+    }
+    .cli-config__status--err {
+      background: rgba(239,68,68,0.1);
+      color: #fca5a5;
+    }
     @keyframes fadeIn {
       from { opacity: 0; transform: translateY(-4px); }
       to { opacity: 1; transform: translateY(0); }
@@ -344,6 +452,11 @@ export class JobDetailComponent implements OnDestroy {
   readonly elapsedTime = signal('');
   readonly errorMsg = signal<string | null>(null);
   readonly starting = signal(false);
+  readonly showCliConfig = signal(false);
+  readonly cliStatus = signal<CliSettings | null>(null);
+  readonly cliPathDraft = signal('');
+  readonly cliTestResult = signal<CliSettings | null>(null);
+  readonly cliTesting = signal(false);
 
   promptDraftValue = '';
   statusDraftValue = '';
@@ -498,6 +611,66 @@ export class JobDetailComponent implements OnDestroy {
 
   formatDate(dateStr: string): string {
     return new Date(dateStr).toLocaleDateString();
+  }
+
+  isCliError(): boolean {
+    const msg = this.errorMsg();
+    return !!msg && (msg.includes('CLI') || msg.includes('copilot') || msg.includes('Copilot'));
+  }
+
+  openCliConfig(): void {
+    this.showCliConfig.set(true);
+    this.cliTestResult.set(null);
+    this.jobService.getCliSettings().subscribe({
+      next: (settings) => {
+        this.cliStatus.set(settings);
+        this.cliPathDraft.set(settings.path);
+      },
+      error: (err) => this.showError(err)
+    });
+  }
+
+  dismissError(): void {
+    this.errorMsg.set(null);
+    this.showCliConfig.set(false);
+  }
+
+  testCliPath(): void {
+    const path = this.cliPathDraft().trim();
+    if (!path) return;
+    this.cliTesting.set(true);
+    this.cliTestResult.set(null);
+    this.jobService.testCliPath(path).subscribe({
+      next: (result) => {
+        this.cliTestResult.set(result);
+        this.cliTesting.set(false);
+      },
+      error: (err) => {
+        this.cliTesting.set(false);
+        this.showError(err);
+      }
+    });
+  }
+
+  saveCliPath(): void {
+    const path = this.cliPathDraft().trim();
+    if (!path) return;
+    this.cliTesting.set(true);
+    this.jobService.setCliPath(path).subscribe({
+      next: (result) => {
+        this.cliStatus.set(result);
+        this.cliTestResult.set(null);
+        this.cliTesting.set(false);
+        if (result.available) {
+          this.errorMsg.set(null);
+          this.showCliConfig.set(false);
+        }
+      },
+      error: (err) => {
+        this.cliTesting.set(false);
+        this.showError(err);
+      }
+    });
   }
 
   onProjectChange(targetWatchPath: string) {

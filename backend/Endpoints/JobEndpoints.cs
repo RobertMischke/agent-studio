@@ -147,5 +147,27 @@ public static class JobEndpoints
         });
 
         app.MapGet("/healthz", () => Results.Ok("ok"));
+
+        // CLI settings endpoints
+        var settingsGroup = app.MapGroup("/api/settings");
+
+        settingsGroup.MapGet("/cli", (CopilotCliService cli) =>
+        {
+            var (available, version, path) = cli.TestCliPath();
+            return Results.Ok(new { path, available, version });
+        });
+
+        settingsGroup.MapPut("/cli", (SetCliPathRequest req, CopilotCliService cli) =>
+        {
+            cli.SetCliPath(req.Path);
+            var (available, version, path) = cli.TestCliPath();
+            return Results.Ok(new { path, available, version });
+        });
+
+        settingsGroup.MapPost("/cli/test", (SetCliPathRequest req, CopilotCliService cli) =>
+        {
+            var (available, version, path) = cli.TestCliPath(req.Path);
+            return Results.Ok(new { path, available, version });
+        });
     }
 }

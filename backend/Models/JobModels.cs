@@ -102,6 +102,11 @@ public record SetRunnerModeRequest
     public string Mode { get; init; } = "manual";
 }
 
+public record SetCliPathRequest
+{
+    public string Path { get; init; } = "";
+}
+
 public record CliOutputLine
 {
     public DateTime Timestamp { get; init; }

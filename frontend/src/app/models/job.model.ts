@@ -74,3 +74,9 @@ export interface ProjectRunnerStatus {
 export interface RunnerStatus {
   projects: { [key: string]: ProjectRunnerStatus };
 }
+
+export interface CliSettings {
+  path: string;
+  available: boolean;
+  version: string | null;
+}

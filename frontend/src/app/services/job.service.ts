@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus } from '../models/job.model';
+import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings } from '../models/job.model';
 
 @Injectable({ providedIn: 'root' })
 export class JobService {
@@ -104,5 +104,18 @@ export class JobService {
     this.getRunnerStatus().subscribe({
       next: (status) => this.runnerStatus.set(status),
     });
+  }
+
+  // CLI settings
+  getCliSettings() {
+    return this.http.get<CliSettings>(`${this.baseUrl}/settings/cli`);
+  }
+
+  setCliPath(path: string) {
+    return this.http.put<CliSettings>(`${this.baseUrl}/settings/cli`, { path });
+  }
+
+  testCliPath(path: string) {
+    return this.http.post<CliSettings>(`${this.baseUrl}/settings/cli/test`, { path });
   }
 }
