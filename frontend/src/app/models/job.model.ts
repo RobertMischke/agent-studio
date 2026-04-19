@@ -45,4 +45,32 @@ export interface CreateJobRequest {
 export interface WatchPathEntry {
   name: string;
   path: string;
+  rootPath: string;
+}
+
+export interface CliExecution {
+  jobId: string;
+  processId: number;
+  startedAt: string;
+  status: string;
+  exitCode: number | null;
+  durationSeconds: number | null;
+}
+
+export interface CliOutputLine {
+  timestamp: string;
+  stream: string;
+  text: string;
+}
+
+export interface ProjectRunnerStatus {
+  projectName: string;
+  mode: string;
+  activeJobId: string | null;
+  activeExecution: CliExecution | null;
+  queuedJobIds: string[];
+}
+
+export interface RunnerStatus {
+  projects: { [key: string]: ProjectRunnerStatus };
 }

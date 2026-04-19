@@ -3,7 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { JobColumnComponent } from './components/job-column';
 import { JobDetailComponent } from './components/job-detail';
 import { JobService } from './services/job.service';
-import { JobDetail, JobInfo, GroupedJobs, WatchPathEntry } from './models/job.model';
+import { JobDetail, JobInfo, GroupedJobs, WatchPathEntry, ProjectRunnerStatus } from './models/job.model';
 
 @Component({
   selector: 'app-root',
@@ -21,6 +21,9 @@ import { JobDetail, JobInfo, GroupedJobs, WatchPathEntry } from './models/job.mo
             <button class="filter-chip"
                     [class.filter-chip--active]="isProjectActive(name)"
                     (click)="toggleProject(name)">
+              @if (getRunnerIndicator(name); as indicator) {
+                <span class="runner-dot" [class]="'runner-dot--' + indicator.cls">{{ indicator.icon }}</span>
+              }
               {{ name }}
             </button>
           }
@@ -132,6 +135,12 @@ import { JobDetail, JobInfo, GroupedJobs, WatchPathEntry } from './models/job.mo
       color: #c4b5fd;
     }
     .filter-chip--active:hover { background: rgba(139,92,246,0.3); }
+    .runner-dot { font-size: 10px; margin-right: 2px; }
+    .runner-dot--running { animation: pulse-runner 1.5s infinite; }
+    @keyframes pulse-runner {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
     .btn {
       background: rgba(255,255,255,0.06);
       border: 1px solid rgba(255,255,255,0.08);
@@ -283,6 +292,7 @@ export class App implements OnInit {
         if (entries.length > 0) this.newWatchPath = entries[0].path;
       }
     });
+    this.jobService.refreshRunnerStatus();
   }
 
   refresh() {
@@ -352,6 +362,17 @@ export class App implements OnInit {
 
   isProjectActive(name: string): boolean {
     return this.activeProjects().has(name);
+  }
+
+  getRunnerIndicator(name: string): { icon: string; cls: string } | null {
+    const status = this.jobService.runnerStatus();
+    const runner = status.projects[name];
+    if (!runner) return null;
+    if (runner.activeJobId) return { icon: '🔵', cls: 'running' };
+    if (runner.mode === 'paused') return { icon: '⏸', cls: 'paused' };
+    if (runner.mode === 'auto-continuous') return { icon: '🟢', cls: 'idle' };
+    if (runner.mode === 'auto-single') return { icon: '🟢', cls: 'idle' };
+    return null;
   }
 
   onFileSaved() {

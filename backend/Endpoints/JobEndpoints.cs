@@ -86,10 +86,55 @@ public static class JobEndpoints
             return success ? Results.Ok() : Results.BadRequest("Failed to change project");
         });
 
+        // CLI execution endpoints
+        group.MapPost("/{jobId}/start", async (string jobId, TaskRunnerService runner, CancellationToken ct) =>
+        {
+            var execution = await runner.StartJobAsync(jobId, ct);
+            return execution is null ? Results.BadRequest("Cannot start job (not found, no runner, or already running)") : Results.Ok(execution);
+        });
+
+        group.MapPost("/{jobId}/stop", (string jobId, TaskRunnerService runner) =>
+        {
+            var success = runner.StopJob(jobId);
+            return success ? Results.Ok() : Results.NotFound();
+        });
+
+        group.MapGet("/{jobId}/output", (string jobId, TaskRunnerService runner) =>
+        {
+            var output = runner.GetJobOutput(jobId);
+            return Results.Ok(output);
+        });
+
         app.MapGet("/api/watch-paths", (JobScannerService scanner) =>
         {
             var entries = scanner.GetWatchPaths();
             return Results.Ok(entries);
+        });
+
+        // Runner endpoints
+        var runnerGroup = app.MapGroup("/api/runner");
+
+        runnerGroup.MapGet("/status", (TaskRunnerService runner) =>
+        {
+            return Results.Ok(runner.GetStatus());
+        });
+
+        runnerGroup.MapPut("/{projectName}/mode", (string projectName, SetRunnerModeRequest req, TaskRunnerService runner) =>
+        {
+            var success = runner.SetMode(projectName, req.Mode);
+            return success ? Results.Ok() : Results.BadRequest("Invalid project or mode");
+        });
+
+        runnerGroup.MapPost("/{projectName}/start", (string projectName, TaskRunnerService runner) =>
+        {
+            var success = runner.StartRunner(projectName);
+            return success ? Results.Ok() : Results.NotFound();
+        });
+
+        runnerGroup.MapPost("/{projectName}/stop", (string projectName, TaskRunnerService runner) =>
+        {
+            var success = runner.StopRunner(projectName);
+            return success ? Results.Ok() : Results.NotFound();
         });
 
         app.MapGet("/healthz", () => Results.Ok("ok"));

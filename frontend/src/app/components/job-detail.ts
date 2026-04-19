@@ -1,12 +1,13 @@
-import { Component, input, output, signal } from '@angular/core';
+import { Component, input, output, signal, effect, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { JobDetail, WatchPathEntry } from '../models/job.model';
+import { JobDetail, WatchPathEntry, CliOutputLine } from '../models/job.model';
 import { JobService } from '../services/job.service';
+import { CliConsoleComponent } from './cli-console';
 
 @Component({
   selector: 'app-job-detail',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, CliConsoleComponent],
   template: `
     <div class="detail">
       <div class="detail__header">
@@ -29,6 +30,20 @@ import { JobService } from '../services/job.service';
         <span>#{{ detail().info.order }}</span>
         <span>{{ formatDate(detail().info.createdAt) }}</span>
       </div>
+
+      @if (canStartJob() || isRunning()) {
+        <div class="execution-bar">
+          @if (isRunning()) {
+            <div class="execution-bar__status">
+              <span class="execution-bar__pulse"></span>
+              <span class="execution-bar__text">Running since {{ elapsedTime() }}</span>
+            </div>
+            <button class="btn-exec btn-exec--stop" (click)="stopJob()">⏹ Stop</button>
+          } @else {
+            <button class="btn-exec btn-exec--start" (click)="startJob()">▶ Start CLI</button>
+          }
+        </div>
+      }
 
       <section class="section">
         <div class="section__header">
@@ -71,6 +86,12 @@ import { JobService } from '../services/job.service';
           <pre class="section__body">{{ detail().statusMarkdown || '(empty)' }}</pre>
         }
       </section>
+
+      @if (cliOutput().length > 0 || isRunning()) {
+        <section class="section">
+          <app-cli-console [lines]="cliOutput()" />
+        </section>
+      }
 
       @if (detail().log.length > 0) {
         <section class="section">
@@ -215,9 +236,58 @@ import { JobService } from '../services/job.service';
       box-sizing: border-box;
     }
     .section__editor:focus { outline: none; border-color: #6366f1; }
+
+    .execution-bar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 14px;
+      background: rgba(0,0,0,0.2);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    .execution-bar__status {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 13px;
+      color: #94a3b8;
+    }
+    .execution-bar__pulse {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #3b82f6;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(59,130,246,0.4); }
+      50% { opacity: 0.7; box-shadow: 0 0 0 6px rgba(59,130,246,0); }
+    }
+    .execution-bar__text { font-variant-numeric: tabular-nums; }
+    .btn-exec {
+      border: none;
+      padding: 6px 16px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .btn-exec--start {
+      background: rgba(34,197,94,0.15);
+      color: #4ade80;
+      border: 1px solid rgba(34,197,94,0.3);
+    }
+    .btn-exec--start:hover { background: rgba(34,197,94,0.25); }
+    .btn-exec--stop {
+      background: rgba(239,68,68,0.15);
+      color: #f87171;
+      border: 1px solid rgba(239,68,68,0.3);
+    }
+    .btn-exec--stop:hover { background: rgba(239,68,68,0.25); }
   `]
 })
-export class JobDetailComponent {
+export class JobDetailComponent implements OnDestroy {
   readonly detail = input.required<JobDetail>();
   readonly watchPaths = input<WatchPathEntry[]>([]);
   readonly back = output<void>();
@@ -228,11 +298,97 @@ export class JobDetailComponent {
   readonly editingStatus = signal(false);
   readonly promptDraft = signal('');
   readonly statusDraft = signal('');
+  readonly cliOutput = signal<CliOutputLine[]>([]);
+  readonly isRunning = signal(false);
+  readonly startedAt = signal<Date | null>(null);
+  readonly elapsedTime = signal('');
 
   promptDraftValue = '';
   statusDraftValue = '';
+  private elapsedTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(private jobService: JobService) {}
+
+  private detailEffect = effect(() => {
+    const d = this.detail();
+    if (d.info.state === '3-progress') {
+      // Try to load existing output
+      this.jobService.getJobOutput(d.info.id).subscribe({
+        next: (output) => {
+          if (output.length > 0) {
+            this.cliOutput.set(output);
+            this.isRunning.set(true);
+            this.startedAt.set(new Date());
+            this.startElapsedTimer();
+          }
+        },
+        error: () => {}
+      });
+    }
+  });
+
+  ngOnDestroy() {
+    this.detailEffect.destroy();
+    if (this.elapsedTimer) clearInterval(this.elapsedTimer);
+  }
+
+  canStartJob(): boolean {
+    const state = this.detail().info.state;
+    return (state === '2-ready' || state === '3-progress') && !this.isRunning();
+  }
+
+  startJob(): void {
+    this.jobService.startJob(this.detail().info.id).subscribe({
+      next: (exec) => {
+        this.isRunning.set(true);
+        this.startedAt.set(new Date(exec.startedAt));
+        this.cliOutput.set([]);
+        this.startElapsedTimer();
+        this.pollOutput();
+      },
+      error: () => {}
+    });
+  }
+
+  stopJob(): void {
+    this.jobService.stopJob(this.detail().info.id).subscribe({
+      next: () => {
+        this.isRunning.set(false);
+        if (this.elapsedTimer) clearInterval(this.elapsedTimer);
+      },
+      error: () => {}
+    });
+  }
+
+  private startElapsedTimer(): void {
+    if (this.elapsedTimer) clearInterval(this.elapsedTimer);
+    this.updateElapsed();
+    this.elapsedTimer = setInterval(() => this.updateElapsed(), 1000);
+  }
+
+  private updateElapsed(): void {
+    const start = this.startedAt();
+    if (!start) { this.elapsedTime.set('0s'); return; }
+    const secs = Math.floor((Date.now() - start.getTime()) / 1000);
+    if (secs < 60) this.elapsedTime.set(`${secs}s`);
+    else if (secs < 3600) this.elapsedTime.set(`${Math.floor(secs / 60)}m ${secs % 60}s`);
+    else this.elapsedTime.set(`${Math.floor(secs / 3600)}h ${Math.floor((secs % 3600) / 60)}m`);
+  }
+
+  private pollOutput(): void {
+    // Poll every 2 seconds while running (SignalR will augment this)
+    const poll = () => {
+      if (!this.isRunning()) return;
+      this.jobService.getJobOutput(this.detail().info.id).subscribe({
+        next: (output) => {
+          this.cliOutput.set(output);
+          setTimeout(poll, 2000);
+        },
+        error: () => setTimeout(poll, 5000)
+      });
+    };
+    setTimeout(poll, 1000);
+  }
 
   isProgress(): boolean {
     return this.detail().info.state === '3-progress';

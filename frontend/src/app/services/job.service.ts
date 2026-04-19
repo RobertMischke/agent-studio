@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry } from '../models/job.model';
+import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus } from '../models/job.model';
 
 @Injectable({ providedIn: 'root' })
 export class JobService {
@@ -10,6 +10,7 @@ export class JobService {
   readonly grouped = signal<GroupedJobs>({ preparation: [], ready: [], progress: [], review: [], completed: [] });
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
+  readonly runnerStatus = signal<RunnerStatus>({ projects: {} });
 
   constructor(private http: HttpClient) {}
 
@@ -63,5 +64,41 @@ export class JobService {
 
   changeProject(jobId: string, targetWatchPath: string) {
     return this.http.post(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/change-project`, { targetWatchPath });
+  }
+
+  // CLI execution
+  startJob(jobId: string) {
+    return this.http.post<CliExecution>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/start`, {});
+  }
+
+  stopJob(jobId: string) {
+    return this.http.post(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/stop`, {});
+  }
+
+  getJobOutput(jobId: string) {
+    return this.http.get<CliOutputLine[]>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/output`);
+  }
+
+  // Runner management
+  getRunnerStatus() {
+    return this.http.get<RunnerStatus>(`${this.baseUrl}/runner/status`);
+  }
+
+  setRunnerMode(projectName: string, mode: string) {
+    return this.http.put(`${this.baseUrl}/runner/${encodeURIComponent(projectName)}/mode`, { mode });
+  }
+
+  startRunner(projectName: string) {
+    return this.http.post(`${this.baseUrl}/runner/${encodeURIComponent(projectName)}/start`, {});
+  }
+
+  stopRunner(projectName: string) {
+    return this.http.post(`${this.baseUrl}/runner/${encodeURIComponent(projectName)}/stop`, {});
+  }
+
+  refreshRunnerStatus(): void {
+    this.getRunnerStatus().subscribe({
+      next: (status) => this.runnerStatus.set(status),
+    });
   }
 }

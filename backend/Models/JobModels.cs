@@ -65,6 +65,48 @@ public record WatchPathEntry
 {
     public string Name { get; init; } = "";
     public string Path { get; init; } = "";
+    public string RootPath { get; init; } = "";
+}
+
+public record CliExecution
+{
+    public string JobId { get; init; } = "";
+    public int ProcessId { get; init; }
+    public DateTime StartedAt { get; init; }
+    public string Status { get; init; } = "";      // running | completed | failed | cancelled
+    public int? ExitCode { get; init; }
+    public double? DurationSeconds { get; init; }
+}
+
+public record RunnerStatus
+{
+    public Dictionary<string, ProjectRunnerStatus> Projects { get; init; } = new();
+}
+
+public record ProjectRunnerStatus
+{
+    public string ProjectName { get; init; } = "";
+    public string Mode { get; init; } = "manual";
+    public string? ActiveJobId { get; init; }
+    public CliExecution? ActiveExecution { get; init; }
+    public List<string> QueuedJobIds { get; init; } = [];
+}
+
+public record StartJobRequest
+{
+    public string? AgentOverride { get; init; }
+}
+
+public record SetRunnerModeRequest
+{
+    public string Mode { get; init; } = "manual";
+}
+
+public record CliOutputLine
+{
+    public DateTime Timestamp { get; init; }
+    public string Stream { get; init; } = "stdout";  // stdout | stderr
+    public string Text { get; init; } = "";
 }
 
 public static class JobStates
