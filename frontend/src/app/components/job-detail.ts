@@ -61,7 +61,7 @@ import { CliConsoleComponent } from './cli-console';
       @if (showCliConfig()) {
         <div class="cli-config">
           <div class="cli-config__header">
-            <span class="cli-config__title">🔧 CLI Path Configuration</span>
+            <span class="cli-config__title">🔧 CLI Configuration</span>
             <button class="detail__error-close" (click)="showCliConfig.set(false)">✕</button>
           </div>
           @if (cliStatus()) {
@@ -92,6 +92,25 @@ import { CliConsoleComponent } from './cli-console';
               } @else {
                 ❌ {{ result.version || 'Not found at this path' }}
               }
+            </div>
+          }
+          <div class="cli-config__separator"></div>
+          <div class="cli-config__row">
+            <input class="cli-config__input" [type]="showToken() ? 'text' : 'password'"
+                   [value]="tokenDraft()"
+                   (input)="tokenDraft.set($any($event.target).value)"
+                   placeholder="GitHub Token (PAT or OAuth)" />
+            <button class="btn-sm" (click)="showToken.set(!showToken())">
+              {{ showToken() ? '🙈' : '👁' }}
+            </button>
+            <button class="btn-sm btn-sm--primary" (click)="saveToken()" [disabled]="tokenSaving()">
+              {{ tokenSaving() ? '⏳' : '💾 Save Token' }}
+            </button>
+          </div>
+          @if (cliStatus()) {
+            <div class="cli-config__status" [class.cli-config__status--ok]="cliStatus()!.hasToken"
+                 [class.cli-config__status--err]="!cliStatus()!.hasToken">
+              {{ cliStatus()!.hasToken ? '🔑 Token configured' : '⚠️ No token — CLI may fail to authenticate' }}
             </div>
           }
         </div>
@@ -429,6 +448,10 @@ import { CliConsoleComponent } from './cli-console';
       background: rgba(239,68,68,0.1);
       color: #fca5a5;
     }
+    .cli-config__separator {
+      border-top: 1px solid rgba(255,255,255,0.08);
+      margin: 8px 0 4px;
+    }
     @keyframes fadeIn {
       from { opacity: 0; transform: translateY(-4px); }
       to { opacity: 1; transform: translateY(0); }
@@ -457,6 +480,9 @@ export class JobDetailComponent implements OnDestroy {
   readonly cliPathDraft = signal('');
   readonly cliTestResult = signal<CliSettings | null>(null);
   readonly cliTesting = signal(false);
+  readonly tokenDraft = signal('');
+  readonly showToken = signal(false);
+  readonly tokenSaving = signal(false);
 
   promptDraftValue = '';
   statusDraftValue = '';
@@ -615,7 +641,7 @@ export class JobDetailComponent implements OnDestroy {
 
   isCliError(): boolean {
     const msg = this.errorMsg();
-    return !!msg && (msg.includes('CLI') || msg.includes('copilot') || msg.includes('Copilot'));
+    return !!msg && (msg.includes('CLI') || msg.includes('copilot') || msg.includes('Copilot') || msg.includes('authenticat'));
   }
 
   openCliConfig(): void {
@@ -668,6 +694,26 @@ export class JobDetailComponent implements OnDestroy {
       },
       error: (err) => {
         this.cliTesting.set(false);
+        this.showError(err);
+      }
+    });
+  }
+
+  saveToken(): void {
+    const token = this.tokenDraft().trim();
+    if (!token) return;
+    this.tokenSaving.set(true);
+    this.jobService.setGitHubToken(token).subscribe({
+      next: (result) => {
+        this.cliStatus.set(result);
+        this.tokenSaving.set(false);
+        this.tokenDraft.set('');
+        if (result.hasToken && result.available) {
+          this.errorMsg.set(null);
+        }
+      },
+      error: (err) => {
+        this.tokenSaving.set(false);
         this.showError(err);
       }
     });

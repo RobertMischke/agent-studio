@@ -230,13 +230,13 @@ public class ProjectRunner
 
             // Start CLI process
             var prompt = $"Lies @.orchestrator/jobs/3-progress/{jobId}/prompt.md und führe den Task aus.";
-            var execution = await _cli.StartAsync(jobId, prompt, Entry.RootPath, ct);
+            var (execution, cliError) = await _cli.StartAsync(jobId, prompt, Entry.RootPath, ct);
 
             if (execution == null)
             {
                 _activeJobId = null;
                 NotifyStatus();
-                return (null, "Failed to start Copilot CLI process — check that 'copilot' is installed, authenticated, and the project root is a trusted directory");
+                return (null, cliError ?? "Failed to start Copilot CLI process");
             }
 
             return (execution, null);

@@ -107,6 +107,11 @@ public record SetCliPathRequest
     public string Path { get; init; } = "";
 }
 
+public record SetGitHubTokenRequest
+{
+    public string? Token { get; init; }
+}
+
 public record CliOutputLine
 {
     public DateTime Timestamp { get; init; }

@@ -154,20 +154,27 @@ public static class JobEndpoints
         settingsGroup.MapGet("/cli", (CopilotCliService cli) =>
         {
             var (available, version, path) = cli.TestCliPath();
-            return Results.Ok(new { path, available, version });
+            return Results.Ok(new { path, available, version, hasToken = cli.HasGitHubToken() });
         });
 
         settingsGroup.MapPut("/cli", (SetCliPathRequest req, CopilotCliService cli) =>
         {
             cli.SetCliPath(req.Path);
             var (available, version, path) = cli.TestCliPath();
-            return Results.Ok(new { path, available, version });
+            return Results.Ok(new { path, available, version, hasToken = cli.HasGitHubToken() });
         });
 
         settingsGroup.MapPost("/cli/test", (SetCliPathRequest req, CopilotCliService cli) =>
         {
             var (available, version, path) = cli.TestCliPath(req.Path);
-            return Results.Ok(new { path, available, version });
+            return Results.Ok(new { path, available, version, hasToken = cli.HasGitHubToken() });
+        });
+
+        settingsGroup.MapPut("/cli/token", (SetGitHubTokenRequest req, CopilotCliService cli) =>
+        {
+            cli.SetGitHubToken(req.Token);
+            var (available, version, path) = cli.TestCliPath();
+            return Results.Ok(new { path, available, version, hasToken = cli.HasGitHubToken() });
         });
     }
 }

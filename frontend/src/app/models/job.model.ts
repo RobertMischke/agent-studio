@@ -79,4 +79,5 @@ export interface CliSettings {
   path: string;
   available: boolean;
   version: string | null;
+  hasToken: boolean;
 }

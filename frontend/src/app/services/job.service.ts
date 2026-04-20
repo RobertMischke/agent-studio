@@ -118,4 +118,8 @@ export class JobService {
   testCliPath(path: string) {
     return this.http.post<CliSettings>(`${this.baseUrl}/settings/cli/test`, { path });
   }
+
+  setGitHubToken(token: string) {
+    return this.http.put<CliSettings>(`${this.baseUrl}/settings/cli/token`, { token });
+  }
 }

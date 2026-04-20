@@ -10,6 +10,7 @@ public class CopilotCliService
     private readonly IConfiguration _configuration;
     private readonly ConcurrentDictionary<string, CliProcessInfo> _processes = new();
     private string? _cliPathOverride;
+    private string? _githubTokenOverride;
 
     public event Action<string, CliOutputLine>? OnOutput;
     public event Action<string, CliExecution>? OnStarted;
@@ -28,6 +29,16 @@ public class CopilotCliService
         _cliPathOverride = string.IsNullOrWhiteSpace(path) ? null : path.Trim();
         _logger.LogInformation("CLI path set to: {Path}", GetCliPath());
     }
+
+    public string? GetGitHubToken() => _githubTokenOverride ?? _configuration["GitHubToken"];
+
+    public void SetGitHubToken(string? token)
+    {
+        _githubTokenOverride = string.IsNullOrWhiteSpace(token) ? null : token.Trim();
+        _logger.LogInformation("GitHub token {Action}", _githubTokenOverride != null ? "set" : "cleared");
+    }
+
+    public bool HasGitHubToken() => !string.IsNullOrWhiteSpace(GetGitHubToken()) || TryGetGhAuthToken() != null;
 
     public (bool Available, string? Version, string Path) TestCliPath(string? path = null)
     {
@@ -61,12 +72,18 @@ public class CopilotCliService
         return available;
     }
 
-    public async Task<CliExecution?> StartAsync(string jobId, string prompt, string workingDirectory, CancellationToken ct = default)
+    public async Task<(CliExecution? Execution, string? Error)> StartAsync(string jobId, string prompt, string workingDirectory, CancellationToken ct = default)
     {
-        if (_processes.ContainsKey(jobId))
+        if (_processes.TryGetValue(jobId, out var existing))
         {
-            _logger.LogWarning("CLI process already running for job {JobId}", jobId);
-            return null;
+            if (!existing.Process.HasExited)
+            {
+                _logger.LogWarning("CLI process already running for job {JobId}", jobId);
+                return (null, $"CLI process already running for job '{jobId}'");
+            }
+            // Previous process finished/failed — clean up and allow restart
+            _logger.LogInformation("Clearing stale CLI entry for job {JobId} (exit={ExitCode})", jobId, existing.Process.ExitCode);
+            _processes.TryRemove(jobId, out _);
         }
 
         var promptArg = $"Lies @.orchestrator/jobs/3-progress/{jobId}/prompt.md und führe den Task aus. Schreibe deinen Completion-Report in .orchestrator/jobs/3-progress/{jobId}/status.md";
@@ -83,6 +100,12 @@ public class CopilotCliService
             CreateNoWindow = true
         };
 
+        var token = GetGitHubToken() ?? TryGetGhAuthToken();
+        if (!string.IsNullOrWhiteSpace(token))
+        {
+            psi.Environment["GITHUB_TOKEN"] = token;
+        }
+
         var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
 
         try
@@ -92,7 +115,7 @@ public class CopilotCliService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to start Copilot CLI for job {JobId}", jobId);
-            return null;
+            return (null, $"Failed to start CLI process: {ex.Message}");
         }
 
         var execution = new CliExecution
@@ -116,7 +139,7 @@ public class CopilotCliService
         // Monitor process exit in background
         _ = MonitorProcessAsync(jobId, process, info, ct);
 
-        return execution;
+        return (execution, null);
     }
 
     public bool Stop(string jobId)
@@ -257,6 +280,51 @@ public class CopilotCliService
         {
             _logger.LogError(ex, "Failed to write output log for job {JobId}", jobId);
         }
+    }
+
+    private string? TryGetGhAuthToken()
+    {
+        try
+        {
+            // Try common locations for gh CLI
+            var candidates = new[]
+            {
+                "gh",
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "gh-cli", "bin", "gh.exe"),
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "GitHub CLI", "gh.exe")
+            };
+
+            foreach (var ghPath in candidates)
+            {
+                try
+                {
+                    using var proc = new Process();
+                    proc.StartInfo = new ProcessStartInfo
+                    {
+                        FileName = ghPath,
+                        Arguments = "auth token",
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
+                    proc.Start();
+                    var token = proc.StandardOutput.ReadToEnd().Trim();
+                    proc.WaitForExit(5000);
+                    if (proc.ExitCode == 0 && !string.IsNullOrWhiteSpace(token))
+                    {
+                        _logger.LogInformation("Resolved GitHub token via gh CLI at {Path}", ghPath);
+                        return token;
+                    }
+                }
+                catch { /* try next candidate */ }
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Failed to get token from gh CLI");
+        }
+        return null;
     }
 
     private static string EscapeArg(string arg) => arg.Replace("\"", "\\\"");

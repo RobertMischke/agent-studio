@@ -16,6 +16,7 @@ import { CliOutputLine } from '../models/job.model';
           <button class="console__btn" [class.console__btn--active]="autoScroll()" (click)="autoScroll.set(!autoScroll())">
             {{ autoScroll() ? '📌' : '📋' }} Auto-scroll
           </button>
+          <button class="console__btn" (click)="copyOutput()">{{ copied() ? '✅ Copied' : '📋 Copy' }}</button>
           <button class="console__btn" (click)="clear()">🗑 Clear</button>
         </div>
       </div>
@@ -155,6 +156,18 @@ export class CliConsoleComponent implements OnDestroy {
   formatTime(dateStr: string): string {
     const d = new Date(dateStr);
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+
+  readonly copied = signal(false);
+  private copiedTimer: ReturnType<typeof setTimeout> | null = null;
+
+  copyOutput() {
+    const text = this.filteredLines().map(l => l.text).join('\n');
+    navigator.clipboard.writeText(text).then(() => {
+      this.copied.set(true);
+      if (this.copiedTimer) clearTimeout(this.copiedTimer);
+      this.copiedTimer = setTimeout(() => this.copied.set(false), 2000);
+    });
   }
 
   clear() {
