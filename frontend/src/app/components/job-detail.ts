@@ -155,36 +155,29 @@ import { ActivityLogViewComponent } from './activity-log-view';
               </div>
 
               @if (usage.metrics.length > 0) {
-                <div class="context-usage__metrics">
+                <div class="ctx-tiles">
                   @for (metric of usage.metrics; track metric.label) {
-                    <div class="context-usage__metric">
-                      <span class="context-usage__metric-label">{{ metric.label }}</span>
-                      <span class="context-usage__metric-value">{{ metric.value }}</span>
+                    <div class="ctx-tile">
+                      <div class="ctx-tile__head">
+                        <span class="ctx-tile__icon">{{ contextMetricIcon(metric.label) }}</span>
+                        <span class="ctx-tile__label">{{ metric.label }}</span>
+                      </div>
+                      <div class="ctx-tile__value">
+                        @for (part of formatContextMetric(metric.label, metric.value); track $index) {
+                          <span class="ctx-tile__chip" [class.ctx-tile__chip--muted]="part.muted">
+                            @if (part.symbol) {
+                              <span class="ctx-tile__chip-symbol">{{ part.symbol }}</span>
+                            }
+                            <span class="ctx-tile__chip-text">{{ part.text }}</span>
+                          </span>
+                        }
+                      </div>
                     </div>
                   }
                 </div>
-              }
-
-              @if (usage.sections.length > 0) {
-                <div class="context-usage__sections">
-                  @for (section of usage.sections; track section.title) {
-                    <section class="context-usage__section">
-                      <h4 class="context-usage__section-title">{{ section.title }}</h4>
-                      <ul class="context-usage__list">
-                        @for (item of section.items; track $index) {
-                          <li>{{ item }}</li>
-                        }
-                      </ul>
-                    </section>
-                  }
-                </div>
-              }
-
-              @if (usage.notes.length > 0) {
-                <div class="context-usage__notes">
-                  @for (note of usage.notes; track $index) {
-                    <div class="context-usage__note">{{ note }}</div>
-                  }
+              } @else {
+                <div class="sidebar-card__empty">
+                  No metrics parsed from the last <code>/context usage</code> output.
                 </div>
               }
             </div>
@@ -547,70 +540,62 @@ import { ActivityLogViewComponent } from './activity-log-view';
       color: #fca5a5;
       border: 1px solid rgba(239,68,68,0.24);
     }
-    .context-usage__metrics {
+    .context-usage__metrics { display: none; } /* legacy — replaced by .ctx-tiles */
+    .ctx-tiles {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
       gap: 10px;
     }
-    .context-usage__metric {
-      padding: 10px 12px;
+    .ctx-tile {
+      padding: 12px 14px;
       border-radius: 12px;
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.05);
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-    .context-usage__metric-label {
-      color: rgba(255,255,255,0.55);
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      font-size: 0.7rem;
-    }
-    .context-usage__metric-value {
-      color: #e2e8f0;
-      font-size: 0.84rem;
-      line-height: 1.5;
-      font-family: var(--font-mono, monospace);
-    }
-    .context-usage__sections {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-    .context-usage__section {
-      padding: 12px;
-      border-radius: 12px;
-      background: rgba(0,0,0,0.18);
-      border: 1px solid rgba(255,255,255,0.05);
-    }
-    .context-usage__section-title {
-      margin: 0 0 8px;
-      color: #c4b5fd;
-      font-size: 0.8rem;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }
-    .context-usage__list {
-      margin: 0;
-      padding-left: 18px;
-      color: #cbd5e1;
-      font-size: 0.84rem;
-      line-height: 1.6;
-    }
-    .context-usage__notes {
+      background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015));
+      border: 1px solid rgba(255,255,255,0.06);
       display: flex;
       flex-direction: column;
       gap: 8px;
+      min-width: 0;
     }
-    .context-usage__note {
-      padding: 10px 12px;
-      border-radius: 10px;
-      background: rgba(255,255,255,0.03);
-      color: #94a3b8;
-      font-size: 0.82rem;
-      line-height: 1.5;
+    .ctx-tile__head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: rgba(255,255,255,0.55);
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
     }
+    .ctx-tile__icon { font-size: 0.95rem; line-height: 1; }
+    .ctx-tile__label { font-weight: 500; }
+    .ctx-tile__value {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 4px 10px;
+    }
+    .ctx-tile__chip {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 4px;
+      color: #e2e8f0;
+      font-family: var(--font-mono, monospace);
+      font-size: 0.95rem;
+      line-height: 1.2;
+    }
+    .ctx-tile__chip--muted {
+      color: rgba(226,232,240,0.55);
+      font-size: 0.78rem;
+    }
+    .ctx-tile__chip-symbol {
+      color: rgba(255,255,255,0.4);
+      font-size: 0.78rem;
+    }
+    .context-usage__sections,
+    .context-usage__section,
+    .context-usage__section-title,
+    .context-usage__list,
+    .context-usage__notes,
+    .context-usage__note { display: none; }
     .detail {
       background: #181825;
       border: 1px solid rgba(255,255,255,0.06);
@@ -1552,6 +1537,57 @@ export class JobDetailComponent implements OnDestroy {
       hour: '2-digit',
       minute: '2-digit'
     });
+  }
+
+  contextMetricIcon(label: string): string {
+    const l = label.toLowerCase();
+    if (l.startsWith('token')) return '🪙';
+    if (l.startsWith('change')) return '📝';
+    if (l.startsWith('request')) return '⚡';
+    if (l.startsWith('session') || l.includes('duration')) return '⏱';
+    return '•';
+  }
+
+  /**
+   * Splits a raw metric value into displayable chips. Handles the three known
+   * Copilot CLI footer formats specially; everything else is shown as a single
+   * chip so unknown metrics still render.
+   *
+   * Tokens   "↑ 89.7k • ↓ 49 • 89.6k (cached) • 4.5k (reasoning)"
+   * Changes  "+75 -31"
+   * Requests "7.5 Premium (40m 24s)"
+   */
+  formatContextMetric(label: string, value: string): { symbol?: string; text: string; muted?: boolean }[] {
+    const v = (value ?? '').trim();
+    if (!v) return [{ text: '—', muted: true }];
+    const l = label.toLowerCase();
+
+    if (l.startsWith('token')) {
+      // Split on " • " (bullet) preserving each segment as its own chip.
+      return v.split(/\s*•\s*/).map(seg => {
+        const m = seg.match(/^(↑|↓)\s*(.+)$/);
+        if (m) return { symbol: m[1], text: m[2].trim() };
+        return { text: seg, muted: /\(.+\)/.test(seg) };
+      });
+    }
+
+    if (l.startsWith('change')) {
+      const parts: { symbol?: string; text: string }[] = [];
+      const plus = v.match(/\+\s*\d+/);
+      const minus = v.match(/-\s*\d+/);
+      if (plus) parts.push({ symbol: '+', text: plus[0].replace(/^\+\s*/, '') });
+      if (minus) parts.push({ symbol: '−', text: minus[0].replace(/^-\s*/, '') });
+      return parts.length > 0 ? parts : [{ text: v }];
+    }
+
+    if (l.startsWith('request')) {
+      // "7.5 Premium (40m 24s)"  →  big chip "7.5 Premium" + muted "(40m 24s)"
+      const m = v.match(/^(.+?)\s*\((.+)\)\s*$/);
+      if (m) return [{ text: m[1].trim() }, { text: m[2].trim(), muted: true }];
+      return [{ text: v }];
+    }
+
+    return [{ text: v }];
   }
 
   isCliError(): boolean {
