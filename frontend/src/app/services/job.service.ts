@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
-import { HttpClient } from '@angular/common/http';
-import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings } from '../models/job.model';
+import { HttpClient, HttpParams } from '@angular/common/http';
+import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem } from '../models/job.model';
 
 @Injectable({ providedIn: 'root' })
 export class JobService {
@@ -38,16 +38,22 @@ export class JobService {
     });
   }
 
-  getDetail(jobId: string) {
-    return this.http.get<JobDetail>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}`);
+  private withWatchPath(watchPath?: string): { params?: HttpParams } {
+    return watchPath
+      ? { params: new HttpParams().set('watchPath', watchPath) }
+      : {};
   }
 
-  updateState(jobId: string, state: string) {
-    return this.http.put(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/state`, { targetState: state });
+  getDetail(jobId: string, watchPath?: string) {
+    return this.http.get<JobDetail>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}`, this.withWatchPath(watchPath));
   }
 
-  moveJob(jobId: string, targetState: string) {
-    return this.http.post(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/move`, { targetState });
+  updateState(jobId: string, state: string, watchPath?: string) {
+    return this.http.put(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/state`, { targetState: state }, this.withWatchPath(watchPath));
+  }
+
+  moveJob(jobId: string, targetState: string, watchPath?: string) {
+    return this.http.post(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/move`, { targetState }, this.withWatchPath(watchPath));
   }
 
   getWatchPaths() {
@@ -58,29 +64,29 @@ export class JobService {
     return this.http.post<{ id: string }>(`${this.baseUrl}/jobs`, req);
   }
 
-  updateJobFile(jobId: string, fileName: string, content: string) {
-    return this.http.put(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/files/${encodeURIComponent(fileName)}`, { content });
+  updateJobFile(jobId: string, fileName: string, content: string, watchPath?: string) {
+    return this.http.put(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/files/${encodeURIComponent(fileName)}`, { content }, this.withWatchPath(watchPath));
   }
 
-  reorderJobs(jobIds: string[]) {
-    return this.http.post(`${this.baseUrl}/jobs/reorder`, { jobIds });
+  reorderJobs(jobs: JobOrderItem[]) {
+    return this.http.post(`${this.baseUrl}/jobs/reorder`, { jobs });
   }
 
-  changeProject(jobId: string, targetWatchPath: string) {
-    return this.http.post(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/change-project`, { targetWatchPath });
+  changeProject(jobId: string, targetWatchPath: string, watchPath?: string) {
+    return this.http.post(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/change-project`, { targetWatchPath }, this.withWatchPath(watchPath));
   }
 
   // CLI execution
-  startJob(jobId: string) {
-    return this.http.post<CliExecution>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/start`, {});
+  startJob(jobId: string, watchPath?: string) {
+    return this.http.post<CliExecution>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/start`, {}, this.withWatchPath(watchPath));
   }
 
-  stopJob(jobId: string) {
-    return this.http.post(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/stop`, {});
+  stopJob(jobId: string, watchPath?: string) {
+    return this.http.post(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/stop`, {}, this.withWatchPath(watchPath));
   }
 
-  getJobOutput(jobId: string) {
-    return this.http.get<CliOutputLine[]>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/output`);
+  getJobOutput(jobId: string, watchPath?: string) {
+    return this.http.get<CliOutputLine[]>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/output`, this.withWatchPath(watchPath));
   }
 
   // Runner management

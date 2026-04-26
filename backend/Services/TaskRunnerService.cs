@@ -87,9 +87,9 @@ public class TaskRunnerService : BackgroundService
         return true;
     }
 
-    public async Task<(CliExecution? Execution, string? Error)> StartJobAsync(string jobId, CancellationToken ct = default)
+    public async Task<(CliExecution? Execution, string? Error)> StartJobAsync(string jobId, string? watchPath = null, CancellationToken ct = default)
     {
-        var info = _scanner.ScanAllJobs().FirstOrDefault(j => j.Id == jobId);
+        var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return (null, "Job not found");
 
         var runner = _runners.Values.FirstOrDefault(r => r.Entry.Name == info.ProjectName);
@@ -100,14 +100,16 @@ public class TaskRunnerService : BackgroundService
         return await runner.StartJobManualAsync(jobId, ct);
     }
 
-    public bool StopJob(string jobId)
+    public bool StopJob(string jobId, string? watchPath = null)
     {
-        return _cli.Stop(jobId);
+        var info = _scanner.FindJob(jobId, watchPath);
+        return info != null && _cli.Stop(info.JobKey);
     }
 
-    public List<CliOutputLine> GetJobOutput(string jobId)
+    public List<CliOutputLine> GetJobOutput(string jobId, string? watchPath = null)
     {
-        return _cli.GetOutput(jobId);
+        var info = _scanner.FindJob(jobId, watchPath);
+        return info != null ? _cli.GetOutput(info.JobKey) : [];
     }
 
     public bool StartRunner(string projectName)
@@ -161,12 +163,13 @@ public class ProjectRunner
     public ProjectRunnerStatus GetStatus()
     {
         var queued = GetQueuedJobIds();
+        var activeJobKey = GetActiveJobKey();
         return new ProjectRunnerStatus
         {
             ProjectName = ProjectName,
             Mode = _mode,
             ActiveJobId = _activeJobId,
-            ActiveExecution = _activeJobId != null ? _cli.GetExecution(_activeJobId) : null,
+            ActiveExecution = activeJobKey != null ? _cli.GetExecution(activeJobKey) : null,
             QueuedJobIds = queued
         };
     }
@@ -210,12 +213,12 @@ public class ProjectRunner
         try
         {
             // Move job to 3-progress
-            var info = _scanner.ScanAllJobs().FirstOrDefault(j => j.Id == jobId);
+            var info = _scanner.FindJob(jobId, Entry.Path);
             if (info == null) return (null, "Job not found");
 
             if (info.State == JobStates.Ready)
             {
-                _scanner.MoveJob(jobId, JobStates.Progress);
+                _scanner.MoveJob(jobId, JobStates.Progress, Entry.Path);
             }
 
             _activeJobId = jobId;
@@ -230,7 +233,7 @@ public class ProjectRunner
 
             // Start CLI process
             var prompt = $"Lies @.orchestrator/jobs/3-progress/{jobId}/prompt.md und führe den Task aus.";
-            var (execution, cliError) = await _cli.StartAsync(jobId, prompt, Entry.RootPath, ct);
+            var (execution, cliError) = await _cli.StartAsync(jobId, GetJobKey(jobId), prompt, Entry.RootPath, ct);
 
             if (execution == null)
             {
@@ -247,18 +250,18 @@ public class ProjectRunner
         }
     }
 
-    private void OnCliFinished(string jobId, CliExecution execution)
+    private void OnCliFinished(string jobKey, CliExecution execution)
     {
-        if (_activeJobId != jobId) return;
+        if (GetActiveJobKey() != jobKey || _activeJobId == null) return;
 
         _logger.LogInformation("Job {JobId} finished in project '{Project}' with status {Status}",
-            jobId, ProjectName, execution.Status);
+            _activeJobId, ProjectName, execution.Status);
 
         // Write CLI output to log file
-        WriteCliLog(jobId);
+        WriteCliLog(_activeJobId);
 
         // Move job to 4-review
-        _scanner.MoveJob(jobId, JobStates.Review);
+        _scanner.MoveJob(_activeJobId, JobStates.Review, Entry.Path);
 
         _activeJobId = null;
         NotifyStatus();
@@ -274,7 +277,7 @@ public class ProjectRunner
             var logsDir = Path.Combine(jobFolder, "logs");
             Directory.CreateDirectory(logsDir);
 
-            var output = _cli.GetOutput(jobId);
+            var output = _cli.GetOutput(GetJobKey(jobId));
             var logContent = string.Join(Environment.NewLine,
                 output.Select(l => $"[{l.Timestamp:HH:mm:ss.fff}] [{l.Stream}] {l.Text}"));
 
@@ -295,6 +298,10 @@ public class ProjectRunner
         }
         return null;
     }
+
+    private string GetJobKey(string jobId) => JobIdentity.CreateKey(Entry.Path, jobId);
+
+    private string? GetActiveJobKey() => _activeJobId != null ? GetJobKey(_activeJobId) : null;
 
     private JobInfo? GetNextReadyJob()
     {

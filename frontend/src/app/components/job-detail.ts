@@ -463,7 +463,7 @@ export class JobDetailComponent implements OnDestroy {
   readonly watchPaths = input<WatchPathEntry[]>([]);
   readonly back = output<void>();
   readonly fileSaved = output<void>();
-  readonly projectChanged = output<void>();
+  readonly projectChanged = output<string>();
 
   readonly editingPrompt = signal(false);
   readonly editingStatus = signal(false);
@@ -495,7 +495,7 @@ export class JobDetailComponent implements OnDestroy {
     this.errorMsg.set(null);
     if (d.info.state === '3-progress') {
       // Try to load existing output
-      this.jobService.getJobOutput(d.info.id).subscribe({
+      this.jobService.getJobOutput(d.info.id, d.info.watchPath).subscribe({
         next: (output) => {
           if (output.length > 0) {
             this.cliOutput.set(output);
@@ -525,7 +525,7 @@ export class JobDetailComponent implements OnDestroy {
   startJob(): void {
     this.errorMsg.set(null);
     this.starting.set(true);
-    this.jobService.startJob(this.detail().info.id).subscribe({
+    this.jobService.startJob(this.detail().info.id, this.detail().info.watchPath).subscribe({
       next: (exec) => {
         this.starting.set(false);
         this.isRunning.set(true);
@@ -543,7 +543,7 @@ export class JobDetailComponent implements OnDestroy {
 
   stopJob(): void {
     this.errorMsg.set(null);
-    this.jobService.stopJob(this.detail().info.id).subscribe({
+    this.jobService.stopJob(this.detail().info.id, this.detail().info.watchPath).subscribe({
       next: () => {
         this.isRunning.set(false);
         if (this.elapsedTimer) clearInterval(this.elapsedTimer);
@@ -583,7 +583,7 @@ export class JobDetailComponent implements OnDestroy {
     // Poll every 2 seconds while running (SignalR will augment this)
     const poll = () => {
       if (!this.isRunning()) return;
-      this.jobService.getJobOutput(this.detail().info.id).subscribe({
+      this.jobService.getJobOutput(this.detail().info.id, this.detail().info.watchPath).subscribe({
         next: (output) => {
           this.cliOutput.set(output);
           setTimeout(poll, 2000);
@@ -617,7 +617,7 @@ export class JobDetailComponent implements OnDestroy {
 
   saveFile(fileName: string, _content: string) {
     const content = fileName === 'prompt.md' ? this.promptDraftValue : this.statusDraftValue;
-    this.jobService.updateJobFile(this.detail().info.id, fileName, content).subscribe({
+    this.jobService.updateJobFile(this.detail().info.id, fileName, content, this.detail().info.watchPath).subscribe({
       next: () => {
         if (fileName === 'prompt.md') this.editingPrompt.set(false);
         else this.editingStatus.set(false);
@@ -721,8 +721,8 @@ export class JobDetailComponent implements OnDestroy {
 
   onProjectChange(targetWatchPath: string) {
     if (targetWatchPath === this.detail().info.watchPath) return;
-    this.jobService.changeProject(this.detail().info.id, targetWatchPath).subscribe({
-      next: () => this.projectChanged.emit(),
+    this.jobService.changeProject(this.detail().info.id, targetWatchPath, this.detail().info.watchPath).subscribe({
+      next: () => this.projectChanged.emit(targetWatchPath),
       error: (err) => this.showError(err)
     });
   }

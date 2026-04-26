@@ -1,5 +1,5 @@
 import { Component, input, output } from '@angular/core';
-import { JobInfo } from '../models/job.model';
+import { JobInfo, JobOrderItem } from '../models/job.model';
 import { JobCardComponent } from './job-card';
 
 @Component({
@@ -18,7 +18,7 @@ import { JobCardComponent } from './job-card';
         <span class="column__count">{{ jobs().length }}</span>
       </div>
       <div class="column__body">
-        @for (job of jobs(); track job.id; let i = $index) {
+        @for (job of jobs(); track job.jobKey; let i = $index) {
           <div class="column__drop-zone"
                [class.column__drop-zone--active]="dropIndex === i"
                (dragover)="onCardDragOver($event, i)"
@@ -111,14 +111,14 @@ export class JobColumnComponent {
   readonly state = input.required<string>();
   readonly jobs = input.required<JobInfo[]>();
   readonly jobClick = output<JobInfo>();
-  readonly jobDrop = output<{ jobId: string; targetState: string }>();
-  readonly jobReorder = output<{ state: string; jobIds: string[] }>();
+  readonly jobDrop = output<{ jobId: string; watchPath: string; targetState: string }>();
+  readonly jobReorder = output<{ state: string; jobs: JobOrderItem[] }>();
 
   isDragOver = false;
   dropIndex = -1;
 
   onDragStart(event: DragEvent, job: JobInfo) {
-    event.dataTransfer?.setData('text/plain', job.id);
+    event.dataTransfer?.setData('text/plain', JSON.stringify({ jobId: job.id, watchPath: job.watchPath, jobKey: job.jobKey }));
     event.dataTransfer?.setData('application/x-source-state', job.state);
   }
 
@@ -146,23 +146,26 @@ export class JobColumnComponent {
     event.stopPropagation();
     this.isDragOver = false;
     this.dropIndex = -1;
-    const jobId = event.dataTransfer?.getData('text/plain');
+    const payload = this.parsePayload(event.dataTransfer?.getData('text/plain'));
     const sourceState = event.dataTransfer?.getData('application/x-source-state');
-    if (!jobId) return;
+    if (!payload) return;
 
     if (sourceState === this.state()) {
       // Reorder within same column
-      const currentIds = this.jobs().map(j => j.id);
-      const fromIndex = currentIds.indexOf(jobId);
+      const currentJobs = this.jobs().map(j => ({ jobId: j.id, watchPath: j.watchPath, jobKey: j.jobKey }));
+      const fromIndex = currentJobs.findIndex(job => job.jobKey === payload.jobKey);
       if (fromIndex >= 0) {
-        currentIds.splice(fromIndex, 1);
+        const [movedJob] = currentJobs.splice(fromIndex, 1);
         const insertAt = index > fromIndex ? index - 1 : index;
-        currentIds.splice(insertAt, 0, jobId);
+        currentJobs.splice(insertAt, 0, movedJob);
       }
-      this.jobReorder.emit({ state: this.state(), jobIds: currentIds });
+      this.jobReorder.emit({
+        state: this.state(),
+        jobs: currentJobs.map(job => ({ jobId: job.jobId, watchPath: job.watchPath }))
+      });
     } else {
       // Cross-column move
-      this.jobDrop.emit({ jobId, targetState: this.state() });
+      this.jobDrop.emit({ jobId: payload.jobId, watchPath: payload.watchPath, targetState: this.state() });
     }
   }
 
@@ -170,9 +173,20 @@ export class JobColumnComponent {
     event.preventDefault();
     this.isDragOver = false;
     this.dropIndex = -1;
-    const jobId = event.dataTransfer?.getData('text/plain');
-    if (jobId) {
-      this.jobDrop.emit({ jobId, targetState: this.state() });
+    const payload = this.parsePayload(event.dataTransfer?.getData('text/plain'));
+    if (payload) {
+      this.jobDrop.emit({ jobId: payload.jobId, watchPath: payload.watchPath, targetState: this.state() });
+    }
+  }
+
+  private parsePayload(rawPayload?: string): { jobId: string; watchPath: string; jobKey: string } | null {
+    if (!rawPayload) return null;
+    try {
+      const payload = JSON.parse(rawPayload) as { jobId?: string; watchPath?: string; jobKey?: string };
+      if (!payload.jobId || !payload.watchPath || !payload.jobKey) return null;
+      return { jobId: payload.jobId, watchPath: payload.watchPath, jobKey: payload.jobKey };
+    } catch {
+      return null;
     }
   }
 }

@@ -59,10 +59,12 @@ public class JobScannerService
 
             var lastActivity = GetLastActivityTime(jobDir);
             var totalSize = GetDirectorySize(jobDir);
+            var resolvedId = raw.TryGetProperty("id", out var id) ? id.GetString() ?? Path.GetFileName(jobDir) : Path.GetFileName(jobDir);
 
             return new JobInfo
             {
-                Id = raw.TryGetProperty("id", out var id) ? id.GetString() ?? Path.GetFileName(jobDir) : Path.GetFileName(jobDir),
+                Id = resolvedId,
+                JobKey = JobIdentity.CreateKey(entry.Path, resolvedId),
                 Title = raw.TryGetProperty("title", out var title) ? title.GetString() ?? "" : "",
                 State = state,
                 Order = raw.TryGetProperty("order", out var ord) && ord.TryGetInt32(out var orderVal) ? orderVal : 999,
@@ -82,9 +84,27 @@ public class JobScannerService
         }
     }
 
-    public JobDetail? GetJobDetail(string jobId)
+    public JobInfo? FindJob(string jobId, string? watchPath = null)
     {
-        var info = ScanAllJobs().FirstOrDefault(j => j.Id == jobId);
+        var matches = ScanAllJobs().Where(j => j.Id == jobId);
+        if (!string.IsNullOrWhiteSpace(watchPath))
+        {
+            matches = matches.Where(j => string.Equals(j.WatchPath, watchPath, StringComparison.OrdinalIgnoreCase));
+        }
+
+        var resolved = matches.ToList();
+        if (resolved.Count == 1) return resolved[0];
+        if (resolved.Count > 1)
+        {
+            _logger.LogWarning("Ambiguous job lookup for {JobId} without unique watch path context", jobId);
+        }
+
+        return null;
+    }
+
+    public JobDetail? GetJobDetail(string jobId, string? watchPath = null)
+    {
+        var info = FindJob(jobId, watchPath);
         if (info == null) return null;
 
         var dir = info.FolderPath;
@@ -97,11 +117,11 @@ public class JobScannerService
         };
     }
 
-    public bool MoveJob(string jobId, string targetState)
+    public bool MoveJob(string jobId, string targetState, string? watchPath = null)
     {
         if (!JobStates.All.Contains(targetState)) return false;
 
-        var info = ScanAllJobs().FirstOrDefault(j => j.Id == jobId);
+        var info = FindJob(jobId, watchPath);
         if (info == null) return false;
         if (info.State == targetState) return true;
 
@@ -121,13 +141,13 @@ public class JobScannerService
         }
     }
 
-    public bool ChangeProject(string jobId, string targetWatchPath)
+    public bool ChangeProject(string jobId, string targetWatchPath, string? watchPath = null)
     {
         var entries = GetWatchPaths();
         var targetEntry = entries.FirstOrDefault(e => e.Path == targetWatchPath);
         if (targetEntry == null) return false;
 
-        var info = ScanAllJobs().FirstOrDefault(j => j.Id == jobId);
+        var info = FindJob(jobId, watchPath);
         if (info == null) return false;
         if (info.WatchPath == targetWatchPath) return true;
 
@@ -245,9 +265,9 @@ public class JobScannerService
         }
     }
 
-    public string? ReadJobFile(string jobId, string fileName)
+    public string? ReadJobFile(string jobId, string fileName, string? watchPath = null)
     {
-        var info = ScanAllJobs().FirstOrDefault(j => j.Id == jobId);
+        var info = FindJob(jobId, watchPath);
         if (info == null) return null;
 
         var allowed = new[] { "prompt.md", "status.md", "job.json" };
@@ -301,12 +321,12 @@ public class JobScannerService
         return jobId;
     }
 
-    public bool UpdateJobFile(string jobId, string fileName, string content)
+    public bool UpdateJobFile(string jobId, string fileName, string content, string? watchPath = null)
     {
         var allowed = new[] { "prompt.md", "status.md" };
         if (!allowed.Contains(fileName)) return false;
 
-        var info = ScanAllJobs().FirstOrDefault(j => j.Id == jobId);
+        var info = FindJob(jobId, watchPath);
         if (info == null) return false;
 
         // Don't allow editing while in progress
@@ -317,12 +337,12 @@ public class JobScannerService
         return true;
     }
 
-    public bool ReorderJobs(List<string> jobIds)
+    public bool ReorderJobs(List<JobOrderItem> jobs)
     {
-        var allJobs = ScanAllJobs();
-        for (int i = 0; i < jobIds.Count; i++)
+        for (int i = 0; i < jobs.Count; i++)
         {
-            var info = allJobs.FirstOrDefault(j => j.Id == jobIds[i]);
+            var job = jobs[i];
+            var info = FindJob(job.JobId, job.WatchPath);
             if (info == null) continue;
             UpdateOrderInJobJson(info.FolderPath, i + 1);
         }

@@ -29,33 +29,33 @@ public static class JobEndpoints
             return Results.Ok(grouped);
         });
 
-        group.MapGet("/{jobId}", (string jobId, JobScannerService scanner) =>
+        group.MapGet("/{jobId}", (string jobId, string? watchPath, JobScannerService scanner) =>
         {
-            var detail = scanner.GetJobDetail(jobId);
+            var detail = scanner.GetJobDetail(jobId, watchPath);
             return detail is null ? Results.NotFound() : Results.Ok(detail);
         });
 
-        group.MapPut("/{jobId}/state", (string jobId, MoveJobRequest req, JobScannerService scanner) =>
+        group.MapPut("/{jobId}/state", (string jobId, string? watchPath, MoveJobRequest req, JobScannerService scanner) =>
         {
             if (!JobStates.All.Contains(req.TargetState))
                 return Results.BadRequest($"Invalid state. Allowed: {string.Join(", ", JobStates.All)}");
 
-            var success = scanner.MoveJob(jobId, req.TargetState);
+            var success = scanner.MoveJob(jobId, req.TargetState, watchPath);
             return success ? Results.Ok() : Results.NotFound();
         });
 
-        group.MapPost("/{jobId}/move", (string jobId, MoveJobRequest req, JobScannerService scanner) =>
+        group.MapPost("/{jobId}/move", (string jobId, string? watchPath, MoveJobRequest req, JobScannerService scanner) =>
         {
             if (!JobStates.All.Contains(req.TargetState))
                 return Results.BadRequest($"Invalid state. Allowed: {string.Join(", ", JobStates.All)}");
 
-            var success = scanner.MoveJob(jobId, req.TargetState);
+            var success = scanner.MoveJob(jobId, req.TargetState, watchPath);
             return success ? Results.Ok() : Results.NotFound();
         });
 
-        group.MapGet("/{jobId}/files/{fileName}", (string jobId, string fileName, JobScannerService scanner) =>
+        group.MapGet("/{jobId}/files/{fileName}", (string jobId, string fileName, string? watchPath, JobScannerService scanner) =>
         {
-            var content = scanner.ReadJobFile(jobId, fileName);
+            var content = scanner.ReadJobFile(jobId, fileName, watchPath);
             return content is null ? Results.NotFound() : Results.Text(content);
         });
 
@@ -68,49 +68,52 @@ public static class JobEndpoints
             return jobId is null ? Results.Conflict("Job already exists or invalid input") : Results.Ok(new { id = jobId });
         });
 
-        group.MapPut("/{jobId}/files/{fileName}", (string jobId, string fileName, UpdateJobFileRequest req, JobScannerService scanner) =>
+        group.MapPut("/{jobId}/files/{fileName}", (string jobId, string fileName, string? watchPath, UpdateJobFileRequest req, JobScannerService scanner) =>
         {
-            var success = scanner.UpdateJobFile(jobId, fileName, req.Content);
+            var success = scanner.UpdateJobFile(jobId, fileName, req.Content, watchPath);
             return success ? Results.Ok() : Results.BadRequest("Cannot edit (job in progress or not found)");
         });
 
         group.MapPost("/reorder", (ReorderRequest req, JobScannerService scanner) =>
         {
-            var success = scanner.ReorderJobs(req.JobIds);
+            var jobs = req.Jobs.Count > 0
+                ? req.Jobs
+                : req.JobIds.Select(id => new JobOrderItem { JobId = id }).ToList();
+            var success = scanner.ReorderJobs(jobs);
             return success ? Results.Ok() : Results.BadRequest("Reorder failed");
         });
 
-        group.MapPost("/{jobId}/change-project", (string jobId, ChangeProjectRequest req, JobScannerService scanner) =>
+        group.MapPost("/{jobId}/change-project", (string jobId, string? watchPath, ChangeProjectRequest req, JobScannerService scanner) =>
         {
-            var success = scanner.ChangeProject(jobId, req.TargetWatchPath);
+            var success = scanner.ChangeProject(jobId, req.TargetWatchPath, watchPath);
             return success ? Results.Ok() : Results.BadRequest("Failed to change project");
         });
 
         // CLI execution endpoints
-        group.MapPost("/{jobId}/start", async (string jobId, TaskRunnerService runner, JobScannerService scanner, CancellationToken ct) =>
+        group.MapPost("/{jobId}/start", async (string jobId, string? watchPath, TaskRunnerService runner, JobScannerService scanner, CancellationToken ct) =>
         {
-            var job = scanner.ScanAllJobs().FirstOrDefault(j => j.Id == jobId);
+            var job = scanner.FindJob(jobId, watchPath);
             if (job == null)
                 return Results.NotFound(new { error = "Job not found" });
 
             if (job.State is not (JobStates.Ready or JobStates.Progress))
                 return Results.BadRequest(new { error = $"Job is in state '{job.State}' — only jobs in 'ready' or 'progress' can be started" });
 
-            var (execution, error) = await runner.StartJobAsync(jobId, ct);
+            var (execution, error) = await runner.StartJobAsync(jobId, watchPath, ct);
             return execution is not null
                 ? Results.Ok(execution)
                 : Results.BadRequest(new { error = error ?? "Cannot start job" });
         });
 
-        group.MapPost("/{jobId}/stop", (string jobId, TaskRunnerService runner) =>
+        group.MapPost("/{jobId}/stop", (string jobId, string? watchPath, TaskRunnerService runner) =>
         {
-            var success = runner.StopJob(jobId);
+            var success = runner.StopJob(jobId, watchPath);
             return success ? Results.Ok() : Results.NotFound();
         });
 
-        group.MapGet("/{jobId}/output", (string jobId, TaskRunnerService runner) =>
+        group.MapGet("/{jobId}/output", (string jobId, string? watchPath, TaskRunnerService runner) =>
         {
-            var output = runner.GetJobOutput(jobId);
+            var output = runner.GetJobOutput(jobId, watchPath);
             return Results.Ok(output);
         });
 

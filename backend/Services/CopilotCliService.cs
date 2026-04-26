@@ -72,18 +72,18 @@ public class CopilotCliService
         return available;
     }
 
-    public async Task<(CliExecution? Execution, string? Error)> StartAsync(string jobId, string prompt, string workingDirectory, CancellationToken ct = default)
+    public async Task<(CliExecution? Execution, string? Error)> StartAsync(string jobId, string jobKey, string prompt, string workingDirectory, CancellationToken ct = default)
     {
-        if (_processes.TryGetValue(jobId, out var existing))
+        if (_processes.TryGetValue(jobKey, out var existing))
         {
             if (!existing.Process.HasExited)
             {
-                _logger.LogWarning("CLI process already running for job {JobId}", jobId);
+                _logger.LogWarning("CLI process already running for job {JobId}", jobKey);
                 return (null, $"CLI process already running for job '{jobId}'");
             }
             // Previous process finished/failed — clean up and allow restart
-            _logger.LogInformation("Clearing stale CLI entry for job {JobId} (exit={ExitCode})", jobId, existing.Process.ExitCode);
-            _processes.TryRemove(jobId, out _);
+            _logger.LogInformation("Clearing stale CLI entry for job {JobId} (exit={ExitCode})", jobKey, existing.Process.ExitCode);
+            _processes.TryRemove(jobKey, out _);
         }
 
         var promptArg = $"Lies @.orchestrator/jobs/3-progress/{jobId}/prompt.md und führe den Task aus. Schreibe deinen Completion-Report in .orchestrator/jobs/3-progress/{jobId}/status.md";
@@ -121,50 +121,51 @@ public class CopilotCliService
         var execution = new CliExecution
         {
             JobId = jobId,
+            JobKey = jobKey,
             ProcessId = process.Id,
             StartedAt = DateTime.UtcNow,
             Status = "running"
         };
 
         var info = new CliProcessInfo(process, execution, workingDirectory);
-        _processes[jobId] = info;
+        _processes[jobKey] = info;
 
-        OnStarted?.Invoke(jobId, execution);
+        OnStarted?.Invoke(jobKey, execution);
         _logger.LogInformation("Started Copilot CLI for job {JobId} (PID {Pid}) in {Cwd}", jobId, process.Id, workingDirectory);
 
         // Start reading stdout/stderr in background
-        _ = ReadStreamAsync(jobId, process.StandardOutput, "stdout", info, ct);
-        _ = ReadStreamAsync(jobId, process.StandardError, "stderr", info, ct);
+        _ = ReadStreamAsync(jobKey, process.StandardOutput, "stdout", info, ct);
+        _ = ReadStreamAsync(jobKey, process.StandardError, "stderr", info, ct);
 
         // Monitor process exit in background
-        _ = MonitorProcessAsync(jobId, process, info, ct);
+        _ = MonitorProcessAsync(jobKey, process, info, ct);
 
         return (execution, null);
     }
 
-    public bool Stop(string jobId)
+    public bool Stop(string jobKey)
     {
-        if (!_processes.TryGetValue(jobId, out var info)) return false;
+        if (!_processes.TryGetValue(jobKey, out var info)) return false;
 
         try
         {
             if (!info.Process.HasExited)
             {
                 info.Process.Kill(entireProcessTree: true);
-                _logger.LogInformation("Killed CLI process for job {JobId}", jobId);
+                _logger.LogInformation("Killed CLI process for job {JobId}", jobKey);
             }
             return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to kill CLI process for job {JobId}", jobId);
+            _logger.LogError(ex, "Failed to kill CLI process for job {JobId}", jobKey);
             return false;
         }
     }
 
-    public bool SendInput(string jobId, string input)
+    public bool SendInput(string jobKey, string input)
     {
-        if (!_processes.TryGetValue(jobId, out var info)) return false;
+        if (!_processes.TryGetValue(jobKey, out var info)) return false;
         if (info.Process.HasExited) return false;
 
         try
@@ -174,21 +175,21 @@ public class CopilotCliService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to send input to CLI process for job {JobId}", jobId);
+            _logger.LogError(ex, "Failed to send input to CLI process for job {JobId}", jobKey);
             return false;
         }
     }
 
-    public List<CliOutputLine> GetOutput(string jobId)
+    public List<CliOutputLine> GetOutput(string jobKey)
     {
-        return _processes.TryGetValue(jobId, out var info)
+        return _processes.TryGetValue(jobKey, out var info)
             ? info.OutputBuffer.ToList()
             : [];
     }
 
-    public CliExecution? GetExecution(string jobId)
+    public CliExecution? GetExecution(string jobKey)
     {
-        return _processes.TryGetValue(jobId, out var info) ? info.Execution : null;
+        return _processes.TryGetValue(jobKey, out var info) ? info.Execution : null;
     }
 
     public bool IsRunningForProject(string rootPath)
@@ -196,7 +197,7 @@ public class CopilotCliService
         return _processes.Values.Any(p => p.WorkingDirectory == rootPath && !p.Process.HasExited);
     }
 
-    private async Task ReadStreamAsync(string jobId, System.IO.StreamReader reader, string stream, CliProcessInfo info, CancellationToken ct)
+    private async Task ReadStreamAsync(string jobKey, System.IO.StreamReader reader, string stream, CliProcessInfo info, CancellationToken ct)
     {
         try
         {
@@ -218,17 +219,17 @@ public class CopilotCliService
                 while (info.OutputBuffer.Count > 5000)
                     info.OutputBuffer.RemoveAt(0);
 
-                OnOutput?.Invoke(jobId, outputLine);
+                OnOutput?.Invoke(jobKey, outputLine);
             }
         }
         catch (OperationCanceledException) { }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error reading {Stream} for job {JobId}", stream, jobId);
+            _logger.LogError(ex, "Error reading {Stream} for job {JobId}", stream, jobKey);
         }
     }
 
-    private async Task MonitorProcessAsync(string jobId, Process process, CliProcessInfo info, CancellationToken ct)
+    private async Task MonitorProcessAsync(string jobKey, Process process, CliProcessInfo info, CancellationToken ct)
     {
         try
         {
@@ -236,7 +237,7 @@ public class CopilotCliService
         }
         catch (OperationCanceledException)
         {
-            Stop(jobId);
+            Stop(jobKey);
         }
 
         var duration = (DateTime.UtcNow - info.Execution.StartedAt).TotalSeconds;
@@ -251,24 +252,24 @@ public class CopilotCliService
         info.Execution = finalExecution;
 
         // Write output log to job folder
-        WriteOutputLog(jobId, info);
+        WriteOutputLog(jobKey, info);
 
-        OnFinished?.Invoke(jobId, finalExecution);
-        _logger.LogInformation("CLI finished for job {JobId}: exit={ExitCode}, duration={Duration:F1}s", jobId, process.ExitCode, duration);
+        OnFinished?.Invoke(jobKey, finalExecution);
+        _logger.LogInformation("CLI finished for job {JobId}: exit={ExitCode}, duration={Duration:F1}s", jobKey, process.ExitCode, duration);
 
         // Keep in _processes for output retrieval; cleanup after a delay
         _ = Task.Delay(TimeSpan.FromMinutes(30), CancellationToken.None).ContinueWith(t =>
         {
-            _processes.TryRemove(jobId, out CliProcessInfo? _removed);
+            _processes.TryRemove(jobKey, out CliProcessInfo? _removed);
         });
     }
 
-    private void WriteOutputLog(string jobId, CliProcessInfo info)
+    private void WriteOutputLog(string jobKey, CliProcessInfo info)
     {
         try
         {
             // Find job folder — look through all watch paths
-            foreach (var proc in _processes.Values.Where(p => p.Execution.JobId == jobId))
+            foreach (var proc in _processes.Values.Where(p => p.Execution.JobKey == jobKey))
             {
                 // The job folder is at {watchPath}/3-progress/{jobId} relative to root
                 // But we don't have direct access to the watch path here, so we write via the info's working directory
@@ -278,7 +279,7 @@ public class CopilotCliService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to write output log for job {JobId}", jobId);
+            _logger.LogError(ex, "Failed to write output log for job {JobId}", jobKey);
         }
     }
 

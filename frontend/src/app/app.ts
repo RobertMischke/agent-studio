@@ -3,7 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { JobColumnComponent } from './components/job-column';
 import { JobDetailComponent } from './components/job-detail';
 import { JobService } from './services/job.service';
-import { JobDetail, JobInfo, GroupedJobs, WatchPathEntry, ProjectRunnerStatus } from './models/job.model';
+import { JobDetail, JobInfo, GroupedJobs, WatchPathEntry } from './models/job.model';
 
 @Component({
   selector: 'app-root',
@@ -50,7 +50,7 @@ import { JobDetail, JobInfo, GroupedJobs, WatchPathEntry, ProjectRunnerStatus } 
         @if (selectedJob(); as detail) {
           <aside class="detail-panel" [style.width.px]="panelWidth()">
             <div class="detail-panel__resize" (mousedown)="startResize($event)"></div>
-            <app-job-detail [detail]="detail" [watchPaths]="watchPaths()" (back)="closeDetail()" (fileSaved)="onFileSaved()" (projectChanged)="onProjectChanged()" />
+            <app-job-detail [detail]="detail" [watchPaths]="watchPaths()" (back)="closeDetail()" (fileSaved)="onFileSaved()" (projectChanged)="onProjectChanged($event)" />
           </aside>
         }
       </div>
@@ -300,7 +300,7 @@ export class App implements OnInit {
   }
 
   openDetail(job: JobInfo) {
-    this.jobService.getDetail(job.id).subscribe({
+    this.jobService.getDetail(job.id, job.watchPath).subscribe({
       next: (detail) => this.selectedJob.set(detail),
     });
   }
@@ -309,15 +309,15 @@ export class App implements OnInit {
     this.selectedJob.set(null);
   }
 
-  onJobDrop(event: { jobId: string; targetState: string }) {
-    this.jobService.moveJob(event.jobId, event.targetState).subscribe({
+  onJobDrop(event: { jobId: string; watchPath: string; targetState: string }) {
+    this.jobService.moveJob(event.jobId, event.targetState, event.watchPath).subscribe({
       next: () => this.refresh(),
       error: (err) => this.jobService.error.set(err.message || 'Failed to move job'),
     });
   }
 
-  onJobReorder(event: { state: string; jobIds: string[] }) {
-    this.jobService.reorderJobs(event.jobIds).subscribe({
+  onJobReorder(event: { state: string; jobs: { jobId: string; watchPath: string }[] }) {
+    this.jobService.reorderJobs(event.jobs).subscribe({
       next: () => this.refresh(),
       error: (err) => this.jobService.error.set(err.message || 'Failed to reorder'),
     });
@@ -377,22 +377,22 @@ export class App implements OnInit {
 
   onFileSaved() {
     // Re-fetch detail to reflect changes
-    const current = this.selectedJob();
-    if (current) {
-      this.jobService.getDetail(current.info.id).subscribe({
+      const current = this.selectedJob();
+      if (current) {
+      this.jobService.getDetail(current.info.id, current.info.watchPath).subscribe({
         next: (detail) => this.selectedJob.set(detail),
       });
     }
   }
 
-  onProjectChanged() {
+  onProjectChanged(targetWatchPath: string) {
     const current = this.selectedJob();
     this.closeDetail();
     this.jobService.refresh();
     if (current) {
       // Re-open detail after refresh
       setTimeout(() => {
-        this.jobService.getDetail(current.info.id).subscribe({
+        this.jobService.getDetail(current.info.id, targetWatchPath).subscribe({
           next: (detail) => this.selectedJob.set(detail),
           error: () => {} // job might not be found if moved across drives
         });

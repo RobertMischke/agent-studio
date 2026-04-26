@@ -1,5 +1,6 @@
 export interface JobInfo {
   id: string;
+  jobKey: string;
   title: string;
   state: string;
   order: number;
@@ -40,6 +41,11 @@ export interface CreateJobRequest {
   agent: string;
   watchPath: string;
   promptMarkdown?: string;
+}
+
+export interface JobOrderItem {
+  jobId: string;
+  watchPath: string;
 }
 
 export interface WatchPathEntry {

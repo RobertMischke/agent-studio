@@ -3,6 +3,7 @@ namespace OrchestratorApi.Models;
 public record JobInfo
 {
     public string Id { get; init; } = "";
+    public string JobKey { get; init; } = "";
     public string Title { get; init; } = "";
     public string State { get; init; } = "draft";
     public int Order { get; init; } = 999;
@@ -48,6 +49,13 @@ public record CreateJobRequest
 public record ReorderRequest
 {
     public List<string> JobIds { get; init; } = [];
+    public List<JobOrderItem> Jobs { get; init; } = [];
+}
+
+public record JobOrderItem
+{
+    public string JobId { get; init; } = "";
+    public string WatchPath { get; init; } = "";
 }
 
 public record ChangeProjectRequest
@@ -71,11 +79,17 @@ public record WatchPathEntry
 public record CliExecution
 {
     public string JobId { get; init; } = "";
+    public string JobKey { get; init; } = "";
     public int ProcessId { get; init; }
     public DateTime StartedAt { get; init; }
     public string Status { get; init; } = "";      // running | completed | failed | cancelled
     public int? ExitCode { get; init; }
     public double? DurationSeconds { get; init; }
+}
+
+public static class JobIdentity
+{
+    public static string CreateKey(string watchPath, string jobId) => $"{watchPath}::{jobId}";
 }
 
 public record RunnerStatus
