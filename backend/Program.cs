@@ -27,6 +27,7 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+var includeExceptionDetails = app.Configuration.GetValue<bool>("ErrorHandling:IncludeExceptionDetails");
 
 app.UseExceptionHandler(exceptionApp =>
 {
@@ -38,13 +39,24 @@ app.UseExceptionHandler(exceptionApp =>
         context.Response.StatusCode = StatusCodes.Status500InternalServerError;
         context.Response.ContentType = "application/json";
 
-        await context.Response.WriteAsJsonAsync(new
+        var response = new Dictionary<string, object?>
         {
-            error = exception?.Message ?? "An unexpected server error occurred.",
-            stackTrace = exception?.StackTrace,
-            path = feature?.Path,
-            timestamp = DateTimeOffset.UtcNow
-        });
+            ["error"] = includeExceptionDetails
+                ? exception?.Message ?? "An unexpected server error occurred."
+                : "An unexpected server error occurred.",
+            ["path"] = feature?.Path,
+            ["traceId"] = context.TraceIdentifier,
+            ["timestamp"] = DateTimeOffset.UtcNow
+        };
+
+        if (includeExceptionDetails)
+        {
+            response["exceptionType"] = exception?.GetType().FullName;
+            response["stackTrace"] = exception?.StackTrace;
+            response["exception"] = exception?.ToString();
+        }
+
+        await context.Response.WriteAsJsonAsync(response);
     });
 });
 
