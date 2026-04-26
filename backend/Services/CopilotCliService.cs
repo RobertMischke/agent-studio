@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Text.Json;
 using OrchestratorApi.Models;
 
 namespace OrchestratorApi.Services;
@@ -144,6 +145,17 @@ public class CopilotCliService
         var info = new CliProcessInfo(process, execution, workingDirectory);
         _processes[jobKey] = info;
 
+        UpsertPersisted(new PersistedExecution
+        {
+            JobId = jobId,
+            JobKey = jobKey,
+            WorkingDirectory = workingDirectory,
+            ProcessId = process.Id,
+            StartedAt = execution.StartedAt,
+            ProcessStartTime = SafeProcessStartTime(process),
+            Status = "running"
+        });
+
         OnStarted?.Invoke(jobKey, execution);
         _logger.LogInformation("Started Copilot CLI for job {JobId} (PID {Pid}) in {Cwd}", jobId, process.Id, workingDirectory);
 
@@ -255,15 +267,29 @@ public class CopilotCliService
         }
 
         var duration = (DateTime.UtcNow - info.Execution.StartedAt).TotalSeconds;
-        var status = process.ExitCode == 0 ? "completed" : "failed";
+        int? exitCode = null;
+        try { exitCode = process.ExitCode; } catch { /* reattached process may deny ExitCode access */ }
+        var status = exitCode == 0 ? "completed" : "failed";
 
         var finalExecution = info.Execution with
         {
             Status = status,
-            ExitCode = process.ExitCode,
+            ExitCode = exitCode,
             DurationSeconds = duration
         };
         info.Execution = finalExecution;
+
+        UpsertPersisted(new PersistedExecution
+        {
+            JobId = info.Execution.JobId,
+            JobKey = jobKey,
+            WorkingDirectory = info.WorkingDirectory,
+            ProcessId = process.Id,
+            StartedAt = info.Execution.StartedAt,
+            FinishedAt = DateTime.UtcNow,
+            Status = status,
+            ExitCode = exitCode
+        });
 
         // Write output log to job folder
         WriteOutputLog(jobKey, info);
@@ -343,6 +369,163 @@ public class CopilotCliService
     }
 
     private static string EscapeArg(string arg) => arg.Replace("\"", "\\\"");
+
+    // ─────────────────────────────────────────────────────────────────────
+    // Persistence + Reattach
+    // ─────────────────────────────────────────────────────────────────────
+
+    private record PersistedExecution
+    {
+        public string JobId { get; init; } = "";
+        public string JobKey { get; init; } = "";
+        public string WorkingDirectory { get; init; } = "";
+        public int ProcessId { get; init; }
+        public DateTime StartedAt { get; init; }
+        public DateTime? ProcessStartTime { get; init; }
+        public DateTime? FinishedAt { get; init; }
+        public string Status { get; init; } = "running";
+        public int? ExitCode { get; init; }
+    }
+
+    private readonly object _persistLock = new();
+    private static readonly JsonSerializerOptions PersistJsonOpts = new() { WriteIndented = true };
+
+    private string GetPersistencePath()
+    {
+        var taskRepo = _configuration["TaskRepository"];
+        var baseDir = !string.IsNullOrWhiteSpace(taskRepo)
+            ? Path.Combine(taskRepo, ".runtime")
+            : Path.Combine(AppContext.BaseDirectory, "runtime");
+        Directory.CreateDirectory(baseDir);
+        return Path.Combine(baseDir, "executions.json");
+    }
+
+    private List<PersistedExecution> ReadPersistedExecutions()
+    {
+        var path = GetPersistencePath();
+        if (!File.Exists(path)) return [];
+        try
+        {
+            return JsonSerializer.Deserialize<List<PersistedExecution>>(File.ReadAllText(path)) ?? [];
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to read persisted executions at {Path}", path);
+            return [];
+        }
+    }
+
+    private void WritePersistedExecutions(List<PersistedExecution> list)
+    {
+        try
+        {
+            File.WriteAllText(GetPersistencePath(), JsonSerializer.Serialize(list, PersistJsonOpts));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to write persisted executions");
+        }
+    }
+
+    private void UpsertPersisted(PersistedExecution entry)
+    {
+        lock (_persistLock)
+        {
+            var list = ReadPersistedExecutions();
+            list.RemoveAll(e => e.JobKey == entry.JobKey);
+            list.Add(entry);
+            WritePersistedExecutions(list);
+        }
+    }
+
+    private static DateTime? SafeProcessStartTime(Process p)
+    {
+        try { return p.StartTime.ToUniversalTime(); } catch { return null; }
+    }
+
+    /// <summary>
+    /// Inspects the persistence file and re-attaches to any CLI processes that are still alive.
+    /// Stale entries (process gone) are marked as <c>crashed</c> so the UI can show the final state.
+    /// Stdout/stderr streams of pre-existing processes can no longer be read — only Stop and exit
+    /// monitoring are supported on reattached entries.
+    /// </summary>
+    public void ReattachOnStartup()
+    {
+        lock (_persistLock)
+        {
+            var list = ReadPersistedExecutions();
+            var changed = false;
+
+            foreach (var pe in list.ToList())
+            {
+                if (pe.Status != "running") continue;
+                if (_processes.ContainsKey(pe.JobKey)) continue;
+
+                Process? proc = null;
+                try
+                {
+                    proc = Process.GetProcessById(pe.ProcessId);
+                }
+                catch (ArgumentException)
+                {
+                    proc = null;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "GetProcessById failed for {Pid}", pe.ProcessId);
+                }
+
+                if (proc == null || proc.HasExited)
+                {
+                    list.Remove(pe);
+                    list.Add(pe with { Status = "crashed", FinishedAt = DateTime.UtcNow });
+                    changed = true;
+                    _logger.LogInformation("Marking job {Job} as crashed (PID {Pid} no longer alive)", pe.JobId, pe.ProcessId);
+                    continue;
+                }
+
+                // Heuristic: if the recorded ProcessStartTime differs from the live one,
+                // the PID has been recycled by an unrelated process — treat as crashed.
+                if (pe.ProcessStartTime.HasValue)
+                {
+                    var liveStart = SafeProcessStartTime(proc);
+                    if (liveStart.HasValue && Math.Abs((liveStart.Value - pe.ProcessStartTime.Value).TotalSeconds) > 5)
+                    {
+                        list.Remove(pe);
+                        list.Add(pe with { Status = "crashed", FinishedAt = DateTime.UtcNow });
+                        changed = true;
+                        _logger.LogWarning("PID {Pid} reused — marking job {Job} as crashed", pe.ProcessId, pe.JobId);
+                        continue;
+                    }
+                }
+
+                var execution = new CliExecution
+                {
+                    JobId = pe.JobId,
+                    JobKey = pe.JobKey,
+                    ProcessId = pe.ProcessId,
+                    StartedAt = pe.StartedAt,
+                    Status = "running"
+                };
+                var info = new CliProcessInfo(proc, execution, pe.WorkingDirectory);
+                info.OutputBuffer.Add(new CliOutputLine
+                {
+                    Timestamp = DateTime.UtcNow,
+                    Stream = "stdout",
+                    Text = $"[reattached to running process PID {pe.ProcessId} — live output unavailable, only stop and exit monitoring supported]"
+                });
+                _processes[pe.JobKey] = info;
+
+                try { proc.EnableRaisingEvents = true; } catch { /* best effort */ }
+                _ = MonitorProcessAsync(pe.JobKey, proc, info, CancellationToken.None);
+
+                OnStarted?.Invoke(pe.JobKey, execution);
+                _logger.LogInformation("Reattached to running job {Job} (PID {Pid})", pe.JobId, pe.ProcessId);
+            }
+
+            if (changed) WritePersistedExecutions(list);
+        }
+    }
 
     private class CliProcessInfo
     {

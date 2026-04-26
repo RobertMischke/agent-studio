@@ -43,6 +43,9 @@ cli.OnStarted += (jobId, exec) =>
 cli.OnFinished += (jobId, exec) =>
     hubContext.Clients.All.SendAsync("cliFinished", jobId, exec.ExitCode, exec.DurationSeconds, exec.Status);
 
+// Reattach to any CLI processes that survived the previous app run
+cli.ReattachOnStartup();
+
 // Wire up Runner status → SignalR push
 var taskRunner = app.Services.GetRequiredService<TaskRunnerService>();
 taskRunner.OnRunnerStatusChanged += (projectName, status) =>
