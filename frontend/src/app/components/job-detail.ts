@@ -39,6 +39,12 @@ import { CliConsoleComponent } from './cli-console';
           <span class="detail__meta-label">Agent</span>
           <span class="detail__meta-value">🤖 {{ detail().info.agent }}</span>
         </div>
+        @if (detail().info.model) {
+          <div class="detail__meta-item">
+            <span class="detail__meta-label">Model</span>
+            <span class="detail__meta-value">🧠 {{ detail().info.model }}</span>
+          </div>
+        }
         <div class="detail__meta-item">
           <span class="detail__meta-label">Order</span>
           <span class="detail__meta-value">#{{ detail().info.order }}</span>
@@ -58,11 +64,27 @@ import { CliConsoleComponent } from './cli-console';
                 <h3 class="section__title">Agent controls</h3>
               </div>
             </div>
+            <div class="model-picker">
+              <label class="model-picker__label" for="job-model">Model</label>
+              <select id="job-model"
+                      class="model-picker__select"
+                      [value]="modelDraft()"
+                      [disabled]="isRunning()"
+                      (change)="onModelDraftChange($any($event.target).value)">
+                <option value="">(default — CLI chooses)</option>
+                @for (m of availableModels; track m) {
+                  <option [value]="m">{{ m }}</option>
+                }
+              </select>
+            </div>
             <div class="execution-bar">
               @if (isRunning()) {
                 <div class="execution-bar__status">
                   <span class="execution-bar__pulse"></span>
                   <span class="execution-bar__text">Running since {{ elapsedTime() }}</span>
+                  @if (detail().info.execution?.model || detail().info.model; as runningModel) {
+                    <span class="execution-bar__model">🧠 {{ runningModel }}</span>
+                  }
                 </div>
                 <button class="btn-exec btn-exec--stop" (click)="stopJob()">⏹ Stop</button>
               } @else {
@@ -431,6 +453,35 @@ import { CliConsoleComponent } from './cli-console';
       resize: vertical;
     }
     .session-followup__input:focus { outline: none; border-color: rgba(137,180,250,0.5); }
+    .model-picker {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .model-picker__label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: rgba(255,255,255,0.55);
+    }
+    .model-picker__select {
+      flex: 1;
+      background: rgba(0,0,0,0.25);
+      color: #cdd6f4;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-family: inherit;
+      font-size: 0.85rem;
+    }
+    .model-picker__select:disabled { opacity: 0.5; cursor: not-allowed; }
+    .execution-bar__model {
+      margin-left: 10px;
+      font-family: var(--font-mono, monospace);
+      color: #c4b5fd;
+      font-size: 0.8rem;
+    }
     .context-usage {
       display: flex;
       flex-direction: column;
@@ -1102,6 +1153,8 @@ export class JobDetailComponent implements OnDestroy {
   readonly starting = signal(false);
   readonly continuing = signal(false);
   readonly followupPrompt = signal('');
+  readonly modelDraft = signal('');
+  readonly availableModels = ['claude-sonnet-4.5', 'gpt-5', 'gpt-5-mini', 'gpt-5-codex'];
   readonly showCliConfig = signal(false);
   readonly cliStatus = signal<CliSettings | null>(null);
   readonly cliPathDraft = signal('');
@@ -1140,6 +1193,8 @@ export class JobDetailComponent implements OnDestroy {
     this.isRunning.set(false);
     this.startedAt.set(null);
     this.elapsedTime.set('0s');
+    this.modelDraft.set(d.info.model ?? '');
+    this.followupPrompt.set('');
     this.pollGeneration += 1;
     if (this.pollTimeout) {
       clearTimeout(this.pollTimeout);
@@ -1216,7 +1271,8 @@ export class JobDetailComponent implements OnDestroy {
   startJob(): void {
     this.errorMsg.set(null);
     this.starting.set(true);
-    this.jobService.startJob(this.detail().info.id, this.detail().info.watchPath).subscribe({
+    const model = this.modelDraft().trim() || undefined;
+    this.jobService.startJob(this.detail().info.id, this.detail().info.watchPath, model).subscribe({
       next: (exec) => {
         this.starting.set(false);
         this.isRunning.set(true);
@@ -1256,7 +1312,8 @@ export class JobDetailComponent implements OnDestroy {
 
     this.errorMsg.set(null);
     this.continuing.set(true);
-    this.jobService.continueJob(this.detail().info.id, prompt, this.detail().info.watchPath).subscribe({
+    const model = this.modelDraft().trim() || undefined;
+    this.jobService.continueJob(this.detail().info.id, prompt, this.detail().info.watchPath, model).subscribe({
       next: (exec) => {
         this.continuing.set(false);
         this.followupPrompt.set('');
@@ -1270,6 +1327,21 @@ export class JobDetailComponent implements OnDestroy {
         this.continuing.set(false);
         this.showError(err);
       }
+    });
+  }
+
+  onModelDraftChange(value: string): void {
+    const trimmed = (value ?? '').trim();
+    this.modelDraft.set(trimmed);
+    const current = this.detail().info.model ?? '';
+    if (trimmed === current) return;
+
+    this.jobService.setJobModel(
+      this.detail().info.id,
+      trimmed === '' ? null : trimmed,
+      this.detail().info.watchPath
+    ).subscribe({
+      error: (err) => this.showError(err)
     });
   }
 

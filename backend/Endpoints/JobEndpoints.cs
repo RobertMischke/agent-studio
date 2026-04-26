@@ -90,7 +90,7 @@ public static class JobEndpoints
         });
 
         // CLI execution endpoints
-        group.MapPost("/{jobId}/start", async (string jobId, string? watchPath, TaskRunnerService runner, JobScannerService scanner, CancellationToken ct) =>
+        group.MapPost("/{jobId}/start", async (string jobId, string? watchPath, StartJobRequest? req, TaskRunnerService runner, JobScannerService scanner, CancellationToken ct) =>
         {
             var job = scanner.FindJob(jobId, watchPath);
             if (job == null)
@@ -99,7 +99,7 @@ public static class JobEndpoints
             if (job.State is not (JobStates.Ready or JobStates.Progress))
                 return Results.BadRequest(new { error = $"Job is in state '{job.State}' — only jobs in 'ready' or 'progress' can be started" });
 
-            var (execution, error) = await runner.StartJobAsync(jobId, watchPath, ct);
+            var (execution, error) = await runner.StartJobAsync(jobId, watchPath, req?.Model, ct);
             return execution is not null
                 ? Results.Ok(execution)
                 : Results.BadRequest(new { error = error ?? "Cannot start job" });
@@ -116,10 +116,16 @@ public static class JobEndpoints
             if (string.IsNullOrWhiteSpace(req?.Prompt))
                 return Results.BadRequest(new { error = "Prompt is required" });
 
-            var (execution, error) = await runner.ContinueJobAsync(jobId, req.Prompt, watchPath, ct);
+            var (execution, error) = await runner.ContinueJobAsync(jobId, req.Prompt, watchPath, req.Model, ct);
             return execution is not null
                 ? Results.Ok(execution)
                 : Results.BadRequest(new { error = error ?? "Cannot continue job" });
+        });
+
+        group.MapPut("/{jobId}/model", (string jobId, string? watchPath, SetJobModelRequest req, JobScannerService scanner) =>
+        {
+            var success = scanner.SetJobModel(jobId, req?.Model, watchPath);
+            return success ? Results.Ok() : Results.NotFound();
         });
 
         group.MapGet("/{jobId}/output", (string jobId, string? watchPath, TaskRunnerService runner) =>

@@ -144,7 +144,8 @@ public class JobScannerService
                 SessionName = raw.TryGetProperty("sessionName", out var sn) ? sn.GetString() : null,
                 LastUsage = raw.TryGetProperty("lastUsage", out var lu) && lu.ValueKind == JsonValueKind.Object
                     ? JsonSerializer.Deserialize<SessionUsage>(lu.GetRawText(), JsonOpts)
-                    : null
+                    : null,
+                Model = raw.TryGetProperty("model", out var md) ? md.GetString() : null
             };
         }
         catch (Exception ex)
@@ -330,6 +331,14 @@ public class JobScannerService
         return true;
     }
 
+    public bool SetJobModel(string jobId, string? model, string? watchPath = null)
+    {
+        var info = FindJob(jobId, watchPath);
+        if (info == null) return false;
+        UpdateJobJsonField(info.FolderPath, "model", model ?? "");
+        return true;
+    }
+
     public bool UpdateContextUsage(string jobId, ContextUsageSnapshot snapshot, string? watchPath = null)
     {
         var info = FindJob(jobId, watchPath);
@@ -435,15 +444,18 @@ public class JobScannerService
 
         Directory.CreateDirectory(jobDir);
 
-        var jobJson = new
+        var jobJson = new Dictionary<string, object?>
         {
-            id = jobId,
-            title = req.Title,
-            createdAt = DateTime.UtcNow.ToString("o"),
-            state = JobStates.Preparation,
-            order = req.Order,
-            agent = req.Agent
+            ["id"] = jobId,
+            ["title"] = req.Title,
+            ["createdAt"] = DateTime.UtcNow.ToString("o"),
+            ["state"] = JobStates.Preparation,
+            ["order"] = req.Order,
+            ["agent"] = req.Agent
         };
+        if (!string.IsNullOrWhiteSpace(req.Model))
+            jobJson["model"] = req.Model;
+
         File.WriteAllText(Path.Combine(jobDir, "job.json"),
             JsonSerializer.Serialize(jobJson, new JsonSerializerOptions { WriteIndented = true }));
 

@@ -22,6 +22,9 @@ import { JobInfo } from '../models/job.model';
       </div>
       <div class="job-card__meta">
         <span class="job-card__agent">🤖 {{ job().agent || 'unknown' }}</span>
+        @if (job().model) {
+          <span class="job-card__model">🧠 {{ job().model }}</span>
+        }
         <span class="job-card__size">{{ formatSize(job().totalSizeBytes) }}</span>
       </div>
       <div class="job-card__activity">
@@ -133,9 +136,16 @@ import { JobInfo } from '../models/job.model';
     .job-card__meta {
       display: flex;
       justify-content: space-between;
+      gap: 6px;
+      flex-wrap: wrap;
       font-size: 12px;
       color: #94a3b8;
       margin-bottom: 4px;
+    }
+    .job-card__model {
+      color: #c4b5fd;
+      font-family: var(--font-mono, monospace);
+      font-size: 11px;
     }
     .job-card__activity {
       font-size: 11px;

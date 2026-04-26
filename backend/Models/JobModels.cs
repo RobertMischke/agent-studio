@@ -16,6 +16,8 @@ public record JobInfo
     public long TotalSizeBytes { get; init; }
     /// <summary>Name passed to Copilot CLI via <c>--name</c> on first start; reused with <c>--resume</c> for follow-ups.</summary>
     public string? SessionName { get; init; }
+    /// <summary>Preferred Copilot model for this job (e.g. <c>claude-sonnet-4.5</c>, <c>gpt-5</c>); passed via <c>--model</c>.</summary>
+    public string? Model { get; init; }
     /// <summary>Last token / cost summary parsed from CLI output (best-effort).</summary>
     public SessionUsage? LastUsage { get; init; }
     public CliExecution? Execution { get; init; }
@@ -82,6 +84,7 @@ public record CreateJobRequest
     public string Agent { get; init; } = "copilot";
     public string WatchPath { get; init; } = "";
     public string? PromptMarkdown { get; init; }
+    public string? Model { get; init; }
 }
 
 public record ReorderRequest
@@ -123,6 +126,7 @@ public record CliExecution
     public string Status { get; init; } = "";      // running | completed | failed | cancelled
     public int? ExitCode { get; init; }
     public double? DurationSeconds { get; init; }
+    public string? Model { get; init; }
 }
 
 public static class JobIdentity
@@ -147,11 +151,18 @@ public record ProjectRunnerStatus
 public record StartJobRequest
 {
     public string? AgentOverride { get; init; }
+    public string? Model { get; init; }
 }
 
 public record ContinueJobRequest
 {
     public string Prompt { get; init; } = "";
+    public string? Model { get; init; }
+}
+
+public record SetJobModelRequest
+{
+    public string? Model { get; init; }
 }
 
 public record SetRunnerModeRequest

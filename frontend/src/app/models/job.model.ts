@@ -12,6 +12,7 @@ export interface JobInfo {
   lastActivity: string;
   totalSizeBytes: number;
   sessionName: string | null;
+  model: string | null;
   lastUsage: SessionUsage | null;
   execution: CliExecution | null;
 }
@@ -94,6 +95,7 @@ export interface CliExecution {
   status: string;
   exitCode: number | null;
   durationSeconds: number | null;
+  model: string | null;
 }
 
 export interface CliOutputLine {

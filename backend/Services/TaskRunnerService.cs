@@ -90,7 +90,7 @@ public class TaskRunnerService : BackgroundService
         return true;
     }
 
-    public async Task<(CliExecution? Execution, string? Error)> StartJobAsync(string jobId, string? watchPath = null, CancellationToken ct = default)
+    public async Task<(CliExecution? Execution, string? Error)> StartJobAsync(string jobId, string? watchPath = null, string? modelOverride = null, CancellationToken ct = default)
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return (null, "Job not found");
@@ -100,6 +100,12 @@ public class TaskRunnerService : BackgroundService
 
         if (!_cli.IsAvailable()) return (null, "Copilot CLI is not installed or not on PATH");
 
+        // Persist override on the job so subsequent runs reuse it
+        if (!string.IsNullOrWhiteSpace(modelOverride) && modelOverride != info.Model)
+        {
+            _scanner.SetJobModel(jobId, modelOverride, watchPath);
+        }
+
         return await runner.StartJobManualAsync(jobId, ct);
     }
 
@@ -107,7 +113,7 @@ public class TaskRunnerService : BackgroundService
     /// Resumes the Copilot session bound to a job and feeds it a follow-up prompt.
     /// The job must already have a sessionName recorded in <c>job.json</c> (i.e. it was started before).
     /// </summary>
-    public async Task<(CliExecution? Execution, string? Error)> ContinueJobAsync(string jobId, string followupPrompt, string? watchPath = null, CancellationToken ct = default)
+    public async Task<(CliExecution? Execution, string? Error)> ContinueJobAsync(string jobId, string followupPrompt, string? watchPath = null, string? modelOverride = null, CancellationToken ct = default)
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return (null, "Job not found");
@@ -117,6 +123,11 @@ public class TaskRunnerService : BackgroundService
         var runner = _runners.Values.FirstOrDefault(r => r.Entry.Name == info.ProjectName);
         if (runner == null) return (null, $"No runner configured for project '{info.ProjectName}'");
         if (!_cli.IsAvailable()) return (null, "Copilot CLI is not installed or not on PATH");
+
+        if (!string.IsNullOrWhiteSpace(modelOverride) && modelOverride != info.Model)
+        {
+            _scanner.SetJobModel(jobId, modelOverride, watchPath);
+        }
 
         return await runner.ContinueJobAsync(jobId, followupPrompt, ct);
     }
@@ -297,7 +308,7 @@ public class ProjectRunner
 
             // Start CLI process
             var prompt = $"Lies @.orchestrator/jobs/3-progress/{jobId}/prompt.md und führe den Task aus.";
-            var (execution, cliError) = await _cli.StartAsync(jobId, GetJobKey(jobId), prompt, Entry.RootPath, sessionName, resume, ct);
+            var (execution, cliError) = await _cli.StartAsync(jobId, GetJobKey(jobId), prompt, Entry.RootPath, sessionName, resume, info.Model, ct);
 
             if (execution == null)
             {
@@ -349,7 +360,7 @@ public class ProjectRunner
                 Directory.CreateDirectory(Path.Combine(jobFolder, "logs"));
             }
 
-            var (execution, cliError) = await _cli.StartAsync(jobId, GetJobKey(jobId), followupPrompt, Entry.RootPath, info.SessionName, true, ct);
+            var (execution, cliError) = await _cli.StartAsync(jobId, GetJobKey(jobId), followupPrompt, Entry.RootPath, info.SessionName, true, info.Model, ct);
 
             if (execution == null)
             {

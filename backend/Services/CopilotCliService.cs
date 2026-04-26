@@ -83,7 +83,7 @@ public class CopilotCliService
         return available;
     }
 
-    public async Task<(CliExecution? Execution, string? Error)> StartAsync(string jobId, string jobKey, string prompt, string workingDirectory, string? sessionName = null, bool resumeSession = false, CancellationToken ct = default)
+    public async Task<(CliExecution? Execution, string? Error)> StartAsync(string jobId, string jobKey, string prompt, string workingDirectory, string? sessionName = null, bool resumeSession = false, string? model = null, CancellationToken ct = default)
     {
         if (_processes.TryGetValue(jobKey, out var existing))
         {
@@ -103,6 +103,10 @@ public class CopilotCliService
             sessionArg = resumeSession
                 ? $" --resume=\"{EscapeArg(sessionName)}\""
                 : $" --name=\"{EscapeArg(sessionName)}\"";
+        }
+        if (!string.IsNullOrWhiteSpace(model))
+        {
+            sessionArg += $" --model=\"{EscapeArg(model)}\"";
         }
 
         var psi = CreateCliStartInfo(prompt, workingDirectory, sessionArg, redirectInput: true);
@@ -125,7 +129,8 @@ public class CopilotCliService
             JobKey = jobKey,
             ProcessId = process.Id,
             StartedAt = DateTime.UtcNow,
-            Status = "running"
+            Status = "running",
+            Model = string.IsNullOrWhiteSpace(model) ? null : model
         };
 
         var info = new CliProcessInfo(process, execution, workingDirectory);

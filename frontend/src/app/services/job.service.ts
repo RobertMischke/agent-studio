@@ -103,16 +103,23 @@ export class JobService {
   }
 
   // CLI execution
-  startJob(jobId: string, watchPath?: string) {
-    return this.http.post<CliExecution>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/start`, {}, this.withWatchPath(watchPath));
+  startJob(jobId: string, watchPath?: string, model?: string) {
+    const body = model ? { model } : {};
+    return this.http.post<CliExecution>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/start`, body, this.withWatchPath(watchPath));
   }
 
   stopJob(jobId: string, watchPath?: string) {
     return this.http.post(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/stop`, {}, this.withWatchPath(watchPath));
   }
 
-  continueJob(jobId: string, prompt: string, watchPath?: string) {
-    return this.http.post<CliExecution>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/continue`, { prompt }, this.withWatchPath(watchPath));
+  continueJob(jobId: string, prompt: string, watchPath?: string, model?: string) {
+    const body: { prompt: string; model?: string } = { prompt };
+    if (model) body.model = model;
+    return this.http.post<CliExecution>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/continue`, body, this.withWatchPath(watchPath));
+  }
+
+  setJobModel(jobId: string, model: string | null, watchPath?: string) {
+    return this.http.put(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/model`, { model }, this.withWatchPath(watchPath));
   }
 
   getJobOutput(jobId: string, watchPath?: string) {
