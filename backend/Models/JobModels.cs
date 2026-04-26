@@ -34,7 +34,32 @@ public record JobDetail
     public JobInfo Info { get; init; } = new();
     public string? PromptMarkdown { get; init; }
     public string? StatusMarkdown { get; init; }
+    public ContextUsageSnapshot? ContextUsage { get; init; }
     public List<JobLogEntry> Log { get; init; } = [];
+}
+
+public record ContextUsageSnapshot
+{
+    public DateTime At { get; init; }
+    public string Command { get; init; } = "/context usage";
+    public string Status { get; init; } = "ok";
+    public string? Error { get; init; }
+    public List<ContextUsageMetric> Metrics { get; init; } = [];
+    public List<ContextUsageSection> Sections { get; init; } = [];
+    public List<string> Notes { get; init; } = [];
+    public string RawText { get; init; } = "";
+}
+
+public record ContextUsageMetric
+{
+    public string Label { get; init; } = "";
+    public string Value { get; init; } = "";
+}
+
+public record ContextUsageSection
+{
+    public string Title { get; init; } = "";
+    public List<string> Items { get; init; } = [];
 }
 
 public record JobLogEntry

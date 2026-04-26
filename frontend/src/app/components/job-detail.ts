@@ -1,6 +1,6 @@
 import { Component, input, output, signal, effect, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { JobDetail, WatchPathEntry, CliOutputLine, CliSettings, CliExecution } from '../models/job.model';
+import { JobDetail, WatchPathEntry, CliOutputLine, CliSettings, CliExecution, ContextUsageSnapshot } from '../models/job.model';
 import { JobService } from '../services/job.service';
 import { ErrorDialogService } from '../services/error-dialog.service';
 import { CliConsoleComponent } from './cli-console';
@@ -111,6 +111,67 @@ import { CliConsoleComponent } from './cli-console';
             }
           </section>
         }
+
+        <section class="sidebar-card sidebar-card--toolbar">
+          <div class="sidebar-card__header">
+            <div>
+              <div class="section__eyebrow">Context window</div>
+              <h3 class="section__title">/context usage</h3>
+            </div>
+            <button class="btn-sm" (click)="refreshContextUsage()" [disabled]="refreshingContextUsage()">
+              {{ refreshingContextUsage() ? '⏳ Refreshing...' : '↻ Refresh' }}
+            </button>
+          </div>
+
+          @if (contextUsage(); as usage) {
+            <div class="context-usage">
+              <div class="context-usage__meta">
+                <span class="context-usage__stamp">Updated {{ formatDateTime(usage.at) }}</span>
+                @if (usage.status !== 'ok' && usage.error) {
+                  <span class="context-usage__status context-usage__status--error">{{ usage.error }}</span>
+                }
+              </div>
+
+              @if (usage.metrics.length > 0) {
+                <div class="context-usage__metrics">
+                  @for (metric of usage.metrics; track metric.label) {
+                    <div class="context-usage__metric">
+                      <span class="context-usage__metric-label">{{ metric.label }}</span>
+                      <span class="context-usage__metric-value">{{ metric.value }}</span>
+                    </div>
+                  }
+                </div>
+              }
+
+              @if (usage.sections.length > 0) {
+                <div class="context-usage__sections">
+                  @for (section of usage.sections; track section.title) {
+                    <section class="context-usage__section">
+                      <h4 class="context-usage__section-title">{{ section.title }}</h4>
+                      <ul class="context-usage__list">
+                        @for (item of section.items; track $index) {
+                          <li>{{ item }}</li>
+                        }
+                      </ul>
+                    </section>
+                  }
+                </div>
+              }
+
+              @if (usage.notes.length > 0) {
+                <div class="context-usage__notes">
+                  @for (note of usage.notes; track $index) {
+                    <div class="context-usage__note">{{ note }}</div>
+                  }
+                </div>
+              }
+            </div>
+          } @else {
+            <div class="sidebar-card__empty">
+              Trigger a refresh to capture and parse the current context usage for this task.
+            </div>
+          }
+        </section>
 
         @if (showCliConfig()) {
           <section class="sidebar-card sidebar-card--toolbar">
@@ -370,6 +431,100 @@ import { CliConsoleComponent } from './cli-console';
       resize: vertical;
     }
     .session-followup__input:focus { outline: none; border-color: rgba(137,180,250,0.5); }
+    .context-usage {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .context-usage__meta {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .context-usage__stamp {
+      color: rgba(255,255,255,0.55);
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .context-usage__status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      width: fit-content;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 0.76rem;
+    }
+    .context-usage__status--error {
+      background: rgba(239,68,68,0.14);
+      color: #fca5a5;
+      border: 1px solid rgba(239,68,68,0.24);
+    }
+    .context-usage__metrics {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 10px;
+    }
+    .context-usage__metric {
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.05);
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .context-usage__metric-label {
+      color: rgba(255,255,255,0.55);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-size: 0.7rem;
+    }
+    .context-usage__metric-value {
+      color: #e2e8f0;
+      font-size: 0.84rem;
+      line-height: 1.5;
+      font-family: var(--font-mono, monospace);
+    }
+    .context-usage__sections {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .context-usage__section {
+      padding: 12px;
+      border-radius: 12px;
+      background: rgba(0,0,0,0.18);
+      border: 1px solid rgba(255,255,255,0.05);
+    }
+    .context-usage__section-title {
+      margin: 0 0 8px;
+      color: #c4b5fd;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .context-usage__list {
+      margin: 0;
+      padding-left: 18px;
+      color: #cbd5e1;
+      font-size: 0.84rem;
+      line-height: 1.6;
+    }
+    .context-usage__notes {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .context-usage__note {
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.03);
+      color: #94a3b8;
+      font-size: 0.82rem;
+      line-height: 1.5;
+    }
     .detail {
       background: #181825;
       border: 1px solid rgba(255,255,255,0.06);
@@ -957,12 +1112,15 @@ export class JobDetailComponent implements OnDestroy {
   readonly tokenDraft = signal('');
   readonly showToken = signal(false);
   readonly tokenSaving = signal(false);
+  readonly contextUsage = signal<ContextUsageSnapshot | null>(null);
+  readonly refreshingContextUsage = signal(false);
 
   promptDraftValue = '';
   statusDraftValue = '';
   private elapsedTimer: ReturnType<typeof setInterval> | null = null;
   private pollGeneration = 0;
   private pollTimeout: ReturnType<typeof setTimeout> | null = null;
+  private contextUsageTimeout: ReturnType<typeof setTimeout> | null = null;
   private lastCliConfigRequest = 0;
 
   constructor(private jobService: JobService, private errorDialog: ErrorDialogService) {}
@@ -977,6 +1135,8 @@ export class JobDetailComponent implements OnDestroy {
     this.editingPrompt.set(false);
     this.editingStatus.set(false);
     this.cliOutput.set([]);
+    this.contextUsage.set(d.contextUsage);
+    this.refreshingContextUsage.set(false);
     this.isRunning.set(false);
     this.startedAt.set(null);
     this.elapsedTime.set('0s');
@@ -988,6 +1148,10 @@ export class JobDetailComponent implements OnDestroy {
     if (this.elapsedTimer) {
       clearInterval(this.elapsedTimer);
       this.elapsedTimer = null;
+    }
+    if (this.contextUsageTimeout) {
+      clearTimeout(this.contextUsageTimeout);
+      this.contextUsageTimeout = null;
     }
     this.applyExecutionState(d.info.execution);
     if (d.info.state === '3-progress' || d.info.execution?.status === 'running') {
@@ -1013,6 +1177,8 @@ export class JobDetailComponent implements OnDestroy {
         }
       });
     }
+
+    this.scheduleContextUsageRefresh(!d.contextUsage);
   });
   private cliConfigEffect = effect(() => {
     const requestId = this.errorDialog.cliConfigRequest();
@@ -1035,6 +1201,10 @@ export class JobDetailComponent implements OnDestroy {
     if (this.elapsedTimer) {
       clearInterval(this.elapsedTimer);
       this.elapsedTimer = null;
+    }
+    if (this.contextUsageTimeout) {
+      clearTimeout(this.contextUsageTimeout);
+      this.contextUsageTimeout = null;
     }
   }
 
@@ -1234,6 +1404,16 @@ export class JobDetailComponent implements OnDestroy {
     return new Date(dateStr).toLocaleDateString();
   }
 
+  formatDateTime(dateStr: string): string {
+    return new Date(dateStr).toLocaleString([], {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  }
+
   isCliError(): boolean {
     const msg = this.errorMsg();
     return this.isCliErrorMessage(msg);
@@ -1320,6 +1500,37 @@ export class JobDetailComponent implements OnDestroy {
       next: () => this.projectChanged.emit(targetWatchPath),
       error: (err) => this.showError(err)
     });
+  }
+
+  refreshContextUsage(silent = false): void {
+    if (this.refreshingContextUsage()) {
+      return;
+    }
+
+    this.refreshingContextUsage.set(true);
+    this.jobService.refreshContextUsage(this.detail().info.id, this.detail().info.watchPath).subscribe({
+      next: (usage) => {
+        this.contextUsage.set(usage);
+        this.refreshingContextUsage.set(false);
+        this.scheduleContextUsageRefresh(false);
+      },
+      error: (err) => {
+        this.refreshingContextUsage.set(false);
+        this.scheduleContextUsageRefresh(false);
+        if (!silent) {
+          this.showError(err);
+        }
+      }
+    });
+  }
+
+  private scheduleContextUsageRefresh(immediate: boolean): void {
+    if (this.contextUsageTimeout) {
+      clearTimeout(this.contextUsageTimeout);
+    }
+
+    const delay = immediate ? 1200 : this.isRunning() ? 60000 : 180000;
+    this.contextUsageTimeout = setTimeout(() => this.refreshContextUsage(true), delay);
   }
 
   private isCliErrorMessage(message: string | null | undefined): boolean {

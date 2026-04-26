@@ -9,6 +9,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddSingleton<JobScannerService>();
 builder.Services.AddSingleton<JobWatcherService>();
 builder.Services.AddSingleton<CopilotCliService>();
+builder.Services.AddSingleton<ContextUsageParser>();
 builder.Services.AddSingleton<TaskRunnerService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<JobWatcherService>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<TaskRunnerService>());

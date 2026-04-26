@@ -142,7 +142,7 @@ function normalizeHttpError(error: HttpErrorResponse, options: ErrorDialogOption
       message: error.message,
       payload
     }),
-    stackTrace: extractStackTrace(payload) ?? error.stack ?? null,
+    stackTrace: extractStackTrace(payload) ?? (error as { stack?: string }).stack ?? null,
     source,
     canOpenCliConfig: options.canOpenCliConfig ?? looksLikeCliError(message)
   };

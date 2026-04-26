@@ -105,23 +105,7 @@ public class CopilotCliService
                 : $" --name=\"{EscapeArg(sessionName)}\"";
         }
 
-        var psi = new ProcessStartInfo
-        {
-            FileName = GetCliPath(),
-            Arguments = $"-p \"{EscapeArg(prompt)}\" --allow-all{sessionArg}",
-            WorkingDirectory = workingDirectory,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            RedirectStandardInput = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-
-        var token = GetGitHubToken() ?? TryGetGhAuthToken();
-        if (!string.IsNullOrWhiteSpace(token))
-        {
-            psi.Environment["GITHUB_TOKEN"] = token;
-        }
+        var psi = CreateCliStartInfo(prompt, workingDirectory, sessionArg, redirectInput: true);
 
         var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
 
@@ -218,6 +202,81 @@ public class CopilotCliService
     public CliExecution? GetExecution(string jobKey)
     {
         return _processes.TryGetValue(jobKey, out var info) ? info.Execution : null;
+    }
+
+    public async Task<CliPromptResult> RunPromptOnceAsync(
+        string prompt,
+        string workingDirectory,
+        string? sessionName = null,
+        bool resumeSession = false,
+        int timeoutSeconds = 45,
+        CancellationToken ct = default)
+    {
+        var sessionArg = "";
+        if (!string.IsNullOrWhiteSpace(sessionName))
+        {
+            sessionArg = resumeSession
+                ? $" --resume=\"{EscapeArg(sessionName)}\""
+                : $" --name=\"{EscapeArg(sessionName)}\"";
+        }
+
+        using var process = new Process
+        {
+            StartInfo = CreateCliStartInfo(prompt, workingDirectory, sessionArg, redirectInput: false)
+        };
+
+        try
+        {
+            process.Start();
+        }
+        catch (Exception ex)
+        {
+            return new CliPromptResult
+            {
+                ExitCode = null,
+                Stdout = "",
+                Stderr = $"Failed to start CLI process: {ex.Message}",
+                TimedOut = false
+            };
+        }
+
+        var stdoutTask = process.StandardOutput.ReadToEndAsync();
+        var stderrTask = process.StandardError.ReadToEndAsync();
+        var waitTask = process.WaitForExitAsync(ct);
+        var timeoutTask = Task.Delay(TimeSpan.FromSeconds(timeoutSeconds), ct);
+
+        var completed = await Task.WhenAny(waitTask, timeoutTask);
+        if (completed == timeoutTask)
+        {
+            try
+            {
+                if (!process.HasExited)
+                {
+                    process.Kill(entireProcessTree: true);
+                }
+            }
+            catch
+            {
+                // Best effort timeout cleanup.
+            }
+
+            return new CliPromptResult
+            {
+                ExitCode = null,
+                Stdout = await SafeAwait(stdoutTask),
+                Stderr = await SafeAwait(stderrTask),
+                TimedOut = true
+            };
+        }
+
+        await waitTask;
+        return new CliPromptResult
+        {
+            ExitCode = process.ExitCode,
+            Stdout = await SafeAwait(stdoutTask),
+            Stderr = await SafeAwait(stderrTask),
+            TimedOut = false
+        };
     }
 
     public bool IsRunningForProject(string rootPath)
@@ -404,6 +463,41 @@ public class CopilotCliService
 
     private static string EscapeArg(string arg) => arg.Replace("\"", "\\\"");
 
+    private ProcessStartInfo CreateCliStartInfo(string prompt, string workingDirectory, string sessionArg, bool redirectInput)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = GetCliPath(),
+            Arguments = $"-p \"{EscapeArg(prompt)}\" --allow-all{sessionArg}",
+            WorkingDirectory = workingDirectory,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            RedirectStandardInput = redirectInput,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        var token = GetGitHubToken() ?? TryGetGhAuthToken();
+        if (!string.IsNullOrWhiteSpace(token))
+        {
+            psi.Environment["GITHUB_TOKEN"] = token;
+        }
+
+        return psi;
+    }
+
+    private static async Task<string> SafeAwait(Task<string> task)
+    {
+        try
+        {
+            return await task;
+        }
+        catch
+        {
+            return "";
+        }
+    }
+
     // ─────────────────────────────────────────────────────────────────────
     // Persistence + Reattach
     // ─────────────────────────────────────────────────────────────────────
@@ -575,5 +669,13 @@ public class CopilotCliService
             Execution = execution;
             WorkingDirectory = workingDirectory;
         }
+    }
+
+    public record CliPromptResult
+    {
+        public int? ExitCode { get; init; }
+        public string Stdout { get; init; } = "";
+        public string Stderr { get; init; } = "";
+        public bool TimedOut { get; init; }
     }
 }

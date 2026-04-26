@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem } from '../models/job.model';
+import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot } from '../models/job.model';
 import { ErrorDialogService } from './error-dialog.service';
 
 @Injectable({ providedIn: 'root' })
@@ -117,6 +117,10 @@ export class JobService {
 
   getJobOutput(jobId: string, watchPath?: string) {
     return this.http.get<CliOutputLine[]>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/output`, this.withWatchPath(watchPath));
+  }
+
+  refreshContextUsage(jobId: string, watchPath?: string) {
+    return this.http.post<ContextUsageSnapshot>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/context-usage/refresh`, {}, this.withWatchPath(watchPath));
   }
 
   // Runner management

@@ -183,6 +183,7 @@ public class JobScannerService
             Info = info,
             PromptMarkdown = ReadFileOrNull(Path.Combine(dir, "prompt.md")),
             StatusMarkdown = ReadFileOrNull(Path.Combine(dir, "status.md")),
+            ContextUsage = ReadContextUsage(dir),
             Log = BuildLog(dir)
         };
     }
@@ -329,6 +330,14 @@ public class JobScannerService
         return true;
     }
 
+    public bool UpdateContextUsage(string jobId, ContextUsageSnapshot snapshot, string? watchPath = null)
+    {
+        var info = FindJob(jobId, watchPath);
+        if (info == null) return false;
+        UpdateJobJsonField(info.FolderPath, "contextUsage", snapshot);
+        return true;
+    }
+
     /// <summary>
     /// Reads <c>job.json</c>, replaces or adds a single top-level field, writes back preserving
     /// the existing field order.
@@ -365,6 +374,29 @@ public class JobScannerService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to update field {Field} in job.json at {Dir}", fieldName, jobDir);
+        }
+    }
+
+    private ContextUsageSnapshot? ReadContextUsage(string jobDir)
+    {
+        var jobJsonPath = Path.Combine(jobDir, "job.json");
+        if (!File.Exists(jobJsonPath)) return null;
+
+        try
+        {
+            var json = File.ReadAllText(jobJsonPath);
+            var raw = JsonSerializer.Deserialize<JsonElement>(json, JsonOpts);
+            if (!raw.TryGetProperty("contextUsage", out var contextUsage) || contextUsage.ValueKind != JsonValueKind.Object)
+            {
+                return null;
+            }
+
+            return JsonSerializer.Deserialize<ContextUsageSnapshot>(contextUsage.GetRawText(), JsonOpts);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to read contextUsage from {JobDir}", jobDir);
+            return null;
         }
     }
 

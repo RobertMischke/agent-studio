@@ -9,6 +9,7 @@ public class TaskRunnerService : BackgroundService
     private readonly ILogger<TaskRunnerService> _logger;
     private readonly JobScannerService _scanner;
     private readonly CopilotCliService _cli;
+    private readonly ContextUsageParser _contextUsageParser;
     private readonly ConcurrentDictionary<string, ProjectRunner> _runners = new();
 
     public event Action<string, ProjectRunnerStatus>? OnRunnerStatusChanged;
@@ -17,12 +18,14 @@ public class TaskRunnerService : BackgroundService
         IConfiguration config,
         ILogger<TaskRunnerService> logger,
         JobScannerService scanner,
-        CopilotCliService cli)
+        CopilotCliService cli,
+        ContextUsageParser contextUsageParser)
     {
         _config = config;
         _logger = logger;
         _scanner = scanner;
         _cli = cli;
+        _contextUsageParser = contextUsageParser;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -128,6 +131,39 @@ public class TaskRunnerService : BackgroundService
     {
         var info = _scanner.FindJob(jobId, watchPath);
         return info != null ? _cli.GetOutput(info.JobKey) : [];
+    }
+
+    public async Task<(ContextUsageSnapshot? Snapshot, string? Error)> RefreshContextUsageAsync(string jobId, string? watchPath = null, CancellationToken ct = default)
+    {
+        var info = _scanner.FindJob(jobId, watchPath);
+        if (info == null) return (null, "Job not found");
+        if (!_cli.IsAvailable()) return (null, "Copilot CLI is not installed or not on PATH");
+
+        var runner = _runners.Values.FirstOrDefault(r => r.Entry.Name == info.ProjectName);
+        if (runner == null) return (null, $"No runner configured for project '{info.ProjectName}'");
+
+        var execution = _cli.GetExecution(info.JobKey);
+        var canResumeSession = !string.IsNullOrWhiteSpace(info.SessionName) && execution?.Status != "running";
+        var promptResult = await _cli.RunPromptOnceAsync(
+            "/context usage",
+            runner.Entry.RootPath,
+            canResumeSession ? info.SessionName : null,
+            resumeSession: canResumeSession,
+            ct: ct);
+
+        var snapshot = _contextUsageParser.Parse(promptResult.Stdout, promptResult.Stderr, promptResult.ExitCode);
+        if (promptResult.TimedOut)
+        {
+            snapshot = snapshot with
+            {
+                Status = "error",
+                Error = "The /context usage command timed out.",
+                Notes = [.. snapshot.Notes, "The context usage query exceeded the time limit."]
+            };
+        }
+
+        _scanner.UpdateContextUsage(jobId, snapshot, watchPath);
+        return (snapshot, null);
     }
 
     public bool StartRunner(string projectName)

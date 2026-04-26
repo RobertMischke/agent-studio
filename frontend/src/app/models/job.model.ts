@@ -27,7 +27,29 @@ export interface JobDetail {
   info: JobInfo;
   promptMarkdown: string | null;
   statusMarkdown: string | null;
+  contextUsage: ContextUsageSnapshot | null;
   log: JobLogEntry[];
+}
+
+export interface ContextUsageSnapshot {
+  at: string;
+  command: string;
+  status: string;
+  error: string | null;
+  metrics: ContextUsageMetric[];
+  sections: ContextUsageSection[];
+  notes: string[];
+  rawText: string;
+}
+
+export interface ContextUsageMetric {
+  label: string;
+  value: string;
+}
+
+export interface ContextUsageSection {
+  title: string;
+  items: string[];
 }
 
 export interface JobLogEntry {

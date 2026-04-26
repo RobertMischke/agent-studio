@@ -128,6 +128,14 @@ public static class JobEndpoints
             return Results.Ok(output);
         });
 
+        group.MapPost("/{jobId}/context-usage/refresh", async (string jobId, string? watchPath, TaskRunnerService runner, CancellationToken ct) =>
+        {
+            var (snapshot, error) = await runner.RefreshContextUsageAsync(jobId, watchPath, ct);
+            return snapshot is not null
+                ? Results.Ok(snapshot)
+                : Results.BadRequest(new { error = error ?? "Cannot refresh context usage" });
+        });
+
         app.MapGet("/api/watch-paths", (JobScannerService scanner) =>
         {
             var entries = scanner.GetWatchPaths();
