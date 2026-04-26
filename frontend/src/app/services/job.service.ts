@@ -122,6 +122,10 @@ export class JobService {
     return this.http.put(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/model`, { model }, this.withWatchPath(watchPath));
   }
 
+  setJobTitle(jobId: string, title: string, watchPath?: string) {
+    return this.http.put(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/title`, { title }, this.withWatchPath(watchPath));
+  }
+
   getModelCatalog() {
     return this.http.get<CopilotModelCatalog>(`${this.baseUrl}/settings/cli/models`);
   }

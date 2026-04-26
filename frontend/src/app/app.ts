@@ -768,13 +768,15 @@ export class App implements OnInit {
   }
 
   onFileSaved() {
-    // Re-fetch detail to reflect changes
-      const current = this.selectedJob();
-      if (current) {
+    // Re-fetch detail to reflect changes, and refresh the board so updates
+    // (e.g. renamed titles) propagate to the card and task-nav views immediately.
+    const current = this.selectedJob();
+    if (current) {
       this.jobService.getDetail(current.info.id, current.info.watchPath).subscribe({
         next: (detail) => this.selectedJob.set(detail),
       });
     }
+    this.jobService.refresh(true);
   }
 
   onProjectChanged(targetWatchPath: string) {

@@ -16,7 +16,39 @@ import { ActivityLogViewComponent } from './activity-log-view';
           <button class="detail__back" (click)="back.emit()">←</button>
           <div class="detail__headline">
             <div class="detail__eyebrow">Task focus</div>
-            <h2 class="detail__title">{{ detail().info.title || detail().info.id }}</h2>
+            @if (editingTitle()) {
+              <div class="detail__title-edit">
+                <input #titleInput
+                       class="detail__title-input"
+                       type="text"
+                       [value]="titleDraft()"
+                       (input)="titleDraft.set($any($event.target).value)"
+                       (keydown.enter)="saveTitle()"
+                       (keydown.escape)="cancelTitleEdit()"
+                       maxlength="200"
+                       placeholder="Task title" />
+                <div class="detail__title-actions">
+                  <button type="button"
+                          class="btn-sm btn-sm--primary"
+                          [disabled]="savingTitle() || !titleDraft().trim() || titleDraft().trim() === (detail().info.title || detail().info.id)"
+                          (click)="saveTitle()">Save</button>
+                  <button type="button"
+                          class="btn-sm"
+                          [disabled]="savingTitle()"
+                          (click)="cancelTitleEdit()">Cancel</button>
+                </div>
+              </div>
+            } @else {
+              <h2 class="detail__title"
+                  (click)="startTitleEdit()"
+                  title="Click to rename">
+                {{ detail().info.title || detail().info.id }}
+                <button type="button"
+                        class="detail__title-edit-btn"
+                        (click)="$event.stopPropagation(); startTitleEdit()"
+                        aria-label="Rename task">✎</button>
+              </h2>
+            }
           </div>
         </div>
         <span class="detail__state" [class]="'state--' + detail().info.state">
@@ -325,8 +357,8 @@ import { ActivityLogViewComponent } from './activity-log-view';
                 </section>
               } @else {
                 <div class="inspector__stack">
-                  <section class="sidebar-card sidebar-card--panel">
-                    <div class="sidebar-card__header">
+                  <section class="activity-panel">
+                    <div class="activity-panel__header">
                       <div>
                         <div class="section__eyebrow">Live stream</div>
                         <h3 class="section__title">Activity log</h3>
@@ -337,9 +369,9 @@ import { ActivityLogViewComponent } from './activity-log-view';
                     </div>
 
                     @if (cliOutput().length > 0 || isRunning()) {
-                      <app-activity-log-view [lines]="cliOutput()" [bodyMaxHeight]="'34vh'" />
+                      <app-activity-log-view [lines]="cliOutput()" [bodyMaxHeight]="'34vh'" variant="embedded" />
                     } @else {
-                      <div class="sidebar-card__empty">Start the task to follow the agent output live.</div>
+                      <div class="activity-panel__empty">Start the task to follow the agent output live.</div>
                     }
                   </section>
 
@@ -382,7 +414,7 @@ import { ActivityLogViewComponent } from './activity-log-view';
                 <div class="sidebar-card__header">
                   <h3 class="section__title">Activity log</h3>
                 </div>
-                <app-activity-log-view [lines]="cliOutput()" [bodyMaxHeight]="'calc(100vh - 320px)'" />
+                <app-activity-log-view [lines]="cliOutput()" [bodyMaxHeight]="'calc(100vh - 320px)'" variant="embedded" />
               </section>
 
               <section class="sidebar-card">
@@ -649,6 +681,62 @@ import { ActivityLogViewComponent } from './activity-log-view';
       line-height: 1.2;
       color: #f8fafc;
       word-break: break-word;
+      cursor: text;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      border-radius: 6px;
+      padding: 2px 6px;
+      margin-left: -6px;
+      transition: background 0.15s;
+    }
+    .detail__title:hover { background: rgba(255,255,255,0.04); }
+    .detail__title:hover .detail__title-edit-btn { opacity: 1; }
+    .detail__title-edit-btn {
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: #94a3b8;
+      width: 28px; height: 28px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      display: grid; place-items: center;
+      opacity: 0;
+      transition: opacity 0.15s, background 0.15s, color 0.15s;
+      flex-shrink: 0;
+    }
+    .detail__title-edit-btn:hover {
+      background: rgba(99,102,241,0.2);
+      color: #c7d2fe;
+    }
+    .detail__title-edit {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      width: 100%;
+    }
+    .detail__title-input {
+      background: rgba(15,23,42,0.6);
+      border: 1px solid rgba(99,102,241,0.5);
+      color: #f8fafc;
+      font-size: 28px;
+      line-height: 1.2;
+      font-weight: inherit;
+      font-family: inherit;
+      padding: 6px 10px;
+      border-radius: 8px;
+      outline: none;
+      width: 100%;
+      box-sizing: border-box;
+    }
+    .detail__title-input:focus {
+      border-color: #6366f1;
+      box-shadow: 0 0 0 3px rgba(99,102,241,0.2);
+    }
+    .detail__title-actions {
+      display: flex;
+      gap: 8px;
     }
     .detail__state {
       font-size: 11px;
@@ -789,8 +877,28 @@ import { ActivityLogViewComponent } from './activity-log-view';
     .inspector__stack {
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 10px;
       min-height: 0;
+    }
+    .activity-panel {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      min-height: 0;
+      padding: 0;
+    }
+    .activity-panel__header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      padding-bottom: 6px;
+    }
+    .activity-panel__empty {
+      padding: 10px 0;
+      color: #94a3b8;
+      font-size: 13px;
+      line-height: 1.5;
     }
 
     .section {
@@ -1198,6 +1306,9 @@ export class JobDetailComponent implements OnDestroy {
   readonly tokenSaving = signal(false);
   readonly contextUsage = signal<ContextUsageSnapshot | null>(null);
   readonly refreshingContextUsage = signal(false);
+  readonly editingTitle = signal(false);
+  readonly titleDraft = signal('');
+  readonly savingTitle = signal(false);
 
   promptDraftValue = '';
   statusDraftValue = '';
@@ -1241,6 +1352,8 @@ export class JobDetailComponent implements OnDestroy {
       this.cliTestResult.set(null);
       this.editingPrompt.set(false);
       this.editingStatus.set(false);
+      this.editingTitle.set(false);
+      this.savingTitle.set(false);
       this.cliOutput.set([]);
       this.isRunning.set(false);
       this.startedAt.set(null);
@@ -1498,6 +1611,40 @@ export class JobDetailComponent implements OnDestroy {
       this.statusDraftValue = this.detail().statusMarkdown ?? '';
       this.editingStatus.set(true);
     }
+  }
+
+  startTitleEdit() {
+    if (this.editingTitle()) return;
+    this.titleDraft.set(this.detail().info.title || this.detail().info.id);
+    this.editingTitle.set(true);
+  }
+
+  cancelTitleEdit() {
+    this.editingTitle.set(false);
+    this.savingTitle.set(false);
+  }
+
+  saveTitle() {
+    const trimmed = this.titleDraft().trim();
+    if (!trimmed || this.savingTitle()) return;
+    const current = this.detail().info.title || this.detail().info.id;
+    if (trimmed === current) {
+      this.editingTitle.set(false);
+      return;
+    }
+
+    this.savingTitle.set(true);
+    this.jobService.setJobTitle(this.detail().info.id, trimmed, this.detail().info.watchPath).subscribe({
+      next: () => {
+        this.savingTitle.set(false);
+        this.editingTitle.set(false);
+        this.fileSaved.emit();
+      },
+      error: (err) => {
+        this.savingTitle.set(false);
+        this.showError(err);
+      }
+    });
   }
 
   cancelEdit(which: 'prompt' | 'status') {

@@ -128,6 +128,15 @@ public static class JobEndpoints
             return success ? Results.Ok() : Results.NotFound();
         });
 
+        group.MapPut("/{jobId}/title", (string jobId, string? watchPath, SetJobTitleRequest req, JobScannerService scanner) =>
+        {
+            if (req is null || string.IsNullOrWhiteSpace(req.Title))
+                return Results.BadRequest(new { error = "Title is required" });
+
+            var success = scanner.SetJobTitle(jobId, req.Title, watchPath);
+            return success ? Results.Ok() : Results.NotFound();
+        });
+
         group.MapGet("/{jobId}/output", (string jobId, string? watchPath, TaskRunnerService runner) =>
         {
             var output = runner.GetJobOutput(jobId, watchPath);

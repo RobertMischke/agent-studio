@@ -16,7 +16,7 @@ import {
   selector: 'app-activity-log-view',
   standalone: true,
   template: `
-    <div class="activity-log">
+    <div class="activity-log" [class.activity-log--embedded]="variant() === 'embedded'">
       <div class="activity-log__toolbar">
         <div class="activity-log__tabs">
           <button class="activity-log__tab"
@@ -116,6 +116,11 @@ import {
       border-radius: 8px;
       overflow: hidden;
     }
+    .activity-log--embedded {
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+    }
     .activity-log__toolbar,
     .activity-log__filters,
     .activity-log__summary {
@@ -128,6 +133,20 @@ import {
     .activity-log__toolbar {
       justify-content: space-between;
       background: rgba(255,255,255,0.03);
+    }
+    .activity-log--embedded .activity-log__toolbar {
+      padding: 0 0 6px;
+      background: transparent;
+    }
+    .activity-log--embedded .activity-log__filters {
+      padding: 4px 0 6px;
+    }
+    .activity-log--embedded .activity-log__summary {
+      padding: 3px 0 6px;
+    }
+    .activity-log--embedded .activity-log__body {
+      padding: 2px 0 0;
+      min-height: 132px;
     }
     .activity-log__tabs,
     .activity-log__actions,
@@ -181,6 +200,11 @@ import {
       background: rgba(15,23,42,0.5);
       overflow: hidden;
     }
+    .activity-log--embedded .activity-group {
+      border-radius: 6px;
+      margin-bottom: 6px;
+      background: rgba(15,23,42,0.38);
+    }
     .activity-group--error {
       border-left-color: #fb7185;
       background: rgba(127,29,29,0.18);
@@ -201,6 +225,9 @@ import {
       text-align: left;
       cursor: pointer;
       font: inherit;
+    }
+    .activity-log--embedded .activity-group__header {
+      padding: 6px 8px;
     }
     .activity-group__chevron,
     .activity-group__count {
@@ -291,6 +318,7 @@ import {
 export class ActivityLogViewComponent {
   readonly lines = input<CliOutputLine[]>([]);
   readonly bodyMaxHeight = input('400px');
+  readonly variant = input<'framed' | 'embedded'>('framed');
   readonly mode = signal<'parsed' | 'raw'>('parsed');
   readonly filterKinds = activityLogKinds;
   readonly filters = signal<ActivityLogFilters>({ ...defaultActivityLogFilters });

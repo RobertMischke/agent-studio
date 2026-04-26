@@ -339,6 +339,15 @@ public class JobScannerService
         return true;
     }
 
+    public bool SetJobTitle(string jobId, string title, string? watchPath = null)
+    {
+        if (string.IsNullOrWhiteSpace(title)) return false;
+        var info = FindJob(jobId, watchPath);
+        if (info == null) return false;
+        UpdateJobJsonField(info.FolderPath, "title", title.Trim());
+        return true;
+    }
+
     public bool UpdateContextUsage(string jobId, ContextUsageSnapshot snapshot, string? watchPath = null)
     {
         var info = FindJob(jobId, watchPath);

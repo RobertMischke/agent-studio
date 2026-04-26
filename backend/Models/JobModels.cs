@@ -166,6 +166,11 @@ public record SetJobModelRequest
     public string? Model { get; init; }
 }
 
+public record SetJobTitleRequest
+{
+    public string Title { get; init; } = "";
+}
+
 /// <summary>Curated entry in the Copilot model catalog returned by <c>GET /api/cli/models</c>.</summary>
 public record CopilotModelInfo
 {
