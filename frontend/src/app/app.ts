@@ -48,7 +48,8 @@ import { ErrorDialogService } from './services/error-dialog.service';
 
       <div class="layout" [class.layout--focus]="selectedJob()">
         @if (selectedJob(); as detail) {
-          <div class="workspace">
+          <div class="workspace" 
+               [style.--side-sheet-width]="sideSheetWidth() + 'px'">
             <aside class="task-nav">
               <div class="task-nav__header">
                 <button class="btn btn--ghost" (click)="closeDetail()">← Board</button>
@@ -60,13 +61,16 @@ import { ErrorDialogService } from './services/error-dialog.service';
 
               <div class="task-nav__groups">
                 @for (group of focusGroups(); track group.state) {
-                  <section class="task-nav__group">
-                    <div class="task-nav__group-header">
-                      <span>{{ group.icon }} {{ group.title }}</span>
+                  <section class="task-nav__group" [class.task-nav__group--collapsed]="isGroupCollapsed(group.state)">
+                    <div class="task-nav__group-header" (click)="toggleGroupCollapse(group.state)">
+                      <span>
+                        <span class="task-nav__group-toggle">{{ isGroupCollapsed(group.state) ? '▶' : '▼' }}</span>
+                        {{ group.icon }} {{ group.title }}
+                      </span>
                       <span class="task-nav__count">{{ group.jobs.length }}</span>
                     </div>
 
-                    @if (group.jobs.length > 0) {
+                    @if (group.jobs.length > 0 && !isGroupCollapsed(group.state)) {
                       <div class="task-nav__items">
                         @for (job of group.jobs; track job.jobKey) {
                           <button class="task-nav__item"
@@ -84,6 +88,9 @@ import { ErrorDialogService } from './services/error-dialog.service';
                   </section>
                 }
               </div>
+              
+              <div class="task-nav__resize-handle" 
+                   (mousedown)="startResize($event)"></div>
             </aside>
 
             <main class="workspace__main">
@@ -416,11 +423,12 @@ import { ErrorDialogService } from './services/error-dialog.service';
     }
     .workspace {
       display: grid;
-      grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+      grid-template-columns: var(--side-sheet-width, 280px) minmax(0, 1fr);
       gap: 24px;
       width: 100%;
       min-height: calc(100vh - 118px);
       animation: slideIn 0.25s ease;
+      position: relative;
     }
     .workspace__main {
       min-width: 0;
@@ -437,6 +445,8 @@ import { ErrorDialogService } from './services/error-dialog.service';
       position: sticky;
       top: 24px;
       overflow: hidden;
+      min-width: 200px;
+      position: relative;
     }
     .task-nav__header {
       display: flex;
@@ -477,6 +487,12 @@ import { ErrorDialogService } from './services/error-dialog.service';
       font-size: 12px;
       color: #94a3b8;
       font-weight: 600;
+      cursor: pointer;
+      user-select: none;
+      transition: color 0.15s ease;
+    }
+    .task-nav__group-header:hover {
+      color: #cbd5e1;
     }
     .task-nav__count {
       background: rgba(255,255,255,0.08);
@@ -529,6 +545,36 @@ import { ErrorDialogService } from './services/error-dialog.service';
       text-transform: uppercase;
       letter-spacing: 0.04em;
     }
+    .task-nav__group-toggle {
+      display: inline-block;
+      width: 12px;
+      font-size: 10px;
+      transition: transform 0.15s ease;
+      margin-right: 4px;
+    }
+    .task-nav__group--collapsed .task-nav__group-toggle {
+      transform: rotate(0deg);
+    }
+    .task-nav__group--collapsed .task-nav__items {
+      display: none;
+    }
+    .task-nav__resize-handle {
+      position: absolute;
+      top: 0;
+      right: 0;
+      width: 4px;
+      height: 100%;
+      cursor: col-resize;
+      background: transparent;
+      border-radius: 0 20px 20px 0;
+      transition: background 0.15s ease;
+    }
+    .task-nav__resize-handle:hover {
+      background: rgba(99, 102, 241, 0.3);
+    }
+    .task-nav__resize-handle--active {
+      background: rgba(99, 102, 241, 0.5);
+    }
     .btn--ghost {
       justify-self: flex-start;
       width: fit-content;
@@ -555,6 +601,19 @@ import { ErrorDialogService } from './services/error-dialog.service';
         max-height: none;
       }
     }
+    
+    :host {
+      --resizing-cursor: col-resize;
+    }
+    
+    ::ng-deep body.resizing {
+      cursor: col-resize !important;
+      user-select: none;
+    }
+    
+    ::ng-deep body.resizing * {
+      cursor: col-resize !important;
+    }
   `]
 })
 export class App implements OnInit {
@@ -562,6 +621,8 @@ export class App implements OnInit {
   readonly showCreate = signal(false);
   readonly watchPaths = signal<WatchPathEntry[]>([]);
   readonly activeProjects = signal<Set<string>>(new Set(JSON.parse(localStorage.getItem('activeProjects') ?? '[]')));
+  readonly sideSheetWidth = signal<number>(parseInt(localStorage.getItem('sideSheetWidth') ?? '280'));
+  readonly collapsedGroups = signal<Set<string>>(new Set(JSON.parse(localStorage.getItem('collapsedGroups') ?? '[]')));
 
   readonly projectNames = computed(() => {
     return this.watchPaths().map(wp => wp.name);
@@ -597,6 +658,8 @@ export class App implements OnInit {
   newAgent = 'copilot';
   newPrompt = '';
   newTargetState = '1-preparation';
+  
+  private resizing = false;
 
   createDialogTitle(): string {
     switch (this.newTargetState) {
@@ -828,5 +891,48 @@ export class App implements OnInit {
 
   openCliConfigFromError() {
     this.errorDialog.requestCliConfig();
+  }
+
+  // Side-sheet width and collapse functionality
+  toggleGroupCollapse(state: string) {
+    const current = new Set(this.collapsedGroups());
+    if (current.has(state)) {
+      current.delete(state);
+    } else {
+      current.add(state);
+    }
+    this.collapsedGroups.set(current);
+    localStorage.setItem('collapsedGroups', JSON.stringify([...current]));
+  }
+
+  isGroupCollapsed(state: string): boolean {
+    return this.collapsedGroups().has(state);
+  }
+
+  startResize(event: MouseEvent) {
+    event.preventDefault();
+    this.resizing = true;
+    document.body.classList.add('resizing');
+
+    const startX = event.clientX;
+    const startWidth = this.sideSheetWidth();
+
+    const onMouseMove = (e: MouseEvent) => {
+      if (!this.resizing) return;
+      const deltaX = e.clientX - startX;
+      const newWidth = Math.max(200, startWidth + deltaX); // No maximum limit
+      this.sideSheetWidth.set(newWidth);
+    };
+
+    const onMouseUp = () => {
+      this.resizing = false;
+      document.body.classList.remove('resizing');
+      localStorage.setItem('sideSheetWidth', this.sideSheetWidth().toString());
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+    };
+
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
   }
 }

@@ -94,13 +94,15 @@ public class CopilotCliService : ICliExecutionService
                 CreateNoWindow = true
             };
             proc.Start();
-            var version = proc.StandardOutput.ReadToEnd().Trim();
+            var rawVersion = proc.StandardOutput.ReadToEnd().Trim();
             proc.WaitForExit(5000);
+            var version = rawVersion.Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim();
             return (proc.ExitCode == 0, version, testPath);
         }
         catch (Exception ex)
         {
-            return (false, ex.Message, testPath);
+            _logger.LogDebug(ex, "CLI not available at path '{Path}'", testPath);
+            return (false, null, testPath);
         }
     }
 

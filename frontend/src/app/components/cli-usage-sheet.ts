@@ -56,7 +56,7 @@ interface SelectedSession {
                     (click)="toggleSection(section.cliType)">
               <span class="sheet-section__chev">{{ isCollapsed(section.cliType) ? '▶' : '▼' }}</span>
               <span class="sheet-section__title">{{ cliLabel(section.cliType) }}</span>
-              @if (section.version) {
+              @if (section.available && section.version) {
                 <span class="sheet-pill sheet-pill--ok">{{ section.version }}</span>
               }
               <span class="sheet-section__count">

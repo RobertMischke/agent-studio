@@ -53,13 +53,16 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
                 CreateNoWindow = true
             };
             proc.Start();
-            var version = proc.StandardOutput.ReadToEnd().Trim();
+            var rawVersion = proc.StandardOutput.ReadToEnd().Trim();
             proc.WaitForExit(5000);
+            // Keep only the first non-empty line — some CLIs print update hints on line 2+
+            var version = rawVersion.Split('\n', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()?.Trim();
             return (proc.ExitCode == 0, version, testPath);
         }
         catch (Exception ex)
         {
-            return (false, ex.Message, testPath);
+            _logger.LogDebug(ex, "CLI not available at path '{Path}'", testPath);
+            return (false, null, testPath);
         }
     }
 
