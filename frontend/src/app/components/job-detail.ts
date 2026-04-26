@@ -3,12 +3,12 @@ import { FormsModule } from '@angular/forms';
 import { JobDetail, WatchPathEntry, CliOutputLine, CliSettings, CliExecution, ContextUsageSnapshot, CopilotModelInfo } from '../models/job.model';
 import { JobService } from '../services/job.service';
 import { ErrorDialogService } from '../services/error-dialog.service';
-import { CliConsoleComponent } from './cli-console';
+import { ActivityLogViewComponent } from './activity-log-view';
 
 @Component({
   selector: 'app-job-detail',
   standalone: true,
-  imports: [FormsModule, CliConsoleComponent],
+  imports: [FormsModule, ActivityLogViewComponent],
   template: `
     <div class="detail">
       <header class="detail__header">
@@ -336,7 +336,7 @@ import { CliConsoleComponent } from './cli-console';
                     <div class="sidebar-card__header">
                       <div>
                         <div class="section__eyebrow">Live stream</div>
-                        <h3 class="section__title">CLI output</h3>
+                        <h3 class="section__title">Activity log</h3>
                       </div>
                       @if (cliOutput().length > 0 || detail().log.length > 0 || isRunning()) {
                         <button class="btn-sm" (click)="showLogOverlay.set(true)">⤢ Maximize log</button>
@@ -344,7 +344,7 @@ import { CliConsoleComponent } from './cli-console';
                     </div>
 
                     @if (cliOutput().length > 0 || isRunning()) {
-                      <app-cli-console [lines]="cliOutput()" [title]="'CLI output'" [bodyMaxHeight]="'34vh'" />
+                      <app-activity-log-view [lines]="cliOutput()" [bodyMaxHeight]="'34vh'" />
                     } @else {
                       <div class="sidebar-card__empty">Start the task to follow the agent output live.</div>
                     }
@@ -387,9 +387,9 @@ import { CliConsoleComponent } from './cli-console';
             <div class="log-overlay__content">
               <section class="sidebar-card">
                 <div class="sidebar-card__header">
-                  <h3 class="section__title">CLI output</h3>
+                  <h3 class="section__title">Activity log</h3>
                 </div>
-                <app-cli-console [lines]="cliOutput()" [title]="'CLI output'" [bodyMaxHeight]="'calc(100vh - 320px)'" />
+                <app-activity-log-view [lines]="cliOutput()" [bodyMaxHeight]="'calc(100vh - 320px)'" />
               </section>
 
               <section class="sidebar-card">
@@ -1278,36 +1278,28 @@ export class JobDetailComponent implements OnDestroy {
 
     this.applyExecutionState(d.info.execution);
 
-    // Load existing CLI output whenever there's a chance the backend has buffered
-    // output for this job — including completed/failed runs (the backend keeps
-    // the buffer for a while after the process exits, so the user keeps seeing
-    // the activity log after the job moves to 4-review).
-    const shouldLoadOutput =
-      d.info.state === '3-progress' ||
-      d.info.execution != null;
-
-    if (shouldLoadOutput) {
-      if (d.info.execution?.status === 'running' && !this.pollTimeout) {
-        this.pollOutput();
-      }
-      this.jobService.getJobOutput(d.info.id, d.info.watchPath).subscribe({
-        next: (output) => {
-          if (output.length > 0) {
-            this.cliOutput.set(output);
-            if (!this.startedAt() && d.info.execution) {
-              this.startedAt.set(new Date(d.info.execution.startedAt));
-            }
-            if (!this.elapsedTimer && this.isRunning()) {
-              this.startElapsedTimer();
-            }
-          }
-        },
-        error: (err) => {
-          if (err.status !== 0) return; // silent for 404 etc
-          this.showError(err);
-        }
-      });
+    // The endpoint returns the live buffer while a process is active and falls
+    // back to logs/cli-output.log for completed tasks.
+    if (d.info.execution?.status === 'running' && !this.pollTimeout) {
+      this.pollOutput();
     }
+    this.jobService.getJobOutput(d.info.id, d.info.watchPath).subscribe({
+      next: (output) => {
+        if (output.length > 0) {
+          this.cliOutput.set(output);
+          if (!this.startedAt() && d.info.execution) {
+            this.startedAt.set(new Date(d.info.execution.startedAt));
+          }
+          if (!this.elapsedTimer && this.isRunning()) {
+            this.startElapsedTimer();
+          }
+        }
+      },
+      error: (err) => {
+        if (err.status !== 0) return; // silent for 404 etc
+        this.showError(err);
+      }
+    });
 
     this.scheduleContextUsageRefresh(!d.contextUsage);
   });
