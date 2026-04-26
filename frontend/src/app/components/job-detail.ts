@@ -350,29 +350,22 @@ import { CliConsoleComponent } from './cli-console';
                     }
                   </section>
 
-                  <section class="sidebar-card sidebar-card--panel">
-                    <div class="sidebar-card__header">
-                      <div>
-                        <div class="section__eyebrow">Timeline</div>
-                        <h3 class="section__title">Event protocol</h3>
+                  @if (detail().info.lastUsage; as usage) {
+                    <section class="sidebar-card sidebar-card--panel activity-metrics">
+                      <div class="activity-metrics__row">
+                        <span class="activity-metrics__label">Changes</span>
+                        <span class="activity-metrics__value">{{ usage.changes || '—' }}</span>
                       </div>
-                    </div>
-                    @if (detail().log.length > 0) {
-                      <div class="log log--sidebar">
-                        @for (entry of detail().log; track entry.timestamp) {
-                          <div class="log__row">
-                            <span class="log__time">{{ formatTime(entry.timestamp) }}</span>
-                            <span class="log__event">{{ entry.event }}</span>
-                            @if (entry.detail) {
-                              <span class="log__detail">{{ entry.detail }}</span>
-                            }
-                          </div>
-                        }
+                      <div class="activity-metrics__row">
+                        <span class="activity-metrics__label">Tokens</span>
+                        <span class="activity-metrics__value">{{ usage.tokens || '—' }}</span>
                       </div>
-                    } @else {
-                      <div class="sidebar-card__empty">No protocol entries yet.</div>
-                    }
-                  </section>
+                      <div class="activity-metrics__row">
+                        <span class="activity-metrics__label">Requests</span>
+                        <span class="activity-metrics__value">{{ usage.requests || '—' }}</span>
+                      </div>
+                    </section>
+                  }
                 </div>
               }
             </div>
@@ -439,6 +432,17 @@ import { CliConsoleComponent } from './cli-console';
     .session-usage__row { display: flex; justify-content: space-between; gap: 12px; }
     .session-usage__label { color: rgba(255,255,255,0.55); text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.7rem; }
     .session-usage__value { color: #cdd6f4; font-family: var(--font-mono, monospace); }
+    .activity-metrics {
+      display: flex;
+      flex-direction: row;
+      flex-wrap: wrap;
+      gap: 8px 24px;
+      padding: 10px 14px;
+      align-items: baseline;
+    }
+    .activity-metrics__row { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+    .activity-metrics__label { color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.65rem; }
+    .activity-metrics__value { color: #cdd6f4; font-family: var(--font-mono, monospace); font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .session-followup { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
     .session-followup__input {
       width: 100%;
