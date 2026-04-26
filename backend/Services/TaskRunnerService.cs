@@ -306,8 +306,13 @@ public class ProjectRunner
                 _scanner.SetJobSessionName(jobId, sessionName, Entry.Path);
             }
 
-            // Start CLI process
-            var prompt = $"Lies @.orchestrator/jobs/3-progress/{jobId}/prompt.md und führe den Task aus.";
+            // Start CLI process. Use the absolute job folder path so the agent does not have to
+            // guess the layout (legacy in-repo `.orchestrator/jobs/` vs. central workspace at
+            // `<TaskRepository>/projects/<projectKey>/3-progress/<jobId>/`).
+            var promptPath = jobFolder != null
+                ? Path.Combine(jobFolder, "prompt.md")
+                : Path.Combine(info.FolderPath, "prompt.md");
+            var prompt = $"Lies @\"{promptPath}\" und führe den Task aus. Der Job-Ordner ist \"{jobFolder ?? info.FolderPath}\".";
             var (execution, cliError) = await _cli.StartAsync(jobId, GetJobKey(jobId), prompt, Entry.RootPath, sessionName, resume, info.Model, ct);
 
             if (execution == null)
