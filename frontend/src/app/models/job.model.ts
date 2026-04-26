@@ -11,7 +11,16 @@ export interface JobInfo {
   folderPath: string;
   lastActivity: string;
   totalSizeBytes: number;
+  sessionName: string | null;
+  lastUsage: SessionUsage | null;
   execution: CliExecution | null;
+}
+
+export interface SessionUsage {
+  at: string;
+  tokens: string | null;
+  changes: string | null;
+  requests: string | null;
 }
 
 export interface JobDetail {

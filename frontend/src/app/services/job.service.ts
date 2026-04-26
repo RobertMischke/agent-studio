@@ -111,6 +111,10 @@ export class JobService {
     return this.http.post(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/stop`, {}, this.withWatchPath(watchPath));
   }
 
+  continueJob(jobId: string, prompt: string, watchPath?: string) {
+    return this.http.post<CliExecution>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/continue`, { prompt }, this.withWatchPath(watchPath));
+  }
+
   getJobOutput(jobId: string, watchPath?: string) {
     return this.http.get<CliOutputLine[]>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/output`, this.withWatchPath(watchPath));
   }

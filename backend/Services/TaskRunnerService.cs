@@ -100,6 +100,24 @@ public class TaskRunnerService : BackgroundService
         return await runner.StartJobManualAsync(jobId, ct);
     }
 
+    /// <summary>
+    /// Resumes the Copilot session bound to a job and feeds it a follow-up prompt.
+    /// The job must already have a sessionName recorded in <c>job.json</c> (i.e. it was started before).
+    /// </summary>
+    public async Task<(CliExecution? Execution, string? Error)> ContinueJobAsync(string jobId, string followupPrompt, string? watchPath = null, CancellationToken ct = default)
+    {
+        var info = _scanner.FindJob(jobId, watchPath);
+        if (info == null) return (null, "Job not found");
+        if (string.IsNullOrWhiteSpace(info.SessionName))
+            return (null, "This job has no session yet — start it once before continuing.");
+
+        var runner = _runners.Values.FirstOrDefault(r => r.Entry.Name == info.ProjectName);
+        if (runner == null) return (null, $"No runner configured for project '{info.ProjectName}'");
+        if (!_cli.IsAvailable()) return (null, "Copilot CLI is not installed or not on PATH");
+
+        return await runner.ContinueJobAsync(jobId, followupPrompt, ct);
+    }
+
     public bool StopJob(string jobId, string? watchPath = null)
     {
         var info = _scanner.FindJob(jobId, watchPath);
@@ -219,6 +237,7 @@ public class ProjectRunner
             if (info.State == JobStates.Ready)
             {
                 _scanner.MoveJob(jobId, JobStates.Progress, Entry.Path);
+                info = _scanner.FindJob(jobId, Entry.Path) ?? info;
             }
 
             _activeJobId = jobId;
@@ -231,9 +250,18 @@ public class ProjectRunner
                 Directory.CreateDirectory(Path.Combine(jobFolder, "logs"));
             }
 
+            // Resolve / persist a stable session name so follow-ups can use --resume
+            var sessionName = info.SessionName;
+            var resume = !string.IsNullOrWhiteSpace(sessionName);
+            if (!resume)
+            {
+                sessionName = BuildSessionName(jobId);
+                _scanner.SetJobSessionName(jobId, sessionName, Entry.Path);
+            }
+
             // Start CLI process
             var prompt = $"Lies @.orchestrator/jobs/3-progress/{jobId}/prompt.md und führe den Task aus.";
-            var (execution, cliError) = await _cli.StartAsync(jobId, GetJobKey(jobId), prompt, Entry.RootPath, ct);
+            var (execution, cliError) = await _cli.StartAsync(jobId, GetJobKey(jobId), prompt, Entry.RootPath, sessionName, resume, ct);
 
             if (execution == null)
             {
@@ -250,12 +278,79 @@ public class ProjectRunner
         }
     }
 
+    /// <summary>
+    /// Sends a follow-up prompt into the Copilot session that was originally created for this job
+    /// (via <c>--resume=&lt;sessionName&gt;</c>). The job must already have a recorded sessionName.
+    /// Moves the job back to <c>3-progress</c> if it sits in <c>4-review</c> or <c>5-completed</c>.
+    /// </summary>
+    public async Task<(CliExecution? Execution, string? Error)> ContinueJobAsync(string jobId, string followupPrompt, CancellationToken ct)
+    {
+        if (_activeJobId != null)
+        {
+            return (null, $"Runner '{ProjectName}' is already executing job '{_activeJobId}'");
+        }
+
+        _processing = true;
+        try
+        {
+            var info = _scanner.FindJob(jobId, Entry.Path);
+            if (info == null) return (null, "Job not found");
+            if (string.IsNullOrWhiteSpace(info.SessionName))
+                return (null, "Job has no session to resume — start it once first.");
+
+            // Bring the job back into 3-progress so the runner workflow stays consistent
+            if (info.State is JobStates.Review or JobStates.Completed or JobStates.Ready)
+            {
+                _scanner.MoveJob(jobId, JobStates.Progress, Entry.Path);
+            }
+
+            _activeJobId = jobId;
+            NotifyStatus();
+
+            var jobFolder = FindJobFolder(jobId);
+            if (jobFolder != null)
+            {
+                Directory.CreateDirectory(Path.Combine(jobFolder, "logs"));
+            }
+
+            var (execution, cliError) = await _cli.StartAsync(jobId, GetJobKey(jobId), followupPrompt, Entry.RootPath, info.SessionName, true, ct);
+
+            if (execution == null)
+            {
+                _activeJobId = null;
+                NotifyStatus();
+                return (null, cliError ?? "Failed to resume Copilot CLI session");
+            }
+
+            return (execution, null);
+        }
+        finally
+        {
+            _processing = false;
+        }
+    }
+
+    private static string BuildSessionName(string jobId)
+    {
+        // Copilot uses the name as a stable handle for --resume; keep it short, deterministic and unique.
+        var slug = new string(jobId.Where(c => char.IsLetterOrDigit(c) || c == '-' || c == '_').ToArray());
+        if (slug.Length > 40) slug = slug[..40];
+        return $"taskboard-{slug}-{DateTime.UtcNow:yyyyMMddHHmm}";
+    }
+
     private void OnCliFinished(string jobKey, CliExecution execution)
     {
         if (GetActiveJobKey() != jobKey || _activeJobId == null) return;
 
         _logger.LogInformation("Job {JobId} finished in project '{Project}' with status {Status}",
             _activeJobId, ProjectName, execution.Status);
+
+        // Persist last token/usage summary (best-effort)
+        var usage = _cli.GetLastUsage(jobKey);
+        if (usage != null)
+        {
+            _scanner.UpdateLastUsage(_activeJobId, usage, Entry.Path);
+        }
 
         // Write CLI output to log file
         WriteCliLog(_activeJobId);

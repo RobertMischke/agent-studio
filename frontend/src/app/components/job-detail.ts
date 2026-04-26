@@ -74,6 +74,44 @@ import { CliConsoleComponent } from './cli-console';
           </section>
         }
 
+        @if (detail().info.sessionName) {
+          <section class="sidebar-card sidebar-card--toolbar">
+            <div class="sidebar-card__header">
+              <div>
+                <div class="section__eyebrow">Copilot session</div>
+                <h3 class="section__title">{{ detail().info.sessionName }}</h3>
+              </div>
+            </div>
+            @if (detail().info.lastUsage; as usage) {
+              <div class="session-usage">
+                @if (usage.tokens) {
+                  <div class="session-usage__row"><span class="session-usage__label">Tokens</span><span class="session-usage__value">{{ usage.tokens }}</span></div>
+                }
+                @if (usage.changes) {
+                  <div class="session-usage__row"><span class="session-usage__label">Changes</span><span class="session-usage__value">{{ usage.changes }}</span></div>
+                }
+                @if (usage.requests) {
+                  <div class="session-usage__row"><span class="session-usage__label">Requests</span><span class="session-usage__value">{{ usage.requests }}</span></div>
+                }
+              </div>
+            }
+            @if (!isRunning()) {
+              <div class="session-followup">
+                <textarea class="session-followup__input"
+                          rows="3"
+                          placeholder="Follow-up prompt — resumes the same Copilot session via --resume"
+                          [value]="followupPrompt()"
+                          (input)="followupPrompt.set($any($event.target).value)"></textarea>
+                <button class="btn-exec btn-exec--start"
+                        (click)="continueJob()"
+                        [disabled]="continuing() || !followupPrompt().trim()">
+                  {{ continuing() ? '⏳ Resuming...' : '↻ Continue session' }}
+                </button>
+              </div>
+            }
+          </section>
+        }
+
         @if (showCliConfig()) {
           <section class="sidebar-card sidebar-card--toolbar">
             <div class="cli-config">
@@ -305,6 +343,33 @@ import { CliConsoleComponent } from './cli-console';
     </div>
   `,
   styles: [`
+    .session-usage {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      padding: 8px 12px;
+      margin: 8px 0;
+      font-size: 0.78rem;
+      background: rgba(255,255,255,0.03);
+      border-radius: 8px;
+    }
+    .session-usage__row { display: flex; justify-content: space-between; gap: 12px; }
+    .session-usage__label { color: rgba(255,255,255,0.55); text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.7rem; }
+    .session-usage__value { color: #cdd6f4; font-family: var(--font-mono, monospace); }
+    .session-followup { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+    .session-followup__input {
+      width: 100%;
+      box-sizing: border-box;
+      background: rgba(0,0,0,0.25);
+      color: #cdd6f4;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-family: inherit;
+      font-size: 0.85rem;
+      resize: vertical;
+    }
+    .session-followup__input:focus { outline: none; border-color: rgba(137,180,250,0.5); }
     .detail {
       background: #181825;
       border: 1px solid rgba(255,255,255,0.06);
@@ -880,6 +945,8 @@ export class JobDetailComponent implements OnDestroy {
   readonly elapsedTime = signal('');
   readonly errorMsg = signal<string | null>(null);
   readonly starting = signal(false);
+  readonly continuing = signal(false);
+  readonly followupPrompt = signal('');
   readonly showCliConfig = signal(false);
   readonly cliStatus = signal<CliSettings | null>(null);
   readonly cliPathDraft = signal('');
@@ -1010,6 +1077,29 @@ export class JobDetailComponent implements OnDestroy {
         }
       },
       error: (err) => this.showError(err)
+    });
+  }
+
+  continueJob(): void {
+    const prompt = this.followupPrompt().trim();
+    if (!prompt) return;
+
+    this.errorMsg.set(null);
+    this.continuing.set(true);
+    this.jobService.continueJob(this.detail().info.id, prompt, this.detail().info.watchPath).subscribe({
+      next: (exec) => {
+        this.continuing.set(false);
+        this.followupPrompt.set('');
+        this.isRunning.set(true);
+        this.startedAt.set(new Date(exec.startedAt));
+        this.cliOutput.set([]);
+        this.startElapsedTimer();
+        this.pollOutput();
+      },
+      error: (err) => {
+        this.continuing.set(false);
+        this.showError(err);
+      }
     });
   }
 

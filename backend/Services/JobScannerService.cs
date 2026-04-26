@@ -140,7 +140,11 @@ public class JobScannerService
                 ProjectName = entry.Name,
                 FolderPath = jobDir,
                 LastActivity = lastActivity,
-                TotalSizeBytes = totalSize
+                TotalSizeBytes = totalSize,
+                SessionName = raw.TryGetProperty("sessionName", out var sn) ? sn.GetString() : null,
+                LastUsage = raw.TryGetProperty("lastUsage", out var lu) && lu.ValueKind == JsonValueKind.Object
+                    ? JsonSerializer.Deserialize<SessionUsage>(lu.GetRawText(), JsonOpts)
+                    : null
             };
         }
         catch (Exception ex)
@@ -306,6 +310,31 @@ public class JobScannerService
 
     private void UpdateStateInJobJson(string jobDir, string newState)
     {
+        UpdateJobJsonField(jobDir, "state", newState);
+    }
+
+    public bool SetJobSessionName(string jobId, string sessionName, string? watchPath = null)
+    {
+        var info = FindJob(jobId, watchPath);
+        if (info == null) return false;
+        UpdateJobJsonField(info.FolderPath, "sessionName", sessionName);
+        return true;
+    }
+
+    public bool UpdateLastUsage(string jobId, SessionUsage usage, string? watchPath = null)
+    {
+        var info = FindJob(jobId, watchPath);
+        if (info == null) return false;
+        UpdateJobJsonField(info.FolderPath, "lastUsage", usage);
+        return true;
+    }
+
+    /// <summary>
+    /// Reads <c>job.json</c>, replaces or adds a single top-level field, writes back preserving
+    /// the existing field order.
+    /// </summary>
+    private void UpdateJobJsonField(string jobDir, string fieldName, object value)
+    {
         var jobJsonPath = Path.Combine(jobDir, "job.json");
         if (!File.Exists(jobJsonPath)) return;
 
@@ -316,18 +345,26 @@ public class JobScannerService
                       ?? new Dictionary<string, JsonElement>();
 
             var updated = new Dictionary<string, object>();
+            var inserted = false;
             foreach (var kv in doc)
             {
-                if (kv.Key == "state") updated["state"] = newState;
-                else updated[kv.Key] = kv.Value;
+                if (kv.Key == fieldName)
+                {
+                    updated[fieldName] = value;
+                    inserted = true;
+                }
+                else
+                {
+                    updated[kv.Key] = kv.Value;
+                }
             }
-            if (!updated.ContainsKey("state")) updated["state"] = newState;
+            if (!inserted) updated[fieldName] = value;
 
             File.WriteAllText(jobJsonPath, JsonSerializer.Serialize(updated, new JsonSerializerOptions { WriteIndented = true }));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to update state in job.json at {Dir}", jobDir);
+            _logger.LogError(ex, "Failed to update field {Field} in job.json at {Dir}", fieldName, jobDir);
         }
     }
 

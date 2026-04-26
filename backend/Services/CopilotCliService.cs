@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using OrchestratorApi.Models;
 
 namespace OrchestratorApi.Services;
@@ -82,7 +83,7 @@ public class CopilotCliService
         return available;
     }
 
-    public async Task<(CliExecution? Execution, string? Error)> StartAsync(string jobId, string jobKey, string prompt, string workingDirectory, CancellationToken ct = default)
+    public async Task<(CliExecution? Execution, string? Error)> StartAsync(string jobId, string jobKey, string prompt, string workingDirectory, string? sessionName = null, bool resumeSession = false, CancellationToken ct = default)
     {
         if (_processes.TryGetValue(jobKey, out var existing))
         {
@@ -96,17 +97,18 @@ public class CopilotCliService
             _processes.TryRemove(jobKey, out _);
         }
 
-        var promptArg = string.Join(" ",
-        [
-            $"Lies @.orchestrator/jobs/3-progress/{jobId}/prompt.md und fuehre den Task aus.",
-            $"Schreibe deinen Completion-Report in .orchestrator/jobs/3-progress/{jobId}/status.md.",
-            .. WindowsShellFallbackInstructions
-        ]);
+        var sessionArg = "";
+        if (!string.IsNullOrWhiteSpace(sessionName))
+        {
+            sessionArg = resumeSession
+                ? $" --resume=\"{EscapeArg(sessionName)}\""
+                : $" --name=\"{EscapeArg(sessionName)}\"";
+        }
 
         var psi = new ProcessStartInfo
         {
             FileName = GetCliPath(),
-            Arguments = $"-p \"{EscapeArg(promptArg)}\" --autopilot --yolo",
+            Arguments = $"-p \"{EscapeArg(prompt)}\" --allow-all{sessionArg}",
             WorkingDirectory = workingDirectory,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -245,6 +247,8 @@ public class CopilotCliService
                 while (info.OutputBuffer.Count > 5000)
                     info.OutputBuffer.RemoveAt(0);
 
+                TryParseUsage(line, info);
+
                 OnOutput?.Invoke(jobKey, outputLine);
             }
         }
@@ -253,6 +257,36 @@ public class CopilotCliService
         {
             _logger.LogError(ex, "Error reading {Stream} for job {JobId}", stream, jobKey);
         }
+    }
+
+    public SessionUsage? GetLastUsage(string jobKey)
+        => _processes.TryGetValue(jobKey, out var info) ? info.LastUsage : null;
+
+    private static readonly Regex TokensRegex = new(@"Tokens\s*(?<tokens>.+?)(?:\s{2,}|\s*\|\s*|$)", RegexOptions.Compiled);
+    private static readonly Regex ChangesRegex = new(@"Changes\s*(?<changes>[+\-0-9\s]+)", RegexOptions.Compiled);
+    private static readonly Regex RequestsRegex = new(@"(?<requests>\d+\s+Premium[^\r\n]*)", RegexOptions.Compiled);
+
+    private static void TryParseUsage(string line, CliProcessInfo info)
+    {
+        // Footer / summary lines look like "Tokens ↑ 38.6k • ↓ 514 • 34.7k (cached)  Changes +47 -4   1 Premium (12s)"
+        if (!line.Contains("Tokens", StringComparison.OrdinalIgnoreCase)
+            && !line.Contains("Changes", StringComparison.OrdinalIgnoreCase)
+            && !line.Contains("Premium", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var tokens = TokensRegex.Match(line);
+        var changes = ChangesRegex.Match(line);
+        var requests = RequestsRegex.Match(line);
+
+        if (!tokens.Success && !changes.Success && !requests.Success) return;
+
+        info.LastUsage = new SessionUsage
+        {
+            At = DateTime.UtcNow,
+            Tokens = tokens.Success ? tokens.Groups["tokens"].Value.Trim() : info.LastUsage?.Tokens,
+            Changes = changes.Success ? changes.Groups["changes"].Value.Trim() : info.LastUsage?.Changes,
+            Requests = requests.Success ? requests.Groups["requests"].Value.Trim() : info.LastUsage?.Requests
+        };
     }
 
     private async Task MonitorProcessAsync(string jobKey, Process process, CliProcessInfo info, CancellationToken ct)
@@ -533,6 +567,7 @@ public class CopilotCliService
         public CliExecution Execution { get; set; }
         public string WorkingDirectory { get; }
         public List<CliOutputLine> OutputBuffer { get; } = [];
+        public SessionUsage? LastUsage { get; set; }
 
         public CliProcessInfo(Process process, CliExecution execution, string workingDirectory)
         {

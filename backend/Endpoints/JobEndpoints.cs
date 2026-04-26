@@ -111,6 +111,17 @@ public static class JobEndpoints
             return success ? Results.Ok() : Results.NotFound();
         });
 
+        group.MapPost("/{jobId}/continue", async (string jobId, string? watchPath, ContinueJobRequest req, TaskRunnerService runner, CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(req?.Prompt))
+                return Results.BadRequest(new { error = "Prompt is required" });
+
+            var (execution, error) = await runner.ContinueJobAsync(jobId, req.Prompt, watchPath, ct);
+            return execution is not null
+                ? Results.Ok(execution)
+                : Results.BadRequest(new { error = error ?? "Cannot continue job" });
+        });
+
         group.MapGet("/{jobId}/output", (string jobId, string? watchPath, TaskRunnerService runner) =>
         {
             var output = runner.GetJobOutput(jobId, watchPath);

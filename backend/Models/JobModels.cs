@@ -14,7 +14,19 @@ public record JobInfo
     public string FolderPath { get; init; } = "";
     public DateTime LastActivity { get; init; }
     public long TotalSizeBytes { get; init; }
+    /// <summary>Name passed to Copilot CLI via <c>--name</c> on first start; reused with <c>--resume</c> for follow-ups.</summary>
+    public string? SessionName { get; init; }
+    /// <summary>Last token / cost summary parsed from CLI output (best-effort).</summary>
+    public SessionUsage? LastUsage { get; init; }
     public CliExecution? Execution { get; init; }
+}
+
+public record SessionUsage
+{
+    public DateTime At { get; init; }
+    public string? Tokens { get; init; }
+    public string? Changes { get; init; }
+    public string? Requests { get; init; }
 }
 
 public record JobDetail
@@ -110,6 +122,11 @@ public record ProjectRunnerStatus
 public record StartJobRequest
 {
     public string? AgentOverride { get; init; }
+}
+
+public record ContinueJobRequest
+{
+    public string Prompt { get; init; } = "";
 }
 
 public record SetRunnerModeRequest
