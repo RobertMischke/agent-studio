@@ -74,4 +74,4 @@ Visibility over control.
 - A new job folder appears and is auto-discovered on the board
 - Jobs can be dragged between columns (state transitions)
 - Detail panel shows prompt and processing protocol at a glance
-- Dependent projects receive Copilot instructions for the autopilot workflow
+- Dependent projects receive agent instructions for the autopilot workflow

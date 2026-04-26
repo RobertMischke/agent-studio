@@ -57,7 +57,7 @@
 
 ## Abhängige Systeme synchronisieren
 
-Wenn sich der Workflow oder das Ordner-Schema ändert, müssen die Copilot-Instruktionen in den Ziel-Projekten aktualisiert werden. Dafür gibt es den Prompt `/sync-target-instructions` (in `.github/prompts/`).
+Wenn sich der Workflow oder das Ordner-Schema ändert, müssen die Agent-Instruktionen in den Ziel-Projekten aktualisiert werden. Dafür gibt es den Prompt `/sync-target-instructions` (in `.github/prompts/`).
 
 ## Docs
 

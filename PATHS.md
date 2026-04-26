@@ -15,7 +15,9 @@ Die Pfade teilen sich in zwei Bereiche:
 - `frontend/` — Angular 21 Dashboard (PWA)
 
 ### Config & Docs
-- `.github/copilot-instructions.md` — Copilot-Anweisungen für dieses Repo
+- `AGENTS.md` — allgemeine Agent-Anweisungen für dieses Repo
+- `frontend/AGENTS.md` — frontend-spezifische Agent-Anweisungen
+- `.github/copilot-instructions.md` — schlanker Copilot-Kompatibilitätsverweis
 - `.github/prompts/` — Reusable Prompts (z.B. Sync abhängiger Projekte)
 - `docs/filesystem-contract.md` — Job-Ordner-Kontrakt + Template
 - `NEW-I.md` — Initiative & Mission
@@ -45,8 +47,9 @@ C:\Projects\Runbook\App\.orchestrator\jobs\
   5-completed/          ← Abgeschlossen
 ```
 
-### Copilot-Instruktionen im Ziel-Projekt
-- `<Ziel-Projekt>/.github/copilot-instructions.md` — enthält den Autopilot-Workflow
+### Agent-Instruktionen im Ziel-Projekt
+- `<Ziel-Projekt>/AGENTS.md` — enthält den Autopilot-Workflow
+- `<Ziel-Projekt>/.github/copilot-instructions.md` — optionaler Copilot-Kompatibilitätsverweis
 - Wird vom Taskboard aus per Prompt synchronisiert (`/sync-target-instructions`)
 
 ### Beispiel-Jobs (Runtime, im Ziel-Projekt)
