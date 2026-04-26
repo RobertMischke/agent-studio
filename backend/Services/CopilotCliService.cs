@@ -6,6 +6,15 @@ namespace OrchestratorApi.Services;
 
 public class CopilotCliService
 {
+    private static readonly string[] WindowsShellFallbackInstructions =
+    [
+        "Wenn Shell-Kommandos notwendig sind, verwende auf Windows keine pwsh.exe-abhaengigen Befehle.",
+        "Bevorzuge cmd.exe, normale Windows-Batch-Syntax oder direkte Node/npm-Kommandos.",
+        "Falls eine Plan-Datei erstellt werden muss, nutze eine Methode ohne PowerShell-spezifische Syntax wie @'... '@, Out-File oder Set-Content.",
+        "Dokumentiere kurz, welche Alternative verwendet wurde.",
+        "Wenn ein Build in der aktuellen Umgebung nicht moeglich ist, nenne den konkreten Grund und fahre mit statischer Pruefung fort."
+    ];
+
     private readonly ILogger<CopilotCliService> _logger;
     private readonly IConfiguration _configuration;
     private readonly ConcurrentDictionary<string, CliProcessInfo> _processes = new();
@@ -86,7 +95,12 @@ public class CopilotCliService
             _processes.TryRemove(jobKey, out _);
         }
 
-        var promptArg = $"Lies @.orchestrator/jobs/3-progress/{jobId}/prompt.md und führe den Task aus. Schreibe deinen Completion-Report in .orchestrator/jobs/3-progress/{jobId}/status.md";
+        var promptArg = string.Join(" ",
+        [
+            $"Lies @.orchestrator/jobs/3-progress/{jobId}/prompt.md und fuehre den Task aus.",
+            $"Schreibe deinen Completion-Report in .orchestrator/jobs/3-progress/{jobId}/status.md.",
+            .. WindowsShellFallbackInstructions
+        ]);
 
         var psi = new ProcessStartInfo
         {

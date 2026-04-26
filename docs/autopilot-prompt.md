@@ -113,3 +113,10 @@ my-task/
 - Work in the project source tree, not inside the job folder
 - Update `job.json` `"state"` to match the folder the job is in
 - Screenshots go into `results/` inside the job folder, linked from `status.md`
+
+## Windows Shell Compatibility
+
+- On Windows, do **not** rely on `pwsh.exe` being installed.
+- For shell commands, prefer `cmd.exe`, normal Windows batch syntax, or direct Node/npm commands.
+- If a plan file must be created, use a method that does not depend on PowerShell-specific syntax such as `@' ... '@`, `Out-File`, or `Set-Content`.
+- If a build cannot run in the current environment, state the concrete reason in `status.md` and continue with static verification.

@@ -31,6 +31,13 @@ Only restart the backend (`.\api.ps1 restart`) when backend code was changed. Sk
 - Frontend: `npm start --prefix frontend` (dev server with proxy)
 - Frontend build: `npx ng build --prefix frontend`
 
+## Windows Shell Compatibility
+
+- Do **not** assume `pwsh.exe` is available.
+- For shell commands, prefer `cmd.exe`, normal Windows batch syntax, or direct Node/npm commands.
+- If a plan file must be created, use a method that does not depend on PowerShell-specific syntax such as `@' ... '@`, `Out-File`, or `Set-Content`.
+- If a build cannot run in the current environment, document the concrete reason and continue with static verification.
+
 ## Job Folder Contract
 
 Each job folder contains:
