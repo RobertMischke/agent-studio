@@ -10,206 +10,375 @@ import { CliConsoleComponent } from './cli-console';
   imports: [FormsModule, CliConsoleComponent],
   template: `
     <div class="detail">
-      <div class="detail__header">
-        <button class="detail__back" (click)="back.emit()">←</button>
-        <h2 class="detail__title">{{ detail().info.title || detail().info.id }}</h2>
+      <header class="detail__header">
+        <div class="detail__header-main">
+          <button class="detail__back" (click)="back.emit()">←</button>
+          <div class="detail__headline">
+            <div class="detail__eyebrow">Task focus</div>
+            <h2 class="detail__title">{{ detail().info.title || detail().info.id }}</h2>
+          </div>
+        </div>
         <span class="detail__state" [class]="'state--' + detail().info.state">
           {{ stateLabel(detail().info.state) }}
         </span>
-      </div>
+      </header>
 
       <div class="detail__meta">
-        <select class="detail__project-select"
-                [ngModel]="detail().info.watchPath"
-                (ngModelChange)="onProjectChange($event)">
-          @for (wp of watchPaths(); track wp.path) {
-            <option [value]="wp.path">{{ wp.name }}</option>
-          }
-        </select>
-        <span>🤖 {{ detail().info.agent }}</span>
-        <span>#{{ detail().info.order }}</span>
-        <span>{{ formatDate(detail().info.createdAt) }}</span>
+        <label class="detail__meta-item detail__meta-item--project">
+          <span class="detail__meta-label">Project</span>
+          <select class="detail__project-select"
+                  [ngModel]="detail().info.watchPath"
+                  (ngModelChange)="onProjectChange($event)">
+            @for (wp of watchPaths(); track wp.path) {
+              <option [value]="wp.path">{{ wp.name }}</option>
+            }
+          </select>
+        </label>
+        <div class="detail__meta-item">
+          <span class="detail__meta-label">Agent</span>
+          <span class="detail__meta-value">🤖 {{ detail().info.agent }}</span>
+        </div>
+        <div class="detail__meta-item">
+          <span class="detail__meta-label">Order</span>
+          <span class="detail__meta-value">#{{ detail().info.order }}</span>
+        </div>
+        <div class="detail__meta-item">
+          <span class="detail__meta-label">Created</span>
+          <span class="detail__meta-value">{{ formatDate(detail().info.createdAt) }}</span>
+        </div>
       </div>
 
-      @if (canStartJob() || isRunning()) {
-        <div class="execution-bar">
-          @if (isRunning()) {
-            <div class="execution-bar__status">
-              <span class="execution-bar__pulse"></span>
-              <span class="execution-bar__text">Running since {{ elapsedTime() }}</span>
+      <div class="detail__tools">
+        @if (canStartJob() || isRunning()) {
+          <section class="sidebar-card sidebar-card--toolbar">
+            <div class="sidebar-card__header">
+              <div>
+                <div class="section__eyebrow">Command deck</div>
+                <h3 class="section__title">Agent controls</h3>
+              </div>
             </div>
-            <button class="btn-exec btn-exec--stop" (click)="stopJob()">⏹ Stop</button>
-          } @else {
-            <button class="btn-exec btn-exec--start" (click)="startJob()" [disabled]="starting()">
-              {{ starting() ? '⏳ Starting...' : '▶ Start CLI' }}
-            </button>
-          }
-        </div>
-      }
-
-      @if (errorMsg(); as err) {
-        <div class="detail__error">
-          <span class="detail__error-icon">⚠️</span>
-          <span class="detail__error-text">{{ err }}</span>
-          @if (isCliError()) {
-            <button class="detail__error-action" (click)="openCliConfig()">🔧 Configure</button>
-          }
-          <button class="detail__error-close" (click)="dismissError()">✕</button>
-        </div>
-      }
-
-      @if (showCliConfig()) {
-        <div class="cli-config">
-          <div class="cli-config__header">
-            <span class="cli-config__title">🔧 CLI Configuration</span>
-            <button class="detail__error-close" (click)="showCliConfig.set(false)">✕</button>
-          </div>
-          @if (cliStatus()) {
-            <div class="cli-config__status" [class.cli-config__status--ok]="cliStatus()!.available"
-                 [class.cli-config__status--err]="!cliStatus()!.available">
-              @if (cliStatus()!.available) {
-                ✅ {{ cliStatus()!.version }} — {{ cliStatus()!.path }}
+            <div class="execution-bar">
+              @if (isRunning()) {
+                <div class="execution-bar__status">
+                  <span class="execution-bar__pulse"></span>
+                  <span class="execution-bar__text">Running since {{ elapsedTime() }}</span>
+                </div>
+                <button class="btn-exec btn-exec--stop" (click)="stopJob()">⏹ Stop</button>
               } @else {
-                ❌ Not found at: {{ cliStatus()!.path }}
+                <button class="btn-exec btn-exec--start" (click)="startJob()" [disabled]="starting()">
+                  {{ starting() ? '⏳ Starting...' : '▶ Start CLI' }}
+                </button>
               }
             </div>
-          }
-          <div class="cli-config__row">
-            <input class="cli-config__input" type="text"
-                   [value]="cliPathDraft()"
-                   (input)="cliPathDraft.set($any($event.target).value)"
-                   placeholder="z.B. copilot, C:\\Program Files\\GitHub\\copilot.exe" />
-            <button class="btn-sm" (click)="testCliPath()" [disabled]="cliTesting()">
-              {{ cliTesting() ? '⏳' : '🧪 Test' }}
-            </button>
-            <button class="btn-sm btn-sm--primary" (click)="saveCliPath()" [disabled]="cliTesting()">💾 Save</button>
-          </div>
-          @if (cliTestResult(); as result) {
-            <div class="cli-config__status" [class.cli-config__status--ok]="result.available"
-                 [class.cli-config__status--err]="!result.available">
-              @if (result.available) {
-                ✅ Found: {{ result.version }}
-              } @else {
-                ❌ {{ result.version || 'Not found at this path' }}
+          </section>
+        }
+
+        @if (errorMsg(); as err) {
+          <section class="sidebar-card sidebar-card--toolbar sidebar-card--error">
+            <div class="detail__error">
+              <span class="detail__error-icon">⚠️</span>
+              <span class="detail__error-text">{{ err }}</span>
+              @if (isCliError()) {
+                <button class="detail__error-action" (click)="openCliConfig()">🔧 Configure</button>
+              }
+              <button class="detail__error-close" (click)="dismissError()">✕</button>
+            </div>
+          </section>
+        }
+
+        @if (showCliConfig()) {
+          <section class="sidebar-card sidebar-card--toolbar">
+            <div class="cli-config">
+              <div class="cli-config__header">
+                <span class="cli-config__title">🔧 CLI Configuration</span>
+                <button class="detail__error-close" (click)="showCliConfig.set(false)">✕</button>
+              </div>
+              @if (cliStatus()) {
+                <div class="cli-config__status" [class.cli-config__status--ok]="cliStatus()!.available"
+                     [class.cli-config__status--err]="!cliStatus()!.available">
+                  @if (cliStatus()!.available) {
+                    ✅ {{ cliStatus()!.version }} — {{ cliStatus()!.path }}
+                  } @else {
+                    ❌ Not found at: {{ cliStatus()!.path }}
+                  }
+                </div>
+              }
+              <div class="cli-config__row">
+                <input class="cli-config__input" type="text"
+                       [value]="cliPathDraft()"
+                       (input)="cliPathDraft.set($any($event.target).value)"
+                       placeholder="z.B. copilot, C:\\Program Files\\GitHub\\copilot.exe" />
+                <button class="btn-sm" (click)="testCliPath()" [disabled]="cliTesting()">
+                  {{ cliTesting() ? '⏳' : '🧪 Test' }}
+                </button>
+                <button class="btn-sm btn-sm--primary" (click)="saveCliPath()" [disabled]="cliTesting()">💾 Save</button>
+              </div>
+              @if (cliTestResult(); as result) {
+                <div class="cli-config__status" [class.cli-config__status--ok]="result.available"
+                     [class.cli-config__status--err]="!result.available">
+                  @if (result.available) {
+                    ✅ Found: {{ result.version }}
+                  } @else {
+                    ❌ {{ result.version || 'Not found at this path' }}
+                  }
+                </div>
+              }
+              <div class="cli-config__separator"></div>
+              <div class="cli-config__row">
+                <input class="cli-config__input" [type]="showToken() ? 'text' : 'password'"
+                       [value]="tokenDraft()"
+                       (input)="tokenDraft.set($any($event.target).value)"
+                       placeholder="GitHub Token (PAT or OAuth)" />
+                <button class="btn-sm" (click)="showToken.set(!showToken())">
+                  {{ showToken() ? '🙈' : '👁' }}
+                </button>
+                <button class="btn-sm btn-sm--primary" (click)="saveToken()" [disabled]="tokenSaving()">
+                  {{ tokenSaving() ? '⏳' : '💾 Save Token' }}
+                </button>
+              </div>
+              @if (cliStatus()) {
+                <div class="cli-config__status" [class.cli-config__status--ok]="cliStatus()!.hasToken"
+                     [class.cli-config__status--err]="!cliStatus()!.hasToken">
+                  {{ cliStatus()!.hasToken ? '🔑 Token configured' : '⚠️ No token — CLI may fail to authenticate' }}
+                </div>
               }
             </div>
-          }
-          <div class="cli-config__separator"></div>
-          <div class="cli-config__row">
-            <input class="cli-config__input" [type]="showToken() ? 'text' : 'password'"
-                   [value]="tokenDraft()"
-                   (input)="tokenDraft.set($any($event.target).value)"
-                   placeholder="GitHub Token (PAT or OAuth)" />
-            <button class="btn-sm" (click)="showToken.set(!showToken())">
-              {{ showToken() ? '🙈' : '👁' }}
-            </button>
-            <button class="btn-sm btn-sm--primary" (click)="saveToken()" [disabled]="tokenSaving()">
-              {{ tokenSaving() ? '⏳' : '💾 Save Token' }}
-            </button>
-          </div>
-          @if (cliStatus()) {
-            <div class="cli-config__status" [class.cli-config__status--ok]="cliStatus()!.hasToken"
-                 [class.cli-config__status--err]="!cliStatus()!.hasToken">
-              {{ cliStatus()!.hasToken ? '🔑 Token configured' : '⚠️ No token — CLI may fail to authenticate' }}
-            </div>
-          }
-        </div>
-      }
-
-      <section class="section">
-        <div class="section__header">
-          <h3 class="section__title">Prompt</h3>
-          @if (!isProgress()) {
-            @if (editingPrompt()) {
-              <div class="section__actions">
-                <button class="btn-sm" (click)="cancelEdit('prompt')">Cancel</button>
-                <button class="btn-sm btn-sm--primary" (click)="saveFile('prompt.md', promptDraft())">Save</button>
-              </div>
-            } @else {
-              <button class="btn-sm" (click)="startEdit('prompt')">✏️ Edit</button>
-            }
-          }
-        </div>
-        @if (editingPrompt()) {
-          <textarea class="section__editor" [(ngModel)]="promptDraftValue" rows="10"></textarea>
-        } @else {
-          <pre class="section__body">{{ detail().promptMarkdown || '(empty)' }}</pre>
+          </section>
         }
-      </section>
+      </div>
 
-      <section class="section">
-        <div class="section__header">
-          <h3 class="section__title">Status</h3>
-          @if (!isProgress()) {
-            @if (editingStatus()) {
-              <div class="section__actions">
-                <button class="btn-sm" (click)="cancelEdit('status')">Cancel</button>
-                <button class="btn-sm btn-sm--primary" (click)="saveFile('status.md', statusDraft())">Save</button>
+      <div class="detail__layout">
+        <main class="detail__main">
+          <section class="section section--primary section--fill">
+            <div class="section__header">
+              <div>
+                <div class="section__eyebrow">Samurai view</div>
+                <h3 class="section__title section__title--large">Task description</h3>
               </div>
-            } @else {
-              <button class="btn-sm" (click)="startEdit('status')">✏️ Edit</button>
-            }
-          }
-        </div>
-        @if (editingStatus()) {
-          <textarea class="section__editor" [(ngModel)]="statusDraftValue" rows="10"></textarea>
-        } @else {
-          <pre class="section__body">{{ detail().statusMarkdown || '(empty)' }}</pre>
-        }
-      </section>
-
-      @if (cliOutput().length > 0 || isRunning()) {
-        <section class="section">
-          <app-cli-console [lines]="cliOutput()" />
-        </section>
-      }
-
-      @if (detail().log.length > 0) {
-        <section class="section">
-          <h3 class="section__title">Protocol</h3>
-          <div class="log">
-            @for (entry of detail().log; track entry.timestamp) {
-              <div class="log__row">
-                <span class="log__time">{{ formatTime(entry.timestamp) }}</span>
-                <span class="log__event">{{ entry.event }}</span>
-                @if (entry.detail) {
-                  <span class="log__detail">{{ entry.detail }}</span>
+              @if (!isProgress()) {
+                @if (editingPrompt()) {
+                  <div class="section__actions">
+                    <button class="btn-sm" (click)="cancelEdit('prompt')">Cancel</button>
+                    <button class="btn-sm btn-sm--primary" (click)="saveFile('prompt.md')">Save</button>
+                  </div>
+                } @else {
+                  <button class="btn-sm" (click)="startEdit('prompt')">✏️ Edit</button>
                 }
-              </div>
+              }
+            </div>
+
+            @if (editingPrompt()) {
+              <textarea class="section__editor section__editor--primary section__editor--fill" [(ngModel)]="promptDraftValue" rows="16"></textarea>
+            } @else {
+              <pre class="section__body section__body--primary section__body--scroll">{{ detail().promptMarkdown || '(empty)' }}</pre>
             }
+          </section>
+        </main>
+
+        <aside class="detail__inspector">
+          <section class="inspector">
+            <div class="inspector__header">
+              <div>
+                <div class="section__eyebrow">Deep dive</div>
+                <h3 class="section__title section__title--large">Agent protocol</h3>
+              </div>
+              <div class="inspector__tabs">
+                <button class="inspector__tab"
+                        [class.inspector__tab--active]="activeInspectorTab() === 'protocol'"
+                        (click)="activeInspectorTab.set('protocol')">
+                  Protocol
+                </button>
+                <button class="inspector__tab"
+                        [class.inspector__tab--active]="activeInspectorTab() === 'activity'"
+                        (click)="activeInspectorTab.set('activity')">
+                  Activity
+                </button>
+              </div>
+            </div>
+
+            <div class="inspector__body">
+              @if (activeInspectorTab() === 'protocol') {
+                <section class="section section--fill">
+                  <div class="section__header">
+                    <div>
+                      <div class="section__eyebrow">Agent notes</div>
+                      <h3 class="section__title section__title--large">status.md</h3>
+                    </div>
+                    @if (!isProgress()) {
+                      @if (editingStatus()) {
+                        <div class="section__actions">
+                          <button class="btn-sm" (click)="cancelEdit('status')">Cancel</button>
+                          <button class="btn-sm btn-sm--primary" (click)="saveFile('status.md')">Save</button>
+                        </div>
+                      } @else {
+                        <button class="btn-sm" (click)="startEdit('status')">✏️ Edit</button>
+                      }
+                    }
+                  </div>
+                  @if (editingStatus()) {
+                    <textarea class="section__editor section__editor--fill" [(ngModel)]="statusDraftValue" rows="14"></textarea>
+                  } @else {
+                    <pre class="section__body section__body--scroll">{{ detail().statusMarkdown || '(empty)' }}</pre>
+                  }
+                </section>
+              } @else {
+                <div class="inspector__stack">
+                  <section class="sidebar-card sidebar-card--panel">
+                    <div class="sidebar-card__header">
+                      <div>
+                        <div class="section__eyebrow">Live stream</div>
+                        <h3 class="section__title">CLI output</h3>
+                      </div>
+                      @if (cliOutput().length > 0 || detail().log.length > 0 || isRunning()) {
+                        <button class="btn-sm" (click)="showLogOverlay.set(true)">⤢ Maximize log</button>
+                      }
+                    </div>
+
+                    @if (cliOutput().length > 0 || isRunning()) {
+                      <app-cli-console [lines]="cliOutput()" [title]="'CLI output'" [bodyMaxHeight]="'34vh'" />
+                    } @else {
+                      <div class="sidebar-card__empty">Start the task to follow the agent output live.</div>
+                    }
+                  </section>
+
+                  <section class="sidebar-card sidebar-card--panel">
+                    <div class="sidebar-card__header">
+                      <div>
+                        <div class="section__eyebrow">Timeline</div>
+                        <h3 class="section__title">Event protocol</h3>
+                      </div>
+                    </div>
+                    @if (detail().log.length > 0) {
+                      <div class="log log--sidebar">
+                        @for (entry of detail().log; track entry.timestamp) {
+                          <div class="log__row">
+                            <span class="log__time">{{ formatTime(entry.timestamp) }}</span>
+                            <span class="log__event">{{ entry.event }}</span>
+                            @if (entry.detail) {
+                              <span class="log__detail">{{ entry.detail }}</span>
+                            }
+                          </div>
+                        }
+                      </div>
+                    } @else {
+                      <div class="sidebar-card__empty">No protocol entries yet.</div>
+                    }
+                  </section>
+                </div>
+              }
+            </div>
+          </section>
+        </aside>
+      </div>
+
+      @if (showLogOverlay()) {
+        <div class="log-overlay" (click)="showLogOverlay.set(false)">
+          <div class="log-overlay__panel" (click)="$event.stopPropagation()">
+            <div class="log-overlay__header">
+              <div>
+                <div class="section__eyebrow">Fullscreen</div>
+                <h3 class="log-overlay__title">Agent log</h3>
+              </div>
+              <button class="btn-sm" (click)="showLogOverlay.set(false)">✕ Close</button>
+            </div>
+
+            <div class="log-overlay__content">
+              <section class="sidebar-card">
+                <div class="sidebar-card__header">
+                  <h3 class="section__title">CLI output</h3>
+                </div>
+                <app-cli-console [lines]="cliOutput()" [title]="'CLI output'" [bodyMaxHeight]="'calc(100vh - 320px)'" />
+              </section>
+
+              <section class="sidebar-card">
+                <div class="sidebar-card__header">
+                  <h3 class="section__title">Protocol</h3>
+                </div>
+                @if (detail().log.length > 0) {
+                  <div class="log log--overlay">
+                    @for (entry of detail().log; track entry.timestamp) {
+                      <div class="log__row">
+                        <span class="log__time">{{ formatTime(entry.timestamp) }}</span>
+                        <span class="log__event">{{ entry.event }}</span>
+                        @if (entry.detail) {
+                          <span class="log__detail">{{ entry.detail }}</span>
+                        }
+                      </div>
+                    }
+                  </div>
+                } @else {
+                  <div class="sidebar-card__empty">No protocol entries yet.</div>
+                }
+              </section>
+            </div>
           </div>
-        </section>
+        </div>
       }
     </div>
   `,
   styles: [`
-    .detail { padding: 0; }
+    .detail {
+      background: #181825;
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 24px;
+      padding: 24px;
+      min-height: calc(100vh - 118px);
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      position: relative;
+    }
 
     .detail__header {
       display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 8px;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+    }
+    .detail__header-main {
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      min-width: 0;
+      flex: 1;
+    }
+    .detail__headline {
+      min-width: 0;
+    }
+    .detail__eyebrow {
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #64748b;
+      margin-bottom: 6px;
     }
     .detail__back {
       background: rgba(255,255,255,0.06);
       border: none;
       color: #94a3b8;
-      width: 32px; height: 32px;
-      border-radius: 8px;
+      width: 36px; height: 36px;
+      border-radius: 10px;
       cursor: pointer;
       font-size: 16px;
       display: grid; place-items: center;
+      flex-shrink: 0;
     }
     .detail__back:hover { background: rgba(255,255,255,0.1); }
-    .detail__title { margin: 0; font-size: 18px; color: #e2e8f0; flex: 1; }
+    .detail__title {
+      margin: 0;
+      font-size: 28px;
+      line-height: 1.2;
+      color: #f8fafc;
+      word-break: break-word;
+    }
     .detail__state {
       font-size: 11px;
       text-transform: uppercase;
-      padding: 4px 10px;
-      border-radius: 6px;
+      padding: 7px 12px;
+      border-radius: 999px;
       font-weight: 600;
-      letter-spacing: 0.4px;
+      letter-spacing: 0.5px;
+      flex-shrink: 0;
     }
     .state--1-preparation { background: rgba(139,92,246,0.15); color: #8b5cf6; }
     .state--2-ready { background: rgba(6,182,212,0.15); color: #06b6d4; }
@@ -218,66 +387,225 @@ import { CliConsoleComponent } from './cli-console';
     .state--5-completed { background: rgba(16,185,129,0.15); color: #10b981; }
 
     .detail__meta {
+      display: grid;
+      grid-template-columns: minmax(180px, 1.4fr) repeat(3, minmax(110px, 1fr));
+      gap: 12px;
+    }
+    .detail__meta-item {
       display: flex;
-      gap: 16px;
-      font-size: 12px;
+      flex-direction: column;
+      gap: 6px;
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.05);
+      min-width: 0;
+    }
+    .detail__meta-item--project {
+      align-items: flex-start;
+    }
+    .detail__meta-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
       color: #64748b;
-      margin-bottom: 24px;
-      padding-bottom: 16px;
-      border-bottom: 1px solid rgba(255,255,255,0.06);
-      align-items: center;
+    }
+    .detail__meta-value {
+      font-size: 14px;
+      color: #e2e8f0;
+      font-weight: 600;
     }
     .detail__project-select {
       background: rgba(255,255,255,0.06);
       border: 1px solid rgba(255,255,255,0.1);
       color: #e2e8f0;
-      padding: 3px 8px;
-      border-radius: 6px;
-      font-size: 12px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      font-size: 13px;
       cursor: pointer;
+      width: 100%;
     }
     .detail__project-select:hover { border-color: rgba(255,255,255,0.2); }
     .detail__project-select:focus { outline: none; border-color: #6366f1; }
 
-    .section { margin-bottom: 24px; }
+    .detail__tools {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+    }
+
+    .detail__layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(360px, 1.05fr);
+      gap: 20px;
+      align-items: start;
+      min-height: 0;
+      flex: 1;
+    }
+    .detail__main {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+    }
+    .detail__inspector {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      min-height: 0;
+    }
+    .inspector {
+      background: rgba(12,12,23,0.55);
+      border: 1px solid rgba(255,255,255,0.05);
+      border-radius: 24px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      min-height: 0;
+      height: 100%;
+    }
+    .inspector__header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+    }
+    .inspector__tabs {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    .inspector__tab {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      color: #94a3b8;
+      padding: 8px 14px;
+      border-radius: 999px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    }
+    .inspector__tab:hover {
+      background: rgba(255,255,255,0.08);
+      color: #e2e8f0;
+    }
+    .inspector__tab--active {
+      background: rgba(99,102,241,0.2);
+      border-color: rgba(99,102,241,0.4);
+      color: #c4b5fd;
+    }
+    .inspector__body {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+    }
+    .inspector__body > * {
+      flex: 1;
+      min-height: 0;
+      min-width: 0;
+    }
+    .inspector__stack {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      min-height: 0;
+    }
+
+    .section {
+      margin: 0;
+      background: rgba(12,12,23,0.55);
+      border: 1px solid rgba(255,255,255,0.05);
+      border-radius: 20px;
+      padding: 20px;
+    }
+    .section--primary {
+      padding: 24px;
+    }
+    .section--fill {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      height: 100%;
+    }
     .section__header {
       display: flex;
       justify-content: space-between;
-      align-items: center;
-      margin-bottom: 8px;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+    .section__eyebrow {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #64748b;
+      margin-bottom: 4px;
     }
     .section__title {
-      font-size: 12px;
-      color: #64748b;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
+      font-size: 13px;
+      color: #cbd5e1;
       margin: 0;
+    }
+    .section__title--large {
+      font-size: 20px;
+      color: #f8fafc;
+      line-height: 1.2;
     }
     .section__body {
       background: rgba(0,0,0,0.2);
       padding: 16px;
-      border-radius: 8px;
+      border-radius: 14px;
       white-space: pre-wrap;
       word-break: break-word;
-      font-size: 13px;
-      line-height: 1.6;
+      font-size: 14px;
+      line-height: 1.7;
       color: #cbd5e1;
       border: 1px solid rgba(255,255,255,0.04);
       margin: 0;
     }
-
-    .log { display: flex; flex-direction: column; gap: 2px; }
+    .section__body--primary {
+      min-height: 320px;
+      font-size: 15px;
+      line-height: 1.8;
+    }
+    .section__body--scroll {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+    }
+    .log {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 0;
+    }
+    .log--sidebar {
+      max-height: none;
+      min-height: 0;
+      flex: 1;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+    .log--overlay {
+      max-height: calc(100vh - 340px);
+      overflow-y: auto;
+      padding-right: 6px;
+    }
     .log__row {
       display: flex;
+      flex-wrap: wrap;
       gap: 12px;
       align-items: baseline;
       padding: 8px 12px;
       background: rgba(0,0,0,0.15);
-      border-radius: 6px;
+      border-radius: 10px;
       font-size: 13px;
     }
     .log__time { font-size: 11px; color: #64748b; min-width: 70px; font-variant-numeric: tabular-nums; }
-    .log__event { color: #e2e8f0; }
+    .log__event { color: #e2e8f0; font-weight: 600; }
     .log__detail { color: #94a3b8; font-size: 12px; }
 
     .btn-sm {
@@ -307,16 +635,18 @@ import { CliConsoleComponent } from './cli-console';
       box-sizing: border-box;
     }
     .section__editor:focus { outline: none; border-color: #6366f1; }
+    .section__editor--primary { min-height: 360px; }
+    .section__editor--fill {
+      flex: 1;
+      min-height: 0;
+      resize: none;
+    }
 
     .execution-bar {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 10px 14px;
-      background: rgba(0,0,0,0.2);
-      border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 8px;
-      margin-bottom: 20px;
+      gap: 12px;
     }
     .execution-bar__status {
       display: flex;
@@ -358,15 +688,46 @@ import { CliConsoleComponent } from './cli-console';
     .btn-exec--stop:hover { background: rgba(239,68,68,0.25); }
     .btn-exec:disabled { opacity: 0.5; cursor: wait; }
 
+    .sidebar-card {
+      background: rgba(12,12,23,0.55);
+      border: 1px solid rgba(255,255,255,0.05);
+      border-radius: 20px;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      min-width: 0;
+    }
+    .sidebar-card--toolbar {
+      min-height: 100%;
+    }
+    .sidebar-card--panel {
+      flex: 1;
+      min-height: 0;
+    }
+    .sidebar-card--error {
+      border-color: rgba(239,68,68,0.2);
+      background: rgba(56,17,22,0.35);
+    }
+    .sidebar-card__header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .sidebar-card__empty {
+      padding: 18px 16px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.03);
+      color: #94a3b8;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
     .detail__error {
       display: flex;
       align-items: center;
       gap: 8px;
-      padding: 10px 14px;
-      background: rgba(239,68,68,0.1);
-      border: 1px solid rgba(239,68,68,0.25);
-      border-radius: 8px;
-      margin-bottom: 20px;
       animation: fadeIn 0.2s ease;
     }
     .detail__error-icon { font-size: 14px; flex-shrink: 0; }
@@ -397,11 +758,6 @@ import { CliConsoleComponent } from './cli-console';
     .detail__error-action:hover { background: rgba(99,102,241,0.25); }
 
     .cli-config {
-      background: rgba(99,102,241,0.06);
-      border: 1px solid rgba(99,102,241,0.15);
-      border-radius: 8px;
-      padding: 14px;
-      margin-bottom: 20px;
       animation: fadeIn 0.2s ease;
     }
     .cli-config__header {
@@ -452,9 +808,98 @@ import { CliConsoleComponent } from './cli-console';
       border-top: 1px solid rgba(255,255,255,0.08);
       margin: 8px 0 4px;
     }
+    .log-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(3,5,10,0.82);
+      backdrop-filter: blur(6px);
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      z-index: 200;
+    }
+    .log-overlay__panel {
+      width: min(1200px, calc(100vw - 48px));
+      max-height: calc(100vh - 48px);
+      overflow: hidden;
+      background: #11111b;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 24px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      box-shadow: 0 24px 80px rgba(0,0,0,0.55);
+    }
+    .log-overlay__header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+    }
+    .log-overlay__title {
+      margin: 0;
+      font-size: 26px;
+      color: #f8fafc;
+    }
+    .log-overlay__content {
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
+      gap: 18px;
+      min-height: 0;
+      overflow: auto;
+      padding-right: 4px;
+    }
     @keyframes fadeIn {
       from { opacity: 0; transform: translateY(-4px); }
       to { opacity: 1; transform: translateY(0); }
+    }
+    @media (max-width: 1200px) {
+      .detail__meta {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      .detail__layout,
+      .log-overlay__content {
+        grid-template-columns: 1fr;
+      }
+      .inspector__header {
+        flex-direction: column;
+      }
+      .inspector__tabs {
+        justify-content: flex-start;
+      }
+    }
+    @media (max-width: 720px) {
+      .detail {
+        padding: 18px;
+      }
+      .detail__header {
+        flex-direction: column;
+      }
+      .detail__title {
+        font-size: 24px;
+      }
+      .detail__meta {
+        grid-template-columns: 1fr;
+      }
+      .detail__tools {
+        grid-template-columns: 1fr;
+      }
+      .execution-bar {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      .cli-config__row {
+        flex-wrap: wrap;
+      }
+      .log-overlay {
+        padding: 12px;
+      }
+      .log-overlay__panel {
+        width: calc(100vw - 24px);
+        max-height: calc(100vh - 24px);
+        padding: 16px;
+      }
     }
   `]
 })
@@ -467,8 +912,6 @@ export class JobDetailComponent implements OnDestroy {
 
   readonly editingPrompt = signal(false);
   readonly editingStatus = signal(false);
-  readonly promptDraft = signal('');
-  readonly statusDraft = signal('');
   readonly cliOutput = signal<CliOutputLine[]>([]);
   readonly isRunning = signal(false);
   readonly startedAt = signal<Date | null>(null);
@@ -480,6 +923,8 @@ export class JobDetailComponent implements OnDestroy {
   readonly cliPathDraft = signal('');
   readonly cliTestResult = signal<CliSettings | null>(null);
   readonly cliTesting = signal(false);
+  readonly showLogOverlay = signal(false);
+  readonly activeInspectorTab = signal<'protocol' | 'activity'>('protocol');
   readonly tokenDraft = signal('');
   readonly showToken = signal(false);
   readonly tokenSaving = signal(false);
@@ -493,6 +938,20 @@ export class JobDetailComponent implements OnDestroy {
   private detailEffect = effect(() => {
     const d = this.detail();
     this.errorMsg.set(null);
+    this.showLogOverlay.set(false);
+    this.activeInspectorTab.set('protocol');
+    this.showCliConfig.set(false);
+    this.cliTestResult.set(null);
+    this.editingPrompt.set(false);
+    this.editingStatus.set(false);
+    this.cliOutput.set([]);
+    this.isRunning.set(false);
+    this.startedAt.set(null);
+    this.elapsedTime.set('0s');
+    if (this.elapsedTimer) {
+      clearInterval(this.elapsedTimer);
+      this.elapsedTimer = null;
+    }
     if (d.info.state === '3-progress') {
       // Try to load existing output
       this.jobService.getJobOutput(d.info.id, d.info.watchPath).subscribe({
@@ -601,11 +1060,9 @@ export class JobDetailComponent implements OnDestroy {
   startEdit(which: 'prompt' | 'status') {
     if (which === 'prompt') {
       this.promptDraftValue = this.detail().promptMarkdown ?? '';
-      this.promptDraft.set(this.promptDraftValue);
       this.editingPrompt.set(true);
     } else {
       this.statusDraftValue = this.detail().statusMarkdown ?? '';
-      this.statusDraft.set(this.statusDraftValue);
       this.editingStatus.set(true);
     }
   }
@@ -615,7 +1072,7 @@ export class JobDetailComponent implements OnDestroy {
     else this.editingStatus.set(false);
   }
 
-  saveFile(fileName: string, _content: string) {
+  saveFile(fileName: string) {
     const content = fileName === 'prompt.md' ? this.promptDraftValue : this.statusDraftValue;
     this.jobService.updateJobFile(this.detail().info.id, fileName, content, this.detail().info.watchPath).subscribe({
       next: () => {

@@ -38,20 +38,58 @@ import { JobDetail, JobInfo, GroupedJobs, WatchPathEntry } from './models/job.mo
         </div>
       </header>
 
-      <div class="layout" [class.layout--panel-open]="selectedJob()">
-        <main class="dashboard">
-          <app-job-column title="In Preparation" icon="📋" state="1-preparation" [jobs]="filteredGrouped().preparation" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
-          <app-job-column title="Ready" icon="📦" state="2-ready" [jobs]="filteredGrouped().ready" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
-          <app-job-column title="In Progress" icon="🔵" state="3-progress" [jobs]="filteredGrouped().progress" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
-          <app-job-column title="Review" icon="🟡" state="4-review" [jobs]="filteredGrouped().review" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
-          <app-job-column title="Completed" icon="🟢" state="5-completed" [jobs]="filteredGrouped().completed" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
-        </main>
-
+      <div class="layout" [class.layout--focus]="selectedJob()">
         @if (selectedJob(); as detail) {
-          <aside class="detail-panel" [style.width.px]="panelWidth()">
-            <div class="detail-panel__resize" (mousedown)="startResize($event)"></div>
-            <app-job-detail [detail]="detail" [watchPaths]="watchPaths()" (back)="closeDetail()" (fileSaved)="onFileSaved()" (projectChanged)="onProjectChanged($event)" />
-          </aside>
+          <div class="workspace">
+            <aside class="task-nav">
+              <div class="task-nav__header">
+                <button class="btn btn--ghost" (click)="closeDetail()">← Board</button>
+                <div>
+                  <div class="task-nav__eyebrow">Task list</div>
+                  <h2 class="task-nav__title">Focused view</h2>
+                </div>
+              </div>
+
+              <div class="task-nav__groups">
+                @for (group of focusGroups(); track group.state) {
+                  <section class="task-nav__group">
+                    <div class="task-nav__group-header">
+                      <span>{{ group.icon }} {{ group.title }}</span>
+                      <span class="task-nav__count">{{ group.jobs.length }}</span>
+                    </div>
+
+                    @if (group.jobs.length > 0) {
+                      <div class="task-nav__items">
+                        @for (job of group.jobs; track job.jobKey) {
+                          <button class="task-nav__item"
+                                  [class.task-nav__item--active]="isSelectedJob(job)"
+                                  (click)="openDetail(job)">
+                            <span class="task-nav__item-title">{{ job.title || job.id }}</span>
+                            <span class="task-nav__item-meta">
+                              <span>#{{ job.order }}</span>
+                              <span>{{ job.projectName }}</span>
+                            </span>
+                          </button>
+                        }
+                      </div>
+                    }
+                  </section>
+                }
+              </div>
+            </aside>
+
+            <main class="workspace__main">
+              <app-job-detail [detail]="detail" [watchPaths]="watchPaths()" (back)="closeDetail()" (fileSaved)="onFileSaved()" (projectChanged)="onProjectChanged($event)" />
+            </main>
+          </div>
+        } @else {
+          <main class="dashboard">
+            <app-job-column title="In Preparation" icon="📋" state="1-preparation" [jobs]="filteredGrouped().preparation" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
+            <app-job-column title="Ready" icon="📦" state="2-ready" [jobs]="filteredGrouped().ready" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
+            <app-job-column title="In Progress" icon="🔵" state="3-progress" [jobs]="filteredGrouped().progress" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
+            <app-job-column title="Review" icon="🟡" state="4-review" [jobs]="filteredGrouped().review" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
+            <app-job-column title="Completed" icon="🟢" state="5-completed" [jobs]="filteredGrouped().completed" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
+          </main>
         }
       </div>
 
@@ -197,9 +235,11 @@ import { JobDetail, JobInfo, GroupedJobs, WatchPathEntry } from './models/job.mo
     .field__textarea { font-family: 'Consolas', monospace; resize: vertical; }
 
     .layout {
-      display: flex;
       min-height: calc(100vh - 70px);
       transition: all 0.3s ease;
+    }
+    .layout--focus {
+      padding: 24px;
     }
     .dashboard {
       display: flex;
@@ -209,31 +249,125 @@ import { JobDetail, JobInfo, GroupedJobs, WatchPathEntry } from './models/job.mo
       flex: 1;
       min-width: 0;
     }
-    .detail-panel {
-      width: 520px;
-      min-width: 320px;
-      max-width: 60vw;
-      background: #181825;
-      border-left: 1px solid rgba(255,255,255,0.06);
-      padding: 24px;
-      overflow-y: auto;
-      max-height: calc(100vh - 70px);
+    .workspace {
+      display: grid;
+      grid-template-columns: minmax(240px, 300px) minmax(0, 1fr);
+      gap: 24px;
+      width: 100%;
+      min-height: calc(100vh - 118px);
       animation: slideIn 0.25s ease;
-      position: relative;
-      flex-shrink: 0;
     }
-    .detail-panel__resize {
-      position: absolute;
-      left: 0; top: 0; bottom: 0;
-      width: 5px;
-      cursor: col-resize;
-      background: transparent;
-      z-index: 10;
-      transition: background 0.15s;
+    .workspace__main {
+      min-width: 0;
     }
-    .detail-panel__resize:hover,
-    .detail-panel__resize:active {
-      background: rgba(99,102,241,0.5);
+    .task-nav {
+      background: #181825;
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 20px;
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      max-height: calc(100vh - 118px);
+      position: sticky;
+      top: 24px;
+      overflow: hidden;
+    }
+    .task-nav__header {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .task-nav__eyebrow {
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #64748b;
+      margin-bottom: 4px;
+    }
+    .task-nav__title {
+      margin: 0;
+      font-size: 20px;
+      color: #e2e8f0;
+    }
+    .task-nav__groups {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+    .task-nav__group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .task-nav__group-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: #94a3b8;
+      font-weight: 600;
+    }
+    .task-nav__count {
+      background: rgba(255,255,255,0.08);
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 11px;
+      color: #cbd5e1;
+    }
+    .task-nav__items {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .task-nav__item {
+      width: 100%;
+      text-align: left;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.06);
+      color: #cbd5e1;
+      border-radius: 14px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      cursor: pointer;
+      transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
+    }
+    .task-nav__item:hover {
+      background: rgba(255,255,255,0.06);
+      border-color: rgba(255,255,255,0.12);
+      transform: translateY(-1px);
+    }
+    .task-nav__item--active {
+      background: rgba(99,102,241,0.16);
+      border-color: rgba(99,102,241,0.45);
+      box-shadow: 0 0 0 1px rgba(99,102,241,0.15);
+    }
+    .task-nav__item-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #f8fafc;
+      line-height: 1.4;
+    }
+    .task-nav__item-meta {
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      font-size: 11px;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .btn--ghost {
+      justify-self: flex-start;
+      width: fit-content;
+      color: #cbd5e1;
     }
     @keyframes slideIn {
       from { transform: translateX(20px); opacity: 0; }
@@ -250,11 +384,27 @@ import { JobDetail, JobInfo, GroupedJobs, WatchPathEntry } from './models/job.mo
       border-radius: 8px;
       font-size: 13px;
     }
+    @media (max-width: 1200px) {
+      .header {
+        align-items: flex-start;
+        flex-wrap: wrap;
+        gap: 12px;
+      }
+      .header__filters {
+        flex-wrap: wrap;
+      }
+      .workspace {
+        grid-template-columns: 1fr;
+      }
+      .task-nav {
+        position: static;
+        max-height: none;
+      }
+    }
   `]
 })
 export class App implements OnInit {
   readonly selectedJob = signal<JobDetail | null>(null);
-  readonly panelWidth = signal(+(localStorage.getItem('panelWidth') ?? 520));
   readonly showCreate = signal(false);
   readonly watchPaths = signal<WatchPathEntry[]>([]);
   readonly activeProjects = signal<Set<string>>(new Set(JSON.parse(localStorage.getItem('activeProjects') ?? '[]')));
@@ -275,6 +425,17 @@ export class App implements OnInit {
       review: filterJobs(grouped.review),
       completed: filterJobs(grouped.completed),
     } as GroupedJobs;
+  });
+
+  readonly focusGroups = computed(() => {
+    const grouped = this.filteredGrouped();
+    return [
+      { state: '1-preparation', title: 'In Preparation', icon: '📋', jobs: grouped.preparation },
+      { state: '2-ready', title: 'Ready', icon: '📦', jobs: grouped.ready },
+      { state: '3-progress', title: 'In Progress', icon: '🔵', jobs: grouped.progress },
+      { state: '4-review', title: 'Review', icon: '🟡', jobs: grouped.review },
+      { state: '5-completed', title: 'Completed', icon: '🟢', jobs: grouped.completed }
+    ];
   });
 
   newTitle = '';
@@ -303,6 +464,10 @@ export class App implements OnInit {
     this.jobService.getDetail(job.id, job.watchPath).subscribe({
       next: (detail) => this.selectedJob.set(detail),
     });
+  }
+
+  isSelectedJob(job: JobInfo): boolean {
+    return this.selectedJob()?.info.jobKey === job.jobKey;
   }
 
   closeDetail() {
@@ -398,30 +563,5 @@ export class App implements OnInit {
         });
       }, 500);
     }
-  }
-
-  startResize(event: MouseEvent) {
-    event.preventDefault();
-    const startX = event.clientX;
-    const startWidth = this.panelWidth();
-
-    const onMove = (e: MouseEvent) => {
-      const delta = startX - e.clientX;
-      const newWidth = Math.min(Math.max(startWidth + delta, 320), window.innerWidth * 0.6);
-      this.panelWidth.set(newWidth);
-    };
-
-    const onUp = () => {
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-      document.body.style.cursor = '';
-      document.body.style.userSelect = '';
-      localStorage.setItem('panelWidth', String(this.panelWidth()));
-    };
-
-    document.body.style.cursor = 'col-resize';
-    document.body.style.userSelect = 'none';
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
   }
 }

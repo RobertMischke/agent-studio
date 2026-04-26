@@ -1,4 +1,4 @@
-import { Component, ElementRef, ViewChild, input, signal, effect, OnDestroy } from '@angular/core';
+import { Component, ElementRef, ViewChild, input, signal, computed, effect, OnDestroy } from '@angular/core';
 import { CliOutputLine } from '../models/job.model';
 
 @Component({
@@ -7,7 +7,7 @@ import { CliOutputLine } from '../models/job.model';
   template: `
     <div class="console">
       <div class="console__header">
-        <span class="console__title">Console Output</span>
+        <span class="console__title">{{ title() }}</span>
         <div class="console__controls">
           <button class="console__btn" [class.console__btn--active]="filterStream() === 'all'" (click)="filterStream.set('all')">All</button>
           <button class="console__btn" [class.console__btn--active]="filterStream() === 'stdout'" (click)="filterStream.set('stdout')">stdout</button>
@@ -20,7 +20,7 @@ import { CliOutputLine } from '../models/job.model';
           <button class="console__btn" (click)="clear()">🗑 Clear</button>
         </div>
       </div>
-      <div class="console__body" #scrollContainer>
+      <div class="console__body" #scrollContainer [style.max-height]="bodyMaxHeight()">
         @for (line of filteredLines(); track $index) {
           <div class="console__line" [class]="'console__line--' + line.stream">
             <span class="console__time">{{ formatTime(line.timestamp) }}</span>
@@ -77,7 +77,6 @@ import { CliOutputLine } from '../models/job.model';
     .console__btn:hover { background: rgba(255,255,255,0.08); color: #94a3b8; }
     .console__btn--active { background: rgba(99,102,241,0.15); border-color: rgba(99,102,241,0.3); color: #a5b4fc; }
     .console__body {
-      max-height: 400px;
       overflow-y: auto;
       padding: 8px 0;
       font-family: 'Consolas', 'Monaco', monospace;
@@ -127,30 +126,38 @@ import { CliOutputLine } from '../models/job.model';
 })
 export class CliConsoleComponent implements OnDestroy {
   readonly lines = input<CliOutputLine[]>([]);
+  readonly title = input('Console Output');
+  readonly bodyMaxHeight = input('400px');
   readonly filterStream = signal<'all' | 'stdout' | 'stderr'>('all');
   readonly autoScroll = signal(true);
-  readonly filteredLines = signal<CliOutputLine[]>([]);
-
-  @ViewChild('scrollContainer') scrollContainer!: ElementRef<HTMLDivElement>;
-
-  private scrollEffect = effect(() => {
-    // Re-compute filtered lines when inputs change
+  readonly filteredLines = computed(() => {
     const all = this.lines();
     const filter = this.filterStream();
-    const filtered = filter === 'all' ? all : all.filter(l => l.stream === filter);
-    this.filteredLines.set(filtered);
+    return filter === 'all' ? all : all.filter((line) => line.stream === filter);
+  });
 
-    // Auto-scroll
+  @ViewChild('scrollContainer') scrollContainer!: ElementRef<HTMLDivElement>;
+  private scrollTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private scrollEffect = effect(() => {
+    if (this.scrollTimer) {
+      clearTimeout(this.scrollTimer);
+      this.scrollTimer = null;
+    }
+
+    this.filteredLines();
     if (this.autoScroll()) {
-      setTimeout(() => {
+      this.scrollTimer = setTimeout(() => {
         const el = this.scrollContainer?.nativeElement;
         if (el) el.scrollTop = el.scrollHeight;
+        this.scrollTimer = null;
       }, 0);
     }
   });
 
   ngOnDestroy() {
     this.scrollEffect.destroy();
+    if (this.scrollTimer) clearTimeout(this.scrollTimer);
   }
 
   formatTime(dateStr: string): string {
