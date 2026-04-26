@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(codex --help)",
+      "Bash(codex --version)",
+      "Bash(codex resume *)",
+      "Bash(codex exec *)",
+      "Read(//c/Users/rmisc/.codex/**)",
+      "Read(//c/Users/rmisc/.codex/sessions/**)"
+    ]
+  }
+}

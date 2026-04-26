@@ -4,11 +4,13 @@ import { JobDetail, WatchPathEntry, CliOutputLine, CliSettings, CliExecution, Co
 import { JobService } from '../services/job.service';
 import { ErrorDialogService } from '../services/error-dialog.service';
 import { ActivityLogViewComponent } from './activity-log-view';
+import { MarkdownRichEditorComponent } from './markdown-rich-editor';
+import { markdownToHtml } from './markdown-utils';
 
 @Component({
   selector: 'app-job-detail',
   standalone: true,
-  imports: [FormsModule, ActivityLogViewComponent],
+  imports: [FormsModule, ActivityLogViewComponent, MarkdownRichEditorComponent],
   template: `
     <div class="detail">
       <header class="detail__header">
@@ -281,7 +283,7 @@ import { ActivityLogViewComponent } from './activity-log-view';
         }
       </div>
 
-      <div class="detail__layout">
+      <div class="detail__layout" [style.--detail-left]="detailPanePercent() + '%'">
         <main class="detail__main">
           <section class="section section--primary section--fill">
             <div class="section__header">
@@ -289,25 +291,20 @@ import { ActivityLogViewComponent } from './activity-log-view';
                 <div class="section__eyebrow">Samurai view</div>
                 <h3 class="section__title section__title--large">Task description</h3>
               </div>
-              @if (!isProgress()) {
-                @if (editingPrompt()) {
-                  <div class="section__actions">
-                    <button class="btn-sm" (click)="cancelEdit('prompt')">Cancel</button>
-                    <button class="btn-sm btn-sm--primary" (click)="saveFile('prompt.md')">Save</button>
-                  </div>
-                } @else {
-                  <button class="btn-sm" (click)="startEdit('prompt')">✏️ Edit</button>
-                }
-              }
             </div>
 
-            @if (editingPrompt()) {
-              <textarea class="section__editor section__editor--primary section__editor--fill" [(ngModel)]="promptDraftValue" rows="16"></textarea>
-            } @else {
-              <pre class="section__body section__body--primary section__body--scroll">{{ detail().promptMarkdown || '(empty)' }}</pre>
-            }
+            <app-markdown-rich-editor [value]="detail().promptMarkdown || ''"
+                                      (save)="saveFileContent('prompt.md', $event)" />
           </section>
         </main>
+
+        <div class="detail__splitter"
+             role="separator"
+             aria-orientation="vertical"
+             title="Resize panels"
+             (pointerdown)="startLayoutResize($event)">
+          <span></span>
+        </div>
 
         <aside class="detail__inspector">
           <section class="inspector">
@@ -332,13 +329,27 @@ import { ActivityLogViewComponent } from './activity-log-view';
 
             <div class="inspector__body">
               @if (activeInspectorTab() === 'protocol') {
-                <section class="section section--fill">
-                  <div class="section__header">
+                <section class="notes-panel">
+                  <div class="notes-panel__header">
                     <div>
                       <div class="section__eyebrow">Agent notes</div>
                       <h3 class="section__title section__title--large">status.md</h3>
                     </div>
-                    @if (!isProgress()) {
+                    <div class="notes-panel__actions">
+                      @if (!editingStatus()) {
+                        <div class="notes-panel__tabs">
+                          <button class="notes-panel__tab"
+                                  [class.notes-panel__tab--active]="statusViewMode() === 'preview'"
+                                  (click)="statusViewMode.set('preview')">
+                            Preview
+                          </button>
+                          <button class="notes-panel__tab"
+                                  [class.notes-panel__tab--active]="statusViewMode() === 'markdown'"
+                                  (click)="statusViewMode.set('markdown')">
+                            Markdown
+                          </button>
+                        </div>
+                      }
                       @if (editingStatus()) {
                         <div class="section__actions">
                           <button class="btn-sm" (click)="cancelEdit('status')">Cancel</button>
@@ -347,12 +358,17 @@ import { ActivityLogViewComponent } from './activity-log-view';
                       } @else {
                         <button class="btn-sm" (click)="startEdit('status')">✏️ Edit</button>
                       }
-                    }
+                    </div>
                   </div>
                   @if (editingStatus()) {
-                    <textarea class="section__editor section__editor--fill" [(ngModel)]="statusDraftValue" rows="14"></textarea>
+                    <textarea class="section__editor notes-panel__editor"
+                              [(ngModel)]="statusDraftValue"
+                              (keydown)="handleFileKeydown($event, 'status.md')"
+                              rows="14"></textarea>
+                  } @else if (statusViewMode() === 'preview') {
+                    <div class="markdown-preview notes-panel__body" [innerHTML]="renderMarkdown(detail().statusMarkdown || '')"></div>
                   } @else {
-                    <pre class="section__body section__body--scroll">{{ detail().statusMarkdown || '(empty)' }}</pre>
+                    <pre class="markdown-source notes-panel__body">{{ detail().statusMarkdown || '(empty)' }}</pre>
                   }
                 </section>
               } @else {
@@ -803,11 +819,31 @@ import { ActivityLogViewComponent } from './activity-log-view';
 
     .detail__layout {
       display: grid;
-      grid-template-columns: minmax(0, 1.35fr) minmax(360px, 1.05fr);
-      gap: 20px;
+      grid-template-columns: minmax(320px, var(--detail-left, 54%)) 10px minmax(360px, 1fr);
+      gap: 10px;
       align-items: start;
       min-height: 0;
       flex: 1;
+    }
+    .detail__splitter {
+      align-self: stretch;
+      display: flex;
+      justify-content: center;
+      cursor: col-resize;
+      touch-action: none;
+      min-height: 100%;
+      border-radius: 999px;
+    }
+    .detail__splitter span {
+      width: 2px;
+      min-height: 100%;
+      border-radius: 999px;
+      background: rgba(148,163,184,0.14);
+      transition: background 0.15s ease, width 0.15s ease;
+    }
+    .detail__splitter:hover span {
+      width: 4px;
+      background: rgba(129,140,248,0.55);
     }
     .detail__main {
       display: flex;
@@ -873,6 +909,57 @@ import { ActivityLogViewComponent } from './activity-log-view';
       flex: 1;
       min-height: 0;
       min-width: 0;
+    }
+    .notes-panel {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      min-height: 0;
+    }
+    .notes-panel__header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      padding-bottom: 8px;
+    }
+    .notes-panel__actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .notes-panel__tabs {
+      display: inline-flex;
+      gap: 4px;
+      padding: 2px;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 6px;
+      background: rgba(255,255,255,0.03);
+    }
+    .notes-panel__tab {
+      border: 0;
+      border-radius: 4px;
+      color: #94a3b8;
+      background: transparent;
+      cursor: pointer;
+      font-size: 12px;
+      padding: 4px 8px;
+    }
+    .notes-panel__tab--active {
+      color: #ddd6fe;
+      background: rgba(99,102,241,0.25);
+    }
+    .notes-panel__body {
+      flex: 1;
+      min-height: 0;
+      overflow: auto;
+    }
+    .notes-panel__editor {
+      flex: 1;
+      min-height: 0;
+      resize: none;
     }
     .inspector__stack {
       display: flex;
@@ -941,27 +1028,52 @@ import { ActivityLogViewComponent } from './activity-log-view';
       color: #f8fafc;
       line-height: 1.2;
     }
-    .section__body {
-      background: rgba(0,0,0,0.2);
-      padding: 16px;
-      border-radius: 14px;
+    .markdown-source,
+    .markdown-preview {
+      margin: 0;
+      border: 1px solid rgba(255,255,255,0.05);
+      border-radius: 10px;
+      background: rgba(0,0,0,0.16);
+      color: #cbd5e1;
+      padding: 12px 14px;
+      font: 13px/1.65 var(--font-mono, 'Consolas', monospace);
       white-space: pre-wrap;
       word-break: break-word;
-      font-size: 14px;
-      line-height: 1.7;
-      color: #cbd5e1;
-      border: 1px solid rgba(255,255,255,0.04);
-      margin: 0;
     }
-    .section__body--primary {
-      min-height: 320px;
-      font-size: 15px;
-      line-height: 1.8;
+    .markdown-preview {
+      white-space: normal;
+      font-family: inherit;
     }
-    .section__body--scroll {
-      flex: 1;
-      min-height: 0;
+    .markdown-preview :where(h1, h2, h3, h4) {
+      margin: 0 0 8px;
+      color: #f8fafc;
+      line-height: 1.25;
+    }
+    .markdown-preview :where(p, ul, pre) {
+      margin: 0 0 10px;
+    }
+    .markdown-preview :where(ul) {
+      padding-left: 18px;
+    }
+    .markdown-preview :where(code) {
+      color: #c4b5fd;
+      background: rgba(124,58,237,0.16);
+      border-radius: 4px;
+      padding: 1px 4px;
+      font-family: var(--font-mono, 'Consolas', monospace);
+    }
+    .markdown-preview :where(pre) {
       overflow: auto;
+      background: rgba(0,0,0,0.22);
+      border-radius: 8px;
+      padding: 10px;
+    }
+    .notes-panel__body.markdown-source,
+    .notes-panel__body.markdown-preview {
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      padding: 4px 0 0;
     }
     .log {
       display: flex;
@@ -1022,7 +1134,6 @@ import { ActivityLogViewComponent } from './activity-log-view';
       box-sizing: border-box;
     }
     .section__editor:focus { outline: none; border-color: #6366f1; }
-    .section__editor--primary { min-height: 360px; }
     .section__editor--fill {
       flex: 1;
       min-height: 0;
@@ -1223,6 +1334,9 @@ import { ActivityLogViewComponent } from './activity-log-view';
       .log-overlay__content {
         grid-template-columns: 1fr;
       }
+      .detail__splitter {
+        display: none;
+      }
       .inspector__header {
         flex-direction: column;
       }
@@ -1309,6 +1423,8 @@ export class JobDetailComponent implements OnDestroy {
   readonly editingTitle = signal(false);
   readonly titleDraft = signal('');
   readonly savingTitle = signal(false);
+  readonly statusViewMode = signal<'preview' | 'markdown'>('preview');
+  readonly detailPanePercent = signal(this.loadDetailPanePercent());
 
   promptDraftValue = '';
   statusDraftValue = '';
@@ -1318,6 +1434,9 @@ export class JobDetailComponent implements OnDestroy {
   private contextUsageTimeout: ReturnType<typeof setTimeout> | null = null;
   private lastCliConfigRequest = 0;
   private currentJobKey: string | null = null;
+  private layoutResizeBounds: DOMRect | null = null;
+  private readonly layoutResizeMove = (event: PointerEvent) => this.resizeLayout(event);
+  private readonly layoutResizeEnd = () => this.stopLayoutResize();
 
   constructor(private jobService: JobService, private errorDialog: ErrorDialogService) {
     this.jobService.getModelCatalog().subscribe({
@@ -1352,6 +1471,7 @@ export class JobDetailComponent implements OnDestroy {
       this.cliTestResult.set(null);
       this.editingPrompt.set(false);
       this.editingStatus.set(false);
+      this.statusViewMode.set('preview');
       this.editingTitle.set(false);
       this.savingTitle.set(false);
       this.cliOutput.set([]);
@@ -1427,6 +1547,7 @@ export class JobDetailComponent implements OnDestroy {
       clearTimeout(this.contextUsageTimeout);
       this.contextUsageTimeout = null;
     }
+    this.stopLayoutResize();
   }
 
   canStartJob(): boolean {
@@ -1654,6 +1775,10 @@ export class JobDetailComponent implements OnDestroy {
 
   saveFile(fileName: string) {
     const content = fileName === 'prompt.md' ? this.promptDraftValue : this.statusDraftValue;
+    this.saveFileContent(fileName, content);
+  }
+
+  saveFileContent(fileName: string, content: string) {
     this.jobService.updateJobFile(this.detail().info.id, fileName, content, this.detail().info.watchPath).subscribe({
       next: () => {
         if (fileName === 'prompt.md') this.editingPrompt.set(false);
@@ -1662,6 +1787,61 @@ export class JobDetailComponent implements OnDestroy {
       },
       error: (err) => this.showError(err)
     });
+  }
+
+  handleFileKeydown(event: KeyboardEvent, fileName: string): void {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+      event.preventDefault();
+      this.saveFile(fileName);
+    }
+  }
+
+  renderMarkdown(markdown: string): string {
+    return markdownToHtml(markdown);
+  }
+
+  startLayoutResize(event: PointerEvent): void {
+    event.preventDefault();
+    const layout = (event.currentTarget as HTMLElement).parentElement;
+    if (!layout) return;
+
+    this.layoutResizeBounds = layout.getBoundingClientRect();
+    window.addEventListener('pointermove', this.layoutResizeMove);
+    window.addEventListener('pointerup', this.layoutResizeEnd, { once: true });
+  }
+
+  private resizeLayout(event: PointerEvent): void {
+    if (!this.layoutResizeBounds) return;
+
+    const raw = ((event.clientX - this.layoutResizeBounds.left) / this.layoutResizeBounds.width) * 100;
+    const clamped = Math.max(35, Math.min(72, raw));
+    this.detailPanePercent.set(Math.round(clamped * 10) / 10);
+  }
+
+  private stopLayoutResize(): void {
+    window.removeEventListener('pointermove', this.layoutResizeMove);
+    window.removeEventListener('pointerup', this.layoutResizeEnd);
+    if (this.layoutResizeBounds) {
+      this.layoutResizeBounds = null;
+      try {
+        localStorage.setItem('taskboard.detailPanePercent', String(this.detailPanePercent()));
+      } catch {
+        // Local storage is best-effort UI preference persistence.
+      }
+    }
+  }
+
+  private loadDetailPanePercent(): number {
+    try {
+      const saved = localStorage.getItem('taskboard.detailPanePercent');
+      const parsed = saved ? Number(saved) : NaN;
+      if (Number.isFinite(parsed)) {
+        return Math.max(35, Math.min(72, parsed));
+      }
+    } catch {
+      // Ignore unavailable storage.
+    }
+    return 54;
   }
 
   stateLabel(state: string): string {

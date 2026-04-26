@@ -18,6 +18,8 @@
     "@angular/platform-browser": "^21.2.0",
     "@angular/router": "^21.2.0",
     "@angular/service-worker": "^21.2.0",
+    "@tiptap/core": "^3.22.4",
+    "@tiptap/starter-kit": "^3.22.4",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0"
   },
