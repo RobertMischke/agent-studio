@@ -33,8 +33,8 @@ interface SelectedSession {
     <aside class="sheet" [class.sheet--open]="open()">
       <header class="sheet__header">
         <div>
-          <div class="sheet__eyebrow">Token usage</div>
-          <h2 class="sheet__title">CLI sessions</h2>
+          <h2 class="sheet__title">CLI Sessions</h2>
+          <div class="sheet__subtitle">Live output and token usage per session</div>
         </div>
         <div class="sheet__header-actions">
           <button class="sheet__btn" (click)="refresh()" [disabled]="loading()">
@@ -49,17 +49,15 @@ interface SelectedSession {
       }
 
       <div class="sheet__body">
-        @for (section of report()?.sections ?? []; track section.cliType) {
+        @for (section of visibleSections(); track section.cliType) {
           <section class="sheet-section">
             <button class="sheet-section__head"
                     type="button"
                     (click)="toggleSection(section.cliType)">
               <span class="sheet-section__chev">{{ isCollapsed(section.cliType) ? '▶' : '▼' }}</span>
               <span class="sheet-section__title">{{ cliLabel(section.cliType) }}</span>
-              @if (section.available) {
-                <span class="sheet-pill sheet-pill--ok">✓ {{ section.version || 'available' }}</span>
-              } @else {
-                <span class="sheet-pill sheet-pill--err">unavailable</span>
+              @if (section.version) {
+                <span class="sheet-pill sheet-pill--ok">{{ section.version }}</span>
               }
               <span class="sheet-section__count">
                 {{ totalSessions(section) }} sessions
@@ -150,12 +148,10 @@ interface SelectedSession {
       padding: 16px 18px;
       border-bottom: 1px solid rgba(255,255,255,0.06);
     }
-    .sheet__eyebrow {
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
+    .sheet__subtitle {
+      font-size: 12px;
       color: #64748b;
-      margin-bottom: 4px;
+      margin-top: 2px;
     }
     .sheet__title { margin: 0; font-size: 18px; }
     .sheet__header-actions { display: flex; gap: 8px; align-items: center; }
@@ -292,6 +288,15 @@ export class CliUsageSheetComponent implements OnInit, OnDestroy {
   readonly errorMsg = signal<string | null>(null);
   readonly selected = signal<SelectedSession | null>(null);
   readonly collapsedSections = signal<Set<string>>(new Set());
+  /**
+   * Sections we surface in the UI. CLIs that aren't installed/available on the
+   * host produce empty sections that would just show an "unavailable" badge —
+   * we hide them entirely so the sheet stays focused on what's actually usable.
+   */
+  readonly visibleSections = computed<CliUsageSection[]>(() => {
+    const all = this.report()?.sections ?? [];
+    return all.filter(s => s.available || s.projects.length > 0);
+  });
   readonly detailLines = computed<CliOutputLine[]>(() => {
     const sel = this.selected();
     if (!sel) return [];

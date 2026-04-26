@@ -31,7 +31,7 @@ import { ErrorDialogService } from './services/error-dialog.service';
           }
         </div>
         <div class="header__actions">
-          <button class="btn" (click)="usageSheet.toggle()" title="CLI sessions & token usage">
+          <button class="btn" (click)="usageSheet.toggle()" title="CLI sessions">
             🪙 Usage
           </button>
           <button class="btn btn--create" (click)="openCreate()">
