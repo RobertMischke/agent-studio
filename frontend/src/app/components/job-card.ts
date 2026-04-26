@@ -1,5 +1,12 @@
-import { Component, input } from '@angular/core';
+import { Component, computed, input, signal } from '@angular/core';
 import { JobInfo } from '../models/job.model';
+
+// Shared 'now' signal that ticks every 30s so all relative timestamps update in lockstep
+// without re-reading Date.now() during change detection (which causes NG0100).
+const nowTick = signal(Date.now());
+if (typeof window !== 'undefined') {
+  setInterval(() => nowTick.set(Date.now()), 30_000);
+}
 
 @Component({
   selector: 'app-job-card',
@@ -28,7 +35,7 @@ import { JobInfo } from '../models/job.model';
         <span class="job-card__size">{{ formatSize(job().totalSizeBytes) }}</span>
       </div>
       <div class="job-card__activity">
-        Last activity: {{ timeAgo(job().lastActivity) }}
+        Last activity: {{ relativeActivity() }}
       </div>
     </div>
   `,
@@ -187,14 +194,15 @@ export class JobCardComponent {
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   }
 
-  timeAgo(dateStr: string): string {
+  readonly relativeActivity = computed(() => {
+    const dateStr = this.job().lastActivity;
     if (!dateStr) return 'never';
-    const diff = Date.now() - new Date(dateStr).getTime();
+    const diff = nowTick() - new Date(dateStr).getTime();
     const mins = Math.floor(diff / 60000);
     if (mins < 1) return 'just now';
     if (mins < 60) return mins + 'm ago';
     const hrs = Math.floor(mins / 60);
     if (hrs < 24) return hrs + 'h ago';
     return Math.floor(hrs / 24) + 'd ago';
-  }
+  });
 }
