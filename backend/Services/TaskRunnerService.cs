@@ -141,7 +141,12 @@ public class TaskRunnerService : BackgroundService
     public List<CliOutputLine> GetJobOutput(string jobId, string? watchPath = null)
     {
         var info = _scanner.FindJob(jobId, watchPath);
-        return info != null ? _cli.GetOutput(info.JobKey) : [];
+        if (info == null) return [];
+
+        var liveOutput = _cli.GetOutput(info.JobKey);
+        if (liveOutput.Count > 0) return liveOutput;
+
+        return CliOutputLogParser.ParseFile(Path.Combine(info.FolderPath, "logs", "cli-output.log"));
     }
 
     public async Task<(ContextUsageSnapshot? Snapshot, string? Error)> RefreshContextUsageAsync(string jobId, string? watchPath = null, CancellationToken ct = default)
