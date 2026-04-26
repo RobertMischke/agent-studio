@@ -40,6 +40,12 @@ import { CliOutputLine } from '../models/job.model';
     </div>
   `,
   styles: [`
+    :host {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      flex: 1;
+    }
     .console {
       background: #0d0d1a;
       border: 1px solid rgba(255,255,255,0.08);
@@ -47,6 +53,8 @@ import { CliOutputLine } from '../models/job.model';
       overflow: hidden;
       display: flex;
       flex-direction: column;
+      flex: 1;
+      min-height: 0;
     }
     .console__header {
       display: flex;

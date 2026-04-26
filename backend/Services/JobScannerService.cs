@@ -15,8 +15,74 @@ public class JobScannerService
         _logger = logger;
     }
 
-    public List<WatchPathEntry> GetWatchPaths() =>
-        _config.GetSection("WatchPaths").Get<List<WatchPathEntry>>() ?? [];
+    public List<WatchPathEntry> GetWatchPaths()
+    {
+        var raw = _config.GetSection("WatchPaths").Get<List<WatchPathEntry>>() ?? [];
+        var resolved = new List<WatchPathEntry>(raw.Count);
+        foreach (var entry in raw)
+        {
+            resolved.Add(ResolveWatchPath(entry));
+        }
+        return resolved;
+    }
+
+    /// <summary>
+    /// Resolves a watch path entry's effective task folder. Resolution order:
+    /// 1. If <c>Path</c> is explicitly set in config, use it as-is (backward compatible).
+    /// 2. Otherwise, if <c>RootPath</c> contains <c>.orchestrator.yml</c> with a <c>projectKey</c>,
+    ///    resolve to <c>&lt;TaskRepository&gt;/projects/&lt;projectKey&gt;</c>.
+    ///    The central <c>TaskRepository</c> path comes from app configuration.
+    /// 3. Otherwise, fall back to <c>&lt;RootPath&gt;/.orchestrator/jobs</c> (legacy layout).
+    /// </summary>
+    private WatchPathEntry ResolveWatchPath(WatchPathEntry entry)
+    {
+        if (!string.IsNullOrWhiteSpace(entry.Path)) return entry;
+        if (string.IsNullOrWhiteSpace(entry.RootPath)) return entry;
+
+        var pointerPath = Path.Combine(entry.RootPath, ".orchestrator.yml");
+        if (File.Exists(pointerPath))
+        {
+            try
+            {
+                var pointer = ReadOrchestratorPointer(pointerPath);
+                var taskRepository = _config["TaskRepository"];
+                if (!string.IsNullOrWhiteSpace(pointer.ProjectKey) && !string.IsNullOrWhiteSpace(taskRepository))
+                {
+                    var combined = Path.GetFullPath(Path.Combine(taskRepository, "projects", pointer.ProjectKey));
+                    return entry with { Path = combined };
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to read pointer {Pointer} — falling back to legacy layout", pointerPath);
+            }
+        }
+
+        var legacy = Path.Combine(entry.RootPath, ".orchestrator", "jobs");
+        return entry with { Path = legacy };
+    }
+
+    private record OrchestratorPointer(string ProjectKey);
+
+    /// <summary>
+    /// Minimal YAML key:value parser for the flat <c>.orchestrator.yml</c> pointer schema.
+    /// Currently only <c>projectKey</c> is read.
+    /// </summary>
+    private static OrchestratorPointer ReadOrchestratorPointer(string path)
+    {
+        string projectKey = "";
+        foreach (var rawLine in File.ReadAllLines(path))
+        {
+            var line = rawLine.Trim();
+            if (line.Length == 0 || line.StartsWith('#')) continue;
+            var colon = line.IndexOf(':');
+            if (colon < 0) continue;
+            var key = line[..colon].Trim();
+            var value = line[(colon + 1)..].Trim().Trim('"', '\'');
+            if (key == "projectKey") projectKey = value;
+        }
+        return new OrchestratorPointer(projectKey);
+    }
 
     public List<JobInfo> ScanAllJobs()
     {
