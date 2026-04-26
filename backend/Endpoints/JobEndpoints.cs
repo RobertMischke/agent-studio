@@ -1,5 +1,6 @@
 using OrchestratorApi.Models;
 using OrchestratorApi.Services;
+using OrchestratorApi.Services.Cli;
 
 namespace OrchestratorApi.Endpoints;
 
@@ -9,15 +10,15 @@ public static class JobEndpoints
     {
         var group = app.MapGroup("/api/jobs");
 
-        group.MapGet("/", (JobScannerService scanner, CopilotCliService cli) =>
+        group.MapGet("/", (JobScannerService scanner, CliRouter router) =>
         {
-            var jobs = scanner.ScanAllJobs().Select(job => WithExecution(job, cli)).ToList();
+            var jobs = scanner.ScanAllJobs().Select(job => WithExecution(job, router)).ToList();
             return Results.Ok(jobs);
         });
 
-        group.MapGet("/grouped", (JobScannerService scanner, CopilotCliService cli) =>
+        group.MapGet("/grouped", (JobScannerService scanner, CliRouter router) =>
         {
-            var jobs = scanner.ScanAllJobs().Select(job => WithExecution(job, cli)).ToList();
+            var jobs = scanner.ScanAllJobs().Select(job => WithExecution(job, router)).ToList();
             var grouped = new
             {
                 Preparation = jobs.Where(j => j.State == JobStates.Preparation).OrderBy(j => j.Order).ToList(),
@@ -29,10 +30,10 @@ public static class JobEndpoints
             return Results.Ok(grouped);
         });
 
-        group.MapGet("/{jobId}", (string jobId, string? watchPath, JobScannerService scanner, CopilotCliService cli) =>
+        group.MapGet("/{jobId}", (string jobId, string? watchPath, JobScannerService scanner, CliRouter router) =>
         {
             var detail = scanner.GetJobDetail(jobId, watchPath);
-            return detail is null ? Results.NotFound() : Results.Ok(WithExecution(detail, cli));
+            return detail is null ? Results.NotFound() : Results.Ok(WithExecution(detail, router));
         });
 
         group.MapPut("/{jobId}/state", (string jobId, string? watchPath, MoveJobRequest req, JobScannerService scanner) =>
@@ -99,7 +100,7 @@ public static class JobEndpoints
             if (job.State is not (JobStates.Ready or JobStates.Progress))
                 return Results.BadRequest(new { error = $"Job is in state '{job.State}' — only jobs in 'ready' or 'progress' can be started" });
 
-            var (execution, error) = await runner.StartJobAsync(jobId, watchPath, req?.Model, ct);
+            var (execution, error) = await runner.StartJobAsync(jobId, watchPath, req?.Model, req?.CliType, ct);
             return execution is not null
                 ? Results.Ok(execution)
                 : Results.BadRequest(new { error = error ?? "Cannot start job" });
@@ -126,6 +127,17 @@ public static class JobEndpoints
         {
             var success = scanner.SetJobModel(jobId, req?.Model, watchPath);
             return success ? Results.Ok() : Results.NotFound();
+        });
+
+        group.MapPut("/{jobId}/cli-type", (string jobId, string? watchPath, SetJobCliTypeRequest req, JobScannerService scanner) =>
+        {
+            if (req is null || !CliTypes.IsValid(req.CliType))
+                return Results.BadRequest(new { error = $"cliType must be one of {string.Join(", ", CliTypes.All)}" });
+            var ok = scanner.SetJobCliType(jobId, req.CliType, watchPath);
+            if (!ok) return Results.NotFound();
+            if (req.UseOwnSession.HasValue)
+                scanner.SetJobUseOwnSession(jobId, req.UseOwnSession.Value, watchPath);
+            return Results.Ok();
         });
 
         group.MapPut("/{jobId}/title", (string jobId, string? watchPath, SetJobTitleRequest req, JobScannerService scanner) =>
@@ -218,15 +230,34 @@ public static class JobEndpoints
         {
             return Results.Ok(cli.GetModelCatalog(forceRefresh: refresh ?? false));
         });
+
+        // ── Multi-CLI endpoints ────────────────────────────────────────
+
+        var cliGroup = app.MapGroup("/api/cli");
+
+        cliGroup.MapGet("/types", () => Results.Ok(CliTypes.All));
+
+        cliGroup.MapGet("/{cliType}/models", async (string cliType, bool? refresh, CliRouter router, CancellationToken ct) =>
+        {
+            if (!CliTypes.IsValid(cliType))
+                return Results.BadRequest(new { error = $"Unknown cliType '{cliType}'" });
+            var catalog = await router.Get(cliType).GetModelCatalogAsync(refresh ?? false, ct);
+            return Results.Ok(catalog);
+        });
+
+        cliGroup.MapGet("/usage", (CliRouter router, SessionRegistry sessions) =>
+        {
+            return Results.Ok(sessions.BuildReport(router));
+        });
     }
 
-    private static JobInfo WithExecution(JobInfo job, CopilotCliService cli)
+    private static JobInfo WithExecution(JobInfo job, CliRouter router)
     {
-        return job with { Execution = cli.GetExecution(job.JobKey) };
+        return job with { Execution = router.Get(job.CliType).GetExecution(job.JobKey) };
     }
 
-    private static JobDetail WithExecution(JobDetail detail, CopilotCliService cli)
+    private static JobDetail WithExecution(JobDetail detail, CliRouter router)
     {
-        return detail with { Info = WithExecution(detail.Info, cli) };
+        return detail with { Info = WithExecution(detail.Info, router) };
     }
 }

@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using OrchestratorApi.Models;
+using OrchestratorApi.Services.Cli;
 
 namespace OrchestratorApi.Services;
 
@@ -9,6 +10,7 @@ public class TaskRunnerService : BackgroundService
     private readonly ILogger<TaskRunnerService> _logger;
     private readonly JobScannerService _scanner;
     private readonly CopilotCliService _cli;
+    private readonly CliRouter _router;
     private readonly ContextUsageParser _contextUsageParser;
     private readonly ConcurrentDictionary<string, ProjectRunner> _runners = new();
 
@@ -19,14 +21,18 @@ public class TaskRunnerService : BackgroundService
         ILogger<TaskRunnerService> logger,
         JobScannerService scanner,
         CopilotCliService cli,
+        CliRouter router,
         ContextUsageParser contextUsageParser)
     {
         _config = config;
         _logger = logger;
         _scanner = scanner;
         _cli = cli;
+        _router = router;
         _contextUsageParser = contextUsageParser;
     }
+
+    public CliRouter Router => _router;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -46,7 +52,7 @@ public class TaskRunnerService : BackgroundService
                 continue;
             }
 
-            var runner = new ProjectRunner(entry.Name, entry, _logger, _scanner, _cli);
+            var runner = new ProjectRunner(entry.Name, entry, _logger, _scanner, _router);
             runner.OnStatusChanged += status => OnRunnerStatusChanged?.Invoke(entry.Name, status);
             _runners[entry.Name] = runner;
             _logger.LogInformation("Initialized runner for project '{Name}' (Root: {RootPath})", entry.Name, entry.RootPath);
@@ -90,7 +96,7 @@ public class TaskRunnerService : BackgroundService
         return true;
     }
 
-    public async Task<(CliExecution? Execution, string? Error)> StartJobAsync(string jobId, string? watchPath = null, string? modelOverride = null, CancellationToken ct = default)
+    public async Task<(CliExecution? Execution, string? Error)> StartJobAsync(string jobId, string? watchPath = null, string? modelOverride = null, string? cliTypeOverride = null, CancellationToken ct = default)
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return (null, "Job not found");
@@ -98,7 +104,15 @@ public class TaskRunnerService : BackgroundService
         var runner = _runners.Values.FirstOrDefault(r => r.Entry.Name == info.ProjectName);
         if (runner == null) return (null, $"No runner configured for project '{info.ProjectName}' — check RootPath in WatchPaths config");
 
-        if (!_cli.IsAvailable()) return (null, "Copilot CLI is not installed or not on PATH");
+        // Persist CLI type override before validity check so the next iteration picks it up.
+        if (!string.IsNullOrWhiteSpace(cliTypeOverride) && cliTypeOverride != info.CliType)
+        {
+            _scanner.SetJobCliType(jobId, CliTypes.Normalize(cliTypeOverride), watchPath);
+            info = _scanner.FindJob(jobId, watchPath) ?? info;
+        }
+
+        var cli = _router.Get(info.CliType);
+        if (!cli.IsAvailable()) return (null, $"{cli.CliType} CLI is not installed or not on PATH");
 
         // Persist override on the job so subsequent runs reuse it
         if (!string.IsNullOrWhiteSpace(modelOverride) && modelOverride != info.Model)
@@ -122,7 +136,8 @@ public class TaskRunnerService : BackgroundService
 
         var runner = _runners.Values.FirstOrDefault(r => r.Entry.Name == info.ProjectName);
         if (runner == null) return (null, $"No runner configured for project '{info.ProjectName}'");
-        if (!_cli.IsAvailable()) return (null, "Copilot CLI is not installed or not on PATH");
+        var cli = _router.Get(info.CliType);
+        if (!cli.IsAvailable()) return (null, $"{cli.CliType} CLI is not installed or not on PATH");
 
         if (!string.IsNullOrWhiteSpace(modelOverride) && modelOverride != info.Model)
         {
@@ -135,7 +150,7 @@ public class TaskRunnerService : BackgroundService
     public bool StopJob(string jobId, string? watchPath = null)
     {
         var info = _scanner.FindJob(jobId, watchPath);
-        return info != null && _cli.Stop(info.JobKey);
+        return info != null && _router.Get(info.CliType).Stop(info.JobKey);
     }
 
     public List<CliOutputLine> GetJobOutput(string jobId, string? watchPath = null)
@@ -143,16 +158,23 @@ public class TaskRunnerService : BackgroundService
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return [];
 
-        var liveOutput = _cli.GetOutput(info.JobKey);
+        var liveOutput = _router.Get(info.CliType).GetOutput(info.JobKey);
         if (liveOutput.Count > 0) return liveOutput;
 
         return CliOutputLogParser.ParseFile(Path.Combine(info.FolderPath, "logs", "cli-output.log"));
     }
 
+    /// <summary>Looks up the CliExecution for a job from the right CLI backend.</summary>
+    public CliExecution? GetExecutionForJob(JobInfo info)
+        => _router.Get(info.CliType).GetExecution(info.JobKey);
+
     public async Task<(ContextUsageSnapshot? Snapshot, string? Error)> RefreshContextUsageAsync(string jobId, string? watchPath = null, CancellationToken ct = default)
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return (null, "Job not found");
+        // /context usage is Copilot-specific; if the job runs another CLI, no-op.
+        if (CliTypes.Normalize(info.CliType) != CliTypes.Copilot)
+            return (null, $"{CliTypes.Normalize(info.CliType)} CLI does not support /context usage refresh.");
         if (!_cli.IsAvailable()) return (null, "Copilot CLI is not installed or not on PATH");
 
         var runner = _runners.Values.FirstOrDefault(r => r.Entry.Name == info.ProjectName);
@@ -201,9 +223,10 @@ public class ProjectRunner
 {
     private readonly ILogger _logger;
     private readonly JobScannerService _scanner;
-    private readonly CopilotCliService _cli;
+    private readonly CliRouter _router;
     private string _mode = "manual";
     private string? _activeJobId;
+    private string? _activeCliType;
     private bool _processing;
 
     public string ProjectName { get; }
@@ -211,17 +234,19 @@ public class ProjectRunner
 
     public event Action<ProjectRunnerStatus>? OnStatusChanged;
 
-    public ProjectRunner(string projectName, WatchPathEntry entry, ILogger logger, JobScannerService scanner, CopilotCliService cli)
+    public ProjectRunner(string projectName, WatchPathEntry entry, ILogger logger, JobScannerService scanner, CliRouter router)
     {
         ProjectName = projectName;
         Entry = entry;
         _logger = logger;
         _scanner = scanner;
-        _cli = cli;
+        _router = router;
 
-        // Listen for CLI completion to move jobs to review
-        _cli.OnFinished += OnCliFinished;
+        // Listen across all CLI backends for completion of the active job.
+        _router.OnFinished += (cliType, jobKey, exec) => OnCliFinished(cliType, jobKey, exec);
     }
+
+    private ICliExecutionService GetCliFor(JobInfo info) => _router.Get(info.CliType);
 
     public void SetMode(string mode)
     {
@@ -234,12 +259,17 @@ public class ProjectRunner
     {
         var queued = GetQueuedJobIds();
         var activeJobKey = GetActiveJobKey();
+        CliExecution? activeExec = null;
+        if (activeJobKey != null && _activeCliType != null)
+        {
+            activeExec = _router.Get(_activeCliType).GetExecution(activeJobKey);
+        }
         return new ProjectRunnerStatus
         {
             ProjectName = ProjectName,
             Mode = _mode,
             ActiveJobId = _activeJobId,
-            ActiveExecution = activeJobKey != null ? _cli.GetExecution(activeJobKey) : null,
+            ActiveExecution = activeExec,
             QueuedJobIds = queued
         };
     }
@@ -249,8 +279,8 @@ public class ProjectRunner
         if (_mode is "manual" or "paused") return;
         if (_processing || _activeJobId != null) return;
 
-        // Check if there's a running process for this project
-        if (_cli.IsRunningForProject(Entry.RootPath)) return;
+        // Check if there's a running process for this project on any CLI
+        if (_router.All.Any(c => c.IsRunningForProject(Entry.RootPath))) return;
 
         var nextJob = GetNextReadyJob();
         if (nextJob == null)
@@ -302,10 +332,13 @@ public class ProjectRunner
                 Directory.CreateDirectory(Path.Combine(jobFolder, "logs"));
             }
 
-            // Resolve / persist a stable session name so follow-ups can use --resume
+            // Resolve / persist a stable session name so follow-ups can use --resume.
+            // For Codex the "name" is actually the captured UUID — for first runs we leave it
+            // null and let the CLI assign one (extracted from session_meta on stdout).
+            var cli = GetCliFor(info);
             var sessionName = info.SessionName;
             var resume = !string.IsNullOrWhiteSpace(sessionName);
-            if (!resume)
+            if (!resume && cli.CliType != CliTypes.Codex)
             {
                 sessionName = BuildSessionName(jobId);
                 _scanner.SetJobSessionName(jobId, sessionName, Entry.Path);
@@ -318,13 +351,16 @@ public class ProjectRunner
                 ? Path.Combine(jobFolder, "prompt.md")
                 : Path.Combine(info.FolderPath, "prompt.md");
             var prompt = $"Lies @\"{promptPath}\" und führe den Task aus. Der Job-Ordner ist \"{jobFolder ?? info.FolderPath}\".";
-            var (execution, cliError) = await _cli.StartAsync(jobId, GetJobKey(jobId), prompt, Entry.RootPath, sessionName, resume, info.Model, ct);
+
+            _activeCliType = cli.CliType;
+            var (execution, cliError) = await cli.StartAsync(jobId, GetJobKey(jobId), prompt, Entry.RootPath, sessionName, resume, info.Model, ct);
 
             if (execution == null)
             {
                 _activeJobId = null;
+                _activeCliType = null;
                 NotifyStatus();
-                return (null, cliError ?? "Failed to start Copilot CLI process");
+                return (null, cliError ?? $"Failed to start {cli.CliType} CLI process");
             }
 
             return (execution, null);
@@ -370,13 +406,16 @@ public class ProjectRunner
                 Directory.CreateDirectory(Path.Combine(jobFolder, "logs"));
             }
 
-            var (execution, cliError) = await _cli.StartAsync(jobId, GetJobKey(jobId), followupPrompt, Entry.RootPath, info.SessionName, true, info.Model, ct);
+            var cli = GetCliFor(info);
+            _activeCliType = cli.CliType;
+            var (execution, cliError) = await cli.StartAsync(jobId, GetJobKey(jobId), followupPrompt, Entry.RootPath, info.SessionName, true, info.Model, ct);
 
             if (execution == null)
             {
                 _activeJobId = null;
+                _activeCliType = null;
                 NotifyStatus();
-                return (null, cliError ?? "Failed to resume Copilot CLI session");
+                return (null, cliError ?? $"Failed to resume {cli.CliType} CLI session");
             }
 
             return (execution, null);
@@ -395,31 +434,45 @@ public class ProjectRunner
         return $"taskboard-{slug}-{DateTime.UtcNow:yyyyMMddHHmm}";
     }
 
-    private void OnCliFinished(string jobKey, CliExecution execution)
+    private void OnCliFinished(string cliType, string jobKey, CliExecution execution)
     {
         if (GetActiveJobKey() != jobKey || _activeJobId == null) return;
+        if (_activeCliType != null && !string.Equals(cliType, _activeCliType, StringComparison.OrdinalIgnoreCase)) return;
 
-        _logger.LogInformation("Job {JobId} finished in project '{Project}' with status {Status}",
-            _activeJobId, ProjectName, execution.Status);
+        _logger.LogInformation("Job {JobId} finished in project '{Project}' on {Cli} with status {Status}",
+            _activeJobId, ProjectName, cliType, execution.Status);
+
+        var cli = _router.Get(cliType);
 
         // Persist last token/usage summary (best-effort)
-        var usage = _cli.GetLastUsage(jobKey);
+        var usage = cli.GetLastUsage(jobKey);
         if (usage != null)
         {
             _scanner.UpdateLastUsage(_activeJobId, usage, Entry.Path);
         }
 
+        // For Codex: persist the captured session UUID so follow-ups can resume.
+        if (cli is Cli.CodexCliService codex)
+        {
+            var capturedId = codex.GetCapturedSessionId(jobKey);
+            if (!string.IsNullOrWhiteSpace(capturedId))
+            {
+                _scanner.SetJobSessionName(_activeJobId, capturedId, Entry.Path);
+            }
+        }
+
         // Write CLI output to log file
-        WriteCliLog(_activeJobId);
+        WriteCliLog(_activeJobId, cli);
 
         // Move job to 4-review
         _scanner.MoveJob(_activeJobId, JobStates.Review, Entry.Path);
 
         _activeJobId = null;
+        _activeCliType = null;
         NotifyStatus();
     }
 
-    private void WriteCliLog(string jobId)
+    private void WriteCliLog(string jobId, ICliExecutionService cli)
     {
         try
         {
@@ -429,7 +482,7 @@ public class ProjectRunner
             var logsDir = Path.Combine(jobFolder, "logs");
             Directory.CreateDirectory(logsDir);
 
-            var output = _cli.GetOutput(GetJobKey(jobId));
+            var output = cli.GetOutput(GetJobKey(jobId));
             var logContent = string.Join(Environment.NewLine,
                 output.Select(l => $"[{l.Timestamp:HH:mm:ss.fff}] [{l.Stream}] {l.Text}"));
 

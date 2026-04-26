@@ -1,3 +1,6 @@
+export type CliType = 'copilot' | 'claude' | 'codex';
+export const CLI_TYPES: CliType[] = ['copilot', 'claude', 'codex'];
+
 export interface JobInfo {
   id: string;
   jobKey: string;
@@ -13,6 +16,8 @@ export interface JobInfo {
   totalSizeBytes: number;
   sessionName: string | null;
   model: string | null;
+  cliType: CliType | null;
+  useOwnSession: boolean | null;
   lastUsage: SessionUsage | null;
   execution: CliExecution | null;
 }
@@ -24,7 +29,7 @@ export interface SessionUsage {
   requests: string | null;
 }
 
-export interface CopilotModelInfo {
+export interface CliModelInfo {
   id: string;
   label: string;
   multiplier: number | null;
@@ -32,10 +37,42 @@ export interface CopilotModelInfo {
   isDefault: boolean;
 }
 
-export interface CopilotModelCatalog {
-  models: CopilotModelInfo[];
+export interface CliModelCatalog {
+  models: CliModelInfo[];
   source: string;
   fetchedAt?: string;
+}
+
+// Backwards-compat aliases — the records were Copilot-named before the multi-CLI refactor.
+export type CopilotModelInfo = CliModelInfo;
+export type CopilotModelCatalog = CliModelCatalog;
+
+export interface CliSessionInfo {
+  id: string;
+  label: string | null;
+  updatedAt: string | null;
+  cwd: string | null;
+  lastUsage: SessionUsage | null;
+  isProjectDefault: boolean;
+}
+
+export interface CliUsageProjectGroup {
+  projectName: string;
+  rootPath: string | null;
+  sessions: CliSessionInfo[];
+}
+
+export interface CliUsageSection {
+  cliType: CliType;
+  available: boolean;
+  version: string | null;
+  error: string | null;
+  projects: CliUsageProjectGroup[];
+}
+
+export interface CliUsageReport {
+  at: string;
+  sections: CliUsageSection[];
 }
 
 export interface JobDetail {
@@ -89,6 +126,7 @@ export interface CreateJobRequest {
   watchPath: string;
   promptMarkdown?: string;
   targetState?: string;
+  cliType?: CliType;
 }
 
 export interface JobOrderItem {

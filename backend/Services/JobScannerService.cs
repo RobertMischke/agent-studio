@@ -145,7 +145,11 @@ public class JobScannerService
                 LastUsage = raw.TryGetProperty("lastUsage", out var lu) && lu.ValueKind == JsonValueKind.Object
                     ? JsonSerializer.Deserialize<SessionUsage>(lu.GetRawText(), JsonOpts)
                     : null,
-                Model = raw.TryGetProperty("model", out var md) ? md.GetString() : null
+                Model = raw.TryGetProperty("model", out var md) ? md.GetString() : null,
+                CliType = raw.TryGetProperty("cliType", out var ct) ? ct.GetString() : null,
+                UseOwnSession = raw.TryGetProperty("useOwnSession", out var uos) && uos.ValueKind is JsonValueKind.True or JsonValueKind.False
+                    ? uos.GetBoolean()
+                    : null
             };
         }
         catch (Exception ex)
@@ -339,6 +343,28 @@ public class JobScannerService
         return true;
     }
 
+    public bool SetJobCliType(string jobId, string cliType, string? watchPath = null)
+    {
+        var info = FindJob(jobId, watchPath);
+        if (info == null) return false;
+        var normalized = CliTypes.Normalize(cliType);
+        UpdateJobJsonField(info.FolderPath, "cliType", normalized);
+        // Switching CLI invalidates the previous session — clear it so the next run mints a new one.
+        if (!string.Equals(normalized, info.CliType, StringComparison.OrdinalIgnoreCase))
+        {
+            UpdateJobJsonField(info.FolderPath, "sessionName", "");
+        }
+        return true;
+    }
+
+    public bool SetJobUseOwnSession(string jobId, bool useOwn, string? watchPath = null)
+    {
+        var info = FindJob(jobId, watchPath);
+        if (info == null) return false;
+        UpdateJobJsonField(info.FolderPath, "useOwnSession", useOwn);
+        return true;
+    }
+
     public bool SetJobTitle(string jobId, string title, string? watchPath = null)
     {
         if (string.IsNullOrWhiteSpace(title)) return false;
@@ -472,6 +498,8 @@ public class JobScannerService
         };
         if (!string.IsNullOrWhiteSpace(req.Model))
             jobJson["model"] = req.Model;
+        if (!string.IsNullOrWhiteSpace(req.CliType))
+            jobJson["cliType"] = CliTypes.Normalize(req.CliType);
 
         File.WriteAllText(Path.Combine(jobDir, "job.json"),
             JsonSerializer.Serialize(jobJson, new JsonSerializerOptions { WriteIndented = true }));

@@ -2,13 +2,14 @@ import { Component, computed, effect, OnInit, signal, untracked } from '@angular
 import { FormsModule } from '@angular/forms';
 import { JobColumnComponent } from './components/job-column';
 import { JobDetailComponent } from './components/job-detail';
+import { CliUsageSheetComponent } from './components/cli-usage-sheet';
 import { JobService } from './services/job.service';
 import { JobDetail, JobInfo, GroupedJobs, WatchPathEntry } from './models/job.model';
 import { ErrorDialogService } from './services/error-dialog.service';
 
 @Component({
   selector: 'app-root',
-  imports: [JobColumnComponent, JobDetailComponent, FormsModule],
+  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, FormsModule],
   template: `
     <div class="app">
       <header class="header">
@@ -30,6 +31,9 @@ import { ErrorDialogService } from './services/error-dialog.service';
           }
         </div>
         <div class="header__actions">
+          <button class="btn" (click)="usageSheet.toggle()" title="CLI sessions & token usage">
+            🪙 Usage
+          </button>
           <button class="btn btn--create" (click)="openCreate()">
             ＋ New Task
           </button>
@@ -38,6 +42,9 @@ import { ErrorDialogService } from './services/error-dialog.service';
           </button>
         </div>
       </header>
+
+      <app-cli-usage-sheet #usageSheet />
+
 
       <div class="layout" [class.layout--focus]="selectedJob()">
         @if (selectedJob(); as detail) {

@@ -1,6 +1,6 @@
 import { Component, input, output, signal, effect, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { JobDetail, WatchPathEntry, CliOutputLine, CliSettings, CliExecution, ContextUsageSnapshot, CopilotModelInfo } from '../models/job.model';
+import { JobDetail, WatchPathEntry, CliOutputLine, CliSettings, CliExecution, ContextUsageSnapshot, CliModelInfo, CliType, CLI_TYPES } from '../models/job.model';
 import { JobService } from '../services/job.service';
 import { ErrorDialogService } from '../services/error-dialog.service';
 import { ActivityLogViewComponent } from './activity-log-view';
@@ -96,6 +96,20 @@ import { markdownToHtml } from './markdown-utils';
               <div>
                 <div class="section__eyebrow">Command deck</div>
                 <h3 class="section__title">Agent controls</h3>
+              </div>
+            </div>
+            <div class="cli-picker">
+              <span class="cli-picker__label">CLI</span>
+              <div class="cli-picker__group" role="tablist">
+                @for (t of cliTypes; track t) {
+                  <button type="button"
+                          class="cli-picker__btn"
+                          [class.cli-picker__btn--active]="cliTypeDraft() === t"
+                          [disabled]="isRunning()"
+                          (click)="onCliTypeChange(t)">
+                    {{ cliTypeLabel(t) }}
+                  </button>
+                }
               </div>
             </div>
             <div class="model-picker">
@@ -498,6 +512,44 @@ import { markdownToHtml } from './markdown-utils';
       resize: vertical;
     }
     .session-followup__input:focus { outline: none; border-color: rgba(137,180,250,0.5); }
+    .cli-picker {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .cli-picker__label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: rgba(255,255,255,0.55);
+    }
+    .cli-picker__group {
+      display: inline-flex;
+      gap: 2px;
+      padding: 2px;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 8px;
+      background: rgba(0,0,0,0.25);
+    }
+    .cli-picker__btn {
+      border: 0;
+      background: transparent;
+      color: #94a3b8;
+      padding: 4px 10px;
+      font-size: 0.78rem;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .cli-picker__btn:hover:not(:disabled) {
+      color: #e2e8f0;
+      background: rgba(255,255,255,0.06);
+    }
+    .cli-picker__btn--active {
+      background: rgba(99,102,241,0.22);
+      color: #c7d2fe;
+    }
+    .cli-picker__btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .model-picker {
       display: flex;
       align-items: center;
@@ -1396,7 +1448,9 @@ export class JobDetailComponent implements OnDestroy {
   readonly continuing = signal(false);
   readonly followupPrompt = signal('');
   readonly modelDraft = signal('');
-  readonly availableModels = signal<CopilotModelInfo[]>([]);
+  readonly availableModels = signal<CliModelInfo[]>([]);
+  readonly cliTypes = CLI_TYPES;
+  readonly cliTypeDraft = signal<CliType>('copilot');
   readonly modelCatalogSource = signal<string>('');
 
   modelMultiplier(id: string | null | undefined): number | null {
@@ -1439,16 +1493,44 @@ export class JobDetailComponent implements OnDestroy {
   private readonly layoutResizeEnd = () => this.stopLayoutResize();
 
   constructor(private jobService: JobService, private errorDialog: ErrorDialogService) {
-    this.jobService.getModelCatalog().subscribe({
+    // Load the initial catalog for whatever CLI the current job uses; the effect below
+    // will re-trigger this when the user switches CLIs.
+    this.loadModelCatalog('copilot');
+  }
+
+  private loadModelCatalog(cliType: CliType) {
+    this.jobService.getCliModelCatalog(cliType).subscribe({
       next: (catalog) => {
         this.availableModels.set(catalog.models ?? []);
         this.modelCatalogSource.set(catalog.source ?? '');
       },
       error: () => {
-        // non-fatal — dropdown will only show the "default" entry
         this.availableModels.set([]);
       }
     });
+  }
+
+  onCliTypeChange(value: string) {
+    if (!CLI_TYPES.includes(value as CliType)) return;
+    const next = value as CliType;
+    if (next === this.cliTypeDraft()) return;
+    this.cliTypeDraft.set(next);
+    // Switching CLI clears the previous model — let the user pick one for the new backend.
+    this.modelDraft.set('');
+    this.loadModelCatalog(next);
+
+    this.jobService.setJobCliType(this.detail().info.id, next, this.detail().info.watchPath).subscribe({
+      next: () => this.fileSaved.emit(),
+      error: (err) => this.showError(err)
+    });
+  }
+
+  cliTypeLabel(t: CliType): string {
+    switch (t) {
+      case 'copilot': return 'Copilot';
+      case 'claude':  return 'Claude Code';
+      case 'codex':   return 'Codex';
+    }
   }
 
   private detailEffect = effect(() => {
@@ -1460,6 +1542,11 @@ export class JobDetailComponent implements OnDestroy {
     this.contextUsage.set(d.contextUsage);
     this.refreshingContextUsage.set(false);
     this.modelDraft.set(d.info.model ?? '');
+    const nextCliType = (d.info.cliType ?? 'copilot') as CliType;
+    if (nextCliType !== this.cliTypeDraft()) {
+      this.cliTypeDraft.set(nextCliType);
+      this.loadModelCatalog(nextCliType);
+    }
 
     if (isJobSwitch) {
       // Reset job-scoped UI state only when switching to a different job —

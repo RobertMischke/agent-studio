@@ -16,8 +16,16 @@ public record JobInfo
     public long TotalSizeBytes { get; init; }
     /// <summary>Name passed to Copilot CLI via <c>--name</c> on first start; reused with <c>--resume</c> for follow-ups.</summary>
     public string? SessionName { get; init; }
-    /// <summary>Preferred Copilot model for this job (e.g. <c>claude-sonnet-4.5</c>, <c>gpt-5</c>); passed via <c>--model</c>.</summary>
+    /// <summary>Preferred model for this job (e.g. <c>claude-sonnet-4.5</c>); passed via <c>--model</c> when supported.</summary>
     public string? Model { get; init; }
+    /// <summary>Which CLI backend executes this job: <c>copilot</c>, <c>claude</c>, or <c>codex</c>. Defaults to <c>copilot</c>.</summary>
+    public string? CliType { get; init; }
+    /// <summary>
+    /// When <c>true</c>, this job uses its own dedicated session even if the project runner is
+    /// configured for <see cref="SessionModes.ReuseProject"/>. Lets a one-off task isolate its
+    /// context from the long-running project session.
+    /// </summary>
+    public bool? UseOwnSession { get; init; }
     /// <summary>Last token / cost summary parsed from CLI output (best-effort).</summary>
     public SessionUsage? LastUsage { get; init; }
     public CliExecution? Execution { get; init; }
@@ -86,6 +94,8 @@ public record CreateJobRequest
     public string? PromptMarkdown { get; init; }
     public string? Model { get; init; }
     public string? TargetState { get; init; }
+    /// <summary>Optional CLI backend (copilot|claude|codex). Defaults to copilot when omitted.</summary>
+    public string? CliType { get; init; }
 }
 
 public record ReorderRequest
@@ -153,12 +163,14 @@ public record StartJobRequest
 {
     public string? AgentOverride { get; init; }
     public string? Model { get; init; }
+    public string? CliType { get; init; }
 }
 
 public record ContinueJobRequest
 {
     public string Prompt { get; init; } = "";
     public string? Model { get; init; }
+    public string? CliType { get; init; }
 }
 
 public record SetJobModelRequest
@@ -166,19 +178,25 @@ public record SetJobModelRequest
     public string? Model { get; init; }
 }
 
+public record SetJobCliTypeRequest
+{
+    public string CliType { get; init; } = "";
+    public bool? UseOwnSession { get; init; }
+}
+
 public record SetJobTitleRequest
 {
     public string Title { get; init; } = "";
 }
 
-/// <summary>Curated entry in the Copilot model catalog returned by <c>GET /api/cli/models</c>.</summary>
-public record CopilotModelInfo
+/// <summary>Curated entry in a CLI's model catalog returned by <c>GET /api/cli/{type}/models</c>.</summary>
+public record CliModelInfo
 {
-    /// <summary>Model identifier passed to <c>copilot --model &lt;id&gt;</c>.</summary>
+    /// <summary>Model identifier passed to <c>--model &lt;id&gt;</c>.</summary>
     public string Id { get; init; } = "";
     /// <summary>Human-friendly label shown in dropdowns. Defaults to <c>Id</c> when empty.</summary>
     public string Label { get; init; } = "";
-    /// <summary>Premium-request multiplier (e.g. 0 = free, 1 = standard, 10 = opus). <c>null</c> when unknown.</summary>
+    /// <summary>Premium-request multiplier (Copilot only; null elsewhere).</summary>
     public double? Multiplier { get; init; }
     /// <summary>Optional vendor / family grouping (anthropic, openai, google, …).</summary>
     public string? Vendor { get; init; }
@@ -186,14 +204,15 @@ public record CopilotModelInfo
     public bool IsDefault { get; init; }
 }
 
-public record CopilotModelCatalog
+public record CliModelCatalog
 {
-    public List<CopilotModelInfo> Models { get; init; } = [];
-    /// <summary>How the catalog was obtained: <c>config</c>, <c>cli</c>, or <c>fallback</c>.</summary>
+    public List<CliModelInfo> Models { get; init; } = [];
+    /// <summary>How the catalog was obtained: <c>config</c>, <c>cli-pty</c>, <c>hardcoded</c>, …</summary>
     public string Source { get; init; } = "config";
     /// <summary>UTC timestamp of the most recent (re)build. Useful for cache diagnostics.</summary>
     public DateTime FetchedAt { get; init; }
 }
+
 
 public record SetRunnerModeRequest
 {

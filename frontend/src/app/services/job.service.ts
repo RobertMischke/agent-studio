@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog } from '../models/job.model';
+import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport } from '../models/job.model';
 import { ErrorDialogService } from './error-dialog.service';
 
 @Injectable({ providedIn: 'root' })
@@ -103,8 +103,10 @@ export class JobService {
   }
 
   // CLI execution
-  startJob(jobId: string, watchPath?: string, model?: string) {
-    const body = model ? { model } : {};
+  startJob(jobId: string, watchPath?: string, model?: string, cliType?: CliType) {
+    const body: { model?: string; cliType?: CliType } = {};
+    if (model) body.model = model;
+    if (cliType) body.cliType = cliType;
     return this.http.post<CliExecution>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/start`, body, this.withWatchPath(watchPath));
   }
 
@@ -112,14 +114,30 @@ export class JobService {
     return this.http.post(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/stop`, {}, this.withWatchPath(watchPath));
   }
 
-  continueJob(jobId: string, prompt: string, watchPath?: string, model?: string) {
-    const body: { prompt: string; model?: string } = { prompt };
+  continueJob(jobId: string, prompt: string, watchPath?: string, model?: string, cliType?: CliType) {
+    const body: { prompt: string; model?: string; cliType?: CliType } = { prompt };
     if (model) body.model = model;
+    if (cliType) body.cliType = cliType;
     return this.http.post<CliExecution>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/continue`, body, this.withWatchPath(watchPath));
   }
 
   setJobModel(jobId: string, model: string | null, watchPath?: string) {
     return this.http.put(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/model`, { model }, this.withWatchPath(watchPath));
+  }
+
+  setJobCliType(jobId: string, cliType: CliType, watchPath?: string, useOwnSession?: boolean) {
+    const body: { cliType: CliType; useOwnSession?: boolean } = { cliType };
+    if (useOwnSession !== undefined) body.useOwnSession = useOwnSession;
+    return this.http.put(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/cli-type`, body, this.withWatchPath(watchPath));
+  }
+
+  getCliModelCatalog(cliType: CliType, refresh = false) {
+    const params = refresh ? new HttpParams().set('refresh', 'true') : undefined;
+    return this.http.get<CliModelCatalog>(`${this.baseUrl}/cli/${cliType}/models`, params ? { params } : {});
+  }
+
+  getCliUsageReport() {
+    return this.http.get<CliUsageReport>(`${this.baseUrl}/cli/usage`);
   }
 
   setJobTitle(jobId: string, title: string, watchPath?: string) {

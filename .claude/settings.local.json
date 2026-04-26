@@ -6,7 +6,9 @@
       "Bash(codex resume *)",
       "Bash(codex exec *)",
       "Read(//c/Users/rmisc/.codex/**)",
-      "Read(//c/Users/rmisc/.codex/sessions/**)"
+      "Read(//c/Users/rmisc/.codex/sessions/**)",
+      "Bash(dotnet build *)",
+      "Bash(npx ng *)"
     ]
   }
 }

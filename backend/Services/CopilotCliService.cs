@@ -7,8 +7,14 @@ using OrchestratorApi.Services.Pty;
 
 namespace OrchestratorApi.Services;
 
-public class CopilotCliService
+public class CopilotCliService : ICliExecutionService
 {
+    public string CliType => CliTypes.Copilot;
+
+    /// <summary>Async wrapper required by <see cref="ICliExecutionService"/>.</summary>
+    public Task<CliModelCatalog> GetModelCatalogAsync(bool forceRefresh = false, CancellationToken ct = default)
+        => _modelDiscovery.GetAsync(GetCliPath(), forceRefresh, ct);
+
     private static readonly string[] WindowsShellFallbackInstructions =
     [
         "Wenn Shell-Kommandos notwendig sind, verwende auf Windows keine pwsh.exe-abhaengigen Befehle.",
@@ -67,7 +73,7 @@ public class CopilotCliService
     /// is no hard-coded fallback by design: stale or guessed model lists are
     /// strictly worse than a clear error.
     /// </summary>
-    public CopilotModelCatalog GetModelCatalog(bool forceRefresh = false)
+    public CliModelCatalog GetModelCatalog(bool forceRefresh = false)
     {
         return _modelDiscovery.GetAsync(GetCliPath(), forceRefresh).GetAwaiter().GetResult();
     }

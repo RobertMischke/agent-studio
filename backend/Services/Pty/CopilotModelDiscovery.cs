@@ -25,7 +25,7 @@ public sealed class CopilotModelDiscovery
     private readonly IConfiguration _config;
     private readonly SemaphoreSlim _gate = new(1, 1);
 
-    private CopilotModelCatalog? _memCache;
+    private CliModelCatalog? _memCache;
     private DateTime _memCacheAt = DateTime.MinValue;
 
     public CopilotModelDiscovery(
@@ -53,7 +53,7 @@ public sealed class CopilotModelDiscovery
     private TimeSpan Ttl =>
         TimeSpan.FromMinutes(_config.GetValue<int?>("CopilotModelsCacheMinutes") ?? 60);
 
-    public async Task<CopilotModelCatalog> GetAsync(string cliPath, bool forceRefresh = false, CancellationToken ct = default)
+    public async Task<CliModelCatalog> GetAsync(string cliPath, bool forceRefresh = false, CancellationToken ct = default)
     {
         if (!forceRefresh)
         {
@@ -85,7 +85,7 @@ public sealed class CopilotModelDiscovery
         finally { _gate.Release(); }
     }
 
-    private CopilotModelCatalog WithActiveModelApplied(CopilotModelCatalog cat)
+    private CliModelCatalog WithActiveModelApplied(CliModelCatalog cat)
     {
         var active = _env.ReadActiveModel();
         if (string.IsNullOrWhiteSpace(active)) return cat;
@@ -96,7 +96,7 @@ public sealed class CopilotModelDiscovery
         return cat with { Models = models };
     }
 
-    private async Task<CopilotModelCatalog> DiscoverViaPtyAsync(string cliPath, CancellationToken ct)
+    private async Task<CliModelCatalog> DiscoverViaPtyAsync(string cliPath, CancellationToken ct)
     {
         // Use a scratch folder so we don't accidentally trust a real workspace
         // just to enumerate models.
@@ -141,7 +141,7 @@ public sealed class CopilotModelDiscovery
             throw new InvalidOperationException("No models parsed from picker");
         }
 
-        return WithActiveModelApplied(new CopilotModelCatalog
+        return WithActiveModelApplied(new CliModelCatalog
         {
             Models = models,
             Source = "cli-pty",
@@ -155,10 +155,10 @@ public sealed class CopilotModelDiscovery
     /// cursor, a "(default)" suffix, or a check mark). The "Auto" entry is
     /// excluded — it's not a concrete model.
     /// </summary>
-    public static List<CopilotModelInfo> ParsePickerSnapshot(string snapshot)
+    public static List<CliModelInfo> ParsePickerSnapshot(string snapshot)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var result = new List<CopilotModelInfo>();
+        var result = new List<CliModelInfo>();
         foreach (Match m in ModelLineRegex.Matches(snapshot))
         {
             var rawLabel = m.Groups["label"].Value.Trim();
@@ -171,7 +171,7 @@ public sealed class CopilotModelDiscovery
             var id = LabelToId(rawLabel);
             if (!seen.Add(id)) continue;
 
-            result.Add(new CopilotModelInfo
+            result.Add(new CliModelInfo
             {
                 Id = id,
                 Label = rawLabel,
@@ -197,13 +197,13 @@ public sealed class CopilotModelDiscovery
         return null;
     }
 
-    private CopilotModelCatalog? TryLoadDisk()
+    private CliModelCatalog? TryLoadDisk()
     {
         try
         {
             if (!File.Exists(CachePath)) return null;
             var json = File.ReadAllText(CachePath);
-            return JsonSerializer.Deserialize<CopilotModelCatalog>(json, JsonOpts);
+            return JsonSerializer.Deserialize<CliModelCatalog>(json, JsonOpts);
         }
         catch (Exception ex)
         {
@@ -212,7 +212,7 @@ public sealed class CopilotModelDiscovery
         }
     }
 
-    private void TrySaveDisk(CopilotModelCatalog cat)
+    private void TrySaveDisk(CliModelCatalog cat)
     {
         try { File.WriteAllText(CachePath, JsonSerializer.Serialize(cat, JsonOpts)); }
         catch (Exception ex) { _logger.LogDebug(ex, "Failed to persist model catalog cache"); }

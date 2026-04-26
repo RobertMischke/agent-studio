@@ -1,6 +1,7 @@
 using OrchestratorApi.Endpoints;
 using OrchestratorApi.Hubs;
 using OrchestratorApi.Services;
+using OrchestratorApi.Services.Cli;
 using OrchestratorApi.Services.Pty;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.Diagnostics;
@@ -12,6 +13,10 @@ builder.Services.AddSingleton<JobWatcherService>();
 builder.Services.AddSingleton<CopilotCliEnvironment>();
 builder.Services.AddSingleton<CopilotModelDiscovery>();
 builder.Services.AddSingleton<CopilotCliService>();
+builder.Services.AddSingleton<ClaudeCliService>();
+builder.Services.AddSingleton<CodexCliService>();
+builder.Services.AddSingleton<CliRouter>();
+builder.Services.AddSingleton<SessionRegistry>();
 builder.Services.AddSingleton<ContextUsageParser>();
 builder.Services.AddSingleton<TaskRunnerService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<JobWatcherService>());
@@ -71,17 +76,17 @@ var watcher = app.Services.GetRequiredService<JobWatcherService>();
 var hubContext = app.Services.GetRequiredService<IHubContext<JobHub>>();
 watcher.OnJobChanged += _ => hubContext.Clients.All.SendAsync("jobsChanged");
 
-// Wire up CLI events → SignalR push
-var cli = app.Services.GetRequiredService<CopilotCliService>();
-cli.OnOutput += (jobId, line) =>
-    hubContext.Clients.All.SendAsync("cliOutput", jobId, line.Text, line.Stream, line.Timestamp);
-cli.OnStarted += (jobId, exec) =>
-    hubContext.Clients.All.SendAsync("cliStarted", jobId, exec.ProcessId, exec.StartedAt);
-cli.OnFinished += (jobId, exec) =>
-    hubContext.Clients.All.SendAsync("cliFinished", jobId, exec.ExitCode, exec.DurationSeconds, exec.Status);
+// Wire up CLI events → SignalR push (across all CLI backends via the router)
+var cliRouter = app.Services.GetRequiredService<CliRouter>();
+cliRouter.OnOutput += (cliType, jobId, line) =>
+    hubContext.Clients.All.SendAsync("cliOutput", jobId, line.Text, line.Stream, line.Timestamp, cliType);
+cliRouter.OnStarted += (cliType, jobId, exec) =>
+    hubContext.Clients.All.SendAsync("cliStarted", jobId, exec.ProcessId, exec.StartedAt, cliType);
+cliRouter.OnFinished += (cliType, jobId, exec) =>
+    hubContext.Clients.All.SendAsync("cliFinished", jobId, exec.ExitCode, exec.DurationSeconds, exec.Status, cliType);
 
-// Reattach to any CLI processes that survived the previous app run
-cli.ReattachOnStartup();
+// Reattach to any CLI processes that survived the previous app run (Copilot only for now)
+cliRouter.ReattachAll();
 
 // Wire up Runner status → SignalR push
 var taskRunner = app.Services.GetRequiredService<TaskRunnerService>();
