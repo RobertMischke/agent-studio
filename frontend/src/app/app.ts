@@ -4,7 +4,7 @@ import { JobColumnComponent } from './components/job-column';
 import { JobDetailComponent } from './components/job-detail';
 import { CliUsageSheetComponent } from './components/cli-usage-sheet';
 import { JobService } from './services/job.service';
-import { JobDetail, JobInfo, GroupedJobs, WatchPathEntry } from './models/job.model';
+import { JobDetail, JobInfo, GroupedJobs, WatchPathEntry, CliType, CLI_TYPES, CliModelInfo } from './models/job.model';
 import { ErrorDialogService } from './services/error-dialog.service';
 
 @Component({
@@ -35,7 +35,7 @@ import { ErrorDialogService } from './services/error-dialog.service';
             🪙 Usage
           </button>
           <button class="btn btn--create" (click)="openCreate()">
-            ＋ New Task
+            ＋ Add Task
           </button>
           <button class="btn btn--refresh" (click)="refresh()" [disabled]="jobService.loading()">
             {{ jobService.loading() ? '⏳' : '🔄' }} Refresh
@@ -85,6 +85,12 @@ import { ErrorDialogService } from './services/error-dialog.service';
                         }
                       </div>
                     }
+                    @if (canAddTaskToGroup(group.state) && !isGroupCollapsed(group.state)) {
+                      <button class="task-nav__add" (click)="openCreate(group.state)">
+                        <span>＋</span>
+                        <span>Add task</span>
+                      </button>
+                    }
                   </section>
                 }
               </div>
@@ -124,10 +130,28 @@ import { ErrorDialogService } from './services/error-dialog.service';
                 }
               </select>
             </label>
-            <label class="field">
+            <div class="field">
               <span class="field__label">Agent</span>
-              <input class="field__input" [(ngModel)]="newAgent" placeholder="copilot" />
-            </label>
+              <div class="create-cli-picker">
+                @for (t of cliTypes; track t) {
+                  <button type="button"
+                          class="create-cli-picker__btn"
+                          [class.create-cli-picker__btn--active]="newCliType === t"
+                          (click)="onCreateCliTypeChange(t)">
+                    {{ cliTypeLabel(t) }}
+                  </button>
+                }
+              </div>
+            </div>
+            <div class="field">
+              <span class="field__label">Model</span>
+              <select class="field__input" [(ngModel)]="newModel">
+                <option value="">(default — CLI chooses)</option>
+                @for (m of availableModels(); track m.id) {
+                  <option [value]="m.id">{{ m.label }}{{ m.multiplier !== null && m.multiplier !== undefined ? ' — ' + formatMultiplier(m.multiplier) : '' }}{{ m.isDefault ? ' ✓' : '' }}</option>
+                }
+              </select>
+            </div>
             <label class="field">
               <span class="field__label">Prompt (optional)</span>
               <textarea class="field__input field__textarea" [(ngModel)]="newPrompt" rows="10" placeholder="Task description..."></textarea>
@@ -393,6 +417,29 @@ import { ErrorDialogService } from './services/error-dialog.service';
     }
     .create-dialog__title { margin: 0 0 20px; font-size: 18px; }
     .create-dialog__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+    .create-cli-picker {
+      display: inline-flex;
+      gap: 2px;
+      padding: 2px;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      background: rgba(0,0,0,0.3);
+    }
+    .create-cli-picker__btn {
+      border: 0;
+      background: transparent;
+      color: #94a3b8;
+      padding: 5px 14px;
+      font-size: 13px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .create-cli-picker__btn:hover { color: #e2e8f0; background: rgba(255,255,255,0.06); }
+    .create-cli-picker__btn--active {
+      background: rgba(99,102,241,0.22);
+      color: #c7d2fe;
+    }
     .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
     .field__label { font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
     .field__input {
@@ -558,6 +605,27 @@ import { ErrorDialogService } from './services/error-dialog.service';
     .task-nav__group--collapsed .task-nav__items {
       display: none;
     }
+    .task-nav__add {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      width: 100%;
+      background: rgba(139, 92, 246, 0.06);
+      border: 1px dashed rgba(139, 92, 246, 0.28);
+      color: #a78bfa;
+      padding: 7px 10px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    .task-nav__add:hover {
+      background: rgba(139, 92, 246, 0.16);
+      border-color: rgba(139, 92, 246, 0.5);
+      color: #c4b5fd;
+    }
     .task-nav__resize-handle {
       position: absolute;
       top: 0;
@@ -658,15 +726,51 @@ export class App implements OnInit {
   newAgent = 'copilot';
   newPrompt = '';
   newTargetState = '1-preparation';
+  newCliType: CliType = 'copilot';
+  newModel = '';
+
+  readonly cliTypes = CLI_TYPES;
+  readonly availableModels = signal<CliModelInfo[]>([]);
   
   private resizing = false;
 
   createDialogTitle(): string {
     switch (this.newTargetState) {
-      case '2-ready': return 'New Task in Ready';
-      case '1-preparation': return 'New Task in Preparation';
-      default: return 'New Task';
+      case '2-ready': return 'Add Task to Ready';
+      case '1-preparation': return 'Add Task to Preparation';
+      default: return 'Add Task';
     }
+  }
+
+  cliTypeLabel(t: CliType): string {
+    switch (t) {
+      case 'copilot': return 'Copilot';
+      case 'claude':  return 'Claude Code';
+      case 'codex':   return 'Codex';
+    }
+  }
+
+  formatMultiplier(mult: number | null): string {
+    if (mult === null) return '';
+    return mult === 0 ? '0×' : `${mult}×`;
+  }
+
+  onCreateCliTypeChange(t: CliType) {
+    if (this.newCliType === t) return;
+    this.newCliType = t;
+    this.newModel = '';
+    this.loadCreateModels(t);
+  }
+
+  private loadCreateModels(cliType: CliType) {
+    this.jobService.getCliModelCatalog(cliType).subscribe({
+      next: (catalog) => this.availableModels.set(catalog.models ?? []),
+      error: () => this.availableModels.set([])
+    });
+  }
+
+  canAddTaskToGroup(state: string): boolean {
+    return state === '1-preparation' || state === '2-ready';
   }
 
   constructor(readonly jobService: JobService, readonly errorDialog: ErrorDialogService) {
@@ -777,6 +881,7 @@ export class App implements OnInit {
 
   openCreate(targetState?: string) {
     this.newTargetState = targetState === '2-ready' ? '2-ready' : '1-preparation';
+    this.loadCreateModels(this.newCliType);
     this.showCreate.set(true);
   }
 
@@ -786,15 +891,20 @@ export class App implements OnInit {
     this.newPrompt = '';
     this.newAgent = 'copilot';
     this.newTargetState = '1-preparation';
+    this.newCliType = 'copilot';
+    this.newModel = '';
+    this.availableModels.set([]);
   }
 
   submitCreate() {
     this.jobService.createJob({
       title: this.newTitle.trim(),
       watchPath: this.newWatchPath,
-      agent: this.newAgent || 'copilot',
+      agent: this.newCliType,
       promptMarkdown: this.newPrompt.trim() || undefined,
-      targetState: this.newTargetState
+      targetState: this.newTargetState,
+      cliType: this.newCliType,
+      model: this.newModel.trim() || undefined
     }).subscribe({
       next: () => {
         this.cancelCreate();

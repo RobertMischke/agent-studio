@@ -127,6 +127,7 @@ export interface CreateJobRequest {
   promptMarkdown?: string;
   targetState?: string;
   cliType?: CliType;
+  model?: string;
 }
 
 export interface JobOrderItem {
