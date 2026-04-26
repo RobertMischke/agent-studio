@@ -12,5 +12,5 @@ obj/
 # Logs & PID
 .api.*
 
-# Dev settings
-appsettings.Development.json
+# Local private settings
+appsettings.Local.json
