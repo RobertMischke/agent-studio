@@ -9,15 +9,15 @@ public static class JobEndpoints
     {
         var group = app.MapGroup("/api/jobs");
 
-        group.MapGet("/", (JobScannerService scanner) =>
+        group.MapGet("/", (JobScannerService scanner, CopilotCliService cli) =>
         {
-            var jobs = scanner.ScanAllJobs();
+            var jobs = scanner.ScanAllJobs().Select(job => WithExecution(job, cli)).ToList();
             return Results.Ok(jobs);
         });
 
-        group.MapGet("/grouped", (JobScannerService scanner) =>
+        group.MapGet("/grouped", (JobScannerService scanner, CopilotCliService cli) =>
         {
-            var jobs = scanner.ScanAllJobs();
+            var jobs = scanner.ScanAllJobs().Select(job => WithExecution(job, cli)).ToList();
             var grouped = new
             {
                 Preparation = jobs.Where(j => j.State == JobStates.Preparation).OrderBy(j => j.Order).ToList(),
@@ -29,10 +29,10 @@ public static class JobEndpoints
             return Results.Ok(grouped);
         });
 
-        group.MapGet("/{jobId}", (string jobId, string? watchPath, JobScannerService scanner) =>
+        group.MapGet("/{jobId}", (string jobId, string? watchPath, JobScannerService scanner, CopilotCliService cli) =>
         {
             var detail = scanner.GetJobDetail(jobId, watchPath);
-            return detail is null ? Results.NotFound() : Results.Ok(detail);
+            return detail is null ? Results.NotFound() : Results.Ok(WithExecution(detail, cli));
         });
 
         group.MapPut("/{jobId}/state", (string jobId, string? watchPath, MoveJobRequest req, JobScannerService scanner) =>
@@ -179,5 +179,15 @@ public static class JobEndpoints
             var (available, version, path) = cli.TestCliPath();
             return Results.Ok(new { path, available, version, hasToken = cli.HasGitHubToken() });
         });
+    }
+
+    private static JobInfo WithExecution(JobInfo job, CopilotCliService cli)
+    {
+        return job with { Execution = cli.GetExecution(job.JobKey) };
+    }
+
+    private static JobDetail WithExecution(JobDetail detail, CopilotCliService cli)
+    {
+        return detail with { Info = WithExecution(detail.Info, cli) };
     }
 }

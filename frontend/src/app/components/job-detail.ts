@@ -1,6 +1,6 @@
 import { Component, input, output, signal, effect, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { JobDetail, WatchPathEntry, CliOutputLine, CliSettings } from '../models/job.model';
+import { JobDetail, WatchPathEntry, CliOutputLine, CliSettings, CliExecution } from '../models/job.model';
 import { JobService } from '../services/job.service';
 import { CliConsoleComponent } from './cli-console';
 
@@ -932,6 +932,8 @@ export class JobDetailComponent implements OnDestroy {
   promptDraftValue = '';
   statusDraftValue = '';
   private elapsedTimer: ReturnType<typeof setInterval> | null = null;
+  private pollGeneration = 0;
+  private pollTimeout: ReturnType<typeof setTimeout> | null = null;
 
   constructor(private jobService: JobService) {}
 
@@ -948,19 +950,31 @@ export class JobDetailComponent implements OnDestroy {
     this.isRunning.set(false);
     this.startedAt.set(null);
     this.elapsedTime.set('0s');
+    this.pollGeneration += 1;
+    if (this.pollTimeout) {
+      clearTimeout(this.pollTimeout);
+      this.pollTimeout = null;
+    }
     if (this.elapsedTimer) {
       clearInterval(this.elapsedTimer);
       this.elapsedTimer = null;
     }
-    if (d.info.state === '3-progress') {
+    this.applyExecutionState(d.info.execution);
+    if (d.info.state === '3-progress' || d.info.execution?.status === 'running') {
+      if (d.info.execution?.status === 'running' && !this.pollTimeout) {
+        this.pollOutput();
+      }
       // Try to load existing output
       this.jobService.getJobOutput(d.info.id, d.info.watchPath).subscribe({
         next: (output) => {
           if (output.length > 0) {
             this.cliOutput.set(output);
-            this.isRunning.set(true);
-            this.startedAt.set(new Date());
-            this.startElapsedTimer();
+            if (!this.startedAt()) {
+              this.startedAt.set(new Date());
+            }
+            if (!this.elapsedTimer && this.isRunning()) {
+              this.startElapsedTimer();
+            }
           }
         },
         error: (err) => {
@@ -972,8 +986,16 @@ export class JobDetailComponent implements OnDestroy {
   });
 
   ngOnDestroy() {
+    this.isRunning.set(false);
     this.detailEffect.destroy();
-    if (this.elapsedTimer) clearInterval(this.elapsedTimer);
+    if (this.pollTimeout) {
+      clearTimeout(this.pollTimeout);
+      this.pollTimeout = null;
+    }
+    if (this.elapsedTimer) {
+      clearInterval(this.elapsedTimer);
+      this.elapsedTimer = null;
+    }
   }
 
   canStartJob(): boolean {
@@ -1005,7 +1027,14 @@ export class JobDetailComponent implements OnDestroy {
     this.jobService.stopJob(this.detail().info.id, this.detail().info.watchPath).subscribe({
       next: () => {
         this.isRunning.set(false);
-        if (this.elapsedTimer) clearInterval(this.elapsedTimer);
+        if (this.pollTimeout) {
+          clearTimeout(this.pollTimeout);
+          this.pollTimeout = null;
+        }
+        if (this.elapsedTimer) {
+          clearInterval(this.elapsedTimer);
+          this.elapsedTimer = null;
+        }
       },
       error: (err) => this.showError(err)
     });
@@ -1020,6 +1049,34 @@ export class JobDetailComponent implements OnDestroy {
       this.errorMsg.set(err.error);
     } else {
       this.errorMsg.set(`Request failed (${err.status || 'unknown'}): ${err.statusText || err.message || 'Unknown error'}`);
+    }
+  }
+
+  private applyExecutionState(execution: CliExecution | null): void {
+    if (!execution) {
+      return;
+    }
+
+    if (execution.status === 'running') {
+      this.isRunning.set(true);
+      this.startedAt.set(new Date(execution.startedAt));
+      if (!this.elapsedTimer) {
+        this.startElapsedTimer();
+      }
+      return;
+    }
+
+    this.isRunning.set(false);
+    if (this.elapsedTimer) {
+      clearInterval(this.elapsedTimer);
+      this.elapsedTimer = null;
+    }
+    if (execution.status === 'failed') {
+      this.errorMsg.set(
+        execution.exitCode === null
+          ? 'Task execution failed.'
+          : `Task execution failed with exit code ${execution.exitCode}.`
+      );
     }
   }
 
@@ -1039,18 +1096,25 @@ export class JobDetailComponent implements OnDestroy {
   }
 
   private pollOutput(): void {
-    // Poll every 2 seconds while running (SignalR will augment this)
+    const generation = this.pollGeneration;
     const poll = () => {
-      if (!this.isRunning()) return;
+      if (!this.isRunning() || generation !== this.pollGeneration) {
+        return;
+      }
       this.jobService.getJobOutput(this.detail().info.id, this.detail().info.watchPath).subscribe({
         next: (output) => {
+          if (generation !== this.pollGeneration) {
+            return;
+          }
           this.cliOutput.set(output);
-          setTimeout(poll, 2000);
+          this.pollTimeout = setTimeout(poll, 2000);
         },
-        error: () => setTimeout(poll, 5000)
+        error: () => {
+          this.pollTimeout = setTimeout(poll, 5000);
+        }
       });
     };
-    setTimeout(poll, 1000);
+    this.pollTimeout = setTimeout(poll, 1000);
   }
 
   isProgress(): boolean {

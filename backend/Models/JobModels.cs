@@ -14,6 +14,7 @@ public record JobInfo
     public string FolderPath { get; init; } = "";
     public DateTime LastActivity { get; init; }
     public long TotalSizeBytes { get; init; }
+    public CliExecution? Execution { get; init; }
 }
 
 public record JobDetail

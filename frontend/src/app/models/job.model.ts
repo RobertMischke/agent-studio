@@ -11,6 +11,7 @@ export interface JobInfo {
   folderPath: string;
   lastActivity: string;
   totalSizeBytes: number;
+  execution: CliExecution | null;
 }
 
 export interface JobDetail {
@@ -56,6 +57,7 @@ export interface WatchPathEntry {
 
 export interface CliExecution {
   jobId: string;
+  jobKey: string;
   processId: number;
   startedAt: string;
   status: string;

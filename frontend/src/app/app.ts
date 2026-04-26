@@ -1,4 +1,4 @@
-import { Component, computed, OnInit, signal } from '@angular/core';
+import { Component, computed, effect, OnInit, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { JobColumnComponent } from './components/job-column';
 import { JobDetailComponent } from './components/job-detail';
@@ -443,10 +443,43 @@ export class App implements OnInit {
   newAgent = 'copilot';
   newPrompt = '';
 
-  constructor(readonly jobService: JobService) {}
+  constructor(readonly jobService: JobService) {
+    effect(() => {
+      const selected = this.selectedJob();
+      const jobs = this.jobService.jobs();
+
+      if (!selected) {
+        return;
+      }
+
+      const latest = jobs.find(job => job.jobKey === selected.info.jobKey);
+      if (!latest) {
+        return;
+      }
+
+      const currentExecution = selected.info.execution;
+      const latestExecution = latest.execution;
+      const executionChanged =
+        (currentExecution?.status ?? null) !== (latestExecution?.status ?? null) ||
+        (currentExecution?.processId ?? null) !== (latestExecution?.processId ?? null) ||
+        (currentExecution?.exitCode ?? null) !== (latestExecution?.exitCode ?? null) ||
+        (currentExecution?.durationSeconds ?? null) !== (latestExecution?.durationSeconds ?? null);
+
+      if (selected.info.state === latest.state && !executionChanged) {
+        return;
+      }
+
+      untracked(() => {
+        this.jobService.getDetail(latest.id, latest.watchPath).subscribe({
+          next: (detail) => this.selectedJob.set(detail),
+        });
+      });
+    });
+  }
 
   ngOnInit() {
     this.refresh();
+    this.jobService.startLiveUpdates();
     this.jobService.getWatchPaths().subscribe({
       next: (entries) => {
         this.watchPaths.set(entries);

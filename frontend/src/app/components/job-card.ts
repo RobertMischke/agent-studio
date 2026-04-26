@@ -11,6 +11,15 @@ import { JobInfo } from '../models/job.model';
         <span class="job-card__order">#{{ job().order }}</span>
       </div>
       <h3 class="job-card__title">{{ job().title || job().id }}</h3>
+      <div class="job-card__badges">
+        <span class="job-card__state-pill">{{ stateLabel() }}</span>
+        @if (executionBadge(); as badge) {
+          <span class="job-card__execution-pill" [class]="'job-card__execution-pill--' + badge.tone">
+            <span class="job-card__execution-dot"></span>
+            {{ badge.label }}
+          </span>
+        }
+      </div>
       <div class="job-card__meta">
         <span class="job-card__agent">🤖 {{ job().agent || 'unknown' }}</span>
         <span class="job-card__size">{{ formatSize(job().totalSizeBytes) }}</span>
@@ -72,6 +81,55 @@ import { JobInfo } from '../models/job.model';
       font-weight: 600;
       color: #e2e8f0;
     }
+    .job-card__badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    .job-card__state-pill,
+    .job-card__execution-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    .job-card__state-pill {
+      background: rgba(255,255,255,0.06);
+      color: #cbd5e1;
+    }
+    .job-card__execution-pill {
+      border: 1px solid transparent;
+    }
+    .job-card__execution-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: currentColor;
+      flex: 0 0 auto;
+    }
+    .job-card__execution-pill--running {
+      color: #7dd3fc;
+      background: rgba(14, 165, 233, 0.14);
+      border-color: rgba(14, 165, 233, 0.25);
+    }
+    .job-card__execution-pill--running .job-card__execution-dot {
+      animation: pulse-running 1.3s infinite;
+    }
+    .job-card__execution-pill--failed,
+    .job-card__execution-pill--cancelled {
+      color: #fda4af;
+      background: rgba(244, 63, 94, 0.14);
+      border-color: rgba(244, 63, 94, 0.25);
+    }
+    @keyframes pulse-running {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.35; }
+    }
     .job-card__meta {
       display: flex;
       justify-content: space-between;
@@ -92,6 +150,25 @@ export class JobCardComponent {
     const state = this.job().state;
     const name = state.includes('-') ? state.substring(state.indexOf('-') + 1) : state;
     return name.replace(/-/g, ' ');
+  }
+
+  executionBadge(): { label: string; tone: 'running' | 'failed' | 'cancelled' } | null {
+    const execution = this.job().execution;
+    if (!execution) return null;
+
+    if (execution.status === 'running') {
+      return { label: 'Running live', tone: 'running' };
+    }
+
+    if (execution.status === 'failed') {
+      return { label: execution.exitCode === null ? 'Failed' : `Failed (${execution.exitCode})`, tone: 'failed' };
+    }
+
+    if (execution.status === 'cancelled') {
+      return { label: 'Stopped', tone: 'cancelled' };
+    }
+
+    return null;
   }
 
   formatSize(bytes: number): string {

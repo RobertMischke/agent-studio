@@ -5,22 +5,27 @@ import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliE
 @Injectable({ providedIn: 'root' })
 export class JobService {
   private readonly baseUrl = 'http://localhost:5030/api';
+  private liveUpdateTimer: ReturnType<typeof setInterval> | null = null;
 
   readonly jobs = signal<JobInfo[]>([]);
   readonly grouped = signal<GroupedJobs>({ preparation: [], ready: [], progress: [], review: [], completed: [] });
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly runnerStatus = signal<RunnerStatus>({ projects: {} });
-
   constructor(private http: HttpClient) {}
 
-  refresh(): void {
-    this.loading.set(true);
-    this.error.set(null);
+  refresh(silent = false): void {
+    if (!silent) {
+      this.loading.set(true);
+      this.error.set(null);
+    }
 
     this.http.get<JobInfo[]>(`${this.baseUrl}/jobs`).subscribe({
       next: (jobs) => {
         this.jobs.set(jobs);
+        if (silent) {
+          this.error.set(null);
+        }
         this.loading.set(false);
       },
       error: (err) => {
@@ -34,8 +39,12 @@ export class JobService {
     });
 
     this.http.get<GroupedJobs>(`${this.baseUrl}/jobs/grouped`).subscribe({
-      next: (grouped) => this.grouped.set(grouped),
+      next: (grouped) => {
+        this.grouped.set(grouped);
+      },
     });
+
+    this.refreshRunnerStatus();
   }
 
   private withWatchPath(watchPath?: string): { params?: HttpParams } {
@@ -110,6 +119,29 @@ export class JobService {
     this.getRunnerStatus().subscribe({
       next: (status) => this.runnerStatus.set(status),
     });
+  }
+
+  startLiveUpdates(intervalMs = 2000): void {
+    if (this.liveUpdateTimer) {
+      return;
+    }
+
+    this.liveUpdateTimer = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) {
+        return;
+      }
+
+      this.refresh(true);
+    }, intervalMs);
+  }
+
+  stopLiveUpdates(): void {
+    if (!this.liveUpdateTimer) {
+      return;
+    }
+
+    clearInterval(this.liveUpdateTimer);
+    this.liveUpdateTimer = null;
   }
 
   // CLI settings
