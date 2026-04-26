@@ -62,7 +62,7 @@ public sealed class CodexCliService : CliExecutionServiceBase
 
         return new ProcessStartInfo
         {
-            FileName = GetCliPath(),
+            FileName = ResolveExecutable(GetCliPath()),
             Arguments = string.Join(' ', args),
             WorkingDirectory = workingDirectory
         };

@@ -1,6 +1,7 @@
 import { Component, OnDestroy, OnInit, signal, computed } from '@angular/core';
 import { JobService } from '../services/job.service';
 import { CliConsoleComponent } from './cli-console';
+import { QuotaStripComponent } from './quota-strip';
 import {
   CliOutputLine,
   CliSessionInfo,
@@ -17,30 +18,34 @@ interface SelectedSession {
 }
 
 /**
- * Global right side-sheet listing every known CLI session across all three
- * backends. Sessions are grouped per CLI → per project; selecting a row shows
- * its last known token usage and (when available) recent output via the
- * existing TTY component.
+ * Right-hand sidesheet that combines two collapsible segments:
+ *   - Quota: subscription / rate-limit visualisation (rendered by QuotaStripComponent).
+ *   - Sessions: per-CLI per-project session list with token usage and (best-effort) output.
  *
- * The actual session output streaming for Claude and Codex is best-effort:
- * we surface what's already on disk; live tail isn't wired yet.
+ * Unlike a typical floating sidesheet this component participates in normal
+ * document flow — the parent layout in `app.ts` keeps it next to the main
+ * content via flexbox. When closed the host width collapses to 0 so the rest
+ * of the UI gets the space back without an overlay covering anything.
+ *
+ * Live session output streaming for Claude/Codex isn't wired yet; we surface
+ * what's already on disk plus session metadata.
  */
 @Component({
   selector: 'app-cli-usage-sheet',
   standalone: true,
-  imports: [CliConsoleComponent],
+  imports: [CliConsoleComponent, QuotaStripComponent],
   template: `
     <aside class="sheet" [class.sheet--open]="open()">
       <header class="sheet__header">
         <div>
-          <h2 class="sheet__title">CLI Sessions</h2>
-          <div class="sheet__subtitle">Live output and token usage per session</div>
+          <h2 class="sheet__title">CLI Usage</h2>
+          <div class="sheet__subtitle">Quota and live sessions per CLI</div>
         </div>
         <div class="sheet__header-actions">
-          <button class="sheet__btn" (click)="refresh()" [disabled]="loading()">
-            {{ loading() ? '⏳' : '↻' }} Refresh
+          <button class="sheet__btn" (click)="refreshSessions()" [disabled]="loading()" title="Reload session list">
+            {{ loading() ? '⏳' : '↻' }}
           </button>
-          <button class="sheet__close" type="button" (click)="closed.emit()">✕</button>
+          <button class="sheet__close" type="button" (click)="closed.emit()" title="Close panel">✕</button>
         </div>
       </header>
 
@@ -49,59 +54,82 @@ interface SelectedSession {
       }
 
       <div class="sheet__body">
-        @for (section of visibleSections(); track section.cliType) {
-          <section class="sheet-section">
-            <button class="sheet-section__head"
-                    type="button"
-                    (click)="toggleSection(section.cliType)">
-              <span class="sheet-section__chev">{{ isCollapsed(section.cliType) ? '▶' : '▼' }}</span>
-              <span class="sheet-section__title">{{ cliLabel(section.cliType) }}</span>
-              @if (section.available && section.version) {
-                <span class="sheet-pill sheet-pill--ok">{{ section.version }}</span>
-              }
-              <span class="sheet-section__count">
-                {{ totalSessions(section) }} sessions
-              </span>
-            </button>
+        <!-- Segment 1: Quota -->
+        <section class="seg">
+          <button class="seg__head" type="button" (click)="toggleSegment('quota')">
+            <span class="seg__chev">{{ isSegmentCollapsed('quota') ? '▶' : '▼' }}</span>
+            <span class="seg__title">Quota</span>
+            <span class="seg__hint">subscription limits</span>
+          </button>
+          @if (!isSegmentCollapsed('quota')) {
+            <app-quota-strip />
+          }
+        </section>
 
-            @if (!isCollapsed(section.cliType)) {
-              @if (section.error) {
-                <div class="sheet__error sheet__error--inline">{{ section.error }}</div>
-              }
-              @if (section.projects.length === 0) {
-                <div class="sheet__empty">No sessions found yet for {{ cliLabel(section.cliType) }}.</div>
-              }
-              @for (project of section.projects; track project.projectName) {
-                <div class="sheet-project">
-                  <div class="sheet-project__name" [title]="project.rootPath || ''">
-                    📁 {{ project.projectName }}
-                  </div>
-                  <ul class="sheet-sessions">
-                    @for (s of project.sessions; track s.id) {
-                      <li class="sheet-session"
-                          [class.sheet-session--active]="isSelected(section.cliType, project, s)"
-                          (click)="select(section.cliType, project, s)">
-                        <div class="sheet-session__row">
-                          <span class="sheet-session__id" [title]="s.id">
-                            {{ s.label || shortId(s.id) }}
-                          </span>
-                          @if (s.updatedAt) {
-                            <span class="sheet-session__time">{{ formatTime(s.updatedAt) }}</span>
-                          }
-                        </div>
-                        @if (s.lastUsage?.tokens) {
-                          <div class="sheet-session__usage">
-                            🪙 {{ s.lastUsage?.tokens }}
-                          </div>
-                        }
-                      </li>
+        <!-- Segment 2: Sessions -->
+        <section class="seg">
+          <button class="seg__head" type="button" (click)="toggleSegment('sessions')">
+            <span class="seg__chev">{{ isSegmentCollapsed('sessions') ? '▶' : '▼' }}</span>
+            <span class="seg__title">Sessions</span>
+            <span class="seg__hint">{{ totalSessionCount() }} total</span>
+          </button>
+
+          @if (!isSegmentCollapsed('sessions')) {
+            <div class="seg__body">
+              @for (section of visibleSections(); track section.cliType) {
+                <section class="cli-section">
+                  <button class="cli-section__head"
+                          type="button"
+                          (click)="toggleCli(section.cliType)">
+                    <span class="cli-section__chev">{{ isCliCollapsed(section.cliType) ? '▶' : '▼' }}</span>
+                    <span class="cli-section__title">{{ cliLabel(section.cliType) }}</span>
+                    @if (section.available && section.version) {
+                      <span class="pill pill--ok">{{ section.version }}</span>
                     }
-                  </ul>
-                </div>
+                    <span class="cli-section__count">
+                      {{ totalSessions(section) }} sessions
+                    </span>
+                  </button>
+
+                  @if (!isCliCollapsed(section.cliType)) {
+                    @if (section.error) {
+                      <div class="sheet__error sheet__error--inline">{{ section.error }}</div>
+                    }
+                    @if (section.projects.length === 0) {
+                      <div class="sheet__empty">No sessions found yet for {{ cliLabel(section.cliType) }}.</div>
+                    }
+                    @for (project of section.projects; track project.projectName) {
+                      <div class="proj">
+                        <div class="proj__name" [title]="project.rootPath || ''">
+                          📁 {{ project.projectName }}
+                        </div>
+                        <ul class="sess-list">
+                          @for (s of project.sessions; track s.id) {
+                            <li class="sess"
+                                [class.sess--active]="isSelected(section.cliType, project, s)"
+                                (click)="select(section.cliType, project, s)">
+                              <div class="sess__row">
+                                <span class="sess__id" [title]="s.id">
+                                  {{ s.label || shortId(s.id) }}
+                                </span>
+                                @if (s.updatedAt) {
+                                  <span class="sess__time">{{ formatTime(s.updatedAt) }}</span>
+                                }
+                              </div>
+                              @if (s.lastUsage?.tokens) {
+                                <div class="sess__usage">🪙 {{ s.lastUsage?.tokens }}</div>
+                              }
+                            </li>
+                          }
+                        </ul>
+                      </div>
+                    }
+                  }
+                </section>
               }
-            }
-          </section>
-        }
+            </div>
+          }
+        </section>
       </div>
 
       @if (selected(); as sel) {
@@ -123,24 +151,26 @@ interface SelectedSession {
     </aside>
   `,
   styles: [`
-    :host { display: contents; }
+    /* The host participates in flex layout from app.ts. When closed we collapse
+       to zero width so the main content reclaims the space. */
+    :host {
+      display: block;
+      width: 0;
+      transition: width 0.22s ease;
+      overflow: hidden;
+      flex: 0 0 auto;
+    }
+    :host(.is-open) { width: min(440px, 92vw); }
+
     .sheet {
-      position: fixed;
-      top: 0;
-      right: 0;
-      bottom: 0;
       width: min(440px, 92vw);
+      height: 100%;
       background: #11111b;
       border-left: 1px solid rgba(255,255,255,0.08);
-      box-shadow: -8px 0 32px rgba(0,0,0,0.45);
-      transform: translateX(100%);
-      transition: transform 0.22s ease;
-      z-index: 90;
       display: flex;
       flex-direction: column;
       color: #e2e8f0;
     }
-    .sheet--open { transform: translateX(0); }
     .sheet__header {
       display: flex;
       justify-content: space-between;
@@ -148,11 +178,7 @@ interface SelectedSession {
       padding: 16px 18px;
       border-bottom: 1px solid rgba(255,255,255,0.06);
     }
-    .sheet__subtitle {
-      font-size: 12px;
-      color: #64748b;
-      margin-top: 2px;
-    }
+    .sheet__subtitle { font-size: 12px; color: #64748b; margin-top: 2px; }
     .sheet__title { margin: 0; font-size: 18px; }
     .sheet__header-actions { display: flex; gap: 8px; align-items: center; }
     .sheet__btn {
@@ -186,18 +212,39 @@ interface SelectedSession {
     .sheet__body {
       flex: 1;
       overflow-y: auto;
-      padding: 12px 14px;
       display: flex;
       flex-direction: column;
-      gap: 12px;
     }
-    .sheet-section {
+
+    /* Top-level collapsible segment (Quota / Sessions). */
+    .seg + .seg { border-top: 1px solid rgba(255,255,255,0.06); }
+    .seg__head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 100%;
+      background: rgba(255,255,255,0.02);
+      color: inherit;
+      border: 0;
+      cursor: pointer;
+      font-size: 13px;
+      padding: 10px 16px;
+      text-align: left;
+    }
+    .seg__head:hover { background: rgba(255,255,255,0.04); }
+    .seg__chev { font-size: 10px; color: #64748b; width: 10px; }
+    .seg__title { font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; font-size: 11px; }
+    .seg__hint { margin-left: auto; font-size: 11px; color: #64748b; font-weight: 400; text-transform: none; letter-spacing: 0; }
+    .seg__body { padding: 12px 14px; display: flex; flex-direction: column; gap: 12px; }
+
+    /* Per-CLI section inside the Sessions segment. */
+    .cli-section {
       border: 1px solid rgba(255,255,255,0.06);
       border-radius: 12px;
       background: rgba(255,255,255,0.02);
       padding: 10px;
     }
-    .sheet-section__head {
+    .cli-section__head {
       display: flex;
       align-items: center;
       gap: 8px;
@@ -209,33 +256,24 @@ interface SelectedSession {
       font-size: 13px;
       padding: 4px 2px;
     }
-    .sheet-section__chev { font-size: 10px; color: #64748b; width: 10px; }
-    .sheet-section__title { font-weight: 600; }
-    .sheet-section__count {
-      margin-left: auto;
-      font-size: 11px;
-      color: #64748b;
-    }
-    .sheet-pill {
+    .cli-section__chev { font-size: 10px; color: #64748b; width: 10px; }
+    .cli-section__title { font-weight: 600; }
+    .cli-section__count { margin-left: auto; font-size: 11px; color: #64748b; }
+    .pill {
       font-size: 10px;
       padding: 2px 6px;
       border-radius: 999px;
       text-transform: uppercase;
       letter-spacing: 0.04em;
     }
-    .sheet-pill--ok { background: rgba(34,197,94,0.12); color: #4ade80; }
-    .sheet-pill--err { background: rgba(244,63,94,0.12); color: #fda4af; }
-    .sheet__empty {
-      padding: 8px 4px;
-      color: #64748b;
-      font-size: 12px;
-    }
-    .sheet-project {
+    .pill--ok { background: rgba(34,197,94,0.12); color: #4ade80; }
+    .sheet__empty { padding: 8px 4px; color: #64748b; font-size: 12px; }
+    .proj {
       margin-top: 8px;
       padding-top: 8px;
       border-top: 1px dashed rgba(255,255,255,0.06);
     }
-    .sheet-project__name {
+    .proj__name {
       font-size: 12px;
       color: #94a3b8;
       margin-bottom: 4px;
@@ -243,8 +281,8 @@ interface SelectedSession {
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    .sheet-sessions { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
-    .sheet-session {
+    .sess-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+    .sess {
       padding: 6px 8px;
       border-radius: 8px;
       cursor: pointer;
@@ -252,15 +290,16 @@ interface SelectedSession {
       border: 1px solid rgba(255,255,255,0.04);
       font-size: 12px;
     }
-    .sheet-session:hover { background: rgba(255,255,255,0.05); }
-    .sheet-session--active {
+    .sess:hover { background: rgba(255,255,255,0.05); }
+    .sess--active {
       background: rgba(99,102,241,0.18);
       border-color: rgba(99,102,241,0.4);
     }
-    .sheet-session__row { display: flex; justify-content: space-between; gap: 8px; }
-    .sheet-session__id { font-family: var(--font-mono, monospace); }
-    .sheet-session__time { color: #64748b; font-size: 10px; }
-    .sheet-session__usage { color: #cdd6f4; font-size: 11px; margin-top: 2px; }
+    .sess__row { display: flex; justify-content: space-between; gap: 8px; }
+    .sess__id { font-family: var(--font-mono, monospace); }
+    .sess__time { color: #64748b; font-size: 10px; }
+    .sess__usage { color: #cdd6f4; font-size: 11px; margin-top: 2px; }
+
     .sheet__detail {
       border-top: 1px solid rgba(255,255,255,0.06);
       padding: 12px 14px;
@@ -279,7 +318,10 @@ interface SelectedSession {
     }
     .sheet__detail-usage > div { display: flex; flex-direction: column; gap: 1px; }
     .sheet__detail-usage span:last-child { color: #cdd6f4; font-family: var(--font-mono, monospace); }
-  `]
+  `],
+  host: {
+    '[class.is-open]': 'open()'
+  }
 })
 export class CliUsageSheetComponent implements OnInit, OnDestroy {
   readonly open = signal(false);
@@ -287,22 +329,22 @@ export class CliUsageSheetComponent implements OnInit, OnDestroy {
   readonly loading = signal(false);
   readonly errorMsg = signal<string | null>(null);
   readonly selected = signal<SelectedSession | null>(null);
-  readonly collapsedSections = signal<Set<string>>(new Set());
-  /**
-   * Sections we surface in the UI. CLIs that aren't installed/available on the
-   * host produce empty sections that would just show an "unavailable" badge —
-   * we hide them entirely so the sheet stays focused on what's actually usable.
-   */
+  // Per-CLI accordion state inside the Sessions segment.
+  readonly collapsedClis = signal<Set<string>>(new Set());
+  // Top-level segment accordion state. Quota stays expanded by default
+  // because it's the highest-value glance information.
+  readonly collapsedSegments = signal<Set<string>>(new Set());
+
   readonly visibleSections = computed<CliUsageSection[]>(() => {
     const all = this.report()?.sections ?? [];
     return all.filter(s => s.available || s.projects.length > 0);
   });
+  readonly totalSessionCount = computed<number>(() =>
+    this.visibleSections().reduce((sum, s) => sum + this.totalSessions(s), 0)
+  );
   readonly detailLines = computed<CliOutputLine[]>(() => {
     const sel = this.selected();
     if (!sel) return [];
-    // Lightweight placeholder content for the TTY view — real per-session output
-    // streaming can be wired in a follow-up. We at least show the metadata so
-    // the panel isn't empty.
     return [
       { timestamp: new Date().toISOString(), stream: 'stdout', text: `Session: ${sel.session.id}` },
       { timestamp: new Date().toISOString(), stream: 'stdout', text: `CLI:     ${sel.cliType}` },
@@ -316,14 +358,15 @@ export class CliUsageSheetComponent implements OnInit, OnDestroy {
 
   constructor(private jobService: JobService) {}
 
-  show() { this.open.set(true); this.refresh(); }
+  show() { this.open.set(true); this.refreshSessions(); }
   hide() { this.open.set(false); }
   toggle() { this.open() ? this.hide() : this.show(); }
 
   ngOnInit() {
-    // Auto-refresh while open
     this.refreshTimer = setInterval(() => {
-      if (this.open() && !this.loading()) this.refresh(true);
+      if (this.open() && !this.loading() && !this.isSegmentCollapsed('sessions')) {
+        this.refreshSessions(true);
+      }
     }, 15000);
   }
 
@@ -331,7 +374,7 @@ export class CliUsageSheetComponent implements OnInit, OnDestroy {
     if (this.refreshTimer) clearInterval(this.refreshTimer);
   }
 
-  refresh(silent = false) {
+  refreshSessions(silent = false) {
     if (!silent) this.loading.set(true);
     this.errorMsg.set(null);
     this.jobService.getCliUsageReport().subscribe({
@@ -346,16 +389,21 @@ export class CliUsageSheetComponent implements OnInit, OnDestroy {
     });
   }
 
-  toggleSection(cliType: string) {
-    const next = new Set(this.collapsedSections());
+  toggleSegment(name: 'quota' | 'sessions') {
+    const next = new Set(this.collapsedSegments());
+    if (next.has(name)) next.delete(name);
+    else next.add(name);
+    this.collapsedSegments.set(next);
+  }
+  isSegmentCollapsed(name: string): boolean { return this.collapsedSegments().has(name); }
+
+  toggleCli(cliType: string) {
+    const next = new Set(this.collapsedClis());
     if (next.has(cliType)) next.delete(cliType);
     else next.add(cliType);
-    this.collapsedSections.set(next);
+    this.collapsedClis.set(next);
   }
-
-  isCollapsed(cliType: string): boolean {
-    return this.collapsedSections().has(cliType);
-  }
+  isCliCollapsed(cliType: string): boolean { return this.collapsedClis().has(cliType); }
 
   totalSessions(section: CliUsageSection): number {
     return section.projects.reduce((sum, p) => sum + p.sessions.length, 0);

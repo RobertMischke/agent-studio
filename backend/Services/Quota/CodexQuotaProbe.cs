@@ -1,0 +1,193 @@
+using System.Globalization;
+using System.Text.RegularExpressions;
+using OrchestratorApi.Models;
+using OrchestratorApi.Services.Cli;
+using OrchestratorApi.Services.Pty;
+
+namespace OrchestratorApi.Services.Quota;
+
+/// <summary>
+/// Probes OpenAI's <c>codex</c> CLI for plan + 5h/weekly quota via the
+/// <c>/status</c> slash command, which renders a panel like:
+/// <code>
+/// Account:        robertmischke@gmail.com (Plus)
+/// 5h limit:       [░░░░░░░░░░] 0% left (resets 02:33)
+/// Weekly limit:   [██████████] 84% left (resets 21:33 on 3 May)
+/// </code>
+/// IMPORTANT: Codex reports <b>% left</b>, not <b>% used</b>. We invert the value
+/// (<c>usedPct = 100 - left</c>) so the model is consistent with the other probes
+/// and the UI can colour-code high values as critical.
+///
+/// In the PTY snapshot inter-word spaces are usually collapsed
+/// (<c>5hlimit:[░░░░]0%left(resets02:33)</c>), so the regexes are intentionally permissive.
+/// </summary>
+public sealed class CodexQuotaProbe : QuotaProbeBase
+{
+    // "5h limit: [bar] NN% left (resets HH:MM[ on D Mon])"
+    private static readonly Regex FiveHourRegex = new(
+        @"5h\s*limit\s*:?\s*\[[^\]]*\]\s*(?<left>\d+)\s*%\s*left[^()]*\(\s*resets\s*(?<reset>[^)]+?)\s*\)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex WeeklyRegex = new(
+        @"Weekly\s*limit\s*:?\s*\[[^\]]*\]\s*(?<left>\d+)\s*%\s*left[^()]*\(\s*resets\s*(?<reset>[^)]+?)\s*\)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    // "Account: someone@example.com (Plus)" — captures the parenthesised plan name.
+    private static readonly Regex PlanRegex = new(
+        @"Account\s*:?[^()\r\n]{1,120}\(\s*(?<plan>[A-Za-z][A-Za-z0-9 +]{0,30})\s*\)",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    // Fallback footer when /status couldn't render: "5h NN% · weekly NN%".
+    // NOTE: footer values here are also "% left", so we invert.
+    private static readonly Regex FooterRegex = new(
+        @"5h\s*(?<h5left>\d+)\s*%\s*[·•]\s*weekly\s*(?<wkleft>\d+)\s*%",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    public CodexQuotaProbe(
+        ILogger<CodexQuotaProbe> logger,
+        CliRouter router,
+        CopilotCliEnvironment env)
+        : base(logger, router, env) { }
+
+    public override string CliType => CliTypes.Codex;
+
+    public override async Task<QuotaSnapshot> ProbeAsync(CancellationToken ct)
+    {
+        try
+        {
+            var trustPattern   = new Regex(@"trust\s*the\s*contents|Yes,\s*continue", RegexOptions.IgnoreCase);
+            var welcomePattern = new Regex(@"OpenAI\s*Codex|model:", RegexOptions.IgnoreCase);
+            var statusPattern  = new Regex(@"5h\s*limit|Weekly\s*limit|Account:", RegexOptions.IgnoreCase);
+
+            var snap = await ProbeWithStepsAsync(
+            [
+                // Codex's trust prompt has "1. Yes, continue" pre-selected and accepts a
+                // bare Enter. Sending "1<Enter>" works for confirmation but ALSO leaves a
+                // stray "1" in the chat input box, which then prefixes the next slash
+                // command and turns "/status" into a chat message instead of a command.
+                new ProbeStep("await-trust",   WaitForPattern: trustPattern,   WaitTimeoutMs: 10000, SendKeys: "<Enter>", SettleTimeoutMs: 6000, PreSendDelayMs: 300),
+                // Clear the buffer so the await-welcome match only sees post-trust content.
+                new ProbeStep("await-welcome", ClearBufferBefore: true, WaitForPattern: welcomePattern, WaitTimeoutMs: 10000, SendKeys: "/status", SettleIdleMs: 800, SettleTimeoutMs: 3000, PreSendDelayMs: 800),
+                // Send Enter as a separate keystroke — Codex sometimes drops a fast-following
+                // Enter while it's still parsing the slash command.
+                new ProbeStep("submit-status", PreSendDelayMs: 500, SendKeys: "<Enter>", SettleIdleMs: 1500, SettleTimeoutMs: 8000),
+                new ProbeStep("await-status",  WaitForPattern: statusPattern,  WaitTimeoutMs: 10000, SettleIdleMs: 1500, SettleTimeoutMs: 6000)
+            ],
+            initialIdleMs: 8000,
+            ct);
+
+            string? plan = PlanRegex.Match(snap) is { Success: true } pm
+                ? pm.Groups["plan"].Value.Trim()
+                : null;
+
+            var windows = new List<QuotaWindow>();
+
+            if (FiveHourRegex.Match(snap) is { Success: true } fm
+                && int.TryParse(fm.Groups["left"].Value, out var fLeft))
+            {
+                var resetRaw = fm.Groups["reset"].Value.Trim();
+                windows.Add(new QuotaWindow
+                {
+                    Label      = "5-hour",
+                    UsedPct    = 100 - fLeft,
+                    Unit       = "%",
+                    ResetAt    = ParseResetUtc(resetRaw),
+                    ResetLabel = resetRaw
+                });
+            }
+
+            if (WeeklyRegex.Match(snap) is { Success: true } wm
+                && int.TryParse(wm.Groups["left"].Value, out var wLeft))
+            {
+                var resetRaw = wm.Groups["reset"].Value.Trim();
+                windows.Add(new QuotaWindow
+                {
+                    Label      = "Weekly",
+                    UsedPct    = 100 - wLeft,
+                    Unit       = "%",
+                    ResetAt    = ParseResetUtc(resetRaw),
+                    ResetLabel = resetRaw
+                });
+            }
+
+            // Footer fallback when /status didn't render — at least we still
+            // get usage percentages, just no reset time.
+            if (windows.Count == 0 && FooterRegex.Match(snap) is { Success: true } fmm
+                && int.TryParse(fmm.Groups["h5left"].Value, out var h5)
+                && int.TryParse(fmm.Groups["wkleft"].Value, out var wk))
+            {
+                windows.Add(new QuotaWindow { Label = "5-hour", UsedPct = 100 - h5, Unit = "%" });
+                windows.Add(new QuotaWindow { Label = "Weekly", UsedPct = 100 - wk, Unit = "%" });
+            }
+
+            return new QuotaSnapshot
+            {
+                CliType   = CliType,
+                Plan      = plan,
+                Source    = "/status",
+                RawSample = TruncateForDebug(snap),
+                Windows   = windows,
+                Error     = (plan == null && windows.Count == 0)
+                    ? "Could not parse Codex /status output."
+                    : null
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Codex quota probe failed");
+            return new QuotaSnapshot { CliType = CliType, Source = "/status", Error = ex.Message };
+        }
+    }
+
+    /// <summary>
+    /// Codex reset strings come in two shapes:
+    ///  - "02:33"               (the next 24h occurrence in the user's local TZ)
+    ///  - "21:33 on 3 May"      (a specific upcoming weekly date)
+    /// Returns the UTC instant or null if the format doesn't match.
+    /// </summary>
+    private static DateTime? ParseResetUtc(string raw)
+    {
+        var local = TimeZoneInfo.Local;
+        var nowLocal = DateTime.Now;
+
+        // "HH:MM on D Mon" — weekly variant.
+        var withDate = Regex.Match(raw, @"^(?<time>\d{1,2}:\d{2})\s*on\s*(?<day>\d{1,2})\s*(?<mon>[A-Za-z]+)$", RegexOptions.IgnoreCase);
+        if (withDate.Success)
+        {
+            if (DateTime.TryParseExact(
+                    withDate.Groups["time"].Value, "H:mm", CultureInfo.InvariantCulture, DateTimeStyles.None, out var t)
+                && int.TryParse(withDate.Groups["day"].Value, out var day)
+                && TryParseMonth(withDate.Groups["mon"].Value, out var month))
+            {
+                var year = nowLocal.Year;
+                var candidate = new DateTime(year, month, day, t.Hour, t.Minute, 0, DateTimeKind.Unspecified);
+                if (candidate < nowLocal.AddDays(-1)) candidate = candidate.AddYears(1);
+                return TimeZoneInfo.ConvertTimeToUtc(candidate, local);
+            }
+            return null;
+        }
+
+        // Plain "HH:MM" — next future occurrence today/tomorrow.
+        if (DateTime.TryParseExact(raw, new[] { "H:mm", "HH:mm", "h:mmtt", "hh:mmtt" },
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out var hm))
+        {
+            var candidate = new DateTime(nowLocal.Year, nowLocal.Month, nowLocal.Day, hm.Hour, hm.Minute, 0, DateTimeKind.Unspecified);
+            if (candidate <= nowLocal) candidate = candidate.AddDays(1);
+            return TimeZoneInfo.ConvertTimeToUtc(candidate, local);
+        }
+
+        return null;
+    }
+
+    private static bool TryParseMonth(string s, out int month)
+    {
+        var formats = new[] { "MMM", "MMMM" };
+        if (DateTime.TryParseExact(s, formats, CultureInfo.InvariantCulture, DateTimeStyles.None, out var dt))
+        {
+            month = dt.Month;
+            return true;
+        }
+        month = 0;
+        return false;
+    }
+}

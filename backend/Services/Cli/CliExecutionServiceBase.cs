@@ -39,7 +39,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
 
     public virtual (bool Available, string? Version, string Path) TestCliPath(string? path = null)
     {
-        var testPath = path?.Trim() ?? GetCliPath();
+        var testPath = ResolveExecutable(path?.Trim() ?? GetCliPath());
         try
         {
             using var proc = new Process();
@@ -67,6 +67,47 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
     }
 
     public bool IsAvailable() => TestCliPath().Available;
+
+    /// <summary>
+    /// On Windows, npm-installed Node CLIs ship as a Bash shim (no extension) plus
+    /// a <c>.cmd</c> launcher. <see cref="Process.Start"/> can only execute the
+    /// <c>.cmd</c>/<c>.exe</c>, so we resolve bare names to their PATHEXT match.
+    /// On non-Windows the input is returned unchanged.
+    /// </summary>
+    protected static string ResolveExecutable(string nameOrPath)
+    {
+        if (string.IsNullOrWhiteSpace(nameOrPath)) return nameOrPath;
+        if (!OperatingSystem.IsWindows()) return nameOrPath;
+        // Already absolute or has an extension — trust the caller.
+        if (Path.IsPathRooted(nameOrPath) && File.Exists(nameOrPath)) return nameOrPath;
+        if (Path.HasExtension(nameOrPath) && File.Exists(nameOrPath)) return nameOrPath;
+
+        var exts = (Environment.GetEnvironmentVariable("PATHEXT") ?? ".COM;.EXE;.BAT;.CMD")
+            .Split(';', StringSplitOptions.RemoveEmptyEntries);
+        var dirs = (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)
+            .Split(';', StringSplitOptions.RemoveEmptyEntries);
+
+        // If a path was given (rooted or relative with extension), keep it.
+        if (Path.IsPathRooted(nameOrPath))
+        {
+            foreach (var ext in exts)
+            {
+                var candidate = nameOrPath + ext;
+                if (File.Exists(candidate)) return candidate;
+            }
+            return nameOrPath;
+        }
+
+        foreach (var dir in dirs)
+        {
+            foreach (var ext in exts)
+            {
+                var candidate = Path.Combine(dir, nameOrPath + ext);
+                if (File.Exists(candidate)) return candidate;
+            }
+        }
+        return nameOrPath;
+    }
 
     /// <summary>Subclass hook: build the actual command-line for this CLI.</summary>
     protected abstract ProcessStartInfo BuildStartInfo(

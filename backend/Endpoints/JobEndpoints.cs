@@ -1,6 +1,8 @@
 using OrchestratorApi.Models;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.Cli;
+using OrchestratorApi.Services.Pty;
+using OrchestratorApi.Services.Quota;
 
 namespace OrchestratorApi.Endpoints;
 
@@ -248,6 +250,91 @@ public static class JobEndpoints
         cliGroup.MapGet("/usage", (CliRouter router, SessionRegistry sessions) =>
         {
             return Results.Ok(sessions.BuildReport(router));
+        });
+
+        // ── Quota: per-CLI subscription quota for the right-hand sidesheet ──
+        cliGroup.MapGet("/quota", (QuotaService quota, CancellationToken ct) =>
+        {
+            return Results.Ok(quota.GetWithBackgroundRefresh(ct));
+        });
+
+        cliGroup.MapPost("/quota/refresh", async (QuotaService quota, CancellationToken ct) =>
+        {
+            return Results.Ok(await quota.RefreshAllAsync(ct));
+        });
+
+        cliGroup.MapPost("/quota/refresh/{cliType}", async (string cliType, QuotaService quota, CancellationToken ct) =>
+        {
+            if (!CliTypes.IsValid(cliType))
+                return Results.BadRequest(new { error = $"Unknown cliType '{cliType}'" });
+            var snap = await quota.RefreshAsync(cliType, ct);
+            return snap == null ? Results.NotFound() : Results.Ok(snap);
+        });
+
+        // ── TEMPORARY: PTY slash-command probe for parser development ──
+        // Spawns the requested CLI in a scratch dir, sends a slash command,
+        // waits for output to settle, returns the ANSI-stripped snapshot.
+        // Example: /api/cli/_probe/copilot?cmd=/usage
+        cliGroup.MapGet("/_probe/{cliType}", async (
+            string cliType,
+            string? cmd,
+            string? followUp,
+            int? settleMs,
+            int? followUpSettleMs,
+            CliRouter router,
+            CopilotCliEnvironment env,
+            CancellationToken ct) =>
+        {
+            if (!CliTypes.IsValid(cliType))
+                return Results.BadRequest(new { error = $"Unknown cliType '{cliType}'" });
+            var slashCmd = string.IsNullOrWhiteSpace(cmd) ? "/usage" : cmd!;
+            var settle = settleMs ?? 2500;
+
+            var cli = router.Get(cliType);
+            var (available, _, resolvedPath) = cli.TestCliPath();
+            if (!available)
+                return Results.BadRequest(new { error = $"{cliType} CLI not available" });
+
+            var scratch = Path.Combine(Path.GetTempPath(), "agent-taskboard-probe", cliType);
+            Directory.CreateDirectory(scratch);
+            try { env.EnsureFolderTrusted(scratch); env.EnsureTerminalSetupAcknowledged("vscode", "vscode-insiders", "windows-terminal"); } catch { }
+
+            try
+            {
+                await using var pty = await PtySession.SpawnAsync(app: resolvedPath, cwd: scratch, ct: ct);
+                await pty.WaitForIdleAsync(idleMs: 1500, timeoutMs: 8000, ct);
+                // For Claude/Codex confirm trust prompt first.
+                if (cliType is "claude" or "codex")
+                {
+                    await pty.SendKeysAsync("1<Enter>", ct);
+                    await pty.WaitForIdleAsync(idleMs: 1500, timeoutMs: 8000, ct);
+                }
+                var preLen = pty.SnapshotStripped().Length;
+                await pty.SendKeysAsync(slashCmd + "<Enter>", ct);
+                await pty.WaitForIdleAsync(idleMs: settle, timeoutMs: 12000, ct);
+                if (!string.IsNullOrEmpty(followUp))
+                {
+                    await pty.SendKeysAsync(followUp, ct);
+                    await pty.WaitForIdleAsync(idleMs: followUpSettleMs ?? 2000, timeoutMs: 10000, ct);
+                }
+                var snap = pty.SnapshotStripped();
+                try { await pty.SendKeysAsync("<Esc>", ct); } catch { }
+                try { await pty.SendKeysAsync("<Esc>", ct); } catch { }
+                return Results.Ok(new
+                {
+                    cliType,
+                    command = slashCmd,
+                    followUp,
+                    resolvedPath,
+                    preCharCount = preLen,
+                    snapshotLength = snap.Length,
+                    snapshot = snap
+                });
+            }
+            catch (Exception ex)
+            {
+                return Results.Problem(detail: ex.Message, title: "Probe failed");
+            }
         });
     }
 

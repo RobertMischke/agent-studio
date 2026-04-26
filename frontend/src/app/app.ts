@@ -43,10 +43,8 @@ import { ErrorDialogService } from './services/error-dialog.service';
         </div>
       </header>
 
-      <app-cli-usage-sheet #usageSheet />
-
-
-      <div class="layout" [class.layout--focus]="selectedJob()">
+      <div class="app__body">
+        <div class="layout" [class.layout--focus]="selectedJob()">
         @if (selectedJob(); as detail) {
           <div class="workspace" 
                [style.--side-sheet-width]="sideSheetWidth() + 'px'">
@@ -112,6 +110,9 @@ import { ErrorDialogService } from './services/error-dialog.service';
             <app-job-column title="Completed" icon="🟢" state="5-completed" [jobs]="filteredGrouped().completed" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
           </main>
         }
+      </div>
+
+        <app-cli-usage-sheet #usageSheet class="app__sidesheet" />
       </div>
 
       @if (showCreate()) {
@@ -212,7 +213,21 @@ import { ErrorDialogService } from './services/error-dialog.service';
       background: #0f0f1a;
       color: #e2e8f0;
       font-family: 'Segoe UI', system-ui, sans-serif;
+      display: flex;
+      flex-direction: column;
     }
+    /* Body row holds the main layout and the CLI Usage sidesheet side-by-side.
+       The sheet's :host width animates from 0 to its open width, so the layout
+       reflows around it instead of being covered by an overlay. */
+    .app__body {
+      flex: 1 1 auto;
+      display: flex;
+      flex-direction: row;
+      align-items: stretch;
+      min-height: 0;
+    }
+    .app__body > .layout { flex: 1 1 auto; min-width: 0; }
+    .app__sidesheet { align-self: stretch; }
     .header {
       display: flex;
       justify-content: space-between;

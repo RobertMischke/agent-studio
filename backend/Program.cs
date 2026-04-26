@@ -3,6 +3,7 @@ using OrchestratorApi.Hubs;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.Cli;
 using OrchestratorApi.Services.Pty;
+using OrchestratorApi.Services.Quota;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.Diagnostics;
 
@@ -19,6 +20,11 @@ builder.Services.AddSingleton<CliRouter>();
 builder.Services.AddSingleton<SessionRegistry>();
 builder.Services.AddSingleton<ContextUsageParser>();
 builder.Services.AddSingleton<TaskRunnerService>();
+// Quota probes: each CLI gets its own probe instance, all surfaced through QuotaService.
+builder.Services.AddSingleton<IQuotaProbe, CopilotQuotaProbe>();
+builder.Services.AddSingleton<IQuotaProbe, ClaudeQuotaProbe>();
+builder.Services.AddSingleton<IQuotaProbe, CodexQuotaProbe>();
+builder.Services.AddSingleton<QuotaService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<JobWatcherService>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<TaskRunnerService>());
 builder.Services.AddSignalR();

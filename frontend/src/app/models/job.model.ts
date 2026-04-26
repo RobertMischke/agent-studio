@@ -176,3 +176,33 @@ export interface CliSettings {
   version: string | null;
   hasToken: boolean;
 }
+
+// ── Subscription quota / rate-limit reporting ──
+// Each CLI exposes one or more "windows" (e.g. monthly premium requests for Copilot,
+// 5h+weekly buckets for Codex, rate-limit reset for Claude when over-quota).
+// usedPct above 100 means the user has overshot the included allotment.
+
+export interface QuotaWindow {
+  label: string;
+  usedPct: number | null;
+  used: number | null;
+  limit: number | null;
+  unit: string | null;
+  resetAt: string | null;
+  resetLabel: string | null;
+}
+
+export interface QuotaSnapshot {
+  cliType: CliType;
+  fetchedAt: string;
+  plan: string | null;
+  windows: QuotaWindow[];
+  source: string | null;
+  rawSample: string | null;
+  error: string | null;
+}
+
+export interface QuotaReport {
+  at: string;
+  snapshots: QuotaSnapshot[];
+}

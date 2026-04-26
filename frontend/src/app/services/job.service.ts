@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport } from '../models/job.model';
+import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport, QuotaReport, QuotaSnapshot } from '../models/job.model';
 import { ErrorDialogService } from './error-dialog.service';
 
 @Injectable({ providedIn: 'root' })
@@ -138,6 +138,22 @@ export class JobService {
 
   getCliUsageReport() {
     return this.http.get<CliUsageReport>(`${this.baseUrl}/cli/usage`);
+  }
+
+  // Quota / subscription rate-limit reporting.
+  // GET returns the cached snapshot immediately and triggers a background refresh
+  // for stale entries. The POST variants force a synchronous re-probe (slow — each
+  // call spawns a CLI in a PTY for several seconds).
+  getQuotaReport() {
+    return this.http.get<QuotaReport>(`${this.baseUrl}/cli/quota`);
+  }
+
+  refreshQuotaAll() {
+    return this.http.post<QuotaReport>(`${this.baseUrl}/cli/quota/refresh`, {});
+  }
+
+  refreshQuotaForCli(cliType: CliType) {
+    return this.http.post<QuotaSnapshot>(`${this.baseUrl}/cli/quota/refresh/${cliType}`, {});
   }
 
   setJobTitle(jobId: string, title: string, watchPath?: string) {
