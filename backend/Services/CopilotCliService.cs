@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using OrchestratorApi.Models;
+using OrchestratorApi.Services.Pty;
 
 namespace OrchestratorApi.Services;
 
@@ -19,6 +20,8 @@ public class CopilotCliService
 
     private readonly ILogger<CopilotCliService> _logger;
     private readonly IConfiguration _configuration;
+    private readonly CopilotModelDiscovery _modelDiscovery;
+    private readonly CopilotCliEnvironment _cliEnv;
     private readonly ConcurrentDictionary<string, CliProcessInfo> _processes = new();
     private string? _cliPathOverride;
     private string? _githubTokenOverride;
@@ -27,10 +30,16 @@ public class CopilotCliService
     public event Action<string, CliExecution>? OnStarted;
     public event Action<string, CliExecution>? OnFinished;
 
-    public CopilotCliService(ILogger<CopilotCliService> logger, IConfiguration configuration)
+    public CopilotCliService(
+        ILogger<CopilotCliService> logger,
+        IConfiguration configuration,
+        CopilotModelDiscovery modelDiscovery,
+        CopilotCliEnvironment cliEnv)
     {
         _logger = logger;
         _configuration = configuration;
+        _modelDiscovery = modelDiscovery;
+        _cliEnv = cliEnv;
     }
 
     public string GetCliPath() => _cliPathOverride ?? _configuration["CliPath"] ?? "copilot";
@@ -51,154 +60,17 @@ public class CopilotCliService
 
     public bool HasGitHubToken() => !string.IsNullOrWhiteSpace(GetGitHubToken()) || TryGetGhAuthToken() != null;
 
-    private CopilotModelCatalog? _cachedModelCatalog;
-    private DateTime _cachedModelCatalogAt = DateTime.MinValue;
-    private readonly object _modelCatalogLock = new();
-
     /// <summary>
-    /// Returns the curated list of Copilot models exposed via <c>--model</c>.
-    /// The list is sourced from the installed CLI bundle (parsed once per hour) and
-    /// merged with optional <c>CopilotModels</c> overrides in <c>appsettings.json</c>
-    /// (which can supply human labels and request multipliers, since those are not
-    /// in the bundle). Falls back to the config-only or built-in catalog if the bundle
-    /// can't be probed.
+    /// Returns the live Copilot model catalog. The single source of truth is
+    /// the interactive <c>/model</c> picker driven over a PTY (see
+    /// <see cref="CopilotModelDiscovery"/>). Throws if discovery fails — there
+    /// is no hard-coded fallback by design: stale or guessed model lists are
+    /// strictly worse than a clear error.
     /// </summary>
     public CopilotModelCatalog GetModelCatalog(bool forceRefresh = false)
     {
-        var ttlMinutes = _configuration.GetValue<int?>("CopilotModelsCacheMinutes") ?? 60;
-        lock (_modelCatalogLock)
-        {
-            var fresh = _cachedModelCatalog != null
-                && (DateTime.UtcNow - _cachedModelCatalogAt) < TimeSpan.FromMinutes(ttlMinutes);
-            if (fresh && !forceRefresh)
-            {
-                return _cachedModelCatalog!;
-            }
-
-            var catalog = BuildModelCatalog() with { FetchedAt = DateTime.UtcNow };
-            _cachedModelCatalog = catalog;
-            _cachedModelCatalogAt = DateTime.UtcNow;
-            return catalog;
-        }
+        return _modelDiscovery.GetAsync(GetCliPath(), forceRefresh).GetAwaiter().GetResult();
     }
-
-    private CopilotModelCatalog BuildModelCatalog()
-    {
-        var overrides = _configuration.GetSection("CopilotModels").Get<List<CopilotModelInfo>>()
-            ?? new List<CopilotModelInfo>();
-        var overrideMap = overrides
-            .Where(o => !string.IsNullOrWhiteSpace(o.Id))
-            .GroupBy(o => o.Id, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(g => g.Key, g => g.Last(), StringComparer.OrdinalIgnoreCase);
-
-        var bundleIds = TryReadModelIdsFromCliBundle();
-        if (bundleIds.Count > 0)
-        {
-            var merged = bundleIds
-                .Select(id =>
-                {
-                    overrideMap.TryGetValue(id, out var ov);
-                    return new CopilotModelInfo
-                    {
-                        Id = id,
-                        Label = ov?.Label is { Length: > 0 } ? ov.Label : id,
-                        Multiplier = ov?.Multiplier,
-                        Vendor = ov?.Vendor ?? GuessVendor(id),
-                        IsDefault = ov?.IsDefault ?? false
-                    };
-                })
-                .ToList();
-            return new CopilotModelCatalog { Models = merged, Source = "cli" };
-        }
-
-        if (overrides.Count > 0)
-        {
-            return new CopilotModelCatalog
-            {
-                Models = overrides.Select(NormalizeModel).ToList(),
-                Source = "config"
-            };
-        }
-
-        return new CopilotModelCatalog
-        {
-            Models = DefaultModelCatalog.Select(NormalizeModel).ToList(),
-            Source = "fallback"
-        };
-    }
-
-    private static string? GuessVendor(string id)
-    {
-        if (id.StartsWith("claude", StringComparison.OrdinalIgnoreCase)) return "anthropic";
-        if (id.StartsWith("gpt",    StringComparison.OrdinalIgnoreCase)) return "openai";
-        if (id.StartsWith("o1",     StringComparison.OrdinalIgnoreCase)) return "openai";
-        if (id.StartsWith("o3",     StringComparison.OrdinalIgnoreCase)) return "openai";
-        if (id.StartsWith("gemini", StringComparison.OrdinalIgnoreCase)) return "google";
-        if (id.StartsWith("grok",   StringComparison.OrdinalIgnoreCase)) return "xai";
-        return null;
-    }
-
-    private static readonly Regex ModelIdRegex = new(
-        @"""((?:claude|gpt|gemini|o1|o3|grok)[a-z0-9.\-]*)""\s*:\s*\{",
-        RegexOptions.Compiled);
-
-    private List<string> TryReadModelIdsFromCliBundle()
-    {
-        try
-        {
-            var bundlePath = LocateCliBundle();
-            if (bundlePath == null || !File.Exists(bundlePath))
-            {
-                _logger.LogDebug("Copilot CLI bundle not found for model catalog scan");
-                return new List<string>();
-            }
-
-            var content = File.ReadAllText(bundlePath);
-            var matches = ModelIdRegex.Matches(content);
-            var ids = matches
-                .Select(m => m.Groups[1].Value)
-                .Where(id => !id.EndsWith("-1m") && !id.EndsWith("-fast")) // skip variant aliases
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(id => id, StringComparer.OrdinalIgnoreCase)
-                .ToList();
-            _logger.LogInformation("Parsed {Count} model IDs from Copilot CLI bundle at {Path}", ids.Count, bundlePath);
-            return ids;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Failed to read Copilot CLI bundle for model catalog");
-            return new List<string>();
-        }
-    }
-
-    private static string? LocateCliBundle()
-    {
-        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        if (string.IsNullOrEmpty(localAppData)) return null;
-        var pkgRoot = Path.Combine(localAppData, "copilot", "pkg", "universal");
-        if (!Directory.Exists(pkgRoot)) return null;
-        var versionDir = Directory.GetDirectories(pkgRoot)
-            .Select(d => new DirectoryInfo(d))
-            .OrderByDescending(d => d.LastWriteTimeUtc)
-            .FirstOrDefault();
-        if (versionDir == null) return null;
-        var appJs = Path.Combine(versionDir.FullName, "app.js");
-        return File.Exists(appJs) ? appJs : null;
-    }
-
-    private static CopilotModelInfo NormalizeModel(CopilotModelInfo m) => m with
-    {
-        Label = string.IsNullOrWhiteSpace(m.Label) ? m.Id : m.Label
-    };
-
-    private static readonly IReadOnlyList<CopilotModelInfo> DefaultModelCatalog =
-    [
-        new() { Id = "claude-sonnet-4.5", Label = "Claude Sonnet 4.5", Multiplier = 1, Vendor = "anthropic" },
-        new() { Id = "claude-opus-4.1",   Label = "Claude Opus 4.1",   Multiplier = 10, Vendor = "anthropic" },
-        new() { Id = "gpt-5",             Label = "GPT-5",             Multiplier = 1, Vendor = "openai", IsDefault = true },
-        new() { Id = "gpt-5-mini",        Label = "GPT-5 mini",        Multiplier = 0, Vendor = "openai" },
-        new() { Id = "gpt-5-codex",       Label = "GPT-5 Codex",       Multiplier = 1, Vendor = "openai" }
-    ];
 
     public (bool Available, string? Version, string Path) TestCliPath(string? path = null)
     {

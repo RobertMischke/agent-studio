@@ -88,6 +88,7 @@ export interface CreateJobRequest {
   agent: string;
   watchPath: string;
   promptMarkdown?: string;
+  targetState?: string;
 }
 
 export interface JobOrderItem {

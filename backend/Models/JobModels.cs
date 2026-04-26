@@ -85,6 +85,7 @@ public record CreateJobRequest
     public string WatchPath { get; init; } = "";
     public string? PromptMarkdown { get; init; }
     public string? Model { get; init; }
+    public string? TargetState { get; init; }
 }
 
 public record ReorderRequest

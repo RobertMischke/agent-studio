@@ -42,13 +42,7 @@ import { CliConsoleComponent } from './cli-console';
         @if (detail().info.model) {
           <div class="detail__meta-item">
             <span class="detail__meta-label">Model</span>
-            <span class="detail__meta-value">
-              🧠 {{ detail().info.model }}
-              @let headerMult = modelMultiplier(detail().info.model);
-              @if (headerMult !== null) {
-                <span class="meta-multiplier" [class.meta-multiplier--free]="headerMult === 0">{{ formatMultiplier(headerMult) }}</span>
-              }
-            </span>
+            <span class="detail__meta-value">🧠 {{ detail().info.model }}</span>
           </div>
         }
         <div class="detail__meta-item">
@@ -79,15 +73,9 @@ import { CliConsoleComponent } from './cli-console';
                       (change)="onModelDraftChange($any($event.target).value)">
                 <option value="">(default — CLI chooses)</option>
                 @for (m of availableModels(); track m.id) {
-                  <option [value]="m.id">{{ m.label }}{{ m.multiplier !== null ? ' — ' + formatMultiplier(m.multiplier) : '' }}{{ m.isDefault ? ' ★' : '' }}</option>
+                  <option [value]="m.id">{{ m.label }}{{ m.multiplier !== null && m.multiplier !== undefined ? ' — ' + formatMultiplier(m.multiplier) : '' }}{{ m.isDefault ? ' ✓' : '' }}</option>
                 }
               </select>
-              @let selectedMult = modelMultiplier(modelDraft());
-              @if (selectedMult !== null) {
-                <span class="model-picker__multiplier" [class.model-picker__multiplier--free]="selectedMult === 0">
-                  {{ formatMultiplier(selectedMult) }}
-                </span>
-              }
             </div>
             <div class="execution-bar">
               @if (isRunning()) {
@@ -1229,6 +1217,7 @@ export class JobDetailComponent implements OnDestroy {
   private pollTimeout: ReturnType<typeof setTimeout> | null = null;
   private contextUsageTimeout: ReturnType<typeof setTimeout> | null = null;
   private lastCliConfigRequest = 0;
+  private currentJobKey: string | null = null;
 
   constructor(private jobService: JobService, private errorDialog: ErrorDialogService) {
     this.jobService.getModelCatalog().subscribe({
@@ -1245,46 +1234,64 @@ export class JobDetailComponent implements OnDestroy {
 
   private detailEffect = effect(() => {
     const d = this.detail();
+    const isJobSwitch = this.currentJobKey !== d.info.jobKey;
+    this.currentJobKey = d.info.jobKey;
+
     this.errorMsg.set(null);
-    this.showLogOverlay.set(false);
-    this.activeInspectorTab.set('protocol');
-    this.showCliConfig.set(false);
-    this.cliTestResult.set(null);
-    this.editingPrompt.set(false);
-    this.editingStatus.set(false);
-    this.cliOutput.set([]);
     this.contextUsage.set(d.contextUsage);
     this.refreshingContextUsage.set(false);
-    this.isRunning.set(false);
-    this.startedAt.set(null);
-    this.elapsedTime.set('0s');
     this.modelDraft.set(d.info.model ?? '');
-    this.followupPrompt.set('');
-    this.pollGeneration += 1;
-    if (this.pollTimeout) {
-      clearTimeout(this.pollTimeout);
-      this.pollTimeout = null;
+
+    if (isJobSwitch) {
+      // Reset job-scoped UI state only when switching to a different job —
+      // refreshes for the same job (e.g. execution status changes) must
+      // preserve the live CLI output and view state.
+      this.showLogOverlay.set(false);
+      this.activeInspectorTab.set('protocol');
+      this.showCliConfig.set(false);
+      this.cliTestResult.set(null);
+      this.editingPrompt.set(false);
+      this.editingStatus.set(false);
+      this.cliOutput.set([]);
+      this.isRunning.set(false);
+      this.startedAt.set(null);
+      this.elapsedTime.set('0s');
+      this.followupPrompt.set('');
+      this.pollGeneration += 1;
+      if (this.pollTimeout) {
+        clearTimeout(this.pollTimeout);
+        this.pollTimeout = null;
+      }
+      if (this.elapsedTimer) {
+        clearInterval(this.elapsedTimer);
+        this.elapsedTimer = null;
+      }
+      if (this.contextUsageTimeout) {
+        clearTimeout(this.contextUsageTimeout);
+        this.contextUsageTimeout = null;
+      }
     }
-    if (this.elapsedTimer) {
-      clearInterval(this.elapsedTimer);
-      this.elapsedTimer = null;
-    }
-    if (this.contextUsageTimeout) {
-      clearTimeout(this.contextUsageTimeout);
-      this.contextUsageTimeout = null;
-    }
+
     this.applyExecutionState(d.info.execution);
-    if (d.info.state === '3-progress' || d.info.execution?.status === 'running') {
+
+    // Load existing CLI output whenever there's a chance the backend has buffered
+    // output for this job — including completed/failed runs (the backend keeps
+    // the buffer for a while after the process exits, so the user keeps seeing
+    // the activity log after the job moves to 4-review).
+    const shouldLoadOutput =
+      d.info.state === '3-progress' ||
+      d.info.execution != null;
+
+    if (shouldLoadOutput) {
       if (d.info.execution?.status === 'running' && !this.pollTimeout) {
         this.pollOutput();
       }
-      // Try to load existing output
       this.jobService.getJobOutput(d.info.id, d.info.watchPath).subscribe({
         next: (output) => {
           if (output.length > 0) {
             this.cliOutput.set(output);
-            if (!this.startedAt()) {
-              this.startedAt.set(new Date());
+            if (!this.startedAt() && d.info.execution) {
+              this.startedAt.set(new Date(d.info.execution.startedAt));
             }
             if (!this.elapsedTimer && this.isRunning()) {
               this.startElapsedTimer();

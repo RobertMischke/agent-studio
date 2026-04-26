@@ -1,6 +1,7 @@
 using OrchestratorApi.Endpoints;
 using OrchestratorApi.Hubs;
 using OrchestratorApi.Services;
+using OrchestratorApi.Services.Pty;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.Diagnostics;
 
@@ -8,6 +9,8 @@ var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddSingleton<JobScannerService>();
 builder.Services.AddSingleton<JobWatcherService>();
+builder.Services.AddSingleton<CopilotCliEnvironment>();
+builder.Services.AddSingleton<CopilotModelDiscovery>();
 builder.Services.AddSingleton<CopilotCliService>();
 builder.Services.AddSingleton<ContextUsageParser>();
 builder.Services.AddSingleton<TaskRunnerService>();

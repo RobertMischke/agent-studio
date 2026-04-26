@@ -40,6 +40,12 @@ import { JobCardComponent } from './job-card';
         @if (jobs().length === 0) {
           <div class="column__empty">No jobs</div>
         }
+        @if (canAddTask()) {
+          <button type="button" class="column__add" (click)="addTask.emit(state())">
+            <span class="column__add-icon">＋</span>
+            <span>Add task</span>
+          </button>
+        }
       </div>
     </div>
   `,
@@ -103,6 +109,32 @@ import { JobCardComponent } from './job-card';
       height: 8px;
       background: rgba(99, 102, 241, 0.5);
     }
+    .column__add {
+      margin-top: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      width: 100%;
+      background: rgba(139, 92, 246, 0.08);
+      border: 1px dashed rgba(139, 92, 246, 0.35);
+      color: #a78bfa;
+      padding: 10px 12px;
+      border-radius: 12px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    .column__add:hover {
+      background: rgba(139, 92, 246, 0.18);
+      border-color: rgba(139, 92, 246, 0.6);
+      color: #c4b5fd;
+    }
+    .column__add-icon {
+      font-size: 16px;
+      line-height: 1;
+    }
   `]
 })
 export class JobColumnComponent {
@@ -113,9 +145,15 @@ export class JobColumnComponent {
   readonly jobClick = output<JobInfo>();
   readonly jobDrop = output<{ jobId: string; watchPath: string; targetState: string }>();
   readonly jobReorder = output<{ state: string; jobs: JobOrderItem[] }>();
+  readonly addTask = output<string>();
 
   isDragOver = false;
   dropIndex = -1;
+
+  canAddTask(): boolean {
+    const s = this.state();
+    return s === '1-preparation' || s === '2-ready';
+  }
 
   onDragStart(event: DragEvent, job: JobInfo) {
     event.dataTransfer?.setData('text/plain', JSON.stringify({ jobId: job.id, watchPath: job.watchPath, jobKey: job.jobKey }));

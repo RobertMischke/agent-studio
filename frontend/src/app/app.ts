@@ -85,8 +85,8 @@ import { ErrorDialogService } from './services/error-dialog.service';
           </div>
         } @else {
           <main class="dashboard">
-            <app-job-column title="In Preparation" icon="📋" state="1-preparation" [jobs]="filteredGrouped().preparation" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
-            <app-job-column title="Ready" icon="📦" state="2-ready" [jobs]="filteredGrouped().ready" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
+            <app-job-column title="In Preparation" icon="📋" state="1-preparation" [jobs]="filteredGrouped().preparation" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" (addTask)="openCreate($event)" />
+            <app-job-column title="Ready" icon="📦" state="2-ready" [jobs]="filteredGrouped().ready" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" (addTask)="openCreate($event)" />
             <app-job-column title="In Progress" icon="🔵" state="3-progress" [jobs]="filteredGrouped().progress" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
             <app-job-column title="Review" icon="🟡" state="4-review" [jobs]="filteredGrouped().review" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
             <app-job-column title="Completed" icon="🟢" state="5-completed" [jobs]="filteredGrouped().completed" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
@@ -97,7 +97,7 @@ import { ErrorDialogService } from './services/error-dialog.service';
       @if (showCreate()) {
         <div class="overlay" (click)="cancelCreate()">
           <div class="create-dialog" (click)="$event.stopPropagation()">
-            <h2 class="create-dialog__title">New Task</h2>
+            <h2 class="create-dialog__title">{{ createDialogTitle() }}</h2>
             <label class="field">
               <span class="field__label">Title</span>
               <input class="field__input" [(ngModel)]="newTitle" placeholder="Task title" />
@@ -116,7 +116,7 @@ import { ErrorDialogService } from './services/error-dialog.service';
             </label>
             <label class="field">
               <span class="field__label">Prompt (optional)</span>
-              <textarea class="field__input field__textarea" [(ngModel)]="newPrompt" rows="5" placeholder="Task description..."></textarea>
+              <textarea class="field__input field__textarea" [(ngModel)]="newPrompt" rows="10" placeholder="Task description..."></textarea>
             </label>
             <div class="create-dialog__actions">
               <button class="btn" (click)="cancelCreate()">Cancel</button>
@@ -253,9 +253,22 @@ import { ErrorDialogService } from './services/error-dialog.service';
       background: #1e1e2e;
       border: 1px solid rgba(255,255,255,0.1);
       border-radius: 16px;
-      padding: 24px;
-      width: 480px;
-      max-width: 90vw;
+      padding: 32px;
+      width: min(820px, 92vw);
+      max-height: 90vh;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .create-dialog__title {
+      margin: 0 0 12px;
+      font-size: 22px;
+      color: #f8fafc;
+    }
+    .create-dialog .field__textarea {
+      min-height: 220px;
+      resize: vertical;
     }
     .overlay--error {
       z-index: 120;
@@ -576,6 +589,15 @@ export class App implements OnInit {
   newWatchPath = '';
   newAgent = 'copilot';
   newPrompt = '';
+  newTargetState = '1-preparation';
+
+  createDialogTitle(): string {
+    switch (this.newTargetState) {
+      case '2-ready': return 'New Task in Ready';
+      case '1-preparation': return 'New Task in Preparation';
+      default: return 'New Task';
+    }
+  }
 
   constructor(readonly jobService: JobService, readonly errorDialog: ErrorDialogService) {
     effect(() => {
@@ -683,7 +705,8 @@ export class App implements OnInit {
     });
   }
 
-  openCreate() {
+  openCreate(targetState?: string) {
+    this.newTargetState = targetState === '2-ready' ? '2-ready' : '1-preparation';
     this.showCreate.set(true);
   }
 
@@ -692,6 +715,7 @@ export class App implements OnInit {
     this.newTitle = '';
     this.newPrompt = '';
     this.newAgent = 'copilot';
+    this.newTargetState = '1-preparation';
   }
 
   submitCreate() {
@@ -699,7 +723,8 @@ export class App implements OnInit {
       title: this.newTitle.trim(),
       watchPath: this.newWatchPath,
       agent: this.newAgent || 'copilot',
-      promptMarkdown: this.newPrompt.trim() || undefined
+      promptMarkdown: this.newPrompt.trim() || undefined,
+      targetState: this.newTargetState
     }).subscribe({
       next: () => {
         this.cancelCreate();

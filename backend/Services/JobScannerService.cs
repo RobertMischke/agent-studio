@@ -432,6 +432,14 @@ public class JobScannerService
 
         if (entry == null) return null;
 
+        var targetState = req.TargetState switch
+        {
+            JobStates.Preparation => JobStates.Preparation,
+            JobStates.Ready => JobStates.Ready,
+            _ => JobStates.Preparation
+        };
+        var stateLabel = targetState == JobStates.Ready ? "Ready" : "Preparation";
+
         // Sanitize ID: lowercase, replace spaces with dashes, only allow safe chars
         var jobId = string.IsNullOrWhiteSpace(req.Id)
             ? req.Title.ToLowerInvariant().Replace(' ', '-')
@@ -439,7 +447,7 @@ public class JobScannerService
         jobId = System.Text.RegularExpressions.Regex.Replace(jobId, @"[^a-z0-9\-]", "");
         if (string.IsNullOrEmpty(jobId)) return null;
 
-        var jobDir = Path.Combine(entry.Path, JobStates.Preparation, jobId);
+        var jobDir = Path.Combine(entry.Path, targetState, jobId);
         if (Directory.Exists(jobDir)) return null; // already exists
 
         Directory.CreateDirectory(jobDir);
@@ -449,7 +457,7 @@ public class JobScannerService
             ["id"] = jobId,
             ["title"] = req.Title,
             ["createdAt"] = DateTime.UtcNow.ToString("o"),
-            ["state"] = JobStates.Preparation,
+            ["state"] = targetState,
             ["order"] = req.Order,
             ["agent"] = req.Agent
         };
@@ -463,7 +471,7 @@ public class JobScannerService
             File.WriteAllText(Path.Combine(jobDir, "prompt.md"), req.PromptMarkdown);
 
         File.WriteAllText(Path.Combine(jobDir, "status.md"),
-            $"# Status\n\n- State: Preparation\n- Created: {DateTime.UtcNow:yyyy-MM-dd HH:mm}\n");
+            $"# Status\n\n- State: {stateLabel}\n- Created: {DateTime.UtcNow:yyyy-MM-dd HH:mm}\n");
 
         return jobId;
     }
