@@ -1,6 +1,7 @@
 import { Injectable, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
 import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem } from '../models/job.model';
+import { ErrorDialogService } from './error-dialog.service';
 
 @Injectable({ providedIn: 'root' })
 export class JobService {
@@ -12,7 +13,7 @@ export class JobService {
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly runnerStatus = signal<RunnerStatus>({ projects: {} });
-  constructor(private http: HttpClient) {}
+  constructor(private http: HttpClient, private errorDialog: ErrorDialogService) {}
 
   refresh(silent = false): void {
     if (!silent) {
@@ -29,10 +30,17 @@ export class JobService {
         this.loading.set(false);
       },
       error: (err) => {
-        if (err.status === 0) {
-          this.error.set('Backend not reachable — is the API running on localhost:5030?');
-        } else {
-          this.error.set(err.error?.error || err.message || 'Failed to load jobs');
+        const message = err.status === 0
+          ? 'Backend not reachable — is the API running on localhost:5030?'
+          : err.error?.error || err.message || 'Failed to load jobs';
+
+        this.error.set(message);
+        if (!silent) {
+          this.errorDialog.show(err, {
+            title: 'Failed to load jobs',
+            fallbackMessage: 'Failed to load jobs',
+            source: 'Dashboard refresh'
+          });
         }
         this.loading.set(false);
       }
@@ -42,9 +50,18 @@ export class JobService {
       next: (grouped) => {
         this.grouped.set(grouped);
       },
+      error: (err) => {
+        if (!silent) {
+          this.errorDialog.show(err, {
+            title: 'Failed to load board columns',
+            fallbackMessage: 'Failed to load board columns',
+            source: 'Board refresh'
+          });
+        }
+      }
     });
 
-    this.refreshRunnerStatus();
+    this.refreshRunnerStatus(silent);
   }
 
   private withWatchPath(watchPath?: string): { params?: HttpParams } {
@@ -115,9 +132,18 @@ export class JobService {
     return this.http.post(`${this.baseUrl}/runner/${encodeURIComponent(projectName)}/stop`, {});
   }
 
-  refreshRunnerStatus(): void {
+  refreshRunnerStatus(silent = false): void {
     this.getRunnerStatus().subscribe({
       next: (status) => this.runnerStatus.set(status),
+      error: (err) => {
+        if (!silent) {
+          this.errorDialog.show(err, {
+            title: 'Failed to load runner status',
+            fallbackMessage: 'Failed to load runner status',
+            source: 'Runner status'
+          });
+        }
+      }
     });
   }
 

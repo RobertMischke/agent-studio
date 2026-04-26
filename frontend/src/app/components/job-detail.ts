@@ -2,6 +2,7 @@ import { Component, input, output, signal, effect, OnDestroy } from '@angular/co
 import { FormsModule } from '@angular/forms';
 import { JobDetail, WatchPathEntry, CliOutputLine, CliSettings, CliExecution } from '../models/job.model';
 import { JobService } from '../services/job.service';
+import { ErrorDialogService } from '../services/error-dialog.service';
 import { CliConsoleComponent } from './cli-console';
 
 @Component({
@@ -69,19 +70,6 @@ import { CliConsoleComponent } from './cli-console';
                   {{ starting() ? '⏳ Starting...' : '▶ Start CLI' }}
                 </button>
               }
-            </div>
-          </section>
-        }
-
-        @if (errorMsg(); as err) {
-          <section class="sidebar-card sidebar-card--toolbar sidebar-card--error">
-            <div class="detail__error">
-              <span class="detail__error-icon">⚠️</span>
-              <span class="detail__error-text">{{ err }}</span>
-              @if (isCliError()) {
-                <button class="detail__error-action" (click)="openCliConfig()">🔧 Configure</button>
-              }
-              <button class="detail__error-close" (click)="dismissError()">✕</button>
             </div>
           </section>
         }
@@ -705,10 +693,6 @@ import { CliConsoleComponent } from './cli-console';
       flex: 1;
       min-height: 0;
     }
-    .sidebar-card--error {
-      border-color: rgba(239,68,68,0.2);
-      background: rgba(56,17,22,0.35);
-    }
     .sidebar-card__header {
       display: flex;
       justify-content: space-between;
@@ -723,15 +707,6 @@ import { CliConsoleComponent } from './cli-console';
       font-size: 13px;
       line-height: 1.5;
     }
-
-    .detail__error {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      animation: fadeIn 0.2s ease;
-    }
-    .detail__error-icon { font-size: 14px; flex-shrink: 0; }
-    .detail__error-text { font-size: 13px; color: #fca5a5; flex: 1; }
     .detail__error-close {
       background: none;
       border: none;
@@ -743,19 +718,6 @@ import { CliConsoleComponent } from './cli-console';
       flex-shrink: 0;
     }
     .detail__error-close:hover { background: rgba(239,68,68,0.15); }
-    .detail__error-action {
-      background: rgba(99,102,241,0.15);
-      border: 1px solid rgba(99,102,241,0.3);
-      color: #a5b4fc;
-      cursor: pointer;
-      font-size: 12px;
-      padding: 3px 10px;
-      border-radius: 4px;
-      font-weight: 600;
-      flex-shrink: 0;
-      white-space: nowrap;
-    }
-    .detail__error-action:hover { background: rgba(99,102,241,0.25); }
 
     .cli-config {
       animation: fadeIn 0.2s ease;
@@ -934,8 +896,9 @@ export class JobDetailComponent implements OnDestroy {
   private elapsedTimer: ReturnType<typeof setInterval> | null = null;
   private pollGeneration = 0;
   private pollTimeout: ReturnType<typeof setTimeout> | null = null;
+  private lastCliConfigRequest = 0;
 
-  constructor(private jobService: JobService) {}
+  constructor(private jobService: JobService, private errorDialog: ErrorDialogService) {}
 
   private detailEffect = effect(() => {
     const d = this.detail();
@@ -984,10 +947,20 @@ export class JobDetailComponent implements OnDestroy {
       });
     }
   });
+  private cliConfigEffect = effect(() => {
+    const requestId = this.errorDialog.cliConfigRequest();
+    if (requestId === 0 || requestId === this.lastCliConfigRequest) {
+      return;
+    }
+
+    this.lastCliConfigRequest = requestId;
+    this.openCliConfig();
+  });
 
   ngOnDestroy() {
     this.isRunning.set(false);
     this.detailEffect.destroy();
+    this.cliConfigEffect.destroy();
     if (this.pollTimeout) {
       clearTimeout(this.pollTimeout);
       this.pollTimeout = null;
@@ -1041,15 +1014,17 @@ export class JobDetailComponent implements OnDestroy {
   }
 
   private showError(err: any): void {
-    if (err.status === 0) {
-      this.errorMsg.set('Backend not reachable — is the API running on localhost:5030?');
-    } else if (err.error?.error) {
-      this.errorMsg.set(err.error.error);
-    } else if (typeof err.error === 'string') {
-      this.errorMsg.set(err.error);
-    } else {
-      this.errorMsg.set(`Request failed (${err.status || 'unknown'}): ${err.statusText || err.message || 'Unknown error'}`);
-    }
+    const message = err.status === 0
+      ? 'Backend not reachable — is the API running on localhost:5030?'
+      : err.error?.error || (typeof err.error === 'string' ? err.error : `Request failed (${err.status || 'unknown'}): ${err.statusText || err.message || 'Unknown error'}`);
+
+    this.errorMsg.set(message);
+    this.errorDialog.show(err, {
+      title: 'Task action failed',
+      fallbackMessage: message,
+      source: `Task ${this.detail().info.id}`,
+      canOpenCliConfig: this.isCliErrorMessage(message)
+    });
   }
 
   private applyExecutionState(execution: CliExecution | null): void {
@@ -1072,11 +1047,20 @@ export class JobDetailComponent implements OnDestroy {
       this.elapsedTimer = null;
     }
     if (execution.status === 'failed') {
-      this.errorMsg.set(
-        execution.exitCode === null
-          ? 'Task execution failed.'
-          : `Task execution failed with exit code ${execution.exitCode}.`
-      );
+      const message = execution.exitCode === null
+        ? 'Task execution failed.'
+        : `Task execution failed with exit code ${execution.exitCode}.`;
+
+      this.errorMsg.set(message);
+      this.errorDialog.show(message, {
+        title: 'Task execution failed',
+        fallbackMessage: message,
+        source: `Task ${this.detail().info.id}`,
+        output: {
+          execution,
+          cliOutput: this.cliOutput()
+        }
+      });
     }
   }
 
@@ -1162,7 +1146,7 @@ export class JobDetailComponent implements OnDestroy {
 
   isCliError(): boolean {
     const msg = this.errorMsg();
-    return !!msg && (msg.includes('CLI') || msg.includes('copilot') || msg.includes('Copilot') || msg.includes('authenticat'));
+    return this.isCliErrorMessage(msg);
   }
 
   openCliConfig(): void {
@@ -1246,5 +1230,9 @@ export class JobDetailComponent implements OnDestroy {
       next: () => this.projectChanged.emit(targetWatchPath),
       error: (err) => this.showError(err)
     });
+  }
+
+  private isCliErrorMessage(message: string | null | undefined): boolean {
+    return !!message && /cli|copilot|authenticat/i.test(message);
   }
 }

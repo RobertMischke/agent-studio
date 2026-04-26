@@ -4,6 +4,7 @@ import { JobColumnComponent } from './components/job-column';
 import { JobDetailComponent } from './components/job-detail';
 import { JobService } from './services/job.service';
 import { JobDetail, JobInfo, GroupedJobs, WatchPathEntry } from './models/job.model';
+import { ErrorDialogService } from './services/error-dialog.service';
 
 @Component({
   selector: 'app-root',
@@ -125,8 +126,45 @@ import { JobDetail, JobInfo, GroupedJobs, WatchPathEntry } from './models/job.mo
         </div>
       }
 
-      @if (jobService.error(); as err) {
-        <div class="error-bar">⚠️ {{ err }}</div>
+      @if (errorDialog.activeError(); as error) {
+        <div class="overlay overlay--error" (click)="closeErrorDialog()">
+          <div class="error-dialog" (click)="$event.stopPropagation()">
+            <div class="error-dialog__header">
+              <div>
+                <div class="error-dialog__eyebrow">Error details</div>
+                <h2 class="error-dialog__title">{{ error.title }}</h2>
+              </div>
+              <button class="error-dialog__close" type="button" (click)="closeErrorDialog()">✕</button>
+            </div>
+
+            @if (error.source) {
+              <div class="error-dialog__source">{{ error.source }}</div>
+            }
+
+            <div class="error-dialog__message">{{ error.message }}</div>
+
+            <div class="error-dialog__actions">
+              <button class="btn" type="button" (click)="copyErrorDetails()">{{ copyErrorButtonLabel() }}</button>
+              @if (error.canOpenCliConfig && selectedJob()) {
+                <button class="btn btn--primary" type="button" (click)="openCliConfigFromError()">🔧 Configure CLI</button>
+              }
+            </div>
+
+            <section class="error-dialog__section">
+              <div class="error-dialog__section-title">Output</div>
+              <pre class="error-dialog__code">{{ error.output }}</pre>
+            </section>
+
+            <section class="error-dialog__section">
+              <div class="error-dialog__section-title">Stack trace</div>
+              @if (error.stackTrace) {
+                <pre class="error-dialog__code">{{ error.stackTrace }}</pre>
+              } @else {
+                <div class="error-dialog__empty">No stack trace available for this error.</div>
+              }
+            </section>
+          </div>
+        </div>
       }
     </div>
   `,
@@ -218,6 +256,113 @@ import { JobDetail, JobInfo, GroupedJobs, WatchPathEntry } from './models/job.mo
       padding: 24px;
       width: 480px;
       max-width: 90vw;
+    }
+    .overlay--error {
+      z-index: 120;
+      padding: 24px;
+      align-items: start;
+      overflow-y: auto;
+    }
+    .error-dialog {
+      background: #11111b;
+      border: 1px solid rgba(248,113,113,0.28);
+      border-radius: 18px;
+      padding: 24px;
+      width: min(860px, 100%);
+      box-shadow: 0 24px 80px rgba(0,0,0,0.45);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .error-dialog__header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+    }
+    .error-dialog__eyebrow {
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #fca5a5;
+      margin-bottom: 6px;
+    }
+    .error-dialog__title {
+      margin: 0;
+      font-size: 22px;
+      color: #ffe4e6;
+    }
+    .error-dialog__close {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.08);
+      color: #f8fafc;
+      width: 36px;
+      height: 36px;
+      border-radius: 999px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    .error-dialog__close:hover { background: rgba(255,255,255,0.1); }
+    .error-dialog__source {
+      font-size: 12px;
+      color: #fda4af;
+      padding: 8px 10px;
+      border-radius: 10px;
+      background: rgba(244,63,94,0.08);
+      border: 1px solid rgba(244,63,94,0.18);
+      width: fit-content;
+      max-width: 100%;
+      word-break: break-word;
+    }
+    .error-dialog__message {
+      font-size: 15px;
+      line-height: 1.6;
+      color: #ffe4e6;
+      padding: 14px 16px;
+      border-radius: 14px;
+      background: rgba(244,63,94,0.1);
+      border: 1px solid rgba(244,63,94,0.18);
+    }
+    .error-dialog__actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .error-dialog__section {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .error-dialog__section-title {
+      font-size: 12px;
+      color: #94a3b8;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-weight: 700;
+    }
+    .error-dialog__code {
+      margin: 0;
+      padding: 16px;
+      border-radius: 14px;
+      background: rgba(0,0,0,0.32);
+      border: 1px solid rgba(255,255,255,0.08);
+      color: #e2e8f0;
+      font-size: 12px;
+      line-height: 1.55;
+      font-family: 'Consolas', 'SFMono-Regular', monospace;
+      overflow: auto;
+      max-height: 280px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .error-dialog__empty {
+      padding: 14px 16px;
+      border-radius: 14px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(255,255,255,0.06);
+      color: #94a3b8;
+      font-size: 13px;
     }
     .create-dialog__title { margin: 0 0 20px; font-size: 18px; }
     .create-dialog__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
@@ -373,17 +518,6 @@ import { JobDetail, JobInfo, GroupedJobs, WatchPathEntry } from './models/job.mo
       from { transform: translateX(20px); opacity: 0; }
       to { transform: translateX(0); opacity: 1; }
     }
-    .error-bar {
-      position: fixed;
-      bottom: 16px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: rgba(239,68,68,0.9);
-      color: white;
-      padding: 10px 20px;
-      border-radius: 8px;
-      font-size: 13px;
-    }
     @media (max-width: 1200px) {
       .header {
         align-items: flex-start;
@@ -443,7 +577,7 @@ export class App implements OnInit {
   newAgent = 'copilot';
   newPrompt = '';
 
-  constructor(readonly jobService: JobService) {
+  constructor(readonly jobService: JobService, readonly errorDialog: ErrorDialogService) {
     effect(() => {
       const selected = this.selectedJob();
       const jobs = this.jobService.jobs();
@@ -484,7 +618,14 @@ export class App implements OnInit {
       next: (entries) => {
         this.watchPaths.set(entries);
         if (entries.length > 0) this.newWatchPath = entries[0].path;
-      }
+      },
+      error: (err) => {
+        this.errorDialog.show(err, {
+          title: 'Failed to load projects',
+          fallbackMessage: 'Failed to load projects',
+          source: 'Project list'
+        });
+      },
     });
     this.jobService.refreshRunnerStatus();
   }
@@ -496,6 +637,13 @@ export class App implements OnInit {
   openDetail(job: JobInfo) {
     this.jobService.getDetail(job.id, job.watchPath).subscribe({
       next: (detail) => this.selectedJob.set(detail),
+      error: (err) => {
+        this.errorDialog.show(err, {
+          title: 'Failed to load task details',
+          fallbackMessage: 'Failed to load task details',
+          source: `Task ${job.id}`
+        });
+      }
     });
   }
 
@@ -510,14 +658,28 @@ export class App implements OnInit {
   onJobDrop(event: { jobId: string; watchPath: string; targetState: string }) {
     this.jobService.moveJob(event.jobId, event.targetState, event.watchPath).subscribe({
       next: () => this.refresh(),
-      error: (err) => this.jobService.error.set(err.message || 'Failed to move job'),
+      error: (err) => {
+        this.jobService.error.set(err.message || 'Failed to move job');
+        this.errorDialog.show(err, {
+          title: 'Failed to move task',
+          fallbackMessage: 'Failed to move task',
+          source: `Task ${event.jobId}`
+        });
+      },
     });
   }
 
   onJobReorder(event: { state: string; jobs: { jobId: string; watchPath: string }[] }) {
     this.jobService.reorderJobs(event.jobs).subscribe({
       next: () => this.refresh(),
-      error: (err) => this.jobService.error.set(err.message || 'Failed to reorder'),
+      error: (err) => {
+        this.jobService.error.set(err.message || 'Failed to reorder');
+        this.errorDialog.show(err, {
+          title: 'Failed to reorder tasks',
+          fallbackMessage: 'Failed to reorder tasks',
+          source: `Column ${event.state}`
+        });
+      },
     });
   }
 
@@ -543,7 +705,14 @@ export class App implements OnInit {
         this.cancelCreate();
         this.refresh();
       },
-      error: (err) => this.jobService.error.set(err.error || 'Failed to create job'),
+      error: (err) => {
+        this.jobService.error.set(err.error || 'Failed to create job');
+        this.errorDialog.show(err, {
+          title: 'Failed to create task',
+          fallbackMessage: 'Failed to create task',
+          source: 'Task creation'
+        });
+      },
     });
   }
 
@@ -592,9 +761,38 @@ export class App implements OnInit {
       setTimeout(() => {
         this.jobService.getDetail(current.info.id, targetWatchPath).subscribe({
           next: (detail) => this.selectedJob.set(detail),
-          error: () => {} // job might not be found if moved across drives
+          error: (err) => {
+            this.errorDialog.show(err, {
+              title: 'Task moved, but detail view could not be reopened',
+              fallbackMessage: 'Task moved, but detail view could not be reopened automatically.',
+              source: `Task ${current.info.id}`
+            });
+          }
         });
       }, 500);
     }
+  }
+
+  closeErrorDialog() {
+    this.errorDialog.close();
+  }
+
+  copyErrorDetails() {
+    this.errorDialog.copyActiveError();
+  }
+
+  copyErrorButtonLabel(): string {
+    switch (this.errorDialog.copyState()) {
+      case 'copied':
+        return 'Copied';
+      case 'failed':
+        return 'Copy failed';
+      default:
+        return 'Copy output';
+    }
+  }
+
+  openCliConfigFromError() {
+    this.errorDialog.requestCliConfig();
   }
 }

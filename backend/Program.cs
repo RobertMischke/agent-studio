@@ -2,6 +2,7 @@ using OrchestratorApi.Endpoints;
 using OrchestratorApi.Hubs;
 using OrchestratorApi.Services;
 using Microsoft.AspNetCore.SignalR;
+using Microsoft.AspNetCore.Diagnostics;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,6 +23,26 @@ builder.Services.AddCors(options =>
 });
 
 var app = builder.Build();
+
+app.UseExceptionHandler(exceptionApp =>
+{
+    exceptionApp.Run(async context =>
+    {
+        var feature = context.Features.Get<IExceptionHandlerPathFeature>();
+        var exception = feature?.Error;
+
+        context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+        context.Response.ContentType = "application/json";
+
+        await context.Response.WriteAsJsonAsync(new
+        {
+            error = exception?.Message ?? "An unexpected server error occurred.",
+            stackTrace = exception?.StackTrace,
+            path = feature?.Path,
+            timestamp = DateTimeOffset.UtcNow
+        });
+    });
+});
 
 app.UseCors();
 
