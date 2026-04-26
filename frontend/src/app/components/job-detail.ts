@@ -1,6 +1,6 @@
 import { Component, input, output, signal, effect, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { JobDetail, WatchPathEntry, CliOutputLine, CliSettings, CliExecution, ContextUsageSnapshot } from '../models/job.model';
+import { JobDetail, WatchPathEntry, CliOutputLine, CliSettings, CliExecution, ContextUsageSnapshot, CopilotModelInfo } from '../models/job.model';
 import { JobService } from '../services/job.service';
 import { ErrorDialogService } from '../services/error-dialog.service';
 import { CliConsoleComponent } from './cli-console';
@@ -42,7 +42,13 @@ import { CliConsoleComponent } from './cli-console';
         @if (detail().info.model) {
           <div class="detail__meta-item">
             <span class="detail__meta-label">Model</span>
-            <span class="detail__meta-value">🧠 {{ detail().info.model }}</span>
+            <span class="detail__meta-value">
+              🧠 {{ detail().info.model }}
+              @let headerMult = modelMultiplier(detail().info.model);
+              @if (headerMult !== null) {
+                <span class="meta-multiplier" [class.meta-multiplier--free]="headerMult === 0">{{ formatMultiplier(headerMult) }}</span>
+              }
+            </span>
           </div>
         }
         <div class="detail__meta-item">
@@ -72,10 +78,16 @@ import { CliConsoleComponent } from './cli-console';
                       [disabled]="isRunning()"
                       (change)="onModelDraftChange($any($event.target).value)">
                 <option value="">(default — CLI chooses)</option>
-                @for (m of availableModels; track m) {
-                  <option [value]="m">{{ m }}</option>
+                @for (m of availableModels(); track m.id) {
+                  <option [value]="m.id">{{ m.label }}{{ m.multiplier !== null ? ' — ' + formatMultiplier(m.multiplier) : '' }}{{ m.isDefault ? ' ★' : '' }}</option>
                 }
               </select>
+              @let selectedMult = modelMultiplier(modelDraft());
+              @if (selectedMult !== null) {
+                <span class="model-picker__multiplier" [class.model-picker__multiplier--free]="selectedMult === 0">
+                  {{ formatMultiplier(selectedMult) }}
+                </span>
+              }
             </div>
             <div class="execution-bar">
               @if (isRunning()) {
@@ -476,6 +488,37 @@ import { CliConsoleComponent } from './cli-console';
       font-size: 0.85rem;
     }
     .model-picker__select:disabled { opacity: 0.5; cursor: not-allowed; }
+    .model-picker__multiplier {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: rgba(245, 194, 231, 0.15);
+      color: #f5c2e7;
+      font-family: var(--font-mono, monospace);
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    .model-picker__multiplier--free {
+      background: rgba(166, 227, 161, 0.18);
+      color: #a6e3a1;
+    }
+    .meta-multiplier {
+      display: inline-block;
+      margin-left: 6px;
+      padding: 2px 6px;
+      border-radius: 999px;
+      background: rgba(245, 194, 231, 0.15);
+      color: #f5c2e7;
+      font-family: var(--font-mono, monospace);
+      font-size: 0.7rem;
+      font-weight: 600;
+    }
+    .meta-multiplier--free {
+      background: rgba(166, 227, 161, 0.18);
+      color: #a6e3a1;
+    }
     .execution-bar__model {
       margin-left: 10px;
       font-family: var(--font-mono, monospace);
@@ -1154,7 +1197,18 @@ export class JobDetailComponent implements OnDestroy {
   readonly continuing = signal(false);
   readonly followupPrompt = signal('');
   readonly modelDraft = signal('');
-  readonly availableModels = ['claude-sonnet-4.5', 'gpt-5', 'gpt-5-mini', 'gpt-5-codex'];
+  readonly availableModels = signal<CopilotModelInfo[]>([]);
+  readonly modelCatalogSource = signal<string>('');
+
+  modelMultiplier(id: string | null | undefined): number | null {
+    if (!id) return null;
+    return this.availableModels().find(m => m.id === id)?.multiplier ?? null;
+  }
+
+  formatMultiplier(mult: number | null): string {
+    if (mult === null) return '';
+    return mult === 0 ? '0×' : `${mult}×`;
+  }
   readonly showCliConfig = signal(false);
   readonly cliStatus = signal<CliSettings | null>(null);
   readonly cliPathDraft = signal('');
@@ -1176,7 +1230,18 @@ export class JobDetailComponent implements OnDestroy {
   private contextUsageTimeout: ReturnType<typeof setTimeout> | null = null;
   private lastCliConfigRequest = 0;
 
-  constructor(private jobService: JobService, private errorDialog: ErrorDialogService) {}
+  constructor(private jobService: JobService, private errorDialog: ErrorDialogService) {
+    this.jobService.getModelCatalog().subscribe({
+      next: (catalog) => {
+        this.availableModels.set(catalog.models ?? []);
+        this.modelCatalogSource.set(catalog.source ?? '');
+      },
+      error: () => {
+        // non-fatal — dropdown will only show the "default" entry
+        this.availableModels.set([]);
+      }
+    });
+  }
 
   private detailEffect = effect(() => {
     const d = this.detail();

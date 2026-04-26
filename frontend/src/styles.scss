@@ -10,3 +10,17 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+/* Dark-mode form controls — ensures select option lists render with readable contrast */
+html { color-scheme: dark; }
+select, input, textarea { color-scheme: dark; }
+select option,
+select optgroup {
+  background-color: #1e1e2e;
+  color: #e2e8f0;
+}
+select option:checked,
+select option:hover {
+  background-color: #45475a;
+  color: #ffffff;
+}

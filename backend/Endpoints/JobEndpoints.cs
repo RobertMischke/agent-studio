@@ -204,6 +204,11 @@ public static class JobEndpoints
             var (available, version, path) = cli.TestCliPath();
             return Results.Ok(new { path, available, version, hasToken = cli.HasGitHubToken() });
         });
+
+        settingsGroup.MapGet("/cli/models", (CopilotCliService cli, bool? refresh) =>
+        {
+            return Results.Ok(cli.GetModelCatalog(forceRefresh: refresh ?? false));
+        });
     }
 
     private static JobInfo WithExecution(JobInfo job, CopilotCliService cli)

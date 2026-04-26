@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot } from '../models/job.model';
+import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog } from '../models/job.model';
 import { ErrorDialogService } from './error-dialog.service';
 
 @Injectable({ providedIn: 'root' })
@@ -120,6 +120,10 @@ export class JobService {
 
   setJobModel(jobId: string, model: string | null, watchPath?: string) {
     return this.http.put(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/model`, { model }, this.withWatchPath(watchPath));
+  }
+
+  getModelCatalog() {
+    return this.http.get<CopilotModelCatalog>(`${this.baseUrl}/settings/cli/models`);
   }
 
   getJobOutput(jobId: string, watchPath?: string) {

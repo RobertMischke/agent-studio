@@ -24,6 +24,20 @@ export interface SessionUsage {
   requests: string | null;
 }
 
+export interface CopilotModelInfo {
+  id: string;
+  label: string;
+  multiplier: number | null;
+  vendor: string | null;
+  isDefault: boolean;
+}
+
+export interface CopilotModelCatalog {
+  models: CopilotModelInfo[];
+  source: string;
+  fetchedAt?: string;
+}
+
 export interface JobDetail {
   info: JobInfo;
   promptMarkdown: string | null;

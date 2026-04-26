@@ -165,6 +165,30 @@ public record SetJobModelRequest
     public string? Model { get; init; }
 }
 
+/// <summary>Curated entry in the Copilot model catalog returned by <c>GET /api/cli/models</c>.</summary>
+public record CopilotModelInfo
+{
+    /// <summary>Model identifier passed to <c>copilot --model &lt;id&gt;</c>.</summary>
+    public string Id { get; init; } = "";
+    /// <summary>Human-friendly label shown in dropdowns. Defaults to <c>Id</c> when empty.</summary>
+    public string Label { get; init; } = "";
+    /// <summary>Premium-request multiplier (e.g. 0 = free, 1 = standard, 10 = opus). <c>null</c> when unknown.</summary>
+    public double? Multiplier { get; init; }
+    /// <summary>Optional vendor / family grouping (anthropic, openai, google, …).</summary>
+    public string? Vendor { get; init; }
+    /// <summary>Marks the entry the CLI uses by default when <c>--model</c> is omitted.</summary>
+    public bool IsDefault { get; init; }
+}
+
+public record CopilotModelCatalog
+{
+    public List<CopilotModelInfo> Models { get; init; } = [];
+    /// <summary>How the catalog was obtained: <c>config</c>, <c>cli</c>, or <c>fallback</c>.</summary>
+    public string Source { get; init; } = "config";
+    /// <summary>UTC timestamp of the most recent (re)build. Useful for cache diagnostics.</summary>
+    public DateTime FetchedAt { get; init; }
+}
+
 public record SetRunnerModeRequest
 {
     public string Mode { get; init; } = "manual";
