@@ -314,11 +314,14 @@ export class QuotaStripComponent implements OnInit, OnDestroy {
    */
   resetText(w: QuotaWindow): string | null {
     if (w.resetAt) {
-      const _ = this.nowTick(); // force recompute every second
-      void _;
+      // Use the ticking signal as the time base — NOT Date.now() — so the
+      // value is stable within a single change-detection cycle. Reading
+      // Date.now() directly causes NG0100 when the wall clock crosses a
+      // minute boundary between the dev-mode "check" and "verify" passes.
+      const now = this.nowTick();
       const target = Date.parse(w.resetAt);
       if (!isNaN(target)) {
-        const ms = target - Date.now();
+        const ms = target - now;
         if (ms > 0) {
           const fallback = w.resetLabel ? ` (${w.resetLabel})` : '';
           return `in ${this.formatDuration(ms)}${fallback}`;

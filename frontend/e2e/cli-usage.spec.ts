@@ -51,4 +51,28 @@ test.describe('CLI Usage sidesheet', () => {
     // No error banner.
     await expect(sheet.locator('.sheet__error')).toHaveCount(0);
   });
+
+  test('quota strip renders without NG0100 (dev-mode change-detection error)', async ({ page }) => {
+    // Regression guard for an ExpressionChangedAfterItHasBeenCheckedError
+    // in QuotaStripComponent.resetText(): using Date.now() instead of the
+    // ticking signal made the value drift across change-detection passes
+    // when the wall clock crossed a minute boundary.
+    const ngErrors: string[] = [];
+    page.on('pageerror', err => {
+      if (err.message.includes('NG0100')) ngErrors.push(err.message);
+    });
+    page.on('console', msg => {
+      const txt = msg.text();
+      if (msg.type() === 'error' && txt.includes('NG0100')) ngErrors.push(txt);
+    });
+
+    await page.goto('/');
+    await page.getByRole('button', { name: /usage|cli sessions/i }).first().click();
+    const sheet = page.locator('aside.sheet');
+    await expect(sheet).toBeVisible();
+    // Wait long enough to cross the 1s tick boundary a few times.
+    await page.waitForTimeout(2500);
+
+    expect(ngErrors, `NG0100 errors leaked:\n${ngErrors.join('\n')}`).toHaveLength(0);
+  });
 });
