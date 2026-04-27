@@ -16,7 +16,7 @@ import {
   selector: 'app-activity-log-view',
   standalone: true,
   template: `
-    <div class="activity-log">
+    <div class="activity-log" [class.activity-log--embedded]="variant() === 'embedded'">
       <div class="activity-log__toolbar">
         <div class="activity-log__tabs">
           <button class="activity-log__tab"
@@ -116,6 +116,11 @@ import {
       border-radius: 8px;
       overflow: hidden;
     }
+    .activity-log--embedded {
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+    }
     .activity-log__toolbar,
     .activity-log__filters,
     .activity-log__summary {
@@ -128,6 +133,20 @@ import {
     .activity-log__toolbar {
       justify-content: space-between;
       background: rgba(255,255,255,0.03);
+    }
+    .activity-log--embedded .activity-log__toolbar {
+      padding: 0 0 8px;
+      background: transparent;
+    }
+    .activity-log--embedded .activity-log__filters {
+      padding: 6px 0 8px;
+    }
+    .activity-log--embedded .activity-log__summary {
+      padding: 4px 0 8px;
+    }
+    .activity-log--embedded .activity-log__body {
+      padding: 4px 0 0;
+      min-height: 132px;
     }
     .activity-log__tabs,
     .activity-log__actions,
@@ -291,6 +310,7 @@ import {
 export class ActivityLogViewComponent {
   readonly lines = input<CliOutputLine[]>([]);
   readonly bodyMaxHeight = input('400px');
+  readonly variant = input<'framed' | 'embedded'>('framed');
   readonly mode = signal<'parsed' | 'raw'>('parsed');
   readonly filterKinds = activityLogKinds;
   readonly filters = signal<ActivityLogFilters>({ ...defaultActivityLogFilters });

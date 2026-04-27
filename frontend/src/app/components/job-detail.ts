@@ -332,8 +332,8 @@ import { ActivityLogViewComponent } from './activity-log-view';
                 </section>
               } @else {
                 <div class="inspector__stack">
-                  <section class="sidebar-card sidebar-card--panel">
-                    <div class="sidebar-card__header">
+                  <section class="activity-panel">
+                    <div class="activity-panel__header">
                       <div>
                         <div class="section__eyebrow">Live stream</div>
                         <h3 class="section__title">Activity log</h3>
@@ -344,9 +344,9 @@ import { ActivityLogViewComponent } from './activity-log-view';
                     </div>
 
                     @if (cliOutput().length > 0 || isRunning()) {
-                      <app-activity-log-view [lines]="cliOutput()" [bodyMaxHeight]="'34vh'" />
+                      <app-activity-log-view [lines]="cliOutput()" [bodyMaxHeight]="'34vh'" variant="embedded" />
                     } @else {
-                      <div class="sidebar-card__empty">Start the task to follow the agent output live.</div>
+                      <div class="activity-panel__empty">Start the task to follow the agent output live.</div>
                     }
                   </section>
 
@@ -396,7 +396,7 @@ import { ActivityLogViewComponent } from './activity-log-view';
                 <div class="sidebar-card__header">
                   <h3 class="section__title">Activity log</h3>
                 </div>
-                <app-activity-log-view [lines]="cliOutput()" [bodyMaxHeight]="'calc(100vh - 320px)'" />
+                <app-activity-log-view [lines]="cliOutput()" [bodyMaxHeight]="'calc(100vh - 320px)'" variant="embedded" />
               </section>
 
               <section class="sidebar-card">
@@ -800,8 +800,30 @@ import { ActivityLogViewComponent } from './activity-log-view';
     .inspector__stack {
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 12px;
       min-height: 0;
+    }
+    .activity-panel {
+      display: flex;
+      flex: 1;
+      flex-direction: column;
+      min-height: 0;
+      padding: 0;
+    }
+    .activity-panel__header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      padding-bottom: 8px;
+      margin-bottom: 6px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .activity-panel__empty {
+      padding: 12px 0;
+      color: #94a3b8;
+      font-size: 13px;
+      line-height: 1.5;
     }
 
     .section {
