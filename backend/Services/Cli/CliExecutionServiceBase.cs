@@ -128,6 +128,18 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
     /// <summary>Subclass hook: try to extract session metadata from a fresh output line.</summary>
     protected virtual void OnOutputLine(ProcInfo info, CliOutputLine line) { }
 
+    /// <summary>
+    /// Subclass hook: translate a single raw line read from the CLI's stdout
+    /// or stderr into one or more user-visible buffer lines. Default: pass
+    /// through unchanged. Used by <see cref="ClaudeCliService"/> to expand
+    /// stream-json NDJSON frames into the marker-line convention the
+    /// frontend's activity log parser already understands.
+    /// </summary>
+    public virtual IEnumerable<CliOutputLine> TransformReadLine(CliOutputLine raw)
+    {
+        yield return raw;
+    }
+
     public virtual Task<CliModelCatalog> GetModelCatalogAsync(bool forceRefresh = false, CancellationToken ct = default)
     {
         return Task.FromResult(new CliModelCatalog
@@ -233,7 +245,6 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         _ = ReadStreamAsync(jobKey, process.StandardOutput, "stdout", info, ct);
         _ = ReadStreamAsync(jobKey, process.StandardError,  "stderr", info, ct);
         _ = MonitorProcessAsync(jobKey, process, info, ct);
-        _ = HeartbeatAsync(jobKey, info, ct);
 
         return (execution, null);
     }
@@ -296,26 +307,40 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
                 var line = await reader.ReadLineAsync(ct);
                 if (line == null) break;
 
-                var outputLine = new CliOutputLine
+                var rawLine = new CliOutputLine
                 {
                     Timestamp = DateTime.UtcNow,
                     Stream = stream,
                     Text = line
                 };
 
-                info.OutputBuffer.Add(outputLine);
-                while (info.OutputBuffer.Count > 5000) info.OutputBuffer.RemoveAt(0);
-
-                try { AppendOutputLine(info.OutputLogPath, outputLine); }
+                // Persist the raw line to the on-disk log unconditionally so
+                // we never lose the source-of-truth bytes from the CLI. The
+                // visible buffer + event stream get the transformed lines.
+                try { AppendOutputLine(info.OutputLogPath, rawLine); }
                 catch (Exception ex) { _logger.LogWarning(ex, "Failed to append output line for {JobId}", jobKey); }
 
-                try { OnOutputLine(info, outputLine); }
-                catch (Exception ex) { _logger.LogWarning(ex, "OnOutputLine subclass hook threw for {JobId}", jobKey); }
+                IEnumerable<CliOutputLine> transformed;
+                try { transformed = TransformReadLine(rawLine); }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "TransformReadLine threw for {JobId}; falling back to raw", jobKey);
+                    transformed = new[] { rawLine };
+                }
 
-                // Event subscribers are out of our control (SignalR hub, etc).
-                // A throw here used to kill the whole API process — guard it.
-                try { OnOutput?.Invoke(jobKey, outputLine); }
-                catch (Exception ex) { _logger.LogWarning(ex, "OnOutput subscriber threw for {JobId}", jobKey); }
+                foreach (var outputLine in transformed)
+                {
+                    info.OutputBuffer.Add(outputLine);
+                    while (info.OutputBuffer.Count > 5000) info.OutputBuffer.RemoveAt(0);
+
+                    try { OnOutputLine(info, outputLine); }
+                    catch (Exception ex) { _logger.LogWarning(ex, "OnOutputLine subclass hook threw for {JobId}", jobKey); }
+
+                    // Event subscribers are out of our control (SignalR hub, etc).
+                    // A throw here used to kill the whole API process — guard it.
+                    try { OnOutput?.Invoke(jobKey, outputLine); }
+                    catch (Exception ex) { _logger.LogWarning(ex, "OnOutput subscriber threw for {JobId}", jobKey); }
+                }
             }
         }
         catch (OperationCanceledException) { }
@@ -374,50 +399,6 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             // Fire-and-forget tasks must never throw to the unobserved-task
             // handler — that's been crashing the host on subscriber exceptions.
             _logger.LogError(ex, "MonitorProcessAsync crashed for {JobId}", jobKey);
-        }
-    }
-
-    /// <summary>
-    /// Emits a "still running, no output for Ns" line every 30 s while the
-    /// CLI is silent, so the Activity log shows progress feedback even for
-    /// CLIs that batch their output until the very end (Claude `-p` mode is
-    /// the typical offender). Stops as soon as the process exits.
-    /// </summary>
-    private async Task HeartbeatAsync(string jobKey, ProcInfo info, CancellationToken ct)
-    {
-        const int IntervalMs = 30_000;
-        try
-        {
-            var startedAt = info.Execution.StartedAt;
-            int lastSeenLineCount = info.OutputBuffer.Count;
-            while (!ct.IsCancellationRequested && !info.Process.HasExited)
-            {
-                await Task.Delay(IntervalMs, ct);
-                if (info.Process.HasExited) break;
-                var currentCount = info.OutputBuffer.Count;
-                if (currentCount > lastSeenLineCount)
-                {
-                    // Real output arrived — silence broken, no heartbeat needed.
-                    lastSeenLineCount = currentCount;
-                    continue;
-                }
-                var elapsed = (DateTime.UtcNow - startedAt).TotalSeconds;
-                var hb = new CliOutputLine
-                {
-                    Timestamp = DateTime.UtcNow,
-                    Stream = "system",
-                    Text = $"[taskboard] still running, no CLI output yet ({elapsed:F0}s elapsed)"
-                };
-                info.OutputBuffer.Add(hb);
-                try { AppendOutputLine(info.OutputLogPath, hb); } catch { }
-                try { OnOutput?.Invoke(jobKey, hb); } catch { }
-                lastSeenLineCount = info.OutputBuffer.Count;
-            }
-        }
-        catch (OperationCanceledException) { }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Heartbeat task crashed for {JobId}", jobKey);
         }
     }
 
