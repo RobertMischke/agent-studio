@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using OrchestratorApi.Models;
 
@@ -475,11 +477,10 @@ public class JobScannerService
         };
         var stateLabel = targetState == JobStates.Ready ? "Ready" : "Preparation";
 
-        // Sanitize ID: lowercase, replace spaces with dashes, only allow safe chars
+        // Sanitize ID: transliterate umlauts, lowercase, replace spaces with dashes, only allow safe chars
         var jobId = string.IsNullOrWhiteSpace(req.Id)
-            ? req.Title.ToLowerInvariant().Replace(' ', '-')
+            ? ToSlug(req.Title)
             : req.Id;
-        jobId = System.Text.RegularExpressions.Regex.Replace(jobId, @"[^a-z0-9\-]", "");
         if (string.IsNullOrEmpty(jobId)) return null;
 
         var jobDir = Path.Combine(entry.Path, targetState, jobId);
@@ -641,5 +642,21 @@ public class JobScannerService
                 .Sum(f => new FileInfo(f).Length);
         }
         catch { return 0; }
+    }
+
+    private static string ToSlug(string text)
+    {
+        // Transliterate German umlauts to ASCII equivalents
+        var s = text
+            .Replace("ä", "ae").Replace("Ä", "ae")
+            .Replace("ö", "oe").Replace("Ö", "oe")
+            .Replace("ü", "ue").Replace("Ü", "ue")
+            .Replace("ß", "ss");
+        // Decompose other accented characters and strip combining marks
+        s = string.Concat(
+            s.Normalize(NormalizationForm.FormD)
+             .Where(c => CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark));
+        s = s.ToLowerInvariant().Replace(' ', '-');
+        return System.Text.RegularExpressions.Regex.Replace(s, @"[^a-z0-9\-]", "");
     }
 }

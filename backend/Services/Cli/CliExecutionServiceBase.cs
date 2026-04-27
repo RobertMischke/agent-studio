@@ -154,6 +154,18 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         psi.UseShellExecute = false;
         psi.CreateNoWindow  = true;
         psi.WorkingDirectory = workingDirectory;
+        // Force UTF-8 on the redirected streams. Default on Windows is the
+        // system code page (CP1252 here), which corrupts non-ASCII bytes from
+        // Claude/Codex output and previously caused silent crashes when a
+        // prompt contained umlauts. Also tell the child process to emit UTF-8
+        // by setting common env hints.
+        psi.StandardOutputEncoding = System.Text.Encoding.UTF8;
+        psi.StandardErrorEncoding  = System.Text.Encoding.UTF8;
+        psi.Environment["PYTHONIOENCODING"]   = "utf-8";
+        psi.Environment["LC_ALL"]             = "C.UTF-8";
+        psi.Environment["LANG"]               = "C.UTF-8";
+        // claude-cli is a Node process; this disables Node's BOM/encoding quirks.
+        psi.Environment["NODE_NO_WARNINGS"]   = "1";
 
         var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
         try
@@ -268,9 +280,16 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
                 info.OutputBuffer.Add(outputLine);
                 while (info.OutputBuffer.Count > 5000) info.OutputBuffer.RemoveAt(0);
 
-                AppendOutputLine(info.OutputLogPath, outputLine);
-                OnOutputLine(info, outputLine);
-                OnOutput?.Invoke(jobKey, outputLine);
+                try { AppendOutputLine(info.OutputLogPath, outputLine); }
+                catch (Exception ex) { _logger.LogWarning(ex, "Failed to append output line for {JobId}", jobKey); }
+
+                try { OnOutputLine(info, outputLine); }
+                catch (Exception ex) { _logger.LogWarning(ex, "OnOutputLine subclass hook threw for {JobId}", jobKey); }
+
+                // Event subscribers are out of our control (SignalR hub, etc).
+                // A throw here used to kill the whole API process — guard it.
+                try { OnOutput?.Invoke(jobKey, outputLine); }
+                catch (Exception ex) { _logger.LogWarning(ex, "OnOutput subscriber threw for {JobId}", jobKey); }
             }
         }
         catch (OperationCanceledException) { }
@@ -282,30 +301,41 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
 
     private async Task MonitorProcessAsync(string jobKey, Process process, ProcInfo info, CancellationToken ct)
     {
-        try { await process.WaitForExitAsync(ct); }
-        catch (OperationCanceledException) { Stop(jobKey); }
-
-        var duration = (DateTime.UtcNow - info.Execution.StartedAt).TotalSeconds;
-        int? exitCode = null;
-        try { exitCode = process.ExitCode; } catch { }
-        var status = exitCode == 0 ? "completed" : "failed";
-
-        var finalExecution = info.Execution with
+        try
         {
-            Status = status,
-            ExitCode = exitCode,
-            DurationSeconds = duration
-        };
-        info.Execution = finalExecution;
+            try { await process.WaitForExitAsync(ct); }
+            catch (OperationCanceledException) { Stop(jobKey); }
 
-        OnFinished?.Invoke(jobKey, finalExecution);
-        _logger.LogInformation("{Cli} finished for job {JobId}: exit={ExitCode}, duration={Duration:F1}s",
-            CliType, jobKey, exitCode, duration);
+            var duration = (DateTime.UtcNow - info.Execution.StartedAt).TotalSeconds;
+            int? exitCode = null;
+            try { exitCode = process.ExitCode; } catch { }
+            var status = exitCode == 0 ? "completed" : "failed";
 
-        _ = Task.Delay(TimeSpan.FromMinutes(30), CancellationToken.None).ContinueWith(_ =>
+            var finalExecution = info.Execution with
+            {
+                Status = status,
+                ExitCode = exitCode,
+                DurationSeconds = duration
+            };
+            info.Execution = finalExecution;
+
+            try { OnFinished?.Invoke(jobKey, finalExecution); }
+            catch (Exception ex) { _logger.LogWarning(ex, "OnFinished subscriber threw for {JobId}", jobKey); }
+
+            _logger.LogInformation("{Cli} finished for job {JobId}: exit={ExitCode}, duration={Duration:F1}s",
+                CliType, jobKey, exitCode, duration);
+
+            _ = Task.Delay(TimeSpan.FromMinutes(30), CancellationToken.None).ContinueWith(_ =>
+            {
+                _processes.TryRemove(jobKey, out ProcInfo? _removed);
+            });
+        }
+        catch (Exception ex)
         {
-            _processes.TryRemove(jobKey, out ProcInfo? _removed);
-        });
+            // Fire-and-forget tasks must never throw to the unobserved-task
+            // handler — that's been crashing the host on subscriber exceptions.
+            _logger.LogError(ex, "MonitorProcessAsync crashed for {JobId}", jobKey);
+        }
     }
 
     // ── Output log persistence ───────────────────────────────────────────

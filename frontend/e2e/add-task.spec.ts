@@ -22,6 +22,21 @@ test.describe('Add Task — Claude model selection', () => {
     );
   });
 
+  test('Copilot model catalog endpoint never returns 500 (PTY discovery is racy)', async ({ request }) => {
+    // Regression guard: when the Copilot /model picker doesn't appear in time,
+    // CopilotModelDiscovery used to throw and bubble a 500 to the UI. The
+    // endpoint now falls back to disk cache or returns 503 with a body —
+    // anything but 5xx-without-context.
+    const res = await request.get('http://localhost:5030/api/cli/copilot/models?refresh=true');
+    expect([200, 503]).toContain(res.status());
+    const body = await res.json();
+    if (res.status() === 200) {
+      expect(Array.isArray(body.models)).toBe(true);
+    } else {
+      expect(body.error, 'error body must explain the failure').toBeTruthy();
+    }
+  });
+
   test('Add Task button opens the dialog', async ({ page }) => {
     await page.goto('/');
     const addBtn = page.getByRole('button', { name: /add task/i }).first();

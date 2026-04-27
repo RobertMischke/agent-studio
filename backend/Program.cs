@@ -7,6 +7,19 @@ using OrchestratorApi.Services.Quota;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.Diagnostics;
 
+// Last-resort safety nets: an uncaught exception in a fire-and-forget Task
+// (e.g. CLI output streaming, SignalR fan-out) used to take down the whole API
+// silently with an empty stderr. Log them instead of crashing.
+TaskScheduler.UnobservedTaskException += (_, e) =>
+{
+    Console.Error.WriteLine($"[UnobservedTaskException] {e.Exception}");
+    e.SetObserved();
+};
+AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+{
+    Console.Error.WriteLine($"[UnhandledException] terminating={e.IsTerminating} {e.ExceptionObject}");
+};
+
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddSingleton<JobScannerService>();

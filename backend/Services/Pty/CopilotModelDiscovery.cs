@@ -76,14 +76,40 @@ public sealed class CopilotModelDiscovery
             if (!forceRefresh && _memCache != null && DateTime.UtcNow - _memCacheAt < Ttl)
                 return _memCache;
 
-            var fresh = await DiscoverViaPtyAsync(cliPath, ct);
-            _memCache = fresh;
-            _memCacheAt = fresh.FetchedAt;
-            TrySaveDisk(fresh);
-            return fresh;
+            try
+            {
+                var fresh = await DiscoverViaPtyAsync(cliPath, ct);
+                _memCache = fresh;
+                _memCacheAt = fresh.FetchedAt;
+                TrySaveDisk(fresh);
+                return fresh;
+            }
+            catch (Exception ex)
+            {
+                // PTY discovery is inherently racy (depends on terminal render
+                // timing). Don't 500 the API: fall back to whatever we have on
+                // disk, even if it's stale. The "Source" field flags it so
+                // callers can tell the difference; a manual refresh re-tries.
+                _logger.LogWarning(ex, "PTY model discovery failed; falling back to cached catalog");
+                if (_memCache != null) return WithSource(_memCache, "pty-failed-mem-cache");
+                var fromDisk = TryLoadDisk();
+                if (fromDisk != null)
+                {
+                    _memCache = fromDisk;
+                    _memCacheAt = fromDisk.FetchedAt;
+                    return WithSource(WithActiveModelApplied(fromDisk), "pty-failed-disk-cache");
+                }
+                // No cache at all → propagate so the endpoint can return a
+                // proper error rather than an empty catalog the UI would
+                // silently render as "no models available".
+                throw;
+            }
         }
         finally { _gate.Release(); }
     }
+
+    private static CliModelCatalog WithSource(CliModelCatalog cat, string source)
+        => cat with { Source = source };
 
     private CliModelCatalog WithActiveModelApplied(CliModelCatalog cat)
     {

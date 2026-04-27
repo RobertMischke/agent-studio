@@ -230,7 +230,13 @@ public static class JobEndpoints
 
         settingsGroup.MapGet("/cli/models", (CopilotCliService cli, bool? refresh) =>
         {
-            return Results.Ok(cli.GetModelCatalog(forceRefresh: refresh ?? false));
+            try { return Results.Ok(cli.GetModelCatalog(forceRefresh: refresh ?? false)); }
+            catch (Exception ex)
+            {
+                return Results.Json(
+                    new { error = ex.Message },
+                    statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
         });
 
         // ── Multi-CLI endpoints ────────────────────────────────────────
@@ -243,8 +249,21 @@ public static class JobEndpoints
         {
             if (!CliTypes.IsValid(cliType))
                 return Results.BadRequest(new { error = $"Unknown cliType '{cliType}'" });
-            var catalog = await router.Get(cliType).GetModelCatalogAsync(refresh ?? false, ct);
-            return Results.Ok(catalog);
+            try
+            {
+                var catalog = await router.Get(cliType).GetModelCatalogAsync(refresh ?? false, ct);
+                return Results.Ok(catalog);
+            }
+            catch (Exception ex)
+            {
+                // Last-resort guard: discovery (e.g. Copilot's PTY probe) can
+                // fail when no cache exists. Return 503 with the reason so the
+                // UI can surface "models temporarily unavailable" rather than
+                // breaking the whole page on a 500.
+                return Results.Json(
+                    new { error = ex.Message, cliType },
+                    statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
         });
 
         cliGroup.MapGet("/usage", (CliRouter router, SessionRegistry sessions) =>
