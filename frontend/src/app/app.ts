@@ -519,6 +519,8 @@ import { ErrorDialogService } from './services/error-dialog.service';
     }
     .layout--focus {
       padding: 24px;
+      display: flex;
+      min-height: calc(100vh - 70px);
     }
     .dashboard {
       display: flex;
@@ -533,12 +535,22 @@ import { ErrorDialogService } from './services/error-dialog.service';
       grid-template-columns: var(--side-sheet-width, 280px) minmax(0, 1fr);
       gap: 24px;
       width: 100%;
-      min-height: calc(100vh - 118px);
+      height: calc(100vh - 118px);
+      min-height: 0;
+      align-items: stretch;
       animation: slideIn 0.25s ease;
       position: relative;
     }
     .workspace__main {
+      display: flex;
       min-width: 0;
+      min-height: 0;
+    }
+    .workspace__main > app-job-detail {
+      display: block;
+      flex: 1;
+      min-width: 0;
+      min-height: 0;
     }
     .task-nav {
       background: #181825;
@@ -548,11 +560,11 @@ import { ErrorDialogService } from './services/error-dialog.service';
       display: flex;
       flex-direction: column;
       gap: 18px;
-      max-height: calc(100vh - 118px);
-      position: sticky;
-      top: 24px;
+      height: 100%;
+      max-height: none;
       overflow: hidden;
       min-width: 200px;
+      box-sizing: border-box;
       position: relative;
     }
     .task-nav__header {

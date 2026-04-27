@@ -701,11 +701,13 @@ import { markdownToHtml } from './markdown-utils';
       border: 1px solid rgba(255,255,255,0.06);
       border-radius: 24px;
       padding: 24px;
-      min-height: calc(100vh - 118px);
+      height: 100%;
+      min-height: 0;
       display: flex;
       flex-direction: column;
       gap: 20px;
       position: relative;
+      box-sizing: border-box;
     }
 
     .detail__header {

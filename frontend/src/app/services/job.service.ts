@@ -5,7 +5,7 @@ import { ErrorDialogService } from './error-dialog.service';
 
 @Injectable({ providedIn: 'root' })
 export class JobService {
-  private readonly baseUrl = 'http://localhost:5030/api';
+  private readonly baseUrl = '/api';
   private liveUpdateTimer: ReturnType<typeof setInterval> | null = null;
 
   readonly jobs = signal<JobInfo[]>([]);

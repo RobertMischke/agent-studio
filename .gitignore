@@ -1,6 +1,10 @@
 frontend/build_log.txt
 .api.pid
 .api.log*
+.api.*.pid
+.api.*.log
+.frontend.*.pid
+.frontend.*.log
 .orchestrator/
 .claude/
 tools/
