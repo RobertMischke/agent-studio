@@ -14,9 +14,9 @@ namespace OrchestratorApi.Services.Quota;
 /// 5h limit:       [░░░░░░░░░░] 0% left (resets 02:33)
 /// Weekly limit:   [██████████] 84% left (resets 21:33 on 3 May)
 /// </code>
-/// IMPORTANT: Codex reports <b>% left</b>, not <b>% used</b>. We invert the value
-/// (<c>usedPct = 100 - left</c>) so the model is consistent with the other probes
-/// and the UI can colour-code high values as critical.
+/// IMPORTANT: Codex reports <b>% left</b> (the bar visually shows the remaining
+/// budget). We invert (<c>usedPct = 100 - left</c>) so the model is consistent
+/// with the other probes and the UI can colour-code high values as critical.
 ///
 /// In the PTY snapshot inter-word spaces are usually collapsed
 /// (<c>5hlimit:[░░░░]0%left(resets02:33)</c>), so the regexes are intentionally permissive.
@@ -38,7 +38,7 @@ public sealed class CodexQuotaProbe : QuotaProbeBase
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     // Fallback footer when /status couldn't render: "5h NN% · weekly NN%".
-    // NOTE: footer values here are also "% left", so we invert.
+    // The footer values are also "% left", so we invert.
     private static readonly Regex FooterRegex = new(
         @"5h\s*(?<h5left>\d+)\s*%\s*[·•]\s*weekly\s*(?<wkleft>\d+)\s*%",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);

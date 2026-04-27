@@ -21,7 +21,6 @@ import { CliType, QuotaReport, QuotaSnapshot, QuotaWindow } from '../models/job.
   template: `
     <section class="qstrip">
       <header class="qstrip__head">
-        <span class="qstrip__title">Quota</span>
         @if (lastUpdate(); as lu) {
           <span class="qstrip__updated">updated {{ lu }}</span>
         }
@@ -92,15 +91,15 @@ import { CliType, QuotaReport, QuotaSnapshot, QuotaWindow } from '../models/job.
   styles: [`
     :host { display: block; }
     .qstrip {
-      padding: 10px 14px 12px;
-      border-bottom: 1px solid rgba(255,255,255,0.06);
-      background: rgba(255,255,255,0.015);
+      padding: 8px 14px 12px;
+      background: transparent;
     }
     .qstrip__head {
       display: flex;
       align-items: center;
       gap: 8px;
       margin-bottom: 8px;
+      min-height: 18px;
     }
     .qstrip__title {
       font-size: 11px;

@@ -101,7 +101,7 @@ public sealed class ClaudeQuotaProbe : QuotaProbeBase
                 windows.Add(new QuotaWindow
                 {
                     Label      = "Current session (5h)",
-                    UsedPct    = sPct,
+                    UsedPct    = Math.Min(100, sPct),
                     Unit       = "%",
                     ResetAt    = ParseResetTimeUtc(time, tz),
                     ResetLabel = tz != null ? $"{time} ({tz})" : time
@@ -116,7 +116,7 @@ public sealed class ClaudeQuotaProbe : QuotaProbeBase
                 windows.Add(new QuotaWindow
                 {
                     Label      = "Current week (all models)",
-                    UsedPct    = wPct,
+                    UsedPct    = Math.Min(100, wPct),
                     Unit       = "%",
                     ResetAt    = ParseResetDateUtc(dateStr, tz),
                     ResetLabel = tz != null ? $"{dateStr} ({tz})" : dateStr

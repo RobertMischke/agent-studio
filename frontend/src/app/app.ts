@@ -14,9 +14,10 @@ import { ErrorDialogService } from './services/error-dialog.service';
     <div class="app">
       <header class="header">
         <div class="header__brand">
-          <span class="header__icon">🔭</span>
-          <h1 class="header__title">Orchestrator</h1>
-          <span class="header__subtitle">AI Work Monitor</span>
+          <img class="header__icon" src="icons/icon.svg" alt="Orchestrator" width="32" height="32" />
+          <h1 class="header__title">
+            <span class="header__title-ai">Task</span><span class="header__title-sep"></span><span class="header__title-name">Orchestrator</span>
+          </h1>
         </div>
         <div class="header__filters">
           @for (name of projectNames(); track name) {
@@ -36,9 +37,6 @@ import { ErrorDialogService } from './services/error-dialog.service';
           </button>
           <button class="btn btn--create" (click)="openCreate()">
             ＋ Add Task
-          </button>
-          <button class="btn btn--refresh" (click)="refresh()" [disabled]="jobService.loading()">
-            {{ jobService.loading() ? '⏳' : '🔄' }} Refresh
           </button>
         </div>
       </header>
@@ -241,29 +239,72 @@ import { ErrorDialogService } from './services/error-dialog.service';
       align-items: center;
       gap: 10px;
     }
-    .header__icon { font-size: 24px; }
-    .header__title { margin: 0; font-size: 20px; font-weight: 700; }
+    .header__icon {
+      width: 32px;
+      height: 32px;
+      display: block;
+      border-radius: 8px;
+      box-shadow: 0 2px 8px rgba(99,102,241,0.35);
+    }
+    .header__title {
+      margin: 0;
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.01em;
+      display: inline-flex;
+      align-items: baseline;
+      gap: 0;
+      line-height: 1;
+    }
+    .header__title-ai {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      font-weight: 900;
+      font-style: italic;
+      letter-spacing: 0.02em;
+      background: linear-gradient(135deg, #a5b4fc 0%, #818cf8 40%, #c4b5fd 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      color: transparent;
+      text-shadow: 0 0 22px rgba(167,139,250,0.35);
+      padding-right: 4px;
+    }
+    .header__title-sep {
+      width: 2px;
+      height: 20px;
+      align-self: center;
+      margin: 0 10px;
+      border-radius: 2px;
+      background: linear-gradient(180deg, rgba(129,140,248,0.0), rgba(129,140,248,0.85), rgba(129,140,248,0.0));
+    }
+    .header__title-name {
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      color: #e2e8f0;
+      text-transform: uppercase;
+      font-size: 18px;
+    }
     .header__subtitle { font-size: 13px; color: #64748b; }
     .header__actions { display: flex; gap: 12px; }
     .header__filters { display: flex; gap: 8px; align-items: center; }
     .filter-chip {
-      background: rgba(255,255,255,0.06);
-      border: 1px solid rgba(255,255,255,0.1);
-      color: #94a3b8;
+      background: rgba(255,255,255,0.10);
+      border: 1px solid rgba(255,255,255,0.20);
+      color: #e2e8f0;
       padding: 5px 14px;
       border-radius: 20px;
       cursor: pointer;
       font-size: 12px;
-      font-weight: 500;
+      font-weight: 600;
       transition: all 0.15s;
     }
-    .filter-chip:hover { background: rgba(255,255,255,0.1); color: #e2e8f0; }
+    .filter-chip:hover { background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.30); color: #ffffff; }
     .filter-chip--active {
-      background: rgba(139,92,246,0.2);
-      border-color: rgba(139,92,246,0.4);
-      color: #c4b5fd;
+      background: rgba(139,92,246,0.45);
+      border-color: rgba(167,139,250,0.85);
+      color: #ffffff;
+      box-shadow: 0 0 0 1px rgba(167,139,250,0.25), 0 2px 6px rgba(139,92,246,0.30);
     }
-    .filter-chip--active:hover { background: rgba(139,92,246,0.3); }
+    .filter-chip--active:hover { background: rgba(139,92,246,0.6); }
     .runner-dot { font-size: 10px; margin-right: 2px; }
     .runner-dot--running { animation: pulse-runner 1.5s infinite; }
     @keyframes pulse-runner {
@@ -271,28 +312,32 @@ import { ErrorDialogService } from './services/error-dialog.service';
       50% { opacity: 0.4; }
     }
     .btn {
-      background: rgba(255,255,255,0.06);
-      border: 1px solid rgba(255,255,255,0.08);
-      color: #e2e8f0;
+      background: rgba(255,255,255,0.10);
+      border: 1px solid rgba(255,255,255,0.20);
+      color: #f8fafc;
       padding: 8px 16px;
       border-radius: 8px;
       cursor: pointer;
       font-size: 13px;
+      font-weight: 600;
+      transition: background 0.15s, border-color 0.15s;
     }
-    .btn:hover { background: rgba(255,255,255,0.1); }
+    .btn:hover { background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.30); }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .btn--create {
-      background: rgba(139,92,246,0.15);
-      border-color: rgba(139,92,246,0.3);
-      color: #a78bfa;
+      background: rgba(139,92,246,0.45);
+      border-color: rgba(167,139,250,0.85);
+      color: #ffffff;
+      box-shadow: 0 2px 8px rgba(139,92,246,0.30);
     }
-    .btn--create:hover { background: rgba(139,92,246,0.25); }
+    .btn--create:hover { background: rgba(139,92,246,0.6); border-color: rgba(196,181,253,0.95); }
     .btn--primary {
       background: #6366f1;
-      border-color: #6366f1;
+      border-color: #818cf8;
       color: white;
+      font-weight: 600;
     }
-    .btn--primary:hover { background: #5558e6; }
+    .btn--primary:hover { background: #5558e6; border-color: #a5b4fc; }
 
     .overlay {
       position: fixed;
