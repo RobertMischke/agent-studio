@@ -173,7 +173,13 @@ public class JobScannerService
         if (resolved.Count == 1) return resolved[0];
         if (resolved.Count > 1)
         {
-            _logger.LogWarning("Ambiguous job lookup for {JobId} without unique watch path context", jobId);
+            // Duplicate job IDs can occur when umlauts were stripped differently during creation,
+            // or when a folder copy was left behind after a failed move. Prefer the job in the
+            // earliest (most active) state so the user can still open and manage it.
+            _logger.LogWarning("Duplicate job id {JobId} found in {Count} locations; returning job in earliest state", jobId, resolved.Count);
+            return resolved
+                .OrderBy(j => Array.IndexOf(JobStates.All, j.State))
+                .First();
         }
 
         return null;
