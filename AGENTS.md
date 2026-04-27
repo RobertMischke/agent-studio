@@ -13,17 +13,56 @@ Keep the product boundary clear:
 
 ## Architecture
 
-- `backend/` - ASP.NET Core API on `http://localhost:5030`, with a SignalR hub for real-time push.
-- `backend.Tests/` - backend test project.
-- `frontend/` - Angular standalone components, signals-based state, PWA, runs on `http://localhost:4010`.
-- `docs/filesystem-contract.md` - job folder contract and templates.
-- `docs/autopilot-prompt.md` - canonical orchestrator workflow copied into watched target projects.
-- `.github/prompts/` - reusable repo prompts.
-- `api.ps1` - backend lifecycle script.
+| Layer | Path | Notes |
+|-------|------|-------|
+| Backend API | `backend/` | ASP.NET Core, runs on `http://localhost:5030`, SignalR hub for live push. |
+| Backend tests | `backend.Tests/` | xUnit. |
+| Frontend | `frontend/` | Angular 21 standalone components, signals state, PWA, runs on `http://localhost:4010`. |
+| E2E tests | `frontend/e2e/` | Playwright. See [frontend/e2e/README.md](frontend/e2e/README.md). |
+| Filesystem contract | `docs/filesystem-contract.md` | Job folder layout. |
+| Orchestrator prompt | `docs/autopilot-prompt.md` | Canonical workflow copied into watched targets. |
+| Repo prompts | `.github/prompts/` | Reusable prompt templates. |
+| Backend lifecycle | `api.ps1` | start / stop / restart / status. |
+
+### Service & data layout (backend)
+
+- `Services/Cli/` — one driver per CLI: `ClaudeCliService`, `CodexCliService`, `CopilotCliService`, all extending `CliExecutionServiceBase`. `CliRouter` picks the right one by `cliType`.
+- `Services/Cli/SessionRegistry.cs` — discovers sessions on disk and builds the `/api/cli/usage` report.
+- `Services/Quota/*QuotaProbe.cs` — per-CLI quota probes. `QuotaService` aggregates and serves `/api/cli/quota` (with background refresh).
+- `Services/Pty/` — PTY-based slash-command probes (used for parsing `/usage`, `/status`).
+- `Models/` — DTOs: `JobInfo`, `JobDetail`, `CliExecution`, `CreateJobRequest`, `StartJobRequest`, etc.
+- `Endpoints/JobEndpoints.cs` — all routes. Read here first when wiring a new feature.
+
+### Key REST endpoints
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/jobs` | List all jobs (flat). |
+| GET | `/api/jobs/grouped` | Jobs grouped by state. |
+| GET | `/api/jobs/{jobId}?watchPath=...` | One `JobDetail` (info + prompt + status + log). |
+| POST | `/api/jobs` | Create job (`CreateJobRequest`). |
+| POST | `/api/jobs/{jobId}/start?watchPath=...` | Start CLI execution. |
+| POST | `/api/jobs/{jobId}/stop?watchPath=...` | Cancel running execution. |
+| POST | `/api/jobs/{jobId}/continue?watchPath=...` | Resume with new prompt (same session). |
+| GET | `/api/jobs/{jobId}/output?watchPath=...` | CLI stdout/stderr buffer. |
+| GET | `/api/cli/usage` | Sessions + versions for all CLIs. |
+| GET | `/api/cli/quota` | Per-CLI quota windows (used%, reset times). |
+| GET | `/api/cli/{cliType}/models` | Model catalog for one CLI. |
+| GET | `/api/watch-paths` | Configured workspaces. |
+
+`jobId` (URL slug) + `watchPath` (project root) is the addressing scheme — `jobKey` is `watchPath::jobId` and is used internally only.
+
+### Watched workspaces
+
+Default dev configuration watches:
+- `C:\Projects\agent-taskboard-workspace\projects\agent-taskboard` (this app's own task folders)
+- `C:\Projects\agent-taskboard-workspace\projects\runbook`
+
+Use `/api/watch-paths` to enumerate at runtime — never hardcode paths in tests; read them from there.
 
 ## Backend Control
 
-Use the `api.ps1` script at the repo root for backend lifecycle operations:
+Use the `api.ps1` script at the repo root:
 
 ```powershell
 .\api.ps1 start
@@ -44,14 +83,34 @@ Fallback command:
 npm start --prefix frontend
 ```
 
-## Build and Test
+## Build, Test, Verify
 
-- Backend build: `dotnet build`
-- Backend run: `dotnet run --project backend`
-- Frontend dev server: `npm start --prefix frontend`
-- Frontend build: `npx ng build --prefix frontend`
+| Action | Command |
+|--------|---------|
+| Backend build | `dotnet build` |
+| Backend run | `dotnet run --project backend` |
+| Backend tests | `dotnet test` |
+| Frontend dev server | `npm start --prefix frontend` |
+| Frontend build | `npx ng build --prefix frontend` |
+| Frontend unit tests | `npm --prefix frontend run test` |
+| **E2E (Playwright)** | `npm --prefix frontend run e2e` |
+| E2E interactive UI | `npm --prefix frontend run e2e:ui` |
+| E2E single spec | `npm --prefix frontend run e2e -- e2e/cli-usage.spec.ts` |
+| Skip billable specs | `SKIP_BILLABLE=1 npm --prefix frontend run e2e` |
 
 Run the relevant build, test, or visual verification checks for the files you change. If a check cannot run in the current environment, document the concrete reason.
+
+### Visual & behavioural changes — Playwright is mandatory
+
+After **every change with visual or behavioural impact** in the frontend (layout, styling, component templates, interaction states, new buttons, new flows), you must:
+
+1. Run the relevant Playwright spec(s) under `frontend/e2e/` and confirm they pass.
+2. If the change isn't covered by an existing spec, **add or extend one** before declaring the task done. Regression tests are the deliverable, not an afterthought.
+3. For changes that touch CLI execution paths (Claude / Codex / Copilot), run `claude-hello-world.spec.ts` (or the equivalent for the affected CLI) end-to-end. It is `@billable` — uses real quota — but cheap (one Haiku call, ~10s).
+
+Skip Playwright only if the change is provably non-visual and non-behavioural (pure rename, comment edit, dependency bump with no API surface change). Document the reason in the PR description if you skip.
+
+The full E2E setup, conventions, and authoring rules live in [frontend/e2e/README.md](frontend/e2e/README.md).
 
 ## Windows Shell Compatibility
 
@@ -63,16 +122,18 @@ Run the relevant build, test, or visual verification checks for the files you ch
 
 Each job folder contains:
 
-- `job.json` - metadata such as id, title, state, order, and agent.
-- `prompt.md` - task description.
-- `status.md` - processing protocol or log.
-- `logs/` - optional log files.
+- `job.json` — metadata (id, title, state, order, agent, cliType, model, sessionName).
+- `prompt.md` — task description.
+- `status.md` — processing protocol or log.
+- `logs/` — optional log files (CLI stdout/stderr lives here as `cli-output.log`).
 
 States:
 
 ```text
 1-preparation -> 2-ready -> 3-progress -> 4-review -> 5-completed
 ```
+
+Only jobs in `2-ready` or `3-progress` can be started via `/api/jobs/{id}/start`. New jobs default to `1-preparation`; the create endpoint accepts an optional `targetState` to land directly in `2-ready`.
 
 See `docs/filesystem-contract.md` for full details.
 
@@ -83,6 +144,10 @@ See `docs/filesystem-contract.md` for full details.
 - Keep the existing dark Catppuccin-inspired UI direction.
 - Keep the detail view as a simple protocol view, without tabs or metrics grids unless the product direction changes.
 - Prefer small, scoped changes and avoid rewriting unrelated code.
+
+### Selectors in Playwright tests
+
+Prefer `data-testid="..."` for stable test hooks. If a feature you're touching lacks one and a spec needs it, add it to the component rather than reaching for a CSS-class selector.
 
 ## Orchestrator Instructions
 
