@@ -213,9 +213,27 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         _logger.LogInformation("Started {Cli} CLI for job {JobId} (PID {Pid}) in {Cwd}",
             CliType, jobId, process.Id, workingDirectory);
 
+        // Synthetic "Started" line so the Activity log isn't empty during the
+        // window between spawn and the CLI's first stdout byte. Claude's `-p`
+        // mode buffers output until the model finishes — without this, users
+        // saw a blank protocol for 30+ seconds and assumed the job was stuck.
+        var startedLine = new CliOutputLine
+        {
+            Timestamp = DateTime.UtcNow,
+            Stream = "system",
+            Text = $"[taskboard] Started {CliType} CLI (PID {process.Id})"
+                   + (string.IsNullOrWhiteSpace(model) ? "" : $", model={model}")
+                   + (string.IsNullOrWhiteSpace(sessionName) ? "" : $", session={sessionName}")
+                   + (resumeSession ? " (resume)" : "")
+        };
+        info.OutputBuffer.Add(startedLine);
+        try { AppendOutputLine(info.OutputLogPath, startedLine); } catch { }
+        try { OnOutput?.Invoke(jobKey, startedLine); } catch { }
+
         _ = ReadStreamAsync(jobKey, process.StandardOutput, "stdout", info, ct);
         _ = ReadStreamAsync(jobKey, process.StandardError,  "stderr", info, ct);
         _ = MonitorProcessAsync(jobKey, process, info, ct);
+        _ = HeartbeatAsync(jobKey, info, ct);
 
         return (execution, null);
     }
@@ -327,6 +345,19 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             };
             info.Execution = finalExecution;
 
+            // Synthetic exit line so the Activity log shows a clear close even
+            // when the CLI emitted nothing on stdout/stderr (rate-limit hangs,
+            // immediate auth failures, etc).
+            var exitLine = new CliOutputLine
+            {
+                Timestamp = DateTime.UtcNow,
+                Stream = "system",
+                Text = $"[taskboard] {CliType} CLI exited: status={status}, exitCode={exitCode?.ToString() ?? "?"}, duration={duration:F1}s"
+            };
+            info.OutputBuffer.Add(exitLine);
+            try { AppendOutputLine(info.OutputLogPath, exitLine); } catch { }
+            try { OnOutput?.Invoke(jobKey, exitLine); } catch { }
+
             try { OnFinished?.Invoke(jobKey, finalExecution); }
             catch (Exception ex) { _logger.LogWarning(ex, "OnFinished subscriber threw for {JobId}", jobKey); }
 
@@ -343,6 +374,50 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             // Fire-and-forget tasks must never throw to the unobserved-task
             // handler — that's been crashing the host on subscriber exceptions.
             _logger.LogError(ex, "MonitorProcessAsync crashed for {JobId}", jobKey);
+        }
+    }
+
+    /// <summary>
+    /// Emits a "still running, no output for Ns" line every 30 s while the
+    /// CLI is silent, so the Activity log shows progress feedback even for
+    /// CLIs that batch their output until the very end (Claude `-p` mode is
+    /// the typical offender). Stops as soon as the process exits.
+    /// </summary>
+    private async Task HeartbeatAsync(string jobKey, ProcInfo info, CancellationToken ct)
+    {
+        const int IntervalMs = 30_000;
+        try
+        {
+            var startedAt = info.Execution.StartedAt;
+            int lastSeenLineCount = info.OutputBuffer.Count;
+            while (!ct.IsCancellationRequested && !info.Process.HasExited)
+            {
+                await Task.Delay(IntervalMs, ct);
+                if (info.Process.HasExited) break;
+                var currentCount = info.OutputBuffer.Count;
+                if (currentCount > lastSeenLineCount)
+                {
+                    // Real output arrived — silence broken, no heartbeat needed.
+                    lastSeenLineCount = currentCount;
+                    continue;
+                }
+                var elapsed = (DateTime.UtcNow - startedAt).TotalSeconds;
+                var hb = new CliOutputLine
+                {
+                    Timestamp = DateTime.UtcNow,
+                    Stream = "system",
+                    Text = $"[taskboard] still running, no CLI output yet ({elapsed:F0}s elapsed)"
+                };
+                info.OutputBuffer.Add(hb);
+                try { AppendOutputLine(info.OutputLogPath, hb); } catch { }
+                try { OnOutput?.Invoke(jobKey, hb); } catch { }
+                lastSeenLineCount = info.OutputBuffer.Count;
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Heartbeat task crashed for {JobId}", jobKey);
         }
     }
 
