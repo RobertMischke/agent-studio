@@ -100,9 +100,22 @@ interface SelectedSession {
                     }
                     @for (project of section.projects; track project.projectName) {
                       <div class="proj">
-                        <div class="proj__name" [title]="project.rootPath || ''">
-                          📁 {{ project.projectName }}
+                        <button class="proj__head" type="button" [title]="project.rootPath || ''" (click)="toggleProject(section.cliType, project)">
+                          <span class="proj__chev" [class.proj__chev--open]="!isProjectCollapsed(section.cliType, project)"></span>
+                          <span class="proj__name">📁 {{ project.projectName }}</span>
+                          <span class="proj__meta">{{ project.sessions.length }} sessions</span>
+                        </button>
+                        <div class="proj__summary">
+                          @if (latestSession(project)?.updatedAt; as latest) {
+                            <span>latest {{ formatTime(latest) }}</span>
+                          }
+                          @if (usageSessionCount(project) > 0) {
+                            <span>{{ usageSessionCount(project) }} with usage</span>
+                          } @else {
+                            <span>metadata only</span>
+                          }
                         </div>
+                        @if (!isProjectCollapsed(section.cliType, project)) {
                         <ul class="sess-list">
                           @for (s of project.sessions; track s.id) {
                             <li class="sess"
@@ -118,10 +131,13 @@ interface SelectedSession {
                               </div>
                               @if (s.lastUsage?.tokens) {
                                 <div class="sess__usage">🪙 {{ s.lastUsage?.tokens }}</div>
+                              } @else {
+                                <div class="sess__usage sess__usage--muted">No parsed token summary</div>
                               }
                             </li>
                           }
                         </ul>
+                        }
                       </div>
                     }
                   }
@@ -143,6 +159,10 @@ interface SelectedSession {
               <div><span>Tokens</span><span>{{ u.tokens || '—' }}</span></div>
               <div><span>Changes</span><span>{{ u.changes || '—' }}</span></div>
               <div><span>Requests</span><span>{{ u.requests || '—' }}</span></div>
+            </div>
+          } @else {
+            <div class="sheet__detail-empty">
+              This session only has id, project path and last-modified time. No token summary has been parsed yet.
             </div>
           }
           <app-cli-console [lines]="detailLines()" [title]="'Session ' + shortId(sel.session.id)" [bodyMaxHeight]="'30vh'" />
@@ -273,13 +293,45 @@ interface SelectedSession {
       padding-top: 8px;
       border-top: 1px dashed rgba(255,255,255,0.06);
     }
+    .proj__head {
+      display: grid;
+      grid-template-columns: 12px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 6px;
+      width: 100%;
+      border: 0;
+      background: transparent;
+      color: #94a3b8;
+      cursor: pointer;
+      padding: 0;
+      text-align: left;
+    }
+    .proj__head:hover { color: #cbd5e1; }
+    .proj__chev {
+      width: 6px;
+      height: 6px;
+      border-right: 1.5px solid #64748b;
+      border-bottom: 1.5px solid #64748b;
+      transform: rotate(-45deg);
+      transition: transform 0.14s ease, border-color 0.14s ease;
+      justify-self: center;
+    }
+    .proj__head:hover .proj__chev { border-color: #cbd5e1; }
+    .proj__chev--open { transform: rotate(45deg); }
     .proj__name {
       font-size: 12px;
       color: #94a3b8;
-      margin-bottom: 4px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+    }
+    .proj__meta { font-size: 10px; color: #64748b; }
+    .proj__summary {
+      display: flex;
+      gap: 8px;
+      padding: 3px 0 0 18px;
+      color: #64748b;
+      font-size: 10px;
     }
     .sess-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
     .sess {
@@ -299,6 +351,7 @@ interface SelectedSession {
     .sess__id { font-family: var(--font-mono, monospace); }
     .sess__time { color: #64748b; font-size: 10px; }
     .sess__usage { color: #cdd6f4; font-size: 11px; margin-top: 2px; }
+    .sess__usage--muted { color: #64748b; font-style: italic; }
 
     .sheet__detail {
       border-top: 1px solid rgba(255,255,255,0.06);
@@ -318,6 +371,14 @@ interface SelectedSession {
     }
     .sheet__detail-usage > div { display: flex; flex-direction: column; gap: 1px; }
     .sheet__detail-usage span:last-child { color: #cdd6f4; font-family: var(--font-mono, monospace); }
+    .sheet__detail-empty {
+      color: #64748b;
+      font-size: 11px;
+      line-height: 1.4;
+      padding: 6px 8px;
+      border-radius: 8px;
+      background: rgba(255,255,255,0.03);
+    }
   `],
   host: {
     '[class.is-open]': 'open()'
@@ -331,6 +392,7 @@ export class CliUsageSheetComponent implements OnInit, OnDestroy {
   readonly selected = signal<SelectedSession | null>(null);
   // Per-CLI accordion state inside the Sessions segment.
   readonly collapsedClis = signal<Set<string>>(new Set());
+  readonly expandedProjects = signal<Set<string>>(new Set());
   // Top-level segment accordion state. Quota stays expanded by default
   // because it's the highest-value glance information.
   readonly collapsedSegments = signal<Set<string>>(new Set());
@@ -405,8 +467,32 @@ export class CliUsageSheetComponent implements OnInit, OnDestroy {
   }
   isCliCollapsed(cliType: string): boolean { return this.collapsedClis().has(cliType); }
 
+  toggleProject(cliType: string, project: CliUsageProjectGroup) {
+    const key = this.projectKey(cliType, project);
+    const next = new Set(this.expandedProjects());
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    this.expandedProjects.set(next);
+  }
+
+  isProjectCollapsed(cliType: string, project: CliUsageProjectGroup): boolean {
+    return !this.expandedProjects().has(this.projectKey(cliType, project));
+  }
+
+  private projectKey(cliType: string, project: CliUsageProjectGroup): string {
+    return `${cliType}:${project.rootPath || project.projectName}`;
+  }
+
   totalSessions(section: CliUsageSection): number {
     return section.projects.reduce((sum, p) => sum + p.sessions.length, 0);
+  }
+
+  latestSession(project: CliUsageProjectGroup): CliSessionInfo | null {
+    return project.sessions[0] ?? null;
+  }
+
+  usageSessionCount(project: CliUsageProjectGroup): number {
+    return project.sessions.filter(s => !!s.lastUsage).length;
   }
 
   select(cliType: CliType, project: CliUsageProjectGroup, session: CliSessionInfo) {
