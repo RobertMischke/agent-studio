@@ -1,7 +1,7 @@
 {
-  "name": "Orchestrator — AI Work Monitor",
-  "short_name": "Orchestrator",
-  "description": "AI Agent Task Board – drag & drop jobs across states",
+  "name": "Agent Task Board",
+  "short_name": "Task Board",
+  "description": "Agent Task Board – drag & drop jobs across states",
   "display": "standalone",
   "background_color": "#0f0f1a",
   "theme_color": "#181825",

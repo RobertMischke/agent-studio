@@ -14,9 +14,9 @@ import { ErrorDialogService } from './services/error-dialog.service';
     <div class="app">
       <header class="header">
         <div class="header__brand">
-          <img class="header__icon" src="icons/icon.svg" alt="Orchestrator" width="32" height="32" />
+          <img class="header__icon" src="icons/icon.svg" alt="Agent Task Board" width="32" height="32" />
           <h1 class="header__title">
-            <span class="header__title-ai">Task</span><span class="header__title-sep"></span><span class="header__title-name">Orchestrator</span>
+            <span class="header__title-ai">Agent</span><span class="header__title-sep"></span><span class="header__title-name">Task Board</span>
           </h1>
         </div>
         <div class="header__filters">

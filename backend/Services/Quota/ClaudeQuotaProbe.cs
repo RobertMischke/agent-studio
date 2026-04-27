@@ -39,8 +39,9 @@ public sealed class ClaudeQuotaProbe : QuotaProbeBase
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     // "Current week (all models) ... NN% used Resets Mon DD, H[:MM][am|pm] (Tz)"
+    // or the compact Claude variant: "Currentweek(allmodels)...32%usedResets2pm(Europe/Berlin)"
     private static readonly Regex WeekRegex = new(
-        @"Current\s*week\s*\(\s*all\s*models?\s*\)[^\d]{0,160}?(?<pct>\d+)\s*%\s*used[^R]{0,40}?Resets\s*(?<date>[A-Za-z]+\s*\d+\s*,?\s*\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s*(?:\((?<tz>[^)]+)\))?",
+        @"Current\s*week\s*\(\s*all\s*models?\s*\)[^\d]{0,220}?(?<pct>\d+)\s*%\s*used[^R]{0,60}?Resets\s*(?<reset>(?:[A-Za-z]+\s*\d+\s*,?\s*)?\d{1,2}(?::\d{2})?\s*(?:am|pm)?)\s*(?:\((?<tz>[^)]+)\))?",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     // Inline rate-limit warning Claude prints when over quota — used as a
@@ -91,37 +92,7 @@ public sealed class ClaudeQuotaProbe : QuotaProbeBase
                 if (!string.IsNullOrWhiteSpace(configured)) plan = NormalizePlan(configured);
             }
 
-            var windows = new List<QuotaWindow>();
-
-            if (SessionRegex.Match(snap) is { Success: true } sm
-                && double.TryParse(sm.Groups["pct"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var sPct))
-            {
-                var time = sm.Groups["time"].Value.Trim();
-                var tz   = sm.Groups["tz"].Success ? sm.Groups["tz"].Value.Trim() : null;
-                windows.Add(new QuotaWindow
-                {
-                    Label      = "Current session (5h)",
-                    UsedPct    = Math.Min(100, sPct),
-                    Unit       = "%",
-                    ResetAt    = ParseResetTimeUtc(time, tz),
-                    ResetLabel = tz != null ? $"{time} ({tz})" : time
-                });
-            }
-
-            if (WeekRegex.Match(snap) is { Success: true } wm
-                && double.TryParse(wm.Groups["pct"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var wPct))
-            {
-                var dateStr = wm.Groups["date"].Value.Trim();
-                var tz      = wm.Groups["tz"].Success ? wm.Groups["tz"].Value.Trim() : null;
-                windows.Add(new QuotaWindow
-                {
-                    Label      = "Current week (all models)",
-                    UsedPct    = Math.Min(100, wPct),
-                    Unit       = "%",
-                    ResetAt    = ParseResetDateUtc(dateStr, tz),
-                    ResetLabel = tz != null ? $"{dateStr} ({tz})" : dateStr
-                });
-            }
+            var windows = ParseUsageWindows(snap);
 
             // Fallback: if /usage didn't render but the rate-limit warning did,
             // synthesize at least the session bucket so the user has *something*.
@@ -164,6 +135,44 @@ public sealed class ClaudeQuotaProbe : QuotaProbeBase
         if (t.Equals("Pro Plus", StringComparison.OrdinalIgnoreCase) || t.Equals("ProPlus", StringComparison.OrdinalIgnoreCase))
             return "Pro+";
         return t;
+    }
+
+    public static List<QuotaWindow> ParseUsageWindows(string snap)
+    {
+        var windows = new List<QuotaWindow>();
+
+        if (SessionRegex.Match(snap) is { Success: true } sm
+            && double.TryParse(sm.Groups["pct"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var sPct))
+        {
+            var time = sm.Groups["time"].Value.Trim();
+            var tz   = sm.Groups["tz"].Success ? sm.Groups["tz"].Value.Trim() : null;
+            windows.Add(new QuotaWindow
+            {
+                Label      = "Current session (5h)",
+                UsedPct    = Math.Min(100, sPct),
+                Unit       = "%",
+                ResetAt    = ParseResetTimeUtc(time, tz),
+                ResetLabel = tz != null ? $"{time} ({tz})" : time
+            });
+        }
+
+        if (WeekRegex.Match(snap) is { Success: true } wm
+            && double.TryParse(wm.Groups["pct"].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out var wPct))
+        {
+            var reset = wm.Groups["reset"].Value.Trim();
+            var tz    = wm.Groups["tz"].Success ? wm.Groups["tz"].Value.Trim() : null;
+            var hasDate = Regex.IsMatch(reset, @"[A-Za-z]+\s*\d+", RegexOptions.IgnoreCase);
+            windows.Add(new QuotaWindow
+            {
+                Label      = "Weekly (all models)",
+                UsedPct    = Math.Min(100, wPct),
+                Unit       = "%",
+                ResetAt    = hasDate ? ParseResetDateUtc(reset, tz) : ParseResetTimeUtc(reset, tz),
+                ResetLabel = tz != null ? $"{reset} ({tz})" : reset
+            });
+        }
+
+        return windows;
     }
 
     /// <summary>

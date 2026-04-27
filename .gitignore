@@ -5,3 +5,7 @@ frontend/build_log.txt
 .claude/
 tools/
 
+.test-output
+
+# .NET 10 Artifacts Output Layout (replaces per-project bin/ and obj/)
+artifacts/
