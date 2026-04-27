@@ -7,8 +7,8 @@ After **every** frontend change under `frontend/src/` that touches layout, spaci
 Workflow:
 
 1. Make sure backend (`http://localhost:5030`) and frontend (`http://localhost:4010`) are running. Tests do **not** spawn them — they fail fast if missing.
-2. Run the relevant spec, or the full suite for cross-cutting changes:
-   ```powershell
+2. Run the relevant spec, or the full suite for cross-cutting changes (sh — never PowerShell):
+   ```sh
    npm --prefix frontend run e2e                          # full suite, headless
    npm --prefix frontend run e2e -- e2e/cli-usage.spec.ts # single spec
    npm --prefix frontend run e2e:ui                       # interactive UI mode

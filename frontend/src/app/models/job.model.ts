@@ -116,6 +116,7 @@ export interface GroupedJobs {
   progress: JobInfo[];
   review: JobInfo[];
   completed: JobInfo[];
+  archive: JobInfo[];
 }
 
 export interface CreateJobRequest {

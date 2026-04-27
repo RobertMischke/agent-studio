@@ -243,8 +243,9 @@ public static class JobStates
     public const string Progress = "3-progress";
     public const string Review = "4-review";
     public const string Completed = "5-completed";
+    public const string Archive = "6-archive";
 
-    public static readonly string[] All = [Preparation, Ready, Progress, Review, Completed];
+    public static readonly string[] All = [Preparation, Ready, Progress, Review, Completed, Archive];
 
     /// <summary>Maps old unnumbered folder names to new numbered ones.</summary>
     public static readonly Dictionary<string, string> LegacyFolderMap = new()

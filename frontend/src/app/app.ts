@@ -1,4 +1,5 @@
 import { Component, computed, effect, OnInit, signal, untracked } from '@angular/core';
+import { forkJoin } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { JobColumnComponent } from './components/job-column';
 import { JobDetailComponent } from './components/job-detail';
@@ -96,7 +97,7 @@ import { ErrorDialogService } from './services/error-dialog.service';
             </aside>
 
             <main class="workspace__main">
-              <app-job-detail [detail]="detail" [watchPaths]="watchPaths()" (back)="closeDetail()" (fileSaved)="onFileSaved()" (projectChanged)="onProjectChanged($event)" />
+              <app-job-detail [detail]="detail" [watchPaths]="watchPaths()" (back)="closeDetail()" (fileSaved)="onFileSaved()" (projectChanged)="onProjectChanged($event)" (completeAndNextReview)="onCompleteAndNextReview()" />
             </main>
           </div>
         } @else {
@@ -105,7 +106,8 @@ import { ErrorDialogService } from './services/error-dialog.service';
             <app-job-column title="Ready" icon="📦" state="2-ready" [jobs]="filteredGrouped().ready" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" (addTask)="openCreate($event)" />
             <app-job-column title="In Progress" icon="🔵" state="3-progress" [jobs]="filteredGrouped().progress" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
             <app-job-column title="Review" icon="🟡" state="4-review" [jobs]="filteredGrouped().review" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
-            <app-job-column title="Completed" icon="🟢" state="5-completed" [jobs]="filteredGrouped().completed" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
+            <app-job-column title="Completed" icon="🟢" state="5-completed" [jobs]="filteredGrouped().completed" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" (archiveAll)="onArchiveAll()" />
+            <app-job-column title="Archive" icon="🗄️" state="6-archive" [jobs]="filteredGrouped().archive" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
           </main>
         }
       </div>
@@ -779,6 +781,7 @@ export class App implements OnInit {
       progress: filterJobs(grouped.progress),
       review: filterJobs(grouped.review),
       completed: filterJobs(grouped.completed),
+      archive: filterJobs(grouped.archive ?? []),
     } as GroupedJobs;
   });
 
@@ -789,7 +792,8 @@ export class App implements OnInit {
       { state: '2-ready', title: 'Ready', icon: '📦', jobs: grouped.ready },
       { state: '3-progress', title: 'In Progress', icon: '🔵', jobs: grouped.progress },
       { state: '4-review', title: 'Review', icon: '🟡', jobs: grouped.review },
-      { state: '5-completed', title: 'Completed', icon: '🟢', jobs: grouped.completed }
+      { state: '5-completed', title: 'Completed', icon: '🟢', jobs: grouped.completed },
+      { state: '6-archive', title: 'Archive', icon: '🗄️', jobs: grouped.archive ?? [] }
     ];
   });
 
@@ -939,6 +943,17 @@ export class App implements OnInit {
     history.replaceState(null, '', window.location.pathname);
   }
 
+  onCompleteAndNextReview() {
+    const currentJobKey = this.selectedJob()?.info.jobKey;
+    const reviewJobs = this.jobService.grouped().review.filter(j => j.jobKey !== currentJobKey);
+    this.refresh();
+    if (reviewJobs.length > 0) {
+      this.openDetail(reviewJobs[0]);
+    } else {
+      this.closeDetail();
+    }
+  }
+
   onJobDrop(event: { jobId: string; watchPath: string; targetState: string }) {
     this.jobService.moveJob(event.jobId, event.targetState, event.watchPath).subscribe({
       next: () => this.refresh(),
@@ -964,6 +979,23 @@ export class App implements OnInit {
           source: `Column ${event.state}`
         });
       },
+    });
+  }
+
+  onArchiveAll() {
+    const completed = this.filteredGrouped().completed;
+    if (completed.length === 0) return;
+    const moves = completed.map(job => this.jobService.moveJob(job.id, '6-archive', job.watchPath));
+    forkJoin(moves).subscribe({
+      next: () => this.refresh(),
+      error: (err) => {
+        this.errorDialog.show(err, {
+          title: 'Failed to archive tasks',
+          fallbackMessage: 'One or more tasks could not be moved to Archive',
+          source: 'Archive all'
+        });
+        this.refresh();
+      }
     });
   }
 

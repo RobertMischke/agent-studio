@@ -27,7 +27,8 @@ public static class JobEndpoints
                 Ready = jobs.Where(j => j.State == JobStates.Ready).OrderBy(j => j.Order).ToList(),
                 Progress = jobs.Where(j => j.State == JobStates.Progress).OrderBy(j => j.Order).ToList(),
                 Review = jobs.Where(j => j.State == JobStates.Review).OrderBy(j => j.Order).ToList(),
-                Completed = jobs.Where(j => j.State == JobStates.Completed).OrderBy(j => j.Order).ToList()
+                Completed = jobs.Where(j => j.State == JobStates.Completed).OrderBy(j => j.Order).ToList(),
+                Archive = jobs.Where(j => j.State == JobStates.Archive).OrderBy(j => j.Order).ToList()
             };
             return Results.Ok(grouped);
         });
@@ -53,6 +54,12 @@ public static class JobEndpoints
                 return Results.BadRequest($"Invalid state. Allowed: {string.Join(", ", JobStates.All)}");
 
             var success = scanner.MoveJob(jobId, req.TargetState, watchPath);
+            return success ? Results.Ok() : Results.NotFound();
+        });
+
+        group.MapDelete("/{jobId}", (string jobId, string? watchPath, JobScannerService scanner) =>
+        {
+            var success = scanner.DeleteJob(jobId, watchPath);
             return success ? Results.Ok() : Results.NotFound();
         });
 

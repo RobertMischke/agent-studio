@@ -14,14 +14,16 @@ The tests assume the dev stack is already running:
 
 | Service  | Command                                    | URL                     |
 |----------|--------------------------------------------|-------------------------|
-| Backend  | `.\api.ps1 start` (from repo root)         | http://localhost:5030   |
+| Backend  | `./api.sh start` (from repo root)          | http://localhost:5030   |
 | Frontend | `npm start --prefix frontend` (or VS Code task `Frontend: Start`) | http://localhost:4010 |
 
 `playwright.config.ts` does not spawn these — both fail fast if missing.
 
 ## Running
 
-```powershell
+All commands are sh / bash. Do not wrap them in PowerShell — agent CLIs hang.
+
+```sh
 # from repo root
 npm --prefix frontend run e2e            # headless run, all specs
 npm --prefix frontend run e2e:ui         # interactive UI mode (debugging)
@@ -33,7 +35,7 @@ npm --prefix frontend run e2e:report     # open last HTML report
 First-time browser install (already done in dev setup, but if the
 `chromium-headless-shell` binary is missing):
 
-```powershell
+```sh
 npx --prefix frontend playwright install chromium
 ```
 

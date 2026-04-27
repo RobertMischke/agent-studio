@@ -22,7 +22,7 @@ Keep the product boundary clear:
 | Filesystem contract | `docs/filesystem-contract.md` | Job folder layout. |
 | Orchestrator prompt | `docs/autopilot-prompt.md` | Canonical workflow copied into watched targets. |
 | Repo prompts | `.github/prompts/` | Reusable prompt templates. |
-| Backend lifecycle | `api.ps1` | start / stop / restart / status. |
+| Backend lifecycle | `api.sh` | start / stop / restart / status (sh — agents must use this). |
 
 ### Service & data layout (backend)
 
@@ -60,45 +60,7 @@ Default dev configuration watches:
 
 Use `/api/watch-paths` to enumerate at runtime — never hardcode paths in tests; read them from there.
 
-## Backend Control
-
-Use the `api.ps1` script at the repo root:
-
-```powershell
-.\api.ps1 start
-.\api.ps1 stop
-.\api.ps1 restart
-.\api.ps1 status
-```
-
-Only restart the backend when backend code changed. Skip backend restarts for pure frontend or docs changes.
-
-## Frontend Control
-
-Start the frontend dev server with the VS Code task `Frontend: Start` when that task runner is available.
-
-Fallback command:
-
-```powershell
-npm start --prefix frontend
-```
-
-## Build, Test, Verify
-
-| Action | Command |
-|--------|---------|
-| Backend build | `dotnet build` |
-| Backend run | `dotnet run --project backend` |
-| Backend tests | `dotnet test` |
-| Frontend dev server | `npm start --prefix frontend` |
-| Frontend build | `npx ng build --prefix frontend` |
-| Frontend unit tests | `npm --prefix frontend run test` |
-| **E2E (Playwright)** | `npm --prefix frontend run e2e` |
-| E2E interactive UI | `npm --prefix frontend run e2e:ui` |
-| E2E single spec | `npm --prefix frontend run e2e -- e2e/cli-usage.spec.ts` |
-| Skip billable specs | `SKIP_BILLABLE=1 npm --prefix frontend run e2e` |
-
-Run the relevant build, test, or visual verification checks for the files you change. If a check cannot run in the current environment, document the concrete reason.
+_(Shell policy, Backend Control, Frontend Control, and Build/Test/Verify are documented below under "Shell policy — sh, not PowerShell".)_
 
 ### Visual & behavioural changes — Playwright is mandatory
 
@@ -114,9 +76,10 @@ The full E2E setup, conventions, and authoring rules live in [frontend/e2e/READM
 
 ## Windows Shell Compatibility
 
-- Do not assume `pwsh.exe` is available.
-- Prefer commands that work in Windows PowerShell or direct executable calls.
-- Avoid shell-specific file creation syntax when a portable tool or existing script is available.
+- **Default shell for agents is bash / sh** (Git Bash on Windows). Do not invoke PowerShell from agent commands.
+- Prefer existing `.sh` scripts (`api.sh`) over inline shell snippets.
+- If a task genuinely requires Windows-specific tooling (`tasklist`, `taskkill`, `netstat`), call those binaries directly from sh — do not wrap them in `powershell -c`.
+- Avoid shell-specific file-creation syntax (PowerShell here-strings, `Out-File`, `Set-Content`); use `cat <<'EOF'`, `tee`, or the `Write` tool.
 
 ## Job Folder Contract
 

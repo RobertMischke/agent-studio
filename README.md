@@ -36,12 +36,14 @@
 
 ## Starten
 
-```powershell
-# Backend
-.\api.ps1 start
+Agenten verwenden ausschließlich die sh-Variante (`./api.sh`). Die `.ps1`-Datei bleibt für manuelle Nutzung in PowerShell-Sessions, aber niemals aus einem Agent heraus.
 
-# Frontend (VS Code Task)
-# Oder: npm start --prefix frontend
+```sh
+# Backend (sh — funktioniert in Git Bash / WSL / POSIX)
+./api.sh start
+
+# Frontend (VS Code Task „Frontend: Start"
+# oder: npm start --prefix frontend)
 ```
 
 ## Konfiguration

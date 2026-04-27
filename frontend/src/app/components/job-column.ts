@@ -1,6 +1,8 @@
-import { Component, input, output } from '@angular/core';
+import { Component, computed, input, output } from '@angular/core';
 import { JobInfo, JobOrderItem } from '../models/job.model';
 import { JobCardComponent } from './job-card';
+
+const ARCHIVE_VISIBLE_LIMIT = 20;
 
 @Component({
   selector: 'app-job-column',
@@ -9,6 +11,7 @@ import { JobCardComponent } from './job-card';
   template: `
     <div class="column"
          [class.column--dragover]="isDragOver"
+         [class.column--archive]="isArchive()"
          (dragover)="onDragOver($event)"
          (dragleave)="onDragLeave($event)"
          (drop)="onDrop($event)">
@@ -16,35 +19,64 @@ import { JobCardComponent } from './job-card';
         <span class="column__icon">{{ icon() }}</span>
         <h2 class="column__title">{{ title() }}</h2>
         <span class="column__count">{{ jobs().length }}</span>
+        @if (canArchiveAll()) {
+          <button type="button"
+                  class="column__archive-all"
+                  data-testid="archive-all-btn"
+                  title="Move all completed tasks to Archive"
+                  (click)="archiveAll.emit()">
+            ⬇ Archive all
+          </button>
+        }
       </div>
       <div class="column__body">
-        @for (job of jobs(); track job.jobKey; let i = $index) {
-          <div class="column__drop-zone"
-               [class.column__drop-zone--active]="dropIndex === i"
-               (dragover)="onCardDragOver($event, i)"
+        @if (isArchive()) {
+          @for (job of archiveVisible(); track job.jobKey) {
+            <button type="button"
+                    class="archive-row"
+                    [attr.data-testid]="'archive-row'"
+                    (click)="jobClick.emit(job)">
+              <span class="archive-row__date">{{ formatShortDate(job.lastActivity) }}</span>
+              <span class="archive-row__project">{{ job.projectName }}</span>
+              <span class="archive-row__title">{{ job.title || job.id }}</span>
+            </button>
+          }
+          @if (jobs().length === 0) {
+            <div class="column__empty">No archived jobs</div>
+          } @else if (archiveOverflow() > 0) {
+            <div class="archive-overflow">
+              + {{ archiveOverflow() }} more in <code>6-archive/</code> folder
+            </div>
+          }
+        } @else {
+          @for (job of jobs(); track job.jobKey; let i = $index) {
+            <div class="column__drop-zone"
+                 [class.column__drop-zone--active]="dropIndex === i"
+                 (dragover)="onCardDragOver($event, i)"
+                 (dragleave)="onCardDragLeave()"
+                 (drop)="onCardDrop($event, i)">
+            </div>
+            <app-job-card
+              [job]="job"
+              (click)="jobClick.emit(job)"
+              draggable="true"
+              (dragstart)="onDragStart($event, job)" />
+          }
+          <div class="column__drop-zone column__drop-zone--last"
+               [class.column__drop-zone--active]="dropIndex === jobs().length"
+               (dragover)="onCardDragOver($event, jobs().length)"
                (dragleave)="onCardDragLeave()"
-               (drop)="onCardDrop($event, i)">
+               (drop)="onCardDrop($event, jobs().length)">
           </div>
-          <app-job-card
-            [job]="job"
-            (click)="jobClick.emit(job)"
-            draggable="true"
-            (dragstart)="onDragStart($event, job)" />
-        }
-        <div class="column__drop-zone column__drop-zone--last"
-             [class.column__drop-zone--active]="dropIndex === jobs().length"
-             (dragover)="onCardDragOver($event, jobs().length)"
-             (dragleave)="onCardDragLeave()"
-             (drop)="onCardDrop($event, jobs().length)">
-        </div>
-        @if (jobs().length === 0) {
-          <div class="column__empty">No jobs</div>
-        }
-        @if (canAddTask()) {
-          <button type="button" class="column__add" (click)="addTask.emit(state())">
-            <span class="column__add-icon">＋</span>
-            <span>Add task</span>
-          </button>
+          @if (jobs().length === 0) {
+            <div class="column__empty">No jobs</div>
+          }
+          @if (canAddTask()) {
+            <button type="button" class="column__add" (click)="addTask.emit(state())">
+              <span class="column__add-icon">＋</span>
+              <span>Add task</span>
+            </button>
+          }
         }
       </div>
     </div>
@@ -135,6 +167,72 @@ import { JobCardComponent } from './job-card';
       font-size: 16px;
       line-height: 1;
     }
+    .column__archive-all {
+      background: rgba(100, 116, 139, 0.12);
+      border: 1px solid rgba(100, 116, 139, 0.3);
+      color: #94a3b8;
+      padding: 3px 8px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 500;
+      white-space: nowrap;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    .column__archive-all:hover {
+      background: rgba(100, 116, 139, 0.25);
+      border-color: rgba(100, 116, 139, 0.55);
+      color: #cbd5e1;
+    }
+    .column--archive .column__body { gap: 2px; }
+    .archive-row {
+      display: grid;
+      grid-template-columns: auto auto 1fr;
+      gap: 8px;
+      align-items: baseline;
+      width: 100%;
+      text-align: left;
+      background: transparent;
+      border: 0;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      color: #cbd5e1;
+      padding: 4px 6px;
+      font-size: 12px;
+      line-height: 1.3;
+      cursor: pointer;
+      transition: background 0.12s, color 0.12s;
+    }
+    .archive-row:hover { background: rgba(255,255,255,0.05); color: #f1f5f9; }
+    .archive-row__date {
+      font-family: 'Consolas', monospace;
+      color: #64748b;
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+    }
+    .archive-row__project {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #8b5cf6;
+    }
+    .archive-row__title {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .archive-overflow {
+      margin-top: 8px;
+      padding: 6px 8px;
+      font-size: 11px;
+      color: #64748b;
+      border-top: 1px dashed rgba(255,255,255,0.08);
+    }
+    .archive-overflow code {
+      background: rgba(255,255,255,0.06);
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-size: 10px;
+    }
   `]
 })
 export class JobColumnComponent {
@@ -146,6 +244,7 @@ export class JobColumnComponent {
   readonly jobDrop = output<{ jobId: string; watchPath: string; targetState: string }>();
   readonly jobReorder = output<{ state: string; jobs: JobOrderItem[] }>();
   readonly addTask = output<string>();
+  readonly archiveAll = output<void>();
 
   isDragOver = false;
   dropIndex = -1;
@@ -153,6 +252,36 @@ export class JobColumnComponent {
   canAddTask(): boolean {
     const s = this.state();
     return s === '1-preparation' || s === '2-ready';
+  }
+
+  isArchive(): boolean {
+    return this.state() === '6-archive';
+  }
+
+  canArchiveAll(): boolean {
+    return this.state() === '5-completed';
+  }
+
+  readonly archiveVisible = computed(() => {
+    if (!this.isArchive()) return [] as JobInfo[];
+    return [...this.jobs()]
+      .sort((a, b) => (b.lastActivity ?? '').localeCompare(a.lastActivity ?? ''))
+      .slice(0, ARCHIVE_VISIBLE_LIMIT);
+  });
+
+  readonly archiveOverflow = computed(() => {
+    if (!this.isArchive()) return 0;
+    return Math.max(0, this.jobs().length - ARCHIVE_VISIBLE_LIMIT);
+  });
+
+  formatShortDate(iso: string | null | undefined): string {
+    if (!iso) return '—';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return '—';
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
   }
 
   onDragStart(event: DragEvent, job: JobInfo) {

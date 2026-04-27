@@ -56,6 +56,15 @@ import { markdownToHtml } from './markdown-utils';
         <span class="detail__state" [class]="'state--' + detail().info.state">
           {{ stateLabel(detail().info.state) }}
         </span>
+        @if (isReview()) {
+          <button type="button"
+                  class="detail__complete-next"
+                  data-testid="complete-and-next-btn"
+                  [disabled]="completingAndNext()"
+                  (click)="completeAndNext()">
+            {{ completingAndNext() ? '⏳' : '✓ Complete & Next' }}
+          </button>
+        }
       </header>
 
       <div class="detail__meta">
@@ -822,6 +831,29 @@ import { markdownToHtml } from './markdown-utils';
     .state--3-progress { background: rgba(59,130,246,0.15); color: #3b82f6; }
     .state--4-review { background: rgba(245,158,11,0.15); color: #f59e0b; }
     .state--5-completed { background: rgba(16,185,129,0.15); color: #10b981; }
+    .state--6-archive { background: rgba(100,116,139,0.15); color: #94a3b8; }
+    .detail__complete-next {
+      background: rgba(16,185,129,0.12);
+      border: 1px solid rgba(16,185,129,0.35);
+      color: #10b981;
+      padding: 7px 14px;
+      border-radius: 999px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+      flex-shrink: 0;
+    }
+    .detail__complete-next:hover:not(:disabled) {
+      background: rgba(16,185,129,0.22);
+      border-color: rgba(16,185,129,0.6);
+      color: #34d399;
+    }
+    .detail__complete-next:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
 
     .detail__meta {
       display: grid;
@@ -1438,6 +1470,7 @@ export class JobDetailComponent implements OnDestroy {
   readonly back = output<void>();
   readonly fileSaved = output<void>();
   readonly projectChanged = output<string>();
+  readonly completeAndNextReview = output<void>();
 
   readonly editingPrompt = signal(false);
   readonly editingStatus = signal(false);
@@ -1479,6 +1512,7 @@ export class JobDetailComponent implements OnDestroy {
   readonly editingTitle = signal(false);
   readonly titleDraft = signal('');
   readonly savingTitle = signal(false);
+  readonly completingAndNext = signal(false);
   readonly statusViewMode = signal<'preview' | 'markdown'>('preview');
   readonly detailPanePercent = signal(this.loadDetailPanePercent());
 
@@ -1811,6 +1845,30 @@ export class JobDetailComponent implements OnDestroy {
 
   isProgress(): boolean {
     return this.detail().info.state === '3-progress';
+  }
+
+  isReview(): boolean {
+    return this.detail().info.state === '4-review';
+  }
+
+  completeAndNext() {
+    if (this.completingAndNext()) return;
+    this.completingAndNext.set(true);
+    const { id, watchPath } = this.detail().info;
+    this.jobService.moveJob(id, '5-completed', watchPath).subscribe({
+      next: () => {
+        this.completingAndNext.set(false);
+        this.completeAndNextReview.emit();
+      },
+      error: (err) => {
+        this.completingAndNext.set(false);
+        this.errorDialog.show(err, {
+          title: 'Failed to complete task',
+          fallbackMessage: 'Failed to move task to Completed',
+          source: `Task ${id}`
+        });
+      }
+    });
   }
 
   startEdit(which: 'prompt' | 'status') {

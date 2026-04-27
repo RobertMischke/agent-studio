@@ -9,7 +9,7 @@ export class JobService {
   private liveUpdateTimer: ReturnType<typeof setInterval> | null = null;
 
   readonly jobs = signal<JobInfo[]>([]);
-  readonly grouped = signal<GroupedJobs>({ preparation: [], ready: [], progress: [], review: [], completed: [] });
+  readonly grouped = signal<GroupedJobs>({ preparation: [], ready: [], progress: [], review: [], completed: [], archive: [] });
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly runnerStatus = signal<RunnerStatus>({ projects: {} });

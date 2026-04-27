@@ -114,9 +114,10 @@ my-task/
 - Update `job.json` `"state"` to match the folder the job is in
 - Screenshots go into `results/` inside the job folder, linked from `status.md`
 
-## Windows Shell Compatibility
+## Shell policy — sh, not PowerShell
 
-- On Windows, do **not** rely on `pwsh.exe` being installed.
-- For shell commands, prefer `cmd.exe`, normal Windows batch syntax, or direct Node/npm commands.
-- If a plan file must be created, use a method that does not depend on PowerShell-specific syntax such as `@' ... '@`, `Out-File`, or `Set-Content`.
+- **Never invoke PowerShell from the agent.** Background launches and PID tracking break, the agent waits for prompts that never arrive.
+- Use bash / sh (Git Bash on Windows is fine). Prefer existing `.sh` entrypoints (e.g. `./api.sh`) over inline shell snippets.
+- For Windows-specific binaries (`tasklist`, `taskkill`, `netstat`), call them directly from sh — do not wrap in `powershell -c`.
+- For file creation, use plain `cat <<'EOF' > path` heredocs or the agent's Write tool. No `Out-File`, `Set-Content`, here-strings.
 - If a build cannot run in the current environment, state the concrete reason in `status.md` and continue with static verification.

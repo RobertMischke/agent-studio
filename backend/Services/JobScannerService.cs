@@ -225,6 +225,23 @@ public class JobScannerService
         }
     }
 
+    public bool DeleteJob(string jobId, string? watchPath = null)
+    {
+        var info = FindJob(jobId, watchPath);
+        if (info == null) return false;
+
+        try
+        {
+            Directory.Delete(info.FolderPath, true);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to delete job {JobId}", jobId);
+            return false;
+        }
+    }
+
     public bool ChangeProject(string jobId, string targetWatchPath, string? watchPath = null)
     {
         var entries = GetWatchPaths();
