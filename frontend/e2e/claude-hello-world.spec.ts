@@ -77,5 +77,22 @@ test.describe('Claude Code — hello world @billable', () => {
     expect(out, 'Output endpoint should return data').toBeTruthy();
     const text = JSON.stringify(out);
     expect(text.toLowerCase()).toContain('hello');
+
+    // Regression guard: the Claude CLI used to emit
+    //   "Warning: no stdin data received in 3s, proceeding without it."
+    // because the backend left stdin open. We now close stdin right after
+    // process.Start(), so the warning must not appear in the output stream.
+    expect(
+      text,
+      'stdin warning leaked — backend must close stdin after process.Start()'
+    ).not.toMatch(/no stdin data received/i);
+
+    // And the run itself shouldn't pay the 3-second stdin timeout anymore.
+    // Haiku Hello World finishes in well under 5 seconds when stdin is closed
+    // up front. We allow a generous 15s envelope to absorb cold-start jitter.
+    expect(
+      e.durationSeconds!,
+      `run took ${e.durationSeconds}s — likely the 3s stdin warning regressed`
+    ).toBeLessThan(15);
   });
 });

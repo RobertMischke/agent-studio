@@ -159,6 +159,11 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         try
         {
             process.Start();
+            // Some CLIs (notably Claude Code) read stdin even when the prompt is
+            // passed via -p, and emit a 3-second "no stdin data received" warning
+            // before continuing. We have no input to send, so signal EOF up front
+            // to skip the warning and the wasted wall time.
+            try { process.StandardInput.Close(); } catch { }
         }
         catch (Exception ex)
         {
