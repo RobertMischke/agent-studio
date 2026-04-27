@@ -337,6 +337,19 @@ public class ProjectRunner
             // null and let the CLI assign one (extracted from session_meta on stdout).
             var cli = GetCliFor(info);
             var sessionName = info.SessionName;
+            // Cross-CLI guard: a session name recorded under another CLI (e.g.
+            // Copilot's slug) is meaningless to Claude/Codex and used to make
+            // them hang on `-r`. Drop it and let the fresh-session branch pick
+            // up.
+            if (!string.IsNullOrWhiteSpace(sessionName) && !cli.IsCompatibleSessionName(sessionName))
+            {
+                _logger.LogInformation(
+                    "Dropping incompatible sessionName '{Session}' for {Cli} job {JobId}",
+                    sessionName, cli.CliType, jobId);
+                sessionName = null;
+                // Clear the persisted value so subsequent runs don't reattempt.
+                _scanner.SetJobSessionName(jobId, null, Entry.Path);
+            }
             var resume = !string.IsNullOrWhiteSpace(sessionName);
             if (!resume && cli.CliType != CliTypes.Codex)
             {

@@ -15,6 +15,17 @@ public class CopilotCliService : ICliExecutionService
     public Task<CliModelCatalog> GetModelCatalogAsync(bool forceRefresh = false, CancellationToken ct = default)
         => _modelDiscovery.GetAsync(GetCliPath(), forceRefresh, ct);
 
+    // Copilot uses slug-style session names ("taskboard-...") and tolerates
+    // any non-empty value via --resume. Reject UUIDs (those are Claude/Codex
+    // session IDs and would make Copilot start a fresh session anyway).
+    private static readonly Regex CopilotUuidRejectRegex = new(
+        @"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+        RegexOptions.Compiled);
+
+    public bool IsCompatibleSessionName(string? sessionName)
+        => !string.IsNullOrWhiteSpace(sessionName)
+           && !CopilotUuidRejectRegex.IsMatch(sessionName);
+
     private static readonly string[] WindowsShellFallbackInstructions =
     [
         "Wenn Shell-Kommandos notwendig sind, verwende auf Windows keine pwsh.exe-abhaengigen Befehle.",

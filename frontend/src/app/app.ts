@@ -48,7 +48,7 @@ import { ErrorDialogService } from './services/error-dialog.service';
                [style.--side-sheet-width]="sideSheetWidth() + 'px'">
             <aside class="task-nav">
               <div class="task-nav__header">
-                <button class="btn btn--ghost" (click)="closeDetail()">← Board</button>
+                <button class="btn btn--ghost" data-testid="back-to-board" (click)="closeDetail()">← Board</button>
                 <div>
                   <div class="task-nav__eyebrow">Task list</div>
                   <h2 class="task-nav__title">Focused view</h2>
@@ -896,6 +896,19 @@ export class App implements OnInit {
       },
     });
     this.jobService.refreshRunnerStatus();
+    this.restoreDetailFromUrl();
+  }
+
+  private restoreDetailFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const jobId = params.get('job');
+    const watchPath = params.get('watchPath');
+    if (jobId && watchPath) {
+      this.jobService.getDetail(jobId, watchPath).subscribe({
+        next: (detail) => this.selectedJob.set(detail),
+        error: () => history.replaceState(null, '', window.location.pathname),
+      });
+    }
   }
 
   refresh() {
@@ -903,9 +916,11 @@ export class App implements OnInit {
   }
 
   openDetail(job: JobInfo) {
+    history.replaceState(null, '', `?job=${encodeURIComponent(job.id)}&watchPath=${encodeURIComponent(job.watchPath)}`);
     this.jobService.getDetail(job.id, job.watchPath).subscribe({
       next: (detail) => this.selectedJob.set(detail),
       error: (err) => {
+        history.replaceState(null, '', window.location.pathname);
         this.errorDialog.show(err, {
           title: 'Failed to load task details',
           fallbackMessage: 'Failed to load task details',
@@ -921,6 +936,7 @@ export class App implements OnInit {
 
   closeDetail() {
     this.selectedJob.set(null);
+    history.replaceState(null, '', window.location.pathname);
   }
 
   onJobDrop(event: { jobId: string; watchPath: string; targetState: string }) {

@@ -39,6 +39,15 @@ public interface ICliExecutionService
     /// <summary>Returns the set of models the user can select for this CLI.</summary>
     Task<CliModelCatalog> GetModelCatalogAsync(bool forceRefresh = false, CancellationToken ct = default);
 
+    /// <summary>
+    /// Returns true if <paramref name="sessionName"/> looks like a session
+    /// identifier this CLI can resume. Cross-CLI session names (e.g. a Copilot
+    /// slug fed to Claude's <c>-r</c>) used to make the new CLI hang silently;
+    /// callers should drop the recorded name and start fresh when this returns
+    /// false.
+    /// </summary>
+    bool IsCompatibleSessionName(string? sessionName);
+
     event Action<string, CliOutputLine>? OnOutput;
     event Action<string, CliExecution>? OnStarted;
     event Action<string, CliExecution>? OnFinished;

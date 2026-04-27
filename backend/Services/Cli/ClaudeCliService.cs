@@ -64,6 +64,17 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         };
     }
 
+    // Claude's `-r` flag expects a session UUID written by the CLI itself.
+    // Slug-style names from another CLI (e.g. Copilot's "taskboard-...") cause
+    // the process to hang instead of erroring out, so reject anything that
+    // isn't a 36-char canonical UUID.
+    private static readonly System.Text.RegularExpressions.Regex UuidRegex =
+        new(@"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    public override bool IsCompatibleSessionName(string? sessionName)
+        => !string.IsNullOrWhiteSpace(sessionName) && UuidRegex.IsMatch(sessionName);
+
     public override Task<CliModelCatalog> GetModelCatalogAsync(bool forceRefresh = false, CancellationToken ct = default)
     {
         // No live discovery yet — surface the well-known Claude 4.x family. The

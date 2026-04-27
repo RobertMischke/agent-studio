@@ -21,6 +21,15 @@ public sealed class CodexCliService : CliExecutionServiceBase
 
     public override string CliType => CliTypes.Codex;
 
+    // Codex resumes by UUID captured from session_meta. A slug from Copilot or
+    // any other CLI is invalid and would make `codex exec resume` error out.
+    private static readonly System.Text.RegularExpressions.Regex CodexUuidRegex =
+        new(@"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+            System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    public override bool IsCompatibleSessionName(string? sessionName)
+        => !string.IsNullOrWhiteSpace(sessionName) && CodexUuidRegex.IsMatch(sessionName);
+
     public override string GetCliPath()
         => _cliPathOverride
            ?? _configuration["CodexCli:Path"]

@@ -12,7 +12,7 @@ if (typeof window !== 'undefined') {
   selector: 'app-job-card',
   standalone: true,
   template: `
-    <div class="job-card" [class]="'job-card--' + job().state">
+    <div class="job-card" [class]="'job-card--' + job().state" data-testid="job-card">
       <div class="job-card__header">
         <span class="job-card__project">{{ job().projectName }}</span>
         <span class="job-card__order">#{{ job().order }}</span>

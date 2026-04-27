@@ -321,11 +321,11 @@ public class JobScannerService
         UpdateJobJsonField(jobDir, "state", newState);
     }
 
-    public bool SetJobSessionName(string jobId, string sessionName, string? watchPath = null)
+    public bool SetJobSessionName(string jobId, string? sessionName, string? watchPath = null)
     {
         var info = FindJob(jobId, watchPath);
         if (info == null) return false;
-        UpdateJobJsonField(info.FolderPath, "sessionName", sessionName);
+        UpdateJobJsonField(info.FolderPath, "sessionName", sessionName ?? "");
         return true;
     }
 

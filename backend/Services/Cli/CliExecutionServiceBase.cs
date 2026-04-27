@@ -37,6 +37,14 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
 
     public abstract string GetCliPath();
 
+    /// <summary>
+    /// Default: accept any non-empty session name. Subclasses with strict
+    /// session-id formats (Claude requires UUIDs) override to reject names
+    /// that came from a different CLI's session store.
+    /// </summary>
+    public virtual bool IsCompatibleSessionName(string? sessionName)
+        => !string.IsNullOrWhiteSpace(sessionName);
+
     public virtual (bool Available, string? Version, string Path) TestCliPath(string? path = null)
     {
         var testPath = ResolveExecutable(path?.Trim() ?? GetCliPath());
