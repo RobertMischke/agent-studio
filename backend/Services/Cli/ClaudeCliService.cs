@@ -204,8 +204,34 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
                 }
                 yield break;
             }
+            case "rate_limit_event":
+            {
+                // Anthropic streams a rate-limit telemetry frame per turn; surface
+                // it as a compact marker so the user sees when a window is near
+                // exhaustion instead of getting a raw JSON dump in the log.
+                var info = root.TryGetProperty("rate_limit_info", out var rli) && rli.ValueKind == System.Text.Json.JsonValueKind.Object
+                    ? rli : default;
+                var status   = info.ValueKind == System.Text.Json.JsonValueKind.Object && info.TryGetProperty("status",          out var s)  ? s.GetString()  : null;
+                var window   = info.ValueKind == System.Text.Json.JsonValueKind.Object && info.TryGetProperty("rateLimitType",   out var rt) ? rt.GetString() : null;
+                var resetsAt = info.ValueKind == System.Text.Json.JsonValueKind.Object && info.TryGetProperty("resetsAt",        out var ra) && ra.ValueKind == System.Text.Json.JsonValueKind.Number
+                    ? ra.GetInt64() : 0;
+                var resetIn = resetsAt > 0
+                    ? FormatRelative(DateTimeOffset.FromUnixTimeSeconds(resetsAt) - DateTimeOffset.UtcNow)
+                    : null;
+                var bits = new List<string> { "● Rate limit" };
+                if (!string.IsNullOrWhiteSpace(window)) bits.Add(window!.Replace('_', '-'));
+                if (!string.IsNullOrWhiteSpace(status)) bits.Add(status!);
+                if (resetIn != null) bits.Add($"reset in {resetIn}");
+                yield return raw with { Text = string.Join(" · ", bits) };
+                yield break;
+            }
             default:
-                yield return raw;
+                // Catch-all: surface the frame type as a marker. Never leak raw
+                // JSON into the activity log — that would also break our marker
+                // classifier downstream. New Claude frame types should still
+                // get an explicit case above when they carry useful info.
+                var fallbackType = type ?? "frame";
+                yield return raw with { Text = $"● {fallbackType}" };
                 yield break;
         }
     }
@@ -259,6 +285,15 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
 
     private static string TrimSingleLine(string s) =>
         s.Replace('\n', ' ').Replace('\r', ' ').Trim() is { } t && t.Length > 200 ? t[..200] + "…" : s.Trim();
+
+    private static string FormatRelative(TimeSpan ts)
+    {
+        if (ts.TotalSeconds <= 0) return "now";
+        if (ts.TotalMinutes < 2)  return $"{(int)ts.TotalSeconds}s";
+        if (ts.TotalHours < 2)    return $"{(int)ts.TotalMinutes} min";
+        if (ts.TotalDays < 2)     return $"{ts.TotalHours:0.#} h";
+        return $"{ts.TotalDays:0.#} d";
+    }
 
     // Claude's `-r` flag expects a session UUID written by the CLI itself.
     // Slug-style names from another CLI (e.g. Copilot's "taskboard-...") cause
