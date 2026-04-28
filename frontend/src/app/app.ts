@@ -10,7 +10,7 @@ import { ErrorDialogService } from './services/error-dialog.service';
 import { cliTypeLabel as fmtCliTypeLabel, formatMultiplier as fmtMultiplier } from './services/format.util';
 import { CreateJobDialogComponent } from './components/board/create-job-dialog/create-job-dialog.component';
 import { ErrorDialogComponent } from './components/board/error-dialog/error-dialog.component';
-import { ProjectTabsComponent } from './components/board/project-tabs/project-tabs.component';
+import { ProjectAutoInfo, ProjectTabsComponent } from './components/board/project-tabs/project-tabs.component';
 
 @Component({
   selector: 'app-root',
@@ -32,7 +32,9 @@ import { ProjectTabsComponent } from './components/board/project-tabs/project-ta
           [names]="projectNames()"
           [isActive]="isProjectActiveFn"
           [runnerIndicator]="getRunnerIndicatorFn"
-          (toggle)="toggleProject($event)" />
+          [autoInfo]="getAutoInfoFn"
+          (toggle)="toggleProject($event)"
+          (toggleAuto)="onToggleAuto($event)" />
         <div class="header__actions">
           <button class="btn" (click)="usageSheet.toggle()" title="CLI sessions">
             🪙 Usage
@@ -267,6 +269,76 @@ import { ProjectTabsComponent } from './components/board/project-tabs/project-ta
     @keyframes pulse-runner {
       0%, 100% { opacity: 1; }
       50% { opacity: 0.4; }
+    }
+    .project-tab {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .auto-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.12);
+      color: #94a3b8;
+      padding: 4px 10px;
+      border-radius: 16px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    .auto-toggle:hover {
+      background: rgba(255,255,255,0.10);
+      border-color: rgba(255,255,255,0.22);
+      color: #e2e8f0;
+    }
+    .auto-toggle__icon {
+      font-size: 11px;
+      line-height: 1;
+    }
+    .auto-toggle__count {
+      background: rgba(255,255,255,0.12);
+      border-radius: 999px;
+      padding: 1px 6px;
+      font-size: 10px;
+      font-weight: 700;
+      color: #f8fafc;
+      min-width: 16px;
+      text-align: center;
+    }
+    .auto-toggle--on {
+      background: rgba(34,197,94,0.18);
+      border-color: rgba(74,222,128,0.55);
+      color: #bbf7d0;
+      box-shadow: 0 0 0 1px rgba(74,222,128,0.18);
+    }
+    .auto-toggle--on:hover {
+      background: rgba(34,197,94,0.28);
+      border-color: rgba(74,222,128,0.75);
+      color: #f0fdf4;
+    }
+    .auto-toggle--on .auto-toggle__count {
+      background: rgba(74,222,128,0.30);
+      color: #f0fdf4;
+    }
+    .auto-toggle--stopping {
+      background: rgba(234,179,8,0.18);
+      border-color: rgba(250,204,21,0.55);
+      color: #fde68a;
+      box-shadow: 0 0 0 1px rgba(250,204,21,0.18);
+      animation: auto-stopping-pulse 2s ease-in-out infinite;
+    }
+    .auto-toggle--stopping:hover {
+      background: rgba(234,179,8,0.28);
+      border-color: rgba(250,204,21,0.75);
+      color: #fef9c3;
+    }
+    @keyframes auto-stopping-pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.65; }
     }
     .btn {
       background: rgba(255,255,255,0.10);
@@ -1081,6 +1153,7 @@ export class App implements OnInit {
   // `this` correct without per-call .bind().
   readonly isProjectActiveFn = (name: string) => this.isProjectActive(name);
   readonly getRunnerIndicatorFn = (name: string) => this.getRunnerIndicator(name);
+  readonly getAutoInfoFn = (name: string) => this.getAutoInfo(name);
 
   getRunnerIndicator(name: string): { icon: string; cls: string } | null {
     const status = this.jobService.runnerStatus();
@@ -1091,6 +1164,62 @@ export class App implements OnInit {
     if (runner.mode === 'auto-continuous') return { icon: '🟢', cls: 'idle' };
     if (runner.mode === 'auto-single') return { icon: '🟢', cls: 'idle' };
     return null;
+  }
+
+  getAutoInfo(name: string): ProjectAutoInfo {
+    const status = this.jobService.runnerStatus();
+    const runner = status.projects[name];
+    const mode = runner?.mode ?? 'manual';
+    const readyCount = runner?.queuedJobIds.length ?? 0;
+    const hasActive = !!runner?.activeJobId;
+
+    if (mode === 'auto-continuous' || mode === 'auto-single') {
+      return {
+        state: 'on',
+        readyCount,
+        icon: '🔁',
+        label: 'Auto',
+        tooltip: readyCount > 0
+          ? `Auto-pickup is on — when the current task finishes, the next Ready task starts automatically (${readyCount} waiting). Click to stop; the running task will continue, but no further tasks will be picked up.`
+          : `Auto-pickup is on — the next task moved to Ready will start automatically. Click to stop; the running task (if any) will continue but no further tasks will be picked up.`
+      };
+    }
+
+    if (mode === 'paused' && hasActive) {
+      return {
+        state: 'stopping',
+        readyCount,
+        icon: '⏸',
+        label: 'Stopping',
+        tooltip: `Auto-pickup stopped — the current task keeps running, but no more tasks will be picked up automatically. Click to resume auto-pickup.`
+      };
+    }
+
+    return {
+      state: 'off',
+      readyCount,
+      icon: '▶',
+      label: 'Auto',
+      tooltip: readyCount > 0
+        ? `Enable auto-pickup — when the current task finishes, the next Ready task starts automatically (${readyCount} waiting).`
+        : `Enable auto-pickup — as soon as a task moves to Ready, it will start automatically.`
+    };
+  }
+
+  onToggleAuto(name: string) {
+    const runner = this.jobService.runnerStatus().projects[name];
+    const mode = runner?.mode ?? 'manual';
+    const newMode = (mode === 'auto-continuous' || mode === 'auto-single') ? 'paused' : 'auto-continuous';
+    this.jobService.setRunnerMode(name, newMode).subscribe({
+      next: () => this.jobService.refreshRunnerStatus(true),
+      error: (err) => {
+        this.errorDialog.show(err, {
+          title: 'Failed to change auto-pickup mode',
+          fallbackMessage: 'Failed to change auto-pickup mode',
+          source: `Project ${name}`
+        });
+      }
+    });
   }
 
   onFileSaved() {
