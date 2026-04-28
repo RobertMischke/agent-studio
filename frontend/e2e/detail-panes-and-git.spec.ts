@@ -51,6 +51,49 @@ test.describe('Detail view — 3-pane layout + Git view', () => {
     }
   });
 
+  test('Git view auto-refreshes when the pane is visible', async ({ page }) => {
+    const watchPath = await pickWatchPath();
+    const job = await createJob({
+      title: `git-autorefresh-${Date.now()}`,
+      watchPath,
+      cliType: 'claude',
+      agent: 'claude',
+      promptMarkdown: '# Git auto-refresh test',
+      targetState: '2-ready'
+    });
+
+    try {
+      await page.goto(`/?job=${encodeURIComponent(job.id)}&watchPath=${encodeURIComponent(watchPath)}`);
+      await expect(page.getByTestId('pane-protocol')).toBeVisible({ timeout: 10_000 });
+
+      // Track how many times the git/status endpoint is called.
+      let statusCallCount = 0;
+      await page.route(`**/api/jobs/*/git/status**`, async (route) => {
+        statusCallCount++;
+        await route.continue();
+      });
+
+      // Open the git pane — this triggers the initial load.
+      await page.getByTestId('pane-toggle-git').click();
+      await expect(page.getByTestId('pane-git')).toBeVisible();
+
+      // Wait for the initial load to complete.
+      const gitContent = page.getByTestId('git-files-count').or(page.locator('.git-view__empty'));
+      await expect(gitContent.first()).toBeVisible({ timeout: 10_000 });
+      const callsAfterOpen = statusCallCount;
+
+      // Wait for at least one auto-refresh cycle (5 s interval + buffer).
+      await page.waitForTimeout(6_500);
+
+      expect(statusCallCount).toBeGreaterThan(callsAfterOpen);
+
+      // Screenshot to confirm the pane is still rendered correctly.
+      await page.screenshot({ path: 'e2e/_baselines/git-auto-refresh.png', fullPage: false });
+    } finally {
+      await api(`/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
+    }
+  });
+
   test('Git view shows file count and supports an empty working tree', async ({ page }) => {
     const watchPath = await pickWatchPath();
     const job = await createJob({

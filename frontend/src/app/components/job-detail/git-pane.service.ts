@@ -1,4 +1,4 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, OnDestroy, signal } from '@angular/core';
 import { GitStatus, JobInfo } from '../../models/job.model';
 import { JobService } from '../../services/job.service';
 import { ErrorDialogService } from '../../services/error-dialog.service';
@@ -14,7 +14,7 @@ import { ErrorDialogService } from '../../services/error-dialog.service';
  * traffic + signals from there.
  */
 @Injectable()
-export class GitPaneService {
+export class GitPaneService implements OnDestroy {
   readonly status = signal<GitStatus | null>(null);
   readonly loading = signal(false);
   readonly selectedDiffPath = signal<string | null>(null);
@@ -24,11 +24,34 @@ export class GitPaneService {
   readonly generatingMsg = signal(false);
 
   private currentJob: JobInfo | null = null;
+  private refreshTimer: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     private jobService: JobService,
     private errorDialog: ErrorDialogService
   ) {}
+
+  /** Start polling git status every `intervalMs` ms. No-op if already running. */
+  startAutoRefresh(intervalMs = 5000): void {
+    if (this.refreshTimer) return;
+    this.refreshTimer = setInterval(() => {
+      if (!this.committing() && !this.generatingMsg()) {
+        this.refresh();
+      }
+    }, intervalMs);
+  }
+
+  /** Stop the auto-refresh polling loop. */
+  stopAutoRefresh(): void {
+    if (this.refreshTimer) {
+      clearInterval(this.refreshTimer);
+      this.refreshTimer = null;
+    }
+  }
+
+  ngOnDestroy(): void {
+    this.stopAutoRefresh();
+  }
 
   /**
    * Tell the service which job is currently displayed. Resets the pane

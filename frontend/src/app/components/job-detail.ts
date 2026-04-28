@@ -1416,10 +1416,18 @@ export class JobDetailComponent implements OnDestroy {
     this.lastCliConfigRequest = requestId;
     this.openCliConfig();
   });
+  private gitAutoRefreshEffect = effect(() => {
+    if (this.panesVisible().git) {
+      this.git.startAutoRefresh();
+    } else {
+      this.git.stopAutoRefresh();
+    }
+  });
 
   ngOnDestroy() {
     this.detailEffect.destroy();
     this.cliConfigEffect.destroy();
+    this.gitAutoRefreshEffect.destroy();
     this.cliPoll.stop();
     this.layout.stopLayoutResize();
     this.claudePoll.stop();
