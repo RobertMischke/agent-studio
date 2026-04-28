@@ -78,10 +78,13 @@ public static class JobEndpoints
             return jobId is null ? Results.Conflict("Job already exists or invalid input") : Results.Ok(new { id = jobId });
         });
 
-        group.MapPut("/{jobId}/files/{fileName}", (string jobId, string fileName, string? watchPath, UpdateJobFileRequest req, JobScannerService scanner) =>
+        group.MapPut("/{jobId}/files/{fileName}", (string jobId, string fileName, string? watchPath, UpdateJobFileRequest req, JobScannerService scanner, TaskRunnerService runner) =>
         {
+            if (runner.IsJobLive(jobId, watchPath))
+                return Results.Conflict("Cannot edit while the CLI is running for this task — stop it first.");
+
             var success = scanner.UpdateJobFile(jobId, fileName, req.Content, watchPath);
-            return success ? Results.Ok() : Results.BadRequest("Cannot edit (job in progress or not found)");
+            return success ? Results.Ok() : Results.NotFound("Job not found or file is not editable.");
         });
 
         group.MapPost("/reorder", (ReorderRequest req, JobScannerService scanner) =>

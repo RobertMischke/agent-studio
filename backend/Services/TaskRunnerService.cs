@@ -168,6 +168,19 @@ public class TaskRunnerService : BackgroundService
         return info != null && _router.Get(info.CliType).Stop(info.JobKey);
     }
 
+    /// <summary>
+    /// True only when a CLI process is currently executing this job.
+    /// The "3-progress" folder alone is not enough — a job can sit there
+    /// after a stop / crash / restart without a live process.
+    /// </summary>
+    public bool IsJobLive(string jobId, string? watchPath = null)
+    {
+        var info = _scanner.FindJob(jobId, watchPath);
+        if (info == null) return false;
+        var execution = _router.Get(info.CliType).GetExecution(info.JobKey);
+        return execution?.Status == "running";
+    }
+
     public List<CliOutputLine> GetJobOutput(string jobId, string? watchPath = null)
     {
         var info = _scanner.FindJob(jobId, watchPath);

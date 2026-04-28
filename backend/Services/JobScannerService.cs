@@ -545,8 +545,9 @@ public class JobScannerService
         var info = FindJob(jobId, watchPath);
         if (info == null) return false;
 
-        // Don't allow editing while in progress
-        if (info.State == JobStates.Progress) return false;
+        // Liveness (is a CLI actually running?) is checked by the endpoint via
+        // TaskRunnerService.IsJobLive — the "3-progress" folder alone is not a
+        // reliable signal because jobs stay there after stop / crash / restart.
 
         var filePath = Path.Combine(info.FolderPath, fileName);
         File.WriteAllText(filePath, content);

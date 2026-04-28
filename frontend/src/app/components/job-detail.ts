@@ -298,6 +298,8 @@ import { markdownToHtml } from './markdown-utils';
             </div>
 
             <app-markdown-rich-editor [value]="detail().promptMarkdown || ''"
+                                      [readOnly]="isRunning()"
+                                      [readOnlyReason]="isRunning() ? 'Editing disabled — the CLI is running for this task. Stop it first.' : null"
                                       (save)="saveFileContent('prompt.md', $event)" />
           </section>
         </main>
@@ -355,8 +357,10 @@ import { markdownToHtml } from './markdown-utils';
                       @if (editingStatus()) {
                         <div class="section__actions">
                           <button class="btn-sm" (click)="cancelEdit('status')">Cancel</button>
-                          <button class="btn-sm btn-sm--primary" (click)="saveFile('status.md')">Save</button>
+                          <button class="btn-sm btn-sm--primary" (click)="saveFile('status.md')" [disabled]="isRunning()">Save</button>
                         </div>
+                      } @else if (isRunning()) {
+                        <span class="notes-panel__lock" title="Editing disabled while the CLI is running for this task.">🔒 CLI is running</span>
                       } @else {
                         <button class="btn-sm" (click)="startEdit('status')">✏️ Edit</button>
                       }
@@ -1043,6 +1047,14 @@ import { markdownToHtml } from './markdown-utils';
       justify-content: flex-end;
       gap: 8px;
       flex-wrap: wrap;
+    }
+    .notes-panel__lock {
+      font-size: 11px;
+      color: #fbbf24;
+      background: rgba(251,191,36,0.10);
+      border: 1px solid rgba(251,191,36,0.35);
+      border-radius: 999px;
+      padding: 2px 8px;
     }
     .notes-panel__tabs {
       display: inline-flex;
@@ -1950,6 +1962,7 @@ export class JobDetailComponent implements OnDestroy {
   }
 
   startEdit(which: 'prompt' | 'status') {
+    if (this.isRunning()) return;
     if (which === 'prompt') {
       this.promptDraftValue = this.detail().promptMarkdown ?? '';
       this.editingPrompt.set(true);
@@ -1999,11 +2012,13 @@ export class JobDetailComponent implements OnDestroy {
   }
 
   saveFile(fileName: string) {
+    if (this.isRunning()) return;
     const content = fileName === 'prompt.md' ? this.promptDraftValue : this.statusDraftValue;
     this.saveFileContent(fileName, content);
   }
 
   saveFileContent(fileName: string, content: string) {
+    if (this.isRunning()) return;
     this.jobService.updateJobFile(this.detail().info.id, fileName, content, this.detail().info.watchPath).subscribe({
       next: () => {
         if (fileName === 'prompt.md') this.editingPrompt.set(false);

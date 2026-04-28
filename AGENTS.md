@@ -85,13 +85,16 @@ _(Shell policy, Backend Control, Frontend Control, and Build/Test/Verify are doc
 
 ### Visual & behavioural changes — Playwright is mandatory
 
+**Default = always test. Never ask the user whether to run Playwright or write a spec — just do it, with priority.** Asking ("should I add a spec?", "want me to verify?") is a regression. Treat the test + screenshot deliverable as part of the task itself.
+
 After **every change with visual or behavioural impact** in the frontend (layout, styling, component templates, interaction states, new buttons, new flows), you must:
 
 1. Run the relevant Playwright spec(s) under `frontend/e2e/` and confirm they pass.
 2. If the change isn't covered by an existing spec, **add or extend one** before declaring the task done. Regression tests are the deliverable, not an afterthought.
-3. For changes that touch CLI execution paths (Claude / Codex / Copilot), run `claude-hello-world.spec.ts` (or the equivalent for the affected CLI) end-to-end. It is `@billable` — uses real quota — but cheap (one Haiku call, ~10s).
+3. **Show screenshots in the chat reply**, not just in the report. Capture before/after (or locked/unlocked, error/empty/loaded — whatever states the change introduces) and attach them inline. The user explicitly wants to see them on every visual or behavioural change. "It passes" is not enough; the user must see what the change looks like.
+4. For changes that touch CLI execution paths (Claude / Codex / Copilot), run `claude-hello-world.spec.ts` (or the equivalent for the affected CLI) end-to-end. It is `@billable` — uses real quota — but cheap (one Haiku call, ~10s).
 
-Skip Playwright only if the change is provably non-visual and non-behavioural (pure rename, comment edit, dependency bump with no API surface change). Document the reason in the PR description if you skip.
+Skip Playwright only if the change is provably non-visual and non-behavioural (pure rename, comment edit, dependency bump with no API surface change). Document the reason in the PR description if you skip. **Do not ask before skipping; decide, document, move on.**
 
 The full E2E setup, conventions, and authoring rules live in [frontend/e2e/README.md](frontend/e2e/README.md).
 

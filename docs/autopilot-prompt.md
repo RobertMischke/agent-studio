@@ -105,6 +105,29 @@ my-task/
 
 **Der Report geht in `status.md`. Nirgendwo anders.**
 
+## Edge-Case Quality Gate (MANDATORY before moving to 4-review)
+
+Before step 9 (move to `4-review/`), pause and run this self-review on the change you just made. Treat it as a checklist — answer each question explicitly in `status.md` under a `## Quality Gate` section. If a question reveals a gap, fix it first.
+
+1. **What states does this feature observe?** List every relevant runtime state (e.g. job state folders, runner mode, CLI execution status, network reachability). For each, ask: does my change behave correctly in that state, or did I implicitly assume only one of them?
+2. **Is the signal I check the same as the property I care about?** A folder name, a flag, a string label — these are often *proxies*. Confirm the proxy matches the real condition (e.g. "CLI is currently running" is not the same as "job sits in `3-progress/`").
+3. **What happens after a crash, restart, or stop?** Persistent state often outlives the process that owns it. Walk through the recovery path.
+4. **Failure UX.** If the operation can fail server-side, can the user reach the failing action at all? Prefer disabling the affordance over showing a modal after the fact.
+5. **Reversibility.** If the change locks/blocks something, is there a clear path to unlock without restarting the app?
+
+Record the answers in `status.md`:
+
+```markdown
+## Quality Gate
+- States considered: <list>
+- Proxy vs. real condition: <how I verified they match>
+- Crash/restart behavior: <what I checked>
+- Failure UX: <what the user sees and why>
+- Reversibility: <how the user gets out of locked states>
+```
+
+If you cannot answer one honestly, the job is not ready for review — go back to step 6.
+
 ## Rules
 
 - **ONLY** pick jobs from `2-ready/` — ignore all other state folders

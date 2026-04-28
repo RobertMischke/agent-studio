@@ -13,8 +13,14 @@ type EditorState = 'idle' | 'dirty' | 'saved';
     <div class="md-editor"
          [class.md-editor--dirty]="state() === 'dirty'"
          [class.md-editor--saved]="state() === 'saved'"
+         [class.md-editor--readonly]="readOnly()"
          [attr.data-state]="state()"
          data-testid="prompt-editor">
+      @if (readOnly()) {
+        <div class="md-editor__lock" data-testid="prompt-editor-lock">
+          🔒 {{ readOnlyReason() || 'Editing disabled while the CLI is running for this task. Stop it first.' }}
+        </div>
+      }
       <div class="md-editor__bar">
         <div class="md-editor__tabs">
           <button class="md-editor__tab"
@@ -36,6 +42,7 @@ type EditorState = 'idle' | 'dirty' | 'saved';
           }
           <button class="md-editor__save"
                   (click)="emitSave()"
+                  [disabled]="readOnly()"
                   data-testid="prompt-editor-save"
                   title="Save (Ctrl+S)">Save</button>
         </div>
@@ -48,7 +55,8 @@ type EditorState = 'idle' | 'dirty' | 'saved';
                     data-testid="prompt-editor-source"
                     [ngModel]="sourceValue()"
                     (ngModelChange)="updateSource($event)"
-                    (keydown)="handleKeydown($event)"></textarea>
+                    (keydown)="handleKeydown($event)"
+                    [readonly]="readOnly()"></textarea>
         }
       </div>
     </div>
@@ -163,6 +171,24 @@ type EditorState = 'idle' | 'dirty' | 'saved';
       padding: 12px 14px;
       resize: none;
     }
+    .md-editor__lock {
+      font-size: 12px;
+      color: #fbbf24;
+      background: rgba(251,191,36,0.10);
+      border: 1px solid rgba(251,191,36,0.35);
+      border-radius: 6px;
+      padding: 6px 10px;
+      margin-bottom: 6px;
+    }
+    .md-editor--readonly .md-editor__rich,
+    .md-editor--readonly .md-editor__source {
+      opacity: 0.7;
+      cursor: not-allowed;
+    }
+    .md-editor--readonly .md-editor__save {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
     .md-editor__source:focus,
     :host ::ng-deep .ProseMirror:focus {
       outline: none;
@@ -195,6 +221,8 @@ type EditorState = 'idle' | 'dirty' | 'saved';
 })
 export class MarkdownRichEditorComponent implements AfterViewInit, OnDestroy {
   readonly value = input('');
+  readonly readOnly = input(false);
+  readonly readOnlyReason = input<string | null>(null);
   readonly save = output<string>();
   readonly sourceValue = signal('');
   readonly mode = signal<'rich' | 'source'>('rich');
@@ -228,6 +256,13 @@ export class MarkdownRichEditorComponent implements AfterViewInit, OnDestroy {
     });
   });
 
+  private readonly readOnlyEffect = effect(() => {
+    const locked = this.readOnly();
+    untracked(() => {
+      this.editor?.setEditable(!locked);
+    });
+  });
+
   ngAfterViewInit(): void {
     void this.initEditor();
   }
@@ -245,6 +280,7 @@ export class MarkdownRichEditorComponent implements AfterViewInit, OnDestroy {
       element: this.editorHost?.nativeElement,
       extensions: [StarterKit],
       content: markdownToHtml(this.sourceValue()),
+      editable: !this.readOnly(),
       editorProps: {
         handleKeyDown: (_view, event) => {
           if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
@@ -264,6 +300,7 @@ export class MarkdownRichEditorComponent implements AfterViewInit, OnDestroy {
   ngOnDestroy(): void {
     this.destroyed = true;
     this.valueEffect.destroy();
+    this.readOnlyEffect.destroy();
     this.editor?.destroy();
     if (this.savedTimer) clearTimeout(this.savedTimer);
   }
@@ -296,6 +333,7 @@ export class MarkdownRichEditorComponent implements AfterViewInit, OnDestroy {
   }
 
   emitSave(): void {
+    if (this.readOnly()) return;
     const value = this.sourceValue();
     this.committedValue.set(value);
     this.save.emit(value);

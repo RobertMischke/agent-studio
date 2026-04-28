@@ -83,6 +83,18 @@ The taskboard drives multiple coding-agent CLIs through a common interface. Toda
 
 The contract every supported CLI must satisfy — process lifecycle, session model, model selection, quota probing, logging, cancellation — is documented in [docs/supported-clis.md](docs/supported-clis.md). Adding a new CLI follows the checklist in §4 of that file.
 
+## Quality Gate for Agent Changes
+
+Before any task is moved from `3-progress/` to `4-review/`, the agent runs the **Edge-Case Quality Gate** documented in [docs/autopilot-prompt.md](docs/autopilot-prompt.md#edge-case-quality-gate-mandatory-before-moving-to-4-review). It forces an explicit walk through:
+
+- every runtime state the feature observes,
+- whether the signal being checked is the same as the property being cared about (folder name vs. live process, etc.),
+- crash / restart recovery behavior,
+- failure UX (prefer disabled affordances over post-hoc error modals),
+- reversibility of any state the change locks down.
+
+The answers are recorded in the job's `status.md` under a `## Quality Gate` section. A job without that section is not ready for review.
+
 ## Docs
 
 - [AGENTS.md](AGENTS.md) — canonical agent instructions
