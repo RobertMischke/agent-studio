@@ -11,6 +11,27 @@ Keep the product boundary clear:
 - Job folders live in watched target projects under `.orchestrator/jobs/`.
 - The app observes external jobs; it should not store runtime job artifacts in this repository.
 
+## Documentation Language
+
+All written artifacts in this repository (README, AGENTS.md, docs/, prompts, code comments, commit messages, PR descriptions) are written in **English**. Chat conversation with the user may happen in any language, but anything you commit or write to disk in this repo stays English.
+
+## Product Goal & Non-Goals
+
+The taskboard drives a **sequential pipeline of tasks per project**. Parallelism exists across projects, never within one. Treat this as a hard product boundary when proposing or implementing changes.
+
+In scope:
+- Sequential, automated task execution **within a single project** — tasks queued on that project's board are picked up and processed one after another, automatically, without per-task human kick-off.
+- **Parallelism across projects** — different watched projects (different watch paths) run their own pipelines independently and may execute concurrently.
+- A single running target app per project on a single branch (typically `main`, occasionally a feature branch).
+- Minimum overhead — the product exists precisely to avoid intra-project parallel-execution bookkeeping.
+
+Out of scope (do not add, even if asked offhandedly):
+- **Intra-project parallelism.** At most one task runs per project at any time. No fan-out across agents, machines, or branches inside one project.
+- **Workspaces / workflows.** No multi-step workflow engine, no per-task workspace creation.
+- **Branch orchestration.** The app does not create, switch, sync, or merge git branches. No worktrees. No branch-per-task.
+
+If a request implies any of the out-of-scope items, surface the conflict to the user before implementing.
+
 ## Architecture
 
 | Layer | Path | Notes |
