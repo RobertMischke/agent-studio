@@ -1,5 +1,6 @@
 import { AfterViewInit, Component, ElementRef, OnDestroy, computed, effect, input, signal, viewChild } from '@angular/core';
 import { CliOutputLine } from '../models/job.model';
+import { copyTextToClipboard } from '../services/clipboard.util';
 import {
   ActivityLogFilters,
   ActivityLogGroup,
@@ -40,12 +41,17 @@ import {
             Raw
           </button>
         </div>
-        @if (mode() !== 'chat') {
-          <div class="activity-log__actions">
+        <div class="activity-log__actions">
+          @if (mode() !== 'chat') {
             <button class="activity-log__btn" (click)="expandAll()">Expand all</button>
             <button class="activity-log__btn" (click)="collapseAll()">Collapse all</button>
-          </div>
-        }
+          }
+          <button class="activity-log__btn"
+                  data-testid="activity-log-copy"
+                  [title]="copyTooltip()"
+                  [disabled]="visibleLines().length === 0 && chatMessages().length === 0"
+                  (click)="copyVisible()">{{ copyLabel() }}</button>
+        </div>
       </div>
 
       <div class="activity-log__filters" aria-label="Activity log filters">
@@ -577,6 +583,8 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
   readonly bodyMaxHeight = input('400px');
   readonly variant = input<'framed' | 'embedded'>('framed');
   readonly mode = signal<'parsed' | 'raw' | 'chat'>('parsed');
+  readonly copyState = signal<'idle' | 'copied' | 'failed'>('idle');
+  private copyResetTimer: ReturnType<typeof setTimeout> | null = null;
   readonly filterKinds = activityLogKinds;
   readonly filters = signal<ActivityLogFilters>({ ...defaultActivityLogFilters });
   readonly expanded = signal<Record<string, boolean>>({});
@@ -610,7 +618,74 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
     if (this.scrollFrame !== null && typeof cancelAnimationFrame !== 'undefined') {
       cancelAnimationFrame(this.scrollFrame);
     }
+    if (this.copyResetTimer !== null) {
+      clearTimeout(this.copyResetTimer);
+      this.copyResetTimer = null;
+    }
     this.autoScrollEffect.destroy();
+  }
+
+  copyLabel(): string {
+    const s = this.copyState();
+    if (s === 'copied') return '✓ Copied';
+    if (s === 'failed') return '⚠ Copy failed';
+    return '📋 Copy';
+  }
+
+  copyTooltip(): string {
+    const m = this.mode();
+    if (m === 'chat') return 'Copy the visible chat transcript to the clipboard';
+    if (m === 'raw') return 'Copy all visible raw lines to the clipboard';
+    return 'Copy the visible parsed groups to the clipboard';
+  }
+
+  async copyVisible(): Promise<void> {
+    const text = this.buildCopyText();
+    if (!text) return;
+    const ok = await copyTextToClipboard(text);
+    this.copyState.set(ok ? 'copied' : 'failed');
+    if (this.copyResetTimer !== null) clearTimeout(this.copyResetTimer);
+    this.copyResetTimer = setTimeout(() => {
+      this.copyState.set('idle');
+      this.copyResetTimer = null;
+    }, 2000);
+  }
+
+  private buildCopyText(): string {
+    const m = this.mode();
+    if (m === 'chat') {
+      const parts: string[] = [];
+      for (const msg of this.chatMessages()) {
+        const head = `[${this.formatTime(msg.timestamp)}] ${msg.author}` +
+          (msg.kindLabel ? ` (${msg.kindLabel})` : '');
+        const body = msg.role === 'tool'
+          ? `${msg.title}${msg.subtitle ? ` — ${msg.subtitle}` : ''}\n${this.formatChatBody(msg.body)}`
+          : msg.body.length > 1
+            ? `${msg.title}\n${this.formatChatBody(msg.body.slice(1))}`
+            : msg.title;
+        parts.push(`${head}\n${body}`);
+      }
+      return parts.join('\n\n');
+    }
+    if (m === 'parsed') {
+      const parts: string[] = [];
+      for (const group of this.visibleGroups()) {
+        parts.push(`=== ${this.kindLabel(group.kind)} — ${group.title} ===`);
+        if (group.subtitle) parts.push(group.subtitle);
+        for (const line of group.lines) {
+          const stream = line.stream === 'stderr' ? 'ERR' : 'OUT';
+          parts.push(`[${this.formatTime(line.timestamp)}] ${stream} ${line.text}`);
+        }
+        parts.push('');
+      }
+      return parts.join('\n').trimEnd();
+    }
+    return this.visibleLines()
+      .map((line) => {
+        const stream = line.stream === 'stderr' ? 'ERR' : 'OUT';
+        return `[${this.formatTime(line.timestamp)}] ${stream} ${line.text}`;
+      })
+      .join('\n');
   }
 
   onBodyScroll(): void {

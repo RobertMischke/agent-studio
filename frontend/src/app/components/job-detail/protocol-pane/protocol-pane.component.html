@@ -114,6 +114,13 @@
                 <p>Noch kein Protokoll. Es wird nach dem ersten Lauf automatisch erstellt.</p>
               </div>
             } @else {
+              <div class="notes-panel__toolbar">
+                <button type="button"
+                        class="btn-sm"
+                        data-testid="protocol-copy-markdown"
+                        title="Copy the protocol markdown to the clipboard"
+                        (click)="copyProtocolMarkdown()">{{ copyLabel() }}</button>
+              </div>
               <div class="markdown-preview notes-panel__body"
                    [innerHTML]="renderMarkdown(detail().statusMarkdown || '')"></div>
             }

@@ -71,4 +71,26 @@ public class TaskRunnerPromptTests
     {
         Assert.Equal(expected, ProjectRunner.IsPlaceholderSessionSlug(input));
     }
+
+    /// <summary>
+    /// The resume-continuation prompt only pays off when there's something to
+    /// reconstruct — a real session to load, or a dropped foreign-CLI session
+    /// whose files we can re-read. A 3-progress job with no captured UUID and
+    /// no dropped session is effectively a fresh start; sending the resume
+    /// prompt there used to make the agent quit with "I don't see an
+    /// interrupted task".
+    /// </summary>
+    [Theory]
+    // (initialState, resume, sessionDropped, expectedUseResumePrompt)
+    [InlineData("2-ready",    false, false, false)] // brand-new fresh start
+    [InlineData("2-ready",    true,  false, false)] // continue with captured UUID; not interrupted
+    [InlineData("3-progress", false, false, false)] // crashed before capturing a session — no context to recover
+    [InlineData("3-progress", true,  false, true)]  // genuine interrupted resume — load `-r` and re-anchor
+    [InlineData("3-progress", false, true,  true)]  // foreign session dropped — reconstruct from files
+    [InlineData("2-ready",    false, true,  true)]  // foreign session dropped on a fresh-looking start
+    public void ShouldUseResumePrompt_OnlyFiresWhenContextExists(
+        string initialState, bool resume, bool sessionDropped, bool expected)
+    {
+        Assert.Equal(expected, ProjectRunner.ShouldUseResumePrompt(initialState, resume, sessionDropped));
+    }
 }

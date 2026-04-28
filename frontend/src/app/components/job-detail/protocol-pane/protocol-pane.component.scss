@@ -148,6 +148,12 @@
   opacity: 0.8;
 }
 
+.notes-panel__toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 6px;
+}
+
 @keyframes pane-livedot-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50%      { opacity: 0.5; transform: scale(0.85); }

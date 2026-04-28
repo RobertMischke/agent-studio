@@ -1,7 +1,8 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnDestroy, computed, inject, input, output, signal } from '@angular/core';
 import { JobDetail, JobSummaryStatus } from '../../../models/job.model';
 import { ActivityLogViewComponent } from '../../activity-log-view';
 import { markdownToHtml } from '../../markdown-utils';
+import { copyTextToClipboard } from '../../../services/clipboard.util';
 import {
   formatTokens as fmtTokens,
   formatRateWindow as fmtRateWindow,
@@ -27,7 +28,7 @@ export type InspectorTab = 'protocol' | 'activity';
   templateUrl: './protocol-pane.component.html',
   styleUrls: ['./protocol-pane.component.scss']
 })
-export class ProtocolPaneComponent {
+export class ProtocolPaneComponent implements OnDestroy {
   readonly detail = input.required<JobDetail>();
   readonly maximized = input(false);
   readonly weight = input<number>(1);
@@ -70,6 +71,35 @@ export class ProtocolPaneComponent {
     const d = this.detail();
     return d.log.length > 0 || d.info.lastUsage != null;
   });
+
+  readonly copyState = signal<'idle' | 'copied' | 'failed'>('idle');
+  private copyResetTimer: ReturnType<typeof setTimeout> | null = null;
+
+  ngOnDestroy(): void {
+    if (this.copyResetTimer !== null) {
+      clearTimeout(this.copyResetTimer);
+      this.copyResetTimer = null;
+    }
+  }
+
+  copyLabel(): string {
+    const s = this.copyState();
+    if (s === 'copied') return '✓ Copied';
+    if (s === 'failed') return '⚠ Copy failed';
+    return '📋 Copy';
+  }
+
+  async copyProtocolMarkdown(): Promise<void> {
+    const md = this.detail().statusMarkdown ?? '';
+    if (!md) return;
+    const ok = await copyTextToClipboard(md);
+    this.copyState.set(ok ? 'copied' : 'failed');
+    if (this.copyResetTimer !== null) clearTimeout(this.copyResetTimer);
+    this.copyResetTimer = setTimeout(() => {
+      this.copyState.set('idle');
+      this.copyResetTimer = null;
+    }, 2000);
+  }
 
   formatTokens(n: number): string { return fmtTokens(n); }
   formatRateWindow(window: string | null): string { return fmtRateWindow(window); }

@@ -415,12 +415,17 @@ public class ProjectRunner
             // "Lies prompt.md und führe den Task aus" message and treats the new
             // turn as a fresh request: it loses the in-flight state, asks "what
             // should I continue with?", and falls back to generic repo context.
-            // Safety fallback: if we had to drop the persisted session id as
-            // incompatible, we still emit the resume prompt so the agent
-            // reconstructs progress from the job folder rather than starting
-            // from zero.
-            var isInterruptedResume = initialState == JobStates.Progress;
-            var useResumePrompt = isInterruptedResume || sessionDropped;
+            //
+            // Two prerequisites for the resume prompt to actually pay off:
+            //   (a) we have a real session to load via `-r` (resume == true), OR
+            //   (b) we've just dropped a foreign-CLI session — the previous agent
+            //       wrote files we can reconstruct from.
+            // If neither holds (state is 3-progress but no UUID was ever captured
+            // and no foreign session was dropped), the "interrupted" run never
+            // produced anything to continue from — sending the resume prompt just
+            // makes the agent reply "I don't see an interrupted task" and quit.
+            // Treat that case as a fresh start.
+            var useResumePrompt = ShouldUseResumePrompt(initialState, resume, sessionDropped);
 
             string prompt;
             if (useResumePrompt)
@@ -542,6 +547,26 @@ public class ProjectRunner
     public static bool IsPlaceholderSessionSlug(string? sessionName)
         => !string.IsNullOrWhiteSpace(sessionName)
            && PlaceholderSessionSlugRegex.IsMatch(sessionName!);
+
+    /// <summary>
+    /// Decides whether the start should inject the resume-continuation prompt
+    /// instead of the fresh-start prompt.
+    /// <list type="bullet">
+    /// <item>Sending it when no real session exists and nothing was dropped just
+    /// gets a "I don't see an interrupted task" reply and an exit — so a job that
+    /// happens to be in 3-progress without a captured UUID is treated as a fresh
+    /// start.</item>
+    /// <item><c>sessionDropped</c> means the persisted session id was for another
+    /// CLI; the agent that wrote the job folder did real work so reconstruction
+    /// from files is worth attempting regardless of the current state.</item>
+    /// </list>
+    /// </summary>
+    public static bool ShouldUseResumePrompt(string initialState, bool resume, bool sessionDropped)
+    {
+        if (sessionDropped) return true;
+        if (initialState == JobStates.Progress && resume) return true;
+        return false;
+    }
 
     /// <summary>
     /// Initial-run prompt: instructs the agent to read the task prompt and
