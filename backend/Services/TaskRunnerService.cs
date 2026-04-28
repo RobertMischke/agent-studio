@@ -368,26 +368,36 @@ public class ProjectRunner
             }
 
             // Resolve / persist a stable session name so follow-ups can use --resume.
-            // For Codex the "name" is actually the captured UUID — for first runs we leave it
-            // null and let the CLI assign one (extracted from session_meta on stdout).
+            // Only Copilot uses a pre-generated slug as its resume handle. Claude /
+            // Codex / Gemini emit a real session UUID in their first stream-json
+            // frame and we capture it in OnCliFinished — until then SessionName
+            // stays null. Pre-generating a slug for them used to backfire: the
+            // slug failed IsCompatibleSessionName on the next run, the cross-CLI
+            // guard treated it as a dropped foreign session, and the resume
+            // prompt was injected into what was actually a fresh start.
             var cli = GetCliFor(info);
             var sessionName = info.SessionName;
             // Cross-CLI guard: a session name recorded under another CLI (e.g.
             // Copilot's slug) is meaningless to Claude/Codex and used to make
             // them hang on `-r`. Drop it and let the fresh-session branch pick
-            // up.
+            // up. Legacy placeholder slugs we generated ourselves (pattern
+            // `taskboard-…-yyyyMMddHHmm`) are recognised and dropped quietly:
+            // they never represented a real session, so there's nothing to
+            // reconstruct via the resume prompt.
             var sessionDropped = false;
             if (!string.IsNullOrWhiteSpace(sessionName) && !cli.IsCompatibleSessionName(sessionName))
             {
+                var isLegacyPlaceholder = IsPlaceholderSessionSlug(sessionName);
                 _logger.LogInformation(
-                    "Dropping incompatible sessionName '{Session}' for {Cli} job {JobId}",
+                    "Dropping {Kind} sessionName '{Session}' for {Cli} job {JobId}",
+                    isLegacyPlaceholder ? "legacy placeholder" : "incompatible",
                     sessionName, cli.CliType, jobId);
                 sessionName = null;
                 _scanner.SetJobSessionName(jobId, null, Entry.Path);
-                sessionDropped = true;
+                sessionDropped = !isLegacyPlaceholder;
             }
             var resume = !string.IsNullOrWhiteSpace(sessionName);
-            if (!resume && cli.CliType != CliTypes.Codex)
+            if (!resume && cli.CliType == CliTypes.Copilot)
             {
                 sessionName = BuildSessionName(jobId);
                 _scanner.SetJobSessionName(jobId, sessionName, Entry.Path);
@@ -519,6 +529,19 @@ public class ProjectRunner
         if (slug.Length > 40) slug = slug[..40];
         return $"taskboard-{slug}-{DateTime.UtcNow:yyyyMMddHHmm}";
     }
+
+    private static readonly System.Text.RegularExpressions.Regex PlaceholderSessionSlugRegex =
+        new(@"^taskboard-[A-Za-z0-9_-]+-\d{12}$", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    /// <summary>
+    /// True for slugs we generated via <see cref="BuildSessionName"/> on an earlier
+    /// run. These were never real sessions on the agent side — recognising them
+    /// lets the cross-CLI guard drop them silently instead of treating the
+    /// next start as a recovery from an interrupted run.
+    /// </summary>
+    public static bool IsPlaceholderSessionSlug(string? sessionName)
+        => !string.IsNullOrWhiteSpace(sessionName)
+           && PlaceholderSessionSlugRegex.IsMatch(sessionName!);
 
     /// <summary>
     /// Initial-run prompt: instructs the agent to read the task prompt and

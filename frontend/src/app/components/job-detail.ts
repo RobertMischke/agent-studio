@@ -73,7 +73,7 @@ import { markdownToHtml } from './markdown-utils';
         (stop)="stopJob()" />
 
 
-      @if (showCliConfig()) {
+      @if (showCliConfig() && cliTypeDraft() === 'copilot') {
         <app-cli-config-card
           [status]="cliStatus()"
           [testResult]="cliTestResult()"
@@ -1557,7 +1557,7 @@ export class JobDetailComponent implements OnDestroy {
       title: 'Task action failed',
       fallbackMessage: message,
       source: `Task ${this.detail().info.id}`,
-      canOpenCliConfig: this.isCliErrorMessage(message)
+      canOpenCliConfig: this.canOpenCliConfigForCurrentJob(message)
     });
   }
 
@@ -1786,6 +1786,7 @@ export class JobDetailComponent implements OnDestroy {
   }
 
   openCliConfig(): void {
+    if (this.cliTypeDraft() !== 'copilot') return;
     this.showCliConfig.set(true);
     this.cliTestResult.set(null);
     this.jobService.getCliSettings().subscribe({
@@ -1870,5 +1871,9 @@ export class JobDetailComponent implements OnDestroy {
 
   private isCliErrorMessage(message: string | null | undefined): boolean {
     return !!message && /cli|copilot|authenticat/i.test(message);
+  }
+
+  private canOpenCliConfigForCurrentJob(message: string | null | undefined): boolean {
+    return this.cliTypeDraft() === 'copilot' && this.isCliErrorMessage(message);
   }
 }

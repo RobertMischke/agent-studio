@@ -49,4 +49,26 @@ public class TaskRunnerPromptTests
 
         Assert.NotEqual(fresh, resume);
     }
+
+    /// <summary>
+    /// Pre-generated slugs in the <c>taskboard-{jobId}-{yyyyMMddHHmm}</c> shape are
+    /// placeholders we wrote ourselves before a real session UUID was captured.
+    /// They must be recognised so the cross-CLI guard drops them silently — otherwise
+    /// every Claude job whose first run didn't capture a UUID would receive the
+    /// resume continuation prompt on its next start and reply "I don't see an
+    /// interrupted task to resume".
+    /// </summary>
+    [Theory]
+    [InlineData("taskboard-verbessere-den-task-log-202604282114", true)]
+    [InlineData("taskboard-action-failed-202604282112", true)]
+    [InlineData("taskboard-x-202604282114", true)]
+    [InlineData("a1b2c3d4-e5f6-7890-abcd-ef0123456789", false)] // real UUID
+    [InlineData("rollover_2025-04-01T12:00:00Z", false)]        // foreign-shaped slug
+    [InlineData("", false)]
+    [InlineData(null, false)]
+    [InlineData("taskboard-no-timestamp", false)]
+    public void IsPlaceholderSessionSlug_RecognisesGeneratedShape(string? input, bool expected)
+    {
+        Assert.Equal(expected, ProjectRunner.IsPlaceholderSessionSlug(input));
+    }
 }

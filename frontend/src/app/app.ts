@@ -157,7 +157,7 @@ import { ProjectAutoInfo, ProjectTabsComponent } from './components/board/projec
       @if (errorDialog.activeError(); as error) {
         <app-error-dialog
           [error]="error"
-          [canOpenCliConfig]="error.canOpenCliConfig && !!selectedJob()"
+          [canOpenCliConfig]="error.canOpenCliConfig && selectedJobUsesCopilot()"
           [copyButtonLabel]="copyErrorButtonLabel()"
           (close)="closeErrorDialog()"
           (copy)="copyErrorDetails()"
@@ -958,6 +958,7 @@ export class App implements OnInit {
       { state: '6-archive', title: 'Archive', icon: '🗄️', jobs: grouped.archive ?? [] }
     ];
   });
+  readonly selectedJobUsesCopilot = computed(() => (this.selectedJob()?.info.cliType ?? 'copilot') === 'copilot');
 
   newTitle = '';
   newWatchPath = '';
@@ -1427,6 +1428,7 @@ export class App implements OnInit {
   }
 
   openCliConfigFromError() {
+    if (!this.selectedJobUsesCopilot()) return;
     this.errorDialog.requestCliConfig();
   }
 
