@@ -4,8 +4,10 @@ import {
   ActivityLogFilters,
   ActivityLogGroup,
   ActivityLogKind,
+  ChatMessage,
   activityKindLabel,
   activityLogKinds,
+  buildChatMessages,
   defaultActivityLogFilters,
   filterActivityGroups,
   flattenActivityLines,
@@ -18,22 +20,32 @@ import {
   template: `
     <div class="activity-log" [class.activity-log--embedded]="variant() === 'embedded'">
       <div class="activity-log__toolbar">
-        <div class="activity-log__tabs">
+        <div class="activity-log__tabs" role="tablist">
           <button class="activity-log__tab"
+                  data-testid="activity-log-mode-chat"
+                  [class.activity-log__tab--active]="mode() === 'chat'"
+                  (click)="mode.set('chat')">
+            Chat
+          </button>
+          <button class="activity-log__tab"
+                  data-testid="activity-log-mode-parsed"
                   [class.activity-log__tab--active]="mode() === 'parsed'"
                   (click)="mode.set('parsed')">
             Parsed
           </button>
           <button class="activity-log__tab"
+                  data-testid="activity-log-mode-raw"
                   [class.activity-log__tab--active]="mode() === 'raw'"
                   (click)="mode.set('raw')">
             Raw
           </button>
         </div>
-        <div class="activity-log__actions">
-          <button class="activity-log__btn" (click)="expandAll()">Expand all</button>
-          <button class="activity-log__btn" (click)="collapseAll()">Collapse all</button>
-        </div>
+        @if (mode() !== 'chat') {
+          <div class="activity-log__actions">
+            <button class="activity-log__btn" (click)="expandAll()">Expand all</button>
+            <button class="activity-log__btn" (click)="collapseAll()">Collapse all</button>
+          </div>
+        }
       </div>
 
       <div class="activity-log__filters" aria-label="Activity log filters">
@@ -63,7 +75,54 @@ import {
                   data-testid="activity-log-jump-bottom"
                   (click)="jumpToBottom()">↓ Jump to latest</button>
         }
-        @if (mode() === 'parsed') {
+        @if (mode() === 'chat') {
+          <div class="activity-chat" data-testid="activity-log-chat">
+            @for (msg of chatMessages(); track msg.id) {
+              <article class="chat-msg"
+                       [class.chat-msg--agent]="msg.role === 'agent'"
+                       [class.chat-msg--tool]="msg.role === 'tool'"
+                       [class.chat-msg--error]="msg.status === 'error'"
+                       [attr.data-role]="msg.role">
+                <div class="chat-msg__avatar" [attr.aria-hidden]="true">{{ msg.avatar }}</div>
+                <div class="chat-msg__bubble">
+                  <header class="chat-msg__head">
+                    <span class="chat-msg__author">{{ msg.author }}</span>
+                    @if (msg.kindLabel) {
+                      <span class="chat-msg__pill"
+                            [class.chat-msg__pill--error]="msg.status === 'error'">{{ msg.kindLabel }}</span>
+                    }
+                    <span class="chat-msg__time">{{ formatTime(msg.timestamp) }}</span>
+                  </header>
+                  @if (msg.role === 'tool') {
+                    <button type="button"
+                            class="chat-tool__title"
+                            (click)="toggleChatMsg(msg.id)">
+                      <span class="chat-tool__chevron">{{ isChatExpanded(msg) ? 'v' : '>' }}</span>
+                      <span class="chat-tool__name">{{ msg.title }}</span>
+                      @if (msg.subtitle) {
+                        <span class="chat-tool__sub">{{ msg.subtitle }}</span>
+                      }
+                      <span class="chat-tool__count">{{ msg.body.length }}</span>
+                    </button>
+                    @if (isChatExpanded(msg)) {
+                      <pre class="chat-tool__body">{{ formatChatBody(msg.body) }}</pre>
+                    }
+                  } @else {
+                    <div class="chat-msg__body">{{ msg.title }}</div>
+                    @if (msg.body.length > 1) {
+                      <pre class="chat-msg__more">{{ formatChatBody(msg.body.slice(1)) }}</pre>
+                    }
+                  }
+                </div>
+              </article>
+            }
+            @if (chatMessages().length === 0) {
+              <div class="activity-log__empty">
+                {{ lines().length === 0 ? 'No activity output yet.' : 'No activity entries match the current filters.' }}
+              </div>
+            }
+          </div>
+        } @else if (mode() === 'parsed') {
           @for (group of visibleGroups(); track group.id) {
             <article class="activity-group"
                      [class.activity-group--error]="group.status === 'error'"
@@ -102,7 +161,7 @@ import {
           </div>
         }
 
-        @if (visibleLines().length === 0) {
+        @if (mode() !== 'chat' && visibleLines().length === 0) {
           <div class="activity-log__empty">
             {{ lines().length === 0 ? 'No activity output yet.' : 'No activity entries match the current filters.' }}
           </div>
@@ -330,6 +389,169 @@ import {
       color: #64748b;
       text-align: center;
     }
+    .activity-chat {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 4px 2px 8px;
+      font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    }
+    .chat-msg {
+      display: grid;
+      grid-template-columns: 30px minmax(0, 1fr);
+      gap: 10px;
+      align-items: flex-start;
+    }
+    .chat-msg__avatar {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+      background: linear-gradient(135deg, #7c3aed, #4338ca);
+      color: #fff;
+      box-shadow: 0 1px 4px rgba(76,29,149,0.5);
+      user-select: none;
+    }
+    .chat-msg--tool .chat-msg__avatar {
+      background: linear-gradient(135deg, #0ea5e9, #1d4ed8);
+      box-shadow: 0 1px 4px rgba(29,78,216,0.45);
+    }
+    .chat-msg--error .chat-msg__avatar {
+      background: linear-gradient(135deg, #f43f5e, #b91c1c);
+      box-shadow: 0 1px 4px rgba(190,18,60,0.5);
+    }
+    .chat-msg__bubble {
+      background: rgba(30,41,59,0.65);
+      border: 1px solid rgba(148,163,184,0.18);
+      border-radius: 12px;
+      padding: 8px 12px 9px;
+      min-width: 0;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.25);
+    }
+    .chat-msg--agent .chat-msg__bubble {
+      background: rgba(76,29,149,0.18);
+      border-color: rgba(196,181,253,0.28);
+    }
+    .chat-msg--tool .chat-msg__bubble {
+      background: rgba(15,23,42,0.7);
+      border-color: rgba(125,211,252,0.25);
+    }
+    .chat-msg--error .chat-msg__bubble {
+      background: rgba(127,29,29,0.22);
+      border-color: rgba(251,113,133,0.45);
+    }
+    .chat-msg__head {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 4px;
+      flex-wrap: wrap;
+    }
+    .chat-msg__author {
+      color: #e2e8f0;
+      font-weight: 600;
+      font-size: 12px;
+    }
+    .chat-msg--agent .chat-msg__author { color: #ddd6fe; }
+    .chat-msg--tool .chat-msg__author { color: #bae6fd; }
+    .chat-msg--error .chat-msg__author { color: #fecaca; }
+    .chat-msg__pill {
+      font-size: 9px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #cbd5e1;
+      background: rgba(148,163,184,0.18);
+      padding: 1px 6px;
+      border-radius: 999px;
+      font-weight: 700;
+    }
+    .chat-msg__pill--error {
+      color: #fecaca;
+      background: rgba(220,38,38,0.25);
+    }
+    .chat-msg__time {
+      margin-left: auto;
+      color: #64748b;
+      font-size: 10px;
+      font-variant-numeric: tabular-nums;
+    }
+    .chat-msg__body {
+      color: #e2e8f0;
+      font-size: 13px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .chat-msg--agent .chat-msg__body { color: #ede9fe; }
+    .chat-msg--error .chat-msg__body { color: #fecaca; }
+    .chat-msg__more {
+      margin: 6px 0 0;
+      padding: 6px 8px;
+      background: rgba(2,6,23,0.55);
+      border: 1px solid rgba(148,163,184,0.12);
+      border-radius: 6px;
+      color: #cbd5e1;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 11.5px;
+      line-height: 1.4;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 160px;
+      overflow: auto;
+    }
+    .chat-tool__title {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 14px minmax(0, auto) minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      background: transparent;
+      border: 0;
+      padding: 0;
+      cursor: pointer;
+      text-align: left;
+      color: #cbd5e1;
+      font: inherit;
+    }
+    .chat-tool__chevron { color: #94a3b8; font-size: 11px; }
+    .chat-tool__name {
+      color: #e2e8f0;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 12.5px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .chat-tool__sub {
+      color: #94a3b8;
+      font-size: 11.5px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .chat-tool__count {
+      color: #94a3b8;
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+    }
+    .chat-tool__body {
+      margin: 8px 0 0;
+      padding: 8px 10px;
+      background: rgba(2,6,23,0.7);
+      border: 1px solid rgba(148,163,184,0.15);
+      border-radius: 6px;
+      color: #cbd5e1;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 11.5px;
+      line-height: 1.45;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 240px;
+      overflow: auto;
+    }
     @media (max-width: 720px) {
       .activity-log__toolbar,
       .activity-log__summary {
@@ -343,6 +565,9 @@ import {
       .activity-group__subtitle {
         padding-left: 10px;
       }
+      .chat-msg {
+        grid-template-columns: 26px minmax(0, 1fr);
+      }
     }
   `]
 })
@@ -350,15 +575,17 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
   readonly lines = input<CliOutputLine[]>([]);
   readonly bodyMaxHeight = input('400px');
   readonly variant = input<'framed' | 'embedded'>('framed');
-  readonly mode = signal<'parsed' | 'raw'>('parsed');
+  readonly mode = signal<'parsed' | 'raw' | 'chat'>('parsed');
   readonly filterKinds = activityLogKinds;
   readonly filters = signal<ActivityLogFilters>({ ...defaultActivityLogFilters });
   readonly expanded = signal<Record<string, boolean>>({});
+  readonly chatExpanded = signal<Record<string, boolean>>({});
   readonly stickToBottom = signal(true);
 
   readonly parsedGroups = computed(() => parseActivityLog(this.lines()));
   readonly visibleGroups = computed(() => filterActivityGroups(this.parsedGroups(), this.filters()));
   readonly visibleLines = computed(() => flattenActivityLines(this.visibleGroups()));
+  readonly chatMessages = computed(() => buildChatMessages(this.visibleGroups()));
 
   private readonly bodyRef = viewChild<ElementRef<HTMLDivElement>>('body');
   private scrollFrame: number | null = null;
@@ -448,5 +675,20 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
 
   formatTime(dateStr: string): string {
     return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  }
+
+  isChatExpanded(msg: ChatMessage): boolean {
+    return this.chatExpanded()[msg.id] ?? !msg.collapsedByDefault;
+  }
+
+  toggleChatMsg(id: string): void {
+    const msg = this.chatMessages().find((m) => m.id === id);
+    if (!msg) return;
+    const next = !this.isChatExpanded(msg);
+    this.chatExpanded.update((expanded) => ({ ...expanded, [id]: next }));
+  }
+
+  formatChatBody(lines: CliOutputLine[]): string {
+    return lines.map((line) => line.text).join('\n');
   }
 }

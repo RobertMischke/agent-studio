@@ -91,6 +91,77 @@ export function flattenActivityLines(groups: ActivityLogGroup[]): CliOutputLine[
   return groups.flatMap((group) => group.lines);
 }
 
+export type ChatRole = 'agent' | 'tool' | 'system';
+
+export interface ChatMessage {
+  id: string;
+  role: ChatRole;
+  author: string;
+  avatar: string;
+  kindLabel: string;
+  title: string;
+  subtitle: string;
+  status: 'ok' | 'error' | 'neutral';
+  timestamp: string;
+  body: CliOutputLine[];
+  collapsedByDefault: boolean;
+}
+
+const TOOL_KINDS: ReadonlyArray<ActivityLogKind> = ['read', 'search', 'command', 'edit', 'task', 'todo'];
+
+export function buildChatMessages(groups: ActivityLogGroup[]): ChatMessage[] {
+  return groups.map((group, index) => groupToChatMessage(group, index));
+}
+
+function groupToChatMessage(group: ActivityLogGroup, index: number): ChatMessage {
+  const isTool = TOOL_KINDS.includes(group.kind);
+  const isError = group.kind === 'error' || group.status === 'error';
+  const role: ChatRole = isError && !isTool ? 'system' : isTool ? 'tool' : 'agent';
+
+  const firstLine = group.lines[0];
+  const timestamp = firstLine ? firstLine.timestamp : new Date().toISOString();
+
+  const author = isError && !isTool
+    ? 'System'
+    : isTool
+      ? 'Tool call'
+      : 'Agent';
+
+  const avatar = isError && !isTool
+    ? '!'
+    : isTool
+      ? toolAvatarFor(group.kind)
+      : '🤖';
+
+  const kindLabel = isTool ? activityKindLabel(group.kind) : (isError ? 'Error' : '');
+
+  return {
+    id: `chat-${index}-${group.id}`,
+    role,
+    author,
+    avatar,
+    kindLabel,
+    title: group.title,
+    subtitle: group.subtitle,
+    status: group.status,
+    timestamp,
+    body: group.lines,
+    collapsedByDefault: isTool || group.collapsedByDefault
+  };
+}
+
+function toolAvatarFor(kind: ActivityLogKind): string {
+  switch (kind) {
+    case 'read': return '📖';
+    case 'search': return '🔎';
+    case 'command': return '⚙';
+    case 'edit': return '✎';
+    case 'task': return '◆';
+    case 'todo': return '☐';
+    default: return '⚙';
+  }
+}
+
 export function activityKindLabel(kind: ActivityLogKind): string {
   switch (kind) {
     case 'read': return 'Reading files';

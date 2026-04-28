@@ -588,6 +588,81 @@ public class JobScannerService
     }
 
     /// <summary>
+    /// Saves a binary attachment (typically a pasted/dropped screenshot) into the job folder's
+    /// <c>attachments/</c> subdirectory and returns the stored file name. Reused inside the prompt
+    /// editor as a relative reference (<c>![alt](attachments/abc.png)</c>) so the CLI agent can
+    /// resolve the same image directly from disk via the relative path in <c>prompt.md</c>.
+    /// </summary>
+    public (string? FileName, string? Error) SaveAttachment(string jobId, string? watchPath, byte[] content, string? originalFileName, string? contentType)
+    {
+        var info = FindJob(jobId, watchPath);
+        if (info == null) return (null, "Job not found");
+        if (content.Length == 0) return (null, "Empty file");
+        if (content.Length > 10 * 1024 * 1024) return (null, "File too large (max 10 MB)");
+
+        var ext = ResolveImageExtension(originalFileName, contentType);
+        if (ext == null) return (null, "Unsupported file type — only png, jpg, gif, webp allowed");
+
+        var attachmentsDir = Path.Combine(info.FolderPath, "attachments");
+        Directory.CreateDirectory(attachmentsDir);
+
+        // Short random ID keeps generated markdown readable; collisions are vanishingly rare
+        // inside one job folder (~16M IDs at 4 bytes hex).
+        string fileName;
+        string fullPath;
+        do
+        {
+            fileName = $"{Guid.NewGuid():N}"[..8] + ext;
+            fullPath = Path.Combine(attachmentsDir, fileName);
+        } while (File.Exists(fullPath));
+
+        File.WriteAllBytes(fullPath, content);
+        return (fileName, null);
+    }
+
+    public (string? Path, string? ContentType) ResolveAttachment(string jobId, string fileName, string? watchPath = null)
+    {
+        if (string.IsNullOrWhiteSpace(fileName) || fileName.Contains("..") || fileName.Contains('/') || fileName.Contains('\\'))
+            return (null, null);
+
+        var info = FindJob(jobId, watchPath);
+        if (info == null) return (null, null);
+
+        var attachmentsDir = Path.Combine(info.FolderPath, "attachments");
+        var fullPath = Path.Combine(attachmentsDir, fileName);
+        if (!File.Exists(fullPath)) return (null, null);
+
+        var ext = Path.GetExtension(fileName).ToLowerInvariant();
+        var contentType = ext switch
+        {
+            ".png" => "image/png",
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".gif" => "image/gif",
+            ".webp" => "image/webp",
+            _ => "application/octet-stream"
+        };
+        return (fullPath, contentType);
+    }
+
+    private static string? ResolveImageExtension(string? originalFileName, string? contentType)
+    {
+        var ext = string.IsNullOrWhiteSpace(originalFileName)
+            ? null
+            : Path.GetExtension(originalFileName).ToLowerInvariant();
+
+        if (ext is ".png" or ".jpg" or ".jpeg" or ".gif" or ".webp") return ext == ".jpeg" ? ".jpg" : ext;
+
+        return contentType?.ToLowerInvariant() switch
+        {
+            "image/png" => ".png",
+            "image/jpeg" or "image/jpg" => ".jpg",
+            "image/gif" => ".gif",
+            "image/webp" => ".webp",
+            _ => null
+        };
+    }
+
+    /// <summary>
     /// Appends a "Continuous Session Nachtrag" block to both <c>prompt.md</c> and <c>status.md</c>
     /// so the user's follow-up shows up in the task description and the agent protocol without
     /// breaking existing markdown structure.

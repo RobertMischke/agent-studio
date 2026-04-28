@@ -98,6 +98,40 @@ public static class JobEndpoints
             }
         });
 
+        // Prompt-editor screenshot uploads — written to <job>/attachments/<id>.<ext> and
+        // referenced from prompt.md as a relative path so the CLI agent finds them on disk.
+        group.MapPost("/{jobId}/attachments", async (string jobId, string? watchPath, HttpRequest request, JobScannerService scanner) =>
+        {
+            if (!request.HasFormContentType)
+                return Results.BadRequest(new { error = "multipart/form-data expected" });
+
+            var form = await request.ReadFormAsync();
+            var file = form.Files["file"] ?? form.Files.FirstOrDefault();
+            if (file is null || file.Length == 0)
+                return Results.BadRequest(new { error = "No file uploaded" });
+
+            using var ms = new MemoryStream();
+            await file.CopyToAsync(ms);
+
+            var (fileName, error) = scanner.SaveAttachment(jobId, watchPath, ms.ToArray(), file.FileName, file.ContentType);
+            if (fileName is null) return Results.BadRequest(new { error });
+
+            // Relative URL so the editor renders it via the API; markdown stores `attachments/<file>`.
+            var watchPathQuery = string.IsNullOrEmpty(watchPath) ? "" : $"?watchPath={Uri.EscapeDataString(watchPath)}";
+            return Results.Ok(new
+            {
+                fileName,
+                relativePath = $"attachments/{fileName}",
+                url = $"/api/jobs/{Uri.EscapeDataString(jobId)}/attachments/{fileName}{watchPathQuery}"
+            });
+        }).DisableAntiforgery();
+
+        group.MapGet("/{jobId}/attachments/{fileName}", (string jobId, string fileName, string? watchPath, JobScannerService scanner) =>
+        {
+            var (path, contentType) = scanner.ResolveAttachment(jobId, fileName, watchPath);
+            return path is null ? Results.NotFound() : Results.File(path, contentType);
+        });
+
         group.MapPost("/reorder", (ReorderRequest req, JobScannerService scanner) =>
         {
             var jobs = req.Jobs.Count > 0
