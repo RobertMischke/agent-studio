@@ -102,6 +102,16 @@ public record MoveJobRequest
     public string TargetState { get; init; } = "";
 }
 
+public enum MoveJobStatus
+{
+    Success,
+    NotFound,
+    TargetFolderExists,
+    Failure
+}
+
+public record MoveJobOutcome(MoveJobStatus Status, string? Message = null);
+
 public record CreateJobRequest
 {
     public string Id { get; init; } = "";

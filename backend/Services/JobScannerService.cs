@@ -223,27 +223,43 @@ public class JobScannerService
         };
     }
 
-    public bool MoveJob(string jobId, string targetState, string? watchPath = null)
+    public MoveJobOutcome MoveJob(string jobId, string targetState, string? watchPath = null)
     {
-        if (!JobStates.All.Contains(targetState)) return false;
+        if (!JobStates.All.Contains(targetState))
+            return new MoveJobOutcome(MoveJobStatus.Failure, $"Invalid state: {targetState}");
 
         var info = FindJob(jobId, watchPath);
-        if (info == null) return false;
-        if (info.State == targetState) return true;
+        if (info == null) return new MoveJobOutcome(MoveJobStatus.NotFound);
+        if (info.State == targetState) return new MoveJobOutcome(MoveJobStatus.Success);
 
         var jobFolderName = Path.GetFileName(info.FolderPath);
         var targetDir = Path.Combine(info.WatchPath, targetState, jobFolderName);
+
+        // A pre-existing target folder almost always means a stale duplicate of the same
+        // slug was left behind in another state — Directory.Move would throw a generic
+        // IOException and the user would see a 404. Detect it up front and surface a
+        // clear message so they know what to clean up.
+        if (Directory.Exists(targetDir))
+        {
+            _logger.LogWarning(
+                "Cannot move {JobId} to {State}: target folder already exists at {Target}",
+                jobId, targetState, targetDir);
+            return new MoveJobOutcome(
+                MoveJobStatus.TargetFolderExists,
+                $"A job folder named '{jobFolderName}' already exists in {targetState}. " +
+                "This usually means a stale duplicate was left behind; remove or rename one of the folders and retry.");
+        }
 
         try
         {
             Directory.Move(info.FolderPath, targetDir);
             UpdateStateInJobJson(targetDir, targetState);
-            return true;
+            return new MoveJobOutcome(MoveJobStatus.Success);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to move job {JobId} to {State}", jobId, targetState);
-            return false;
+            return new MoveJobOutcome(MoveJobStatus.Failure, ex.Message);
         }
     }
 

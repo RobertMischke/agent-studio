@@ -44,8 +44,7 @@ public static class JobEndpoints
             if (!JobStates.All.Contains(req.TargetState))
                 return Results.BadRequest($"Invalid state. Allowed: {string.Join(", ", JobStates.All)}");
 
-            var success = scanner.MoveJob(jobId, req.TargetState, watchPath);
-            return success ? Results.Ok() : Results.NotFound();
+            return MoveResult(scanner.MoveJob(jobId, req.TargetState, watchPath));
         });
 
         group.MapPost("/{jobId}/move", (string jobId, string? watchPath, MoveJobRequest req, JobScannerService scanner) =>
@@ -53,8 +52,7 @@ public static class JobEndpoints
             if (!JobStates.All.Contains(req.TargetState))
                 return Results.BadRequest($"Invalid state. Allowed: {string.Join(", ", JobStates.All)}");
 
-            var success = scanner.MoveJob(jobId, req.TargetState, watchPath);
-            return success ? Results.Ok() : Results.NotFound();
+            return MoveResult(scanner.MoveJob(jobId, req.TargetState, watchPath));
         });
 
         group.MapDelete("/{jobId}", (string jobId, string? watchPath, JobScannerService scanner) =>
@@ -517,6 +515,14 @@ public static class JobEndpoints
             }
         });
     }
+
+    private static IResult MoveResult(MoveJobOutcome outcome) => outcome.Status switch
+    {
+        MoveJobStatus.Success => Results.Ok(),
+        MoveJobStatus.NotFound => Results.NotFound(),
+        MoveJobStatus.TargetFolderExists => Results.Conflict(new { error = outcome.Message }),
+        _ => Results.Json(new { error = outcome.Message ?? "Failed to move job" }, statusCode: StatusCodes.Status500InternalServerError)
+    };
 
     private static JobInfo WithExecution(JobInfo job, CliRouter router)
     {
