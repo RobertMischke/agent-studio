@@ -7,6 +7,7 @@ import { CliUsageSheetComponent } from './components/cli-usage-sheet';
 import { JobService } from './services/job.service';
 import { JobDetail, JobInfo, GroupedJobs, WatchPathEntry, CliType, CLI_TYPES, CliModelInfo } from './models/job.model';
 import { ErrorDialogService } from './services/error-dialog.service';
+import { cliTypeLabel as fmtCliTypeLabel, formatMultiplier as fmtMultiplier } from './services/format.util';
 
 @Component({
   selector: 'app-root',
@@ -880,19 +881,9 @@ export class App implements OnInit {
     }
   }
 
-  cliTypeLabel(t: CliType): string {
-    switch (t) {
-      case 'copilot': return 'Copilot';
-      case 'claude':  return 'Claude Code';
-      case 'codex':   return 'Codex';
-      case 'gemini':  return 'Gemini';
-    }
-  }
+  cliTypeLabel(t: CliType): string { return fmtCliTypeLabel(t); }
 
-  formatMultiplier(mult: number | null): string {
-    if (mult === null) return '';
-    return mult === 0 ? '0×' : `${mult}×`;
-  }
+  formatMultiplier(mult: number | null): string { return fmtMultiplier(mult); }
 
   onCreateCliTypeChange(t: CliType) {
     if (this.newCliType === t) return;

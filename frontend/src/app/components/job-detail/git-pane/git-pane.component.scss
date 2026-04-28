@@ -1,0 +1,92 @@
+/*
+ * Styles specific to the Git pane. The shared `.pane*` shell styles
+ * remain in job-detail.ts so all three panes (prompt / protocol / git)
+ * stay visually identical — only the Git-pane-specific surfaces live
+ * here.
+ */
+:host { display: contents; }
+
+.git-view { gap: 12px; }
+.git-view__summary {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  font-size: 12px;
+  color: #cbd5e1;
+}
+.git-view__branch { color: #a5b4fc; }
+.git-view__count  { color: #f8fafc; font-weight: 600; }
+.git-view__diffstat { color: #94a3b8; font-family: var(--font-mono, monospace); }
+.git-view__empty { color: #94a3b8; font-size: 13px; padding: 12px 0; }
+.git-view__files {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 30vh;
+  overflow: auto;
+  border: 1px solid rgba(255,255,255,0.05);
+  border-radius: 10px;
+}
+.git-view__file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+.git-view__file:last-child { border-bottom: 0; }
+.git-view__file:hover { background: rgba(255,255,255,0.04); }
+.git-view__file--selected { background: rgba(99,102,241,0.18); }
+.git-view__file-status {
+  width: 28px;
+  font-family: var(--font-mono, monospace);
+  color: #fbbf24;
+}
+.git-view__file-path {
+  flex: 1;
+  color: #cbd5e1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.git-view__file-stat {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: #94a3b8;
+}
+.git-view__diff {
+  max-height: 28vh;
+  overflow: auto;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(0,0,0,0.3);
+  border: 1px solid rgba(255,255,255,0.05);
+  color: #cbd5e1;
+  font: 12px/1.5 var(--font-mono, monospace);
+  white-space: pre;
+}
+.git-view__commit {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.git-view__msg {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 10px;
+  background: rgba(0,0,0,0.2);
+  color: #cbd5e1;
+  padding: 8px 10px;
+  font: 12px/1.5 var(--font-mono, monospace);
+  resize: vertical;
+}
+.git-view__msg:focus { outline: none; border-color: rgba(129,140,248,0.55); }
+.git-view__commit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}

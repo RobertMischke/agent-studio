@@ -1,0 +1,18 @@
+<section class="pane pane--prompt" [style.flex]="maximized() ? '1 1 100%' : weight()" data-testid="pane-prompt">
+  <header class="pane__header">
+    <h3 class="pane__title">📝 Task description</h3>
+    <button class="pane__maximize"
+            data-testid="pane-maximize-prompt"
+            (click)="maximizeToggle.emit()"
+            [title]="maximized() ? 'Restore layout' : 'Maximize'">
+      {{ maximized() ? '⤡' : '⤢' }}
+    </button>
+    <button class="pane__hide" (click)="hide.emit()" title="Hide panel">×</button>
+  </header>
+  <div class="pane__body">
+    <app-markdown-rich-editor [value]="markdown()"
+                              [readOnly]="isRunning()"
+                              [readOnlyReason]="isRunning() ? 'Editing disabled — the CLI is running for this task. Stop it first.' : null"
+                              (save)="save.emit($event)" />
+  </div>
+</section>

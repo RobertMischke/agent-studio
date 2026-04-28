@@ -1,0 +1,50 @@
+<div class="commandbar" data-testid="commandbar">
+  <label class="commandbar__field commandbar__field--project">
+    <span class="commandbar__label">Project</span>
+    <select class="commandbar__select"
+            [ngModel]="currentWatchPath()"
+            (ngModelChange)="projectChange.emit($event)">
+      @for (wp of watchPaths(); track wp.path) {
+        <option [value]="wp.path">{{ wp.name }}</option>
+      }
+    </select>
+  </label>
+
+  <div class="commandbar__cli" role="tablist" [attr.aria-label]="'CLI'">
+    @for (t of cliTypes; track t) {
+      <button type="button"
+              class="commandbar__cli-btn"
+              [class.commandbar__cli-btn--active]="cliTypeDraft() === t"
+              [disabled]="isRunning()"
+              (click)="cliTypeChange.emit(t)">
+        {{ cliTypeLabel(t) }}
+      </button>
+    }
+  </div>
+
+  <label class="commandbar__field commandbar__field--grow">
+    <span class="commandbar__label">Model</span>
+    <select id="job-model"
+            class="commandbar__select"
+            [ngModel]="modelDraft()"
+            [disabled]="isRunning()"
+            (ngModelChange)="modelChange.emit($event)">
+      <option value="">(default)</option>
+      @for (m of availableModels(); track m.id) {
+        <option [value]="m.id">{{ m.label }}{{ m.multiplier !== null && m.multiplier !== undefined ? ' — ' + formatMultiplier(m.multiplier) : '' }}{{ m.isDefault ? ' ✓' : '' }}</option>
+      }
+    </select>
+  </label>
+
+  @if (isRunning()) {
+    <span class="commandbar__status" data-testid="commandbar-running">
+      <span class="commandbar__pulse"></span>
+      <span class="commandbar__status-text">{{ elapsedTime() }}</span>
+    </span>
+    <button class="btn-exec btn-exec--stop commandbar__action" (click)="stop.emit()">⏹ Stop</button>
+  } @else if (canStart()) {
+    <button class="btn-exec btn-exec--start commandbar__action" (click)="start.emit()" [disabled]="starting()">
+      {{ starting() ? '⏳' : '▶ Start' }}
+    </button>
+  }
+</div>

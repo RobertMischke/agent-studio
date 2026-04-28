@@ -14,3 +14,5 @@ tools/
 # .NET 10 Artifacts Output Layout (replaces per-project bin/ and obj/)
 artifacts/
 .claude-screenshots
+frontend/e2e/_baselines*
+test-results/

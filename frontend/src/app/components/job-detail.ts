@@ -1,16 +1,36 @@
-import { Component, input, output, signal, effect, OnDestroy } from '@angular/core';
+import { Component, inject, input, output, signal, effect, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { JobDetail, WatchPathEntry, CliOutputLine, CliSettings, CliExecution, CliModelInfo, CliType, CLI_TYPES, GitStatus, ClaudeSessionInfo, ClaudeRateLimitSnapshot, ClaudeSessionResponse } from '../models/job.model';
+import { JobDetail, WatchPathEntry, CliSettings, CliModelInfo, CliType, CLI_TYPES } from '../models/job.model';
 import { JobService } from '../services/job.service';
 import { ErrorDialogService } from '../services/error-dialog.service';
+import { NowTickService } from '../services/now-tick.service';
+import {
+  formatTokens as fmtTokens,
+  formatRateWindow as fmtRateWindow,
+  formatResetIn as fmtResetIn,
+  stateLabel as fmtStateLabel,
+  formatTime as fmtTime,
+  formatDate as fmtDate,
+  formatDateTime as fmtDateTime,
+  formatMultiplier as fmtMultiplier,
+  cliTypeLabel as fmtCliTypeLabel
+} from '../services/format.util';
+import { LayoutPanesService } from './job-detail/layout-panes.service';
+import { ClaudeSessionPollService } from './job-detail/claude-session-poll.service';
+import { GitPaneService } from './job-detail/git-pane.service';
+import { GitPaneComponent } from './job-detail/git-pane/git-pane.component';
+import { CliOutputPollService } from './job-detail/cli-output-poll.service';
+import { CommandDeckComponent } from './job-detail/command-deck/command-deck.component';
+import { PromptPaneComponent } from './job-detail/prompt-pane/prompt-pane.component';
+import { LogOverlayComponent } from './job-detail/log-overlay/log-overlay.component';
 import { ActivityLogViewComponent } from './activity-log-view';
-import { MarkdownRichEditorComponent } from './markdown-rich-editor';
 import { markdownToHtml } from './markdown-utils';
 
 @Component({
   selector: 'app-job-detail',
   standalone: true,
-  imports: [FormsModule, ActivityLogViewComponent, MarkdownRichEditorComponent],
+  imports: [FormsModule, ActivityLogViewComponent, GitPaneComponent, CommandDeckComponent, PromptPaneComponent, LogOverlayComponent],
+  providers: [LayoutPanesService, ClaudeSessionPollService, GitPaneService, CliOutputPollService],
   template: `
     <div class="detail">
       <header class="detail__header">
@@ -66,56 +86,22 @@ import { markdownToHtml } from './markdown-utils';
         }
       </header>
 
-      <div class="commandbar" data-testid="commandbar">
-        <label class="commandbar__field commandbar__field--project">
-          <span class="commandbar__label">Project</span>
-          <select class="commandbar__select"
-                  [ngModel]="detail().info.watchPath"
-                  (ngModelChange)="onProjectChange($event)">
-            @for (wp of watchPaths(); track wp.path) {
-              <option [value]="wp.path">{{ wp.name }}</option>
-            }
-          </select>
-        </label>
+      <app-command-deck
+        [currentWatchPath]="detail().info.watchPath"
+        [watchPaths]="watchPaths()"
+        [cliTypeDraft]="cliTypeDraft()"
+        [modelDraft]="modelDraft()"
+        [availableModels]="availableModels()"
+        [isRunning]="isRunning()"
+        [canStart]="canStartJob()"
+        [starting]="starting()"
+        [elapsedTime]="elapsedTime()"
+        (projectChange)="onProjectChange($event)"
+        (cliTypeChange)="onCliTypeChange($event)"
+        (modelChange)="onModelDraftChange($event)"
+        (start)="startJob()"
+        (stop)="stopJob()" />
 
-        <div class="commandbar__cli" role="tablist" [attr.aria-label]="'CLI'">
-          @for (t of cliTypes; track t) {
-            <button type="button"
-                    class="commandbar__cli-btn"
-                    [class.commandbar__cli-btn--active]="cliTypeDraft() === t"
-                    [disabled]="isRunning()"
-                    (click)="onCliTypeChange(t)">
-              {{ cliTypeLabel(t) }}
-            </button>
-          }
-        </div>
-
-        <label class="commandbar__field commandbar__field--grow">
-          <span class="commandbar__label">Model</span>
-          <select id="job-model"
-                  class="commandbar__select"
-                  [value]="modelDraft()"
-                  [disabled]="isRunning()"
-                  (change)="onModelDraftChange($any($event.target).value)">
-            <option value="">(default)</option>
-            @for (m of availableModels(); track m.id) {
-              <option [value]="m.id">{{ m.label }}{{ m.multiplier !== null && m.multiplier !== undefined ? ' — ' + formatMultiplier(m.multiplier) : '' }}{{ m.isDefault ? ' ✓' : '' }}</option>
-            }
-          </select>
-        </label>
-
-        @if (isRunning()) {
-          <span class="commandbar__status" data-testid="commandbar-running">
-            <span class="commandbar__pulse"></span>
-            <span class="commandbar__status-text">{{ elapsedTime() }}</span>
-          </span>
-          <button class="btn-exec btn-exec--stop commandbar__action" (click)="stopJob()">⏹ Stop</button>
-        } @else if (canStartJob()) {
-          <button class="btn-exec btn-exec--start commandbar__action" (click)="startJob()" [disabled]="starting()">
-            {{ starting() ? '⏳' : '▶ Start' }}
-          </button>
-        }
-      </div>
 
       @if (showCliConfig()) {
         <section class="sidebar-card sidebar-card--toolbar">
@@ -188,24 +174,14 @@ import { markdownToHtml } from './markdown-utils';
 
       <div class="detail__panes" [class.detail__panes--maximized]="!!maximizedPane()" data-testid="detail-panes">
         @if (isPaneRendered('prompt')) {
-        <section class="pane pane--prompt" [style.flex]="maximizedPane() ? '1 1 100%' : paneWeights().prompt" data-testid="pane-prompt">
-          <header class="pane__header">
-            <h3 class="pane__title">📝 Task description</h3>
-            <button class="pane__maximize"
-                    data-testid="pane-maximize-prompt"
-                    (click)="toggleMaximize('prompt')"
-                    [title]="maximizedPane() === 'prompt' ? 'Restore layout' : 'Maximize'">
-              {{ maximizedPane() === 'prompt' ? '⤡' : '⤢' }}
-            </button>
-            <button class="pane__hide" (click)="togglePane('prompt')" title="Hide panel">×</button>
-          </header>
-          <div class="pane__body">
-            <app-markdown-rich-editor [value]="detail().promptMarkdown || ''"
-                                      [readOnly]="isRunning()"
-                                      [readOnlyReason]="isRunning() ? 'Editing disabled — the CLI is running for this task. Stop it first.' : null"
-                                      (save)="saveFileContent('prompt.md', $event)" />
-          </div>
-        </section>
+          <app-prompt-pane
+            [markdown]="detail().promptMarkdown || ''"
+            [maximized]="maximizedPane() === 'prompt'"
+            [weight]="paneWeights().prompt"
+            [isRunning]="isRunning()"
+            (maximizeToggle)="toggleMaximize('prompt')"
+            (hide)="togglePane('prompt')"
+            (save)="saveFileContent('prompt.md', $event)" />
         }
 
         @if (!maximizedPane() && panesVisible().prompt && (panesVisible().protocol || panesVisible().git)) {
@@ -399,79 +375,12 @@ import { markdownToHtml } from './markdown-utils';
         }
 
         @if (isPaneRendered('git')) {
-        <section class="pane pane--git" [style.flex]="maximizedPane() ? '1 1 100%' : paneWeights().git" data-testid="pane-git">
-          <header class="pane__header">
-            <h3 class="pane__title">⎇ Git view</h3>
-            <button class="btn-sm" (click)="refreshGit()" [disabled]="gitLoading()" title="Refresh git status">↻</button>
-            <button class="pane__maximize"
-                    data-testid="pane-maximize-git"
-                    (click)="toggleMaximize('git')"
-                    [title]="maximizedPane() === 'git' ? 'Restore layout' : 'Maximize'">
-              {{ maximizedPane() === 'git' ? '⤡' : '⤢' }}
-            </button>
-            <button class="pane__hide" (click)="togglePane('git')" title="Hide panel">×</button>
-          </header>
-          <div class="pane__body git-view">
-            @if (gitStatus(); as g) {
-              @if (g.error) {
-                <div class="git-view__empty">{{ g.error }}</div>
-              } @else if (!g.isRepo) {
-                <div class="git-view__empty">Not a git repository.</div>
-              } @else {
-                <div class="git-view__summary">
-                  <span class="git-view__branch">⎇ {{ g.branch || '(detached)' }}</span>
-                  <span class="git-view__count" data-testid="git-files-count">{{ g.filesChanged }} files</span>
-                  <span class="git-view__diffstat">+{{ g.totalAdded }} / −{{ g.totalRemoved }}</span>
-                </div>
-                @if (g.files.length === 0) {
-                  <div class="git-view__empty">Working tree clean.</div>
-                } @else {
-                  <ul class="git-view__files" data-testid="git-files">
-                    @for (f of g.files; track f.path) {
-                      <li class="git-view__file"
-                          [class.git-view__file--selected]="selectedDiffPath() === f.path"
-                          (click)="selectDiffPath(f.path)">
-                        <span class="git-view__file-status" [title]="f.status">{{ f.status.trim() || '·' }}</span>
-                        <span class="git-view__file-path">{{ f.path }}</span>
-                        @if (f.added || f.removed) {
-                          <span class="git-view__file-stat">+{{ f.added }}/−{{ f.removed }}</span>
-                        }
-                      </li>
-                    }
-                  </ul>
-
-                  @if (selectedDiffPath()) {
-                    <pre class="git-view__diff" data-testid="git-diff">{{ gitDiffText() || '(loading...)' }}</pre>
-                  }
-
-                  <div class="git-view__commit">
-                    <textarea class="git-view__msg" rows="3"
-                              data-testid="git-commit-msg"
-                              placeholder="Commit message — Conventional Commit recommended."
-                              [value]="commitMessage()"
-                              (input)="commitMessage.set($any($event.target).value)"></textarea>
-                    <div class="git-view__commit-actions">
-                      <button class="btn-sm" (click)="generateCommitMessage()"
-                              [disabled]="generatingMsg() || isRunning()"
-                              data-testid="git-generate-msg"
-                              title="Use Gemini to draft a commit message from the diff.">
-                        {{ generatingMsg() ? '⏳' : '✨ Generate' }}
-                      </button>
-                      <button class="btn-sm btn-sm--primary"
-                              (click)="commitChanges()"
-                              [disabled]="committing() || !commitMessage().trim() || isRunning()"
-                              data-testid="git-commit">
-                        {{ committing() ? '⏳ Committing…' : '✓ Commit all' }}
-                      </button>
-                    </div>
-                  </div>
-                }
-              }
-            } @else {
-              <div class="git-view__empty">{{ gitLoading() ? 'Loading…' : 'No data — press ↻ to refresh.' }}</div>
-            }
-          </div>
-        </section>
+          <app-git-pane
+            [maximized]="maximizedPane() === 'git'"
+            [weight]="paneWeights().git"
+            [isRunning]="isRunning()"
+            (maximizeToggle)="toggleMaximize('git')"
+            (hide)="togglePane('git')" />
         }
 
         @if (!panesVisible().prompt && !panesVisible().protocol && !panesVisible().git) {
@@ -480,46 +389,10 @@ import { markdownToHtml } from './markdown-utils';
       </div>
 
       @if (showLogOverlay()) {
-        <div class="log-overlay" (click)="showLogOverlay.set(false)">
-          <div class="log-overlay__panel" (click)="$event.stopPropagation()">
-            <div class="log-overlay__header">
-              <div>
-                <h3 class="log-overlay__title">Agent log</h3>
-              </div>
-              <button class="btn-sm" (click)="showLogOverlay.set(false)">✕ Close</button>
-            </div>
-
-            <div class="log-overlay__content">
-              <section class="sidebar-card">
-                <div class="sidebar-card__header">
-                  <h3 class="section__title">Activity log</h3>
-                </div>
-                <app-activity-log-view [lines]="cliOutput()" [bodyMaxHeight]="'calc(100vh - 320px)'" variant="embedded" />
-              </section>
-
-              <section class="sidebar-card">
-                <div class="sidebar-card__header">
-                  <h3 class="section__title">Protocol</h3>
-                </div>
-                @if (detail().log.length > 0) {
-                  <div class="log log--overlay">
-                    @for (entry of detail().log; track entry.timestamp) {
-                      <div class="log__row">
-                        <span class="log__time">{{ formatTime(entry.timestamp) }}</span>
-                        <span class="log__event">{{ entry.event }}</span>
-                        @if (entry.detail) {
-                          <span class="log__detail">{{ entry.detail }}</span>
-                        }
-                      </div>
-                    }
-                  </div>
-                } @else {
-                  <div class="sidebar-card__empty">No protocol entries yet.</div>
-                }
-              </section>
-            </div>
-          </div>
-        </div>
+        <app-log-overlay
+          [cliOutput]="cliOutput()"
+          [log]="detail().log"
+          (close)="showLogOverlay.set(false)" />
       }
     </div>
   `,
@@ -696,79 +569,7 @@ import { markdownToHtml } from './markdown-utils';
       color: #c4b5fd;
       font-size: 0.8rem;
     }
-    /* Compact command bar (Project | CLI | Model | Start/Stop) */
-    .commandbar {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 6px 10px;
-      background: rgba(12,12,23,0.55);
-      border: 1px solid rgba(255,255,255,0.05);
-      border-radius: 12px;
-      flex-wrap: wrap;
-    }
-    .commandbar__field {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      min-width: 0;
-    }
-    .commandbar__field--project { flex: 0 1 220px; }
-    .commandbar__field--grow { flex: 1 1 220px; min-width: 160px; }
-    .commandbar__label {
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-      color: #64748b;
-      white-space: nowrap;
-    }
-    .commandbar__select {
-      flex: 1;
-      min-width: 0;
-      background: rgba(0,0,0,0.25);
-      color: #cdd6f4;
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 6px;
-      padding: 4px 8px;
-      font-size: 12px;
-    }
-    .commandbar__select:focus { outline: none; border-color: rgba(99,102,241,0.55); }
-    .commandbar__select:disabled { opacity: 0.6; cursor: not-allowed; }
-    .commandbar__cli {
-      display: inline-flex;
-      gap: 2px;
-      padding: 2px;
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 6px;
-      background: rgba(0,0,0,0.25);
-    }
-    .commandbar__cli-btn {
-      border: 0;
-      background: transparent;
-      color: #94a3b8;
-      padding: 3px 9px;
-      font-size: 11px;
-      border-radius: 4px;
-      cursor: pointer;
-    }
-    .commandbar__cli-btn:hover:not(:disabled) { color: #e2e8f0; background: rgba(255,255,255,0.06); }
-    .commandbar__cli-btn--active { background: rgba(99,102,241,0.22); color: #c7d2fe; }
-    .commandbar__cli-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-    .commandbar__status {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      font-size: 12px;
-      color: #94a3b8;
-      font-variant-numeric: tabular-nums;
-    }
-    .commandbar__pulse {
-      width: 7px; height: 7px;
-      border-radius: 50%;
-      background: #3b82f6;
-      animation: pulse 1.5s infinite;
-    }
-    .commandbar__action { padding: 5px 12px; font-size: 12px; }
+    /* Command-bar styles moved to ./job-detail/command-deck/command-deck.component.scss */
     .detail {
       background: #181825;
       border: 1px solid rgba(255,255,255,0.06);
@@ -1092,91 +893,7 @@ import { markdownToHtml } from './markdown-utils';
       color: #94a3b8;
       font-size: 13px;
     }
-    /* Git view */
-    .git-view { gap: 12px; }
-    .git-view__summary {
-      display: flex;
-      gap: 12px;
-      align-items: center;
-      font-size: 12px;
-      color: #cbd5e1;
-    }
-    .git-view__branch { color: #a5b4fc; }
-    .git-view__count  { color: #f8fafc; font-weight: 600; }
-    .git-view__diffstat { color: #94a3b8; font-family: var(--font-mono, monospace); }
-    .git-view__empty { color: #94a3b8; font-size: 13px; padding: 12px 0; }
-    .git-view__files {
-      list-style: none;
-      margin: 0;
-      padding: 0;
-      max-height: 30vh;
-      overflow: auto;
-      border: 1px solid rgba(255,255,255,0.05);
-      border-radius: 10px;
-    }
-    .git-view__file {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 10px;
-      cursor: pointer;
-      font-size: 12px;
-      border-bottom: 1px solid rgba(255,255,255,0.03);
-    }
-    .git-view__file:last-child { border-bottom: 0; }
-    .git-view__file:hover { background: rgba(255,255,255,0.04); }
-    .git-view__file--selected { background: rgba(99,102,241,0.18); }
-    .git-view__file-status {
-      width: 28px;
-      font-family: var(--font-mono, monospace);
-      color: #fbbf24;
-    }
-    .git-view__file-path {
-      flex: 1;
-      color: #cbd5e1;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-    .git-view__file-stat {
-      font-family: var(--font-mono, monospace);
-      font-size: 11px;
-      color: #94a3b8;
-    }
-    .git-view__diff {
-      max-height: 28vh;
-      overflow: auto;
-      margin: 0;
-      padding: 10px 12px;
-      border-radius: 10px;
-      background: rgba(0,0,0,0.3);
-      border: 1px solid rgba(255,255,255,0.05);
-      color: #cbd5e1;
-      font: 12px/1.5 var(--font-mono, monospace);
-      white-space: pre;
-    }
-    .git-view__commit {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-    .git-view__msg {
-      width: 100%;
-      box-sizing: border-box;
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 10px;
-      background: rgba(0,0,0,0.2);
-      color: #cbd5e1;
-      padding: 8px 10px;
-      font: 12px/1.5 var(--font-mono, monospace);
-      resize: vertical;
-    }
-    .git-view__msg:focus { outline: none; border-color: rgba(129,140,248,0.55); }
-    .git-view__commit-actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: 8px;
-    }
+    /* Git view styles moved to ./job-detail/git-pane/git-pane.component.scss */
     .detail__splitter {
       align-self: stretch;
       display: flex;
@@ -1524,27 +1241,7 @@ import { markdownToHtml } from './markdown-utils';
       50% { opacity: 0.7; box-shadow: 0 0 0 6px rgba(59,130,246,0); }
     }
     .execution-bar__text { font-variant-numeric: tabular-nums; }
-    .btn-exec {
-      border: none;
-      padding: 6px 16px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 13px;
-      font-weight: 600;
-    }
-    .btn-exec--start {
-      background: rgba(34,197,94,0.15);
-      color: #4ade80;
-      border: 1px solid rgba(34,197,94,0.3);
-    }
-    .btn-exec--start:hover { background: rgba(34,197,94,0.25); }
-    .btn-exec--stop {
-      background: rgba(239,68,68,0.15);
-      color: #f87171;
-      border: 1px solid rgba(239,68,68,0.3);
-    }
-    .btn-exec--stop:hover { background: rgba(239,68,68,0.25); }
-    .btn-exec:disabled { opacity: 0.5; cursor: wait; }
+    /* btn-exec styles moved to command-deck.component.scss */
 
     .sidebar-card {
       background: rgba(12,12,23,0.55);
@@ -1765,34 +1462,36 @@ export class JobDetailComponent implements OnDestroy {
   readonly editingPrompt = signal(false);
   readonly editingStatus = signal(false);
 
-  // Three-pane layout state. Each weight is an arbitrary positive flex
-  // factor; visible panes share the available width proportionally. Hidden
-  // panes don't render at all and disappear from the splitter chain.
-  readonly panesVisible = signal(this.loadPanesVisible());
-  readonly paneWeights = signal(this.loadPaneWeights());
-  // Maximize one pane to fill the whole detail area. null = normal layout.
-  readonly maximizedPane = signal<'prompt' | 'protocol' | 'git' | null>(null);
+  // Three-pane layout — state, persistence and resize handlers live in
+  // LayoutPanesService (provided locally on this component). The fields
+  // below are facades so existing template bindings keep working.
+  private readonly layout = inject(LayoutPanesService);
+  readonly panesVisible = this.layout.panesVisible;
+  readonly paneWeights = this.layout.paneWeights;
+  readonly maximizedPane = this.layout.maximizedPane;
 
-  // Live Claude session telemetry — read from two sources merged on the
-  // backend: the CLI's JSONL log (per-turn token usage) and the live
-  // process's last `rate_limit_event` frame (per-turn quota window).
-  // Refreshes on a 5 s timer while the job is the open detail target.
-  readonly claudeSession = signal<ClaudeSessionInfo | null>(null);
-  readonly claudeRateLimit = signal<ClaudeRateLimitSnapshot | null>(null);
-  private claudeSessionTimer: ReturnType<typeof setInterval> | null = null;
+  // Live Claude session telemetry — owned by ClaudeSessionPollService
+  // (5 s poll, started/stopped in response to detail() changes).
+  private readonly claudePoll = inject(ClaudeSessionPollService);
+  readonly claudeSession = this.claudePoll.session;
+  readonly claudeRateLimit = this.claudePoll.rateLimit;
 
-  // Git view state — populated lazily when the Git pane is opened.
-  readonly gitStatus = signal<GitStatus | null>(null);
-  readonly gitLoading = signal(false);
-  readonly selectedDiffPath = signal<string | null>(null);
-  readonly gitDiffText = signal<string>('');
-  readonly commitMessage = signal('');
-  readonly committing = signal(false);
-  readonly generatingMsg = signal(false);
-  readonly cliOutput = signal<CliOutputLine[]>([]);
-  readonly isRunning = signal(false);
-  readonly startedAt = signal<Date | null>(null);
-  readonly elapsedTime = signal('');
+  // Git view state lives in GitPaneService (provided locally on this
+  // component). Facades below keep the existing call sites unchanged.
+  private readonly git = inject(GitPaneService);
+  readonly gitStatus = this.git.status;
+  readonly gitLoading = this.git.loading;
+  readonly selectedDiffPath = this.git.selectedDiffPath;
+  readonly gitDiffText = this.git.diffText;
+  readonly commitMessage = this.git.commitMessage;
+  readonly committing = this.git.committing;
+  readonly generatingMsg = this.git.generatingMsg;
+  // CLI output buffer + run-state lives in CliOutputPollService.
+  private readonly cliPoll = inject(CliOutputPollService);
+  readonly cliOutput = this.cliPoll.output;
+  readonly isRunning = this.cliPoll.isRunning;
+  readonly startedAt = this.cliPoll.startedAt;
+  readonly elapsedTime = this.cliPoll.elapsedTime;
   readonly errorMsg = signal<string | null>(null);
   readonly starting = signal(false);
   readonly continuing = signal(false);
@@ -1808,10 +1507,7 @@ export class JobDetailComponent implements OnDestroy {
     return this.availableModels().find(m => m.id === id)?.multiplier ?? null;
   }
 
-  formatMultiplier(mult: number | null): string {
-    if (mult === null) return '';
-    return mult === 0 ? '0×' : `${mult}×`;
-  }
+  formatMultiplier(mult: number | null): string { return fmtMultiplier(mult); }
   readonly showCliConfig = signal(false);
   readonly cliStatus = signal<CliSettings | null>(null);
   readonly cliPathDraft = signal('');
@@ -1827,27 +1523,17 @@ export class JobDetailComponent implements OnDestroy {
   readonly savingTitle = signal(false);
   readonly completingAndNext = signal(false);
   readonly statusViewMode = signal<'preview' | 'markdown'>('preview');
-  readonly detailPanePercent = signal(this.loadDetailPanePercent());
+  readonly detailPanePercent = this.layout.detailPanePercent;
 
   // Wall-clock tick used by relative-time formatters (e.g. formatResetIn).
-  // Reading Date.now() directly inside template-bound methods causes
-  // NG0100 in dev-mode when the value crosses a minute boundary between
-  // the regular and the checkNoChanges change-detection pass. Routing
-  // "now" through a signal keeps the formatter stable within one CD cycle.
-  private readonly nowTick = signal(Date.now());
-  private readonly nowTickTimer: ReturnType<typeof setInterval> = setInterval(
-    () => this.nowTick.set(Date.now()), 15_000);
+  // Sourced from NowTickService — keeps the formatter stable within one
+  // change-detection cycle and avoids the NG0100 minute-boundary trap.
+  private readonly nowTick = inject(NowTickService).now;
 
   promptDraftValue = '';
   statusDraftValue = '';
-  private elapsedTimer: ReturnType<typeof setInterval> | null = null;
-  private pollGeneration = 0;
-  private pollTimeout: ReturnType<typeof setTimeout> | null = null;
   private lastCliConfigRequest = 0;
   private currentJobKey: string | null = null;
-  private layoutResizeBounds: DOMRect | null = null;
-  private readonly layoutResizeMove = (event: PointerEvent) => this.resizeLayout(event);
-  private readonly layoutResizeEnd = () => this.stopLayoutResize();
 
   constructor(private jobService: JobService, private errorDialog: ErrorDialogService) {
     // Load the initial catalog for whatever CLI the current job uses; the effect below
@@ -1887,19 +1573,15 @@ export class JobDetailComponent implements OnDestroy {
     });
   }
 
-  cliTypeLabel(t: CliType): string {
-    switch (t) {
-      case 'copilot': return 'Copilot';
-      case 'claude':  return 'Claude Code';
-      case 'codex':   return 'Codex';
-      case 'gemini':  return 'Gemini';
-    }
-  }
+  cliTypeLabel(t: CliType): string { return fmtCliTypeLabel(t); }
 
   private detailEffect = effect(() => {
     const d = this.detail();
     const isJobSwitch = this.currentJobKey !== d.info.jobKey;
     this.currentJobKey = d.info.jobKey;
+    // Keep GitPaneService in sync with the open job; resets internal
+    // state on actual job changes, no-ops on same-job refreshes.
+    this.git.setJob(d.info);
 
     this.errorMsg.set(null);
     if (d.info.model) {
@@ -1927,41 +1609,20 @@ export class JobDetailComponent implements OnDestroy {
       this.statusViewMode.set('preview');
       this.editingTitle.set(false);
       this.savingTitle.set(false);
-      this.cliOutput.set([]);
-      this.isRunning.set(false);
-      this.startedAt.set(null);
-      this.elapsedTime.set('0s');
       this.followupPrompt.set('');
-      this.pollGeneration += 1;
-      if (this.pollTimeout) {
-        clearTimeout(this.pollTimeout);
-        this.pollTimeout = null;
-      }
-      if (this.elapsedTimer) {
-        clearInterval(this.elapsedTimer);
-        this.elapsedTimer = null;
-      }
+      this.cliPoll.resetForJobSwitch();
     }
 
+    this.cliPoll.setJob({ id: d.info.id, watchPath: d.info.watchPath });
     this.applyExecutionState(d.info.execution);
 
     // The endpoint returns the live buffer while a process is active and falls
     // back to logs/cli-output.log for completed tasks.
-    if (d.info.execution?.status === 'running' && !this.pollTimeout) {
-      this.pollOutput();
+    if (d.info.execution?.status === 'running' && !this.cliPoll.isPolling()) {
+      this.cliPoll.startPolling();
     }
     this.jobService.getJobOutput(d.info.id, d.info.watchPath).subscribe({
-      next: (output) => {
-        if (output.length > 0) {
-          this.cliOutput.set(output);
-          if (!this.startedAt() && d.info.execution) {
-            this.startedAt.set(new Date(d.info.execution.startedAt));
-          }
-          if (!this.elapsedTimer && this.isRunning()) {
-            this.startElapsedTimer();
-          }
-        }
-      },
+      next: (output) => this.cliPoll.hydrateOutput(output, d.info.execution?.startedAt ?? null),
       error: (err) => {
         if (err.status !== 0) return; // silent for 404 etc
         this.showError(err);
@@ -1980,32 +1641,18 @@ export class JobDetailComponent implements OnDestroy {
   });
 
   ngOnDestroy() {
-    this.isRunning.set(false);
-    clearInterval(this.nowTickTimer);
     this.detailEffect.destroy();
     this.cliConfigEffect.destroy();
-    if (this.pollTimeout) {
-      clearTimeout(this.pollTimeout);
-      this.pollTimeout = null;
-    }
-    if (this.elapsedTimer) {
-      clearInterval(this.elapsedTimer);
-      this.elapsedTimer = null;
-    }
-    this.stopLayoutResize();
-    this.stopClaudeSessionPolling();
+    this.cliPoll.stop();
+    this.layout.stopLayoutResize();
+    this.claudePoll.stop();
   }
 
-  // Tracks the currently-polled job so we can re-arm when the detail target
-  // changes. We don't key on sessionName because the live rate-limit signal
-  // is available from the CLI before any sessionId is captured.
-  private claudeSessionKey = '';
+  // Bridge detail() changes to the ClaudeSessionPollService. The service
+  // ignores no-op syncs and re-arms its 5 s timer only when the polled
+  // job actually changes.
   private readonly claudeSessionEffect = effect(() => {
-    const info = this.detail()?.info;
-    const key = info && info.cliType === 'claude' ? info.id : '';
-    if (key === this.claudeSessionKey) return;
-    this.claudeSessionKey = key;
-    this.startClaudeSessionPolling();
+    this.claudePoll.syncTo(this.detail()?.info ?? null);
   });
 
   canStartJob(): boolean {
@@ -2020,11 +1667,7 @@ export class JobDetailComponent implements OnDestroy {
     this.jobService.startJob(this.detail().info.id, this.detail().info.watchPath, model).subscribe({
       next: (exec) => {
         this.starting.set(false);
-        this.isRunning.set(true);
-        this.startedAt.set(new Date(exec.startedAt));
-        this.cliOutput.set([]);
-        this.startElapsedTimer();
-        this.pollOutput();
+        this.cliPoll.beginRun(new Date(exec.startedAt));
       },
       error: (err) => {
         this.starting.set(false);
@@ -2036,17 +1679,7 @@ export class JobDetailComponent implements OnDestroy {
   stopJob(): void {
     this.errorMsg.set(null);
     this.jobService.stopJob(this.detail().info.id, this.detail().info.watchPath).subscribe({
-      next: () => {
-        this.isRunning.set(false);
-        if (this.pollTimeout) {
-          clearTimeout(this.pollTimeout);
-          this.pollTimeout = null;
-        }
-        if (this.elapsedTimer) {
-          clearInterval(this.elapsedTimer);
-          this.elapsedTimer = null;
-        }
-      },
+      next: () => this.cliPoll.stop(),
       error: (err) => this.showError(err)
     });
   }
@@ -2062,11 +1695,7 @@ export class JobDetailComponent implements OnDestroy {
       next: (exec) => {
         this.continuing.set(false);
         this.followupPrompt.set('');
-        this.isRunning.set(true);
-        this.startedAt.set(new Date(exec.startedAt));
-        this.cliOutput.set([]);
-        this.startElapsedTimer();
-        this.pollOutput();
+        this.cliPoll.beginRun(new Date(exec.startedAt));
       },
       error: (err) => {
         this.continuing.set(false);
@@ -2149,78 +1778,21 @@ export class JobDetailComponent implements OnDestroy {
     });
   }
 
-  private applyExecutionState(execution: CliExecution | null): void {
-    if (!execution) {
-      return;
-    }
-
-    if (execution.status === 'running') {
-      this.isRunning.set(true);
-      this.startedAt.set(new Date(execution.startedAt));
-      if (!this.elapsedTimer) {
-        this.startElapsedTimer();
-      }
-      return;
-    }
-
-    this.isRunning.set(false);
-    if (this.elapsedTimer) {
-      clearInterval(this.elapsedTimer);
-      this.elapsedTimer = null;
-    }
+  private applyExecutionState(execution: import('../models/job.model').CliExecution | null): void {
+    if (!execution) return;
+    this.cliPoll.applyExecution(execution);
     if (execution.status === 'failed') {
       const message = execution.exitCode === null
         ? 'Task execution failed.'
         : `Task execution failed with exit code ${execution.exitCode}.`;
-
       this.errorMsg.set(message);
       this.errorDialog.show(message, {
         title: 'Task execution failed',
         fallbackMessage: message,
         source: `Task ${this.detail().info.id}`,
-        output: {
-          execution,
-          cliOutput: this.cliOutput()
-        }
+        output: { execution, cliOutput: this.cliOutput() }
       });
     }
-  }
-
-  private startElapsedTimer(): void {
-    if (this.elapsedTimer) clearInterval(this.elapsedTimer);
-    this.updateElapsed();
-    this.elapsedTimer = setInterval(() => this.updateElapsed(), 1000);
-  }
-
-  private updateElapsed(): void {
-    const start = this.startedAt();
-    if (!start) { this.elapsedTime.set('0s'); return; }
-    const secs = Math.floor((Date.now() - start.getTime()) / 1000);
-    if (secs < 60) this.elapsedTime.set(`${secs}s`);
-    else if (secs < 3600) this.elapsedTime.set(`${Math.floor(secs / 60)}m ${secs % 60}s`);
-    else this.elapsedTime.set(`${Math.floor(secs / 3600)}h ${Math.floor((secs % 3600) / 60)}m`);
-  }
-
-  private pollOutput(): void {
-    const generation = this.pollGeneration;
-    const poll = () => {
-      if (!this.isRunning() || generation !== this.pollGeneration) {
-        return;
-      }
-      this.jobService.getJobOutput(this.detail().info.id, this.detail().info.watchPath).subscribe({
-        next: (output) => {
-          if (generation !== this.pollGeneration) {
-            return;
-          }
-          this.cliOutput.set(output);
-          this.pollTimeout = setTimeout(poll, 2000);
-        },
-        error: () => {
-          this.pollTimeout = setTimeout(poll, 5000);
-        }
-      });
-    };
-    this.pollTimeout = setTimeout(poll, 1000);
   }
 
   isProgress(): boolean {
@@ -2330,288 +1902,43 @@ export class JobDetailComponent implements OnDestroy {
     return markdownToHtml(markdown);
   }
 
-  startLayoutResize(event: PointerEvent): void {
-    event.preventDefault();
-    const layout = (event.currentTarget as HTMLElement).parentElement;
-    if (!layout) return;
+  // === 3-pane layout — facades for LayoutPanesService ====================
 
-    this.layoutResizeBounds = layout.getBoundingClientRect();
-    window.addEventListener('pointermove', this.layoutResizeMove);
-    window.addEventListener('pointerup', this.layoutResizeEnd, { once: true });
-  }
-
-  private resizeLayout(event: PointerEvent): void {
-    if (!this.layoutResizeBounds) return;
-
-    const raw = ((event.clientX - this.layoutResizeBounds.left) / this.layoutResizeBounds.width) * 100;
-    const clamped = Math.max(35, Math.min(72, raw));
-    this.detailPanePercent.set(Math.round(clamped * 10) / 10);
-  }
-
-  private stopLayoutResize(): void {
-    window.removeEventListener('pointermove', this.layoutResizeMove);
-    window.removeEventListener('pointerup', this.layoutResizeEnd);
-    if (this.layoutResizeBounds) {
-      this.layoutResizeBounds = null;
-      try {
-        localStorage.setItem('taskboard.detailPanePercent', String(this.detailPanePercent()));
-      } catch {
-        // Local storage is best-effort UI preference persistence.
-      }
-    }
-  }
-
-  private loadDetailPanePercent(): number {
-    try {
-      const saved = localStorage.getItem('taskboard.detailPanePercent');
-      const parsed = saved ? Number(saved) : NaN;
-      if (Number.isFinite(parsed)) {
-        return Math.max(35, Math.min(72, parsed));
-      }
-    } catch {
-      // Ignore unavailable storage.
-    }
-    return 54;
-  }
-
-  // === 3-pane layout =====================================================
-
-  private loadPanesVisible(): { prompt: boolean; protocol: boolean; git: boolean } {
-    const fallback = { prompt: true, protocol: true, git: false };
-    try {
-      const raw = localStorage.getItem('taskboard.panesVisible');
-      if (!raw) return fallback;
-      const parsed = JSON.parse(raw);
-      return {
-        prompt:   typeof parsed.prompt   === 'boolean' ? parsed.prompt   : fallback.prompt,
-        protocol: typeof parsed.protocol === 'boolean' ? parsed.protocol : fallback.protocol,
-        git:      typeof parsed.git      === 'boolean' ? parsed.git      : fallback.git
-      };
-    } catch { return fallback; }
-  }
-
-  private loadPaneWeights(): { prompt: number; protocol: number; git: number } {
-    const fallback = { prompt: 4, protocol: 3, git: 3 };
-    try {
-      const raw = localStorage.getItem('taskboard.paneWeights');
-      if (!raw) return fallback;
-      const parsed = JSON.parse(raw);
-      const norm = (v: unknown, f: number) =>
-        typeof v === 'number' && v > 0 && Number.isFinite(v) ? v : f;
-      return {
-        prompt:   norm(parsed.prompt,   fallback.prompt),
-        protocol: norm(parsed.protocol, fallback.protocol),
-        git:      norm(parsed.git,      fallback.git)
-      };
-    } catch { return fallback; }
-  }
+  startLayoutResize(event: PointerEvent): void { this.layout.startLayoutResize(event); }
 
   togglePane(name: 'prompt' | 'protocol' | 'git'): void {
-    const next = { ...this.panesVisible(), [name]: !this.panesVisible()[name] };
-    this.panesVisible.set(next);
-    try { localStorage.setItem('taskboard.panesVisible', JSON.stringify(next)); } catch {}
-    // Hiding the maximized pane drops it back to normal layout.
-    if (this.maximizedPane() === name && !next[name]) {
-      this.maximizedPane.set(null);
-    }
-    if (name === 'git' && next.git) {
+    const next = this.layout.togglePane(name);
+    if (name === 'git' && next.git && !this.gitStatus()) {
       // Lazy-load git status the first time the pane is shown.
-      if (!this.gitStatus()) this.refreshGit();
+      this.refreshGit();
     }
   }
 
-  toggleMaximize(name: 'prompt' | 'protocol' | 'git'): void {
-    this.maximizedPane.set(this.maximizedPane() === name ? null : name);
-  }
+  toggleMaximize(name: 'prompt' | 'protocol' | 'git'): void { this.layout.toggleMaximize(name); }
 
-  /** Whether a pane should currently be in the DOM. */
-  isPaneRendered(name: 'prompt' | 'protocol' | 'git'): boolean {
-    if (!this.panesVisible()[name]) return false;
-    const max = this.maximizedPane();
-    return !max || max === name;
-  }
+  isPaneRendered(name: 'prompt' | 'protocol' | 'git'): boolean { return this.layout.isPaneRendered(name); }
 
-  /** First visible pane to the right of `name`, used to bind the splitter. */
-  firstVisibleAfter(name: 'prompt' | 'protocol' | 'git'): 'protocol' | 'git' {
-    if (name === 'prompt') return this.panesVisible().protocol ? 'protocol' : 'git';
-    return 'git';
-  }
-
-  private paneResizeBounds: DOMRect | null = null;
-  private paneResizeLeft: 'prompt' | 'protocol' | null = null;
-  private paneResizeRight: 'protocol' | 'git' | null = null;
-  private paneResizeStartTotal = 0;
-  private readonly paneResizeMove = (e: PointerEvent) => this.resizePanes(e);
-  private readonly paneResizeEnd  = () => this.stopPaneResize();
+  firstVisibleAfter(name: 'prompt' | 'protocol' | 'git'): 'protocol' | 'git' { return this.layout.firstVisibleAfter(name); }
 
   startPaneResize(event: PointerEvent, left: 'prompt' | 'protocol', right: 'protocol' | 'git'): void {
-    event.preventDefault();
-    const container = (event.currentTarget as HTMLElement).parentElement;
-    if (!container) return;
-    this.paneResizeBounds = container.getBoundingClientRect();
-    this.paneResizeLeft = left;
-    this.paneResizeRight = right;
-    this.paneResizeStartTotal = this.paneWeights()[left] + this.paneWeights()[right];
-    window.addEventListener('pointermove', this.paneResizeMove);
-    window.addEventListener('pointerup', this.paneResizeEnd, { once: true });
+    this.layout.startPaneResize(event, left, right);
   }
 
-  private resizePanes(event: PointerEvent): void {
-    if (!this.paneResizeBounds || !this.paneResizeLeft || !this.paneResizeRight) return;
-    const { left, width } = this.paneResizeBounds;
-    const ratio = Math.max(0.1, Math.min(0.9, (event.clientX - left) / width));
-    // Allocate the splitter's neighbours' combined weight by ratio. Other
-    // panes keep their weight unchanged. Visual sizes are flex factors, so
-    // proportional allocation works regardless of total.
-    const total = this.paneResizeStartTotal;
-    const w = { ...this.paneWeights() };
-    w[this.paneResizeLeft]  = Math.max(0.5, total * ratio);
-    w[this.paneResizeRight] = Math.max(0.5, total * (1 - ratio));
-    this.paneWeights.set(w);
-  }
+  // === Git view facades ==================================================
+  // State + API calls live in GitPaneService (provided locally). The
+  // GitPaneComponent in the template binds directly to the service; the
+  // wrappers here keep older same-class call sites working (e.g. the
+  // togglePane lazy-load below).
 
-  private stopPaneResize(): void {
-    window.removeEventListener('pointermove', this.paneResizeMove);
-    window.removeEventListener('pointerup', this.paneResizeEnd);
-    this.paneResizeBounds = null;
-    this.paneResizeLeft = null;
-    this.paneResizeRight = null;
-    try { localStorage.setItem('taskboard.paneWeights', JSON.stringify(this.paneWeights())); } catch {}
-  }
-
-  // === Git view ==========================================================
-
-  refreshGit(): void {
-    const info = this.detail()?.info;
-    if (!info) return;
-    this.gitLoading.set(true);
-    this.jobService.getGitStatus(info.id, info.watchPath).subscribe({
-      next: (status) => {
-        this.gitStatus.set(status);
-        this.gitLoading.set(false);
-        // If a previously selected file is no longer in the change set,
-        // clear the diff so we don't keep stale text on screen.
-        const selected = this.selectedDiffPath();
-        if (selected && !status.files.some(f => f.path === selected)) {
-          this.selectedDiffPath.set(null);
-          this.gitDiffText.set('');
-        }
-      },
-      error: (err) => {
-        this.gitLoading.set(false);
-        this.errorDialog.show(err, { title: 'Git status failed', source: `Task ${info.id}` });
-      }
-    });
-  }
-
-  selectDiffPath(path: string): void {
-    if (this.selectedDiffPath() === path) {
-      this.selectedDiffPath.set(null);
-      this.gitDiffText.set('');
-      return;
-    }
-    const info = this.detail()?.info;
-    if (!info) return;
-    this.selectedDiffPath.set(path);
-    this.gitDiffText.set('');
-    this.jobService.getGitDiff(info.id, path, info.watchPath).subscribe({
-      next: (text: unknown) => this.gitDiffText.set(typeof text === 'string' ? text : ''),
-      error: () => this.gitDiffText.set('(failed to load diff)')
-    });
-  }
-
-  generateCommitMessage(): void {
-    const info = this.detail()?.info;
-    if (!info) return;
-    this.generatingMsg.set(true);
-    this.jobService.generateCommitMessage(info.id, info.watchPath).subscribe({
-      next: (res) => {
-        this.generatingMsg.set(false);
-        if (res?.message) this.commitMessage.set(res.message);
-      },
-      error: (err) => {
-        this.generatingMsg.set(false);
-        this.errorDialog.show(err, { title: 'Generate commit message failed', source: `Task ${info.id}` });
-      }
-    });
-  }
-
-  commitChanges(): void {
-    const info = this.detail()?.info;
-    const msg = this.commitMessage().trim();
-    if (!info || !msg) return;
-    this.committing.set(true);
-    this.jobService.commitJob(info.id, msg, info.watchPath).subscribe({
-      next: () => {
-        this.committing.set(false);
-        this.commitMessage.set('');
-        this.refreshGit();
-      },
-      error: (err) => {
-        this.committing.set(false);
-        this.errorDialog.show(err, { title: 'Commit failed', source: `Task ${info.id}` });
-      }
-    });
-  }
-
-  openInVsCode(): void {
-    const info = this.detail()?.info;
-    if (!info) return;
-    this.jobService.openInVsCode(info.id, info.watchPath).subscribe({
-      error: (err) => this.errorDialog.show(err, { title: 'Open in VS Code failed', source: `Task ${info.id}` })
-    });
-  }
+  refreshGit(): void { this.git.refresh(); }
+  openInVsCode(): void { this.git.openInVsCode(); }
 
   // === Claude live session telemetry =====================================
+  // Polling lives in ClaudeSessionPollService (provided locally on this
+  // component); the claudeSessionEffect above bridges detail() changes
+  // into it, and the session/rateLimit signals are exposed as facades.
 
-  refreshClaudeSession(): void {
-    const info = this.detail()?.info;
-    if (!info || info.cliType !== 'claude') {
-      this.claudeSession.set(null);
-      this.claudeRateLimit.set(null);
-      return;
-    }
-    // Note: even without a sessionName yet, the live rate-limit may already
-    // be present (the CLI emits it on the first run too). The backend
-    // returns a stub sessionInfo in that case rather than 404'ing.
-    this.jobService.getClaudeSessionInfo(info.id, info.watchPath).subscribe({
-      next: (res) => {
-        this.claudeSession.set(res?.sessionInfo ?? null);
-        this.claudeRateLimit.set(res?.rateLimit ?? null);
-      },
-      error: () => { /* non-fatal — keep previous snapshot */ }
-    });
-  }
-
-  /**
-   * Manage the 5 s telemetry poll. Called from the existing detail-load
-   * effect: starts polling when a Claude job is opened, stops when the
-   * detail target changes or the component is destroyed.
-   */
-  startClaudeSessionPolling(): void {
-    this.stopClaudeSessionPolling();
-    const info = this.detail()?.info;
-    if (!info || info.cliType !== 'claude') return;
-    // Poll even before a sessionName is captured — the live rate-limit
-    // snapshot is available from the CLI's first turn onward, well before
-    // the JSONL session file becomes useful.
-    this.refreshClaudeSession();
-    this.claudeSessionTimer = setInterval(() => this.refreshClaudeSession(), 5_000);
-  }
-
-  stopClaudeSessionPolling(): void {
-    if (this.claudeSessionTimer) {
-      clearInterval(this.claudeSessionTimer);
-      this.claudeSessionTimer = null;
-    }
-  }
-
-  formatTokens(n: number): string {
-    if (!n) return '0';
-    if (n < 1000) return String(n);
-    if (n < 1_000_000) return (n / 1000).toFixed(1) + 'k';
-    return (n / 1_000_000).toFixed(2) + 'M';
-  }
+  formatTokens(n: number): string { return fmtTokens(n); }
 
   claudeSessionTooltip(): string {
     const cs = this.claudeSession();
@@ -2627,22 +1954,9 @@ export class JobDetailComponent implements OnDestroy {
     ].filter(Boolean).join('\n');
   }
 
-  formatRateWindow(window: string | null): string {
-    if (!window) return '?';
-    return window.replace(/_/g, '-');
-  }
+  formatRateWindow(window: string | null): string { return fmtRateWindow(window); }
 
-  formatResetIn(epochSeconds: number): string {
-    if (!epochSeconds) return '?';
-    const ms = epochSeconds * 1000 - this.nowTick();
-    if (ms <= 0) return 'now';
-    const min = Math.floor(ms / 60_000);
-    if (min < 2) return `${Math.floor(ms / 1000)}s`;
-    if (min < 120) return `in ${min} min`;
-    const hrs = ms / 3_600_000;
-    if (hrs < 48) return `in ${hrs.toFixed(1)} h`;
-    return `in ${Math.floor(hrs / 24)} d`;
-  }
+  formatResetIn(epochSeconds: number): string { return fmtResetIn(epochSeconds, this.nowTick()); }
 
   rateLimitTooltip(): string {
     const rl = this.claudeRateLimit();
@@ -2660,27 +1974,13 @@ export class JobDetailComponent implements OnDestroy {
     ].filter(Boolean).join('\n');
   }
 
-  stateLabel(state: string): string {
-    return state.replace(/^\d+-/, '');
-  }
+  stateLabel(state: string): string { return fmtStateLabel(state); }
 
-  formatTime(dateStr: string): string {
-    return new Date(dateStr).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  }
+  formatTime(dateStr: string): string { return fmtTime(dateStr); }
 
-  formatDate(dateStr: string): string {
-    return new Date(dateStr).toLocaleDateString();
-  }
+  formatDate(dateStr: string): string { return fmtDate(dateStr); }
 
-  formatDateTime(dateStr: string): string {
-    return new Date(dateStr).toLocaleString([], {
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  }
+  formatDateTime(dateStr: string): string { return fmtDateTime(dateStr); }
 
   isCliError(): boolean {
     const msg = this.errorMsg();

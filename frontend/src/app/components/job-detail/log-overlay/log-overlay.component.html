@@ -1,0 +1,40 @@
+<div class="log-overlay" (click)="close.emit()">
+  <div class="log-overlay__panel" (click)="$event.stopPropagation()">
+    <div class="log-overlay__header">
+      <div>
+        <h3 class="log-overlay__title">Agent log</h3>
+      </div>
+      <button class="btn-sm" (click)="close.emit()">✕ Close</button>
+    </div>
+
+    <div class="log-overlay__content">
+      <section class="sidebar-card">
+        <div class="sidebar-card__header">
+          <h3 class="section__title">Activity log</h3>
+        </div>
+        <app-activity-log-view [lines]="cliOutput()" [bodyMaxHeight]="'calc(100vh - 320px)'" variant="embedded" />
+      </section>
+
+      <section class="sidebar-card">
+        <div class="sidebar-card__header">
+          <h3 class="section__title">Protocol</h3>
+        </div>
+        @if (log().length > 0) {
+          <div class="log log--overlay">
+            @for (entry of log(); track entry.timestamp) {
+              <div class="log__row">
+                <span class="log__time">{{ formatTime(entry.timestamp) }}</span>
+                <span class="log__event">{{ entry.event }}</span>
+                @if (entry.detail) {
+                  <span class="log__detail">{{ entry.detail }}</span>
+                }
+              </div>
+            }
+          </div>
+        } @else {
+          <div class="sidebar-card__empty">No protocol entries yet.</div>
+        }
+      </section>
+    </div>
+  </div>
+</div>

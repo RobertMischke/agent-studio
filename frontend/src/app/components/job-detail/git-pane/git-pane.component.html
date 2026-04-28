@@ -1,0 +1,73 @@
+<section class="pane pane--git" [style.flex]="maximized() ? '1 1 100%' : weight()" data-testid="pane-git">
+  <header class="pane__header">
+    <h3 class="pane__title">⎇ Git view</h3>
+    <button class="btn-sm" (click)="git.refresh()" [disabled]="git.loading()" title="Refresh git status">↻</button>
+    <button class="pane__maximize"
+            data-testid="pane-maximize-git"
+            (click)="maximizeToggle.emit()"
+            [title]="maximized() ? 'Restore layout' : 'Maximize'">
+      {{ maximized() ? '⤡' : '⤢' }}
+    </button>
+    <button class="pane__hide" (click)="hide.emit()" title="Hide panel">×</button>
+  </header>
+  <div class="pane__body git-view">
+    @if (git.status(); as g) {
+      @if (g.error) {
+        <div class="git-view__empty">{{ g.error }}</div>
+      } @else if (!g.isRepo) {
+        <div class="git-view__empty">Not a git repository.</div>
+      } @else {
+        <div class="git-view__summary">
+          <span class="git-view__branch">⎇ {{ g.branch || '(detached)' }}</span>
+          <span class="git-view__count" data-testid="git-files-count">{{ g.filesChanged }} files</span>
+          <span class="git-view__diffstat">+{{ g.totalAdded }} / −{{ g.totalRemoved }}</span>
+        </div>
+        @if (g.files.length === 0) {
+          <div class="git-view__empty">Working tree clean.</div>
+        } @else {
+          <ul class="git-view__files" data-testid="git-files">
+            @for (f of g.files; track f.path) {
+              <li class="git-view__file"
+                  [class.git-view__file--selected]="git.selectedDiffPath() === f.path"
+                  (click)="git.selectDiffPath(f.path)">
+                <span class="git-view__file-status" [title]="f.status">{{ f.status.trim() || '·' }}</span>
+                <span class="git-view__file-path">{{ f.path }}</span>
+                @if (f.added || f.removed) {
+                  <span class="git-view__file-stat">+{{ f.added }}/−{{ f.removed }}</span>
+                }
+              </li>
+            }
+          </ul>
+
+          @if (git.selectedDiffPath()) {
+            <pre class="git-view__diff" data-testid="git-diff">{{ git.diffText() || '(loading...)' }}</pre>
+          }
+
+          <div class="git-view__commit">
+            <textarea class="git-view__msg" rows="3"
+                      data-testid="git-commit-msg"
+                      placeholder="Commit message — Conventional Commit recommended."
+                      [value]="git.commitMessage()"
+                      (input)="setCommitMessage($any($event.target).value)"></textarea>
+            <div class="git-view__commit-actions">
+              <button class="btn-sm" (click)="git.generateCommitMessage()"
+                      [disabled]="git.generatingMsg() || isRunning()"
+                      data-testid="git-generate-msg"
+                      title="Use Claude Haiku to draft a commit message from the diff.">
+                {{ git.generatingMsg() ? '⏳' : '✨ Generate' }}
+              </button>
+              <button class="btn-sm btn-sm--primary"
+                      (click)="git.commit()"
+                      [disabled]="git.committing() || !git.commitMessage().trim() || isRunning()"
+                      data-testid="git-commit">
+                {{ git.committing() ? '⏳ Committing…' : '✓ Commit all' }}
+              </button>
+            </div>
+          </div>
+        }
+      }
+    } @else {
+      <div class="git-view__empty">{{ git.loading() ? 'Loading…' : 'No data — press ↻ to refresh.' }}</div>
+    }
+  </div>
+</section>
