@@ -1,0 +1,47 @@
+<div class="overlay" (click)="cancel.emit()">
+  <div class="create-dialog" (click)="$event.stopPropagation()">
+    <h2 class="create-dialog__title">{{ title() }}</h2>
+    <label class="field">
+      <span class="field__label">Title</span>
+      <input class="field__input" [(ngModel)]="newTitle" placeholder="Task title" />
+    </label>
+    <label class="field">
+      <span class="field__label">Project</span>
+      <select class="field__input" data-testid="create-project-select" [(ngModel)]="newWatchPath">
+        @for (wp of watchPaths(); track wp.path) {
+          <option [value]="wp.path">{{ wp.name }}</option>
+        }
+      </select>
+    </label>
+    <div class="field">
+      <span class="field__label">Agent</span>
+      <div class="create-cli-picker">
+        @for (t of cliTypes; track t) {
+          <button type="button"
+                  class="create-cli-picker__btn"
+                  [class.create-cli-picker__btn--active]="cliTypeDraft() === t"
+                  (click)="cliTypeChange.emit(t)">
+            {{ cliTypeLabel(t) }}
+          </button>
+        }
+      </div>
+    </div>
+    <div class="field">
+      <span class="field__label">Model</span>
+      <select class="field__input" [(ngModel)]="newModel">
+        <option value="">(default — CLI chooses)</option>
+        @for (m of availableModels(); track m.id) {
+          <option [value]="m.id">{{ m.label }}{{ m.multiplier !== null && m.multiplier !== undefined ? ' — ' + formatMultiplier(m.multiplier) : '' }}{{ m.isDefault ? ' ✓' : '' }}</option>
+        }
+      </select>
+    </div>
+    <label class="field">
+      <span class="field__label">Prompt (optional)</span>
+      <textarea class="field__input field__textarea" [(ngModel)]="newPrompt" rows="10" placeholder="Task description..."></textarea>
+    </label>
+    <div class="create-dialog__actions">
+      <button class="btn" (click)="cancel.emit()">Cancel</button>
+      <button class="btn btn--primary" (click)="submit.emit()" [disabled]="!newTitle().trim()">Create</button>
+    </div>
+  </div>
+</div>

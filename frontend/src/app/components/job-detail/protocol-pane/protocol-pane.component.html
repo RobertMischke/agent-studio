@@ -1,0 +1,178 @@
+<section class="pane pane--protocol" [style.flex]="maximized() ? '1 1 100%' : weight()" data-testid="pane-protocol">
+  <header class="pane__header">
+    <h3 class="pane__title">🤖 Agent protocol</h3>
+    @if (claudeSession(); as cs) {
+      @if (cs.error && !cs.turnCount) {
+        <span class="pane__telemetry pane__telemetry--err"
+              [title]="'Claude session telemetry: ' + cs.error"
+              data-testid="claude-telemetry-error">⚠ no session yet</span>
+      } @else if (cs.turnCount > 0) {
+        <span class="pane__telemetry"
+              [title]="claudeSessionTooltip()"
+              data-testid="claude-telemetry">
+          <span class="pane__telemetry-chip">🧠 {{ cs.model || '?' }}</span>
+          <span class="pane__telemetry-chip">↑ {{ formatTokens(cs.inputTokens) }}</span>
+          <span class="pane__telemetry-chip">↓ {{ formatTokens(cs.outputTokens) }}</span>
+          <span class="pane__telemetry-chip pane__telemetry-chip--cache">⚡ {{ formatTokens(cs.cacheReadTokens) }}</span>
+          <span class="pane__telemetry-chip">{{ cs.turnCount }} turns</span>
+        </span>
+      }
+    }
+    @if (claudeRateLimit(); as rl) {
+      <span class="pane__telemetry pane__telemetry-rate"
+            [class.pane__telemetry-rate--ok]="rl.status === 'allowed'"
+            [class.pane__telemetry-rate--warn]="rl.status && rl.status !== 'allowed'"
+            [title]="rateLimitTooltip()"
+            data-testid="claude-rate-limit">
+        <span class="pane__telemetry-chip">⏱ {{ formatRateWindow(rl.window) }} · {{ rl.status || '?' }}</span>
+        @if (rl.resetsAt > 0) {
+          <span class="pane__telemetry-chip">reset {{ formatResetIn(rl.resetsAt) }}</span>
+        }
+        @if (rl.isUsingOverage) {
+          <span class="pane__telemetry-chip pane__telemetry-chip--overage">overage</span>
+        }
+      </span>
+    }
+    <button class="pane__maximize"
+            data-testid="pane-maximize-protocol"
+            (click)="maximizeToggle.emit()"
+            [title]="maximized() ? 'Restore layout' : 'Maximize'">
+      {{ maximized() ? '⤡' : '⤢' }}
+    </button>
+    <button class="pane__hide" (click)="hide.emit()" title="Hide panel">×</button>
+  </header>
+  <div class="pane__body">
+    <section class="inspector">
+      <div class="inspector__header">
+        <div>
+          <h3 class="section__title section__title--large">Agent protocol</h3>
+        </div>
+        <div class="inspector__tabs">
+          <button class="inspector__tab"
+                  [class.inspector__tab--active]="activeInspectorTab() === 'protocol'"
+                  (click)="activeInspectorTabChange.emit('protocol')">
+            Protocol
+          </button>
+          <button class="inspector__tab"
+                  [class.inspector__tab--active]="activeInspectorTab() === 'activity'"
+                  (click)="activeInspectorTabChange.emit('activity')">
+            Activity
+          </button>
+        </div>
+      </div>
+
+      <div class="inspector__body">
+        @if (activeInspectorTab() === 'protocol') {
+          <section class="notes-panel">
+            <div class="notes-panel__header">
+              <div>
+                <h3 class="section__title section__title--large">status.md</h3>
+              </div>
+              <div class="notes-panel__actions">
+                @if (!editingStatus()) {
+                  <div class="notes-panel__tabs">
+                    <button class="notes-panel__tab"
+                            [class.notes-panel__tab--active]="statusViewMode() === 'preview'"
+                            (click)="statusViewModeChange.emit('preview')">
+                      Preview
+                    </button>
+                    <button class="notes-panel__tab"
+                            [class.notes-panel__tab--active]="statusViewMode() === 'markdown'"
+                            (click)="statusViewModeChange.emit('markdown')">
+                      Markdown
+                    </button>
+                  </div>
+                }
+                @if (editingStatus()) {
+                  <div class="section__actions">
+                    <button class="btn-sm" (click)="cancelEditStatus.emit()">Cancel</button>
+                    <button class="btn-sm btn-sm--primary" (click)="saveStatus.emit()" [disabled]="isRunning()">Save</button>
+                  </div>
+                } @else if (isRunning()) {
+                  <span class="notes-panel__lock" title="Editing disabled while the CLI is running for this task.">🔒 CLI is running</span>
+                } @else {
+                  <button class="btn-sm" (click)="startEditStatus.emit()">✏️ Edit</button>
+                }
+              </div>
+            </div>
+            @if (editingStatus()) {
+              <textarea class="section__editor notes-panel__editor"
+                        [ngModel]="statusDraft()"
+                        (ngModelChange)="statusDraftChange.emit($event)"
+                        (keydown)="statusKeydown.emit($event)"
+                        rows="14"></textarea>
+            } @else if (statusViewMode() === 'preview') {
+              <div class="markdown-preview notes-panel__body" [innerHTML]="renderMarkdown(detail().statusMarkdown || '')"></div>
+            } @else {
+              <pre class="markdown-source notes-panel__body">{{ detail().statusMarkdown || '(empty)' }}</pre>
+            }
+          </section>
+        } @else {
+          <div class="inspector__stack">
+            <section class="activity-panel">
+              <div class="activity-panel__header">
+                <div>
+                  <h3 class="section__title">Activity log</h3>
+                </div>
+                @if (cliOutput().length > 0 || detail().log.length > 0 || isRunning()) {
+                  <button class="btn-sm" (click)="openLogOverlay.emit()">⤢ Maximize log</button>
+                }
+              </div>
+
+              @if (cliOutput().length > 0 || isRunning()) {
+                <app-activity-log-view [lines]="cliOutput()" [bodyMaxHeight]="'34vh'" variant="embedded" />
+              } @else {
+                <div class="activity-panel__empty">Start the task to follow the agent output live.</div>
+              }
+
+              <div class="chat-compose" data-testid="activity-chat-compose">
+                <textarea class="chat-compose__input"
+                          data-testid="activity-chat-input"
+                          rows="2"
+                          placeholder="Type a follow-up — Ctrl+Enter to send. Sends while running pauses the agent first."
+                          [value]="followupPrompt()"
+                          (input)="followupPromptChange.emit($any($event.target).value)"
+                          (keydown.control.enter)="sendChat.emit()"
+                          (keydown.meta.enter)="sendChat.emit()"></textarea>
+                <div class="chat-compose__actions">
+                  @if (isRunning()) {
+                    <button type="button"
+                            class="btn-sm chat-compose__stop"
+                            data-testid="activity-chat-stop"
+                            (click)="stopJob.emit()">⏸ Pause</button>
+                  }
+                  <button type="button"
+                          class="btn-sm btn-sm--primary chat-compose__send"
+                          data-testid="activity-chat-send"
+                          [disabled]="!canSendChat()"
+                          (click)="sendChat.emit()">
+                    {{ chatSendLabel() }}
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            @if (detail().info.lastUsage; as usage) {
+              <section class="sidebar-card sidebar-card--panel activity-metrics">
+                <div class="activity-metrics__row">
+                  <span class="activity-metrics__label">Changes</span>
+                  <span class="activity-metrics__value">{{ usage.changes || '—' }}</span>
+                </div>
+                @if (detail().info.cliType === 'claude') {
+                  <div class="activity-metrics__row">
+                    <span class="activity-metrics__label">Tokens</span>
+                    <span class="activity-metrics__value">{{ usage.tokens || '—' }}</span>
+                  </div>
+                }
+                <div class="activity-metrics__row">
+                  <span class="activity-metrics__label">Requests</span>
+                  <span class="activity-metrics__value">{{ usage.requests || '—' }}</span>
+                </div>
+              </section>
+            }
+          </div>
+        }
+      </div>
+    </section>
+  </div>
+</section>

@@ -8,10 +8,13 @@ import { JobService } from './services/job.service';
 import { JobDetail, JobInfo, GroupedJobs, WatchPathEntry, CliType, CLI_TYPES, CliModelInfo } from './models/job.model';
 import { ErrorDialogService } from './services/error-dialog.service';
 import { cliTypeLabel as fmtCliTypeLabel, formatMultiplier as fmtMultiplier } from './services/format.util';
+import { CreateJobDialogComponent } from './components/board/create-job-dialog/create-job-dialog.component';
+import { ErrorDialogComponent } from './components/board/error-dialog/error-dialog.component';
+import { ProjectTabsComponent } from './components/board/project-tabs/project-tabs.component';
 
 @Component({
   selector: 'app-root',
-  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, FormsModule],
+  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent],
   template: `
     <div class="app">
       <header class="header">
@@ -21,19 +24,11 @@ import { cliTypeLabel as fmtCliTypeLabel, formatMultiplier as fmtMultiplier } fr
             <span class="header__title-ai">Agent</span><span class="header__title-sep"></span><span class="header__title-name">Task Board</span>
           </h1>
         </div>
-        <div class="header__filters">
-          @for (name of projectNames(); track name) {
-            <button class="filter-chip"
-                    [attr.data-testid]="'project-filter-' + name"
-                    [class.filter-chip--active]="isProjectActive(name)"
-                    (click)="toggleProject(name)">
-              @if (getRunnerIndicator(name); as indicator) {
-                <span class="runner-dot" [class]="'runner-dot--' + indicator.cls">{{ indicator.icon }}</span>
-              }
-              {{ name }}
-            </button>
-          }
-        </div>
+        <app-project-tabs
+          [names]="projectNames()"
+          [isActive]="isProjectActiveFn"
+          [runnerIndicator]="getRunnerIndicatorFn"
+          (toggle)="toggleProject($event)" />
         <div class="header__actions">
           <button class="btn" (click)="usageSheet.toggle()" title="CLI sessions">
             🪙 Usage
@@ -138,94 +133,28 @@ import { cliTypeLabel as fmtCliTypeLabel, formatMultiplier as fmtMultiplier } fr
       </div>
 
       @if (showCreate()) {
-        <div class="overlay" (click)="cancelCreate()">
-          <div class="create-dialog" (click)="$event.stopPropagation()">
-            <h2 class="create-dialog__title">{{ createDialogTitle() }}</h2>
-            <label class="field">
-              <span class="field__label">Title</span>
-              <input class="field__input" [(ngModel)]="newTitle" placeholder="Task title" />
-            </label>
-            <label class="field">
-              <span class="field__label">Project</span>
-              <select class="field__input" data-testid="create-project-select" [(ngModel)]="newWatchPath">
-                @for (wp of watchPaths(); track wp.path) {
-                  <option [value]="wp.path">{{ wp.name }}</option>
-                }
-              </select>
-            </label>
-            <div class="field">
-              <span class="field__label">Agent</span>
-              <div class="create-cli-picker">
-                @for (t of cliTypes; track t) {
-                  <button type="button"
-                          class="create-cli-picker__btn"
-                          [class.create-cli-picker__btn--active]="newCliType === t"
-                          (click)="onCreateCliTypeChange(t)">
-                    {{ cliTypeLabel(t) }}
-                  </button>
-                }
-              </div>
-            </div>
-            <div class="field">
-              <span class="field__label">Model</span>
-              <select class="field__input" [(ngModel)]="newModel">
-                <option value="">(default — CLI chooses)</option>
-                @for (m of availableModels(); track m.id) {
-                  <option [value]="m.id">{{ m.label }}{{ m.multiplier !== null && m.multiplier !== undefined ? ' — ' + formatMultiplier(m.multiplier) : '' }}{{ m.isDefault ? ' ✓' : '' }}</option>
-                }
-              </select>
-            </div>
-            <label class="field">
-              <span class="field__label">Prompt (optional)</span>
-              <textarea class="field__input field__textarea" [(ngModel)]="newPrompt" rows="10" placeholder="Task description..."></textarea>
-            </label>
-            <div class="create-dialog__actions">
-              <button class="btn" (click)="cancelCreate()">Cancel</button>
-              <button class="btn btn--primary" (click)="submitCreate()" [disabled]="!newTitle.trim()">Create</button>
-            </div>
-          </div>
-        </div>
+        <app-create-job-dialog
+          [title]="createDialogTitle()"
+          [watchPaths]="watchPaths()"
+          [availableModels]="availableModels()"
+          [cliTypeDraft]="newCliType"
+          [(newTitle)]="newTitle"
+          [(newWatchPath)]="newWatchPath"
+          [(newModel)]="newModel"
+          [(newPrompt)]="newPrompt"
+          (cliTypeChange)="onCreateCliTypeChange($event)"
+          (cancel)="cancelCreate()"
+          (submit)="submitCreate()" />
       }
 
       @if (errorDialog.activeError(); as error) {
-        <div class="overlay overlay--error" (click)="closeErrorDialog()">
-          <div class="error-dialog" (click)="$event.stopPropagation()">
-            <div class="error-dialog__header">
-              <div>
-                <div class="error-dialog__eyebrow">Error details</div>
-                <h2 class="error-dialog__title">{{ error.title }}</h2>
-              </div>
-              <button class="error-dialog__close" type="button" (click)="closeErrorDialog()">✕</button>
-            </div>
-
-            @if (error.source) {
-              <div class="error-dialog__source">{{ error.source }}</div>
-            }
-
-            <div class="error-dialog__message">{{ error.message }}</div>
-
-            <div class="error-dialog__actions">
-              <button class="btn" type="button" (click)="copyErrorDetails()">{{ copyErrorButtonLabel() }}</button>
-              @if (error.canOpenCliConfig && selectedJob()) {
-                <button class="btn btn--primary" type="button" (click)="openCliConfigFromError()">🔧 Configure CLI</button>
-              }
-            </div>
-
-            <section class="error-dialog__section">
-              <div class="error-dialog__section-title">Output</div>
-              <pre class="error-dialog__code">{{ error.output }}</pre>
-            </section>
-
-            <section class="error-dialog__section">
-              <div class="error-dialog__section-title">Stack trace</div>
-              @if (error.stackTrace) {
-                <pre class="error-dialog__code">{{ error.stackTrace }}</pre>
-              } @else {
-                <div class="error-dialog__empty">No stack trace available for this error.</div>
-              }
-            </section>
-          </div>
-        </div>
+        <app-error-dialog
+          [error]="error"
+          [canOpenCliConfig]="error.canOpenCliConfig && !!selectedJob()"
+          [copyButtonLabel]="copyErrorButtonLabel()"
+          (close)="closeErrorDialog()"
+          (copy)="copyErrorDetails()"
+          (openCliConfig)="openCliConfigFromError()" />
       }
     </div>
   `,
@@ -1138,6 +1067,12 @@ export class App implements OnInit {
   isProjectActive(name: string): boolean {
     return this.activeProjects().has(name);
   }
+
+  // Pre-bound arrow-function aliases for child components that take a
+  // predicate-style input (e.g. <app-project-tabs>). Using arrows keeps
+  // `this` correct without per-call .bind().
+  readonly isProjectActiveFn = (name: string) => this.isProjectActive(name);
+  readonly getRunnerIndicatorFn = (name: string) => this.getRunnerIndicator(name);
 
   getRunnerIndicator(name: string): { icon: string; cls: string } | null {
     const status = this.jobService.runnerStatus();

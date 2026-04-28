@@ -1,0 +1,52 @@
+<header class="detail__header">
+  <div class="detail__header-main">
+    <button class="detail__back" (click)="back.emit()">←</button>
+    <div class="detail__headline">
+      @if (editingTitle()) {
+        <div class="detail__title-edit">
+          <input #titleInput
+                 class="detail__title-input"
+                 type="text"
+                 [value]="titleDraft()"
+                 (input)="titleDraftChange.emit($any($event.target).value)"
+                 (keydown.enter)="saveTitle.emit()"
+                 (keydown.escape)="cancelTitleEdit.emit()"
+                 maxlength="200"
+                 placeholder="Task title" />
+          <div class="detail__title-actions">
+            <button type="button"
+                    class="btn-sm btn-sm--primary"
+                    [disabled]="savingTitle() || !titleDraft().trim() || titleDraft().trim() === (info().title || info().id)"
+                    (click)="saveTitle.emit()">Save</button>
+            <button type="button"
+                    class="btn-sm"
+                    [disabled]="savingTitle()"
+                    (click)="cancelTitleEdit.emit()">Cancel</button>
+          </div>
+        </div>
+      } @else {
+        <h2 class="detail__title"
+            (click)="startTitleEdit.emit()"
+            title="Click to rename">
+          {{ info().title || info().id }}
+          <button type="button"
+                  class="detail__title-edit-btn"
+                  (click)="$event.stopPropagation(); startTitleEdit.emit()"
+                  aria-label="Rename task">✎</button>
+        </h2>
+      }
+    </div>
+  </div>
+  <span class="detail__state" [class]="'state--' + info().state">
+    {{ stateLabel(info().state) }}
+  </span>
+  @if (isReview()) {
+    <button type="button"
+            class="detail__complete-next"
+            data-testid="complete-and-next-btn"
+            [disabled]="completingAndNext()"
+            (click)="completeAndNext.emit()">
+      {{ completingAndNext() ? '⏳' : '✓ Complete & Next' }}
+    </button>
+  }
+</header>

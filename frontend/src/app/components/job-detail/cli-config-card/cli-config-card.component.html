@@ -1,0 +1,57 @@
+<section class="sidebar-card sidebar-card--toolbar">
+  <div class="cli-config">
+    <div class="cli-config__header">
+      <span class="cli-config__title">🔧 CLI Configuration</span>
+      <button class="detail__error-close" (click)="close.emit()">✕</button>
+    </div>
+    @if (status()) {
+      <div class="cli-config__status" [class.cli-config__status--ok]="status()!.available"
+           [class.cli-config__status--err]="!status()!.available">
+        @if (status()!.available) {
+          ✅ {{ status()!.version }} — {{ status()!.path }}
+        } @else {
+          ❌ Not found at: {{ status()!.path }}
+        }
+      </div>
+    }
+    <div class="cli-config__row">
+      <input class="cli-config__input" type="text"
+             [value]="pathDraft()"
+             (input)="pathDraftChange.emit($any($event.target).value)"
+             placeholder="z.B. copilot, C:\\Program Files\\GitHub\\copilot.exe" />
+      <button class="btn-sm" (click)="testPath.emit()" [disabled]="testing()">
+        {{ testing() ? '⏳' : '🧪 Test' }}
+      </button>
+      <button class="btn-sm btn-sm--primary" (click)="savePath.emit()" [disabled]="testing()">💾 Save</button>
+    </div>
+    @if (testResult(); as result) {
+      <div class="cli-config__status" [class.cli-config__status--ok]="result.available"
+           [class.cli-config__status--err]="!result.available">
+        @if (result.available) {
+          ✅ Found: {{ result.version }}
+        } @else {
+          ❌ {{ result.version || 'Not found at this path' }}
+        }
+      </div>
+    }
+    <div class="cli-config__separator"></div>
+    <div class="cli-config__row">
+      <input class="cli-config__input" [type]="showToken() ? 'text' : 'password'"
+             [value]="tokenDraft()"
+             (input)="tokenDraftChange.emit($any($event.target).value)"
+             placeholder="GitHub Token (PAT or OAuth)" />
+      <button class="btn-sm" (click)="showToken.set(!showToken())">
+        {{ showToken() ? '🙈' : '👁' }}
+      </button>
+      <button class="btn-sm btn-sm--primary" (click)="saveToken.emit()" [disabled]="tokenSaving()">
+        {{ tokenSaving() ? '⏳' : '💾 Save Token' }}
+      </button>
+    </div>
+    @if (status()) {
+      <div class="cli-config__status" [class.cli-config__status--ok]="status()!.hasToken"
+           [class.cli-config__status--err]="!status()!.hasToken">
+        {{ status()!.hasToken ? '🔑 Token configured' : '⚠️ No token — CLI may fail to authenticate' }}
+      </div>
+    }
+  </div>
+</section>

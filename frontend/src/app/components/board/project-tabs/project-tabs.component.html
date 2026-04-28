@@ -1,0 +1,13 @@
+<div class="header__filters">
+  @for (name of names(); track name) {
+    <button class="filter-chip"
+            [attr.data-testid]="'project-filter-' + name"
+            [class.filter-chip--active]="isActive()(name)"
+            (click)="toggle.emit(name)">
+      @if (runnerIndicator()(name); as indicator) {
+        <span class="runner-dot" [class]="'runner-dot--' + indicator.cls">{{ indicator.icon }}</span>
+      }
+      {{ name }}
+    </button>
+  }
+</div>

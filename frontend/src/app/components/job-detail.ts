@@ -23,68 +23,32 @@ import { CliOutputPollService } from './job-detail/cli-output-poll.service';
 import { CommandDeckComponent } from './job-detail/command-deck/command-deck.component';
 import { PromptPaneComponent } from './job-detail/prompt-pane/prompt-pane.component';
 import { LogOverlayComponent } from './job-detail/log-overlay/log-overlay.component';
-import { ActivityLogViewComponent } from './activity-log-view';
+import { ProtocolPaneComponent } from './job-detail/protocol-pane/protocol-pane.component';
+import { DetailHeaderComponent } from './job-detail/detail-header/detail-header.component';
+import { CliConfigCardComponent } from './job-detail/cli-config-card/cli-config-card.component';
+import { PaneToggleBarComponent } from './job-detail/pane-toggle-bar/pane-toggle-bar.component';
 import { markdownToHtml } from './markdown-utils';
 
 @Component({
   selector: 'app-job-detail',
   standalone: true,
-  imports: [FormsModule, ActivityLogViewComponent, GitPaneComponent, CommandDeckComponent, PromptPaneComponent, LogOverlayComponent],
+  imports: [FormsModule, GitPaneComponent, CommandDeckComponent, PromptPaneComponent, LogOverlayComponent, ProtocolPaneComponent, DetailHeaderComponent, CliConfigCardComponent, PaneToggleBarComponent],
   providers: [LayoutPanesService, ClaudeSessionPollService, GitPaneService, CliOutputPollService],
   template: `
     <div class="detail">
-      <header class="detail__header">
-        <div class="detail__header-main">
-          <button class="detail__back" (click)="back.emit()">←</button>
-          <div class="detail__headline">
-            @if (editingTitle()) {
-              <div class="detail__title-edit">
-                <input #titleInput
-                       class="detail__title-input"
-                       type="text"
-                       [value]="titleDraft()"
-                       (input)="titleDraft.set($any($event.target).value)"
-                       (keydown.enter)="saveTitle()"
-                       (keydown.escape)="cancelTitleEdit()"
-                       maxlength="200"
-                       placeholder="Task title" />
-                <div class="detail__title-actions">
-                  <button type="button"
-                          class="btn-sm btn-sm--primary"
-                          [disabled]="savingTitle() || !titleDraft().trim() || titleDraft().trim() === (detail().info.title || detail().info.id)"
-                          (click)="saveTitle()">Save</button>
-                  <button type="button"
-                          class="btn-sm"
-                          [disabled]="savingTitle()"
-                          (click)="cancelTitleEdit()">Cancel</button>
-                </div>
-              </div>
-            } @else {
-              <h2 class="detail__title"
-                  (click)="startTitleEdit()"
-                  title="Click to rename">
-                {{ detail().info.title || detail().info.id }}
-                <button type="button"
-                        class="detail__title-edit-btn"
-                        (click)="$event.stopPropagation(); startTitleEdit()"
-                        aria-label="Rename task">✎</button>
-              </h2>
-            }
-          </div>
-        </div>
-        <span class="detail__state" [class]="'state--' + detail().info.state">
-          {{ stateLabel(detail().info.state) }}
-        </span>
-        @if (isReview()) {
-          <button type="button"
-                  class="detail__complete-next"
-                  data-testid="complete-and-next-btn"
-                  [disabled]="completingAndNext()"
-                  (click)="completeAndNext()">
-            {{ completingAndNext() ? '⏳' : '✓ Complete & Next' }}
-          </button>
-        }
-      </header>
+      <app-detail-header
+        [info]="detail().info"
+        [editingTitle]="editingTitle()"
+        [titleDraft]="titleDraft()"
+        [savingTitle]="savingTitle()"
+        [isReview]="isReview()"
+        [completingAndNext]="completingAndNext()"
+        (back)="back.emit()"
+        (titleDraftChange)="titleDraft.set($event)"
+        (startTitleEdit)="startTitleEdit()"
+        (cancelTitleEdit)="cancelTitleEdit()"
+        (saveTitle)="saveTitle()"
+        (completeAndNext)="completeAndNext()" />
 
       <app-command-deck
         [currentWatchPath]="detail().info.watchPath"
@@ -104,73 +68,25 @@ import { markdownToHtml } from './markdown-utils';
 
 
       @if (showCliConfig()) {
-        <section class="sidebar-card sidebar-card--toolbar">
-          <div class="cli-config">
-            <div class="cli-config__header">
-              <span class="cli-config__title">🔧 CLI Configuration</span>
-              <button class="detail__error-close" (click)="showCliConfig.set(false)">✕</button>
-            </div>
-            @if (cliStatus()) {
-              <div class="cli-config__status" [class.cli-config__status--ok]="cliStatus()!.available"
-                   [class.cli-config__status--err]="!cliStatus()!.available">
-                @if (cliStatus()!.available) {
-                  ✅ {{ cliStatus()!.version }} — {{ cliStatus()!.path }}
-                } @else {
-                  ❌ Not found at: {{ cliStatus()!.path }}
-                }
-              </div>
-            }
-            <div class="cli-config__row">
-              <input class="cli-config__input" type="text"
-                     [value]="cliPathDraft()"
-                     (input)="cliPathDraft.set($any($event.target).value)"
-                     placeholder="z.B. copilot, C:\\Program Files\\GitHub\\copilot.exe" />
-              <button class="btn-sm" (click)="testCliPath()" [disabled]="cliTesting()">
-                {{ cliTesting() ? '⏳' : '🧪 Test' }}
-              </button>
-              <button class="btn-sm btn-sm--primary" (click)="saveCliPath()" [disabled]="cliTesting()">💾 Save</button>
-            </div>
-            @if (cliTestResult(); as result) {
-              <div class="cli-config__status" [class.cli-config__status--ok]="result.available"
-                   [class.cli-config__status--err]="!result.available">
-                @if (result.available) {
-                  ✅ Found: {{ result.version }}
-                } @else {
-                  ❌ {{ result.version || 'Not found at this path' }}
-                }
-              </div>
-            }
-            <div class="cli-config__separator"></div>
-            <div class="cli-config__row">
-              <input class="cli-config__input" [type]="showToken() ? 'text' : 'password'"
-                     [value]="tokenDraft()"
-                     (input)="tokenDraft.set($any($event.target).value)"
-                     placeholder="GitHub Token (PAT or OAuth)" />
-              <button class="btn-sm" (click)="showToken.set(!showToken())">
-                {{ showToken() ? '🙈' : '👁' }}
-              </button>
-              <button class="btn-sm btn-sm--primary" (click)="saveToken()" [disabled]="tokenSaving()">
-                {{ tokenSaving() ? '⏳' : '💾 Save Token' }}
-              </button>
-            </div>
-            @if (cliStatus()) {
-              <div class="cli-config__status" [class.cli-config__status--ok]="cliStatus()!.hasToken"
-                   [class.cli-config__status--err]="!cliStatus()!.hasToken">
-                {{ cliStatus()!.hasToken ? '🔑 Token configured' : '⚠️ No token — CLI may fail to authenticate' }}
-              </div>
-            }
-          </div>
-        </section>
+        <app-cli-config-card
+          [status]="cliStatus()"
+          [testResult]="cliTestResult()"
+          [pathDraft]="cliPathDraft()"
+          [tokenDraft]="tokenDraft()"
+          [testing]="cliTesting()"
+          [tokenSaving]="tokenSaving()"
+          (close)="showCliConfig.set(false)"
+          (pathDraftChange)="cliPathDraft.set($event)"
+          (tokenDraftChange)="tokenDraft.set($event)"
+          (testPath)="testCliPath()"
+          (savePath)="saveCliPath()"
+          (saveToken)="saveToken()" />
       }
 
-      <div class="detail__panes-toolbar">
-        <span class="detail__panes-toolbar-label">Panels:</span>
-        <button class="btn-sm" [class.btn-sm--primary]="panesVisible().prompt" (click)="togglePane('prompt')" data-testid="pane-toggle-prompt">📝 Task</button>
-        <button class="btn-sm" [class.btn-sm--primary]="panesVisible().protocol" (click)="togglePane('protocol')" data-testid="pane-toggle-protocol">🤖 Protocol</button>
-        <button class="btn-sm" [class.btn-sm--primary]="panesVisible().git" (click)="togglePane('git')" data-testid="pane-toggle-git">⎇ Git</button>
-        <span class="detail__panes-toolbar-spacer"></span>
-        <button class="btn-sm" (click)="openInVsCode()" data-testid="open-in-vscode" title="Open the project root in VS Code (-r reuses an existing window).">🪟 VS Code</button>
-      </div>
+      <app-pane-toggle-bar
+        [panesVisible]="panesVisible()"
+        (toggle)="togglePane($event)"
+        (openInVsCode)="openInVsCode()" />
 
       <div class="detail__panes" [class.detail__panes--maximized]="!!maximizedPane()" data-testid="detail-panes">
         @if (isPaneRendered('prompt')) {
@@ -190,183 +106,31 @@ import { markdownToHtml } from './markdown-utils';
         }
 
         @if (isPaneRendered('protocol')) {
-        <section class="pane pane--protocol" [style.flex]="maximizedPane() ? '1 1 100%' : paneWeights().protocol" data-testid="pane-protocol">
-          <header class="pane__header">
-            <h3 class="pane__title">🤖 Agent protocol</h3>
-            @if (claudeSession(); as cs) {
-              @if (cs.error && !cs.turnCount) {
-                <span class="pane__telemetry pane__telemetry--err"
-                      [title]="'Claude session telemetry: ' + cs.error"
-                      data-testid="claude-telemetry-error">⚠ no session yet</span>
-              } @else if (cs.turnCount > 0) {
-                <span class="pane__telemetry"
-                      [title]="claudeSessionTooltip()"
-                      data-testid="claude-telemetry">
-                  <span class="pane__telemetry-chip">🧠 {{ cs.model || '?' }}</span>
-                  <span class="pane__telemetry-chip">↑ {{ formatTokens(cs.inputTokens) }}</span>
-                  <span class="pane__telemetry-chip">↓ {{ formatTokens(cs.outputTokens) }}</span>
-                  <span class="pane__telemetry-chip pane__telemetry-chip--cache">⚡ {{ formatTokens(cs.cacheReadTokens) }}</span>
-                  <span class="pane__telemetry-chip">{{ cs.turnCount }} turns</span>
-                </span>
-              }
-            }
-            @if (claudeRateLimit(); as rl) {
-              <span class="pane__telemetry pane__telemetry-rate"
-                    [class.pane__telemetry-rate--ok]="rl.status === 'allowed'"
-                    [class.pane__telemetry-rate--warn]="rl.status && rl.status !== 'allowed'"
-                    [title]="rateLimitTooltip()"
-                    data-testid="claude-rate-limit">
-                <span class="pane__telemetry-chip">⏱ {{ formatRateWindow(rl.window) }} · {{ rl.status || '?' }}</span>
-                @if (rl.resetsAt > 0) {
-                  <span class="pane__telemetry-chip">reset {{ formatResetIn(rl.resetsAt) }}</span>
-                }
-                @if (rl.isUsingOverage) {
-                  <span class="pane__telemetry-chip pane__telemetry-chip--overage">overage</span>
-                }
-              </span>
-            }
-            <button class="pane__maximize"
-                    data-testid="pane-maximize-protocol"
-                    (click)="toggleMaximize('protocol')"
-                    [title]="maximizedPane() === 'protocol' ? 'Restore layout' : 'Maximize'">
-              {{ maximizedPane() === 'protocol' ? '⤡' : '⤢' }}
-            </button>
-            <button class="pane__hide" (click)="togglePane('protocol')" title="Hide panel">×</button>
-          </header>
-          <div class="pane__body">
-          <section class="inspector">
-            <div class="inspector__header">
-              <div>
-                <h3 class="section__title section__title--large">Agent protocol</h3>
-              </div>
-              <div class="inspector__tabs">
-                <button class="inspector__tab"
-                        [class.inspector__tab--active]="activeInspectorTab() === 'protocol'"
-                        (click)="activeInspectorTab.set('protocol')">
-                  Protocol
-                </button>
-                <button class="inspector__tab"
-                        [class.inspector__tab--active]="activeInspectorTab() === 'activity'"
-                        (click)="activeInspectorTab.set('activity')">
-                  Activity
-                </button>
-              </div>
-            </div>
-
-            <div class="inspector__body">
-              @if (activeInspectorTab() === 'protocol') {
-                <section class="notes-panel">
-                  <div class="notes-panel__header">
-                    <div>
-                      <h3 class="section__title section__title--large">status.md</h3>
-                    </div>
-                    <div class="notes-panel__actions">
-                      @if (!editingStatus()) {
-                        <div class="notes-panel__tabs">
-                          <button class="notes-panel__tab"
-                                  [class.notes-panel__tab--active]="statusViewMode() === 'preview'"
-                                  (click)="statusViewMode.set('preview')">
-                            Preview
-                          </button>
-                          <button class="notes-panel__tab"
-                                  [class.notes-panel__tab--active]="statusViewMode() === 'markdown'"
-                                  (click)="statusViewMode.set('markdown')">
-                            Markdown
-                          </button>
-                        </div>
-                      }
-                      @if (editingStatus()) {
-                        <div class="section__actions">
-                          <button class="btn-sm" (click)="cancelEdit('status')">Cancel</button>
-                          <button class="btn-sm btn-sm--primary" (click)="saveFile('status.md')" [disabled]="isRunning()">Save</button>
-                        </div>
-                      } @else if (isRunning()) {
-                        <span class="notes-panel__lock" title="Editing disabled while the CLI is running for this task.">🔒 CLI is running</span>
-                      } @else {
-                        <button class="btn-sm" (click)="startEdit('status')">✏️ Edit</button>
-                      }
-                    </div>
-                  </div>
-                  @if (editingStatus()) {
-                    <textarea class="section__editor notes-panel__editor"
-                              [(ngModel)]="statusDraftValue"
-                              (keydown)="handleFileKeydown($event, 'status.md')"
-                              rows="14"></textarea>
-                  } @else if (statusViewMode() === 'preview') {
-                    <div class="markdown-preview notes-panel__body" [innerHTML]="renderMarkdown(detail().statusMarkdown || '')"></div>
-                  } @else {
-                    <pre class="markdown-source notes-panel__body">{{ detail().statusMarkdown || '(empty)' }}</pre>
-                  }
-                </section>
-              } @else {
-                <div class="inspector__stack">
-                  <section class="activity-panel">
-                    <div class="activity-panel__header">
-                      <div>
-                        <h3 class="section__title">Activity log</h3>
-                      </div>
-                      @if (cliOutput().length > 0 || detail().log.length > 0 || isRunning()) {
-                        <button class="btn-sm" (click)="showLogOverlay.set(true)">⤢ Maximize log</button>
-                      }
-                    </div>
-
-                    @if (cliOutput().length > 0 || isRunning()) {
-                      <app-activity-log-view [lines]="cliOutput()" [bodyMaxHeight]="'34vh'" variant="embedded" />
-                    } @else {
-                      <div class="activity-panel__empty">Start the task to follow the agent output live.</div>
-                    }
-
-                    <div class="chat-compose" data-testid="activity-chat-compose">
-                      <textarea class="chat-compose__input"
-                                data-testid="activity-chat-input"
-                                rows="2"
-                                placeholder="Type a follow-up — Ctrl+Enter to send. Sends while running pauses the agent first."
-                                [value]="followupPrompt()"
-                                (input)="followupPrompt.set($any($event.target).value)"
-                                (keydown.control.enter)="sendChatMessage()"
-                                (keydown.meta.enter)="sendChatMessage()"></textarea>
-                      <div class="chat-compose__actions">
-                        @if (isRunning()) {
-                          <button type="button"
-                                  class="btn-sm chat-compose__stop"
-                                  data-testid="activity-chat-stop"
-                                  (click)="stopJob()">⏸ Pause</button>
-                        }
-                        <button type="button"
-                                class="btn-sm btn-sm--primary chat-compose__send"
-                                data-testid="activity-chat-send"
-                                [disabled]="!canSendChat()"
-                                (click)="sendChatMessage()">
-                          {{ chatSendLabel() }}
-                        </button>
-                      </div>
-                    </div>
-                  </section>
-
-                  @if (detail().info.lastUsage; as usage) {
-                    <section class="sidebar-card sidebar-card--panel activity-metrics">
-                      <div class="activity-metrics__row">
-                        <span class="activity-metrics__label">Changes</span>
-                        <span class="activity-metrics__value">{{ usage.changes || '—' }}</span>
-                      </div>
-                      @if (detail().info.cliType === 'claude') {
-                        <div class="activity-metrics__row">
-                          <span class="activity-metrics__label">Tokens</span>
-                          <span class="activity-metrics__value">{{ usage.tokens || '—' }}</span>
-                        </div>
-                      }
-                      <div class="activity-metrics__row">
-                        <span class="activity-metrics__label">Requests</span>
-                        <span class="activity-metrics__value">{{ usage.requests || '—' }}</span>
-                      </div>
-                    </section>
-                  }
-                </div>
-              }
-            </div>
-          </section>
-          </div>
-        </section>
+          <app-protocol-pane
+            [detail]="detail()"
+            [maximized]="maximizedPane() === 'protocol'"
+            [weight]="paneWeights().protocol"
+            [isRunning]="isRunning()"
+            [editingStatus]="editingStatus()"
+            [statusViewMode]="statusViewMode()"
+            [statusDraft]="statusDraftValue"
+            [activeInspectorTab]="activeInspectorTab()"
+            [followupPrompt]="followupPrompt()"
+            [canSendChat]="canSendChat()"
+            [chatSendLabel]="chatSendLabel()"
+            (maximizeToggle)="toggleMaximize('protocol')"
+            (hide)="togglePane('protocol')"
+            (activeInspectorTabChange)="activeInspectorTab.set($event)"
+            (statusViewModeChange)="statusViewMode.set($event)"
+            (statusDraftChange)="statusDraftValue = $event"
+            (followupPromptChange)="followupPrompt.set($event)"
+            (startEditStatus)="startEdit('status')"
+            (cancelEditStatus)="cancelEdit('status')"
+            (saveStatus)="saveFile('status.md')"
+            (statusKeydown)="handleFileKeydown($event, 'status.md')"
+            (openLogOverlay)="showLogOverlay.set(true)"
+            (sendChat)="sendChatMessage()"
+            (stopJob)="stopJob()" />
         }
 
         @if (!maximizedPane() && panesVisible().protocol && panesVisible().git) {

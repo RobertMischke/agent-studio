@@ -1,0 +1,8 @@
+<div class="detail__panes-toolbar">
+  <span class="detail__panes-toolbar-label">Panels:</span>
+  <button class="btn-sm" [class.btn-sm--primary]="panesVisible().prompt" (click)="toggle.emit('prompt')" data-testid="pane-toggle-prompt">📝 Task</button>
+  <button class="btn-sm" [class.btn-sm--primary]="panesVisible().protocol" (click)="toggle.emit('protocol')" data-testid="pane-toggle-protocol">🤖 Protocol</button>
+  <button class="btn-sm" [class.btn-sm--primary]="panesVisible().git" (click)="toggle.emit('git')" data-testid="pane-toggle-git">⎇ Git</button>
+  <span class="detail__panes-toolbar-spacer"></span>
+  <button class="btn-sm" (click)="openInVsCode.emit()" data-testid="open-in-vscode" title="Open the project root in VS Code (-r reuses an existing window).">🪟 VS Code</button>
+</div>
