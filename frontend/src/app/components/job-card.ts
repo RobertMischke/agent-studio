@@ -1,5 +1,6 @@
-import { Component, computed, input, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, inject, input, signal } from '@angular/core';
 import { JobInfo } from '../models/job.model';
+import { GitSummaryService } from '../services/git-summary.service';
 
 // Shared 'now' signal that ticks every 30s so all relative timestamps update in lockstep
 // without re-reading Date.now() during change detection (which causes NG0100).
@@ -34,6 +35,17 @@ if (typeof window !== 'undefined') {
         }
         <span class="job-card__size">{{ formatSize(job().totalSizeBytes) }}</span>
       </div>
+      @if (gitPill(); as g) {
+        <div class="job-card__git" [title]="gitTooltip()" data-testid="job-card-git">
+          <span class="job-card__git-branch">⎇ {{ g.branch || '?' }}</span>
+          <span class="job-card__git-count" [class.job-card__git-count--clean]="g.filesChanged === 0">
+            {{ g.filesChanged }} {{ g.filesChanged === 1 ? 'file' : 'files' }}
+          </span>
+          @if (g.totalAdded || g.totalRemoved) {
+            <span class="job-card__git-stat">+{{ g.totalAdded }}/−{{ g.totalRemoved }}</span>
+          }
+        </div>
+      }
       <div class="job-card__activity">
         Last activity: {{ relativeActivity() }}
       </div>
@@ -158,10 +170,50 @@ if (typeof window !== 'undefined') {
       font-size: 11px;
       color: #64748b;
     }
+    .job-card__git {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px 8px;
+      margin: 2px 0 6px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
+      font-size: 11px;
+      color: #cbd5e1;
+    }
+    .job-card__git-branch { color: #a5b4fc; font-family: var(--font-mono, monospace); }
+    .job-card__git-count { color: #fbbf24; font-weight: 600; }
+    .job-card__git-count--clean { color: #86efac; }
+    .job-card__git-stat { color: #94a3b8; font-family: var(--font-mono, monospace); font-size: 10px; }
   `]
 })
-export class JobCardComponent {
+export class JobCardComponent implements OnInit, OnDestroy {
   readonly job = input.required<JobInfo>();
+  private readonly gitSummary = inject(GitSummaryService);
+  private stopPolling: (() => void) | null = null;
+
+  // Git status only matters for tasks the user is actively working on or
+  // about to review — pre-work lanes (preparation/ready) and post-review
+  // lanes (completed/archive) carry no useful per-task git context, so we
+  // skip the pill there to keep the board calm.
+  private static readonly LANES_WITH_GIT = new Set(['3-progress', '4-review']);
+
+  readonly gitPill = computed(() => {
+    if (!JobCardComponent.LANES_WITH_GIT.has(this.job().state)) return null;
+    const projectName = this.job().projectName;
+    const summary = this.gitSummary.value().find(s => s.projectName === projectName);
+    return summary && summary.isRepo ? summary : null;
+  });
+
+  readonly gitTooltip = computed(() => {
+    const g = this.gitPill();
+    if (!g) return '';
+    return `Branch: ${g.branch ?? '(detached)'}\n${g.filesChanged} changed file(s) in ${g.rootPath}\n+${g.totalAdded} / −${g.totalRemoved}`;
+  });
+
+  ngOnInit(): void { this.stopPolling = this.gitSummary.ensurePolling(); }
+  ngOnDestroy(): void { this.stopPolling?.(); }
 
   stateLabel(): string {
     const state = this.job().state;

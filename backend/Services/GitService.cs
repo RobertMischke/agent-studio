@@ -18,6 +18,15 @@ public record GitCommitResult(bool Success, string? Sha, string? Error);
 
 public record GenerateMessageResult(string? Message, string? Error);
 
+public record GitProjectSummary(
+    string ProjectName,
+    string RootPath,
+    bool IsRepo,
+    string? Branch,
+    int FilesChanged,
+    int TotalAdded,
+    int TotalRemoved);
+
 /// <summary>
 /// Thin wrapper around git CLI for the per-task Git view. Operates on the
 /// project's RootPath (the watched repo), not on the job folder.
@@ -33,6 +42,68 @@ public class GitService
         _logger = logger;
         _scanner = scanner;
         _config = config;
+    }
+
+    private readonly object _summaryLock = new();
+    private DateTime _summaryAt = DateTime.MinValue;
+    private List<GitProjectSummary> _summaryCache = [];
+
+    /// <summary>
+    /// Per-project summary, cached for ~3 seconds so the board's tile-pills
+    /// can ask freely without spawning N git processes per render.
+    /// </summary>
+    public List<GitProjectSummary> GetSummaries()
+    {
+        lock (_summaryLock)
+        {
+            if (DateTime.UtcNow - _summaryAt < TimeSpan.FromSeconds(3))
+                return _summaryCache;
+        }
+
+        var list = new List<GitProjectSummary>();
+        foreach (var entry in _scanner.GetWatchPaths())
+        {
+            if (string.IsNullOrWhiteSpace(entry.RootPath))
+            {
+                list.Add(new GitProjectSummary(entry.Name, "", false, null, 0, 0, 0));
+                continue;
+            }
+            var root = entry.RootPath;
+            if (!Directory.Exists(Path.Combine(root, ".git")) && !File.Exists(Path.Combine(root, ".git")))
+            {
+                list.Add(new GitProjectSummary(entry.Name, root, false, null, 0, 0, 0));
+                continue;
+            }
+
+            var (statusOut, _, statusCode) = RunGit(root, "status --porcelain=v1");
+            var fileCount = statusCode == 0
+                ? statusOut.Split('\n').Count(l => !string.IsNullOrWhiteSpace(l))
+                : 0;
+
+            var (branchOut, _, _) = RunGit(root, "rev-parse --abbrev-ref HEAD");
+            var (numOut, _, _) = RunGit(root, "diff --numstat HEAD");
+            var added = 0; var removed = 0;
+            foreach (var line in numOut.Split('\n'))
+            {
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                var parts = line.Split('\t');
+                if (parts.Length < 3) continue;
+                if (int.TryParse(parts[0], out var a)) added += a;
+                if (int.TryParse(parts[1], out var r)) removed += r;
+            }
+
+            list.Add(new GitProjectSummary(
+                entry.Name, root, true,
+                string.IsNullOrWhiteSpace(branchOut) ? null : branchOut.Trim(),
+                fileCount, added, removed));
+        }
+
+        lock (_summaryLock)
+        {
+            _summaryCache = list;
+            _summaryAt = DateTime.UtcNow;
+        }
+        return list;
     }
 
     /// <summary>Resolve the repo root for a job — the watch entry's RootPath.</summary>

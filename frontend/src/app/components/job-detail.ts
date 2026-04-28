@@ -1,6 +1,6 @@
 import { Component, input, output, signal, effect, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { JobDetail, WatchPathEntry, CliOutputLine, CliSettings, CliExecution, ContextUsageSnapshot, CliModelInfo, CliType, CLI_TYPES, GitStatus } from '../models/job.model';
+import { JobDetail, WatchPathEntry, CliOutputLine, CliSettings, CliExecution, ContextUsageSnapshot, CliModelInfo, CliType, CLI_TYPES, GitStatus, ClaudeSessionInfo } from '../models/job.model';
 import { JobService } from '../services/job.service';
 import { ErrorDialogService } from '../services/error-dialog.service';
 import { ActivityLogViewComponent } from './activity-log-view';
@@ -324,6 +324,23 @@ import { markdownToHtml } from './markdown-utils';
         <section class="pane pane--protocol" [style.flex]="paneWeights().protocol" data-testid="pane-protocol">
           <header class="pane__header">
             <h3 class="pane__title">🤖 Agent protocol</h3>
+            @if (claudeSession(); as cs) {
+              @if (cs.error) {
+                <span class="pane__telemetry pane__telemetry--err"
+                      [title]="'Claude session telemetry: ' + cs.error"
+                      data-testid="claude-telemetry-error">⚠ {{ cs.turnCount }} turns</span>
+              } @else {
+                <span class="pane__telemetry"
+                      [title]="claudeSessionTooltip()"
+                      data-testid="claude-telemetry">
+                  <span class="pane__telemetry-chip">🧠 {{ cs.model || '?' }}</span>
+                  <span class="pane__telemetry-chip">↑ {{ formatTokens(cs.inputTokens) }}</span>
+                  <span class="pane__telemetry-chip">↓ {{ formatTokens(cs.outputTokens) }}</span>
+                  <span class="pane__telemetry-chip pane__telemetry-chip--cache">⚡ {{ formatTokens(cs.cacheReadTokens) }}</span>
+                  <span class="pane__telemetry-chip">{{ cs.turnCount }} turns</span>
+                </span>
+              }
+            }
             <button class="pane__hide" (click)="togglePane('protocol')" title="Hide panel">×</button>
           </header>
           <div class="pane__body">
@@ -1088,6 +1105,26 @@ import { markdownToHtml } from './markdown-utils';
       letter-spacing: 0.02em;
       color: #cbd5e1;
     }
+    .pane__telemetry {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      color: #cbd5e1;
+      flex-wrap: wrap;
+    }
+    .pane__telemetry--err { color: #fbbf24; }
+    .pane__telemetry-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 1px 7px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
+      font-family: var(--font-mono, monospace);
+    }
+    .pane__telemetry-chip--cache { color: #86efac; }
     .pane__hide {
       width: 22px;
       height: 22px;
@@ -1815,6 +1852,12 @@ export class JobDetailComponent implements OnDestroy {
   readonly panesVisible = signal(this.loadPanesVisible());
   readonly paneWeights = signal(this.loadPaneWeights());
 
+  // Live Claude session telemetry — read directly from the CLI's JSONL log.
+  // Refreshes on a 5 s timer while the job is the open detail target so the
+  // pill updates without manual refresh during a run.
+  readonly claudeSession = signal<ClaudeSessionInfo | null>(null);
+  private claudeSessionTimer: ReturnType<typeof setInterval> | null = null;
+
   // Git view state — populated lazily when the Git pane is opened.
   readonly gitStatus = signal<GitStatus | null>(null);
   readonly gitLoading = signal(false);
@@ -2035,7 +2078,20 @@ export class JobDetailComponent implements OnDestroy {
       this.contextUsageTimeout = null;
     }
     this.stopLayoutResize();
+    this.stopClaudeSessionPolling();
   }
+
+  // Tracks the currently-polled job + sessionName so we can re-arm whenever
+  // either changes (e.g. a fresh sessionId is captured mid-run).
+  private claudeSessionKey = '';
+  private readonly claudeSessionEffect = effect(() => {
+    const info = this.detail()?.info;
+    const key = info && info.cliType === 'claude' && info.sessionName
+      ? `${info.id}::${info.sessionName}` : '';
+    if (key === this.claudeSessionKey) return;
+    this.claudeSessionKey = key;
+    this.startClaudeSessionPolling();
+  });
 
   canStartJob(): boolean {
     const state = this.detail().info.state;
@@ -2574,6 +2630,61 @@ export class JobDetailComponent implements OnDestroy {
     this.jobService.openInVsCode(info.id, info.watchPath).subscribe({
       error: (err) => this.errorDialog.show(err, { title: 'Open in VS Code failed', source: `Task ${info.id}` })
     });
+  }
+
+  // === Claude live session telemetry =====================================
+
+  refreshClaudeSession(): void {
+    const info = this.detail()?.info;
+    if (!info || info.cliType !== 'claude' || !info.sessionName) {
+      this.claudeSession.set(null);
+      return;
+    }
+    this.jobService.getClaudeSessionInfo(info.id, info.watchPath).subscribe({
+      next: (s) => this.claudeSession.set(s),
+      error: () => { /* non-fatal — keep previous snapshot */ }
+    });
+  }
+
+  /**
+   * Manage the 5 s telemetry poll. Called from the existing detail-load
+   * effect: starts polling when a Claude job is opened, stops when the
+   * detail target changes or the component is destroyed.
+   */
+  startClaudeSessionPolling(): void {
+    this.stopClaudeSessionPolling();
+    const info = this.detail()?.info;
+    if (!info || info.cliType !== 'claude' || !info.sessionName) return;
+    this.refreshClaudeSession();
+    this.claudeSessionTimer = setInterval(() => this.refreshClaudeSession(), 5_000);
+  }
+
+  stopClaudeSessionPolling(): void {
+    if (this.claudeSessionTimer) {
+      clearInterval(this.claudeSessionTimer);
+      this.claudeSessionTimer = null;
+    }
+  }
+
+  formatTokens(n: number): string {
+    if (!n) return '0';
+    if (n < 1000) return String(n);
+    if (n < 1_000_000) return (n / 1000).toFixed(1) + 'k';
+    return (n / 1_000_000).toFixed(2) + 'M';
+  }
+
+  claudeSessionTooltip(): string {
+    const cs = this.claudeSession();
+    if (!cs) return '';
+    return [
+      `Model: ${cs.model ?? '?'}`,
+      `Input: ${cs.inputTokens.toLocaleString()} tokens`,
+      `Output: ${cs.outputTokens.toLocaleString()} tokens`,
+      `Cache read: ${cs.cacheReadTokens.toLocaleString()} tokens`,
+      `Cache creation: ${cs.cacheCreationTokens.toLocaleString()} tokens`,
+      `Turns recorded: ${cs.turnCount}`,
+      cs.lastTurnAt ? `Last turn: ${cs.lastTurnAt}` : ''
+    ].filter(Boolean).join('\n');
   }
 
   stateLabel(state: string): string {

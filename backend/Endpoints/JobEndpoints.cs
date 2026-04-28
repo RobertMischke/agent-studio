@@ -143,6 +143,25 @@ public static class JobEndpoints
                 : Results.BadRequest(new { error });
         });
 
+        // Claude-specific live session telemetry: reads the CLI's JSONL file
+        // directly so we can show live tokens / model without spawning a PTY
+        // or interrupting the running process.
+        group.MapGet("/{jobId}/claude/session-info", (string jobId, string? watchPath, JobScannerService scanner, ClaudeSessionInspector inspector) =>
+        {
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info == null) return Results.NotFound(new { error = "Job not found" });
+            if (string.IsNullOrWhiteSpace(info.SessionName))
+                return Results.Ok(new ClaudeSessionInfo("", null, 0, 0, 0, 0, 0, null, 0, "Job has no recorded sessionId yet — run it once first."));
+
+            var entry = scanner.GetWatchPaths().FirstOrDefault(e => e.Name == info.ProjectName);
+            var cwd = entry?.RootPath;
+            if (string.IsNullOrWhiteSpace(cwd))
+                return Results.BadRequest(new { error = "Project has no RootPath configured." });
+
+            var snapshot = inspector.Inspect(info.SessionName, cwd);
+            return Results.Ok(snapshot);
+        });
+
         // CLI execution endpoints
         group.MapPost("/{jobId}/start", async (string jobId, string? watchPath, StartJobRequest? req, TaskRunnerService runner, JobScannerService scanner, CancellationToken ct) =>
         {
@@ -221,6 +240,10 @@ public static class JobEndpoints
             var entries = scanner.GetWatchPaths();
             return Results.Ok(entries);
         });
+
+        // Per-project git summary, used by board tile pills. Cached server-side
+        // for ~3 s so the board can call freely without forking N git processes.
+        app.MapGet("/api/git/summary", (GitService git) => Results.Ok(git.GetSummaries()));
 
         // Runner endpoints
         var runnerGroup = app.MapGroup("/api/runner");

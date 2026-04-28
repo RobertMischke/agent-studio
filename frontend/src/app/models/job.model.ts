@@ -18,6 +18,29 @@ export interface GitStatus {
   error: string | null;
 }
 
+export interface ClaudeSessionInfo {
+  sessionId: string;
+  model: string | null;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  totalTokens: number;
+  lastTurnAt: string | null;
+  turnCount: number;
+  error: string | null;
+}
+
+export interface GitProjectSummary {
+  projectName: string;
+  rootPath: string;
+  isRepo: boolean;
+  branch: string | null;
+  filesChanged: number;
+  totalAdded: number;
+  totalRemoved: number;
+}
+
 export interface JobInfo {
   id: string;
   jobKey: string;

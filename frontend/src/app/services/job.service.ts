@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport, QuotaReport, QuotaSnapshot, GitStatus } from '../models/job.model';
+import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport, QuotaReport, QuotaSnapshot, GitStatus, ClaudeSessionInfo } from '../models/job.model';
 import { ErrorDialogService } from './error-dialog.service';
 
 @Injectable({ providedIn: 'root' })
@@ -124,6 +124,10 @@ export class JobService {
 
   openInVsCode(jobId: string, watchPath?: string) {
     return this.http.post(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/open-in-vscode`, {}, this.withWatchPath(watchPath));
+  }
+
+  getClaudeSessionInfo(jobId: string, watchPath?: string) {
+    return this.http.get<ClaudeSessionInfo>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/claude/session-info`, this.withWatchPath(watchPath));
   }
 
   // CLI execution

@@ -31,6 +31,7 @@ builder.Services.AddSingleton<CopilotCliService>();
 builder.Services.AddSingleton<ClaudeCliService>();
 builder.Services.AddSingleton<CodexCliService>();
 builder.Services.AddSingleton<GeminiCliService>();
+builder.Services.AddSingleton<ClaudeSessionInspector>();
 builder.Services.AddSingleton<CliRouter>();
 builder.Services.AddSingleton<SessionRegistry>();
 builder.Services.AddSingleton<ContextUsageParser>();
