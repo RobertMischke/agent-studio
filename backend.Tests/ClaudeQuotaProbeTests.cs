@@ -1,3 +1,4 @@
+using OrchestratorApi.Services.Cli;
 using OrchestratorApi.Services.Quota;
 using Xunit;
 
@@ -36,5 +37,19 @@ public class ClaudeQuotaProbeTests
         Assert.Equal("Weekly (all models)", windows[0].Label);
         Assert.Equal(28, windows[0].UsedPct);
         Assert.Equal("Apr 28, 2pm (Europe/Berlin)", windows[0].ResetLabel);
+    }
+
+    [Theory]
+    [InlineData("claude-opus-4.7",        "claude-opus-4-7")]
+    [InlineData("claude-sonnet-4.6",      "claude-sonnet-4-6")]
+    [InlineData("claude-haiku-4.5",       "claude-haiku-4-5")]
+    [InlineData("claude-opus-4-7",        "claude-opus-4-7")]   // already correct
+    [InlineData("claude-3.5-sonnet-20240620", "claude-3-5-sonnet-20240620")]
+    [InlineData("",                       "")]
+    [InlineData(null,                     null)]
+    [InlineData("gpt-5.5",                "gpt-5.5")]            // non-Claude unchanged
+    public void NormalizeModelId_FixesDottedClaudeIdsLeavesOthers(string? input, string? expected)
+    {
+        Assert.Equal(expected, ClaudeCliService.NormalizeModelId(input));
     }
 }

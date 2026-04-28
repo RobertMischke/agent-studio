@@ -60,3 +60,51 @@ test.describe('Add Task — model selection', () => {
     await expect(dialog.or(page.getByText(/title|titel/i)).first()).toBeVisible();
   });
 });
+
+test.describe('Add Task — project default', () => {
+  test('defaults to the single active project filter', async ({ page }) => {
+    await page.addInitScript(() => {
+      localStorage.removeItem('lastCreateWatchPath');
+      localStorage.setItem('activeProjects', '[]');
+    });
+    await page.goto('/');
+
+    const chips = page.locator('[data-testid^="project-filter-"]');
+    await expect(chips.first()).toBeVisible();
+    const count = await chips.count();
+    test.skip(count < 2, 'needs at least two configured watch paths');
+
+    // Activate only the second project
+    const secondName = await chips.nth(1).innerText();
+    const secondChip = page.getByTestId(`project-filter-${secondName.trim()}`);
+    await secondChip.click();
+    await expect(secondChip).toHaveClass(/filter-chip--active/);
+
+    await page.getByRole('button', { name: /add task/i }).first().click();
+    const select = page.getByTestId('create-project-select');
+    await expect(select).toBeVisible();
+    const selectedOptionText = await select.locator('option:checked').innerText();
+    expect(selectedOptionText.trim()).toBe(secondName.trim());
+  });
+
+  test('with multiple active projects, uses lastCreateWatchPath', async ({ page }) => {
+    // Pre-seed: pretend the user last created in the second project, and activate both.
+    const watchPaths = await (await page.request.get('http://localhost:5030/api/watch-paths')).json();
+    test.skip(!Array.isArray(watchPaths) || watchPaths.length < 2, 'needs at least two watch paths');
+    const names = watchPaths.map((wp: { name: string }) => wp.name);
+    const lastPath = watchPaths[1].path;
+    const lastName = watchPaths[1].name;
+
+    await page.addInitScript(([active, last]) => {
+      localStorage.setItem('activeProjects', JSON.stringify(active));
+      localStorage.setItem('lastCreateWatchPath', last as string);
+    }, [names, lastPath]);
+    await page.goto('/');
+
+    await page.getByRole('button', { name: /add task/i }).first().click();
+    const select = page.getByTestId('create-project-select');
+    await expect(select).toBeVisible();
+    const selectedOptionText = await select.locator('option:checked').innerText();
+    expect(selectedOptionText.trim()).toBe(lastName);
+  });
+});

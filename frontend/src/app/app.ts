@@ -23,6 +23,7 @@ import { ErrorDialogService } from './services/error-dialog.service';
         <div class="header__filters">
           @for (name of projectNames(); track name) {
             <button class="filter-chip"
+                    [attr.data-testid]="'project-filter-' + name"
                     [class.filter-chip--active]="isProjectActive(name)"
                     (click)="toggleProject(name)">
               @if (getRunnerIndicator(name); as indicator) {
@@ -125,7 +126,7 @@ import { ErrorDialogService } from './services/error-dialog.service';
             </label>
             <label class="field">
               <span class="field__label">Project</span>
-              <select class="field__input" [(ngModel)]="newWatchPath">
+              <select class="field__input" data-testid="create-project-select" [(ngModel)]="newWatchPath">
                 @for (wp of watchPaths(); track wp.path) {
                   <option [value]="wp.path">{{ wp.name }}</option>
                 }
@@ -1002,8 +1003,29 @@ export class App implements OnInit {
 
   openCreate(targetState?: string) {
     this.newTargetState = targetState === '2-ready' ? '2-ready' : '1-preparation';
+    this.newWatchPath = this.pickCreateWatchPath();
     this.loadCreateModels(this.newCliType);
     this.showCreate.set(true);
+  }
+
+  private pickCreateWatchPath(): string {
+    const paths = this.watchPaths();
+    if (paths.length === 0) return '';
+    const last = localStorage.getItem('lastCreateWatchPath');
+    const isValid = (p: string | null) => !!p && paths.some(wp => wp.path === p);
+    const active = this.activeProjects();
+    const activePaths = paths.filter(wp => active.has(wp.name));
+
+    if (activePaths.length === 1) {
+      return activePaths[0].path;
+    }
+    if (activePaths.length > 1) {
+      const lastInActive = activePaths.find(wp => wp.path === last);
+      if (lastInActive) return lastInActive.path;
+      return activePaths[0].path;
+    }
+    if (isValid(last)) return last as string;
+    return paths[0].path;
   }
 
   cancelCreate() {
@@ -1028,6 +1050,7 @@ export class App implements OnInit {
       model: this.newModel.trim() || undefined
     }).subscribe({
       next: () => {
+        localStorage.setItem('lastCreateWatchPath', this.newWatchPath);
         this.cancelCreate();
         this.refresh();
       },

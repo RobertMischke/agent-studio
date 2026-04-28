@@ -56,9 +56,10 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
             else                { args.Add("--name"); args.Add(Quote(sessionName)); }
         }
 
-        if (!string.IsNullOrWhiteSpace(model))
+        var normalizedModel = NormalizeModelId(model);
+        if (!string.IsNullOrWhiteSpace(normalizedModel))
         {
-            args.Add("--model"); args.Add(Quote(model));
+            args.Add("--model"); args.Add(Quote(normalizedModel));
         }
 
         args.Add("--output-format"); args.Add("stream-json");
@@ -281,6 +282,22 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
             Source = "hardcoded",
             FetchedAt = DateTime.UtcNow
         });
+    }
+
+    /// <summary>
+    /// Coerces the dotted model-version forms users tend to type or paste
+    /// (<c>claude-opus-4.7</c>, <c>claude-sonnet-4.6</c>) into the dashed form
+    /// the Anthropic CLI requires (<c>claude-opus-4-7</c>). Any other model
+    /// string is returned unchanged so non-standard ids still flow through.
+    /// </summary>
+    public static string? NormalizeModelId(string? model)
+    {
+        if (string.IsNullOrWhiteSpace(model)) return model;
+        var trimmed = model.Trim();
+        if (!trimmed.StartsWith("claude-", StringComparison.OrdinalIgnoreCase)) return trimmed;
+        // Replace dots between digits ("4.7" → "4-7") without touching dots in
+        // unrelated positions (none exist in real Claude ids today, but be safe).
+        return System.Text.RegularExpressions.Regex.Replace(trimmed, @"(?<=\d)\.(?=\d)", "-");
     }
 
     private static string Quote(string s) => $"\"{s.Replace("\"", "\\\"")}\"";

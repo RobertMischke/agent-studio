@@ -553,6 +553,47 @@ public class JobScannerService
         return true;
     }
 
+    /// <summary>
+    /// Appends a "Continuous Session Nachtrag" block to both <c>prompt.md</c> and <c>status.md</c>
+    /// so the user's follow-up shows up in the task description and the agent protocol without
+    /// breaking existing markdown structure.
+    /// </summary>
+    public bool AppendContinuationNote(string jobId, string followupPrompt, string? watchPath = null)
+    {
+        if (string.IsNullOrWhiteSpace(followupPrompt)) return false;
+
+        var info = FindJob(jobId, watchPath);
+        if (info == null) return false;
+
+        var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
+        var block = $"\n\n---\n\n## Continuous Session Nachtrag — {timestamp}\n\n{followupPrompt.TrimEnd()}\n";
+
+        AppendWithLeadingNewline(Path.Combine(info.FolderPath, "prompt.md"), block);
+        AppendWithLeadingNewline(Path.Combine(info.FolderPath, "status.md"), block);
+        return true;
+    }
+
+    private static void AppendWithLeadingNewline(string filePath, string block)
+    {
+        try
+        {
+            if (File.Exists(filePath))
+            {
+                var existing = File.ReadAllText(filePath);
+                var separator = existing.EndsWith('\n') ? string.Empty : "\n";
+                File.AppendAllText(filePath, separator + block);
+            }
+            else
+            {
+                File.WriteAllText(filePath, block.TrimStart('\n'));
+            }
+        }
+        catch
+        {
+            // Best-effort append — failure to persist the addendum should not block the CLI resume.
+        }
+    }
+
     public bool ReorderJobs(List<JobOrderItem> jobs)
     {
         for (int i = 0; i < jobs.Count; i++)

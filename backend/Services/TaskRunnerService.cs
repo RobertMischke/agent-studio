@@ -144,7 +144,22 @@ public class TaskRunnerService : BackgroundService
             _scanner.SetJobModel(jobId, modelOverride, watchPath);
         }
 
-        return await runner.ContinueJobAsync(jobId, followupPrompt, ct);
+        // Persist the user's follow-up to prompt.md and status.md so the task description
+        // and the agent protocol both reflect the continuous-session input.
+        _scanner.AppendContinuationNote(jobId, followupPrompt, watchPath);
+
+        // Wrap the user's follow-up so the agent always leaves a trace in status.md
+        // when the continuation finishes — otherwise the Agent-Protokoll stays empty
+        // and the user can't tell whether anything happened.
+        var wrappedPrompt =
+            followupPrompt.TrimEnd() +
+            "\n\n---\n" +
+            "Wenn du diese Nachfrage abgeschlossen hast, hänge in `status.md` " +
+            "im Job-Ordner einen kurzen Block an (Separator `---`, Überschrift " +
+            "`## Continuous Session Ergebnis — <Datum Zeit>`) mit 1–3 Bullet-Punkten, " +
+            "was du getan oder festgestellt hast. Nicht den vorhandenen Inhalt überschreiben.";
+
+        return await runner.ContinueJobAsync(jobId, wrappedPrompt, ct);
     }
 
     public bool StopJob(string jobId, string? watchPath = null)
