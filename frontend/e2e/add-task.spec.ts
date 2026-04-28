@@ -63,20 +63,18 @@ test.describe('Add Task — model selection', () => {
 
 test.describe('Add Task — project default', () => {
   test('defaults to the single active project filter', async ({ page }) => {
+    const watchPaths = await (await page.request.get('http://localhost:5030/api/watch-paths')).json();
+    test.skip(!Array.isArray(watchPaths) || watchPaths.length < 2, 'needs at least two watch paths');
+    const secondName = watchPaths[1].name;
+
     await page.addInitScript(() => {
       localStorage.removeItem('lastCreateWatchPath');
       localStorage.setItem('activeProjects', '[]');
     });
     await page.goto('/');
 
-    const chips = page.locator('[data-testid^="project-filter-"]');
-    await expect(chips.first()).toBeVisible();
-    const count = await chips.count();
-    test.skip(count < 2, 'needs at least two configured watch paths');
-
-    // Activate only the second project
-    const secondName = await chips.nth(1).innerText();
-    const secondChip = page.getByTestId(`project-filter-${secondName.trim()}`);
+    const secondChip = page.getByTestId(`project-filter-${secondName}`);
+    await expect(secondChip).toBeVisible();
     await secondChip.click();
     await expect(secondChip).toHaveClass(/filter-chip--active/);
 
@@ -84,7 +82,7 @@ test.describe('Add Task — project default', () => {
     const select = page.getByTestId('create-project-select');
     await expect(select).toBeVisible();
     const selectedOptionText = await select.locator('option:checked').innerText();
-    expect(selectedOptionText.trim()).toBe(secondName.trim());
+    expect(selectedOptionText.trim()).toBe(secondName);
   });
 
   test('with multiple active projects, uses lastCreateWatchPath', async ({ page }) => {
