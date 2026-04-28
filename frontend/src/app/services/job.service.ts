@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport, QuotaReport, QuotaSnapshot } from '../models/job.model';
+import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport, QuotaReport, QuotaSnapshot, GitStatus } from '../models/job.model';
 import { ErrorDialogService } from './error-dialog.service';
 
 @Injectable({ providedIn: 'root' })
@@ -100,6 +100,30 @@ export class JobService {
 
   changeProject(jobId: string, targetWatchPath: string, watchPath?: string) {
     return this.http.post(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/change-project`, { targetWatchPath }, this.withWatchPath(watchPath));
+  }
+
+  // Git
+  getGitStatus(jobId: string, watchPath?: string) {
+    return this.http.get<GitStatus>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/git/status`, this.withWatchPath(watchPath));
+  }
+
+  getGitDiff(jobId: string, path: string | null, watchPath?: string) {
+    const opts = this.withWatchPath(watchPath);
+    const params = (opts.params as Record<string, string> | undefined) ?? {};
+    if (path) params['path'] = path;
+    return this.http.get(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/git/diff`, { ...opts, params, responseType: 'text' });
+  }
+
+  commitJob(jobId: string, message: string, watchPath?: string) {
+    return this.http.post<{ sha?: string }>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/git/commit`, { message }, this.withWatchPath(watchPath));
+  }
+
+  generateCommitMessage(jobId: string, watchPath?: string) {
+    return this.http.post<{ message: string }>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/git/generate-message`, {}, this.withWatchPath(watchPath));
+  }
+
+  openInVsCode(jobId: string, watchPath?: string) {
+    return this.http.post(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/open-in-vscode`, {}, this.withWatchPath(watchPath));
   }
 
   // CLI execution

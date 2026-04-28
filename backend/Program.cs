@@ -35,6 +35,7 @@ builder.Services.AddSingleton<CliRouter>();
 builder.Services.AddSingleton<SessionRegistry>();
 builder.Services.AddSingleton<ContextUsageParser>();
 builder.Services.AddSingleton<TaskRunnerService>();
+builder.Services.AddSingleton<GitService>();
 // Quota probes: each CLI gets its own probe instance, all surfaced through QuotaService.
 builder.Services.AddSingleton<IQuotaProbe, CopilotQuotaProbe>();
 builder.Services.AddSingleton<IQuotaProbe, ClaudeQuotaProbe>();

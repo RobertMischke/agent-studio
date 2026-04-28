@@ -113,6 +113,36 @@ public static class JobEndpoints
             return success ? Results.Ok() : Results.BadRequest("Failed to change project");
         });
 
+        // Git endpoints — operate on the project's RootPath repository.
+        group.MapGet("/{jobId}/git/status", (string jobId, string? watchPath, GitService git) =>
+            Results.Ok(git.GetStatus(jobId, watchPath)));
+
+        group.MapGet("/{jobId}/git/diff", (string jobId, string? watchPath, string? path, GitService git) =>
+            Results.Text(git.GetDiff(jobId, watchPath, path), "text/plain"));
+
+        group.MapPost("/{jobId}/git/commit", (string jobId, string? watchPath, GitCommitRequest req, GitService git) =>
+        {
+            var result = git.Commit(jobId, watchPath, req.Message);
+            return result.Success
+                ? Results.Ok(new { sha = result.Sha })
+                : Results.BadRequest(new { error = result.Error });
+        });
+
+        group.MapPost("/{jobId}/git/generate-message", async (string jobId, string? watchPath, GitService git, CancellationToken ct) =>
+        {
+            var result = await git.GenerateCommitMessageAsync(jobId, watchPath, ct);
+            return result.Message is not null
+                ? Results.Ok(new { message = result.Message })
+                : Results.BadRequest(new { error = result.Error });
+        });
+
+        group.MapPost("/{jobId}/open-in-vscode", (string jobId, string? watchPath, GitService git) =>
+        {
+            return git.OpenInVsCode(jobId, watchPath, out var error)
+                ? Results.Ok()
+                : Results.BadRequest(new { error });
+        });
+
         // CLI execution endpoints
         group.MapPost("/{jobId}/start", async (string jobId, string? watchPath, StartJobRequest? req, TaskRunnerService runner, JobScannerService scanner, CancellationToken ct) =>
         {

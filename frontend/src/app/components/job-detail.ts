@@ -1,6 +1,6 @@
 import { Component, input, output, signal, effect, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { JobDetail, WatchPathEntry, CliOutputLine, CliSettings, CliExecution, ContextUsageSnapshot, CliModelInfo, CliType, CLI_TYPES } from '../models/job.model';
+import { JobDetail, WatchPathEntry, CliOutputLine, CliSettings, CliExecution, ContextUsageSnapshot, CliModelInfo, CliType, CLI_TYPES, GitStatus } from '../models/job.model';
 import { JobService } from '../services/job.service';
 import { ErrorDialogService } from '../services/error-dialog.service';
 import { ActivityLogViewComponent } from './activity-log-view';
@@ -290,31 +290,43 @@ import { markdownToHtml } from './markdown-utils';
         }
       </div>
 
-      <div class="detail__layout" [style.--detail-left]="detailPanePercent() + '%'">
-        <main class="detail__main">
-          <section class="section section--primary section--fill">
-            <div class="section__header">
-              <div>
-                <h3 class="section__title section__title--large">Task description</h3>
-              </div>
-            </div>
+      <div class="detail__panes-toolbar">
+        <span class="detail__panes-toolbar-label">Panels:</span>
+        <button class="btn-sm" [class.btn-sm--primary]="panesVisible().prompt" (click)="togglePane('prompt')" data-testid="pane-toggle-prompt">📝 Task</button>
+        <button class="btn-sm" [class.btn-sm--primary]="panesVisible().protocol" (click)="togglePane('protocol')" data-testid="pane-toggle-protocol">🤖 Protocol</button>
+        <button class="btn-sm" [class.btn-sm--primary]="panesVisible().git" (click)="togglePane('git')" data-testid="pane-toggle-git">⎇ Git</button>
+        <span class="detail__panes-toolbar-spacer"></span>
+        <button class="btn-sm" (click)="openInVsCode()" data-testid="open-in-vscode" title="Open the project root in VS Code (-r reuses an existing window).">🪟 VS Code</button>
+      </div>
 
+      <div class="detail__panes" data-testid="detail-panes">
+        @if (panesVisible().prompt) {
+        <section class="pane pane--prompt" [style.flex]="paneWeights().prompt" data-testid="pane-prompt">
+          <header class="pane__header">
+            <h3 class="pane__title">📝 Task description</h3>
+            <button class="pane__hide" (click)="togglePane('prompt')" title="Hide panel">×</button>
+          </header>
+          <div class="pane__body">
             <app-markdown-rich-editor [value]="detail().promptMarkdown || ''"
                                       [readOnly]="isRunning()"
                                       [readOnlyReason]="isRunning() ? 'Editing disabled — the CLI is running for this task. Stop it first.' : null"
                                       (save)="saveFileContent('prompt.md', $event)" />
-          </section>
-        </main>
+          </div>
+        </section>
+        }
 
-        <div class="detail__splitter"
-             role="separator"
-             aria-orientation="vertical"
-             title="Resize panels"
-             (pointerdown)="startLayoutResize($event)">
-          <span></span>
-        </div>
+        @if (panesVisible().prompt && (panesVisible().protocol || panesVisible().git)) {
+          <div class="pane__splitter" role="separator" aria-orientation="vertical"
+               title="Resize" (pointerdown)="startPaneResize($event, 'prompt', firstVisibleAfter('prompt'))"><span></span></div>
+        }
 
-        <aside class="detail__inspector">
+        @if (panesVisible().protocol) {
+        <section class="pane pane--protocol" [style.flex]="paneWeights().protocol" data-testid="pane-protocol">
+          <header class="pane__header">
+            <h3 class="pane__title">🤖 Agent protocol</h3>
+            <button class="pane__hide" (click)="togglePane('protocol')" title="Hide panel">×</button>
+          </header>
+          <div class="pane__body">
           <section class="inspector">
             <div class="inspector__header">
               <div>
@@ -444,7 +456,88 @@ import { markdownToHtml } from './markdown-utils';
               }
             </div>
           </section>
-        </aside>
+          </div>
+        </section>
+        }
+
+        @if (panesVisible().protocol && panesVisible().git) {
+          <div class="pane__splitter" role="separator" aria-orientation="vertical"
+               title="Resize" (pointerdown)="startPaneResize($event, 'protocol', 'git')"><span></span></div>
+        }
+
+        @if (panesVisible().git) {
+        <section class="pane pane--git" [style.flex]="paneWeights().git" data-testid="pane-git">
+          <header class="pane__header">
+            <h3 class="pane__title">⎇ Git view</h3>
+            <button class="btn-sm" (click)="refreshGit()" [disabled]="gitLoading()" title="Refresh git status">↻</button>
+            <button class="pane__hide" (click)="togglePane('git')" title="Hide panel">×</button>
+          </header>
+          <div class="pane__body git-view">
+            @if (gitStatus(); as g) {
+              @if (g.error) {
+                <div class="git-view__empty">{{ g.error }}</div>
+              } @else if (!g.isRepo) {
+                <div class="git-view__empty">Not a git repository.</div>
+              } @else {
+                <div class="git-view__summary">
+                  <span class="git-view__branch">⎇ {{ g.branch || '(detached)' }}</span>
+                  <span class="git-view__count" data-testid="git-files-count">{{ g.filesChanged }} files</span>
+                  <span class="git-view__diffstat">+{{ g.totalAdded }} / −{{ g.totalRemoved }}</span>
+                </div>
+                @if (g.files.length === 0) {
+                  <div class="git-view__empty">Working tree clean.</div>
+                } @else {
+                  <ul class="git-view__files" data-testid="git-files">
+                    @for (f of g.files; track f.path) {
+                      <li class="git-view__file"
+                          [class.git-view__file--selected]="selectedDiffPath() === f.path"
+                          (click)="selectDiffPath(f.path)">
+                        <span class="git-view__file-status" [title]="f.status">{{ f.status.trim() || '·' }}</span>
+                        <span class="git-view__file-path">{{ f.path }}</span>
+                        @if (f.added || f.removed) {
+                          <span class="git-view__file-stat">+{{ f.added }}/−{{ f.removed }}</span>
+                        }
+                      </li>
+                    }
+                  </ul>
+
+                  @if (selectedDiffPath()) {
+                    <pre class="git-view__diff" data-testid="git-diff">{{ gitDiffText() || '(loading...)' }}</pre>
+                  }
+
+                  <div class="git-view__commit">
+                    <textarea class="git-view__msg" rows="3"
+                              data-testid="git-commit-msg"
+                              placeholder="Commit message — Conventional Commit recommended."
+                              [value]="commitMessage()"
+                              (input)="commitMessage.set($any($event.target).value)"></textarea>
+                    <div class="git-view__commit-actions">
+                      <button class="btn-sm" (click)="generateCommitMessage()"
+                              [disabled]="generatingMsg() || isRunning()"
+                              data-testid="git-generate-msg"
+                              title="Use Gemini to draft a commit message from the diff.">
+                        {{ generatingMsg() ? '⏳' : '✨ Generate' }}
+                      </button>
+                      <button class="btn-sm btn-sm--primary"
+                              (click)="commitChanges()"
+                              [disabled]="committing() || !commitMessage().trim() || isRunning()"
+                              data-testid="git-commit">
+                        {{ committing() ? '⏳ Committing…' : '✓ Commit all' }}
+                      </button>
+                    </div>
+                  </div>
+                }
+              }
+            } @else {
+              <div class="git-view__empty">{{ gitLoading() ? 'Loading…' : 'No data — press ↻ to refresh.' }}</div>
+            }
+          </div>
+        </section>
+        }
+
+        @if (!panesVisible().prompt && !panesVisible().protocol && !panesVisible().git) {
+          <div class="detail__panes-empty">All panels hidden — re-enable one above.</div>
+        }
       </div>
 
       @if (showLogOverlay()) {
@@ -944,6 +1037,189 @@ import { markdownToHtml } from './markdown-utils';
       align-items: start;
       min-height: 0;
       flex: 1;
+    }
+    /* === 3-pane layout =================================================== */
+    .detail__panes-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 4px 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      margin-bottom: 8px;
+    }
+    .detail__panes-toolbar-label {
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      color: #94a3b8;
+      text-transform: uppercase;
+      margin-right: 4px;
+    }
+    .detail__panes-toolbar-spacer { flex: 1; }
+    .detail__panes {
+      display: flex;
+      flex: 1;
+      align-items: stretch;
+      min-height: 0;
+      gap: 0;
+    }
+    .pane {
+      display: flex;
+      flex-direction: column;
+      min-width: 240px;
+      min-height: 0;
+      background: rgba(12,12,23,0.55);
+      border: 1px solid rgba(255,255,255,0.05);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+    .pane__header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 14px;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      background: rgba(255,255,255,0.02);
+    }
+    .pane__title {
+      flex: 1;
+      margin: 0;
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      color: #cbd5e1;
+    }
+    .pane__hide {
+      width: 22px;
+      height: 22px;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      background: transparent;
+      color: #94a3b8;
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+    }
+    .pane__hide:hover {
+      color: #f8fafc;
+      border-color: rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.04);
+    }
+    .pane__body {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      padding: 14px;
+      overflow: auto;
+    }
+    .pane__splitter {
+      flex: 0 0 10px;
+      align-self: stretch;
+      display: flex;
+      justify-content: center;
+      cursor: col-resize;
+      touch-action: none;
+    }
+    .pane__splitter span {
+      width: 2px;
+      min-height: 100%;
+      border-radius: 999px;
+      background: rgba(148,163,184,0.14);
+      transition: background 0.15s ease, width 0.15s ease;
+    }
+    .pane__splitter:hover span { width: 4px; background: rgba(129,140,248,0.55); }
+    .detail__panes-empty {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #94a3b8;
+      font-size: 13px;
+    }
+    /* Git view */
+    .git-view { gap: 12px; }
+    .git-view__summary {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      font-size: 12px;
+      color: #cbd5e1;
+    }
+    .git-view__branch { color: #a5b4fc; }
+    .git-view__count  { color: #f8fafc; font-weight: 600; }
+    .git-view__diffstat { color: #94a3b8; font-family: var(--font-mono, monospace); }
+    .git-view__empty { color: #94a3b8; font-size: 13px; padding: 12px 0; }
+    .git-view__files {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      max-height: 30vh;
+      overflow: auto;
+      border: 1px solid rgba(255,255,255,0.05);
+      border-radius: 10px;
+    }
+    .git-view__file {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      cursor: pointer;
+      font-size: 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.03);
+    }
+    .git-view__file:last-child { border-bottom: 0; }
+    .git-view__file:hover { background: rgba(255,255,255,0.04); }
+    .git-view__file--selected { background: rgba(99,102,241,0.18); }
+    .git-view__file-status {
+      width: 28px;
+      font-family: var(--font-mono, monospace);
+      color: #fbbf24;
+    }
+    .git-view__file-path {
+      flex: 1;
+      color: #cbd5e1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .git-view__file-stat {
+      font-family: var(--font-mono, monospace);
+      font-size: 11px;
+      color: #94a3b8;
+    }
+    .git-view__diff {
+      max-height: 28vh;
+      overflow: auto;
+      margin: 0;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: rgba(0,0,0,0.3);
+      border: 1px solid rgba(255,255,255,0.05);
+      color: #cbd5e1;
+      font: 12px/1.5 var(--font-mono, monospace);
+      white-space: pre;
+    }
+    .git-view__commit {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .git-view__msg {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 10px;
+      background: rgba(0,0,0,0.2);
+      color: #cbd5e1;
+      padding: 8px 10px;
+      font: 12px/1.5 var(--font-mono, monospace);
+      resize: vertical;
+    }
+    .git-view__msg:focus { outline: none; border-color: rgba(129,140,248,0.55); }
+    .git-view__commit-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
     }
     .detail__splitter {
       align-self: stretch;
@@ -1532,6 +1808,21 @@ export class JobDetailComponent implements OnDestroy {
 
   readonly editingPrompt = signal(false);
   readonly editingStatus = signal(false);
+
+  // Three-pane layout state. Each weight is an arbitrary positive flex
+  // factor; visible panes share the available width proportionally. Hidden
+  // panes don't render at all and disappear from the splitter chain.
+  readonly panesVisible = signal(this.loadPanesVisible());
+  readonly paneWeights = signal(this.loadPaneWeights());
+
+  // Git view state — populated lazily when the Git pane is opened.
+  readonly gitStatus = signal<GitStatus | null>(null);
+  readonly gitLoading = signal(false);
+  readonly selectedDiffPath = signal<string | null>(null);
+  readonly gitDiffText = signal<string>('');
+  readonly commitMessage = signal('');
+  readonly committing = signal(false);
+  readonly generatingMsg = signal(false);
   // /context usage is collapsed by default — it eats a lot of header
   // real estate and most of the time the user just wants to see the
   // task description and agent protocol.
@@ -2110,6 +2401,179 @@ export class JobDetailComponent implements OnDestroy {
       // Ignore unavailable storage.
     }
     return 54;
+  }
+
+  // === 3-pane layout =====================================================
+
+  private loadPanesVisible(): { prompt: boolean; protocol: boolean; git: boolean } {
+    const fallback = { prompt: true, protocol: true, git: false };
+    try {
+      const raw = localStorage.getItem('taskboard.panesVisible');
+      if (!raw) return fallback;
+      const parsed = JSON.parse(raw);
+      return {
+        prompt:   typeof parsed.prompt   === 'boolean' ? parsed.prompt   : fallback.prompt,
+        protocol: typeof parsed.protocol === 'boolean' ? parsed.protocol : fallback.protocol,
+        git:      typeof parsed.git      === 'boolean' ? parsed.git      : fallback.git
+      };
+    } catch { return fallback; }
+  }
+
+  private loadPaneWeights(): { prompt: number; protocol: number; git: number } {
+    const fallback = { prompt: 4, protocol: 3, git: 3 };
+    try {
+      const raw = localStorage.getItem('taskboard.paneWeights');
+      if (!raw) return fallback;
+      const parsed = JSON.parse(raw);
+      const norm = (v: unknown, f: number) =>
+        typeof v === 'number' && v > 0 && Number.isFinite(v) ? v : f;
+      return {
+        prompt:   norm(parsed.prompt,   fallback.prompt),
+        protocol: norm(parsed.protocol, fallback.protocol),
+        git:      norm(parsed.git,      fallback.git)
+      };
+    } catch { return fallback; }
+  }
+
+  togglePane(name: 'prompt' | 'protocol' | 'git'): void {
+    const next = { ...this.panesVisible(), [name]: !this.panesVisible()[name] };
+    this.panesVisible.set(next);
+    try { localStorage.setItem('taskboard.panesVisible', JSON.stringify(next)); } catch {}
+    if (name === 'git' && next.git) {
+      // Lazy-load git status the first time the pane is shown.
+      if (!this.gitStatus()) this.refreshGit();
+    }
+  }
+
+  /** First visible pane to the right of `name`, used to bind the splitter. */
+  firstVisibleAfter(name: 'prompt' | 'protocol' | 'git'): 'protocol' | 'git' {
+    if (name === 'prompt') return this.panesVisible().protocol ? 'protocol' : 'git';
+    return 'git';
+  }
+
+  private paneResizeBounds: DOMRect | null = null;
+  private paneResizeLeft: 'prompt' | 'protocol' | null = null;
+  private paneResizeRight: 'protocol' | 'git' | null = null;
+  private paneResizeStartTotal = 0;
+  private readonly paneResizeMove = (e: PointerEvent) => this.resizePanes(e);
+  private readonly paneResizeEnd  = () => this.stopPaneResize();
+
+  startPaneResize(event: PointerEvent, left: 'prompt' | 'protocol', right: 'protocol' | 'git'): void {
+    event.preventDefault();
+    const container = (event.currentTarget as HTMLElement).parentElement;
+    if (!container) return;
+    this.paneResizeBounds = container.getBoundingClientRect();
+    this.paneResizeLeft = left;
+    this.paneResizeRight = right;
+    this.paneResizeStartTotal = this.paneWeights()[left] + this.paneWeights()[right];
+    window.addEventListener('pointermove', this.paneResizeMove);
+    window.addEventListener('pointerup', this.paneResizeEnd, { once: true });
+  }
+
+  private resizePanes(event: PointerEvent): void {
+    if (!this.paneResizeBounds || !this.paneResizeLeft || !this.paneResizeRight) return;
+    const { left, width } = this.paneResizeBounds;
+    const ratio = Math.max(0.1, Math.min(0.9, (event.clientX - left) / width));
+    // Allocate the splitter's neighbours' combined weight by ratio. Other
+    // panes keep their weight unchanged. Visual sizes are flex factors, so
+    // proportional allocation works regardless of total.
+    const total = this.paneResizeStartTotal;
+    const w = { ...this.paneWeights() };
+    w[this.paneResizeLeft]  = Math.max(0.5, total * ratio);
+    w[this.paneResizeRight] = Math.max(0.5, total * (1 - ratio));
+    this.paneWeights.set(w);
+  }
+
+  private stopPaneResize(): void {
+    window.removeEventListener('pointermove', this.paneResizeMove);
+    window.removeEventListener('pointerup', this.paneResizeEnd);
+    this.paneResizeBounds = null;
+    this.paneResizeLeft = null;
+    this.paneResizeRight = null;
+    try { localStorage.setItem('taskboard.paneWeights', JSON.stringify(this.paneWeights())); } catch {}
+  }
+
+  // === Git view ==========================================================
+
+  refreshGit(): void {
+    const info = this.detail()?.info;
+    if (!info) return;
+    this.gitLoading.set(true);
+    this.jobService.getGitStatus(info.id, info.watchPath).subscribe({
+      next: (status) => {
+        this.gitStatus.set(status);
+        this.gitLoading.set(false);
+        // If a previously selected file is no longer in the change set,
+        // clear the diff so we don't keep stale text on screen.
+        const selected = this.selectedDiffPath();
+        if (selected && !status.files.some(f => f.path === selected)) {
+          this.selectedDiffPath.set(null);
+          this.gitDiffText.set('');
+        }
+      },
+      error: (err) => {
+        this.gitLoading.set(false);
+        this.errorDialog.show(err, { title: 'Git status failed', source: `Task ${info.id}` });
+      }
+    });
+  }
+
+  selectDiffPath(path: string): void {
+    if (this.selectedDiffPath() === path) {
+      this.selectedDiffPath.set(null);
+      this.gitDiffText.set('');
+      return;
+    }
+    const info = this.detail()?.info;
+    if (!info) return;
+    this.selectedDiffPath.set(path);
+    this.gitDiffText.set('');
+    this.jobService.getGitDiff(info.id, path, info.watchPath).subscribe({
+      next: (text: unknown) => this.gitDiffText.set(typeof text === 'string' ? text : ''),
+      error: () => this.gitDiffText.set('(failed to load diff)')
+    });
+  }
+
+  generateCommitMessage(): void {
+    const info = this.detail()?.info;
+    if (!info) return;
+    this.generatingMsg.set(true);
+    this.jobService.generateCommitMessage(info.id, info.watchPath).subscribe({
+      next: (res) => {
+        this.generatingMsg.set(false);
+        if (res?.message) this.commitMessage.set(res.message);
+      },
+      error: (err) => {
+        this.generatingMsg.set(false);
+        this.errorDialog.show(err, { title: 'Generate commit message failed', source: `Task ${info.id}` });
+      }
+    });
+  }
+
+  commitChanges(): void {
+    const info = this.detail()?.info;
+    const msg = this.commitMessage().trim();
+    if (!info || !msg) return;
+    this.committing.set(true);
+    this.jobService.commitJob(info.id, msg, info.watchPath).subscribe({
+      next: () => {
+        this.committing.set(false);
+        this.commitMessage.set('');
+        this.refreshGit();
+      },
+      error: (err) => {
+        this.committing.set(false);
+        this.errorDialog.show(err, { title: 'Commit failed', source: `Task ${info.id}` });
+      }
+    });
+  }
+
+  openInVsCode(): void {
+    const info = this.detail()?.info;
+    if (!info) return;
+    this.jobService.openInVsCode(info.id, info.watchPath).subscribe({
+      error: (err) => this.errorDialog.show(err, { title: 'Open in VS Code failed', source: `Task ${info.id}` })
+    });
   }
 
   stateLabel(state: string): string {

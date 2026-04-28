@@ -1,6 +1,23 @@
 export type CliType = 'copilot' | 'claude' | 'codex' | 'gemini';
 export const CLI_TYPES: CliType[] = ['copilot', 'claude', 'codex', 'gemini'];
 
+export interface GitFileChange {
+  status: string;
+  path: string;
+  added: number;
+  removed: number;
+}
+
+export interface GitStatus {
+  isRepo: boolean;
+  branch: string | null;
+  filesChanged: number;
+  totalAdded: number;
+  totalRemoved: number;
+  files: GitFileChange[];
+  error: string | null;
+}
+
 export interface JobInfo {
   id: string;
   jobKey: string;

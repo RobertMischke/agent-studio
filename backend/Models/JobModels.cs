@@ -121,6 +121,11 @@ public record UpdateJobFileRequest
     public string Content { get; init; } = "";
 }
 
+public record GitCommitRequest
+{
+    public string Message { get; init; } = "";
+}
+
 public record WatchPathEntry
 {
     public string Name { get; init; } = "";
