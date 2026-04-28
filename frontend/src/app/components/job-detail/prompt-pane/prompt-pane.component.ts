@@ -19,6 +19,8 @@ export class PromptPaneComponent {
   readonly maximized = input(false);
   readonly weight = input<number>(1);
   readonly isRunning = input(false);
+  readonly jobId = input<string | null>(null);
+  readonly watchPath = input<string | null>(null);
 
   readonly maximizeToggle = output<void>();
   readonly hide = output<void>();

@@ -13,4 +13,18 @@ describe('markdownToHtml', () => {
       '<p>Hello &lt;script&gt;alert(1)&lt;/script&gt;</p>'
     );
   });
+
+  it('renders standalone image lines as block-level <img>', () => {
+    expect(markdownToHtml('Before\n\n![shot](attachments/abc.png)\n\nAfter')).toBe(
+      '<p>Before</p><img src="attachments/abc.png" alt="shot"><p>After</p>'
+    );
+  });
+
+  it('expands attachment refs through resolveImageSrc', () => {
+    const html = markdownToHtml('![shot](attachments/abc.png)', {
+      resolveImageSrc: (src) =>
+        src.startsWith('attachments/') ? `/api/jobs/x/${src}` : src
+    });
+    expect(html).toBe('<img src="/api/jobs/x/attachments/abc.png" alt="shot">');
+  });
 });

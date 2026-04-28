@@ -13,6 +13,8 @@
     <app-markdown-rich-editor [value]="markdown()"
                               [readOnly]="isRunning()"
                               [readOnlyReason]="isRunning() ? 'Editing disabled — the CLI is running for this task. Stop it first.' : null"
+                              [jobId]="jobId()"
+                              [watchPath]="watchPath()"
                               (save)="save.emit($event)" />
   </div>
 </section>

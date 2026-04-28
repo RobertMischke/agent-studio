@@ -101,6 +101,8 @@ import { markdownToHtml } from './markdown-utils';
             [maximized]="maximizedPane() === 'prompt'"
             [weight]="paneWeights().prompt"
             [isRunning]="isRunning()"
+            [jobId]="detail().info.id"
+            [watchPath]="detail().info.watchPath"
             (maximizeToggle)="toggleMaximize('prompt')"
             (hide)="togglePane('prompt')"
             (save)="saveFileContent('prompt.md', $event)" />
