@@ -341,9 +341,16 @@ public class ProjectRunner
         _processing = true;
         try
         {
-            // Move job to 3-progress
             var info = _scanner.FindJob(jobId, Entry.Path);
             if (info == null) return (null, "Job not found");
+
+            // Capture state BEFORE moving to 3-progress so we can tell a fresh
+            // start (job sits in 2-ready) apart from a resume after the previous
+            // run was interrupted (job already in 3-progress because it was
+            // started before but never reached 4-review). Same callsite, same
+            // CLI args — only the injected prompt and the structured logging
+            // differ between the two cases.
+            var initialState = info.State;
 
             if (info.State == JobStates.Ready)
             {
@@ -354,7 +361,6 @@ public class ProjectRunner
             _activeJobId = jobId;
             NotifyStatus();
 
-            // Ensure logs directory exists
             var jobFolder = FindJobFolder(jobId);
             if (jobFolder != null)
             {
@@ -370,14 +376,15 @@ public class ProjectRunner
             // Copilot's slug) is meaningless to Claude/Codex and used to make
             // them hang on `-r`. Drop it and let the fresh-session branch pick
             // up.
+            var sessionDropped = false;
             if (!string.IsNullOrWhiteSpace(sessionName) && !cli.IsCompatibleSessionName(sessionName))
             {
                 _logger.LogInformation(
                     "Dropping incompatible sessionName '{Session}' for {Cli} job {JobId}",
                     sessionName, cli.CliType, jobId);
                 sessionName = null;
-                // Clear the persisted value so subsequent runs don't reattempt.
                 _scanner.SetJobSessionName(jobId, null, Entry.Path);
+                sessionDropped = true;
             }
             var resume = !string.IsNullOrWhiteSpace(sessionName);
             if (!resume && cli.CliType != CliTypes.Codex)
@@ -386,13 +393,43 @@ public class ProjectRunner
                 _scanner.SetJobSessionName(jobId, sessionName, Entry.Path);
             }
 
-            // Start CLI process. Use the absolute job folder path so the agent does not have to
-            // guess the layout (legacy in-repo `.orchestrator/jobs/` vs. central workspace at
-            // `<TaskRepository>/projects/<projectKey>/3-progress/<jobId>/`).
             var promptPath = jobFolder != null
                 ? Path.Combine(jobFolder, "prompt.md")
                 : Path.Combine(info.FolderPath, "prompt.md");
-            var prompt = $"Lies @\"{promptPath}\" und führe den Task aus. Der Job-Ordner ist \"{jobFolder ?? info.FolderPath}\".";
+            var jobFolderPath = jobFolder ?? info.FolderPath;
+
+            // Resume mode kicks in when the job was already in 3-progress at the
+            // moment we were asked to start it — i.e. a previous CLI run crashed,
+            // timed out, was killed, or hit an API error before reaching review.
+            // Without an explicit resume prompt the agent only sees a fresh
+            // "Lies prompt.md und führe den Task aus" message and treats the new
+            // turn as a fresh request: it loses the in-flight state, asks "what
+            // should I continue with?", and falls back to generic repo context.
+            // Safety fallback: if we had to drop the persisted session id as
+            // incompatible, we still emit the resume prompt so the agent
+            // reconstructs progress from the job folder rather than starting
+            // from zero.
+            var isInterruptedResume = initialState == JobStates.Progress;
+            var useResumePrompt = isInterruptedResume || sessionDropped;
+
+            string prompt;
+            if (useResumePrompt)
+            {
+                _logger.LogInformation("[taskboard] resume detected for job {JobId} (initialState={State}, sessionDropped={Dropped})",
+                    jobId, initialState, sessionDropped);
+                if (resume)
+                    _logger.LogInformation("[taskboard] restoring session {SessionId}", sessionName);
+                else
+                    _logger.LogInformation("[taskboard] no compatible session to restore — falling back to fresh session with continuation prompt");
+                _logger.LogInformation("[taskboard] restoring job {JobId}", jobId);
+                _logger.LogInformation("[taskboard] using working directory {Path}", Entry.RootPath);
+                _logger.LogInformation("[taskboard] injecting continuation prompt (jobFolder={JobFolder})", jobFolderPath);
+                prompt = BuildResumeContinuationPrompt(jobFolderPath);
+            }
+            else
+            {
+                prompt = BuildFreshStartPrompt(promptPath, jobFolderPath);
+            }
 
             _activeCliType = cli.CliType;
             var (execution, cliError) = await cli.StartAsync(jobId, GetJobKey(jobId), prompt, Entry.RootPath, sessionName, resume, info.Model, ct);
@@ -452,6 +489,10 @@ public class ProjectRunner
                 Directory.CreateDirectory(Path.Combine(jobFolder, "logs"));
             }
 
+            _logger.LogInformation("[taskboard] continue requested for job {JobId} (user follow-up)", jobId);
+            _logger.LogInformation("[taskboard] restoring session {SessionId}", info.SessionName);
+            _logger.LogInformation("[taskboard] using working directory {Path}", Entry.RootPath);
+
             _activeCliType = cli.CliType;
             var (execution, cliError) = await cli.StartAsync(jobId, GetJobKey(jobId), followupPrompt, Entry.RootPath, info.SessionName, true, info.Model, ct);
 
@@ -478,6 +519,30 @@ public class ProjectRunner
         if (slug.Length > 40) slug = slug[..40];
         return $"taskboard-{slug}-{DateTime.UtcNow:yyyyMMddHHmm}";
     }
+
+    /// <summary>
+    /// Initial-run prompt: instructs the agent to read the task prompt and
+    /// execute it. Used only for fresh starts (job came from 2-ready).
+    /// </summary>
+    public static string BuildFreshStartPrompt(string promptPath, string jobFolder)
+        => $"Lies @\"{promptPath}\" und führe den Task aus. Der Job-Ordner ist \"{jobFolder}\".";
+
+    /// <summary>
+    /// Resume prompt: forces the agent to rebuild context from the job folder
+    /// before doing anything else. Sent when the previous run was interrupted
+    /// (job already in 3-progress) or when the persisted session id had to be
+    /// dropped as incompatible — in both cases the model would otherwise treat
+    /// the new turn as a fresh request and ask the user what to continue with.
+    /// English on purpose: works across Claude / Codex / Gemini / Copilot
+    /// regardless of the user's chat language.
+    /// </summary>
+    public static string BuildResumeContinuationPrompt(string jobFolder)
+        => "Resume the interrupted task.\n\n"
+         + "Task folder:\n"
+         + $"{jobFolder}\n\n"
+         + "Read job.json, prompt.md, status.md and existing logs first.\n"
+         + "Reconstruct progress from files and continue implementation.\n"
+         + "Do not ask what to do unless required files are missing.";
 
     private void OnCliFinished(string cliType, string jobKey, CliExecution execution)
     {
