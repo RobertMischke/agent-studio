@@ -75,6 +75,9 @@ export class ModalErrorHandler implements ErrorHandler {
   constructor(private readonly errorDialog: ErrorDialogService, private readonly zone: NgZone) {}
 
   handleError(error: unknown): void {
+    if (isResizeObserverLoopError(error)) {
+      return;
+    }
     console.error(error);
     this.zone.run(() => {
       this.errorDialog.show(error, {
@@ -84,6 +87,25 @@ export class ModalErrorHandler implements ErrorHandler {
       });
     });
   }
+}
+
+function isResizeObserverLoopError(error: unknown): boolean {
+  const messages: string[] = [];
+  if (typeof error === 'string') {
+    messages.push(error);
+  } else if (error && typeof error === 'object') {
+    const record = error as { message?: unknown; cause?: unknown };
+    if (typeof record.message === 'string') {
+      messages.push(record.message);
+    }
+    if (record.cause && typeof record.cause === 'object') {
+      const causeMessage = (record.cause as { message?: unknown }).message;
+      if (typeof causeMessage === 'string') {
+        messages.push(causeMessage);
+      }
+    }
+  }
+  return messages.some((m) => m.includes('ResizeObserver loop'));
 }
 
 function normalizeError(error: unknown, options: ErrorDialogOptions): ErrorDialogState {
