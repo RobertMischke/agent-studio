@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, model, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CliModelInfo, CliType, CLI_TYPES, WatchPathEntry } from '../../../models/job.model';
-import { cliTypeLabel as fmtCliTypeLabel, formatMultiplier as fmtMultiplier } from '../../../services/format.util';
+import { cliTypeIcon as fmtCliTypeIcon, cliTypeLabel as fmtCliTypeLabel, formatMultiplier as fmtMultiplier } from '../../../services/format.util';
 
 /**
  * "Create task" dialog. The parent owns all draft signals and the
@@ -33,5 +33,6 @@ export class CreateJobDialogComponent {
 
   readonly cliTypes = CLI_TYPES;
   cliTypeLabel(t: CliType): string { return fmtCliTypeLabel(t); }
+  cliTypeIcon(t: CliType): string { return fmtCliTypeIcon(t); }
   formatMultiplier(mult: number | null): string { return fmtMultiplier(mult); }
 }

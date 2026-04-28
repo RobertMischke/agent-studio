@@ -447,7 +447,11 @@ import { ProjectTabsComponent } from './components/board/project-tabs/project-ta
       border-radius: 6px;
       cursor: pointer;
       transition: background 0.15s, color 0.15s;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
     }
+    .create-cli-picker__icon { font-size: 14px; line-height: 1; }
     .create-cli-picker__btn:hover { color: #e2e8f0; background: rgba(255,255,255,0.06); }
     .create-cli-picker__btn--active {
       background: rgba(99,102,241,0.22);

@@ -17,6 +17,7 @@
               [class.commandbar__cli-btn--active]="cliTypeDraft() === t"
               [disabled]="isRunning()"
               (click)="cliTypeChange.emit(t)">
+        <span class="commandbar__cli-icon" aria-hidden="true">{{ cliTypeIcon(t) }}</span>
         {{ cliTypeLabel(t) }}
       </button>
     }

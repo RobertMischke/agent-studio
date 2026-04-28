@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CliModelInfo, CliType, CLI_TYPES, WatchPathEntry } from '../../../models/job.model';
-import { cliTypeLabel as fmtCliTypeLabel, formatMultiplier as fmtMultiplier } from '../../../services/format.util';
+import { cliTypeIcon as fmtCliTypeIcon, cliTypeLabel as fmtCliTypeLabel, formatMultiplier as fmtMultiplier } from '../../../services/format.util';
 
 /**
  * Top toolbar of the job-detail view: project picker, CLI tab strip,
@@ -39,5 +39,6 @@ export class CommandDeckComponent {
 
   readonly cliTypes = CLI_TYPES;
   cliTypeLabel(t: CliType): string { return fmtCliTypeLabel(t); }
+  cliTypeIcon(t: CliType): string { return fmtCliTypeIcon(t); }
   formatMultiplier(mult: number | null): string { return fmtMultiplier(mult); }
 }

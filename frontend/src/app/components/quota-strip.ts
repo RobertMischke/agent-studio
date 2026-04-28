@@ -1,6 +1,7 @@
 import { Component, OnDestroy, OnInit, signal, computed } from '@angular/core';
 import { JobService } from '../services/job.service';
 import { CliType, QuotaReport, QuotaSnapshot, QuotaWindow } from '../models/job.model';
+import { cliTypeIcon } from '../services/format.util';
 
 /**
  * Compact strip surfacing each installed CLI's subscription quota / rate-limit
@@ -41,6 +42,7 @@ import { CliType, QuotaReport, QuotaSnapshot, QuotaWindow } from '../models/job.
         @for (snap of snapshots(); track snap.cliType) {
           <article class="qcard">
             <div class="qcard__head">
+              <span class="qcard__icon" aria-hidden="true">{{ cliIcon(snap.cliType) }}</span>
               <span class="qcard__cli">{{ cliLabel(snap.cliType) }}</span>
               @if (snap.plan) {
                 <span class="qcard__plan">{{ snap.plan }}</span>
@@ -150,6 +152,7 @@ import { CliType, QuotaReport, QuotaSnapshot, QuotaWindow } from '../models/job.
       gap: 8px;
       margin-bottom: 6px;
     }
+    .qcard__icon { font-size: 14px; line-height: 1; }
     .qcard__cli { font-weight: 600; font-size: 12px; color: #e2e8f0; }
     .qcard__plan {
       font-size: 10px;
@@ -293,6 +296,8 @@ export class QuotaStripComponent implements OnInit, OnDestroy {
       case 'gemini':  return 'Gemini';
     }
   }
+
+  cliIcon(t: CliType): string { return cliTypeIcon(t); }
 
   formatPct(pct: number | null): string {
     if (pct === null || isNaN(pct)) return '—';

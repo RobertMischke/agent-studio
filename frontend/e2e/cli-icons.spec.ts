@@ -1,0 +1,108 @@
+import { test, expect } from '@playwright/test';
+
+/**
+ * Verifies that each CLI gets a distinct icon glyph in:
+ *   1. The cost overview (quota strip in the CLI Usage sidesheet).
+ *   2. The job preview cards on the board.
+ *   3. The Command Deck CLI selector and the Add-Task dialog picker.
+ *
+ * Icons defined in `services/format.util.ts#cliTypeIcon`:
+ *   copilot 🐙, claude ✴️, codex 🌀, gemini ♊
+ */
+
+const ICONS = {
+  copilot: '🐙',
+  claude:  '✴️',
+  codex:   '🌀',
+  gemini:  '♊'
+} as const;
+
+test.describe('CLI icons — distinct glyph per CLI', () => {
+  test('quota strip shows a per-CLI icon next to each card', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /usage|cli sessions/i }).first().click();
+    const sheet = page.locator('aside.sheet');
+    await expect(sheet).toBeVisible();
+
+    const qcards = sheet.locator('.qcard');
+    await expect(qcards.first()).toBeVisible();
+
+    const seen: string[] = [];
+    const count = await qcards.count();
+    for (let i = 0; i < count; i++) {
+      const icon = await qcards.nth(i).locator('.qcard__icon').textContent();
+      expect(icon?.trim(), `qcard ${i} should have an icon`).toBeTruthy();
+      seen.push(icon!.trim());
+    }
+    // Every visible card must use one of the four declared glyphs.
+    for (const g of seen) {
+      expect(Object.values(ICONS)).toContain(g);
+    }
+  });
+
+  test('Command Deck picker renders distinct icons for each CLI', async ({ page }) => {
+    await page.goto('/');
+    // Open any job's detail view; the first card on the board will do.
+    const firstCard = page.locator('[data-testid="job-card"]').first();
+    if (await firstCard.count() === 0) {
+      test.skip(true, 'no jobs available to open detail view');
+    }
+    await firstCard.click();
+
+    const bar = page.locator('[data-testid="commandbar"]');
+    await expect(bar).toBeVisible();
+
+    const buttons = bar.locator('.commandbar__cli-btn');
+    await expect(buttons).toHaveCount(4);
+
+    const labels = ['Copilot', 'Claude Code', 'Codex', 'Gemini'] as const;
+    const expectedIcons = [ICONS.copilot, ICONS.claude, ICONS.codex, ICONS.gemini];
+
+    const found = new Set<string>();
+    for (let i = 0; i < 4; i++) {
+      const btn = buttons.nth(i);
+      const text = (await btn.textContent())?.trim() ?? '';
+      // Each button's text must contain its label and exactly one icon.
+      const matchedLabel = labels.find(l => text.includes(l));
+      expect(matchedLabel, `button ${i} text "${text}" should contain a known label`).toBeTruthy();
+      const matchedIcon = expectedIcons.find(g => text.includes(g));
+      expect(matchedIcon, `button ${i} text "${text}" should contain a known icon`).toBeTruthy();
+      found.add(matchedIcon!);
+    }
+    expect(found.size, 'all four icons should be distinct').toBe(4);
+  });
+
+  test('Add Task dialog picker renders distinct icons for each CLI', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('button', { name: /add task/i }).first().click();
+
+    const buttons = page.locator('.create-cli-picker__btn');
+    await expect(buttons).toHaveCount(4);
+
+    const expectedIcons = [ICONS.copilot, ICONS.claude, ICONS.codex, ICONS.gemini];
+    const found = new Set<string>();
+    for (let i = 0; i < 4; i++) {
+      const text = (await buttons.nth(i).textContent())?.trim() ?? '';
+      const matchedIcon = expectedIcons.find(g => text.includes(g));
+      expect(matchedIcon, `button ${i} text "${text}" should contain a known icon`).toBeTruthy();
+      found.add(matchedIcon!);
+    }
+    expect(found.size).toBe(4);
+  });
+
+  test('job preview cards use a CLI-specific icon when cliType is set', async ({ page }) => {
+    await page.goto('/');
+    const cards = page.locator('[data-testid="job-card"]');
+    const count = await cards.count();
+    if (count === 0) test.skip(true, 'no job cards on board');
+
+    // Each card's agent label must show one of the known glyphs OR the
+    // generic 🤖 fallback (when cliType is null on disk).
+    const allowed = [...Object.values(ICONS), '🤖'];
+    for (let i = 0; i < count; i++) {
+      const text = (await cards.nth(i).locator('.job-card__agent').textContent())?.trim() ?? '';
+      const matched = allowed.find(g => text.includes(g));
+      expect(matched, `card ${i} agent line "${text}" should start with a known glyph`).toBeTruthy();
+    }
+  });
+});

@@ -1495,14 +1495,6 @@ export class JobDetailComponent implements OnDestroy {
     this.jobService.stopJob(this.detail().info.id, this.detail().info.watchPath).subscribe({
       next: () => {
         this.isRunning.set(false);
-        if (this.pollTimeout) {
-          clearTimeout(this.pollTimeout);
-          this.pollTimeout = null;
-        }
-        if (this.elapsedTimer) {
-          clearInterval(this.elapsedTimer);
-          this.elapsedTimer = null;
-        }
         this.continuing.set(false);
         this.continueJob();
       },

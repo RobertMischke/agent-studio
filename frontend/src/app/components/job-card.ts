@@ -1,6 +1,7 @@
 import { Component, OnDestroy, OnInit, computed, inject, input, signal } from '@angular/core';
 import { JobInfo } from '../models/job.model';
 import { GitSummaryService } from '../services/git-summary.service';
+import { cliTypeIcon } from '../services/format.util';
 
 // Shared 'now' signal that ticks every 30s so all relative timestamps update in lockstep
 // without re-reading Date.now() during change detection (which causes NG0100).
@@ -29,7 +30,7 @@ if (typeof window !== 'undefined') {
         }
       </div>
       <div class="job-card__meta">
-        <span class="job-card__agent">🤖 {{ job().agent || 'unknown' }}</span>
+        <span class="job-card__agent">{{ agentIcon() }} {{ job().agent || 'unknown' }}</span>
         @if (job().model) {
           <span class="job-card__model">🧠 {{ job().model }}</span>
         }
@@ -245,6 +246,11 @@ export class JobCardComponent implements OnInit, OnDestroy {
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   }
+
+  readonly agentIcon = computed(() => {
+    const t = this.job().cliType;
+    return t ? cliTypeIcon(t) : '🤖';
+  });
 
   readonly relativeActivity = computed(() => {
     const dateStr = this.job().lastActivity;

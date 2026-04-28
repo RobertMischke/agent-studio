@@ -73,3 +73,16 @@ export function cliTypeLabel(t: CliType): string {
     case 'gemini':  return 'Gemini';
   }
 }
+
+// Distinct glyph per CLI so the cost overview, job preview cards, and
+// command-deck picker can be told apart at a glance. Choices echo each
+// vendor's mark: Anthropic burst (Claude), OpenAI knot (Codex), GitHub
+// Octocat (Copilot), Gemini zodiac (Gemini).
+export function cliTypeIcon(t: CliType): string {
+  switch (t) {
+    case 'copilot': return '🐙';
+    case 'claude':  return '✴️';
+    case 'codex':   return '🌀';
+    case 'gemini':  return '♊';
+  }
+}

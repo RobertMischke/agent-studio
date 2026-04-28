@@ -21,6 +21,7 @@
                   class="create-cli-picker__btn"
                   [class.create-cli-picker__btn--active]="cliTypeDraft() === t"
                   (click)="cliTypeChange.emit(t)">
+            <span class="create-cli-picker__icon" aria-hidden="true">{{ cliTypeIcon(t) }}</span>
             {{ cliTypeLabel(t) }}
           </button>
         }
