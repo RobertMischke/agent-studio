@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.RegularExpressions;
 using OrchestratorApi.Models;
 
 namespace OrchestratorApi.Services.Cli;
@@ -50,10 +51,14 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         // marker-line convention the frontend parser already understands.
         var args = new List<string> { "-p", Quote(prompt) };
 
-        if (!string.IsNullOrWhiteSpace(sessionName))
+        // Claude Code CLI does not expose a `--name` flag; sessions are
+        // identified by the UUID the CLI itself generates and emits in the
+        // first `system` stream-json frame. We only ever pass `-r <uuid>` to
+        // resume an already-captured session — never a pre-generated slug.
+        if (resumeSession && !string.IsNullOrWhiteSpace(sessionName) && IsCompatibleSessionName(sessionName))
         {
-            if (resumeSession) { args.Add("-r"); args.Add(Quote(sessionName)); }
-            else                { args.Add("--name"); args.Add(Quote(sessionName)); }
+            args.Add("-r");
+            args.Add(Quote(sessionName));
         }
 
         var normalizedModel = NormalizeModelId(model);
@@ -259,12 +264,41 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
     // Slug-style names from another CLI (e.g. Copilot's "taskboard-...") cause
     // the process to hang instead of erroring out, so reject anything that
     // isn't a 36-char canonical UUID.
-    private static readonly System.Text.RegularExpressions.Regex UuidRegex =
+    private static readonly Regex UuidRegex =
         new(@"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
-            System.Text.RegularExpressions.RegexOptions.Compiled);
+            RegexOptions.Compiled);
 
     public override bool IsCompatibleSessionName(string? sessionName)
         => !string.IsNullOrWhiteSpace(sessionName) && UuidRegex.IsMatch(sessionName);
+
+    // The first `system` frame is rendered by TransformReadLine into
+    //   "● Session init <uuid>"  (or another subtype + uuid)
+    // and we read the UUID back from the marker line so the same plumbing as
+    // Gemini/Codex applies. Without this, Continue always starts a fresh
+    // session because info.SessionName never advances past the placeholder
+    // slug TaskRunnerService pre-generates.
+    private static readonly Regex SessionMarkerRegex = new(
+        @"●\s*Session\s+\S+\s+(?<uuid>[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})",
+        RegexOptions.Compiled);
+
+    protected override void OnOutputLine(ProcInfo info, CliOutputLine line)
+    {
+        if (line.Text == null) return;
+        var m = SessionMarkerRegex.Match(line.Text);
+        if (!m.Success) return;
+
+        // Claude emits one `system` frame per turn; the latest UUID is the
+        // session we want to resume next. Always overwrite — chaining a
+        // continue should land on the freshest session, not the original.
+        var uuid = m.Groups["uuid"].Value;
+        if (info.CapturedSessionId == uuid) return;
+        info.CapturedSessionId = uuid;
+        info.SessionName = uuid;
+        _logger.LogInformation("Captured Claude session id {Id}", uuid);
+    }
+
+    public string? GetCapturedSessionId(string jobKey)
+        => _processes.TryGetValue(jobKey, out var info) ? info.CapturedSessionId : null;
 
     public override Task<CliModelCatalog> GetModelCatalogAsync(bool forceRefresh = false, CancellationToken ct = default)
     {

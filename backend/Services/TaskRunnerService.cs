@@ -432,6 +432,10 @@ public class ProjectRunner
             if (string.IsNullOrWhiteSpace(info.SessionName))
                 return (null, "Job has no session to resume — start it once first.");
 
+            var cli = GetCliFor(info);
+            if (!cli.IsCompatibleSessionName(info.SessionName))
+                return (null, $"Recorded session id '{info.SessionName}' is not a valid {cli.CliType} session — restart the job once so the CLI can record a fresh session UUID.");
+
             // Bring the job back into 3-progress so the runner workflow stays consistent
             if (info.State is JobStates.Review or JobStates.Completed or JobStates.Ready)
             {
@@ -447,7 +451,6 @@ public class ProjectRunner
                 Directory.CreateDirectory(Path.Combine(jobFolder, "logs"));
             }
 
-            var cli = GetCliFor(info);
             _activeCliType = cli.CliType;
             var (execution, cliError) = await cli.StartAsync(jobId, GetJobKey(jobId), followupPrompt, Entry.RootPath, info.SessionName, true, info.Model, ct);
 
@@ -492,11 +495,14 @@ public class ProjectRunner
             _scanner.UpdateLastUsage(_activeJobId, usage, Entry.Path);
         }
 
-        // For Codex / Gemini: persist the captured session UUID so follow-ups can resume.
-        // Both CLIs auto-create a UUID on first run and surface it in their JSON output;
-        // we capture it during streaming and write it back here.
+        // Persist the captured session UUID so follow-ups can resume.
+        // Claude / Codex / Gemini all auto-create a UUID on first run and
+        // surface it in their JSON output; we capture it during streaming
+        // and write it back here. Without this, Continue always loses
+        // context because info.SessionName never advances past the slug.
         var capturedSessionId = cli switch
         {
+            Cli.ClaudeCliService claude => claude.GetCapturedSessionId(jobKey),
             Cli.CodexCliService codex   => codex.GetCapturedSessionId(jobKey),
             Cli.GeminiCliService gemini => gemini.GetCapturedSessionId(jobKey),
             _ => null

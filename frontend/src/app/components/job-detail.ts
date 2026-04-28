@@ -157,33 +157,34 @@ import { markdownToHtml } from './markdown-utils';
                 }
               </div>
             }
-            @if (!isRunning()) {
-              <div class="session-followup">
-                <textarea class="session-followup__input"
-                          rows="3"
-                          placeholder="Follow-up prompt — resumes the same Copilot session via --resume"
-                          [value]="followupPrompt()"
-                          (input)="followupPrompt.set($any($event.target).value)"></textarea>
-                <button class="btn-exec btn-exec--start"
-                        (click)="continueJob()"
-                        [disabled]="continuing() || !followupPrompt().trim()">
-                  {{ continuing() ? '⏳ Resuming...' : '↻ Continue session' }}
-                </button>
-              </div>
-            }
+            <!-- Continue is now driven solely from the chat compose box in
+                 the Activity tab. Removing the duplicate input box here
+                 keeps the header compact and avoids two follow-up entry
+                 points fighting over the same followupPrompt signal. -->
           </section>
         }
 
-        <section class="sidebar-card sidebar-card--toolbar">
-          <div class="sidebar-card__header">
+        <section class="sidebar-card sidebar-card--toolbar"
+                 [class.sidebar-card--collapsed]="!contextUsageExpanded()">
+          <div class="sidebar-card__header sidebar-card__header--clickable"
+               (click)="contextUsageExpanded.set(!contextUsageExpanded())">
             <div>
-              <h3 class="section__title">/context usage</h3>
+              <h3 class="section__title">
+                <span class="sidebar-card__chevron">{{ contextUsageExpanded() ? '▾' : '▸' }}</span>
+                /context usage
+                @if (contextUsage()?.metrics?.length) {
+                  <span class="sidebar-card__hint">{{ contextUsage()!.metrics.length }} metrics</span>
+                }
+              </h3>
             </div>
-            <button class="btn-sm" (click)="refreshContextUsage()" [disabled]="refreshingContextUsage()">
+            <button class="btn-sm"
+                    (click)="$event.stopPropagation(); refreshContextUsage()"
+                    [disabled]="refreshingContextUsage()">
               {{ refreshingContextUsage() ? '⏳ Refreshing...' : '↻ Refresh' }}
             </button>
           </div>
 
+          @if (contextUsageExpanded()) {
           @if (contextUsage(); as usage) {
             <div class="context-usage">
               <div class="context-usage__meta">
@@ -224,6 +225,7 @@ import { markdownToHtml } from './markdown-utils';
             <div class="sidebar-card__empty">
               Trigger a refresh to capture and parse the current context usage for this task.
             </div>
+          }
           }
         </section>
 
@@ -1335,6 +1337,28 @@ import { markdownToHtml } from './markdown-utils';
       align-items: flex-start;
       gap: 12px;
     }
+    .sidebar-card__header--clickable {
+      cursor: pointer;
+      user-select: none;
+    }
+    .sidebar-card__chevron {
+      display: inline-block;
+      width: 1em;
+      color: #94a3b8;
+      margin-right: 4px;
+    }
+    .sidebar-card__hint {
+      margin-left: 8px;
+      font-size: 11px;
+      font-weight: 400;
+      color: #94a3b8;
+    }
+    .sidebar-card--collapsed {
+      padding-bottom: 0;
+    }
+    .sidebar-card--collapsed .sidebar-card__header {
+      align-items: center;
+    }
     .sidebar-card__empty {
       padding: 18px 16px;
       border-radius: 12px;
@@ -1508,6 +1532,10 @@ export class JobDetailComponent implements OnDestroy {
 
   readonly editingPrompt = signal(false);
   readonly editingStatus = signal(false);
+  // /context usage is collapsed by default — it eats a lot of header
+  // real estate and most of the time the user just wants to see the
+  // task description and agent protocol.
+  readonly contextUsageExpanded = signal(false);
   readonly cliOutput = signal<CliOutputLine[]>([]);
   readonly isRunning = signal(false);
   readonly startedAt = signal<Date | null>(null);

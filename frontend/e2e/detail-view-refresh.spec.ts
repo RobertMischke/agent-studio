@@ -51,7 +51,7 @@ test.describe('Job detail view — F5 / page refresh', () => {
     await firstCard.click();
 
     // Wait for detail view to appear (back button is the marker).
-    const backBtn = page.getByRole('button', { name: /board/i });
+    const backBtn = page.getByTestId('back-to-board');
     await expect(backBtn).toBeVisible({ timeout: 5_000 });
 
     // Reload the page (simulate F5).
@@ -62,7 +62,7 @@ test.describe('Job detail view — F5 / page refresh', () => {
 
     // The same job title should be visible in the detail view.
     if (jobTitle) {
-      await expect(page.getByText(jobTitle.trim(), { exact: false })).toBeVisible({ timeout: 5_000 });
+      await expect(page.getByText(jobTitle.trim(), { exact: false }).first()).toBeVisible({ timeout: 5_000 });
     }
   });
 
@@ -83,7 +83,7 @@ test.describe('Job detail view — F5 / page refresh', () => {
     await expect(page).toHaveURL(/[?&]job=/, { timeout: 5_000 });
 
     // Press the back button.
-    const backBtn = page.getByRole('button', { name: /board/i });
+    const backBtn = page.getByTestId('back-to-board');
     await backBtn.click();
 
     // URL should no longer contain job params.
