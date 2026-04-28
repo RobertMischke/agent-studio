@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using OrchestratorApi.Models;
+using OrchestratorApi.Services.Cli;
 
 namespace OrchestratorApi.Services;
 
@@ -264,7 +265,7 @@ public class GitService
 
         var psi = new ProcessStartInfo
         {
-            FileName = ResolveExecutable(claudePath),
+            FileName = CliExecutionServiceBase.ResolveExecutable(claudePath),
             WorkingDirectory = root,
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
@@ -313,7 +314,7 @@ public class GitService
         {
             var psi = new ProcessStartInfo
             {
-                FileName = ResolveExecutable(codePath),
+                FileName = CliExecutionServiceBase.ResolveExecutable(codePath),
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardError = true,
@@ -380,11 +381,4 @@ public class GitService
         }
     }
 
-    private static string ResolveExecutable(string command)
-    {
-        // ProcessStartInfo on Windows resolves PATH lookups for us when
-        // UseShellExecute=false and the command is a bare name; we just need
-        // to make sure we forward what the user configured.
-        return command;
-    }
 }

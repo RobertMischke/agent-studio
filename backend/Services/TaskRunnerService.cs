@@ -186,10 +186,17 @@ public class TaskRunnerService : BackgroundService
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return [];
 
+        var logPath = Path.Combine(info.FolderPath, "logs", "cli-output.log");
         var liveOutput = _router.Get(info.CliType).GetOutput(info.JobKey);
-        if (liveOutput.Count > 0) return liveOutput;
 
-        return CliOutputLogParser.ParseFile(Path.Combine(info.FolderPath, "logs", "cli-output.log"));
+        if (liveOutput.Count > 0)
+        {
+            // Prepend the accumulated historical log so continuations show the full conversation.
+            var historical = CliOutputLogParser.ParseFile(logPath);
+            return historical.Count > 0 ? [.. historical, .. liveOutput] : liveOutput;
+        }
+
+        return CliOutputLogParser.ParseFile(logPath);
     }
 
     /// <summary>Looks up the CliExecution for a job from the right CLI backend.</summary>
@@ -533,11 +540,16 @@ public class ProjectRunner
             var logsDir = Path.Combine(jobFolder, "logs");
             Directory.CreateDirectory(logsDir);
 
+            var logPath = Path.Combine(logsDir, "cli-output.log");
             var output = cli.GetOutput(GetJobKey(jobId));
             var logContent = string.Join(Environment.NewLine,
                 output.Select(l => $"[{l.Timestamp:HH:mm:ss.fff}] [{l.Stream}] {l.Text}"));
 
-            File.WriteAllText(Path.Combine(logsDir, "cli-output.log"), logContent);
+            // Append so that continuation sessions accumulate rather than overwrite.
+            if (File.Exists(logPath) && new FileInfo(logPath).Length > 0)
+                File.AppendAllText(logPath, Environment.NewLine + logContent, System.Text.Encoding.UTF8);
+            else
+                File.WriteAllText(logPath, logContent, System.Text.Encoding.UTF8);
         }
         catch (Exception ex)
         {

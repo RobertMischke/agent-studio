@@ -60,6 +60,16 @@ export class CliOutputPollService implements OnDestroy {
     this.isRunning.set(true);
     this.startedAt.set(startedAt);
     this.output.set([]);
+    this.clearPollTimer();
+    this.startElapsedTimer();
+    this.startPolling();
+  }
+
+  /** Resume an existing session — keeps the buffer intact so the log accumulates. */
+  beginContinuation(startedAt: Date): void {
+    this.isRunning.set(true);
+    this.startedAt.set(startedAt);
+    this.clearPollTimer();
     this.startElapsedTimer();
     this.startPolling();
   }

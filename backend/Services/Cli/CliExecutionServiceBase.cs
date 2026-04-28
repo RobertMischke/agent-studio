@@ -82,7 +82,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
     /// <c>.cmd</c>/<c>.exe</c>, so we resolve bare names to their PATHEXT match.
     /// On non-Windows the input is returned unchanged.
     /// </summary>
-    protected static string ResolveExecutable(string nameOrPath)
+    public static string ResolveExecutable(string nameOrPath)
     {
         if (string.IsNullOrWhiteSpace(nameOrPath)) return nameOrPath;
         if (!OperatingSystem.IsWindows()) return nameOrPath;

@@ -1470,7 +1470,7 @@ export class JobDetailComponent implements OnDestroy {
       next: (exec) => {
         this.continuing.set(false);
         this.followupPrompt.set('');
-        this.cliPoll.beginRun(new Date(exec.startedAt));
+        this.cliPoll.beginContinuation(new Date(exec.startedAt));
       },
       error: (err) => {
         this.continuing.set(false);
