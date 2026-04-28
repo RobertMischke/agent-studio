@@ -1,14 +1,20 @@
-import { AfterViewInit, Component, ElementRef, OnDestroy, ViewChild, effect, input, output, signal } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, HostListener, OnDestroy, ViewChild, computed, effect, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import type { Editor } from '@tiptap/core';
 import { htmlToMarkdown, markdownToHtml } from './markdown-utils';
+
+type EditorState = 'idle' | 'dirty' | 'saved';
 
 @Component({
   selector: 'app-markdown-rich-editor',
   standalone: true,
   imports: [FormsModule],
   template: `
-    <div class="md-editor">
+    <div class="md-editor"
+         [class.md-editor--dirty]="state() === 'dirty'"
+         [class.md-editor--saved]="state() === 'saved'"
+         [attr.data-state]="state()"
+         data-testid="prompt-editor">
       <div class="md-editor__bar">
         <div class="md-editor__tabs">
           <button class="md-editor__tab"
@@ -22,13 +28,24 @@ import { htmlToMarkdown, markdownToHtml } from './markdown-utils';
             Markdown
           </button>
         </div>
-        <button class="md-editor__save" (click)="emitSave()">Save</button>
+        <div class="md-editor__status" data-testid="prompt-editor-status">
+          @switch (state()) {
+            @case ('dirty') { <span class="md-editor__status-pill md-editor__status-pill--dirty">Unsaved changes</span> }
+            @case ('saved') { <span class="md-editor__status-pill md-editor__status-pill--saved">✓ Saved</span> }
+            @default        { <span class="md-editor__status-pill">Saved</span> }
+          }
+          <button class="md-editor__save"
+                  (click)="emitSave()"
+                  data-testid="prompt-editor-save"
+                  title="Save (Ctrl+S)">Save</button>
+        </div>
       </div>
 
       <div class="md-editor__content">
         <div #editorHost class="md-editor__rich" [class.md-editor__rich--hidden]="mode() !== 'rich'"></div>
         @if (mode() === 'source') {
           <textarea class="md-editor__source"
+                    data-testid="prompt-editor-source"
                     [ngModel]="sourceValue()"
                     (ngModelChange)="updateSource($event)"
                     (keydown)="handleKeydown($event)"></textarea>
@@ -62,6 +79,31 @@ import { htmlToMarkdown, markdownToHtml } from './markdown-utils';
       border: 1px solid rgba(255,255,255,0.08);
       border-radius: 6px;
       background: rgba(255,255,255,0.03);
+    }
+    .md-editor__status {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .md-editor__status-pill {
+      font-size: 11px;
+      letter-spacing: 0.02em;
+      color: #94a3b8;
+      padding: 2px 8px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.08);
+      background: rgba(255,255,255,0.03);
+      transition: color 200ms ease, background 200ms ease, border-color 200ms ease;
+    }
+    .md-editor__status-pill--dirty {
+      color: #ddd6fe;
+      border-color: rgba(139,92,246,0.45);
+      background: rgba(139,92,246,0.18);
+    }
+    .md-editor__status-pill--saved {
+      color: #86efac;
+      border-color: rgba(34,197,94,0.55);
+      background: rgba(34,197,94,0.22);
     }
     .md-editor__tab,
     .md-editor__save {
@@ -98,6 +140,17 @@ import { htmlToMarkdown, markdownToHtml } from './markdown-utils';
       color: #cbd5e1;
       font: 14px/1.65 var(--font-mono, 'Consolas', monospace);
       overflow: auto;
+      transition: border-color 200ms ease, box-shadow 200ms ease;
+    }
+    .md-editor--dirty .md-editor__rich,
+    .md-editor--dirty .md-editor__source {
+      border-color: rgba(139,92,246,0.55);
+      box-shadow: 0 0 0 1px rgba(139,92,246,0.25);
+    }
+    .md-editor--saved .md-editor__rich,
+    .md-editor--saved .md-editor__source {
+      border-color: rgba(34,197,94,0.65);
+      box-shadow: 0 0 0 1px rgba(34,197,94,0.30);
     }
     .md-editor__rich {
       padding: 12px 14px;
@@ -145,13 +198,24 @@ export class MarkdownRichEditorComponent implements AfterViewInit, OnDestroy {
   readonly save = output<string>();
   readonly sourceValue = signal('');
   readonly mode = signal<'rich' | 'source'>('rich');
+  readonly savedAt = signal(0);
+
+  // Last value the parent told us about — anything diverging from this is "dirty".
+  private readonly committedValue = signal('');
+
+  readonly state = computed<EditorState>(() => {
+    if (this.savedAt() > 0) return 'saved';
+    return this.sourceValue() !== this.committedValue() ? 'dirty' : 'idle';
+  });
 
   @ViewChild('editorHost') private editorHost?: ElementRef<HTMLElement>;
 
   private editor: Editor | null = null;
   private destroyed = false;
+  private savedTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly valueEffect = effect(() => {
     const next = this.value() ?? '';
+    this.committedValue.set(next);
     if (next === this.sourceValue()) return;
     this.sourceValue.set(next);
     if (this.editor) {
@@ -196,6 +260,7 @@ export class MarkdownRichEditorComponent implements AfterViewInit, OnDestroy {
     this.destroyed = true;
     this.valueEffect.destroy();
     this.editor?.destroy();
+    if (this.savedTimer) clearTimeout(this.savedTimer);
   }
 
   setMode(mode: 'rich' | 'source'): void {
@@ -214,7 +279,26 @@ export class MarkdownRichEditorComponent implements AfterViewInit, OnDestroy {
     }
   }
 
+  // Catch Ctrl+S anywhere on the page while the editor is mounted, so users
+  // don't have to focus the editor first. The detail view hosts a single
+  // prompt editor at a time, so a window-level listener is unambiguous.
+  @HostListener('window:keydown', ['$event'])
+  onWindowKeydown(event: KeyboardEvent): void {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
+      event.preventDefault();
+      this.emitSave();
+    }
+  }
+
   emitSave(): void {
-    this.save.emit(this.sourceValue());
+    const value = this.sourceValue();
+    this.committedValue.set(value);
+    this.save.emit(value);
+    if (this.savedTimer) clearTimeout(this.savedTimer);
+    this.savedAt.set(Date.now());
+    this.savedTimer = setTimeout(() => {
+      this.savedAt.set(0);
+      this.savedTimer = null;
+    }, 1400);
   }
 }

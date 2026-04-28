@@ -1,4 +1,4 @@
-import { Component, computed, input, signal } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, OnDestroy, computed, effect, input, signal, viewChild } from '@angular/core';
 import { CliOutputLine } from '../models/job.model';
 import {
   ActivityLogFilters,
@@ -52,7 +52,17 @@ import {
         <span>{{ visibleLines().length }} / {{ lines().length }} lines</span>
       </div>
 
-      <div class="activity-log__body" [style.max-height]="bodyMaxHeight()">
+      <div #body
+           class="activity-log__body"
+           [style.max-height]="bodyMaxHeight()"
+           data-testid="activity-log-body"
+           (scroll)="onBodyScroll()">
+        @if (!stickToBottom()) {
+          <button type="button"
+                  class="activity-log__jump"
+                  data-testid="activity-log-jump-bottom"
+                  (click)="jumpToBottom()">↓ Jump to latest</button>
+        }
         @if (mode() === 'parsed') {
           @for (group of visibleGroups(); track group.id) {
             <article class="activity-group"
@@ -191,6 +201,27 @@ import {
       font-family: 'Consolas', 'Monaco', monospace;
       font-size: 12px;
       line-height: 1.5;
+      position: relative;
+      scroll-behavior: smooth;
+    }
+    .activity-log__jump {
+      position: sticky;
+      top: 0;
+      float: right;
+      margin: 0 0 6px 8px;
+      padding: 4px 10px;
+      font-size: 11px;
+      color: #c4b5fd;
+      background: rgba(76,29,149,0.65);
+      border: 1px solid rgba(196,181,253,0.4);
+      border-radius: 999px;
+      cursor: pointer;
+      z-index: 2;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+    }
+    .activity-log__jump:hover {
+      background: rgba(124,58,237,0.85);
+      color: #ede9fe;
     }
     .activity-group {
       border: 1px solid rgba(148,163,184,0.16);
@@ -315,7 +346,7 @@ import {
     }
   `]
 })
-export class ActivityLogViewComponent {
+export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
   readonly lines = input<CliOutputLine[]>([]);
   readonly bodyMaxHeight = input('400px');
   readonly variant = input<'framed' | 'embedded'>('framed');
@@ -323,10 +354,64 @@ export class ActivityLogViewComponent {
   readonly filterKinds = activityLogKinds;
   readonly filters = signal<ActivityLogFilters>({ ...defaultActivityLogFilters });
   readonly expanded = signal<Record<string, boolean>>({});
+  readonly stickToBottom = signal(true);
 
   readonly parsedGroups = computed(() => parseActivityLog(this.lines()));
   readonly visibleGroups = computed(() => filterActivityGroups(this.parsedGroups(), this.filters()));
   readonly visibleLines = computed(() => flattenActivityLines(this.visibleGroups()));
+
+  private readonly bodyRef = viewChild<ElementRef<HTMLDivElement>>('body');
+  private scrollFrame: number | null = null;
+  private suppressScrollEvent = false;
+
+  private readonly autoScrollEffect = effect(() => {
+    // Re-run whenever lines, mode, filters, or expansion change.
+    this.lines();
+    this.mode();
+    this.visibleGroups();
+    this.expanded();
+    if (!this.stickToBottom()) return;
+    this.scheduleScrollToBottom();
+  });
+
+  ngAfterViewInit(): void {
+    this.scheduleScrollToBottom();
+  }
+
+  ngOnDestroy(): void {
+    if (this.scrollFrame !== null && typeof cancelAnimationFrame !== 'undefined') {
+      cancelAnimationFrame(this.scrollFrame);
+    }
+    this.autoScrollEffect.destroy();
+  }
+
+  onBodyScroll(): void {
+    if (this.suppressScrollEvent) return;
+    const el = this.bodyRef()?.nativeElement;
+    if (!el) return;
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    this.stickToBottom.set(distanceFromBottom <= 24);
+  }
+
+  jumpToBottom(): void {
+    this.stickToBottom.set(true);
+    this.scheduleScrollToBottom();
+  }
+
+  private scheduleScrollToBottom(): void {
+    if (typeof requestAnimationFrame === 'undefined') return;
+    if (this.scrollFrame !== null) cancelAnimationFrame(this.scrollFrame);
+    this.scrollFrame = requestAnimationFrame(() => {
+      this.scrollFrame = null;
+      const el = this.bodyRef()?.nativeElement;
+      if (!el) return;
+      this.suppressScrollEvent = true;
+      el.scrollTop = el.scrollHeight;
+      // Release the suppression on the next frame so programmatic scroll
+      // doesn't toggle stick-to-bottom off via the scroll event.
+      requestAnimationFrame(() => { this.suppressScrollEvent = false; });
+    });
+  }
 
   kindLabel(kind: ActivityLogKind): string {
     return activityKindLabel(kind);

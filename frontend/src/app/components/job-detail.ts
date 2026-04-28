@@ -412,6 +412,32 @@ import { markdownToHtml } from './markdown-utils';
                     } @else {
                       <div class="activity-panel__empty">Start the task to follow the agent output live.</div>
                     }
+
+                    <div class="chat-compose" data-testid="activity-chat-compose">
+                      <textarea class="chat-compose__input"
+                                data-testid="activity-chat-input"
+                                rows="2"
+                                placeholder="Type a follow-up — Ctrl+Enter to send. Sends while running pauses the agent first."
+                                [value]="followupPrompt()"
+                                (input)="followupPrompt.set($any($event.target).value)"
+                                (keydown.control.enter)="sendChatMessage()"
+                                (keydown.meta.enter)="sendChatMessage()"></textarea>
+                      <div class="chat-compose__actions">
+                        @if (isRunning()) {
+                          <button type="button"
+                                  class="btn-sm chat-compose__stop"
+                                  data-testid="activity-chat-stop"
+                                  (click)="stopJob()">⏸ Pause</button>
+                        }
+                        <button type="button"
+                                class="btn-sm btn-sm--primary chat-compose__send"
+                                data-testid="activity-chat-send"
+                                [disabled]="!canSendChat()"
+                                (click)="sendChatMessage()">
+                          {{ chatSendLabel() }}
+                        </button>
+                      </div>
+                    </div>
                   </section>
 
                   @if (detail().info.lastUsage; as usage) {
@@ -507,6 +533,42 @@ import { markdownToHtml } from './markdown-utils';
     .activity-metrics__row { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
     .activity-metrics__label { color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.65rem; }
     .activity-metrics__value { color: #cdd6f4; font-family: var(--font-mono, monospace); font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .chat-compose {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 10px;
+      background: rgba(0,0,0,0.28);
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .chat-compose__input {
+      width: 100%;
+      box-sizing: border-box;
+      background: rgba(0,0,0,0.35);
+      color: #cdd6f4;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 8px;
+      padding: 8px 10px;
+      font-family: inherit;
+      font-size: 0.85rem;
+      resize: vertical;
+      min-height: 44px;
+    }
+    .chat-compose__input:focus { outline: none; border-color: rgba(137,180,250,0.5); }
+    .chat-compose__actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      align-items: center;
+    }
+    .chat-compose__stop {
+      background: rgba(245, 194, 231, 0.12);
+      color: #f5c2e7;
+      border-color: rgba(245, 194, 231, 0.35);
+    }
+    .chat-compose__send:disabled { opacity: 0.45; cursor: not-allowed; }
     .session-followup { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
     .session-followup__input {
       width: 100%;
@@ -1733,6 +1795,51 @@ export class JobDetailComponent implements OnDestroy {
         this.cliOutput.set([]);
         this.startElapsedTimer();
         this.pollOutput();
+      },
+      error: (err) => {
+        this.continuing.set(false);
+        this.showError(err);
+      }
+    });
+  }
+
+  canSendChat(): boolean {
+    if (this.continuing()) return false;
+    if (!this.followupPrompt().trim()) return false;
+    return true;
+  }
+
+  chatSendLabel(): string {
+    if (this.continuing()) return '⏳ Sending...';
+    return this.isRunning() ? '⏸ Pause & Send' : '▶ Send';
+  }
+
+  sendChatMessage(): void {
+    const prompt = this.followupPrompt().trim();
+    if (!prompt || this.continuing()) return;
+
+    if (!this.isRunning()) {
+      this.continueJob();
+      return;
+    }
+
+    // Pause-and-send: stop the running CLI first, then continue with the
+    // user's intervention as a follow-up prompt.
+    this.errorMsg.set(null);
+    this.continuing.set(true);
+    this.jobService.stopJob(this.detail().info.id, this.detail().info.watchPath).subscribe({
+      next: () => {
+        this.isRunning.set(false);
+        if (this.pollTimeout) {
+          clearTimeout(this.pollTimeout);
+          this.pollTimeout = null;
+        }
+        if (this.elapsedTimer) {
+          clearInterval(this.elapsedTimer);
+          this.elapsedTimer = null;
+        }
+        this.continuing.set(false);
+        this.continueJob();
       },
       error: (err) => {
         this.continuing.set(false);
