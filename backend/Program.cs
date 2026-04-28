@@ -35,6 +35,7 @@ builder.Services.AddSingleton<ClaudeSessionInspector>();
 builder.Services.AddSingleton<CliRouter>();
 builder.Services.AddSingleton<SessionRegistry>();
 builder.Services.AddSingleton<ContextUsageParser>();
+builder.Services.AddSingleton<SummaryGenerationService>();
 builder.Services.AddSingleton<TaskRunnerService>();
 builder.Services.AddSingleton<GitService>();
 // Quota probes: each CLI gets its own probe instance, all surfaced through QuotaService.
@@ -45,6 +46,14 @@ builder.Services.AddSingleton<IQuotaProbe, GeminiQuotaProbe>();
 builder.Services.AddSingleton<QuotaService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<JobWatcherService>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<TaskRunnerService>());
+// Serialise enums as camelCase strings so the frontend can use string-literal
+// unions (e.g. JobSummaryStatus = 'none' | 'generating' | 'ready' | 'failed')
+// instead of numeric values.
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    options.SerializerOptions.Converters.Add(
+        new System.Text.Json.Serialization.JsonStringEnumConverter(System.Text.Json.JsonNamingPolicy.CamelCase));
+});
 builder.Services.AddSignalR();
 builder.Services.AddCors(options =>
 {

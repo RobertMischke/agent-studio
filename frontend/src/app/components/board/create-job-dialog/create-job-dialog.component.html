@@ -1,5 +1,10 @@
 <div class="overlay" (click)="cancel.emit()">
-  <div class="create-dialog" (click)="$event.stopPropagation()">
+  <div class="create-dialog"
+       [class.create-dialog--drag]="isDragging()"
+       (click)="$event.stopPropagation()"
+       (dragover)="onDragOver($event)"
+       (dragleave)="onDragLeave($event)"
+       (drop)="onDrop($event)">
     <h2 class="create-dialog__title">{{ title() }}</h2>
     <label class="field">
       <span class="field__label">Title</span>
@@ -36,13 +41,50 @@
         }
       </select>
     </div>
-    <label class="field">
-      <span class="field__label">Prompt (optional)</span>
-      <textarea class="field__input field__textarea" [(ngModel)]="newPrompt" rows="10" placeholder="Task description..."></textarea>
-    </label>
+    <div class="field">
+      <div class="create-dialog__prompt-label">
+        <span class="field__label">Prompt (optional)</span>
+        <button type="button"
+                class="create-dialog__attach-btn"
+                data-testid="create-attach-image"
+                (click)="triggerFilePicker()"
+                title="Attach image (paste or drop also works)">📎 Image</button>
+      </div>
+      <textarea #promptArea
+                class="field__input field__textarea"
+                data-testid="create-prompt"
+                [(ngModel)]="newPrompt"
+                (paste)="onPromptPaste($event)"
+                rows="10"
+                placeholder="Task description..."></textarea>
+      @if (hasAttachments()) {
+        <div class="create-dialog__attachments" data-testid="create-attachments">
+          @for (att of attachments(); track att.id) {
+            <div class="create-dialog__attachment">
+              <img [src]="att.previewUrl" [alt]="att.alt" />
+              <span class="create-dialog__attachment-name">{{ att.file.name || att.alt }}</span>
+              <button type="button"
+                      class="create-dialog__attachment-remove"
+                      (click)="removeAttachment(att.id)"
+                      title="Remove attachment">×</button>
+            </div>
+          }
+        </div>
+      }
+      @if (attachmentError()) {
+        <div class="create-dialog__attachment-error" data-testid="create-attach-error">⚠ {{ attachmentError() }}</div>
+      }
+    </div>
     <div class="create-dialog__actions">
       <button class="btn" (click)="cancel.emit()">Cancel</button>
       <button class="btn btn--primary" (click)="submit.emit()" [disabled]="!newTitle().trim()">Create</button>
     </div>
+    <input #fileInput
+           type="file"
+           accept="image/png,image/jpeg,image/gif,image/webp"
+           class="create-dialog__file"
+           data-testid="create-attach-input"
+           multiple
+           (change)="onFileInputChange($event)" />
   </div>
 </div>

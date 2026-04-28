@@ -35,7 +35,7 @@ test.describe('Activity log — chat mode', () => {
 
     await page.goto(`/?job=${encodeURIComponent(target.id)}&watchPath=${encodeURIComponent(target.watchPath)}`);
 
-    const activityTab = page.getByRole('button', { name: 'Activity', exact: true });
+    const activityTab = page.getByTestId('inspector-tab-activity');
     await expect(activityTab).toBeVisible({ timeout: 10_000 });
     await activityTab.click();
 
@@ -79,7 +79,7 @@ test.describe('Activity log — chat mode', () => {
     }
 
     await page.goto(`/?job=${encodeURIComponent(target.id)}&watchPath=${encodeURIComponent(target.watchPath)}`);
-    await page.getByRole('button', { name: 'Activity', exact: true }).click();
+    await page.getByTestId('inspector-tab-activity').click();
 
     await page.getByTestId('activity-log-mode-chat').click();
     await expect(page.getByTestId('activity-log-chat')).toBeVisible();

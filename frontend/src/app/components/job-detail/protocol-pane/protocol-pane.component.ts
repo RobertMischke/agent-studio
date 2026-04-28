@@ -1,6 +1,5 @@
-import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
-import { FormsModule } from '@angular/forms';
-import { JobDetail } from '../../../models/job.model';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
+import { JobDetail, JobSummaryStatus } from '../../../models/job.model';
 import { ActivityLogViewComponent } from '../../activity-log-view';
 import { markdownToHtml } from '../../markdown-utils';
 import {
@@ -13,20 +12,18 @@ import { CliOutputPollService } from '../cli-output-poll.service';
 import { NowTickService } from '../../../services/now-tick.service';
 
 export type InspectorTab = 'protocol' | 'activity';
-export type StatusViewMode = 'preview' | 'markdown';
 
 /**
- * Protocol pane: shows status.md (preview / markdown / edit), the
+ * Protocol pane: shows the Haiku-generated status.md (read-only), the
  * activity log, the chat-compose strip, and Claude telemetry chips in
- * the header. State that the parent owns (edit toggles, drafts) is
- * passed in/out via inputs+outputs; live signals (cliOutput, claude
- * session/rate-limit) come from the locally-provided services.
+ * the header. status.md is owned by the SummaryGenerationService on the
+ * backend — there is no edit mode here.
  */
 @Component({
   selector: 'app-protocol-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule, ActivityLogViewComponent],
+  imports: [ActivityLogViewComponent],
   templateUrl: './protocol-pane.component.html',
   styleUrls: ['./protocol-pane.component.scss']
 })
@@ -35,11 +32,6 @@ export class ProtocolPaneComponent {
   readonly maximized = input(false);
   readonly weight = input<number>(1);
   readonly isRunning = input(false);
-
-  // Status-edit state owned by the parent (preserved across pane mounts)
-  readonly editingStatus = input(false);
-  readonly statusViewMode = input<StatusViewMode>('preview');
-  readonly statusDraft = input<string>('');
 
   readonly activeInspectorTab = input<InspectorTab>('protocol');
   readonly followupPrompt = input<string>('');
@@ -50,14 +42,7 @@ export class ProtocolPaneComponent {
   readonly hide = output<void>();
 
   readonly activeInspectorTabChange = output<InspectorTab>();
-  readonly statusViewModeChange = output<StatusViewMode>();
-  readonly statusDraftChange = output<string>();
   readonly followupPromptChange = output<string>();
-
-  readonly startEditStatus = output<void>();
-  readonly cancelEditStatus = output<void>();
-  readonly saveStatus = output<void>();
-  readonly statusKeydown = output<KeyboardEvent>();
 
   readonly openLogOverlay = output<void>();
   readonly sendChat = output<void>();
@@ -71,6 +56,20 @@ export class ProtocolPaneComponent {
   readonly claudeSession = this.claudePoll.session;
   readonly claudeRateLimit = this.claudePoll.rateLimit;
   readonly cliOutput = this.cliPoll.output;
+
+  readonly summaryStatus = computed<JobSummaryStatus>(
+    () => this.detail().summaryState?.status ?? 'none'
+  );
+
+  // "There is or was activity for this job" — drives the live-dot indicator.
+  // True when CLI is running OR we have any output buffered OR the job has a
+  // log/usage record from a previous run.
+  readonly hasActivity = computed(() => {
+    if (this.isRunning()) return true;
+    if (this.cliOutput().length > 0) return true;
+    const d = this.detail();
+    return d.log.length > 0 || d.info.lastUsage != null;
+  });
 
   formatTokens(n: number): string { return fmtTokens(n); }
   formatRateWindow(window: string | null): string { return fmtRateWindow(window); }

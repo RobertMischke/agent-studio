@@ -9,12 +9,14 @@ public class JobScannerService
 {
     private readonly IConfiguration _config;
     private readonly ILogger<JobScannerService> _logger;
+    private readonly SummaryGenerationService _summaryService;
     private static readonly JsonSerializerOptions JsonOpts = new() { PropertyNameCaseInsensitive = true };
 
-    public JobScannerService(IConfiguration config, ILogger<JobScannerService> logger)
+    public JobScannerService(IConfiguration config, ILogger<JobScannerService> logger, SummaryGenerationService summaryService)
     {
         _config = config;
         _logger = logger;
+        _summaryService = summaryService;
     }
 
     public List<WatchPathEntry> GetWatchPaths()
@@ -191,13 +193,33 @@ public class JobScannerService
         if (info == null) return null;
 
         var dir = info.FolderPath;
+        var statusMd = ReadFileOrNull(Path.Combine(dir, "status.md"));
         return new JobDetail
         {
             Info = info,
             PromptMarkdown = ReadFileOrNull(Path.Combine(dir, "prompt.md")),
-            StatusMarkdown = ReadFileOrNull(Path.Combine(dir, "status.md")),
+            StatusMarkdown = statusMd,
             ContextUsage = ReadContextUsage(dir),
-            Log = BuildLog(dir)
+            Log = BuildLog(dir),
+            SummaryState = ResolveSummaryState(info.JobKey, statusMd)
+        };
+    }
+
+    /// <summary>
+    /// Returns the in-memory summary state if there is one, otherwise infers
+    /// a baseline from disk: <c>Ready</c> when status.md exists with content,
+    /// <c>None</c> when absent. After a backend restart any previous
+    /// <c>Generating</c> / <c>Failed</c> state is forgotten — acceptable, since
+    /// the user can simply re-run.
+    /// </summary>
+    private JobSummaryState ResolveSummaryState(string jobKey, string? statusMarkdown)
+    {
+        var live = _summaryService.GetState(jobKey);
+        if (live != null) return live;
+        return new JobSummaryState
+        {
+            Status = string.IsNullOrWhiteSpace(statusMarkdown) ? JobSummaryStatus.None : JobSummaryStatus.Ready,
+            BytesWritten = statusMarkdown?.Length
         };
     }
 
@@ -498,7 +520,6 @@ public class JobScannerService
             JobStates.Ready => JobStates.Ready,
             _ => JobStates.Preparation
         };
-        var stateLabel = targetState == JobStates.Ready ? "Ready" : "Preparation";
 
         // Sanitize ID: transliterate umlauts, lowercase, replace spaces with dashes, only allow safe chars
         var jobId = string.IsNullOrWhiteSpace(req.Id)
@@ -531,15 +552,12 @@ public class JobScannerService
         if (!string.IsNullOrWhiteSpace(req.PromptMarkdown))
             File.WriteAllText(Path.Combine(jobDir, "prompt.md"), req.PromptMarkdown);
 
-        File.WriteAllText(Path.Combine(jobDir, "status.md"),
-            $"# Status\n\n- State: {stateLabel}\n- Created: {DateTime.UtcNow:yyyy-MM-dd HH:mm}\n");
-
         return jobId;
     }
 
     public bool UpdateJobFile(string jobId, string fileName, string content, string? watchPath = null)
     {
-        var allowed = new[] { "prompt.md", "status.md" };
+        var allowed = new[] { "prompt.md" };
         if (!allowed.Contains(fileName)) return false;
 
         var info = FindJob(jobId, watchPath);
@@ -663,9 +681,9 @@ public class JobScannerService
     }
 
     /// <summary>
-    /// Appends a "Continuous Session Nachtrag" block to both <c>prompt.md</c> and <c>status.md</c>
-    /// so the user's follow-up shows up in the task description and the agent protocol without
-    /// breaking existing markdown structure.
+    /// Appends a "Continuous Session Nachtrag" block to <c>prompt.md</c> so the user's follow-up
+    /// stays visible as part of the task description. <c>status.md</c> is intentionally not touched —
+    /// it is owned by the post-run summary generator.
     /// </summary>
     public bool AppendContinuationNote(string jobId, string followupPrompt, string? watchPath = null)
     {
@@ -678,7 +696,6 @@ public class JobScannerService
         var block = $"\n\n---\n\n## Continuous Session Nachtrag — {timestamp}\n\n{followupPrompt.TrimEnd()}\n";
 
         AppendWithLeadingNewline(Path.Combine(info.FolderPath, "prompt.md"), block);
-        AppendWithLeadingNewline(Path.Combine(info.FolderPath, "status.md"), block);
         return true;
     }
 

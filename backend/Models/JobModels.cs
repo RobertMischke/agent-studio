@@ -46,6 +46,24 @@ public record JobDetail
     public string? StatusMarkdown { get; init; }
     public ContextUsageSnapshot? ContextUsage { get; init; }
     public List<JobLogEntry> Log { get; init; } = [];
+    public JobSummaryState? SummaryState { get; init; }
+}
+
+public enum JobSummaryStatus
+{
+    None,
+    Generating,
+    Ready,
+    Failed
+}
+
+public record JobSummaryState
+{
+    public JobSummaryStatus Status { get; init; } = JobSummaryStatus.None;
+    public DateTime? StartedAt { get; init; }
+    public DateTime? FinishedAt { get; init; }
+    public string? ErrorMessage { get; init; }
+    public int? BytesWritten { get; init; }
 }
 
 public record ContextUsageSnapshot

@@ -119,23 +119,14 @@ import { markdownToHtml } from './markdown-utils';
             [maximized]="maximizedPane() === 'protocol'"
             [weight]="paneWeights().protocol"
             [isRunning]="isRunning()"
-            [editingStatus]="editingStatus()"
-            [statusViewMode]="statusViewMode()"
-            [statusDraft]="statusDraftValue"
             [activeInspectorTab]="activeInspectorTab()"
             [followupPrompt]="followupPrompt()"
             [canSendChat]="canSendChat()"
             [chatSendLabel]="chatSendLabel()"
             (maximizeToggle)="toggleMaximize('protocol')"
             (hide)="togglePane('protocol')"
-            (activeInspectorTabChange)="activeInspectorTab.set($event)"
-            (statusViewModeChange)="statusViewMode.set($event)"
-            (statusDraftChange)="statusDraftValue = $event"
+            (activeInspectorTabChange)="onInspectorTabChange($event)"
             (followupPromptChange)="followupPrompt.set($event)"
-            (startEditStatus)="startEdit('status')"
-            (cancelEditStatus)="cancelEdit('status')"
-            (saveStatus)="saveFile('status.md')"
-            (statusKeydown)="handleFileKeydown($event, 'status.md')"
             (openLogOverlay)="showLogOverlay.set(true)"
             (sendChat)="sendChatMessage()"
             (stopJob)="stopJob()" />
@@ -400,6 +391,15 @@ import { markdownToHtml } from './markdown-utils';
       transition: background 0.15s;
     }
     .detail__title:hover { background: rgba(255,255,255,0.04); }
+    .detail__meta {
+      display: flex;
+      gap: 12px;
+      margin-top: 4px;
+      padding-left: 6px;
+      font-size: 11px;
+      color: #94a3b8;
+    }
+    .detail__meta-item { cursor: help; user-select: none; }
     .detail__title:hover .detail__title-edit-btn { opacity: 1; }
     .detail__title-edit-btn {
       background: rgba(255,255,255,0.08);
@@ -770,14 +770,6 @@ import { markdownToHtml } from './markdown-utils';
       justify-content: flex-end;
       gap: 8px;
       flex-wrap: wrap;
-    }
-    .notes-panel__lock {
-      font-size: 11px;
-      color: #fbbf24;
-      background: rgba(251,191,36,0.10);
-      border: 1px solid rgba(251,191,36,0.35);
-      border-radius: 999px;
-      padding: 2px 8px;
     }
     .notes-panel__tabs {
       display: inline-flex;
@@ -1232,7 +1224,6 @@ export class JobDetailComponent implements OnDestroy {
   readonly completeAndNextReview = output<void>();
 
   readonly editingPrompt = signal(false);
-  readonly editingStatus = signal(false);
 
   // Three-pane layout — state, persistence and resize handlers live in
   // LayoutPanesService (provided locally on this component). The fields
@@ -1294,7 +1285,6 @@ export class JobDetailComponent implements OnDestroy {
   readonly titleDraft = signal('');
   readonly savingTitle = signal(false);
   readonly completingAndNext = signal(false);
-  readonly statusViewMode = signal<'preview' | 'markdown'>('preview');
   readonly detailPanePercent = this.layout.detailPanePercent;
 
   // Wall-clock tick used by relative-time formatters (e.g. formatResetIn).
@@ -1303,7 +1293,10 @@ export class JobDetailComponent implements OnDestroy {
   private readonly nowTick = inject(NowTickService).now;
 
   promptDraftValue = '';
-  statusDraftValue = '';
+  // Tracks whether the user has explicitly chosen an inspector tab for the
+  // current job. Reset on job switch. Used to block the "auto-switch to
+  // Protokoll once the summary lands" effect from clobbering a manual choice.
+  private userTouchedInspectorTab = false;
   private lastCliConfigRequest = 0;
   private currentJobKey: string | null = null;
   // Tracks which failed execution we've already surfaced as a modal so that
@@ -1377,17 +1370,30 @@ export class JobDetailComponent implements OnDestroy {
       // refreshes for the same job (e.g. execution status changes) must
       // preserve the live CLI output and view state.
       this.showLogOverlay.set(false);
-      this.activeInspectorTab.set('protocol');
+      // Default tab: Protokoll once a summary exists, otherwise Aktivität.
+      // The auto-switch effect below promotes Aktivität → Protokoll once
+      // Haiku finishes, unless the user has manually picked a tab.
+      this.activeInspectorTab.set(d.statusMarkdown ? 'protocol' : 'activity');
+      this.userTouchedInspectorTab = false;
       this.showCliConfig.set(false);
       this.cliTestResult.set(null);
       this.editingPrompt.set(false);
-      this.editingStatus.set(false);
-      this.statusViewMode.set('preview');
       this.editingTitle.set(false);
       this.savingTitle.set(false);
       this.followupPrompt.set('');
       this.cliPoll.resetForJobSwitch();
       this.lastShownFailureKey = null;
+    }
+
+    // Auto-promote Aktivität → Protokoll the moment a fresh summary lands,
+    // but only when the user hasn't actively chosen a tab themselves.
+    if (
+      !this.userTouchedInspectorTab &&
+      this.activeInspectorTab() === 'activity' &&
+      d.summaryState?.status === 'ready' &&
+      d.statusMarkdown
+    ) {
+      this.activeInspectorTab.set('protocol');
     }
 
     this.cliPoll.setJob({ id: d.info.id, watchPath: d.info.watchPath });
@@ -1610,15 +1616,22 @@ export class JobDetailComponent implements OnDestroy {
     });
   }
 
-  startEdit(which: 'prompt' | 'status') {
+  startEdit(which: 'prompt') {
     if (this.isRunning()) return;
     if (which === 'prompt') {
       this.promptDraftValue = this.detail().promptMarkdown ?? '';
       this.editingPrompt.set(true);
-    } else {
-      this.statusDraftValue = this.detail().statusMarkdown ?? '';
-      this.editingStatus.set(true);
     }
+  }
+
+  /**
+   * Forwarded from the protocol pane's pill toggle. Marks the user as having
+   * manually picked a tab so the auto-switch from "activity → protocol on
+   * summary ready" doesn't override their explicit choice.
+   */
+  onInspectorTabChange(tab: 'protocol' | 'activity') {
+    this.userTouchedInspectorTab = true;
+    this.activeInspectorTab.set(tab);
   }
 
   startTitleEdit() {
@@ -1655,15 +1668,14 @@ export class JobDetailComponent implements OnDestroy {
     });
   }
 
-  cancelEdit(which: 'prompt' | 'status') {
+  cancelEdit(which: 'prompt') {
     if (which === 'prompt') this.editingPrompt.set(false);
-    else this.editingStatus.set(false);
   }
 
   saveFile(fileName: string) {
     if (this.isRunning()) return;
-    const content = fileName === 'prompt.md' ? this.promptDraftValue : this.statusDraftValue;
-    this.saveFileContent(fileName, content);
+    if (fileName !== 'prompt.md') return;
+    this.saveFileContent(fileName, this.promptDraftValue);
   }
 
   saveFileContent(fileName: string, content: string) {
@@ -1671,7 +1683,6 @@ export class JobDetailComponent implements OnDestroy {
     this.jobService.updateJobFile(this.detail().info.id, fileName, content, this.detail().info.watchPath).subscribe({
       next: () => {
         if (fileName === 'prompt.md') this.editingPrompt.set(false);
-        else this.editingStatus.set(false);
         this.fileSaved.emit();
       },
       error: (err) => this.showError(err)

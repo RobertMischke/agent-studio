@@ -8,7 +8,7 @@ import { JobService } from './services/job.service';
 import { JobDetail, JobInfo, GroupedJobs, WatchPathEntry, CliType, CLI_TYPES, CliModelInfo } from './models/job.model';
 import { ErrorDialogService } from './services/error-dialog.service';
 import { cliTypeLabel as fmtCliTypeLabel, formatMultiplier as fmtMultiplier } from './services/format.util';
-import { CreateJobDialogComponent } from './components/board/create-job-dialog/create-job-dialog.component';
+import { CreateJobDialogComponent, PendingAttachment } from './components/board/create-job-dialog/create-job-dialog.component';
 import { ErrorDialogComponent } from './components/board/error-dialog/error-dialog.component';
 import { ProjectAutoInfo, ProjectTabsComponent } from './components/board/project-tabs/project-tabs.component';
 
@@ -148,6 +148,7 @@ import { ProjectAutoInfo, ProjectTabsComponent } from './components/board/projec
           [(newWatchPath)]="newWatchPath"
           [(newModel)]="newModel"
           [(newPrompt)]="newPrompt"
+          [(attachments)]="newAttachments"
           (cliTypeChange)="onCreateCliTypeChange($event)"
           (cancel)="cancelCreate()"
           (submit)="submitCreate()" />
@@ -396,6 +397,95 @@ import { ProjectAutoInfo, ProjectTabsComponent } from './components/board/projec
     .create-dialog .field__textarea {
       min-height: 220px;
       resize: vertical;
+    }
+    .create-dialog--drag {
+      box-shadow: 0 0 0 2px rgba(56,189,248,0.55), 0 24px 80px rgba(0,0,0,0.45);
+      border-color: rgba(56,189,248,0.7);
+    }
+    .create-dialog__prompt-label {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    .create-dialog__attach-btn {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+      color: #cbd5e1;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .create-dialog__attach-btn:hover {
+      background: rgba(99,102,241,0.18);
+      color: #ddd6fe;
+      border-color: rgba(167,139,250,0.55);
+    }
+    .create-dialog__attachments {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .create-dialog__attachment {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+      padding: 6px 8px 8px;
+      background: rgba(0,0,0,0.25);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 8px;
+      max-width: 140px;
+    }
+    .create-dialog__attachment img {
+      width: 120px;
+      height: 80px;
+      object-fit: cover;
+      border-radius: 4px;
+      border: 1px solid rgba(255,255,255,0.08);
+    }
+    .create-dialog__attachment-name {
+      font-size: 11px;
+      color: #94a3b8;
+      max-width: 120px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .create-dialog__attachment-remove {
+      position: absolute;
+      top: 2px;
+      right: 4px;
+      width: 20px;
+      height: 20px;
+      border-radius: 999px;
+      border: 0;
+      background: rgba(0,0,0,0.55);
+      color: #f8fafc;
+      font-size: 14px;
+      line-height: 1;
+      cursor: pointer;
+    }
+    .create-dialog__attachment-remove:hover {
+      background: rgba(239,68,68,0.7);
+    }
+    .create-dialog__attachment-error {
+      margin-top: 6px;
+      font-size: 12px;
+      color: #fca5a5;
+      background: rgba(239,68,68,0.10);
+      border: 1px solid rgba(239,68,68,0.35);
+      border-radius: 6px;
+      padding: 6px 10px;
+    }
+    .create-dialog__file {
+      display: none;
     }
     .overlay--error {
       z-index: 120;
@@ -876,6 +966,7 @@ export class App implements OnInit {
   newTargetState = '1-preparation';
   newCliType: CliType = 'copilot';
   newModel = '';
+  newAttachments: PendingAttachment[] = [];
 
   readonly cliTypes = CLI_TYPES;
   readonly availableModels = signal<CliModelInfo[]>([]);
@@ -1105,20 +1196,35 @@ export class App implements OnInit {
     this.newCliType = 'copilot';
     this.newModel = '';
     this.availableModels.set([]);
+    for (const att of this.newAttachments) URL.revokeObjectURL(att.previewUrl);
+    this.newAttachments = [];
   }
 
   submitCreate() {
+    const attachments = this.newAttachments;
+    const promptDraft = this.newPrompt.trim();
+    const watchPath = this.newWatchPath;
+
+    // When attachments are present we defer writing the prompt to the create
+    // call (its `pending-attachment-…` placeholders are not yet resolvable),
+    // upload each image against the new jobId, then PUT prompt.md with the
+    // real `attachments/<file>` references.
+    const initialPrompt = attachments.length > 0 ? undefined : (promptDraft || undefined);
+
     this.jobService.createJob({
       title: this.newTitle.trim(),
-      watchPath: this.newWatchPath,
+      watchPath,
       agent: this.newCliType,
-      promptMarkdown: this.newPrompt.trim() || undefined,
+      promptMarkdown: initialPrompt,
       targetState: this.newTargetState,
       cliType: this.newCliType,
       model: this.newModel.trim() || undefined
     }).subscribe({
-      next: () => {
-        localStorage.setItem('lastCreateWatchPath', this.newWatchPath);
+      next: (res) => {
+        localStorage.setItem('lastCreateWatchPath', watchPath);
+        if (attachments.length > 0) {
+          void this.uploadCreateAttachments(res.id, watchPath, promptDraft, attachments);
+        }
         this.cancelCreate();
         this.refresh();
       },
@@ -1130,6 +1236,52 @@ export class App implements OnInit {
           source: 'Task creation'
         });
       },
+    });
+  }
+
+  private async uploadCreateAttachments(
+    jobId: string,
+    watchPath: string,
+    promptDraft: string,
+    attachments: PendingAttachment[]
+  ): Promise<void> {
+    let prompt = promptDraft;
+    for (const att of attachments) {
+      try {
+        const form = new FormData();
+        form.append('file', att.file, att.file.name || `${att.alt}.png`);
+        const url = `/api/jobs/${encodeURIComponent(jobId)}/attachments`
+          + (watchPath ? `?watchPath=${encodeURIComponent(watchPath)}` : '');
+        const res = await fetch(url, { method: 'POST', body: form });
+        if (!res.ok) {
+          this.errorDialog.show(new Error(`Upload failed (${res.status}) for ${att.file.name || att.alt}`), {
+            title: 'Attachment upload failed',
+            fallbackMessage: 'Could not upload one of the pasted images.',
+            source: `Task ${jobId}`
+          });
+          continue;
+        }
+        const payload = (await res.json()) as { fileName: string; relativePath: string };
+        prompt = prompt.replace(
+          new RegExp(`pending-attachment-${att.id}`, 'g'),
+          payload.relativePath
+        );
+      } catch (err) {
+        this.errorDialog.show(err as Error, {
+          title: 'Attachment upload failed',
+          fallbackMessage: 'Could not upload one of the pasted images.',
+          source: `Task ${jobId}`
+        });
+      }
+    }
+
+    this.jobService.updateJobFile(jobId, 'prompt.md', prompt, watchPath).subscribe({
+      next: () => this.refresh(),
+      error: (err) => this.errorDialog.show(err, {
+        title: 'Failed to save prompt',
+        fallbackMessage: 'Attachments uploaded, but writing prompt.md failed.',
+        source: `Task ${jobId}`
+      })
     });
   }
 

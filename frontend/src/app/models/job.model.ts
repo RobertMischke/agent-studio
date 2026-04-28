@@ -129,12 +129,23 @@ export interface CliUsageReport {
   sections: CliUsageSection[];
 }
 
+export type JobSummaryStatus = 'none' | 'generating' | 'ready' | 'failed';
+
+export interface JobSummaryState {
+  status: JobSummaryStatus;
+  startedAt: string | null;
+  finishedAt: string | null;
+  errorMessage: string | null;
+  bytesWritten: number | null;
+}
+
 export interface JobDetail {
   info: JobInfo;
   promptMarkdown: string | null;
   statusMarkdown: string | null;
   contextUsage: ContextUsageSnapshot | null;
   log: JobLogEntry[];
+  summaryState: JobSummaryState | null;
 }
 
 export interface ContextUsageSnapshot {

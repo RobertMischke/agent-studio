@@ -50,6 +50,27 @@ export function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleDateString();
 }
 
+/**
+ * Compact human-readable "time since" string for timestamps shown next to
+ * job titles. `now` is passed in (not Date.now()) so the result is stable
+ * within a change-detection cycle — source from `NowTickService`.
+ */
+export function formatRelativeShort(dateStr: string, now: number): string {
+  const ms = now - new Date(dateStr).getTime();
+  if (ms < 0) return 'gerade';
+  const sec = Math.floor(ms / 1000);
+  if (sec < 60) return 'gerade';
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `vor ${min} min`;
+  const hrs = Math.floor(min / 60);
+  if (hrs < 48) return `vor ${hrs} h`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `vor ${days} d`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `vor ${months} mo`;
+  return `vor ${Math.floor(months / 12)} y`;
+}
+
 export function formatDateTime(dateStr: string): string {
   return new Date(dateStr).toLocaleString([], {
     year: 'numeric',

@@ -12,6 +12,7 @@ public class TaskRunnerService : BackgroundService
     private readonly CopilotCliService _cli;
     private readonly CliRouter _router;
     private readonly ContextUsageParser _contextUsageParser;
+    private readonly SummaryGenerationService _summaryService;
     private readonly ConcurrentDictionary<string, ProjectRunner> _runners = new();
 
     public event Action<string, ProjectRunnerStatus>? OnRunnerStatusChanged;
@@ -22,7 +23,8 @@ public class TaskRunnerService : BackgroundService
         JobScannerService scanner,
         CopilotCliService cli,
         CliRouter router,
-        ContextUsageParser contextUsageParser)
+        ContextUsageParser contextUsageParser,
+        SummaryGenerationService summaryService)
     {
         _config = config;
         _logger = logger;
@@ -30,7 +32,10 @@ public class TaskRunnerService : BackgroundService
         _cli = cli;
         _router = router;
         _contextUsageParser = contextUsageParser;
+        _summaryService = summaryService;
     }
+
+    public SummaryGenerationService SummaryService => _summaryService;
 
     public CliRouter Router => _router;
 
@@ -52,7 +57,7 @@ public class TaskRunnerService : BackgroundService
                 continue;
             }
 
-            var runner = new ProjectRunner(entry.Name, entry, _logger, _scanner, _router);
+            var runner = new ProjectRunner(entry.Name, entry, _logger, _scanner, _router, _summaryService);
             runner.OnStatusChanged += status => OnRunnerStatusChanged?.Invoke(entry.Name, status);
             _runners[entry.Name] = runner;
             _logger.LogInformation("Initialized runner for project '{Name}' (Root: {RootPath})", entry.Name, entry.RootPath);
@@ -144,22 +149,9 @@ public class TaskRunnerService : BackgroundService
             _scanner.SetJobModel(jobId, modelOverride, watchPath);
         }
 
-        // Persist the user's follow-up to prompt.md and status.md so the task description
-        // and the agent protocol both reflect the continuous-session input.
         _scanner.AppendContinuationNote(jobId, followupPrompt, watchPath);
 
-        // Wrap the user's follow-up so the agent always leaves a trace in status.md
-        // when the continuation finishes — otherwise the Agent-Protokoll stays empty
-        // and the user can't tell whether anything happened.
-        var wrappedPrompt =
-            followupPrompt.TrimEnd() +
-            "\n\n---\n" +
-            "Wenn du diese Nachfrage abgeschlossen hast, hänge in `status.md` " +
-            "im Job-Ordner einen kurzen Block an (Separator `---`, Überschrift " +
-            "`## Continuous Session Ergebnis — <Datum Zeit>`) mit 1–3 Bullet-Punkten, " +
-            "was du getan oder festgestellt hast. Nicht den vorhandenen Inhalt überschreiben.";
-
-        return await runner.ContinueJobAsync(jobId, wrappedPrompt, ct);
+        return await runner.ContinueJobAsync(jobId, followupPrompt, ct);
     }
 
     public bool StopJob(string jobId, string? watchPath = null)
@@ -259,6 +251,7 @@ public class ProjectRunner
     private readonly ILogger _logger;
     private readonly JobScannerService _scanner;
     private readonly CliRouter _router;
+    private readonly SummaryGenerationService _summaryService;
     private string _mode = "manual";
     private string? _activeJobId;
     private string? _activeCliType;
@@ -269,13 +262,14 @@ public class ProjectRunner
 
     public event Action<ProjectRunnerStatus>? OnStatusChanged;
 
-    public ProjectRunner(string projectName, WatchPathEntry entry, ILogger logger, JobScannerService scanner, CliRouter router)
+    public ProjectRunner(string projectName, WatchPathEntry entry, ILogger logger, JobScannerService scanner, CliRouter router, SummaryGenerationService summaryService)
     {
         ProjectName = projectName;
         Entry = entry;
         _logger = logger;
         _scanner = scanner;
         _router = router;
+        _summaryService = summaryService;
 
         // Listen across all CLI backends for completion of the active job.
         _router.OnFinished += (cliType, jobKey, exec) => OnCliFinished(cliType, jobKey, exec);
@@ -522,8 +516,28 @@ public class ProjectRunner
         // Write CLI output to log file
         WriteCliLog(_activeJobId, cli);
 
+        var finishedJobId = _activeJobId;
         // Move job to 4-review
         _scanner.MoveJob(_activeJobId, JobStates.Review, Entry.Path);
+
+        // Fire-and-forget Haiku summary on successful completion. Skipped for
+        // failed/cancelled runs because partial logs rarely yield useful
+        // protocols and the user can re-run if needed.
+        if (string.Equals(execution.Status, "completed", StringComparison.OrdinalIgnoreCase))
+        {
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    var info = _scanner.FindJob(finishedJobId, Entry.Path);
+                    if (info != null) await _summaryService.GenerateAsync(info);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Summary generation crashed for {JobId}", finishedJobId);
+                }
+            });
+        }
 
         _activeJobId = null;
         _activeCliType = null;

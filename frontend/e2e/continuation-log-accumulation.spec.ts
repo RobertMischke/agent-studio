@@ -68,7 +68,7 @@ test.describe('Continuation log accumulation', () => {
 
     await page.goto(`/?job=${encodeURIComponent(target.id)}&watchPath=${encodeURIComponent(target.watchPath)}`);
 
-    const activityTab = page.getByRole('button', { name: 'Activity', exact: true });
+    const activityTab = page.getByTestId('inspector-tab-activity');
     await expect(activityTab).toBeVisible({ timeout: 10_000 });
     await activityTab.click();
 
@@ -105,7 +105,7 @@ test.describe('Continuation log accumulation', () => {
 
     await page.goto(`/?job=${encodeURIComponent(target.id)}&watchPath=${encodeURIComponent(target.watchPath)}`);
 
-    const activityTab = page.getByRole('button', { name: 'Activity', exact: true });
+    const activityTab = page.getByTestId('inspector-tab-activity');
     await expect(activityTab).toBeVisible({ timeout: 10_000 });
     await activityTab.click();
 

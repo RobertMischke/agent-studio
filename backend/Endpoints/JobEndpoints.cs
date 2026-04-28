@@ -285,6 +285,49 @@ public static class JobEndpoints
             return Results.Ok(entries);
         });
 
+        // Lists the centrally-managed agent-rule files that are appended as a
+        // system-prompt overlay to every Claude job. Used by the Job Detail
+        // header to show "Active rules" so the user can verify what's in scope.
+        app.MapGet("/api/agent-rules", (IConfiguration config) =>
+        {
+            var configured = config["AgentRules:CorePath"];
+            if (string.IsNullOrWhiteSpace(configured))
+                return Results.Ok(Array.Empty<object>());
+
+            var candidates = new List<string>();
+            if (Path.IsPathRooted(configured))
+            {
+                candidates.Add(configured);
+            }
+            else
+            {
+                candidates.Add(Path.GetFullPath(configured));
+                var dir = new DirectoryInfo(AppContext.BaseDirectory);
+                while (dir != null)
+                {
+                    candidates.Add(Path.Combine(dir.FullName, configured));
+                    dir = dir.Parent;
+                }
+            }
+
+            foreach (var candidate in candidates)
+            {
+                if (!File.Exists(candidate)) continue;
+                var fi = new FileInfo(candidate);
+                return Results.Ok(new[]
+                {
+                    new
+                    {
+                        name = Path.GetFileName(candidate),
+                        path = candidate,
+                        sizeBytes = fi.Length,
+                        modifiedAt = fi.LastWriteTimeUtc
+                    }
+                });
+            }
+            return Results.Ok(Array.Empty<object>());
+        });
+
         // Per-project git summary, used by board tile pills. Cached server-side
         // for ~3 s so the board can call freely without forking N git processes.
         app.MapGet("/api/git/summary", (GitService git) => Results.Ok(git.GetSummaries()));

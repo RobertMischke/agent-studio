@@ -34,6 +34,11 @@
                   (click)="$event.stopPropagation(); startTitleEdit.emit()"
                   aria-label="Rename task">✎</button>
         </h2>
+        <div class="detail__meta">
+          <span class="detail__meta-item"
+                data-testid="detail-created-at"
+                [title]="createdAtTooltip()">⏱ erstellt {{ relativeCreated() }}</span>
+        </div>
       }
     </div>
   </div>

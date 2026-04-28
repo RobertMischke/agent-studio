@@ -85,12 +85,65 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         args.Add("--verbose");
         args.Add("--dangerously-skip-permissions");
 
+        // Inject centrally-managed agent rules as a system-prompt overlay.
+        // Using --append-system-prompt-file (vs. --append-system-prompt) keeps
+        // the multi-line markdown out of the command-line argument string, and
+        // lets the Anthropic CLI cache the system-prompt portion across runs.
+        var rulesPath = ResolveAgentRulesPath();
+        if (rulesPath != null)
+        {
+            args.Add("--append-system-prompt-file");
+            args.Add(Quote(rulesPath));
+        }
+
         return new ProcessStartInfo
         {
             FileName = ResolveExecutable(GetCliPath()),
             Arguments = string.Join(' ', args),
             WorkingDirectory = workingDirectory
         };
+    }
+
+    /// <summary>
+    /// Resolves <c>AgentRules:CorePath</c> to an absolute existing file path.
+    /// Honours absolute paths verbatim; for relative paths, searches CWD,
+    /// then walks up from <c>AppContext.BaseDirectory</c> looking for the file.
+    /// Returns <c>null</c> if no candidate exists or the file is empty / oversized.
+    /// </summary>
+    private string? ResolveAgentRulesPath()
+    {
+        var configured = _configuration["AgentRules:CorePath"];
+        if (string.IsNullOrWhiteSpace(configured)) return null;
+
+        var candidates = new List<string>();
+        if (Path.IsPathRooted(configured))
+        {
+            candidates.Add(configured);
+        }
+        else
+        {
+            candidates.Add(Path.GetFullPath(configured));
+            var dir = new DirectoryInfo(AppContext.BaseDirectory);
+            while (dir != null)
+            {
+                candidates.Add(Path.Combine(dir.FullName, configured));
+                dir = dir.Parent;
+            }
+        }
+
+        foreach (var candidate in candidates)
+        {
+            if (!File.Exists(candidate)) continue;
+            var size = new FileInfo(candidate).Length;
+            if (size == 0) return null;
+            if (size > 8 * 1024)
+            {
+                _logger.LogWarning("Agent rules file {Path} is {Size} bytes (>8 KB), skipping injection", candidate, size);
+                return null;
+            }
+            return candidate;
+        }
+        return null;
     }
 
     /// <summary>
