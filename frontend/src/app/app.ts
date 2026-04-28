@@ -823,6 +823,7 @@ export class App implements OnInit {
       case 'copilot': return 'Copilot';
       case 'claude':  return 'Claude Code';
       case 'codex':   return 'Codex';
+      case 'gemini':  return 'Gemini';
     }
   }
 

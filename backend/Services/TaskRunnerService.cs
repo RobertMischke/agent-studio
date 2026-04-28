@@ -464,14 +464,18 @@ public class ProjectRunner
             _scanner.UpdateLastUsage(_activeJobId, usage, Entry.Path);
         }
 
-        // For Codex: persist the captured session UUID so follow-ups can resume.
-        if (cli is Cli.CodexCliService codex)
+        // For Codex / Gemini: persist the captured session UUID so follow-ups can resume.
+        // Both CLIs auto-create a UUID on first run and surface it in their JSON output;
+        // we capture it during streaming and write it back here.
+        var capturedSessionId = cli switch
         {
-            var capturedId = codex.GetCapturedSessionId(jobKey);
-            if (!string.IsNullOrWhiteSpace(capturedId))
-            {
-                _scanner.SetJobSessionName(_activeJobId, capturedId, Entry.Path);
-            }
+            Cli.CodexCliService codex   => codex.GetCapturedSessionId(jobKey),
+            Cli.GeminiCliService gemini => gemini.GetCapturedSessionId(jobKey),
+            _ => null
+        };
+        if (!string.IsNullOrWhiteSpace(capturedSessionId))
+        {
+            _scanner.SetJobSessionName(_activeJobId, capturedSessionId, Entry.Path);
         }
 
         // Write CLI output to log file

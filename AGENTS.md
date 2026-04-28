@@ -47,7 +47,7 @@ If a request implies any of the out-of-scope items, surface the conflict to the 
 
 ### Service & data layout (backend)
 
-- `Services/Cli/` — one driver per CLI: `ClaudeCliService`, `CodexCliService`, `CopilotCliService`, all extending `CliExecutionServiceBase`. `CliRouter` picks the right one by `cliType`.
+- `Services/Cli/` — one driver per CLI: `ClaudeCliService`, `CodexCliService`, `CopilotCliService`, `GeminiCliService`, all extending `CliExecutionServiceBase` (except Copilot, which predates the base class). `CliRouter` picks the right one by `cliType`. The contract every driver must satisfy is documented in [docs/supported-clis.md](docs/supported-clis.md).
 - `Services/Cli/SessionRegistry.cs` — discovers sessions on disk and builds the `/api/cli/usage` report.
 - `Services/Quota/*QuotaProbe.cs` — per-CLI quota probes. `QuotaService` aggregates and serves `/api/cli/quota` (with background refresh).
 - `Services/Pty/` — PTY-based slash-command probes (used for parsing `/usage`, `/status`).

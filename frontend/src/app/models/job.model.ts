@@ -1,5 +1,5 @@
-export type CliType = 'copilot' | 'claude' | 'codex';
-export const CLI_TYPES: CliType[] = ['copilot', 'claude', 'codex'];
+export type CliType = 'copilot' | 'claude' | 'codex' | 'gemini';
+export const CLI_TYPES: CliType[] = ['copilot', 'claude', 'codex', 'gemini'];
 
 export interface JobInfo {
   id: string;

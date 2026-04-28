@@ -55,6 +55,7 @@ public sealed class SessionRegistry
                 CliTypes.Copilot => BuildCopilotProjects(),
                 CliTypes.Claude  => BuildClaudeProjects(),
                 CliTypes.Codex   => BuildCodexProjects(),
+                CliTypes.Gemini  => BuildGeminiProjects(),
                 _ => []
             }};
         }
@@ -141,6 +142,101 @@ public sealed class SessionRegistry
             });
         }
         return groups;
+    }
+
+    // ── Gemini ──────────────────────────────────────────────────────────
+    // Sessions live under ~/.gemini/tmp/<project-slug>/chats/session-*.json.
+    // The slug map (absolute cwd → slug) is in ~/.gemini/projects.json.
+    private List<CliUsageProjectGroup> BuildGeminiProjects()
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var root = Path.Combine(home, ".gemini");
+        var projectsPath = Path.Combine(root, "projects.json");
+        if (!File.Exists(projectsPath)) return [];
+
+        // Build slug → absolute-cwd lookup so the side-sheet can show the real path.
+        var slugToCwd = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(projectsPath));
+            if (doc.RootElement.TryGetProperty("projects", out var projs)
+                && projs.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var p in projs.EnumerateObject())
+                {
+                    var slug = p.Value.GetString();
+                    if (!string.IsNullOrWhiteSpace(slug))
+                        slugToCwd[slug!] = p.Name;
+                }
+            }
+        }
+        catch { /* best-effort */ }
+
+        var tmpRoot = Path.Combine(root, "tmp");
+        if (!Directory.Exists(tmpRoot)) return [];
+
+        var groups = new List<CliUsageProjectGroup>();
+        foreach (var projectDir in Directory.EnumerateDirectories(tmpRoot))
+        {
+            var slug = Path.GetFileName(projectDir);
+            var chatsDir = Path.Combine(projectDir, "chats");
+            if (!Directory.Exists(chatsDir)) continue;
+
+            var sessions = new List<CliSessionInfo>();
+            foreach (var jsonPath in Directory.EnumerateFiles(chatsDir, "session-*.json"))
+            {
+                try
+                {
+                    using var doc = JsonDocument.Parse(File.ReadAllText(jsonPath));
+                    var rootEl = doc.RootElement;
+                    var id = rootEl.TryGetProperty("sessionId", out var sid) ? sid.GetString() : null;
+                    if (string.IsNullOrWhiteSpace(id)) continue;
+                    DateTime? updated = rootEl.TryGetProperty("lastUpdated", out var lu)
+                                        && lu.TryGetDateTime(out var dt) ? dt : null;
+                    var label = ExtractFirstUserPrompt(rootEl);
+                    sessions.Add(new CliSessionInfo
+                    {
+                        Id        = id!,
+                        Label     = label,
+                        UpdatedAt = updated ?? new FileInfo(jsonPath).LastWriteTimeUtc,
+                        Cwd       = slugToCwd.TryGetValue(slug, out var cwd) ? cwd : slug
+                    });
+                }
+                catch { /* skip unreadable session file */ }
+            }
+
+            if (sessions.Count == 0) continue;
+            groups.Add(new CliUsageProjectGroup
+            {
+                ProjectName = slug,
+                RootPath    = slugToCwd.TryGetValue(slug, out var cwd2) ? cwd2 : slug,
+                Sessions    = sessions.OrderByDescending(s => s.UpdatedAt).Take(20).ToList()
+            });
+        }
+
+        return groups;
+    }
+
+    private static string? ExtractFirstUserPrompt(JsonElement sessionRoot)
+    {
+        if (!sessionRoot.TryGetProperty("messages", out var msgs) || msgs.ValueKind != JsonValueKind.Array)
+            return null;
+        foreach (var msg in msgs.EnumerateArray())
+        {
+            if (!msg.TryGetProperty("type", out var t) || t.GetString() != "user") continue;
+            if (!msg.TryGetProperty("content", out var c) || c.ValueKind != JsonValueKind.Array) continue;
+            foreach (var part in c.EnumerateArray())
+            {
+                if (part.TryGetProperty("text", out var txt) && txt.ValueKind == JsonValueKind.String)
+                {
+                    var s = txt.GetString() ?? "";
+                    var firstLine = s.Replace("\r\n", "\n").Split('\n').FirstOrDefault()?.Trim() ?? "";
+                    if (firstLine.Length > 80) firstLine = firstLine[..80] + "…";
+                    return firstLine.Length > 0 ? firstLine : null;
+                }
+            }
+        }
+        return null;
     }
 
     // ── Codex ───────────────────────────────────────────────────────────

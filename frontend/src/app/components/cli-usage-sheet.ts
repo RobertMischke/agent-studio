@@ -509,6 +509,7 @@ export class CliUsageSheetComponent implements OnInit, OnDestroy {
       case 'copilot': return 'Copilot';
       case 'claude':  return 'Claude Code';
       case 'codex':   return 'Codex';
+      case 'gemini':  return 'Gemini';
       default:        return t;
     }
   }

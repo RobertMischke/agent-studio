@@ -18,13 +18,15 @@ public sealed class CliRouter
     public CliRouter(
         CopilotCliService copilot,
         ClaudeCliService claude,
-        CodexCliService codex)
+        CodexCliService codex,
+        GeminiCliService gemini)
     {
         _byType = new(StringComparer.OrdinalIgnoreCase)
         {
             [CliTypes.Copilot] = copilot,
             [CliTypes.Claude]  = claude,
             [CliTypes.Codex]   = codex,
+            [CliTypes.Gemini]  = gemini,
         };
 
         foreach (var (type, svc) in _byType)

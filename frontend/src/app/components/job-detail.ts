@@ -1566,6 +1566,7 @@ export class JobDetailComponent implements OnDestroy {
       case 'copilot': return 'Copilot';
       case 'claude':  return 'Claude Code';
       case 'codex':   return 'Codex';
+      case 'gemini':  return 'Gemini';
     }
   }
 

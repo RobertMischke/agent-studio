@@ -9,8 +9,9 @@ public static class CliTypes
     public const string Copilot = "copilot";
     public const string Claude  = "claude";
     public const string Codex   = "codex";
+    public const string Gemini  = "gemini";
 
-    public static readonly string[] All = [Copilot, Claude, Codex];
+    public static readonly string[] All = [Copilot, Claude, Codex, Gemini];
 
     public static bool IsValid(string? type) =>
         !string.IsNullOrWhiteSpace(type) && All.Contains(type, StringComparer.OrdinalIgnoreCase);

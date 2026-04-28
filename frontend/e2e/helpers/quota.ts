@@ -66,3 +66,16 @@ export async function getQuotaForCli(
 }
 
 export const getClaudeQuota = () => getQuotaForCli('claude');
+
+/**
+ * Gemini availability check — the Gemini quota probe always returns an
+ * explanatory `error` string because daily limit numbers aren't surfaced
+ * headlessly. So we check availability via `/api/cli/usage` (which uses
+ * `gemini --version`) instead, and ignore the quota error.
+ */
+export async function getGeminiAvailability(): Promise<{ available: boolean; version: string | null }> {
+  const usage = await getCliUsage();
+  const section = usage.sections.find(s => s.cliType === 'gemini');
+  if (!section) return { available: false, version: null };
+  return { available: section.available, version: section.version };
+}

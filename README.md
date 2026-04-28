@@ -77,9 +77,16 @@ Agents must use the `sh` variant (`./api.sh`). The `.ps1` file remains for manua
 
 When the workflow or folder schema changes, agent instructions in target projects must be updated. Use the `/sync-target-instructions` prompt in `.github/prompts/`.
 
+## Supported CLIs
+
+The taskboard drives multiple coding-agent CLIs through a common interface. Today: Claude Code, Codex, GitHub Copilot, and Gemini (skeleton — Phase 1 in progress).
+
+The contract every supported CLI must satisfy — process lifecycle, session model, model selection, quota probing, logging, cancellation — is documented in [docs/supported-clis.md](docs/supported-clis.md). Adding a new CLI follows the checklist in §4 of that file.
+
 ## Docs
 
 - [AGENTS.md](AGENTS.md) — canonical agent instructions
+- [docs/supported-clis.md](docs/supported-clis.md) — CLI integration contract
 - [NEW-I.md](NEW-I.md) — initiative & mission
 - [PATHS.md](PATHS.md) — path conventions
 - [docs/filesystem-contract.md](docs/filesystem-contract.md) — job folder contract

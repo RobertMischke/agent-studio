@@ -286,7 +286,12 @@ export class QuotaStripComponent implements OnInit, OnDestroy {
   }
 
   cliLabel(t: CliType): string {
-    return t === 'copilot' ? 'Copilot' : t === 'claude' ? 'Claude Code' : 'Codex';
+    switch (t) {
+      case 'copilot': return 'Copilot';
+      case 'claude':  return 'Claude Code';
+      case 'codex':   return 'Codex';
+      case 'gemini':  return 'Gemini';
+    }
   }
 
   formatPct(pct: number | null): string {
