@@ -2,8 +2,8 @@ import { test, expect } from '@playwright/test';
 import { api } from './helpers/api';
 
 /**
- * Verifies the Add Task dialog and that the Claude model catalog reaches
- * the UI. We probe the backend catalog first so a failure fingerprints
+ * Verifies the Add Task dialog and that model catalogs reach the UI.
+ * We probe the backend catalog first so a failure fingerprints
  * the right layer.
  */
 
@@ -12,7 +12,7 @@ interface ModelCatalog {
   source: string;
 }
 
-test.describe('Add Task — Claude model selection', () => {
+test.describe('Add Task — model selection', () => {
   test('backend exposes a non-empty Claude model catalog', async () => {
     const cat = await api<ModelCatalog>('/api/cli/claude/models');
     expect(Array.isArray(cat.models)).toBe(true);
@@ -32,6 +32,19 @@ test.describe('Add Task — Claude model selection', () => {
     const body = await res.json();
     if (res.status() === 200) {
       expect(Array.isArray(body.models)).toBe(true);
+    } else {
+      expect(body.error, 'error body must explain the failure').toBeTruthy();
+    }
+  });
+
+  test('Codex model catalog comes from CLI discovery when available', async ({ request }) => {
+    const res = await request.get('http://localhost:5030/api/cli/codex/models?refresh=true');
+    expect([200, 503]).toContain(res.status());
+    const body = await res.json();
+    if (res.status() === 200) {
+      expect(Array.isArray(body.models)).toBe(true);
+      expect(body.models.length).toBeGreaterThan(0);
+      expect(body.source).not.toBe('hardcoded');
     } else {
       expect(body.error, 'error body must explain the failure').toBeTruthy();
     }

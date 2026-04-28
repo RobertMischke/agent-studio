@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 using OrchestratorApi.Models;
+using OrchestratorApi.Services.Pty;
 
 namespace OrchestratorApi.Services.Cli;
 
@@ -14,10 +15,17 @@ namespace OrchestratorApi.Services.Cli;
 /// </summary>
 public sealed class CodexCliService : CliExecutionServiceBase
 {
+    private readonly CodexModelDiscovery _modelDiscovery;
     private string? _cliPathOverride;
 
-    public CodexCliService(ILogger<CodexCliService> logger, IConfiguration configuration)
-        : base(logger, configuration) { }
+    public CodexCliService(
+        ILogger<CodexCliService> logger,
+        IConfiguration configuration,
+        CodexModelDiscovery modelDiscovery)
+        : base(logger, configuration)
+    {
+        _modelDiscovery = modelDiscovery;
+    }
 
     public override string CliType => CliTypes.Codex;
 
@@ -114,20 +122,7 @@ public sealed class CodexCliService : CliExecutionServiceBase
     }
 
     public override Task<CliModelCatalog> GetModelCatalogAsync(bool forceRefresh = false, CancellationToken ct = default)
-    {
-        var models = new List<CliModelInfo>
-        {
-            new() { Id = "gpt-5",          Label = "GPT-5",          Vendor = "openai", IsDefault = true },
-            new() { Id = "gpt-5-mini",     Label = "GPT-5 Mini",     Vendor = "openai" },
-            new() { Id = "o4-mini",        Label = "o4-mini",        Vendor = "openai" }
-        };
-        return Task.FromResult(new CliModelCatalog
-        {
-            Models = models,
-            Source = "hardcoded",
-            FetchedAt = DateTime.UtcNow
-        });
-    }
+        => _modelDiscovery.GetAsync(GetCliPath(), forceRefresh, ct);
 
     private static string Quote(string s) => $"\"{s.Replace("\"", "\\\"")}\"";
 }

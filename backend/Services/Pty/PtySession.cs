@@ -57,6 +57,7 @@ public sealed class PtySession : IAsyncDisposable
         IDictionary<string, string>? extraEnv = null,
         int cols = 160,
         int rows = 40,
+        bool verbatimCommandLine = false,
         CancellationToken ct = default)
     {
         var env = new Dictionary<string, string>
@@ -79,6 +80,7 @@ public sealed class PtySession : IAsyncDisposable
             Cwd = cwd ?? Environment.CurrentDirectory,
             App = app,
             CommandLine = (args ?? Array.Empty<string>()).ToArray(),
+            VerbatimCommandLine = verbatimCommandLine,
             Environment = env,
         };
         var conn = await PtyProvider.SpawnAsync(options, ct);
