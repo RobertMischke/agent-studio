@@ -254,6 +254,7 @@ import {
       font-size: 11px;
     }
     .activity-log__body {
+      flex: 1 1 auto;
       overflow-y: auto;
       padding: 10px;
       min-height: 160px;

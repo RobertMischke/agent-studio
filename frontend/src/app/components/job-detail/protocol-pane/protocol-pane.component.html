@@ -120,7 +120,7 @@
               </div>
 
               @if (cliOutput().length > 0 || isRunning()) {
-                <app-activity-log-view [lines]="cliOutput()" [bodyMaxHeight]="'34vh'" variant="embedded" />
+                <app-activity-log-view [lines]="cliOutput()" [bodyMaxHeight]="'none'" variant="embedded" />
               } @else {
                 <div class="activity-panel__empty">Start the task to follow the agent output live.</div>
               }
