@@ -17,7 +17,6 @@ import { markdownToHtml } from './markdown-utils';
         <div class="detail__header-main">
           <button class="detail__back" (click)="back.emit()">←</button>
           <div class="detail__headline">
-            <div class="detail__eyebrow">Task focus</div>
             @if (editingTitle()) {
               <div class="detail__title-edit">
                 <input #titleInput
@@ -79,20 +78,6 @@ import { markdownToHtml } from './markdown-utils';
           </select>
         </label>
         <div class="detail__meta-item">
-          <span class="detail__meta-label">Agent</span>
-          <span class="detail__meta-value">🤖 {{ detail().info.agent }}</span>
-        </div>
-        @if (detail().info.model) {
-          <div class="detail__meta-item">
-            <span class="detail__meta-label">Model</span>
-            <span class="detail__meta-value">🧠 {{ detail().info.model }}</span>
-          </div>
-        }
-        <div class="detail__meta-item">
-          <span class="detail__meta-label">Order</span>
-          <span class="detail__meta-value">#{{ detail().info.order }}</span>
-        </div>
-        <div class="detail__meta-item">
           <span class="detail__meta-label">Created</span>
           <span class="detail__meta-value">{{ formatDate(detail().info.createdAt) }}</span>
         </div>
@@ -103,8 +88,7 @@ import { markdownToHtml } from './markdown-utils';
           <section class="sidebar-card sidebar-card--toolbar">
             <div class="sidebar-card__header">
               <div>
-                <div class="section__eyebrow">Command deck</div>
-                <h3 class="section__title">Agent controls</h3>
+                <h3 class="section__title">Command deck</h3>
               </div>
             </div>
             <div class="cli-picker">
@@ -157,7 +141,6 @@ import { markdownToHtml } from './markdown-utils';
           <section class="sidebar-card sidebar-card--toolbar">
             <div class="sidebar-card__header">
               <div>
-                <div class="section__eyebrow">Copilot session</div>
                 <h3 class="section__title">{{ detail().info.sessionName }}</h3>
               </div>
             </div>
@@ -194,7 +177,6 @@ import { markdownToHtml } from './markdown-utils';
         <section class="sidebar-card sidebar-card--toolbar">
           <div class="sidebar-card__header">
             <div>
-              <div class="section__eyebrow">Context window</div>
               <h3 class="section__title">/context usage</h3>
             </div>
             <button class="btn-sm" (click)="refreshContextUsage()" [disabled]="refreshingContextUsage()">
@@ -311,7 +293,6 @@ import { markdownToHtml } from './markdown-utils';
           <section class="section section--primary section--fill">
             <div class="section__header">
               <div>
-                <div class="section__eyebrow">Samurai view</div>
                 <h3 class="section__title section__title--large">Task description</h3>
               </div>
             </div>
@@ -333,7 +314,6 @@ import { markdownToHtml } from './markdown-utils';
           <section class="inspector">
             <div class="inspector__header">
               <div>
-                <div class="section__eyebrow">Deep dive</div>
                 <h3 class="section__title section__title--large">Agent protocol</h3>
               </div>
               <div class="inspector__tabs">
@@ -355,7 +335,6 @@ import { markdownToHtml } from './markdown-utils';
                 <section class="notes-panel">
                   <div class="notes-panel__header">
                     <div>
-                      <div class="section__eyebrow">Agent notes</div>
                       <h3 class="section__title section__title--large">status.md</h3>
                     </div>
                     <div class="notes-panel__actions">
@@ -399,7 +378,6 @@ import { markdownToHtml } from './markdown-utils';
                   <section class="activity-panel">
                     <div class="activity-panel__header">
                       <div>
-                        <div class="section__eyebrow">Live stream</div>
                         <h3 class="section__title">Activity log</h3>
                       </div>
                       @if (cliOutput().length > 0 || detail().log.length > 0 || isRunning()) {
@@ -468,7 +446,6 @@ import { markdownToHtml } from './markdown-utils';
           <div class="log-overlay__panel" (click)="$event.stopPropagation()">
             <div class="log-overlay__header">
               <div>
-                <div class="section__eyebrow">Fullscreen</div>
                 <h3 class="log-overlay__title">Agent log</h3>
               </div>
               <button class="btn-sm" (click)="showLogOverlay.set(false)">✕ Close</button>
@@ -771,12 +748,12 @@ import { markdownToHtml } from './markdown-utils';
       background: #181825;
       border: 1px solid rgba(255,255,255,0.06);
       border-radius: 24px;
-      padding: 24px;
+      padding: 18px 20px;
       height: 100%;
       min-height: 0;
       display: flex;
       flex-direction: column;
-      gap: 20px;
+      gap: 12px;
       position: relative;
       box-sizing: border-box;
     }
@@ -789,37 +766,30 @@ import { markdownToHtml } from './markdown-utils';
     }
     .detail__header-main {
       display: flex;
-      align-items: flex-start;
-      gap: 14px;
+      align-items: center;
+      gap: 10px;
       min-width: 0;
       flex: 1;
     }
     .detail__headline {
       min-width: 0;
     }
-    .detail__eyebrow {
-      font-size: 11px;
-      letter-spacing: 0.08em;
-      text-transform: uppercase;
-      color: #64748b;
-      margin-bottom: 6px;
-    }
     .detail__back {
       background: rgba(255,255,255,0.06);
       border: none;
       color: #94a3b8;
-      width: 36px; height: 36px;
-      border-radius: 10px;
+      width: 28px; height: 28px;
+      border-radius: 8px;
       cursor: pointer;
-      font-size: 16px;
+      font-size: 14px;
       display: grid; place-items: center;
       flex-shrink: 0;
     }
     .detail__back:hover { background: rgba(255,255,255,0.1); }
     .detail__title {
       margin: 0;
-      font-size: 28px;
-      line-height: 1.2;
+      font-size: 18px;
+      line-height: 1.25;
       color: #f8fafc;
       word-break: break-word;
       cursor: text;
@@ -861,8 +831,8 @@ import { markdownToHtml } from './markdown-utils';
       background: rgba(15,23,42,0.6);
       border: 1px solid rgba(99,102,241,0.5);
       color: #f8fafc;
-      font-size: 28px;
-      line-height: 1.2;
+      font-size: 18px;
+      line-height: 1.25;
       font-weight: inherit;
       font-family: inherit;
       padding: 6px 10px;
@@ -918,43 +888,39 @@ import { markdownToHtml } from './markdown-utils';
     }
 
     .detail__meta {
-      display: grid;
-      grid-template-columns: minmax(180px, 1.4fr) repeat(3, minmax(110px, 1fr));
-      gap: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 16px;
+      align-items: center;
     }
     .detail__meta-item {
       display: flex;
-      flex-direction: column;
+      align-items: center;
       gap: 6px;
-      padding: 14px 16px;
-      border-radius: 16px;
-      background: rgba(255,255,255,0.03);
-      border: 1px solid rgba(255,255,255,0.05);
       min-width: 0;
     }
     .detail__meta-item--project {
-      align-items: flex-start;
+      flex: 1 1 220px;
     }
     .detail__meta-label {
-      font-size: 11px;
+      font-size: 10px;
       text-transform: uppercase;
       letter-spacing: 0.08em;
       color: #64748b;
     }
     .detail__meta-value {
-      font-size: 14px;
-      color: #e2e8f0;
-      font-weight: 600;
+      font-size: 12px;
+      color: #cbd5e1;
     }
     .detail__project-select {
       background: rgba(255,255,255,0.06);
       border: 1px solid rgba(255,255,255,0.1);
       color: #e2e8f0;
-      padding: 8px 10px;
-      border-radius: 10px;
-      font-size: 13px;
+      padding: 4px 8px;
+      border-radius: 8px;
+      font-size: 12px;
       cursor: pointer;
-      width: 100%;
+      max-width: 280px;
     }
     .detail__project-select:hover { border-color: rgba(255,255,255,0.2); }
     .detail__project-select:focus { outline: none; border-color: #6366f1; }
@@ -1475,9 +1441,6 @@ import { markdownToHtml } from './markdown-utils';
       to { opacity: 1; transform: translateY(0); }
     }
     @media (max-width: 1200px) {
-      .detail__meta {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-      }
       .detail__layout,
       .log-overlay__content {
         grid-template-columns: 1fr;
@@ -1500,10 +1463,7 @@ import { markdownToHtml } from './markdown-utils';
         flex-direction: column;
       }
       .detail__title {
-        font-size: 24px;
-      }
-      .detail__meta {
-        grid-template-columns: 1fr;
+        font-size: 17px;
       }
       .detail__tools {
         grid-template-columns: 1fr;
@@ -1599,8 +1559,13 @@ export class JobDetailComponent implements OnDestroy {
   private loadModelCatalog(cliType: CliType) {
     this.jobService.getCliModelCatalog(cliType).subscribe({
       next: (catalog) => {
-        this.availableModels.set(catalog.models ?? []);
+        const models = catalog.models ?? [];
+        this.availableModels.set(models);
         this.modelCatalogSource.set(catalog.source ?? '');
+        if (!this.modelDraft()) {
+          const def = models.find(m => m.isDefault);
+          if (def) this.modelDraft.set(def.id);
+        }
       },
       error: () => {
         this.availableModels.set([]);
@@ -1640,7 +1605,12 @@ export class JobDetailComponent implements OnDestroy {
     this.errorMsg.set(null);
     this.contextUsage.set(d.contextUsage);
     this.refreshingContextUsage.set(false);
-    this.modelDraft.set(d.info.model ?? '');
+    if (d.info.model) {
+      this.modelDraft.set(d.info.model);
+    } else {
+      const def = this.availableModels().find(m => m.isDefault);
+      this.modelDraft.set(def?.id ?? '');
+    }
     const nextCliType = (d.info.cliType ?? 'copilot') as CliType;
     if (nextCliType !== this.cliTypeDraft()) {
       this.cliTypeDraft.set(nextCliType);
