@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, ElementRef, HostListener, OnDestroy, ViewChild, computed, effect, input, output, signal } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, HostListener, OnDestroy, ViewChild, computed, effect, input, output, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import type { Editor } from '@tiptap/core';
 import { htmlToMarkdown, markdownToHtml } from './markdown-utils';
@@ -213,14 +213,19 @@ export class MarkdownRichEditorComponent implements AfterViewInit, OnDestroy {
   private editor: Editor | null = null;
   private destroyed = false;
   private savedTimer: ReturnType<typeof setTimeout> | null = null;
+  // Sync the parent-provided value into the editor whenever it changes. We
+  // read sourceValue/committedValue via untracked() so user edits (which write
+  // sourceValue) don't re-trigger this effect and revert the user's typing.
   private readonly valueEffect = effect(() => {
     const next = this.value() ?? '';
-    this.committedValue.set(next);
-    if (next === this.sourceValue()) return;
-    this.sourceValue.set(next);
-    if (this.editor) {
-      this.editor.commands.setContent(markdownToHtml(next), { emitUpdate: false });
-    }
+    untracked(() => {
+      this.committedValue.set(next);
+      if (next === this.sourceValue()) return;
+      this.sourceValue.set(next);
+      if (this.editor) {
+        this.editor.commands.setContent(markdownToHtml(next), { emitUpdate: false });
+      }
+    });
   });
 
   ngAfterViewInit(): void {
