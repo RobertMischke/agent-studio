@@ -1,9 +1,9 @@
-# Agent-Taskboard Paths
+# Agent Task Processor Paths
 
 ## Trennung: App-Code vs. Beobachtete Daten
 
 Die Pfade teilen sich in zwei Bereiche:
-1. **App-Source** — der Code der Taskboard-App selbst (dieses Repo)
+1. **App-Source** — der Code der Task-Processor-App selbst (dieses Repo)
 2. **Watch-Target** — die Job-Ordner im Ziel-Projekt, die der Agent bearbeitet
 
 ---
@@ -51,7 +51,7 @@ C:\Projects\Runbook\App\.orchestrator\jobs\
 ### Agent-Instruktionen im Ziel-Projekt
 - `<Ziel-Projekt>/AGENTS.md` — enthält den Autopilot-Workflow
 - `<Ziel-Projekt>/.github/copilot-instructions.md` — optionaler Copilot-Kompatibilitätsverweis
-- Wird vom Taskboard aus per Prompt synchronisiert (`/sync-target-instructions`)
+- Wird vom Task Processor aus per Prompt synchronisiert (`/sync-target-instructions`)
 
 ### Beispiel-Jobs (Runtime, im Ziel-Projekt)
 - `C:\Projects\MeinProjekt\.orchestrator\jobs\feature-login\`

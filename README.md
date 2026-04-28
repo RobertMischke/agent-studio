@@ -1,4 +1,4 @@
-# Agent-Taskboard
+# Agent Task Processor
 
 **Local AI Work Monitor** — a standalone app (.NET 10 + Angular 21) that watches coding agents at work and renders their progress as a Kanban board.
 
@@ -6,7 +6,7 @@
 
 ## Product Goal
 
-The taskboard drives a **sequential pipeline of tasks per project**. Multiple projects may run in parallel, but inside a single project work is strictly serial.
+The task processor drives a **sequential pipeline of tasks per project**. Multiple projects may run in parallel, but inside a single project work is strictly serial.
 
 Concretely:
 
@@ -45,10 +45,10 @@ If a future requirement implies parallel agents within a single project, multi-b
 
 ### Why this separation?
 
-1. **The taskboard is a standalone product** — its source does not belong inside the projects it observes.
+1. **The task processor is a standalone product** — its source does not belong inside the projects it observes.
 2. **Jobs belong to the target project** — the agent works there, so its artifacts live there.
-3. **One taskboard, multiple targets** — a single taskboard can watch several target paths sequentially.
-4. **Clean git history** — job artifacts do not pollute the taskboard source, and vice versa.
+3. **One task processor, multiple targets** — a single task processor can watch several target paths sequentially.
+4. **Clean git history** — job artifacts do not pollute the task processor source, and vice versa.
 
 ## Running
 
@@ -79,7 +79,7 @@ When the workflow or folder schema changes, agent instructions in target project
 
 ## Supported CLIs
 
-The taskboard drives multiple coding-agent CLIs through a common interface. Today: Claude Code, Codex, GitHub Copilot, and Gemini (skeleton — Phase 1 in progress).
+The task processor drives multiple coding-agent CLIs through a common interface. Today: Claude Code, Codex, GitHub Copilot, and Gemini (skeleton — Phase 1 in progress).
 
 The contract every supported CLI must satisfy — process lifecycle, session model, model selection, quota probing, logging, cancellation — is documented in [docs/supported-clis.md](docs/supported-clis.md). Adding a new CLI follows the checklist in §4 of that file.
 

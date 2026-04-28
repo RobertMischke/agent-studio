@@ -1,6 +1,6 @@
 # Supported CLIs
 
-This document is the **contract** every CLI integration in agent-taskboard must satisfy. It describes:
+This document is the **contract** every CLI integration in the Agent Task Processor must satisfy. It describes:
 
 1. What "supported" means.
 2. The capabilities every supported CLI must provide.
@@ -15,9 +15,9 @@ Whenever a CLI integration is added, changed, or audited, this file is updated *
 
 ## 1. What "supported" means
 
-A "supported CLI" is a coding-agent CLI (Claude Code, Codex, Copilot, Gemini, …) that the taskboard can drive end-to-end:
+A "supported CLI" is a coding-agent CLI (Claude Code, Codex, Copilot, Gemini, …) that the task processor can drive end-to-end:
 
-- The taskboard can spawn a process for it from a job folder.
+- The task processor can spawn a process for it from a job folder.
 - It surfaces live output in the Activity Log.
 - The user can pick a model from the side-sheet.
 - The user can see plan + remaining quota in the right-hand quota side-sheet.
@@ -102,7 +102,7 @@ If the CLI emits plain text already in a parser-friendly shape, `TransformReadLi
 
 **Contract.** `TestCliPath()` returns `(Available, Version, ResolvedPath)`. Default implementation runs `<cli> --version` and parses the first non-empty line. Override only if the CLI's version surface differs.
 
-**Authentication.** Most CLIs auth out-of-band (browser login, env var, gh-cli token). The taskboard does **not** drive login flows — if `TestCliPath` succeeds but the CLI is logged out, the failure surfaces when the first quota probe or job starts. New CLIs should make the failure mode obvious in their error message.
+**Authentication.** Most CLIs auth out-of-band (browser login, env var, gh-cli token). The task processor does **not** drive login flows — if `TestCliPath` succeeds but the CLI is logged out, the failure surfaces when the first quota probe or job starts. New CLIs should make the failure mode obvious in their error message.
 
 ---
 

@@ -7,7 +7,7 @@ interface WatchPath { path: string; name: string; rootPath: string }
 test.describe('Board — git pill on tile', () => {
   test('pill appears only on 3-progress and 4-review tiles', async ({ page }) => {
     const paths = await api<WatchPath[]>('/api/watch-paths');
-    const wp = paths.find(p => p.name.toLowerCase().includes('agent taskboard'))!;
+    const wp = paths.find(p => p.name.toLowerCase().includes('agent task processor'))!;
 
     const ready    = await createJob({ title: `pill-ready-${Date.now()}`,    watchPath: wp.path, cliType: 'claude', agent: 'claude', targetState: '2-ready' });
     const progress = await createJob({ title: `pill-progress-${Date.now()}`, watchPath: wp.path, cliType: 'claude', agent: 'claude', targetState: '2-ready' });
@@ -39,7 +39,7 @@ test.describe('Board — git pill on tile', () => {
 test.describe('Detail — Claude session telemetry', () => {
   test('endpoint returns a structured response even with no session yet', async () => {
     const paths = await api<WatchPath[]>('/api/watch-paths');
-    const wp = paths.find(p => p.name.toLowerCase().includes('agent taskboard'))!;
+    const wp = paths.find(p => p.name.toLowerCase().includes('agent task processor'))!;
     const job = await createJob({ title: `tel-${Date.now()}`, watchPath: wp.path, cliType: 'claude', agent: 'claude', targetState: '2-ready' });
 
     try {

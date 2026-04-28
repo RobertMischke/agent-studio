@@ -1,6 +1,6 @@
 # Orchestrator — Autopilot Workflow
 
-This project is monitored by the Agent-Taskboard. Job folders live under `.orchestrator/jobs/` in numbered state folders.
+This project is monitored by the Agent Task Processor. Job folders live under `.orchestrator/jobs/` in numbered state folders.
 
 ## CRITICAL: Task Source
 

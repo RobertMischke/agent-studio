@@ -1,7 +1,7 @@
 {
-  "name": "Agent Task Board",
-  "short_name": "Task Board",
-  "description": "Agent Task Board – drag & drop jobs across states",
+  "name": "Agent Task Processor",
+  "short_name": "Task Processor",
+  "description": "Agent Task Processor – drag & drop jobs across states",
   "display": "standalone",
   "background_color": "#0f0f1a",
   "theme_color": "#181825",

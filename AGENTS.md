@@ -4,10 +4,10 @@
 
 ## Project Overview
 
-Agent-Taskboard is a local AI work monitor: a .NET 10 backend plus an Angular 21 frontend that watches external job folders and displays agent progress as a Kanban board.
+Agent Task Processor is a local AI work monitor: a .NET 10 backend plus an Angular 21 frontend that watches external job folders and displays agent progress as a Kanban board.
 
 Keep the product boundary clear:
-- This repository contains the taskboard app source code, prompts, and docs.
+- This repository contains the task processor app source code, prompts, and docs.
 - Job folders live in watched target projects under `.orchestrator/jobs/`.
 - The app observes external jobs; it should not store runtime job artifacts in this repository.
 
@@ -17,7 +17,7 @@ All written artifacts in this repository (README, AGENTS.md, docs/, prompts, cod
 
 ## Product Goal & Non-Goals
 
-The taskboard drives a **sequential pipeline of tasks per project**. Parallelism exists across projects, never within one. Treat this as a hard product boundary when proposing or implementing changes.
+The task processor drives a **sequential pipeline of tasks per project**. Parallelism exists across projects, never within one. Treat this as a hard product boundary when proposing or implementing changes.
 
 In scope:
 - Sequential, automated task execution **within a single project** — tasks queued on that project's board are picked up and processed one after another, automatically, without per-task human kick-off.

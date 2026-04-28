@@ -23,9 +23,9 @@ import { ProjectTabsComponent } from './components/board/project-tabs/project-ta
     <div class="app">
       <header class="header">
         <div class="header__brand">
-          <img class="header__icon" src="icons/icon.svg" alt="Agent Task Board" width="32" height="32" />
+          <img class="header__icon" src="icons/icon.svg" alt="Agent Task Processor" width="32" height="32" />
           <h1 class="header__title">
-            <span class="header__title-ai">Agent</span><span class="header__title-sep"></span><span class="header__title-name">Task Board</span>
+            <span class="header__title-ai">Agent</span><span class="header__title-sep"></span><span class="header__title-name">Task Processor</span>
           </h1>
         </div>
         <app-project-tabs
