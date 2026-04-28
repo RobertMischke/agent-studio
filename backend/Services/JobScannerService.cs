@@ -550,8 +550,41 @@ public class JobScannerService
         // reliable signal because jobs stay there after stop / crash / restart.
 
         var filePath = Path.Combine(info.FolderPath, fileName);
-        File.WriteAllText(filePath, content);
+        WriteAllTextWithRetry(filePath, content);
         return true;
+    }
+
+    /// <summary>
+    /// Writes a text file tolerating transient Windows file-locks. The file
+    /// can be briefly held by editors (VSCode), search indexers, AV scanners,
+    /// or our own readers (status panel, log panel). A short retry loop with
+    /// FileShare.ReadWrite avoids surfacing an HTTP 500 to the user for what
+    /// is almost always a sub-second contention.
+    /// </summary>
+    private static void WriteAllTextWithRetry(string filePath, string content)
+    {
+        const int maxAttempts = 8;
+        var bytes = System.Text.Encoding.UTF8.GetBytes(content);
+        IOException? last = null;
+        for (var attempt = 0; attempt < maxAttempts; attempt++)
+        {
+            try
+            {
+                using var stream = new FileStream(
+                    filePath,
+                    FileMode.Create,
+                    FileAccess.Write,
+                    FileShare.ReadWrite | FileShare.Delete);
+                stream.Write(bytes, 0, bytes.Length);
+                return;
+            }
+            catch (IOException ex) when (attempt < maxAttempts - 1)
+            {
+                last = ex;
+                Thread.Sleep(50 * (attempt + 1));
+            }
+        }
+        if (last != null) throw last;
     }
 
     /// <summary>

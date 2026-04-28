@@ -83,8 +83,19 @@ public static class JobEndpoints
             if (runner.IsJobLive(jobId, watchPath))
                 return Results.Conflict("Cannot edit while the CLI is running for this task — stop it first.");
 
-            var success = scanner.UpdateJobFile(jobId, fileName, req.Content, watchPath);
-            return success ? Results.Ok() : Results.NotFound("Job not found or file is not editable.");
+            try
+            {
+                var success = scanner.UpdateJobFile(jobId, fileName, req.Content, watchPath);
+                return success ? Results.Ok() : Results.NotFound("Job not found or file is not editable.");
+            }
+            catch (IOException ex)
+            {
+                // File was locked by another process (editor, indexer, AV) for longer than
+                // the retry window. Surface a tidy 503 instead of a stack-trace modal.
+                return Results.Json(
+                    new { error = "File is temporarily locked by another process — try saving again in a moment.", detail = ex.Message },
+                    statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
         });
 
         group.MapPost("/reorder", (ReorderRequest req, JobScannerService scanner) =>
