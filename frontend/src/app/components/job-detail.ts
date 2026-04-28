@@ -1,6 +1,6 @@
 import { Component, input, output, signal, effect, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { JobDetail, WatchPathEntry, CliOutputLine, CliSettings, CliExecution, ContextUsageSnapshot, CliModelInfo, CliType, CLI_TYPES, GitStatus, ClaudeSessionInfo, ClaudeRateLimitSnapshot, ClaudeSessionResponse } from '../models/job.model';
+import { JobDetail, WatchPathEntry, CliOutputLine, CliSettings, CliExecution, CliModelInfo, CliType, CLI_TYPES, GitStatus, ClaudeSessionInfo, ClaudeRateLimitSnapshot, ClaudeSessionResponse } from '../models/job.model';
 import { JobService } from '../services/job.service';
 import { ErrorDialogService } from '../services/error-dialog.service';
 import { ActivityLogViewComponent } from './activity-log-view';
@@ -66,10 +66,10 @@ import { markdownToHtml } from './markdown-utils';
         }
       </header>
 
-      <div class="detail__meta">
-        <label class="detail__meta-item detail__meta-item--project">
-          <span class="detail__meta-label">Project</span>
-          <select class="detail__project-select"
+      <div class="commandbar" data-testid="commandbar">
+        <label class="commandbar__field commandbar__field--project">
+          <span class="commandbar__label">Project</span>
+          <select class="commandbar__select"
                   [ngModel]="detail().info.watchPath"
                   (ngModelChange)="onProjectChange($event)">
             @for (wp of watchPaths(); track wp.path) {
@@ -77,218 +77,105 @@ import { markdownToHtml } from './markdown-utils';
             }
           </select>
         </label>
-        <div class="detail__meta-item">
-          <span class="detail__meta-label">Created</span>
-          <span class="detail__meta-value">{{ formatDate(detail().info.createdAt) }}</span>
+
+        <div class="commandbar__cli" role="tablist" [attr.aria-label]="'CLI'">
+          @for (t of cliTypes; track t) {
+            <button type="button"
+                    class="commandbar__cli-btn"
+                    [class.commandbar__cli-btn--active]="cliTypeDraft() === t"
+                    [disabled]="isRunning()"
+                    (click)="onCliTypeChange(t)">
+              {{ cliTypeLabel(t) }}
+            </button>
+          }
         </div>
+
+        <label class="commandbar__field commandbar__field--grow">
+          <span class="commandbar__label">Model</span>
+          <select id="job-model"
+                  class="commandbar__select"
+                  [value]="modelDraft()"
+                  [disabled]="isRunning()"
+                  (change)="onModelDraftChange($any($event.target).value)">
+            <option value="">(default)</option>
+            @for (m of availableModels(); track m.id) {
+              <option [value]="m.id">{{ m.label }}{{ m.multiplier !== null && m.multiplier !== undefined ? ' — ' + formatMultiplier(m.multiplier) : '' }}{{ m.isDefault ? ' ✓' : '' }}</option>
+            }
+          </select>
+        </label>
+
+        @if (isRunning()) {
+          <span class="commandbar__status" data-testid="commandbar-running">
+            <span class="commandbar__pulse"></span>
+            <span class="commandbar__status-text">{{ elapsedTime() }}</span>
+          </span>
+          <button class="btn-exec btn-exec--stop commandbar__action" (click)="stopJob()">⏹ Stop</button>
+        } @else if (canStartJob()) {
+          <button class="btn-exec btn-exec--start commandbar__action" (click)="startJob()" [disabled]="starting()">
+            {{ starting() ? '⏳' : '▶ Start' }}
+          </button>
+        }
       </div>
 
-      <div class="detail__tools">
-        @if (canStartJob() || isRunning()) {
-          <section class="sidebar-card sidebar-card--toolbar">
-            <div class="sidebar-card__header">
-              <div>
-                <h3 class="section__title">Command deck</h3>
-              </div>
+      @if (showCliConfig()) {
+        <section class="sidebar-card sidebar-card--toolbar">
+          <div class="cli-config">
+            <div class="cli-config__header">
+              <span class="cli-config__title">🔧 CLI Configuration</span>
+              <button class="detail__error-close" (click)="showCliConfig.set(false)">✕</button>
             </div>
-            <div class="cli-picker">
-              <span class="cli-picker__label">CLI</span>
-              <div class="cli-picker__group" role="tablist">
-                @for (t of cliTypes; track t) {
-                  <button type="button"
-                          class="cli-picker__btn"
-                          [class.cli-picker__btn--active]="cliTypeDraft() === t"
-                          [disabled]="isRunning()"
-                          (click)="onCliTypeChange(t)">
-                    {{ cliTypeLabel(t) }}
-                  </button>
-                }
-              </div>
-            </div>
-            <div class="model-picker">
-              <label class="model-picker__label" for="job-model">Model</label>
-              <select id="job-model"
-                      class="model-picker__select"
-                      [value]="modelDraft()"
-                      [disabled]="isRunning()"
-                      (change)="onModelDraftChange($any($event.target).value)">
-                <option value="">(default — CLI chooses)</option>
-                @for (m of availableModels(); track m.id) {
-                  <option [value]="m.id">{{ m.label }}{{ m.multiplier !== null && m.multiplier !== undefined ? ' — ' + formatMultiplier(m.multiplier) : '' }}{{ m.isDefault ? ' ✓' : '' }}</option>
-                }
-              </select>
-            </div>
-            <div class="execution-bar">
-              @if (isRunning()) {
-                <div class="execution-bar__status">
-                  <span class="execution-bar__pulse"></span>
-                  <span class="execution-bar__text">Running since {{ elapsedTime() }}</span>
-                  @if (detail().info.execution?.model || detail().info.model; as runningModel) {
-                    <span class="execution-bar__model">🧠 {{ runningModel }}</span>
-                  }
-                </div>
-                <button class="btn-exec btn-exec--stop" (click)="stopJob()">⏹ Stop</button>
-              } @else {
-                <button class="btn-exec btn-exec--start" (click)="startJob()" [disabled]="starting()">
-                  {{ starting() ? '⏳ Starting...' : '▶ Start CLI' }}
-                </button>
-              }
-            </div>
-          </section>
-        }
-
-        @if (detail().info.sessionName) {
-          <section class="sidebar-card sidebar-card--toolbar">
-            <div class="sidebar-card__header">
-              <div>
-                <h3 class="section__title">{{ detail().info.sessionName }}</h3>
-              </div>
-            </div>
-            @if (detail().info.lastUsage; as usage) {
-              <div class="session-usage">
-                @if (usage.tokens) {
-                  <div class="session-usage__row"><span class="session-usage__label">Tokens</span><span class="session-usage__value">{{ usage.tokens }}</span></div>
-                }
-                @if (usage.changes) {
-                  <div class="session-usage__row"><span class="session-usage__label">Changes</span><span class="session-usage__value">{{ usage.changes }}</span></div>
-                }
-                @if (usage.requests) {
-                  <div class="session-usage__row"><span class="session-usage__label">Requests</span><span class="session-usage__value">{{ usage.requests }}</span></div>
+            @if (cliStatus()) {
+              <div class="cli-config__status" [class.cli-config__status--ok]="cliStatus()!.available"
+                   [class.cli-config__status--err]="!cliStatus()!.available">
+                @if (cliStatus()!.available) {
+                  ✅ {{ cliStatus()!.version }} — {{ cliStatus()!.path }}
+                } @else {
+                  ❌ Not found at: {{ cliStatus()!.path }}
                 }
               </div>
             }
-            <!-- Continue is now driven solely from the chat compose box in
-                 the Activity tab. Removing the duplicate input box here
-                 keeps the header compact and avoids two follow-up entry
-                 points fighting over the same followupPrompt signal. -->
-          </section>
-        }
-
-        <section class="sidebar-card sidebar-card--toolbar"
-                 [class.sidebar-card--collapsed]="!contextUsageExpanded()">
-          <div class="sidebar-card__header sidebar-card__header--clickable"
-               (click)="contextUsageExpanded.set(!contextUsageExpanded())">
-            <div>
-              <h3 class="section__title">
-                <span class="sidebar-card__chevron">{{ contextUsageExpanded() ? '▾' : '▸' }}</span>
-                /context usage
-                @if (contextUsage()?.metrics?.length) {
-                  <span class="sidebar-card__hint">{{ contextUsage()!.metrics.length }} metrics</span>
-                }
-              </h3>
+            <div class="cli-config__row">
+              <input class="cli-config__input" type="text"
+                     [value]="cliPathDraft()"
+                     (input)="cliPathDraft.set($any($event.target).value)"
+                     placeholder="z.B. copilot, C:\\Program Files\\GitHub\\copilot.exe" />
+              <button class="btn-sm" (click)="testCliPath()" [disabled]="cliTesting()">
+                {{ cliTesting() ? '⏳' : '🧪 Test' }}
+              </button>
+              <button class="btn-sm btn-sm--primary" (click)="saveCliPath()" [disabled]="cliTesting()">💾 Save</button>
             </div>
-            <button class="btn-sm"
-                    (click)="$event.stopPropagation(); refreshContextUsage()"
-                    [disabled]="refreshingContextUsage()">
-              {{ refreshingContextUsage() ? '⏳ Refreshing...' : '↻ Refresh' }}
-            </button>
+            @if (cliTestResult(); as result) {
+              <div class="cli-config__status" [class.cli-config__status--ok]="result.available"
+                   [class.cli-config__status--err]="!result.available">
+                @if (result.available) {
+                  ✅ Found: {{ result.version }}
+                } @else {
+                  ❌ {{ result.version || 'Not found at this path' }}
+                }
+              </div>
+            }
+            <div class="cli-config__separator"></div>
+            <div class="cli-config__row">
+              <input class="cli-config__input" [type]="showToken() ? 'text' : 'password'"
+                     [value]="tokenDraft()"
+                     (input)="tokenDraft.set($any($event.target).value)"
+                     placeholder="GitHub Token (PAT or OAuth)" />
+              <button class="btn-sm" (click)="showToken.set(!showToken())">
+                {{ showToken() ? '🙈' : '👁' }}
+              </button>
+              <button class="btn-sm btn-sm--primary" (click)="saveToken()" [disabled]="tokenSaving()">
+                {{ tokenSaving() ? '⏳' : '💾 Save Token' }}
+              </button>
+            </div>
+            @if (cliStatus()) {
+              <div class="cli-config__status" [class.cli-config__status--ok]="cliStatus()!.hasToken"
+                   [class.cli-config__status--err]="!cliStatus()!.hasToken">
+                {{ cliStatus()!.hasToken ? '🔑 Token configured' : '⚠️ No token — CLI may fail to authenticate' }}
+              </div>
+            }
           </div>
-
-          @if (contextUsageExpanded()) {
-          @if (contextUsage(); as usage) {
-            <div class="context-usage">
-              <div class="context-usage__meta">
-                <span class="context-usage__stamp">Updated {{ formatDateTime(usage.at) }}</span>
-                @if (usage.status !== 'ok' && usage.error) {
-                  <span class="context-usage__status context-usage__status--error">{{ usage.error }}</span>
-                }
-              </div>
-
-              @if (usage.metrics.length > 0) {
-                <div class="ctx-tiles">
-                  @for (metric of usage.metrics; track metric.label) {
-                    <div class="ctx-tile">
-                      <div class="ctx-tile__head">
-                        <span class="ctx-tile__icon">{{ contextMetricIcon(metric.label) }}</span>
-                        <span class="ctx-tile__label">{{ metric.label }}</span>
-                      </div>
-                      <div class="ctx-tile__value">
-                        @for (part of formatContextMetric(metric.label, metric.value); track $index) {
-                          <span class="ctx-tile__chip" [class.ctx-tile__chip--muted]="part.muted">
-                            @if (part.symbol) {
-                              <span class="ctx-tile__chip-symbol">{{ part.symbol }}</span>
-                            }
-                            <span class="ctx-tile__chip-text">{{ part.text }}</span>
-                          </span>
-                        }
-                      </div>
-                    </div>
-                  }
-                </div>
-              } @else {
-                <div class="sidebar-card__empty">
-                  No metrics parsed from the last <code>/context usage</code> output.
-                </div>
-              }
-            </div>
-          } @else {
-            <div class="sidebar-card__empty">
-              Trigger a refresh to capture and parse the current context usage for this task.
-            </div>
-          }
-          }
         </section>
-
-        @if (showCliConfig()) {
-          <section class="sidebar-card sidebar-card--toolbar">
-            <div class="cli-config">
-              <div class="cli-config__header">
-                <span class="cli-config__title">🔧 CLI Configuration</span>
-                <button class="detail__error-close" (click)="showCliConfig.set(false)">✕</button>
-              </div>
-              @if (cliStatus()) {
-                <div class="cli-config__status" [class.cli-config__status--ok]="cliStatus()!.available"
-                     [class.cli-config__status--err]="!cliStatus()!.available">
-                  @if (cliStatus()!.available) {
-                    ✅ {{ cliStatus()!.version }} — {{ cliStatus()!.path }}
-                  } @else {
-                    ❌ Not found at: {{ cliStatus()!.path }}
-                  }
-                </div>
-              }
-              <div class="cli-config__row">
-                <input class="cli-config__input" type="text"
-                       [value]="cliPathDraft()"
-                       (input)="cliPathDraft.set($any($event.target).value)"
-                       placeholder="z.B. copilot, C:\\Program Files\\GitHub\\copilot.exe" />
-                <button class="btn-sm" (click)="testCliPath()" [disabled]="cliTesting()">
-                  {{ cliTesting() ? '⏳' : '🧪 Test' }}
-                </button>
-                <button class="btn-sm btn-sm--primary" (click)="saveCliPath()" [disabled]="cliTesting()">💾 Save</button>
-              </div>
-              @if (cliTestResult(); as result) {
-                <div class="cli-config__status" [class.cli-config__status--ok]="result.available"
-                     [class.cli-config__status--err]="!result.available">
-                  @if (result.available) {
-                    ✅ Found: {{ result.version }}
-                  } @else {
-                    ❌ {{ result.version || 'Not found at this path' }}
-                  }
-                </div>
-              }
-              <div class="cli-config__separator"></div>
-              <div class="cli-config__row">
-                <input class="cli-config__input" [type]="showToken() ? 'text' : 'password'"
-                       [value]="tokenDraft()"
-                       (input)="tokenDraft.set($any($event.target).value)"
-                       placeholder="GitHub Token (PAT or OAuth)" />
-                <button class="btn-sm" (click)="showToken.set(!showToken())">
-                  {{ showToken() ? '🙈' : '👁' }}
-                </button>
-                <button class="btn-sm btn-sm--primary" (click)="saveToken()" [disabled]="tokenSaving()">
-                  {{ tokenSaving() ? '⏳' : '💾 Save Token' }}
-                </button>
-              </div>
-              @if (cliStatus()) {
-                <div class="cli-config__status" [class.cli-config__status--ok]="cliStatus()!.hasToken"
-                     [class.cli-config__status--err]="!cliStatus()!.hasToken">
-                  {{ cliStatus()!.hasToken ? '🔑 Token configured' : '⚠️ No token — CLI may fail to authenticate' }}
-                </div>
-              }
-            </div>
-          </section>
-        }
-      </div>
+      }
 
       <div class="detail__panes-toolbar">
         <span class="detail__panes-toolbar-label">Panels:</span>
@@ -299,11 +186,17 @@ import { markdownToHtml } from './markdown-utils';
         <button class="btn-sm" (click)="openInVsCode()" data-testid="open-in-vscode" title="Open the project root in VS Code (-r reuses an existing window).">🪟 VS Code</button>
       </div>
 
-      <div class="detail__panes" data-testid="detail-panes">
-        @if (panesVisible().prompt) {
-        <section class="pane pane--prompt" [style.flex]="paneWeights().prompt" data-testid="pane-prompt">
+      <div class="detail__panes" [class.detail__panes--maximized]="!!maximizedPane()" data-testid="detail-panes">
+        @if (isPaneRendered('prompt')) {
+        <section class="pane pane--prompt" [style.flex]="maximizedPane() ? '1 1 100%' : paneWeights().prompt" data-testid="pane-prompt">
           <header class="pane__header">
             <h3 class="pane__title">📝 Task description</h3>
+            <button class="pane__maximize"
+                    data-testid="pane-maximize-prompt"
+                    (click)="toggleMaximize('prompt')"
+                    [title]="maximizedPane() === 'prompt' ? 'Restore layout' : 'Maximize'">
+              {{ maximizedPane() === 'prompt' ? '⤡' : '⤢' }}
+            </button>
             <button class="pane__hide" (click)="togglePane('prompt')" title="Hide panel">×</button>
           </header>
           <div class="pane__body">
@@ -315,13 +208,13 @@ import { markdownToHtml } from './markdown-utils';
         </section>
         }
 
-        @if (panesVisible().prompt && (panesVisible().protocol || panesVisible().git)) {
+        @if (!maximizedPane() && panesVisible().prompt && (panesVisible().protocol || panesVisible().git)) {
           <div class="pane__splitter" role="separator" aria-orientation="vertical"
                title="Resize" (pointerdown)="startPaneResize($event, 'prompt', firstVisibleAfter('prompt'))"><span></span></div>
         }
 
-        @if (panesVisible().protocol) {
-        <section class="pane pane--protocol" [style.flex]="paneWeights().protocol" data-testid="pane-protocol">
+        @if (isPaneRendered('protocol')) {
+        <section class="pane pane--protocol" [style.flex]="maximizedPane() ? '1 1 100%' : paneWeights().protocol" data-testid="pane-protocol">
           <header class="pane__header">
             <h3 class="pane__title">🤖 Agent protocol</h3>
             @if (claudeSession(); as cs) {
@@ -356,6 +249,12 @@ import { markdownToHtml } from './markdown-utils';
                 }
               </span>
             }
+            <button class="pane__maximize"
+                    data-testid="pane-maximize-protocol"
+                    (click)="toggleMaximize('protocol')"
+                    [title]="maximizedPane() === 'protocol' ? 'Restore layout' : 'Maximize'">
+              {{ maximizedPane() === 'protocol' ? '⤡' : '⤢' }}
+            </button>
             <button class="pane__hide" (click)="togglePane('protocol')" title="Hide panel">×</button>
           </header>
           <div class="pane__body">
@@ -474,10 +373,12 @@ import { markdownToHtml } from './markdown-utils';
                         <span class="activity-metrics__label">Changes</span>
                         <span class="activity-metrics__value">{{ usage.changes || '—' }}</span>
                       </div>
-                      <div class="activity-metrics__row">
-                        <span class="activity-metrics__label">Tokens</span>
-                        <span class="activity-metrics__value">{{ usage.tokens || '—' }}</span>
-                      </div>
+                      @if (detail().info.cliType === 'claude') {
+                        <div class="activity-metrics__row">
+                          <span class="activity-metrics__label">Tokens</span>
+                          <span class="activity-metrics__value">{{ usage.tokens || '—' }}</span>
+                        </div>
+                      }
                       <div class="activity-metrics__row">
                         <span class="activity-metrics__label">Requests</span>
                         <span class="activity-metrics__value">{{ usage.requests || '—' }}</span>
@@ -492,16 +393,22 @@ import { markdownToHtml } from './markdown-utils';
         </section>
         }
 
-        @if (panesVisible().protocol && panesVisible().git) {
+        @if (!maximizedPane() && panesVisible().protocol && panesVisible().git) {
           <div class="pane__splitter" role="separator" aria-orientation="vertical"
                title="Resize" (pointerdown)="startPaneResize($event, 'protocol', 'git')"><span></span></div>
         }
 
-        @if (panesVisible().git) {
-        <section class="pane pane--git" [style.flex]="paneWeights().git" data-testid="pane-git">
+        @if (isPaneRendered('git')) {
+        <section class="pane pane--git" [style.flex]="maximizedPane() ? '1 1 100%' : paneWeights().git" data-testid="pane-git">
           <header class="pane__header">
             <h3 class="pane__title">⎇ Git view</h3>
             <button class="btn-sm" (click)="refreshGit()" [disabled]="gitLoading()" title="Refresh git status">↻</button>
+            <button class="pane__maximize"
+                    data-testid="pane-maximize-git"
+                    (click)="toggleMaximize('git')"
+                    [title]="maximizedPane() === 'git' ? 'Restore layout' : 'Maximize'">
+              {{ maximizedPane() === 'git' ? '⤡' : '⤢' }}
+            </button>
             <button class="pane__hide" (click)="togglePane('git')" title="Hide panel">×</button>
           </header>
           <div class="pane__body git-view">
@@ -789,92 +696,79 @@ import { markdownToHtml } from './markdown-utils';
       color: #c4b5fd;
       font-size: 0.8rem;
     }
-    .context-usage {
+    /* Compact command bar (Project | CLI | Model | Start/Stop) */
+    .commandbar {
       display: flex;
-      flex-direction: column;
-      gap: 12px;
+      align-items: center;
+      gap: 10px;
+      padding: 6px 10px;
+      background: rgba(12,12,23,0.55);
+      border: 1px solid rgba(255,255,255,0.05);
+      border-radius: 12px;
+      flex-wrap: wrap;
     }
-    .context-usage__meta {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-    .context-usage__stamp {
-      color: rgba(255,255,255,0.55);
-      font-size: 0.72rem;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-    }
-    .context-usage__status {
+    .commandbar__field {
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      width: fit-content;
-      padding: 6px 10px;
-      border-radius: 999px;
-      font-size: 0.76rem;
-    }
-    .context-usage__status--error {
-      background: rgba(239,68,68,0.14);
-      color: #fca5a5;
-      border: 1px solid rgba(239,68,68,0.24);
-    }
-    .context-usage__metrics { display: none; } /* legacy — replaced by .ctx-tiles */
-    .ctx-tiles {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-      gap: 10px;
-    }
-    .ctx-tile {
-      padding: 12px 14px;
-      border-radius: 12px;
-      background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015));
-      border: 1px solid rgba(255,255,255,0.06);
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
       min-width: 0;
     }
-    .ctx-tile__head {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      color: rgba(255,255,255,0.55);
-      font-size: 0.7rem;
+    .commandbar__field--project { flex: 0 1 220px; }
+    .commandbar__field--grow { flex: 1 1 220px; min-width: 160px; }
+    .commandbar__label {
+      font-size: 10px;
       text-transform: uppercase;
       letter-spacing: 0.08em;
+      color: #64748b;
+      white-space: nowrap;
     }
-    .ctx-tile__icon { font-size: 0.95rem; line-height: 1; }
-    .ctx-tile__label { font-weight: 500; }
-    .ctx-tile__value {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: baseline;
-      gap: 4px 10px;
+    .commandbar__select {
+      flex: 1;
+      min-width: 0;
+      background: rgba(0,0,0,0.25);
+      color: #cdd6f4;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 12px;
     }
-    .ctx-tile__chip {
+    .commandbar__select:focus { outline: none; border-color: rgba(99,102,241,0.55); }
+    .commandbar__select:disabled { opacity: 0.6; cursor: not-allowed; }
+    .commandbar__cli {
       display: inline-flex;
-      align-items: baseline;
-      gap: 4px;
-      color: #e2e8f0;
-      font-family: var(--font-mono, monospace);
-      font-size: 0.95rem;
-      line-height: 1.2;
+      gap: 2px;
+      padding: 2px;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 6px;
+      background: rgba(0,0,0,0.25);
     }
-    .ctx-tile__chip--muted {
-      color: rgba(226,232,240,0.55);
-      font-size: 0.78rem;
+    .commandbar__cli-btn {
+      border: 0;
+      background: transparent;
+      color: #94a3b8;
+      padding: 3px 9px;
+      font-size: 11px;
+      border-radius: 4px;
+      cursor: pointer;
     }
-    .ctx-tile__chip-symbol {
-      color: rgba(255,255,255,0.4);
-      font-size: 0.78rem;
+    .commandbar__cli-btn:hover:not(:disabled) { color: #e2e8f0; background: rgba(255,255,255,0.06); }
+    .commandbar__cli-btn--active { background: rgba(99,102,241,0.22); color: #c7d2fe; }
+    .commandbar__cli-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .commandbar__status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: #94a3b8;
+      font-variant-numeric: tabular-nums;
     }
-    .context-usage__sections,
-    .context-usage__section,
-    .context-usage__section-title,
-    .context-usage__list,
-    .context-usage__notes,
-    .context-usage__note { display: none; }
+    .commandbar__pulse {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: #3b82f6;
+      animation: pulse 1.5s infinite;
+    }
+    .commandbar__action { padding: 5px 12px; font-size: 12px; }
     .detail {
       background: #181825;
       border: 1px solid rgba(255,255,255,0.06);
@@ -1147,7 +1041,8 @@ import { markdownToHtml } from './markdown-utils';
     }
     .pane__telemetry-rate--ok   .pane__telemetry-chip { border-color: rgba(34,197,94,0.35); }
     .pane__telemetry-rate--warn .pane__telemetry-chip { border-color: rgba(251,191,36,0.45); color: #fbbf24; }
-    .pane__hide {
+    .pane__hide,
+    .pane__maximize {
       width: 22px;
       height: 22px;
       border-radius: 6px;
@@ -1158,11 +1053,13 @@ import { markdownToHtml } from './markdown-utils';
       font-size: 14px;
       line-height: 1;
     }
-    .pane__hide:hover {
+    .pane__hide:hover,
+    .pane__maximize:hover {
       color: #f8fafc;
       border-color: rgba(255,255,255,0.12);
       background: rgba(255,255,255,0.04);
     }
+    .detail__panes--maximized .pane { min-width: 0; }
     .pane__body {
       flex: 1;
       display: flex;
@@ -1873,6 +1770,8 @@ export class JobDetailComponent implements OnDestroy {
   // panes don't render at all and disappear from the splitter chain.
   readonly panesVisible = signal(this.loadPanesVisible());
   readonly paneWeights = signal(this.loadPaneWeights());
+  // Maximize one pane to fill the whole detail area. null = normal layout.
+  readonly maximizedPane = signal<'prompt' | 'protocol' | 'git' | null>(null);
 
   // Live Claude session telemetry — read from two sources merged on the
   // backend: the CLI's JSONL log (per-turn token usage) and the live
@@ -1890,10 +1789,6 @@ export class JobDetailComponent implements OnDestroy {
   readonly commitMessage = signal('');
   readonly committing = signal(false);
   readonly generatingMsg = signal(false);
-  // /context usage is collapsed by default — it eats a lot of header
-  // real estate and most of the time the user just wants to see the
-  // task description and agent protocol.
-  readonly contextUsageExpanded = signal(false);
   readonly cliOutput = signal<CliOutputLine[]>([]);
   readonly isRunning = signal(false);
   readonly startedAt = signal<Date | null>(null);
@@ -1927,8 +1822,6 @@ export class JobDetailComponent implements OnDestroy {
   readonly tokenDraft = signal('');
   readonly showToken = signal(false);
   readonly tokenSaving = signal(false);
-  readonly contextUsage = signal<ContextUsageSnapshot | null>(null);
-  readonly refreshingContextUsage = signal(false);
   readonly editingTitle = signal(false);
   readonly titleDraft = signal('');
   readonly savingTitle = signal(false);
@@ -1936,12 +1829,20 @@ export class JobDetailComponent implements OnDestroy {
   readonly statusViewMode = signal<'preview' | 'markdown'>('preview');
   readonly detailPanePercent = signal(this.loadDetailPanePercent());
 
+  // Wall-clock tick used by relative-time formatters (e.g. formatResetIn).
+  // Reading Date.now() directly inside template-bound methods causes
+  // NG0100 in dev-mode when the value crosses a minute boundary between
+  // the regular and the checkNoChanges change-detection pass. Routing
+  // "now" through a signal keeps the formatter stable within one CD cycle.
+  private readonly nowTick = signal(Date.now());
+  private readonly nowTickTimer: ReturnType<typeof setInterval> = setInterval(
+    () => this.nowTick.set(Date.now()), 15_000);
+
   promptDraftValue = '';
   statusDraftValue = '';
   private elapsedTimer: ReturnType<typeof setInterval> | null = null;
   private pollGeneration = 0;
   private pollTimeout: ReturnType<typeof setTimeout> | null = null;
-  private contextUsageTimeout: ReturnType<typeof setTimeout> | null = null;
   private lastCliConfigRequest = 0;
   private currentJobKey: string | null = null;
   private layoutResizeBounds: DOMRect | null = null;
@@ -2001,8 +1902,6 @@ export class JobDetailComponent implements OnDestroy {
     this.currentJobKey = d.info.jobKey;
 
     this.errorMsg.set(null);
-    this.contextUsage.set(d.contextUsage);
-    this.refreshingContextUsage.set(false);
     if (d.info.model) {
       this.modelDraft.set(d.info.model);
     } else {
@@ -2042,10 +1941,6 @@ export class JobDetailComponent implements OnDestroy {
         clearInterval(this.elapsedTimer);
         this.elapsedTimer = null;
       }
-      if (this.contextUsageTimeout) {
-        clearTimeout(this.contextUsageTimeout);
-        this.contextUsageTimeout = null;
-      }
     }
 
     this.applyExecutionState(d.info.execution);
@@ -2073,7 +1968,6 @@ export class JobDetailComponent implements OnDestroy {
       }
     });
 
-    this.scheduleContextUsageRefresh(!d.contextUsage);
   });
   private cliConfigEffect = effect(() => {
     const requestId = this.errorDialog.cliConfigRequest();
@@ -2087,6 +1981,7 @@ export class JobDetailComponent implements OnDestroy {
 
   ngOnDestroy() {
     this.isRunning.set(false);
+    clearInterval(this.nowTickTimer);
     this.detailEffect.destroy();
     this.cliConfigEffect.destroy();
     if (this.pollTimeout) {
@@ -2096,10 +1991,6 @@ export class JobDetailComponent implements OnDestroy {
     if (this.elapsedTimer) {
       clearInterval(this.elapsedTimer);
       this.elapsedTimer = null;
-    }
-    if (this.contextUsageTimeout) {
-      clearTimeout(this.contextUsageTimeout);
-      this.contextUsageTimeout = null;
     }
     this.stopLayoutResize();
     this.stopClaudeSessionPolling();
@@ -2519,10 +2410,25 @@ export class JobDetailComponent implements OnDestroy {
     const next = { ...this.panesVisible(), [name]: !this.panesVisible()[name] };
     this.panesVisible.set(next);
     try { localStorage.setItem('taskboard.panesVisible', JSON.stringify(next)); } catch {}
+    // Hiding the maximized pane drops it back to normal layout.
+    if (this.maximizedPane() === name && !next[name]) {
+      this.maximizedPane.set(null);
+    }
     if (name === 'git' && next.git) {
       // Lazy-load git status the first time the pane is shown.
       if (!this.gitStatus()) this.refreshGit();
     }
+  }
+
+  toggleMaximize(name: 'prompt' | 'protocol' | 'git'): void {
+    this.maximizedPane.set(this.maximizedPane() === name ? null : name);
+  }
+
+  /** Whether a pane should currently be in the DOM. */
+  isPaneRendered(name: 'prompt' | 'protocol' | 'git'): boolean {
+    if (!this.panesVisible()[name]) return false;
+    const max = this.maximizedPane();
+    return !max || max === name;
   }
 
   /** First visible pane to the right of `name`, used to bind the splitter. */
@@ -2776,57 +2682,6 @@ export class JobDetailComponent implements OnDestroy {
     });
   }
 
-  contextMetricIcon(label: string): string {
-    const l = label.toLowerCase();
-    if (l.startsWith('token')) return '🪙';
-    if (l.startsWith('change')) return '📝';
-    if (l.startsWith('request')) return '⚡';
-    if (l.startsWith('session') || l.includes('duration')) return '⏱';
-    return '•';
-  }
-
-  /**
-   * Splits a raw metric value into displayable chips. Handles the three known
-   * Copilot CLI footer formats specially; everything else is shown as a single
-   * chip so unknown metrics still render.
-   *
-   * Tokens   "↑ 89.7k • ↓ 49 • 89.6k (cached) • 4.5k (reasoning)"
-   * Changes  "+75 -31"
-   * Requests "7.5 Premium (40m 24s)"
-   */
-  formatContextMetric(label: string, value: string): { symbol?: string; text: string; muted?: boolean }[] {
-    const v = (value ?? '').trim();
-    if (!v) return [{ text: '—', muted: true }];
-    const l = label.toLowerCase();
-
-    if (l.startsWith('token')) {
-      // Split on " • " (bullet) preserving each segment as its own chip.
-      return v.split(/\s*•\s*/).map(seg => {
-        const m = seg.match(/^(↑|↓)\s*(.+)$/);
-        if (m) return { symbol: m[1], text: m[2].trim() };
-        return { text: seg, muted: /\(.+\)/.test(seg) };
-      });
-    }
-
-    if (l.startsWith('change')) {
-      const parts: { symbol?: string; text: string }[] = [];
-      const plus = v.match(/\+\s*\d+/);
-      const minus = v.match(/-\s*\d+/);
-      if (plus) parts.push({ symbol: '+', text: plus[0].replace(/^\+\s*/, '') });
-      if (minus) parts.push({ symbol: '−', text: minus[0].replace(/^-\s*/, '') });
-      return parts.length > 0 ? parts : [{ text: v }];
-    }
-
-    if (l.startsWith('request')) {
-      // "7.5 Premium (40m 24s)"  →  big chip "7.5 Premium" + muted "(40m 24s)"
-      const m = v.match(/^(.+?)\s*\((.+)\)\s*$/);
-      if (m) return [{ text: m[1].trim() }, { text: m[2].trim(), muted: true }];
-      return [{ text: v }];
-    }
-
-    return [{ text: v }];
-  }
-
   isCliError(): boolean {
     const msg = this.errorMsg();
     return this.isCliErrorMessage(msg);
@@ -2913,37 +2768,6 @@ export class JobDetailComponent implements OnDestroy {
       next: () => this.projectChanged.emit(targetWatchPath),
       error: (err) => this.showError(err)
     });
-  }
-
-  refreshContextUsage(silent = false): void {
-    if (this.refreshingContextUsage()) {
-      return;
-    }
-
-    this.refreshingContextUsage.set(true);
-    this.jobService.refreshContextUsage(this.detail().info.id, this.detail().info.watchPath).subscribe({
-      next: (usage) => {
-        this.contextUsage.set(usage);
-        this.refreshingContextUsage.set(false);
-        this.scheduleContextUsageRefresh(false);
-      },
-      error: (err) => {
-        this.refreshingContextUsage.set(false);
-        this.scheduleContextUsageRefresh(false);
-        if (!silent) {
-          this.showError(err);
-        }
-      }
-    });
-  }
-
-  private scheduleContextUsageRefresh(immediate: boolean): void {
-    if (this.contextUsageTimeout) {
-      clearTimeout(this.contextUsageTimeout);
-    }
-
-    const delay = immediate ? 1200 : this.isRunning() ? 60000 : 180000;
-    this.contextUsageTimeout = setTimeout(() => this.refreshContextUsage(true), delay);
   }
 
   private isCliErrorMessage(message: string | null | undefined): boolean {

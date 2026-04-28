@@ -61,6 +61,27 @@ test.describe('Add Task — model selection', () => {
   });
 });
 
+test.describe('Add Task — default model pre-selection', () => {
+  test('switching to Claude pre-selects the default model in the dropdown', async ({ page }) => {
+    const cat = await api<ModelCatalog>('/api/cli/claude/models');
+    const defaultModel = cat.models.find(m => m.isDefault);
+    test.skip(!defaultModel, 'no default model in Claude catalog');
+
+    await page.goto('/');
+    await page.getByRole('button', { name: /add task/i }).first().click();
+
+    // Click the Claude CLI button
+    await page.getByRole('button', { name: /claude code/i }).click();
+
+    // Wait for the model dropdown to reflect the default
+    const modelSelect = page.locator('select').filter({ hasText: /default/i });
+    await expect(modelSelect).toBeVisible();
+
+    // The selected option should be the default model id (not the empty "(default — CLI chooses)" option)
+    await expect(modelSelect).toHaveValue(defaultModel!.id);
+  });
+});
+
 test.describe('Add Task — project default', () => {
   test('defaults to the single active project filter', async ({ page }) => {
     const watchPaths = await (await page.request.get('http://localhost:5030/api/watch-paths')).json();

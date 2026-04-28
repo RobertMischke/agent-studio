@@ -46,11 +46,30 @@ import { ErrorDialogService } from './services/error-dialog.service';
       <div class="app__body">
         <div class="layout" [class.layout--focus]="selectedJob()">
         @if (selectedJob(); as detail) {
-          <div class="workspace" 
+          <div class="workspace"
+               [class.workspace--nav-collapsed]="taskNavCollapsed()"
                [style.--side-sheet-width]="sideSheetWidth() + 'px'">
+            @if (taskNavCollapsed()) {
+              <aside class="task-nav task-nav--collapsed" data-testid="task-nav-collapsed">
+                <button class="task-nav__expand"
+                        data-testid="task-nav-expand"
+                        title="Expand task list"
+                        (click)="setTaskNavCollapsed(false)">›</button>
+                <button class="task-nav__expand task-nav__expand--board"
+                        data-testid="back-to-board"
+                        title="Back to board"
+                        (click)="closeDetail()">←</button>
+              </aside>
+            } @else {
             <aside class="task-nav">
               <div class="task-nav__header">
-                <button class="btn btn--ghost" data-testid="back-to-board" (click)="closeDetail()">← Board</button>
+                <div class="task-nav__header-row">
+                  <button class="btn btn--ghost" data-testid="back-to-board" (click)="closeDetail()">← Board</button>
+                  <button class="task-nav__collapse"
+                          data-testid="task-nav-collapse"
+                          title="Collapse task list"
+                          (click)="setTaskNavCollapsed(true)">‹</button>
+                </div>
                 <div>
                   <div class="task-nav__eyebrow">Task list</div>
                   <h2 class="task-nav__title">Focused view</h2>
@@ -93,9 +112,10 @@ import { ErrorDialogService } from './services/error-dialog.service';
                 }
               </div>
               
-              <div class="task-nav__resize-handle" 
+              <div class="task-nav__resize-handle"
                    (mousedown)="startResize($event)"></div>
             </aside>
+            }
 
             <main class="workspace__main">
               <app-job-detail [detail]="detail" [watchPaths]="watchPaths()" (back)="closeDetail()" (fileSaved)="onFileSaved()" (projectChanged)="onProjectChanged($event)" (completeAndNextReview)="onCompleteAndNextReview()" />
@@ -544,6 +564,46 @@ import { ErrorDialogService } from './services/error-dialog.service';
       animation: slideIn 0.25s ease;
       position: relative;
     }
+    .workspace--nav-collapsed {
+      grid-template-columns: 36px minmax(0, 1fr);
+      gap: 12px;
+    }
+    .task-nav.task-nav--collapsed {
+      padding: 10px 4px;
+      gap: 8px;
+      min-width: 0;
+      width: 36px;
+      align-items: center;
+      overflow: hidden;
+    }
+    .task-nav__header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .task-nav__collapse,
+    .task-nav__expand {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.08);
+      color: #cbd5e1;
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+      display: grid;
+      place-items: center;
+    }
+    .task-nav__collapse:hover,
+    .task-nav__expand:hover {
+      background: rgba(255,255,255,0.12);
+      color: #f8fafc;
+    }
+    .task-nav__expand--board {
+      margin-top: 4px;
+    }
     .workspace__main {
       display: flex;
       min-width: 0;
@@ -766,6 +826,7 @@ export class App implements OnInit {
   readonly activeProjects = signal<Set<string>>(new Set(JSON.parse(localStorage.getItem('activeProjects') ?? '[]')));
   readonly sideSheetWidth = signal<number>(parseInt(localStorage.getItem('sideSheetWidth') ?? '280'));
   readonly collapsedGroups = signal<Set<string>>(new Set(JSON.parse(localStorage.getItem('collapsedGroups') ?? '[]')));
+  readonly taskNavCollapsed = signal<boolean>(localStorage.getItem('taskNavCollapsed') === '1');
 
   readonly projectNames = computed(() => {
     return this.watchPaths().map(wp => wp.name);
@@ -842,7 +903,14 @@ export class App implements OnInit {
 
   private loadCreateModels(cliType: CliType) {
     this.jobService.getCliModelCatalog(cliType).subscribe({
-      next: (catalog) => this.availableModels.set(catalog.models ?? []),
+      next: (catalog) => {
+        const models = catalog.models ?? [];
+        this.availableModels.set(models);
+        if (!this.newModel) {
+          const def = models.find(m => m.isDefault);
+          if (def) this.newModel = def.id;
+        }
+      },
       error: () => this.availableModels.set([])
     });
   }
@@ -1161,6 +1229,11 @@ export class App implements OnInit {
 
   isGroupCollapsed(state: string): boolean {
     return this.collapsedGroups().has(state);
+  }
+
+  setTaskNavCollapsed(collapsed: boolean) {
+    this.taskNavCollapsed.set(collapsed);
+    localStorage.setItem('taskNavCollapsed', collapsed ? '1' : '0');
   }
 
   startResize(event: MouseEvent) {
