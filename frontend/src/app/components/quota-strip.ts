@@ -211,7 +211,7 @@ export class QuotaStripComponent implements OnInit, OnDestroy {
   readonly refreshingAll = signal(false);
   // Per-CLI in-flight refresh flags so each card's spinner is independent.
   readonly refreshing = signal<Record<CliType, boolean>>({
-    copilot: false, claude: false, codex: false
+    copilot: false, claude: false, codex: false, gemini: false
   });
   // Tick once a second so countdown labels (`resets in 23m`) stay live without
   // re-fetching the snapshot.
