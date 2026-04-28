@@ -1,0 +1,7 @@
+/*
+ * The host element must not introduce its own box: the flex value is
+ * applied to the inner <section class="pane">, but for that to drive
+ * the parent .detail__panes flex layout the host has to disappear as
+ * a layout box. Without this the splitters cannot resize the pane.
+ */
+:host { display: contents; }

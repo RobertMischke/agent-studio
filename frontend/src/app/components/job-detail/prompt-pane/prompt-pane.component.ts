@@ -11,7 +11,8 @@ import { MarkdownRichEditorComponent } from '../../markdown-rich-editor';
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [MarkdownRichEditorComponent],
-  templateUrl: './prompt-pane.component.html'
+  templateUrl: './prompt-pane.component.html',
+  styleUrls: ['./prompt-pane.component.scss']
 })
 export class PromptPaneComponent {
   readonly markdown = input<string>('');

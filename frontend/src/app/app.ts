@@ -1,4 +1,4 @@
-import { Component, computed, effect, OnInit, signal, untracked } from '@angular/core';
+import { Component, computed, effect, OnInit, signal, untracked, ViewEncapsulation } from '@angular/core';
 import { forkJoin } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { JobColumnComponent } from './components/job-column';
@@ -15,6 +15,10 @@ import { ProjectTabsComponent } from './components/board/project-tabs/project-ta
 @Component({
   selector: 'app-root',
   imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent],
+  // Keep styles global to this subtree — the App shell still owns the
+  // .header*, .filter-chip*, .overlay*, .create-dialog*, .error-dialog*
+  // class rules used by the extracted dialogs and project-tabs.
+  encapsulation: ViewEncapsulation.None,
   template: `
     <div class="app">
       <header class="header">

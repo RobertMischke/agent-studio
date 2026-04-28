@@ -1,4 +1,4 @@
-import { Component, inject, input, output, signal, effect, OnDestroy } from '@angular/core';
+import { Component, inject, input, output, signal, effect, OnDestroy, ViewEncapsulation } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { JobDetail, WatchPathEntry, CliSettings, CliModelInfo, CliType, CLI_TYPES } from '../models/job.model';
 import { JobService } from '../services/job.service';
@@ -34,6 +34,12 @@ import { markdownToHtml } from './markdown-utils';
   standalone: true,
   imports: [FormsModule, GitPaneComponent, CommandDeckComponent, PromptPaneComponent, LogOverlayComponent, ProtocolPaneComponent, DetailHeaderComponent, CliConfigCardComponent, PaneToggleBarComponent],
   providers: [LayoutPanesService, ClaudeSessionPollService, GitPaneService, CliOutputPollService],
+  // Keep styles global to this subtree so the still-inline class rules
+  // (.pane*, .detail*, .inspector*, .notes-panel*, .sidebar-card*, …)
+  // continue to reach the now-extracted sub-components without having
+  // to copy each block into its own .scss. Step 9 (per-component
+  // styles) can flip this back to default once all blocks have moved.
+  encapsulation: ViewEncapsulation.None,
   template: `
     <div class="detail">
       <app-detail-header

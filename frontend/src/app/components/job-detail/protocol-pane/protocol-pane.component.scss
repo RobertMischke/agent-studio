@@ -1,0 +1,6 @@
+/*
+ * Host must collapse out of the layout so the inner <section class="pane">
+ * is the direct flex child of .detail__panes — otherwise [style.flex]
+ * has no effect on the splitter-driven sizing.
+ */
+:host { display: contents; }

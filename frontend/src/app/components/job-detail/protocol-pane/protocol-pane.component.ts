@@ -27,7 +27,8 @@ export type StatusViewMode = 'preview' | 'markdown';
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [FormsModule, ActivityLogViewComponent],
-  templateUrl: './protocol-pane.component.html'
+  templateUrl: './protocol-pane.component.html',
+  styleUrls: ['./protocol-pane.component.scss']
 })
 export class ProtocolPaneComponent {
   readonly detail = input.required<JobDetail>();
