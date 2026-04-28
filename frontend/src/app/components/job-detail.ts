@@ -1304,6 +1304,10 @@ export class JobDetailComponent implements OnDestroy {
   statusDraftValue = '';
   private lastCliConfigRequest = 0;
   private currentJobKey: string | null = null;
+  // Tracks which failed execution we've already surfaced as a modal so that
+  // re-opening the detail view (or the 2s board refresh re-emitting the same
+  // failed snapshot) does not re-pop the dialog. Keyed by `${jobKey}|${startedAt}`.
+  private lastShownFailureKey: string | null = null;
 
   constructor(private jobService: JobService, private errorDialog: ErrorDialogService) {
     // Load the initial catalog for whatever CLI the current job uses; the effect below
@@ -1381,6 +1385,7 @@ export class JobDetailComponent implements OnDestroy {
       this.savingTitle.set(false);
       this.followupPrompt.set('');
       this.cliPoll.resetForJobSwitch();
+      this.lastShownFailureKey = null;
     }
 
     this.cliPoll.setJob({ id: d.info.id, watchPath: d.info.watchPath });
@@ -1548,6 +1553,16 @@ export class JobDetailComponent implements OnDestroy {
         ? 'Task execution failed.'
         : `Task execution failed with exit code ${execution.exitCode}.`;
       this.errorMsg.set(message);
+
+      // The backend keeps the failed CliExecution in memory until the next run,
+      // so the same snapshot arrives on every detail refresh and on every job
+      // re-open. Without de-duping we'd block the detail view behind a modal
+      // every 2 s. Key by jobKey + startedAt so a fresh failure (different
+      // startedAt) still surfaces.
+      const failureKey = `${execution.jobKey}|${execution.startedAt}`;
+      if (this.lastShownFailureKey === failureKey) return;
+      this.lastShownFailureKey = failureKey;
+
       this.errorDialog.show(message, {
         title: 'Task execution failed',
         fallbackMessage: message,
