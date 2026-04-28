@@ -456,6 +456,10 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         /// <summary>For Codex: the UUID extracted from the first <c>session_meta</c> JSON line.</summary>
         public string? CapturedSessionId { get; set; }
 
+        /// <summary>For Claude: the latest <c>rate_limit_event</c> frame parsed
+        /// from the stream-json output. Null until the first event arrives.</summary>
+        public ClaudeRateLimitSnapshot? LastRateLimit { get; set; }
+
         public ProcInfo(Process process, CliExecution execution, string workingDirectory)
         {
             Process = process;

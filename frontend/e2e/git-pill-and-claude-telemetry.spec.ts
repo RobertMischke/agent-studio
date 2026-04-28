@@ -44,11 +44,18 @@ test.describe('Detail — Claude session telemetry', () => {
 
     try {
       const url = `/api/jobs/${encodeURIComponent(job.id)}/claude/session-info?watchPath=${encodeURIComponent(wp.path)}`;
-      const res = await api<{ sessionId: string; error: string | null; turnCount: number }>(url);
+      const res = await api<{
+        sessionInfo: { sessionId: string; error: string | null; turnCount: number };
+        rateLimit: unknown | null;
+      }>(url);
       expect(res).toBeDefined();
+      expect(res.sessionInfo).toBeDefined();
       // No session captured yet → backend reports an explanatory error string.
-      expect(typeof res.sessionId).toBe('string');
-      expect(typeof res.turnCount).toBe('number');
+      expect(typeof res.sessionInfo.sessionId).toBe('string');
+      expect(typeof res.sessionInfo.turnCount).toBe('number');
+      // rateLimit is null until the running CLI emits its first
+      // rate_limit_event frame — for a brand-new untouched job it must be null.
+      expect(res.rateLimit).toBeNull();
     } finally {
       await api(`/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(wp.path)}`, { method: 'DELETE' });
     }

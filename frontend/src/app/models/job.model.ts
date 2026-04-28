@@ -31,6 +31,20 @@ export interface ClaudeSessionInfo {
   error: string | null;
 }
 
+export interface ClaudeRateLimitSnapshot {
+  window: string | null;          // e.g. "five_hour", "weekly"
+  status: string | null;          // e.g. "allowed", "exceeded"
+  resetsAt: number;               // Unix epoch (seconds)
+  overageStatus: string | null;
+  isUsingOverage: boolean;
+  capturedAt: string;             // ISO timestamp
+}
+
+export interface ClaudeSessionResponse {
+  sessionInfo: ClaudeSessionInfo;
+  rateLimit: ClaudeRateLimitSnapshot | null;
+}
+
 export interface GitProjectSummary {
   projectName: string;
   rootPath: string;

@@ -5,6 +5,20 @@ using OrchestratorApi.Models;
 namespace OrchestratorApi.Services.Cli;
 
 /// <summary>
+/// Live rate-limit snapshot derived from Anthropic's <c>rate_limit_event</c>
+/// stream-json frames. Captured per-turn while the CLI is running and
+/// surfaced via <c>GET /api/jobs/{id}/claude/session-info</c> so the
+/// frontend's protocol-pane pill can show "5h reset in 12 min".
+/// </summary>
+public record ClaudeRateLimitSnapshot(
+    string? Window,
+    string? Status,
+    long ResetsAt,
+    string? OverageStatus,
+    bool IsUsingOverage,
+    DateTime CapturedAt);
+
+/// <summary>
 /// Driver for Anthropic's <c>claude</c> CLI.
 /// <list type="bullet">
 ///   <item>First run: <c>claude -p "prompt" --name "session-name"</c> creates a named session.</item>
@@ -206,23 +220,30 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
             }
             case "rate_limit_event":
             {
-                // Anthropic streams a rate-limit telemetry frame per turn; surface
-                // it as a compact marker so the user sees when a window is near
-                // exhaustion instead of getting a raw JSON dump in the log.
+                // Anthropic streams a rate-limit telemetry frame per turn. The
+                // marker is split into two halves: a human-friendly prefix
+                // (visible in the activity log) and a machine-parseable
+                // bracketed key=value tail that OnOutputLine reads back into a
+                // typed snapshot for the live header pill.
+                //
+                //   ● Rate limit · five-hour · allowed · reset in 109 min  [resetsAt=1777393800 overage=allowed usingOverage=false]
                 var info = root.TryGetProperty("rate_limit_info", out var rli) && rli.ValueKind == System.Text.Json.JsonValueKind.Object
                     ? rli : default;
-                var status   = info.ValueKind == System.Text.Json.JsonValueKind.Object && info.TryGetProperty("status",          out var s)  ? s.GetString()  : null;
-                var window   = info.ValueKind == System.Text.Json.JsonValueKind.Object && info.TryGetProperty("rateLimitType",   out var rt) ? rt.GetString() : null;
-                var resetsAt = info.ValueKind == System.Text.Json.JsonValueKind.Object && info.TryGetProperty("resetsAt",        out var ra) && ra.ValueKind == System.Text.Json.JsonValueKind.Number
-                    ? ra.GetInt64() : 0;
+                var status        = info.ValueKind == System.Text.Json.JsonValueKind.Object && info.TryGetProperty("status",            out var s)   ? s.GetString()   : null;
+                var window        = info.ValueKind == System.Text.Json.JsonValueKind.Object && info.TryGetProperty("rateLimitType",     out var rt)  ? rt.GetString()  : null;
+                var resetsAt      = info.ValueKind == System.Text.Json.JsonValueKind.Object && info.TryGetProperty("resetsAt",          out var ra)  && ra.ValueKind  == System.Text.Json.JsonValueKind.Number ? ra.GetInt64() : 0;
+                var overageStatus = info.ValueKind == System.Text.Json.JsonValueKind.Object && info.TryGetProperty("overageStatus",     out var os)  ? os.GetString()  : null;
+                var usingOverage  = info.ValueKind == System.Text.Json.JsonValueKind.Object && info.TryGetProperty("isUsingOverage",    out var uo)  && uo.ValueKind  == System.Text.Json.JsonValueKind.True;
                 var resetIn = resetsAt > 0
                     ? FormatRelative(DateTimeOffset.FromUnixTimeSeconds(resetsAt) - DateTimeOffset.UtcNow)
                     : null;
-                var bits = new List<string> { "● Rate limit" };
-                if (!string.IsNullOrWhiteSpace(window)) bits.Add(window!.Replace('_', '-'));
-                if (!string.IsNullOrWhiteSpace(status)) bits.Add(status!);
-                if (resetIn != null) bits.Add($"reset in {resetIn}");
-                yield return raw with { Text = string.Join(" · ", bits) };
+                var human = new List<string> { "● Rate limit" };
+                if (!string.IsNullOrWhiteSpace(window)) human.Add(window!.Replace('_', '-'));
+                if (!string.IsNullOrWhiteSpace(status)) human.Add(status!);
+                if (resetIn != null) human.Add($"reset in {resetIn}");
+                var humanText = string.Join(" · ", human);
+                var machineText = $"[window={window ?? "?"} status={status ?? "?"} resetsAt={resetsAt} overage={overageStatus ?? "-"} usingOverage={(usingOverage ? "true" : "false")}]";
+                yield return raw with { Text = humanText + "  " + machineText };
                 yield break;
             }
             default:
@@ -316,24 +337,57 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         @"●\s*Session\s+\S+\s+(?<uuid>[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})",
         RegexOptions.Compiled);
 
+    private static readonly Regex RateLimitMarkerRegex = new(
+        @"●\s*Rate limit\b.*\[" +
+        @"window=(?<win>[^\s\]]+)\s+" +
+        @"status=(?<st>[^\s\]]+)\s+" +
+        @"resetsAt=(?<reset>\d+)\s+" +
+        @"overage=(?<ov>[^\s\]]+)\s+" +
+        @"usingOverage=(?<using>true|false)\]",
+        RegexOptions.Compiled);
+
     protected override void OnOutputLine(ProcInfo info, CliOutputLine line)
     {
         if (line.Text == null) return;
-        var m = SessionMarkerRegex.Match(line.Text);
-        if (!m.Success) return;
 
-        // Claude emits one `system` frame per turn; the latest UUID is the
-        // session we want to resume next. Always overwrite — chaining a
-        // continue should land on the freshest session, not the original.
-        var uuid = m.Groups["uuid"].Value;
-        if (info.CapturedSessionId == uuid) return;
-        info.CapturedSessionId = uuid;
-        info.SessionName = uuid;
-        _logger.LogInformation("Captured Claude session id {Id}", uuid);
+        // Capture session UUID from the first `system` frame's marker. The
+        // latest UUID is the one a Continue resumes — always overwrite.
+        var sessionMatch = SessionMarkerRegex.Match(line.Text);
+        if (sessionMatch.Success)
+        {
+            var uuid = sessionMatch.Groups["uuid"].Value;
+            if (info.CapturedSessionId != uuid)
+            {
+                info.CapturedSessionId = uuid;
+                info.SessionName = uuid;
+                _logger.LogInformation("Captured Claude session id {Id}", uuid);
+            }
+        }
+
+        // Capture the latest rate-limit telemetry from the bracketed kv tail
+        // of the `● Rate limit ... [window=... status=... resetsAt=...]` marker.
+        var rateMatch = RateLimitMarkerRegex.Match(line.Text);
+        if (rateMatch.Success)
+        {
+            long.TryParse(rateMatch.Groups["reset"].Value, out var resetsAt);
+            info.LastRateLimit = new ClaudeRateLimitSnapshot(
+                Window:         NullIfPlaceholder(rateMatch.Groups["win"].Value),
+                Status:         NullIfPlaceholder(rateMatch.Groups["st"].Value),
+                ResetsAt:       resetsAt,
+                OverageStatus:  NullIfPlaceholder(rateMatch.Groups["ov"].Value),
+                IsUsingOverage: rateMatch.Groups["using"].Value == "true",
+                CapturedAt:     DateTime.UtcNow);
+        }
     }
+
+    private static string? NullIfPlaceholder(string v) =>
+        string.IsNullOrEmpty(v) || v == "?" || v == "-" ? null : v;
 
     public string? GetCapturedSessionId(string jobKey)
         => _processes.TryGetValue(jobKey, out var info) ? info.CapturedSessionId : null;
+
+    public ClaudeRateLimitSnapshot? GetLastRateLimit(string jobKey)
+        => _processes.TryGetValue(jobKey, out var info) ? info.LastRateLimit : null;
 
     public override Task<CliModelCatalog> GetModelCatalogAsync(bool forceRefresh = false, CancellationToken ct = default)
     {

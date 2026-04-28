@@ -1,6 +1,6 @@
 import { Component, input, output, signal, effect, OnDestroy } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { JobDetail, WatchPathEntry, CliOutputLine, CliSettings, CliExecution, ContextUsageSnapshot, CliModelInfo, CliType, CLI_TYPES, GitStatus, ClaudeSessionInfo } from '../models/job.model';
+import { JobDetail, WatchPathEntry, CliOutputLine, CliSettings, CliExecution, ContextUsageSnapshot, CliModelInfo, CliType, CLI_TYPES, GitStatus, ClaudeSessionInfo, ClaudeRateLimitSnapshot, ClaudeSessionResponse } from '../models/job.model';
 import { JobService } from '../services/job.service';
 import { ErrorDialogService } from '../services/error-dialog.service';
 import { ActivityLogViewComponent } from './activity-log-view';
@@ -325,11 +325,11 @@ import { markdownToHtml } from './markdown-utils';
           <header class="pane__header">
             <h3 class="pane__title">🤖 Agent protocol</h3>
             @if (claudeSession(); as cs) {
-              @if (cs.error) {
+              @if (cs.error && !cs.turnCount) {
                 <span class="pane__telemetry pane__telemetry--err"
                       [title]="'Claude session telemetry: ' + cs.error"
-                      data-testid="claude-telemetry-error">⚠ {{ cs.turnCount }} turns</span>
-              } @else {
+                      data-testid="claude-telemetry-error">⚠ no session yet</span>
+              } @else if (cs.turnCount > 0) {
                 <span class="pane__telemetry"
                       [title]="claudeSessionTooltip()"
                       data-testid="claude-telemetry">
@@ -340,6 +340,21 @@ import { markdownToHtml } from './markdown-utils';
                   <span class="pane__telemetry-chip">{{ cs.turnCount }} turns</span>
                 </span>
               }
+            }
+            @if (claudeRateLimit(); as rl) {
+              <span class="pane__telemetry pane__telemetry-rate"
+                    [class.pane__telemetry-rate--ok]="rl.status === 'allowed'"
+                    [class.pane__telemetry-rate--warn]="rl.status && rl.status !== 'allowed'"
+                    [title]="rateLimitTooltip()"
+                    data-testid="claude-rate-limit">
+                <span class="pane__telemetry-chip">⏱ {{ formatRateWindow(rl.window) }} · {{ rl.status || '?' }}</span>
+                @if (rl.resetsAt > 0) {
+                  <span class="pane__telemetry-chip">reset {{ formatResetIn(rl.resetsAt) }}</span>
+                }
+                @if (rl.isUsingOverage) {
+                  <span class="pane__telemetry-chip pane__telemetry-chip--overage">overage</span>
+                }
+              </span>
             }
             <button class="pane__hide" (click)="togglePane('protocol')" title="Hide panel">×</button>
           </header>
@@ -1125,6 +1140,13 @@ import { markdownToHtml } from './markdown-utils';
       font-family: var(--font-mono, monospace);
     }
     .pane__telemetry-chip--cache { color: #86efac; }
+    .pane__telemetry-chip--overage {
+      color: #fda4af;
+      background: rgba(244,63,94,0.15);
+      border-color: rgba(244,63,94,0.35);
+    }
+    .pane__telemetry-rate--ok   .pane__telemetry-chip { border-color: rgba(34,197,94,0.35); }
+    .pane__telemetry-rate--warn .pane__telemetry-chip { border-color: rgba(251,191,36,0.45); color: #fbbf24; }
     .pane__hide {
       width: 22px;
       height: 22px;
@@ -1852,10 +1874,12 @@ export class JobDetailComponent implements OnDestroy {
   readonly panesVisible = signal(this.loadPanesVisible());
   readonly paneWeights = signal(this.loadPaneWeights());
 
-  // Live Claude session telemetry — read directly from the CLI's JSONL log.
-  // Refreshes on a 5 s timer while the job is the open detail target so the
-  // pill updates without manual refresh during a run.
+  // Live Claude session telemetry — read from two sources merged on the
+  // backend: the CLI's JSONL log (per-turn token usage) and the live
+  // process's last `rate_limit_event` frame (per-turn quota window).
+  // Refreshes on a 5 s timer while the job is the open detail target.
   readonly claudeSession = signal<ClaudeSessionInfo | null>(null);
+  readonly claudeRateLimit = signal<ClaudeRateLimitSnapshot | null>(null);
   private claudeSessionTimer: ReturnType<typeof setInterval> | null = null;
 
   // Git view state — populated lazily when the Git pane is opened.
@@ -2081,13 +2105,13 @@ export class JobDetailComponent implements OnDestroy {
     this.stopClaudeSessionPolling();
   }
 
-  // Tracks the currently-polled job + sessionName so we can re-arm whenever
-  // either changes (e.g. a fresh sessionId is captured mid-run).
+  // Tracks the currently-polled job so we can re-arm when the detail target
+  // changes. We don't key on sessionName because the live rate-limit signal
+  // is available from the CLI before any sessionId is captured.
   private claudeSessionKey = '';
   private readonly claudeSessionEffect = effect(() => {
     const info = this.detail()?.info;
-    const key = info && info.cliType === 'claude' && info.sessionName
-      ? `${info.id}::${info.sessionName}` : '';
+    const key = info && info.cliType === 'claude' ? info.id : '';
     if (key === this.claudeSessionKey) return;
     this.claudeSessionKey = key;
     this.startClaudeSessionPolling();
@@ -2636,12 +2660,19 @@ export class JobDetailComponent implements OnDestroy {
 
   refreshClaudeSession(): void {
     const info = this.detail()?.info;
-    if (!info || info.cliType !== 'claude' || !info.sessionName) {
+    if (!info || info.cliType !== 'claude') {
       this.claudeSession.set(null);
+      this.claudeRateLimit.set(null);
       return;
     }
+    // Note: even without a sessionName yet, the live rate-limit may already
+    // be present (the CLI emits it on the first run too). The backend
+    // returns a stub sessionInfo in that case rather than 404'ing.
     this.jobService.getClaudeSessionInfo(info.id, info.watchPath).subscribe({
-      next: (s) => this.claudeSession.set(s),
+      next: (res) => {
+        this.claudeSession.set(res?.sessionInfo ?? null);
+        this.claudeRateLimit.set(res?.rateLimit ?? null);
+      },
       error: () => { /* non-fatal — keep previous snapshot */ }
     });
   }
@@ -2654,7 +2685,10 @@ export class JobDetailComponent implements OnDestroy {
   startClaudeSessionPolling(): void {
     this.stopClaudeSessionPolling();
     const info = this.detail()?.info;
-    if (!info || info.cliType !== 'claude' || !info.sessionName) return;
+    if (!info || info.cliType !== 'claude') return;
+    // Poll even before a sessionName is captured — the live rate-limit
+    // snapshot is available from the CLI's first turn onward, well before
+    // the JSONL session file becomes useful.
     this.refreshClaudeSession();
     this.claudeSessionTimer = setInterval(() => this.refreshClaudeSession(), 5_000);
   }
@@ -2684,6 +2718,39 @@ export class JobDetailComponent implements OnDestroy {
       `Cache creation: ${cs.cacheCreationTokens.toLocaleString()} tokens`,
       `Turns recorded: ${cs.turnCount}`,
       cs.lastTurnAt ? `Last turn: ${cs.lastTurnAt}` : ''
+    ].filter(Boolean).join('\n');
+  }
+
+  formatRateWindow(window: string | null): string {
+    if (!window) return '?';
+    return window.replace(/_/g, '-');
+  }
+
+  formatResetIn(epochSeconds: number): string {
+    if (!epochSeconds) return '?';
+    const ms = epochSeconds * 1000 - Date.now();
+    if (ms <= 0) return 'now';
+    const min = Math.floor(ms / 60_000);
+    if (min < 2) return `${Math.floor(ms / 1000)}s`;
+    if (min < 120) return `in ${min} min`;
+    const hrs = ms / 3_600_000;
+    if (hrs < 48) return `in ${hrs.toFixed(1)} h`;
+    return `in ${Math.floor(hrs / 24)} d`;
+  }
+
+  rateLimitTooltip(): string {
+    const rl = this.claudeRateLimit();
+    if (!rl) return '';
+    const reset = rl.resetsAt
+      ? new Date(rl.resetsAt * 1000).toLocaleString()
+      : 'unknown';
+    return [
+      `Window: ${this.formatRateWindow(rl.window)}`,
+      `Status: ${rl.status ?? '?'}`,
+      `Resets at: ${reset}`,
+      `Overage: ${rl.overageStatus ?? '—'}`,
+      rl.isUsingOverage ? 'Currently using overage budget' : '',
+      `Captured: ${new Date(rl.capturedAt).toLocaleTimeString()}`
     ].filter(Boolean).join('\n');
   }
 
