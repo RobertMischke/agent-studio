@@ -105,6 +105,36 @@ test.describe('Prompt editor — Ctrl+S save & visual feedback', () => {
       await deleteJob(job.id, job.watchPath);
     }
   });
+
+  test('autosave: changes persist without any manual save action', async ({ page }) => {
+    const job = await createPromptJob();
+
+    try {
+      await page.goto(`/?job=${encodeURIComponent(job.id)}&watchPath=${encodeURIComponent(job.watchPath)}`);
+
+      const editor = page.getByTestId('prompt-editor');
+      await expect(editor).toBeVisible({ timeout: 10_000 });
+
+      await editor.getByRole('button', { name: 'Markdown', exact: true }).click();
+      const source = page.getByTestId('prompt-editor-source');
+      await expect(source).toBeVisible();
+
+      const newBody = `# Autosaved by e2e\n\nrun-${Date.now()}`;
+      await source.fill(newBody);
+
+      // No Ctrl+S, no button click — wait for autosave (debounce is 600ms).
+      await expect(editor).toHaveAttribute('data-state', 'saved', { timeout: 4_000 });
+      await expect(page.getByTestId('prompt-editor-status')).toContainText(/saved/i);
+
+      // Backend must have the updated content.
+      await expect.poll(async () => {
+        const detail = await getJobDetail(job.id, job.watchPath);
+        return detail.promptMarkdown ?? '';
+      }, { timeout: 5_000 }).toContain('Autosaved by e2e');
+    } finally {
+      await deleteJob(job.id, job.watchPath);
+    }
+  });
 });
 
 // Sanity: keep the helper used so unused-import linters don't trip. listJobs

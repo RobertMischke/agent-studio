@@ -322,6 +322,7 @@ export class MarkdownRichEditorComponent implements AfterViewInit, OnDestroy {
   private editor: Editor | null = null;
   private destroyed = false;
   private savedTimer: ReturnType<typeof setTimeout> | null = null;
+  private autosaveTimer: ReturnType<typeof setTimeout> | null = null;
   private dragCounter = 0;
   // Sync the parent-provided value into the editor whenever it changes. We
   // read sourceValue/committedValue via untracked() so user edits (which write
@@ -329,8 +330,14 @@ export class MarkdownRichEditorComponent implements AfterViewInit, OnDestroy {
   private readonly valueEffect = effect(() => {
     const next = this.value() ?? '';
     untracked(() => {
+      const prevCommitted = this.committedValue();
       this.committedValue.set(next);
       if (next === this.sourceValue()) return;
+      // Skip reset when the server echoes back the value we just autosaved
+      // while the user has already typed more content. Without this guard an
+      // autosave round-trip (save → re-fetch → valueEffect) would overwrite
+      // in-progress typing with the slightly-stale saved value.
+      if (next === prevCommitted && this.sourceValue() !== prevCommitted) return;
       this.sourceValue.set(next);
       if (this.editor) {
         this.editor.commands.setContent(this.toHtml(next), { emitUpdate: false });
@@ -397,6 +404,7 @@ export class MarkdownRichEditorComponent implements AfterViewInit, OnDestroy {
       },
       onUpdate: ({ editor }) => {
         this.sourceValue.set(htmlToMarkdown(editor.getHTML(), this.markdownOptions()));
+        this.scheduleAutosave();
       }
     });
   }
@@ -407,6 +415,7 @@ export class MarkdownRichEditorComponent implements AfterViewInit, OnDestroy {
     this.readOnlyEffect.destroy();
     this.editor?.destroy();
     if (this.savedTimer) clearTimeout(this.savedTimer);
+    if (this.autosaveTimer) clearTimeout(this.autosaveTimer);
   }
 
   setMode(mode: 'rich' | 'source'): void {
@@ -416,6 +425,16 @@ export class MarkdownRichEditorComponent implements AfterViewInit, OnDestroy {
   updateSource(value: string): void {
     this.sourceValue.set(value);
     this.editor?.commands.setContent(this.toHtml(value), { emitUpdate: false });
+    this.scheduleAutosave();
+  }
+
+  private scheduleAutosave(): void {
+    if (this.readOnly()) return;
+    if (this.autosaveTimer) clearTimeout(this.autosaveTimer);
+    this.autosaveTimer = setTimeout(() => {
+      this.autosaveTimer = null;
+      this.emitSave();
+    }, 600);
   }
 
   handleKeydown(event: KeyboardEvent): void {
