@@ -234,9 +234,9 @@ public class GitService
     }
 
     /// <summary>
-    /// Sends the working-tree diff to the cheapest available Gemini model and
-    /// asks for a Conventional Commit message. Only the subject + short body
-    /// are returned; we strip leading code-fence noise.
+    /// Sends the working-tree diff to Claude Haiku and asks for a Conventional
+    /// Commit message. Only the subject + short body are returned; we strip
+    /// leading code-fence noise.
     /// </summary>
     public async Task<GenerateMessageResult> GenerateCommitMessageAsync(
         string jobId, string? watchPath, CancellationToken ct = default)
@@ -248,7 +248,7 @@ public class GitService
         if (code != 0 || string.IsNullOrWhiteSpace(diff))
             return new GenerateMessageResult(null, "No diff against HEAD — nothing to summarise.");
 
-        // Bound the prompt size — Gemini Flash handles plenty but huge diffs
+        // Bound the prompt size — Haiku handles plenty but huge diffs
         // just waste latency for a commit message.
         if (diff.Length > 60_000) diff = diff[..60_000] + "\n[…truncated]";
 
@@ -259,12 +259,12 @@ public class GitService
             "fences, no preamble, no trailing notes.\n\n" +
             "DIFF:\n" + diff;
 
-        var geminiPath = _config["GeminiCli:Path"] ?? "gemini";
-        var model = _config["GeminiCli:CommitMsgModel"] ?? "gemini-2.5-flash-lite";
+        var claudePath = _config["ClaudeCli:Path"] ?? "claude";
+        var model = _config["ClaudeCli:CommitMsgModel"] ?? "claude-haiku-4-5";
 
         var psi = new ProcessStartInfo
         {
-            FileName = ResolveExecutable(geminiPath),
+            FileName = ResolveExecutable(claudePath),
             WorkingDirectory = root,
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
@@ -272,8 +272,9 @@ public class GitService
             UseShellExecute = false,
             CreateNoWindow = true
         };
-        psi.ArgumentList.Add("-m"); psi.ArgumentList.Add(model);
         psi.ArgumentList.Add("-p"); psi.ArgumentList.Add(prompt);
+        psi.ArgumentList.Add("--model"); psi.ArgumentList.Add(model);
+        psi.ArgumentList.Add("--dangerously-skip-permissions");
 
         try
         {
@@ -286,16 +287,16 @@ public class GitService
             var stdout = await stdoutTask;
             var stderr = await stderrTask;
             if (p.ExitCode != 0)
-                return new GenerateMessageResult(null, $"gemini exited {p.ExitCode}: {stderr.Trim()}");
+                return new GenerateMessageResult(null, $"claude exited {p.ExitCode}: {stderr.Trim()}");
 
             var msg = SanitizeCommitMessage(stdout);
             if (string.IsNullOrWhiteSpace(msg))
-                return new GenerateMessageResult(null, "gemini returned an empty message.");
+                return new GenerateMessageResult(null, "claude returned an empty message.");
             return new GenerateMessageResult(msg, null);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to invoke gemini for commit message");
+            _logger.LogError(ex, "Failed to invoke claude for commit message");
             return new GenerateMessageResult(null, ex.Message);
         }
     }

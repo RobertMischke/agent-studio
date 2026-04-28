@@ -2634,7 +2634,7 @@ export class JobDetailComponent implements OnDestroy {
 
   formatResetIn(epochSeconds: number): string {
     if (!epochSeconds) return '?';
-    const ms = epochSeconds * 1000 - Date.now();
+    const ms = epochSeconds * 1000 - this.nowTick();
     if (ms <= 0) return 'now';
     const min = Math.floor(ms / 60_000);
     if (min < 2) return `${Math.floor(ms / 1000)}s`;
