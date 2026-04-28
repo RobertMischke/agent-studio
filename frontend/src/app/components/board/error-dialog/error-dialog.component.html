@@ -12,7 +12,7 @@
       <div class="error-dialog__source">{{ error().source }}</div>
     }
 
-    <div class="error-dialog__message">{{ error().message }}</div>
+    <div class="error-dialog__message" data-testid="error-dialog-message">{{ error().message }}</div>
 
     <div class="error-dialog__actions">
       <button class="btn" type="button" (click)="copy.emit()">{{ copyButtonLabel() }}</button>

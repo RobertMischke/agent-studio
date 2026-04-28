@@ -33,10 +33,10 @@ test.describe('CLI configuration card', () => {
 
       await page.goto(`/?job=${encodeURIComponent(job.id)}&watchPath=${encodeURIComponent(watchPath)}`);
       await expect(page.getByTestId('pane-protocol')).toBeVisible({ timeout: 10_000 });
-      await page.getByRole('button', { name: /Start/ }).click();
+      await page.getByTestId('commandbar').getByRole('button', { name: /Start/ }).click();
 
       await expect(page.getByRole('heading', { name: 'Task action failed' })).toBeVisible();
-      await expect(page.getByText('claude CLI is not installed or not on PATH')).toBeVisible();
+      await expect(page.getByTestId('error-dialog-message')).toHaveText('claude CLI is not installed or not on PATH');
       await expect(page.getByRole('button', { name: /Configure CLI/ })).toHaveCount(0);
       await expect(page.getByText('GitHub Token')).toHaveCount(0);
       await page.screenshot({ path: 'e2e/_baselines/cli-config-hidden-for-claude.png', fullPage: true });
@@ -67,7 +67,7 @@ test.describe('CLI configuration card', () => {
 
       await page.goto(`/?job=${encodeURIComponent(job.id)}&watchPath=${encodeURIComponent(watchPath)}`);
       await expect(page.getByTestId('pane-protocol')).toBeVisible({ timeout: 10_000 });
-      await page.getByRole('button', { name: /Start/ }).click();
+      await page.getByTestId('commandbar').getByRole('button', { name: /Start/ }).click();
 
       await expect(page.getByRole('heading', { name: 'Task action failed' })).toBeVisible();
       await expect(page.getByRole('button', { name: /Configure CLI/ })).toBeVisible();
