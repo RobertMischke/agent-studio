@@ -272,15 +272,15 @@ public static class JobEndpoints
         // Manual re-trigger of the Haiku summary that the runner normally fires
         // post-execution. Surfaced behind a button while we iterate on the prompt
         // and observe failure modes — overwrites status.md when Haiku succeeds.
+        // Pre-flight checks (e.g. missing cli-output.log) happen inside
+        // GenerateAsync so the failure mode is recorded as a regular Failed
+        // SummaryState the UI can render in-place — surfacing the precise
+        // reason via the banner instead of a top-level error dialog.
         group.MapPost("/{jobId}/summary/regenerate", (string jobId, string? watchPath, JobScannerService scanner, SummaryGenerationService summaries) =>
         {
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null)
                 return Results.NotFound(new { error = "Job not found" });
-
-            var logPath = JobPaths.CliOutputLog(info.FolderPath);
-            if (!File.Exists(logPath))
-                return Results.BadRequest(new { error = "No cli-output.log on disk yet — run the task at least once before regenerating the protocol." });
 
             // Fire-and-forget — the frontend polls summaryState until it flips
             // out of "generating", same path the post-run summary uses.

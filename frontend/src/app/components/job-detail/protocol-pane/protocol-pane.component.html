@@ -18,7 +18,7 @@
       }
       @if (summaryStatus() === 'failed') {
         <span class="pane__spinner pane__spinner--failed" data-testid="summary-failed"
-              [title]="detail().summaryState?.errorMessage ?? 'Unbekannter Fehler'">
+              title="Details siehe Banner unten">
           ⚠ Protokoll fehlgeschlagen
         </span>
       }
@@ -71,7 +71,7 @@
                   role="tab"
                   data-testid="inspector-tab-protocol"
                   [class.inspector__tab--active]="activeInspectorTab() === 'protocol'"
-                  [disabled]="!detail().statusMarkdown && summaryStatus() !== 'generating'"
+                  [disabled]="!detail().statusMarkdown && summaryStatus() !== 'generating' && summaryStatus() !== 'failed'"
                   [attr.aria-selected]="activeInspectorTab() === 'protocol'"
                   (click)="activeInspectorTabChange.emit('protocol')">
             <span>📜 Protokoll</span>
@@ -96,21 +96,16 @@
       <div class="inspector__body">
         @if (activeInspectorTab() === 'protocol') {
           <section class="notes-panel">
-            @if (summaryStatus() === 'generating' && !detail().statusMarkdown) {
-              <div class="notes-panel__placeholder" data-testid="protocol-generating-placeholder">
-                <span class="spinner-ring spinner-ring--lg"></span>
-                <p>Haiku fasst gerade den CLI-Output zusammen…</p>
-              </div>
-            } @else if (summaryStatus() === 'failed' && !detail().statusMarkdown) {
-              <div class="notes-panel__placeholder notes-panel__placeholder--failed">
-                <p>⚠ Das Protokoll konnte nicht erstellt werden.</p>
-                @if (detail().summaryState?.errorMessage; as err) {
-                  <pre class="notes-panel__error">{{ err }}</pre>
-                }
-                <p class="notes-panel__hint">Du kannst den Aktivitäts-Tab nutzen, um den Roh-Log zu sehen.</p>
-                @if (canRegenerate()) {
+            @if (summaryStatus() === 'failed') {
+              <div class="summary-error" role="alert" data-testid="protocol-summary-error">
+                <div class="summary-error__head">
+                  <span class="summary-error__icon" aria-hidden="true">⚠</span>
+                  <h4 class="summary-error__title">Protokoll konnte nicht erstellt werden</h4>
+                </div>
+                <pre class="summary-error__body" data-testid="protocol-summary-error-message">{{ detail().summaryState?.errorMessage || 'Unbekannter Fehler — keine Details vom Backend.' }}</pre>
+                <div class="summary-error__actions">
                   <button type="button"
-                          class="btn-regen btn-regen--placeholder"
+                          class="btn-regen"
                           data-testid="protocol-regenerate-summary"
                           title="Den CLI-Output erneut von Haiku zusammenfassen lassen"
                           [disabled]="regenerating()"
@@ -118,23 +113,33 @@
                     <span class="btn-regen__icon" aria-hidden="true">✨</span>
                     <span>{{ regenerating() ? 'Erzeuge…' : 'Erneut versuchen' }}</span>
                   </button>
-                }
+                  <span class="summary-error__hint">Im Aktivitäts-Tab siehst du den Roh-Log.</span>
+                </div>
               </div>
-            } @else if (!detail().statusMarkdown) {
+            }
+
+            @if (summaryStatus() === 'generating' && !detail().statusMarkdown) {
+              <div class="notes-panel__placeholder" data-testid="protocol-generating-placeholder">
+                <span class="spinner-ring spinner-ring--lg"></span>
+                <p>Haiku fasst gerade den CLI-Output zusammen…</p>
+              </div>
+            } @else if (!detail().statusMarkdown && summaryStatus() !== 'failed') {
               <div class="notes-panel__placeholder">
                 <p>Noch kein Protokoll. Es wird nach dem ersten Lauf automatisch erstellt.</p>
               </div>
-            } @else {
+            } @else if (detail().statusMarkdown) {
               <div class="notes-panel__toolbar">
-                <button type="button"
-                        class="btn-regen"
-                        data-testid="protocol-regenerate-summary"
-                        title="Den CLI-Output erneut von Haiku zusammenfassen lassen"
-                        [disabled]="!canRegenerate()"
-                        (click)="regenerateSummary.emit()">
-                  <span class="btn-regen__icon" aria-hidden="true">✨</span>
-                  <span>{{ regenerating() ? 'Erzeuge…' : 'Neu generieren' }}</span>
-                </button>
+                @if (summaryStatus() !== 'failed') {
+                  <button type="button"
+                          class="btn-regen"
+                          data-testid="protocol-regenerate-summary"
+                          title="Den CLI-Output erneut von Haiku zusammenfassen lassen"
+                          [disabled]="!canRegenerate()"
+                          (click)="regenerateSummary.emit()">
+                    <span class="btn-regen__icon" aria-hidden="true">✨</span>
+                    <span>{{ regenerating() ? 'Erzeuge…' : 'Neu generieren' }}</span>
+                  </button>
+                }
                 <button type="button"
                         class="btn-sm"
                         data-testid="protocol-copy-markdown"

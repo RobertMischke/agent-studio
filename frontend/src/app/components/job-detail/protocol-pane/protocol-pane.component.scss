@@ -148,6 +148,65 @@
   opacity: 0.8;
 }
 
+/* Inline failure banner — replaces the previously tooltip-only error so the
+ * user can read the actual reason without hovering, and retry without leaving
+ * the protocol tab. Sits above the markdown body when status.md is present. */
+.summary-error {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.08);
+  color: var(--text, #f3f4f6);
+}
+
+.summary-error__head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.summary-error__icon {
+  font-size: 1.1em;
+}
+
+.summary-error__title {
+  margin: 0;
+  font-size: 0.95em;
+  font-weight: 600;
+  color: #fca5a5;
+}
+
+.summary-error__body {
+  margin: 0;
+  padding: 8px 10px;
+  background: rgba(15, 23, 42, 0.55);
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.82em;
+  line-height: 1.4;
+  color: #fecaca;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 220px;
+  overflow: auto;
+}
+
+.summary-error__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.summary-error__hint {
+  font-size: 0.82em;
+  opacity: 0.75;
+}
+
 .notes-panel__toolbar {
   display: flex;
   justify-content: flex-end;

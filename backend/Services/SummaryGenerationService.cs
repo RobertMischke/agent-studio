@@ -44,7 +44,7 @@ public sealed class SummaryGenerationService
             var logPath = JobPaths.CliOutputLog(info.FolderPath);
             if (!File.Exists(logPath))
             {
-                Fail(key, "cli-output.log not found");
+                Fail(key, "Kein CLI-Output zum Zusammenfassen vorhanden — der Task wurde noch nicht ausgeführt (logs/cli-output.log fehlt). Starte ihn einmal, dann erneut versuchen.");
                 return;
             }
 
