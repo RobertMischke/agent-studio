@@ -34,6 +34,27 @@ export function parseActivityLog(lines: CliOutputLine[]): ActivityLogGroup[] {
   let current: ActivityLogGroup | null = null;
 
   for (const line of lines) {
+    // User follow-ups are persisted with stream='user' (see backend
+    // TaskRunnerService.AppendUserPromptToCliLog). They are always their own
+    // group — never folded into a preceding agent action — so the chat
+    // transcript reads as alternating user/agent turns.
+    if (line.stream === 'user') {
+      current = {
+        id: `${groups.length}-${line.timestamp}-user`,
+        kind: 'message',
+        title: line.text,
+        subtitle: '',
+        status: 'neutral',
+        lines: [line],
+        collapsedByDefault: false
+      };
+      groups.push(current);
+      // Reset so any subsequent continuation/blank lines don't fold into
+      // the user message group.
+      current = null;
+      continue;
+    }
+
     const action = parseActionLine(line);
     if (action) {
       current = {
@@ -91,7 +112,7 @@ export function flattenActivityLines(groups: ActivityLogGroup[]): CliOutputLine[
   return groups.flatMap((group) => group.lines);
 }
 
-export type ChatRole = 'agent' | 'tool' | 'system';
+export type ChatRole = 'agent' | 'tool' | 'system' | 'user';
 
 export interface ChatMessage {
   id: string;
@@ -116,22 +137,30 @@ export function buildChatMessages(groups: ActivityLogGroup[]): ChatMessage[] {
 function groupToChatMessage(group: ActivityLogGroup, index: number): ChatMessage {
   const isTool = TOOL_KINDS.includes(group.kind);
   const isError = group.kind === 'error' || group.status === 'error';
-  const role: ChatRole = isError && !isTool ? 'system' : isTool ? 'tool' : 'agent';
+  const isUser = group.lines.length > 0 && group.lines[0].stream === 'user';
+  const role: ChatRole = isUser ? 'user'
+    : isError && !isTool ? 'system'
+    : isTool ? 'tool'
+    : 'agent';
 
   const firstLine = group.lines[0];
   const timestamp = firstLine ? firstLine.timestamp : new Date().toISOString();
 
-  const author = isError && !isTool
-    ? 'System'
-    : isTool
-      ? 'Tool call'
-      : 'Agent';
+  const author = isUser
+    ? 'You'
+    : isError && !isTool
+      ? 'System'
+      : isTool
+        ? 'Tool call'
+        : 'Agent';
 
-  const avatar = isError && !isTool
-    ? '!'
-    : isTool
-      ? toolAvatarFor(group.kind)
-      : '🤖';
+  const avatar = isUser
+    ? '🧑'
+    : isError && !isTool
+      ? '!'
+      : isTool
+        ? toolAvatarFor(group.kind)
+        : '🤖';
 
   const kindLabel = isTool ? activityKindLabel(group.kind) : (isError ? 'Error' : '');
 

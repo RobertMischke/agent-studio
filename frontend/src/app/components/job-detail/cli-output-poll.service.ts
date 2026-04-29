@@ -1,4 +1,4 @@
-import { Injectable, OnDestroy, signal } from '@angular/core';
+import { Injectable, OnDestroy, computed, signal } from '@angular/core';
 import { CliExecution, CliOutputLine } from '../../models/job.model';
 import { JobService } from '../../services/job.service';
 
@@ -15,7 +15,28 @@ interface JobRef { id: string; watchPath: string; }
  */
 @Injectable()
 export class CliOutputPollService implements OnDestroy {
-  readonly output = signal<CliOutputLine[]>([]);
+  // The polled buffer is what GET /api/jobs/{id}/output returns — it's the
+  // authoritative server state. We keep it separate from the optimistic
+  // echo buffer so a poll round-trip never wipes the user's just-typed
+  // follow-up off the screen.
+  private readonly polledOutput = signal<CliOutputLine[]>([]);
+  private readonly pendingUserLines = signal<CliOutputLine[]>([]);
+
+  readonly output = computed<CliOutputLine[]>(() => {
+    const polled = this.polledOutput();
+    const pending = this.pendingUserLines();
+    if (pending.length === 0) return polled;
+    // Drop pending lines whose text already appears as a [user]-stream entry
+    // in the polled output — that means the backend has persisted our optimistic
+    // line and we'd otherwise show a duplicate.
+    const persisted = new Set(
+      polled.filter(l => l.stream === 'user').map(l => l.text)
+    );
+    const stillPending = pending.filter(l => !persisted.has(l.text));
+    if (stillPending.length === 0) return polled;
+    return [...polled, ...stillPending];
+  });
+
   readonly isRunning = signal(false);
   readonly startedAt = signal<Date | null>(null);
   readonly elapsedTime = signal('');
@@ -33,7 +54,8 @@ export class CliOutputPollService implements OnDestroy {
 
   /** Reset all per-job state — call when switching to a different job. */
   resetForJobSwitch(): void {
-    this.output.set([]);
+    this.polledOutput.set([]);
+    this.pendingUserLines.set([]);
     this.isRunning.set(false);
     this.startedAt.set(null);
     this.elapsedTime.set('0s');
@@ -59,7 +81,8 @@ export class CliOutputPollService implements OnDestroy {
   beginRun(startedAt: Date): void {
     this.isRunning.set(true);
     this.startedAt.set(startedAt);
-    this.output.set([]);
+    this.polledOutput.set([]);
+    this.pendingUserLines.set([]);
     this.clearPollTimer();
     this.startElapsedTimer();
     this.startPolling();
@@ -72,6 +95,27 @@ export class CliOutputPollService implements OnDestroy {
     this.clearPollTimer();
     this.startElapsedTimer();
     this.startPolling();
+  }
+
+  /**
+   * Optimistically append a user-typed follow-up to the activity log so it
+   * shows up the instant the user clicks Send — without waiting 1-2 s for the
+   * next poll. The line lives in a separate "pending" buffer that the polled
+   * output never wipes; once the backend persists the same prompt to
+   * cli-output.log (TaskRunnerService.AppendUserPromptToCliLog) the polled
+   * output contains a matching [user]-stream line and the dedupe in
+   * <c>output()</c> drops the pending copy. Net effect: the user sees their
+   * message instantly and exactly once.
+   */
+  appendOptimisticUserMessage(text: string): void {
+    const trimmed = (text ?? '').trim();
+    if (!trimmed) return;
+    const now = new Date().toISOString();
+    const oneLine = trimmed.replace(/[\r\n]+/g, ' ');
+    this.pendingUserLines.update(lines => [
+      ...lines,
+      { timestamp: now, stream: 'user', text: oneLine }
+    ]);
   }
 
   /** Halt timers and polling without resetting buffers — used by Stop. */
@@ -95,7 +139,7 @@ export class CliOutputPollService implements OnDestroy {
       this.jobService.getJobOutput(job.id, job.watchPath).subscribe({
         next: (output) => {
           if (generation !== this.pollGeneration) return;
-          this.output.set(output);
+          this.polledOutput.set(output);
           this.pollTimeout = setTimeout(poll, 2000);
         },
         error: () => {
@@ -112,7 +156,7 @@ export class CliOutputPollService implements OnDestroy {
   /** Hydrate the buffer from a prior run's logs (called by detail-effect). */
   hydrateOutput(output: CliOutputLine[], execStartedAt?: string | null): void {
     if (output.length === 0) return;
-    this.output.set(output);
+    this.polledOutput.set(output);
     if (!this.startedAt() && execStartedAt) {
       this.startedAt.set(new Date(execStartedAt));
     }

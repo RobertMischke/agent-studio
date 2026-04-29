@@ -87,8 +87,10 @@ import {
               <article class="chat-msg"
                        [class.chat-msg--agent]="msg.role === 'agent'"
                        [class.chat-msg--tool]="msg.role === 'tool'"
+                       [class.chat-msg--user]="msg.role === 'user'"
                        [class.chat-msg--error]="msg.status === 'error'"
-                       [attr.data-role]="msg.role">
+                       [attr.data-role]="msg.role"
+                       [attr.data-testid]="msg.role === 'user' ? 'chat-msg-user' : null">
                 <div class="chat-msg__avatar" [attr.aria-hidden]="true">{{ msg.avatar }}</div>
                 <div class="chat-msg__bubble">
                   <header class="chat-msg__head">
@@ -132,7 +134,9 @@ import {
           @for (group of visibleGroups(); track group.id) {
             <article class="activity-group"
                      [class.activity-group--error]="group.status === 'error'"
-                     [class.activity-group--neutral]="group.status === 'neutral'">
+                     [class.activity-group--neutral]="group.status === 'neutral'"
+                     [class.activity-group--user]="group.lines[0]?.stream === 'user'"
+                     [attr.data-testid]="group.lines[0]?.stream === 'user' ? 'activity-group-user' : null">
               <button class="activity-group__header" (click)="toggleGroup(group)">
                 <span class="activity-group__chevron">{{ isExpanded(group) ? 'v' : '>' }}</span>
                 <span class="activity-group__kind">{{ kindLabel(group.kind) }}</span>
@@ -145,9 +149,11 @@ import {
               @if (isExpanded(group)) {
                 <div class="activity-group__lines">
                   @for (line of group.lines; track $index) {
-                    <div class="activity-line" [class.activity-line--stderr]="line.stream === 'stderr'">
+                    <div class="activity-line"
+                         [class.activity-line--stderr]="line.stream === 'stderr'"
+                         [class.activity-line--user]="line.stream === 'user'">
                       <span class="activity-line__time">{{ formatTime(line.timestamp) }}</span>
-                      <span class="activity-line__stream">{{ line.stream === 'stderr' ? 'ERR' : 'OUT' }}</span>
+                      <span class="activity-line__stream">{{ streamLabel(line.stream) }}</span>
                       <span class="activity-line__text">{{ line.text }}</span>
                     </div>
                   }
@@ -158,9 +164,11 @@ import {
         } @else {
           <div class="activity-raw">
             @for (line of visibleLines(); track $index) {
-              <div class="activity-line" [class.activity-line--stderr]="line.stream === 'stderr'">
+              <div class="activity-line"
+                   [class.activity-line--stderr]="line.stream === 'stderr'"
+                   [class.activity-line--user]="line.stream === 'user'">
                 <span class="activity-line__time">{{ formatTime(line.timestamp) }}</span>
-                <span class="activity-line__stream">{{ line.stream === 'stderr' ? 'ERR' : 'OUT' }}</span>
+                <span class="activity-line__stream">{{ streamLabel(line.stream) }}</span>
                 <span class="activity-line__text">{{ line.text }}</span>
               </div>
             }
@@ -386,6 +394,17 @@ import {
     .activity-line--stderr .activity-line__text {
       color: #fca5a5;
     }
+    .activity-line--user .activity-line__stream {
+      color: #5eead4;
+      background: rgba(13,148,136,0.18);
+    }
+    .activity-line--user .activity-line__text {
+      color: #ccfbf1;
+    }
+    .activity-group--user {
+      border-left-color: #14b8a6;
+      background: rgba(13,148,136,0.12);
+    }
     .activity-line__text {
       color: #e2e8f0;
       white-space: pre-wrap;
@@ -450,6 +469,16 @@ import {
       background: rgba(127,29,29,0.22);
       border-color: rgba(251,113,133,0.45);
     }
+    .chat-msg--user .chat-msg__avatar {
+      background: linear-gradient(135deg, #14b8a6, #0f766e);
+      box-shadow: 0 1px 4px rgba(15,118,110,0.5);
+    }
+    .chat-msg--user .chat-msg__bubble {
+      background: rgba(13,148,136,0.18);
+      border-color: rgba(94,234,212,0.35);
+    }
+    .chat-msg--user .chat-msg__author { color: #99f6e4; }
+    .chat-msg--user .chat-msg__body { color: #ccfbf1; }
     .chat-msg__head {
       display: flex;
       align-items: baseline;
@@ -673,18 +702,14 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
         parts.push(`=== ${this.kindLabel(group.kind)} — ${group.title} ===`);
         if (group.subtitle) parts.push(group.subtitle);
         for (const line of group.lines) {
-          const stream = line.stream === 'stderr' ? 'ERR' : 'OUT';
-          parts.push(`[${this.formatTime(line.timestamp)}] ${stream} ${line.text}`);
+          parts.push(`[${this.formatTime(line.timestamp)}] ${this.streamLabel(line.stream)} ${line.text}`);
         }
         parts.push('');
       }
       return parts.join('\n').trimEnd();
     }
     return this.visibleLines()
-      .map((line) => {
-        const stream = line.stream === 'stderr' ? 'ERR' : 'OUT';
-        return `[${this.formatTime(line.timestamp)}] ${stream} ${line.text}`;
-      })
+      .map((line) => `[${this.formatTime(line.timestamp)}] ${this.streamLabel(line.stream)} ${line.text}`)
       .join('\n');
   }
 
@@ -718,6 +743,13 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
 
   kindLabel(kind: ActivityLogKind): string {
     return activityKindLabel(kind);
+  }
+
+  streamLabel(stream: string): string {
+    if (stream === 'stderr') return 'ERR';
+    if (stream === 'user') return 'YOU';
+    if (stream === 'system') return 'SYS';
+    return 'OUT';
   }
 
   toggleFilter(kind: ActivityLogKind): void {

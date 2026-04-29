@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  buildChatMessages,
   defaultActivityLogFilters,
   filterActivityGroups,
   flattenActivityLines,
@@ -54,6 +55,34 @@ describe('parseActivityLog', () => {
       '* Edit',
       '  | Edit frontend/src/app/components/job-detail.ts'
     ]);
+  });
+  it('treats [user] stream lines as their own message group, never folded into adjacent agent output', () => {
+    const groups = parseActivityLog([
+      line('* Read prompt.md'),
+      line('  | prompt.md'),
+      line('please switch to dark mode', 'user'),
+      line('* Edit', 'stdout'),
+      line('  | Edit src/styles.css')
+    ]);
+
+    // The user line must be its own group sandwiched between the read and the edit.
+    const kinds = groups.map(g => g.kind);
+    expect(kinds).toEqual(['read', 'message', 'edit']);
+    expect(groups[1].lines).toHaveLength(1);
+    expect(groups[1].lines[0].stream).toBe('user');
+    expect(groups[1].title).toBe('please switch to dark mode');
+  });
+
+  it('buildChatMessages assigns role="user" with author "You" for [user]-stream lines', () => {
+    const groups = parseActivityLog([
+      line('please switch to dark mode', 'user')
+    ]);
+    const messages = buildChatMessages(groups);
+
+    expect(messages).toHaveLength(1);
+    expect(messages[0].role).toBe('user');
+    expect(messages[0].author).toBe('You');
+    expect(messages[0].title).toBe('please switch to dark mode');
   });
 });
 

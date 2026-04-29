@@ -1543,15 +1543,24 @@ export class JobDetailComponent implements OnDestroy {
 
     this.errorMsg.set(null);
     this.continuing.set(true);
+    // Echo the user's message into the activity log immediately so the chat
+    // feels responsive — the backend writes the same line to cli-output.log
+    // on success, and the next poll dedupes the optimistic copy.
+    this.cliPoll.appendOptimisticUserMessage(prompt);
+    this.followupPrompt.set('');
     const model = this.modelDraft().trim() || undefined;
     this.jobService.continueJob(this.detail().info.id, prompt, this.detail().info.watchPath, model).subscribe({
       next: (exec) => {
         this.continuing.set(false);
-        this.followupPrompt.set('');
         this.cliPoll.beginContinuation(new Date(exec.startedAt));
       },
       error: (err) => {
         this.continuing.set(false);
+        // Restore the user's text so they can correct or retry — the backend
+        // never accepted it, so the optimistic echo above is a lie we shouldn't
+        // leave on screen permanently. We keep it visible for now (so the user
+        // can see what they tried) but the inline error banner explains why.
+        this.followupPrompt.set(prompt);
         this.showError(err);
       }
     });

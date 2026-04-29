@@ -150,8 +150,36 @@ public class TaskRunnerService : BackgroundService
         }
 
         _scanner.AppendContinuationNote(jobId, followupPrompt, watchPath);
+        AppendUserPromptToCliLog(info, followupPrompt);
 
         return await runner.ContinueJobAsync(jobId, followupPrompt, ct);
+    }
+
+    /// <summary>
+    /// Persist the user's follow-up as a <c>[user]</c>-stream line in
+    /// <c>logs/cli-output.log</c>. The activity log polls this file, so writing
+    /// the line synchronously before the CLI starts means the user sees their
+    /// own message in the conversation immediately — no silent gap between
+    /// click and the agent's first reply.
+    /// </summary>
+    private void AppendUserPromptToCliLog(JobInfo info, string prompt)
+    {
+        try
+        {
+            Directory.CreateDirectory(JobPaths.LogsDir(info.FolderPath));
+            var logPath = JobPaths.CliOutputLog(info.FolderPath);
+            var ts = DateTime.UtcNow.ToString("HH:mm:ss.fff");
+            var oneLine = prompt.Replace("\r", " ").Replace("\n", " ").TrimEnd();
+            var line = $"[{ts}] [user] {oneLine}";
+            var prefix = File.Exists(logPath) && new FileInfo(logPath).Length > 0
+                ? Environment.NewLine
+                : string.Empty;
+            File.AppendAllText(logPath, prefix + line + Environment.NewLine, System.Text.Encoding.UTF8);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to record user follow-up in CLI log for {JobId}", info.Id);
+        }
     }
 
     public bool StopJob(string jobId, string? watchPath = null)
