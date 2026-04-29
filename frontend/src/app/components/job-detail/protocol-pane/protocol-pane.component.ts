@@ -39,6 +39,8 @@ export class ProtocolPaneComponent implements OnDestroy {
   readonly canSendChat = input(false);
   readonly chatSendLabel = input<string>('Send');
 
+  readonly regenerating = input(false);
+
   readonly maximizeToggle = output<void>();
   readonly hide = output<void>();
 
@@ -48,6 +50,7 @@ export class ProtocolPaneComponent implements OnDestroy {
   readonly openLogOverlay = output<void>();
   readonly sendChat = output<void>();
   readonly stopJob = output<void>();
+  readonly regenerateSummary = output<void>();
 
   // Live data — injected from the parent's local providers.
   private readonly claudePoll = inject(ClaudeSessionPollService);
@@ -61,6 +64,17 @@ export class ProtocolPaneComponent implements OnDestroy {
   readonly summaryStatus = computed<JobSummaryStatus>(
     () => this.detail().summaryState?.status ?? 'none'
   );
+
+  // The button is meaningful only after the task has produced a cli-output.log.
+  // We can't see the disk from here, so use "summary has been touched" as a
+  // proxy: any non-`none` status means the runner already attempted to summarize
+  // (which only happens after a successful CLI run wrote logs/cli-output.log).
+  readonly canRegenerate = computed(() => {
+    const status = this.summaryStatus();
+    if (status === 'generating') return false;
+    if (this.regenerating()) return false;
+    return status !== 'none' || !!this.detail().statusMarkdown;
+  });
 
   // "There is or was activity for this job" — drives the live-dot indicator.
   // True when CLI is running OR we have any output buffered OR the job has a

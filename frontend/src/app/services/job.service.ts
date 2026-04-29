@@ -200,6 +200,10 @@ export class JobService {
     return this.http.post<ContextUsageSnapshot>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/context-usage/refresh`, {}, this.withWatchPath(watchPath));
   }
 
+  regenerateSummary(jobId: string, watchPath?: string) {
+    return this.http.post(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/summary/regenerate`, {}, this.withWatchPath(watchPath));
+  }
+
   // Runner management
   getRunnerStatus() {
     return this.http.get<RunnerStatus>(`${this.baseUrl}/runner/status`);

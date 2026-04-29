@@ -108,6 +108,17 @@
                   <pre class="notes-panel__error">{{ err }}</pre>
                 }
                 <p class="notes-panel__hint">Du kannst den Aktivitäts-Tab nutzen, um den Roh-Log zu sehen.</p>
+                @if (canRegenerate()) {
+                  <button type="button"
+                          class="btn-regen btn-regen--placeholder"
+                          data-testid="protocol-regenerate-summary"
+                          title="Den CLI-Output erneut von Haiku zusammenfassen lassen"
+                          [disabled]="regenerating()"
+                          (click)="regenerateSummary.emit()">
+                    <span class="btn-regen__icon" aria-hidden="true">✨</span>
+                    <span>{{ regenerating() ? 'Erzeuge…' : 'Erneut versuchen' }}</span>
+                  </button>
+                }
               </div>
             } @else if (!detail().statusMarkdown) {
               <div class="notes-panel__placeholder">
@@ -115,6 +126,15 @@
               </div>
             } @else {
               <div class="notes-panel__toolbar">
+                <button type="button"
+                        class="btn-regen"
+                        data-testid="protocol-regenerate-summary"
+                        title="Den CLI-Output erneut von Haiku zusammenfassen lassen"
+                        [disabled]="!canRegenerate()"
+                        (click)="regenerateSummary.emit()">
+                  <span class="btn-regen__icon" aria-hidden="true">✨</span>
+                  <span>{{ regenerating() ? 'Erzeuge…' : 'Neu generieren' }}</span>
+                </button>
                 <button type="button"
                         class="btn-sm"
                         data-testid="protocol-copy-markdown"

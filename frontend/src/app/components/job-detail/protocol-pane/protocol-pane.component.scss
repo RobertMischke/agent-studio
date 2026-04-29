@@ -151,7 +151,89 @@
 .notes-panel__toolbar {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 6px;
+}
+
+/* "Neu generieren" — eye-catching gradient pill so the test button stands
+ * out as something distinct from the unobtrusive Copy. The shimmering
+ * highlight reinforces "AI re-runs and produces a new artifact". */
+.btn-regen {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(168, 132, 255, 0.55);
+  background: linear-gradient(135deg, #6d28d9 0%, #8b5cf6 45%, #ec4899 100%);
+  color: #fdf4ff;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.12) inset,
+    0 6px 16px rgba(124, 58, 237, 0.28),
+    0 0 0 0 rgba(236, 72, 153, 0.0);
+  transition: transform 0.12s ease, box-shadow 0.18s ease, filter 0.18s ease;
+}
+
+.btn-regen::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  pointer-events: none;
+  z-index: -1;
+}
+
+.btn-regen:hover:not(:disabled) {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.18) inset,
+    0 10px 24px rgba(124, 58, 237, 0.40),
+    0 0 0 4px rgba(236, 72, 153, 0.18);
+}
+
+.btn-regen:active:not(:disabled) {
+  transform: translateY(0);
+  filter: brightness(0.96);
+}
+
+.btn-regen:disabled {
+  cursor: not-allowed;
+  opacity: 0.65;
+  filter: saturate(0.7);
+  box-shadow: none;
+}
+
+.btn-regen__icon {
+  display: inline-block;
+  font-size: 0.95em;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25));
+}
+
+.btn-regen--placeholder {
+  margin-top: 6px;
+}
+
+/* Sparkle wiggle while a regeneration is in flight. */
+.btn-regen:disabled .btn-regen__icon {
+  animation: btn-regen-sparkle 1.2s ease-in-out infinite;
+}
+
+@keyframes btn-regen-sparkle {
+  0%, 100% { transform: rotate(-8deg) scale(1); opacity: 0.85; }
+  50%      { transform: rotate(8deg) scale(1.15); opacity: 1; }
 }
 
 @keyframes pane-livedot-pulse {

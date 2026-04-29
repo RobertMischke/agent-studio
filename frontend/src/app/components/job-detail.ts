@@ -123,13 +123,15 @@ import { markdownToHtml } from './markdown-utils';
             [followupPrompt]="followupPrompt()"
             [canSendChat]="canSendChat()"
             [chatSendLabel]="chatSendLabel()"
+            [regenerating]="regeneratingSummary()"
             (maximizeToggle)="toggleMaximize('protocol')"
             (hide)="togglePane('protocol')"
             (activeInspectorTabChange)="onInspectorTabChange($event)"
             (followupPromptChange)="followupPrompt.set($event)"
             (openLogOverlay)="showLogOverlay.set(true)"
             (sendChat)="sendChatMessage()"
-            (stopJob)="stopJob()" />
+            (stopJob)="stopJob()"
+            (regenerateSummary)="regenerateProtocol()" />
         }
 
         @if (!maximizedPane() && panesVisible().protocol && panesVisible().git) {
@@ -1258,6 +1260,9 @@ export class JobDetailComponent implements OnDestroy {
   readonly errorMsg = signal<string | null>(null);
   readonly starting = signal(false);
   readonly continuing = signal(false);
+  readonly regeneratingSummary = signal(false);
+  private regenPollTimer: ReturnType<typeof setInterval> | null = null;
+  private regenStartedAt = 0;
   readonly followupPrompt = signal('');
   readonly modelDraft = signal('');
   readonly availableModels = signal<CliModelInfo[]>([]);
@@ -1396,6 +1401,16 @@ export class JobDetailComponent implements OnDestroy {
       this.activeInspectorTab.set('protocol');
     }
 
+    // Manual-regenerate poll lifecycle: once the backend flips out of
+    // "generating", stop hammering the detail endpoint.
+    if (this.regeneratingSummary() && d.summaryState?.status !== 'generating') {
+      // Honour the small grace window (the very first request response usually
+      // lands before the in-process state has flipped to "generating").
+      if (Date.now() - this.regenStartedAt > 1500) {
+        this.stopRegenPolling();
+      }
+    }
+
     this.cliPoll.setJob({ id: d.info.id, watchPath: d.info.watchPath });
     this.applyExecutionState(d.info.execution);
 
@@ -1437,6 +1452,53 @@ export class JobDetailComponent implements OnDestroy {
     this.cliPoll.stop();
     this.layout.stopLayoutResize();
     this.claudePoll.stop();
+    this.stopRegenPolling();
+  }
+
+  /**
+   * Re-run the Haiku summary for the current job. The backend writes status.md
+   * and flips summaryState through generating → ready/failed; we poll detail
+   * every 2 s (via fileSaved → parent re-fetch) so the UI follows the
+   * transition. The detailEffect stops the timer once the status leaves
+   * "generating".
+   */
+  regenerateProtocol(): void {
+    if (this.regeneratingSummary()) return;
+    const { id, watchPath } = this.detail().info;
+    this.regeneratingSummary.set(true);
+    this.regenStartedAt = Date.now();
+    this.jobService.regenerateSummary(id, watchPath).subscribe({
+      next: () => {
+        // Immediate refresh — status flips to "generating" so the spinner shows.
+        this.fileSaved.emit();
+        this.startRegenPolling();
+      },
+      error: (err) => {
+        this.stopRegenPolling();
+        this.showError(err);
+      }
+    });
+  }
+
+  private startRegenPolling(): void {
+    this.stopRegenPolling(false);
+    this.regenPollTimer = setInterval(() => {
+      // Hard cap: Haiku itself times out at 90 s; give a bit of slack for
+      // process spawn + status file flush.
+      if (Date.now() - this.regenStartedAt > 120_000) {
+        this.stopRegenPolling();
+        return;
+      }
+      this.fileSaved.emit();
+    }, 2000);
+  }
+
+  private stopRegenPolling(clearFlag = true): void {
+    if (this.regenPollTimer != null) {
+      clearInterval(this.regenPollTimer);
+      this.regenPollTimer = null;
+    }
+    if (clearFlag) this.regeneratingSummary.set(false);
   }
 
   // Bridge detail() changes to the ClaudeSessionPollService. The service

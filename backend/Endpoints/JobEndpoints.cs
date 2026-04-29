@@ -269,6 +269,25 @@ public static class JobEndpoints
             return Results.Ok(output);
         });
 
+        // Manual re-trigger of the Haiku summary that the runner normally fires
+        // post-execution. Surfaced behind a button while we iterate on the prompt
+        // and observe failure modes — overwrites status.md when Haiku succeeds.
+        group.MapPost("/{jobId}/summary/regenerate", (string jobId, string? watchPath, JobScannerService scanner, SummaryGenerationService summaries) =>
+        {
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info == null)
+                return Results.NotFound(new { error = "Job not found" });
+
+            var logPath = Path.Combine(info.FolderPath, "logs", "cli-output.log");
+            if (!File.Exists(logPath))
+                return Results.BadRequest(new { error = "No cli-output.log on disk yet — run the task at least once before regenerating the protocol." });
+
+            // Fire-and-forget — the frontend polls summaryState until it flips
+            // out of "generating", same path the post-run summary uses.
+            _ = summaries.GenerateAsync(info);
+            return Results.Accepted();
+        });
+
         group.MapPost("/{jobId}/context-usage/refresh", async (string jobId, string? watchPath, TaskRunnerService runner, CancellationToken ct) =>
         {
             var (snapshot, error) = await runner.RefreshContextUsageAsync(jobId, watchPath, ct);
