@@ -40,7 +40,25 @@
           </ul>
 
           @if (git.selectedDiffPath()) {
-            <pre class="git-view__diff" data-testid="git-diff">{{ git.diffText() || '(loading...)' }}</pre>
+            <div class="git-view__diff-wrap"
+                 [class.git-view__diff-wrap--maximized]="diffMaximized()"
+                 data-testid="git-diff-wrap">
+              <div class="git-view__diff-toolbar">
+                <span class="git-view__diff-path">{{ git.selectedDiffPath() }}</span>
+                <span class="git-view__diff-mode">{{ diffMaximized() ? 'side-by-side' : 'line-by-line' }}</span>
+                <button class="pane__maximize"
+                        data-testid="git-diff-maximize"
+                        (click)="toggleDiffMaximize()"
+                        [title]="diffMaximized() ? 'Restore diff' : 'Maximize diff'">
+                  {{ diffMaximized() ? '⤡' : '⤢' }}
+                </button>
+              </div>
+              @if (diffHtml(); as dh) {
+                <div class="git-view__diff" data-testid="git-diff" [innerHTML]="dh"></div>
+              } @else {
+                <div class="git-view__diff git-view__diff--placeholder" data-testid="git-diff">(loading…)</div>
+              }
+            </div>
           }
 
           <div class="git-view__commit">

@@ -3,6 +3,11 @@
  * remain in job-detail.ts so all three panes (prompt / protocol / git)
  * stay visually identical — only the Git-pane-specific surfaces live
  * here.
+ *
+ * The diff body itself is rendered by `diff2html`, which ships its own
+ * stylesheet (loaded via angular.json). The rules below only adjust
+ * the wrapper, the toolbar, and the dark-mode tweaks needed to blend
+ * into the Catppuccin-inspired surface.
  */
 :host { display: contents; }
 
@@ -56,18 +61,88 @@
   font-size: 11px;
   color: #94a3b8;
 }
-.git-view__diff {
-  max-height: 28vh;
-  overflow: auto;
-  margin: 0;
-  padding: 10px 12px;
+
+.git-view__diff-wrap {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid rgba(255,255,255,0.05);
   border-radius: 10px;
   background: rgba(0,0,0,0.3);
-  border: 1px solid rgba(255,255,255,0.05);
-  color: #cbd5e1;
-  font: 12px/1.5 var(--font-mono, monospace);
-  white-space: pre;
+  overflow: hidden;
+  min-height: 0;
 }
+.git-view__diff-wrap--maximized {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  border-radius: 0;
+  /* Solid (not translucent) — the maximized diff is a focus mode and must
+     fully obscure the board behind it. */
+  background: #0d1117;
+  border: 0;
+}
+.git-view__diff-wrap--maximized .git-view__diff {
+  background: #0d1117;
+}
+.git-view__diff-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  font-size: 11px;
+  color: #94a3b8;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  background: rgba(0,0,0,0.25);
+}
+.git-view__diff-path {
+  flex: 1;
+  font-family: var(--font-mono, monospace);
+  color: #cbd5e1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.git-view__diff-mode {
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 10px;
+}
+.git-view__diff {
+  flex: 1;
+  min-height: 0;
+  max-height: 36vh;
+  overflow: auto;
+  padding: 0;
+  color: #cbd5e1;
+  font-size: 12px;
+}
+.git-view__diff--placeholder {
+  padding: 10px 12px;
+  font: 12px/1.5 var(--font-mono, monospace);
+}
+.git-view__diff-wrap--maximized .git-view__diff {
+  max-height: none;
+  height: 100%;
+}
+
+/*
+ * diff2html dark-mode polish. The library ships a `d2h-dark-color-scheme`
+ * variant; we tweak a few colours so the rendered diff sits cleanly on
+ * our dark surface without competing with the Catppuccin palette.
+ */
+.git-view__diff ::ng-deep .d2h-wrapper { background: transparent; }
+.git-view__diff ::ng-deep .d2h-file-header { display: none; }
+.git-view__diff ::ng-deep .d2h-file-wrapper {
+  border: 0;
+  border-radius: 0;
+  margin: 0;
+}
+.git-view__diff ::ng-deep .d2h-code-line,
+.git-view__diff ::ng-deep .d2h-code-side-line {
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+}
+
 .git-view__commit {
   display: flex;
   flex-direction: column;

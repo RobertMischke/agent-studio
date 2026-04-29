@@ -1,4 +1,7 @@
-import { ChangeDetectionStrategy, Component, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
+import { html as diff2html } from 'diff2html';
+import { ColorSchemeType } from 'diff2html/lib-esm/types';
 import { GitPaneService } from '../git-pane.service';
 
 /**
@@ -6,6 +9,13 @@ import { GitPaneService } from '../git-pane.service';
  * per-file diff, and commit form. State + API calls live in
  * GitPaneService (provided locally on JobDetailComponent); this
  * component is purely presentational.
+ *
+ * The selected file's unified-diff text is rendered through
+ * `diff2html` so users see syntax-aware add/remove highlighting and
+ * (when maximized) a side-by-side view. The diff section has its own
+ * maximize toggle independent of the surrounding pane: in-pane it uses
+ * `line-by-line` to fit the narrow column, and switches to
+ * `side-by-side` when the diff is fullscreened.
  */
 @Component({
   selector: 'app-git-pane',
@@ -26,8 +36,28 @@ export class GitPaneComponent {
   readonly hide = output<void>();
 
   readonly git = inject(GitPaneService);
+  private readonly sanitizer = inject(DomSanitizer);
+
+  /** Diff section fullscreen toggle, scoped to this component. */
+  readonly diffMaximized = signal(false);
+
+  readonly diffHtml = computed<SafeHtml | null>(() => {
+    const text = this.git.diffText();
+    if (!text) return null;
+    const rendered = diff2html(text, {
+      drawFileList: false,
+      outputFormat: this.diffMaximized() ? 'side-by-side' : 'line-by-line',
+      matching: 'lines',
+      colorScheme: ColorSchemeType.DARK,
+    });
+    return this.sanitizer.bypassSecurityTrustHtml(rendered);
+  });
 
   setCommitMessage(value: string): void {
     this.git.commitMessage.set(value);
+  }
+
+  toggleDiffMaximize(): void {
+    this.diffMaximized.update(v => !v);
   }
 }
