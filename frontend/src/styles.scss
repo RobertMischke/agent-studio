@@ -11,6 +11,15 @@ body {
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
 
+/* Hide the text caret on every non-text-input surface. Clicking a card,
+ * button, heading, etc. should never leave a blinking I-beam behind. Real
+ * text-entry surfaces (form fields and rich-text contenteditable hosts)
+ * opt back in below.
+ */
+* { caret-color: transparent; }
+input, textarea, [contenteditable]:not([contenteditable="false"]),
+[contenteditable]:not([contenteditable="false"]) * { caret-color: auto; }
+
 /* Dark-mode form controls — ensures select option lists render with readable contrast */
 html { color-scheme: dark; }
 select, input, textarea { color-scheme: dark; }
