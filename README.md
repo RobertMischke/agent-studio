@@ -1,104 +1,152 @@
 # Agent Task Processor
 
-**Local AI Work Monitor** — a standalone app (.NET 10 + Angular 21) that watches coding agents at work and renders their progress as a Kanban board.
+**Stop being the bottleneck.** A local Kanban board that feeds your coding-agent CLIs a continuous queue of work — using the subscriptions you already pay for, on the machine you already own.
 
-> **Documentation language:** all repository documentation (README, AGENTS.md, docs/) is written in English. Conversation in chat may be in any language; written artifacts in this repo stay English.
+![Board overview](docs/images/board-overview.png)
 
-## Product Goal
+> .NET 10 backend + Angular 21 PWA. Watches one or more project folders for `.orchestrator/jobs/` directories and runs them sequentially through Claude Code, Codex, GitHub Copilot, or Gemini.
 
-The task processor drives a **sequential pipeline of tasks per project**. Multiple projects may run in parallel, but inside a single project work is strictly serial.
+---
 
-Concretely:
+## The bottleneck is you
 
-- **Sequential, automated task execution — per project.** Within one watched project, tasks queued on the board are picked up and worked through automatically, one after another. No human kick-off per task.
-- **Parallelism only across projects, never within one.** At most one task is in flight per project at any time. Different projects (different watch paths) may execute their own pipelines concurrently and independently.
-- **No workspaces, no workflows, no branch orchestration.** The app does not create or sync git branches, does not spin up worktrees, and does not manage multi-step workflows across environments.
-- **One running app per project, one branch.** Each project assumes a single running target application on one branch (`main`, or occasionally a feature branch) and pushes its queue of tasks through that one environment.
-- **Minimum overhead.** No branch synchronization, no merge coordination, no intra-project parallel-execution bookkeeping — that overhead is exactly what this product is designed to avoid.
+Modern coding agents can run for hours. They don't get tired. They don't context-switch. They just need a steady queue of work.
 
-If a future requirement implies parallel agents within a single project, multi-branch orchestration, or workspace management, that is **out of scope** for this product. Resist the temptation to add it.
+The bottleneck isn't the model. It's the human babysitting it — paste a prompt, watch it run, review, paste the next one. Every minute spent on that loop is a minute your subscription's token bucket sits idle.
 
-## Concept Boundary (IMPORTANT)
+```
+  WITHOUT a queue                          WITH Agent Task Processor
+  ───────────────                          ─────────────────────────
+
+  you ──► prompt ──► agent ──► review      queue ──► agent ──► review
+   ▲                            │            │ ▲                │
+   │       (idle, you blink)    │            │ │                │
+   └────────────────────────────┘            │ └────────────────┘
+                                             │   (auto pickup)
+   utilization: ~10–20% of the hour          │
+                                             ▼
+                                          next task
+                                          
+                                          utilization: ~95% of the hour
+```
+
+The board exists to make the queue the only thing you maintain. Tasks land in `2-ready`, the runner walks them through `3-progress → 4-review` automatically, and your role shrinks to **review** — the one part that actually needs you.
+
+---
+
+## Principles
+
+**Sequential, never parallel — within a project.** One task at a time per project. No worktrees. No branch-per-task. No intra-project fan-out. Parallelism only exists *across* projects (different watch paths run independently).
+
+**Use what you already pay for.** The runner drives **your** Claude Code, Codex, Copilot, and Gemini CLIs through their existing subscriptions. **No API keys. No per-token billing.** Your Pro/Max plan is the budget; the board's job is to use as much of it as productively as possible.
+
+**Maximize token utilization, minimize bookkeeping.** Skip the things that burn time and tokens for marginal benefit:
+
+| What it skips | Why |
+|---|---|
+| Worktrees | Spinning up a worktree per task triples I/O for no gain when work is sequential. |
+| Virtualization / sandboxes | Adds startup latency and forces the agent to re-discover the workspace every run. |
+| Cross-task orchestration | Workflow engines, branch coordination, merge bots — all overhead the sequential model removes by construction. |
+| API-key-based execution | Subscriptions already cover this. Paying twice is silly. |
+
+The product is small on purpose. Any feature that pulls toward "let's run two agents on one project" is out of scope — that's where complexity (and bills) explode.
+
+---
+
+## What you see
+
+### Board — every watched project, every state
+
+![Board overview](docs/images/board-overview.png)
+
+Five lanes — `1-preparation`, `2-ready`, `3-progress`, `4-review`, `5-completed` — driven directly off the filesystem. Each card shows the CLI, the model, the task size, and last activity. The pill in the header says how many projects are running on auto-pickup.
+
+### Detail view — task description + live protocol
+
+![Detail view, task + protocol panes](docs/images/detail-protocol.png)
+
+Click a card and you get the prompt on the left and the agent's protocol on the right. The protocol is a parsed, human-readable summary of what the agent has done so far — pulled from `status.md` and `cli-output.log` and re-rendered after every run.
+
+### Three panes — task, protocol, live git
+
+![Three-pane layout with git view](docs/images/detail-three-panes.png)
+
+Toggle the Git panel to see what the agent actually changed in the project's working tree, file by file, while it works. No leaving the board to alt-tab into a terminal.
+
+### Quality Gate — what makes a task review-ready
+
+![Quality Gate in protocol view](docs/images/detail-quality-gate.png)
+
+Before any task moves from `3-progress` to `4-review`, the agent fills out an **Edge-Case Quality Gate**: runtime states observed, signal-vs-property check, crash recovery, failure UX, reversibility. The gate is recorded in `status.md` and visible in the protocol pane.
+
+A job without a Quality Gate section is not ready for review — full stop.
+
+---
+
+## How it's wired
 
 ```
 ┌─────────────────────────────┐     ┌──────────────────────────────────┐
 │  agent-taskboard/           │     │  Target project (e.g. C:\Proj\X) │
 │  ════════════════           │     │  ═══════════════════════════════  │
 │  App source code:           │     │  Where the agent works:          │
-│  - backend/ (.NET API)      │     │  - src/, lib/, ...               │
+│  - backend/  (.NET 10 API)  │     │  - src/, lib/, ...               │
 │  - frontend/ (Angular PWA)  │     │  - .orchestrator/                │
 │  - docs/                    │     │    └── jobs/                     │
 │  - .github/prompts/         │     │        ├── 1-preparation/        │
-│                             │────>│        ├── 2-ready/              │
-│  The app READS / WATCHES    │     │        ├── 3-progress/           │
-│  the target's jobs/ folder. │     │        ├── 4-review/             │
-│  It contains no jobs/.      │     │        └── 5-completed/          │
+│                             │────►│        ├── 2-ready/              │
+│  Reads / watches the        │     │        ├── 3-progress/           │
+│  target's jobs/ folder.     │     │        ├── 4-review/             │
+│  Stores no jobs of its own. │     │        └── 5-completed/          │
 └─────────────────────────────┘     └──────────────────────────────────┘
 ```
 
-### What lives where?
-
 | Location | Contents |
 |----------|----------|
-| `agent-taskboard/` | App source code, prompts, docs |
-| `<target-project>/.orchestrator/jobs/` | Job folders with `job.json`, `prompt.md`, `status.md` |
+| `agent-taskboard/` | App source, prompts, docs |
+| `<target-project>/.orchestrator/jobs/` | `job.json`, `prompt.md`, `status.md`, `logs/` per task |
 
-### Why this separation?
+One task processor, many targets. The board watches several projects in parallel; inside each project, work is strictly serial.
 
-1. **The task processor is a standalone product** — its source does not belong inside the projects it observes.
-2. **Jobs belong to the target project** — the agent works there, so its artifacts live there.
-3. **One task processor, multiple targets** — a single task processor can watch several target paths sequentially.
-4. **Clean git history** — job artifacts do not pollute the task processor source, and vice versa.
+---
 
 ## Running
 
-Agents must use the `sh` variant (`./api.sh`). The `.ps1` file remains for manual PowerShell sessions only — never invoke it from an agent.
+Backend on `http://localhost:5030`, frontend on `http://localhost:4010`. Agents must use the `sh` variant.
 
 ```sh
-# Backend (sh — works in Git Bash / WSL / any POSIX shell)
-./api.sh start
-
-# Frontend (VS Code task "Frontend: Start"
-# or: npm start --prefix frontend)
+./api.sh start                       # backend
+npm start --prefix frontend          # or VS Code task "Frontend: Start"
 ```
 
-## Configuration
+### Configuration
 
 ```json
 // backend/appsettings.json
 {
   "WatchPaths": [
-    "C:\\Projects\\Runbook\\App\\.orchestrator\\jobs"
+    { "Name": "Runbook", "RootPath": "C:\\Projects\\Runbook\\App" },
+    { "Name": "My Other Project", "RootPath": "C:\\Projects\\OtherApp" }
   ]
 }
 ```
 
-## Keeping target projects in sync
+`RootPath` is the project directory; the board reads `<RootPath>/.orchestrator.yml` for `projectKey` and resolves jobs under `agent-taskboard-workspace/projects/<projectKey>/`.
 
-When the workflow or folder schema changes, agent instructions in target projects must be updated. Use the `/sync-target-instructions` prompt in `.github/prompts/`.
+### Supported CLIs
 
-## Supported CLIs
+Claude Code, Codex, GitHub Copilot, Gemini. The contract every CLI must satisfy — process lifecycle, session model, model selection, quota probing, logging, cancellation — is in [docs/supported-clis.md](docs/supported-clis.md).
 
-The task processor drives multiple coding-agent CLIs through a common interface. Today: Claude Code, Codex, GitHub Copilot, and Gemini (skeleton — Phase 1 in progress).
+### Keeping target projects in sync
 
-The contract every supported CLI must satisfy — process lifecycle, session model, model selection, quota probing, logging, cancellation — is documented in [docs/supported-clis.md](docs/supported-clis.md). Adding a new CLI follows the checklist in §4 of that file.
+When the workflow or folder schema changes, run the `/sync-target-instructions` prompt against each target.
 
-## Quality Gate for Agent Changes
-
-Before any task is moved from `3-progress/` to `4-review/`, the agent runs the **Edge-Case Quality Gate** documented in [docs/autopilot-prompt.md](docs/autopilot-prompt.md#edge-case-quality-gate-mandatory-before-moving-to-4-review). It forces an explicit walk through:
-
-- every runtime state the feature observes,
-- whether the signal being checked is the same as the property being cared about (folder name vs. live process, etc.),
-- crash / restart recovery behavior,
-- failure UX (prefer disabled affordances over post-hoc error modals),
-- reversibility of any state the change locks down.
-
-The answers are recorded in the job's `status.md` under a `## Quality Gate` section. A job without that section is not ready for review.
+---
 
 ## Docs
 
 - [AGENTS.md](AGENTS.md) — canonical agent instructions
 - [docs/supported-clis.md](docs/supported-clis.md) — CLI integration contract
-- [NEW-I.md](NEW-I.md) — initiative & mission
-- [PATHS.md](PATHS.md) — path conventions
 - [docs/filesystem-contract.md](docs/filesystem-contract.md) — job folder contract
+- [docs/autopilot-prompt.md](docs/autopilot-prompt.md) — orchestrator workflow + Quality Gate definition
+- [PATHS.md](PATHS.md) — path conventions
