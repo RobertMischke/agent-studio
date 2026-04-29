@@ -15,6 +15,8 @@ Keep the product boundary clear:
 
 All written artifacts in this repository (README, AGENTS.md, docs/, prompts, code comments, commit messages, PR descriptions) are written in **English**. Chat conversation with the user may happen in any language, but anything you commit or write to disk in this repo stays English.
 
+User-facing application strings (UI labels, button text, banner copy, backend error messages surfaced to the UI) are **English** as well — even when the user dictates them in another language. Existing German strings are legacy and may be migrated opportunistically when you're already touching the surrounding code, but never introduce new non-English strings.
+
 ## Product Goal & Non-Goals
 
 The task processor drives a **sequential pipeline of tasks per project**. Parallelism exists across projects, never within one. Treat this as a hard product boundary when proposing or implementing changes.

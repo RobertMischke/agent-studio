@@ -44,7 +44,7 @@ public sealed class SummaryGenerationService
             var logPath = JobPaths.CliOutputLog(info.FolderPath);
             if (!File.Exists(logPath))
             {
-                Fail(key, "Kein CLI-Output zum Zusammenfassen vorhanden — der Task wurde noch nicht ausgeführt (logs/cli-output.log fehlt). Starte ihn einmal, dann erneut versuchen.");
+                Fail(key, "No CLI output to summarise yet — the task has not been run (logs/cli-output.log is missing). Start it once, then try again.");
                 return;
             }
 
@@ -136,6 +136,13 @@ public sealed class SummaryGenerationService
         var claudePath = _configuration["ClaudeCli:Path"] ?? "claude";
         var model = _configuration["ClaudeCli:SummaryModel"] ?? "claude-haiku-4-5";
 
+        // Feed the prompt via stdin instead of a positional `-p <prompt>`
+        // argument. The summary prompt embeds up to MaxLogChars (60 000) of
+        // CLI log; that combined with `--model …` and the executable path
+        // overruns Windows' 32 767-char CreateProcess command-line cap and
+        // returns "The command line is too long." Stdin has no such limit
+        // and Claude Code's `-p` mode reads the user message from stdin
+        // when no positional prompt is provided.
         var psi = new ProcessStartInfo
         {
             FileName = CliExecutionServiceBase.ResolveExecutable(claudePath),
@@ -144,9 +151,12 @@ public sealed class SummaryGenerationService
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
-            CreateNoWindow = true
+            CreateNoWindow = true,
+            StandardInputEncoding = System.Text.Encoding.UTF8,
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
+            StandardErrorEncoding = System.Text.Encoding.UTF8
         };
-        psi.ArgumentList.Add("-p"); psi.ArgumentList.Add(prompt);
+        psi.ArgumentList.Add("-p");
         psi.ArgumentList.Add("--model"); psi.ArgumentList.Add(model);
         psi.ArgumentList.Add("--dangerously-skip-permissions");
 
@@ -154,6 +164,12 @@ public sealed class SummaryGenerationService
         {
             using var p = Process.Start(psi);
             if (p == null) return (false, null, "Process.Start returned null");
+
+            // Write the prompt up front, then close stdin so Claude can finalise
+            // the request. WriteAsync is awaited so the OS pipe buffer can drain
+            // before we move on to reading stdout.
+            await p.StandardInput.WriteAsync(prompt.AsMemory(), ct);
+            p.StandardInput.Close();
 
             var stdoutTask = p.StandardOutput.ReadToEndAsync(ct);
             var stderrTask = p.StandardError.ReadToEndAsync(ct);

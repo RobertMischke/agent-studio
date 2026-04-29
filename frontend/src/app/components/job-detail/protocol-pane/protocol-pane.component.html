@@ -17,10 +17,9 @@
         </span>
       }
       @if (summaryStatus() === 'failed') {
-        <span class="pane__spinner pane__spinner--failed" data-testid="summary-failed"
-              title="Details siehe Banner unten">
-          ⚠ Protokoll fehlgeschlagen
-        </span>
+        <span class="pane__badge pane__badge--failed" data-testid="summary-failed"
+              [title]="detail().summaryState?.errorMessage ?? 'Protocol generation failed — see banner below'"
+              aria-label="Protocol generation failed">⚠</span>
       }
     </div>
     @if (claudeSession(); as cs) {
@@ -100,20 +99,20 @@
               <div class="summary-error" role="alert" data-testid="protocol-summary-error">
                 <div class="summary-error__head">
                   <span class="summary-error__icon" aria-hidden="true">⚠</span>
-                  <h4 class="summary-error__title">Protokoll konnte nicht erstellt werden</h4>
+                  <h4 class="summary-error__title">Protocol could not be generated</h4>
                 </div>
-                <pre class="summary-error__body" data-testid="protocol-summary-error-message">{{ detail().summaryState?.errorMessage || 'Unbekannter Fehler — keine Details vom Backend.' }}</pre>
+                <pre class="summary-error__body" data-testid="protocol-summary-error-message">{{ detail().summaryState?.errorMessage || 'Unknown error — no detail from backend.' }}</pre>
                 <div class="summary-error__actions">
                   <button type="button"
                           class="btn-regen"
                           data-testid="protocol-regenerate-summary"
-                          title="Den CLI-Output erneut von Haiku zusammenfassen lassen"
+                          title="Re-run the Haiku summary on the CLI output"
                           [disabled]="regenerating()"
                           (click)="regenerateSummary.emit()">
                     <span class="btn-regen__icon" aria-hidden="true">✨</span>
-                    <span>{{ regenerating() ? 'Erzeuge…' : 'Erneut versuchen' }}</span>
+                    <span>{{ regenerating() ? 'Generating…' : 'Try again' }}</span>
                   </button>
-                  <span class="summary-error__hint">Im Aktivitäts-Tab siehst du den Roh-Log.</span>
+                  <span class="summary-error__hint">See the Activity tab for the raw log.</span>
                 </div>
               </div>
             }

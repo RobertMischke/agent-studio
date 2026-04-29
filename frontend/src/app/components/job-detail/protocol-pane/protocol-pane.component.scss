@@ -44,11 +44,25 @@
   background: rgba(99, 102, 241, 0.08);
   padding: 2px 8px;
   border-radius: 999px;
+}
 
-  &--failed {
-    color: #b45309;
-    background: rgba(245, 158, 11, 0.12);
-  }
+/* Compact warn dot for "summary failed" — full text used to live here, but
+ * the inline banner below already explains the situation, so the header
+ * only needs a small affordance that something went wrong. The full reason
+ * stays on the title attribute for hover. */
+.pane__badge--failed {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  font-size: 12px;
+  line-height: 1;
+  color: #fecaca;
+  background: rgba(239, 68, 68, 0.18);
+  border: 1px solid rgba(239, 68, 68, 0.55);
+  border-radius: 50%;
+  cursor: help;
 }
 
 .spinner-ring {

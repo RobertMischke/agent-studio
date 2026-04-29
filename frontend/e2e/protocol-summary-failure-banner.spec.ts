@@ -46,9 +46,10 @@ test.describe('Protocol pane — summary failure banner', () => {
         `/?job=${encodeURIComponent(created.id)}&watchPath=${encodeURIComponent(watchPath)}`
       );
 
-      // Header badge stays compact; the meat is the inline banner.
+      // Header badge is icon-only — the explanation lives in the banner.
       const failedBadge = page.getByTestId('summary-failed');
       await expect(failedBadge).toBeVisible({ timeout: 15_000 });
+      await expect(failedBadge).toHaveText('⚠');
 
       // Tab must be enabled now that the summary is in "failed" state, even
       // though no status.md has ever been written.
@@ -58,12 +59,14 @@ test.describe('Protocol pane — summary failure banner', () => {
 
       const banner = page.getByTestId('protocol-summary-error');
       await expect(banner).toBeVisible();
+      await expect(banner).toContainText('Protocol could not be generated');
       const message = page.getByTestId('protocol-summary-error-message');
       await expect(message).toContainText('cli-output.log');
 
       const retry = page.getByTestId('protocol-regenerate-summary');
       await expect(retry).toBeVisible();
       await expect(retry).toBeEnabled();
+      await expect(retry).toContainText('Try again');
 
       await page.screenshot({
         path: 'test-results/protocol-summary-failure-banner.png',
