@@ -39,20 +39,24 @@ public static class JobEndpoints
             return detail is null ? Results.NotFound() : Results.Ok(WithExecution(detail, router));
         });
 
-        group.MapPut("/{jobId}/state", (string jobId, string? watchPath, MoveJobRequest req, JobScannerService scanner) =>
+        group.MapPut("/{jobId}/state", async (string jobId, string? watchPath, MoveJobRequest req,
+            JobScannerService scanner, GitService git, ProjectSettingsService settings, ILogger<Program> logger,
+            CancellationToken ct) =>
         {
             if (!JobStates.All.Contains(req.TargetState))
                 return Results.BadRequest($"Invalid state. Allowed: {string.Join(", ", JobStates.All)}");
 
-            return MoveResult(scanner.MoveJob(jobId, req.TargetState, watchPath));
+            return MoveResult(await MoveAndMaybeAutoCommitAsync(scanner, git, settings, logger, jobId, req.TargetState, watchPath, ct));
         });
 
-        group.MapPost("/{jobId}/move", (string jobId, string? watchPath, MoveJobRequest req, JobScannerService scanner) =>
+        group.MapPost("/{jobId}/move", async (string jobId, string? watchPath, MoveJobRequest req,
+            JobScannerService scanner, GitService git, ProjectSettingsService settings, ILogger<Program> logger,
+            CancellationToken ct) =>
         {
             if (!JobStates.All.Contains(req.TargetState))
                 return Results.BadRequest($"Invalid state. Allowed: {string.Join(", ", JobStates.All)}");
 
-            return MoveResult(scanner.MoveJob(jobId, req.TargetState, watchPath));
+            return MoveResult(await MoveAndMaybeAutoCommitAsync(scanner, git, settings, logger, jobId, req.TargetState, watchPath, ct));
         });
 
         group.MapDelete("/{jobId}", (string jobId, string? watchPath, JobScannerService scanner) =>
@@ -166,6 +170,20 @@ public static class JobEndpoints
             return result.Message is not null
                 ? Results.Ok(new { message = result.Message })
                 : Results.BadRequest(new { error = result.Error });
+        });
+
+        // Per-job commit details: returns the cached snapshot from job.json plus
+        // a live re-derivation of the file list from `git show --name-status`,
+        // so the detail view stays accurate even after history rewrites.
+        group.MapGet("/{jobId}/commit", (string jobId, string? watchPath, JobScannerService scanner, GitService git) =>
+        {
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info == null) return Results.NotFound();
+            if (info.Commit == null) return Results.Ok(new { commit = (object?)null, files = Array.Empty<GitFileChange>() });
+
+            var live = git.GetCommitFiles(jobId, watchPath, info.Commit.Sha);
+            var files = live.Count > 0 ? live : info.Commit.Files.Select(p => new GitFileChange("?", p, 0, 0)).ToList();
+            return Results.Ok(new { commit = info.Commit, files });
         });
 
         group.MapPost("/{jobId}/open-in-vscode", (string jobId, string? watchPath, GitService git) =>
@@ -348,6 +366,25 @@ public static class JobEndpoints
         // Per-project git summary, used by board tile pills. Cached server-side
         // for ~3 s so the board can call freely without forking N git processes.
         app.MapGet("/api/git/summary", (GitService git) => Results.Ok(git.GetSummaries()));
+
+        // Per-project preferences (auto-commit on/off today). Read-all returns a
+        // flat map keyed by project name so the header can render every toggle
+        // in one shot without N round-trips.
+        app.MapGet("/api/projects/settings", (ProjectSettingsService settings) =>
+        {
+            return Results.Ok(settings.GetAll());
+        });
+
+        app.MapPut("/api/projects/{projectName}/auto-commit", (string projectName, SetAutoCommitRequest req, ProjectSettingsService settings, JobScannerService scanner) =>
+        {
+            // Reject unknown project names so a typo in the URL fails loud rather than silently
+            // adding orphan settings entries that never reach a board column.
+            var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+
+            settings.SetAutoCommit(projectName, req.Enabled);
+            return Results.Ok(settings.Get(projectName));
+        });
 
         // Runner endpoints
         var runnerGroup = app.MapGroup("/api/runner");
@@ -533,6 +570,69 @@ public static class JobEndpoints
                 return Results.Problem(detail: ex.Message, title: "Probe failed");
             }
         });
+    }
+
+    /// <summary>
+    /// Wraps <see cref="JobScannerService.MoveJob"/> with the auto-commit hook:
+    /// when the project has auto-commit enabled and the transition is
+    /// <c>3-progress → 4-review</c>, generate a Conventional Commit message via
+    /// Haiku, commit on the workspace repo, then move the job folder and stamp
+    /// the SHA onto its <c>job.json</c>. The move always proceeds — a commit
+    /// failure is logged but never blocks the state transition, so the user
+    /// never gets stuck mid-pipeline because the LLM call timed out.
+    /// </summary>
+    private static async Task<MoveJobOutcome> MoveAndMaybeAutoCommitAsync(
+        JobScannerService scanner, GitService git, ProjectSettingsService settings, ILogger logger,
+        string jobId, string targetState, string? watchPath, CancellationToken ct)
+    {
+        var info = scanner.FindJob(jobId, watchPath);
+        if (info == null) return new MoveJobOutcome(MoveJobStatus.NotFound);
+
+        var shouldAutoCommit =
+            info.State == JobStates.Progress &&
+            targetState == JobStates.Review &&
+            settings.Get(info.ProjectName).AutoCommit;
+
+        JobCommitInfo? commitToStamp = null;
+        if (shouldAutoCommit)
+        {
+            try
+            {
+                var (result, message) = await git.AutoCommitAsync(jobId, watchPath, ct);
+                if (result.Success && !string.IsNullOrWhiteSpace(result.Sha))
+                {
+                    var files = git.GetCommitFiles(jobId, watchPath, result.Sha);
+                    commitToStamp = new JobCommitInfo
+                    {
+                        Sha = result.Sha,
+                        ShortSha = result.Sha.Length > 7 ? result.Sha[..7] : result.Sha,
+                        Message = message,
+                        FilesChanged = files.Count,
+                        Files = files.Select(f => f.Path).ToList(),
+                        At = DateTime.UtcNow
+                    };
+                }
+                else
+                {
+                    logger.LogInformation("Auto-commit skipped for {JobId}: {Error}", jobId, result.Error);
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Auto-commit threw for {JobId} — moving without a recorded SHA", jobId);
+            }
+        }
+
+        var outcome = scanner.MoveJob(jobId, targetState, watchPath);
+        if (outcome.Status == MoveJobStatus.Success && commitToStamp != null)
+        {
+            // Re-resolve the job — its FolderPath has shifted from progress/ to review/.
+            var moved = scanner.FindJob(jobId, watchPath);
+            if (moved != null)
+                scanner.SetJobCommitOnFolder(moved.FolderPath, commitToStamp);
+        }
+
+        return outcome;
     }
 
     private static IResult MoveResult(MoveJobOutcome outcome) => outcome.Status switch

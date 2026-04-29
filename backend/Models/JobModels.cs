@@ -29,6 +29,8 @@ public record JobInfo
     /// <summary>Last token / cost summary parsed from CLI output (best-effort).</summary>
     public SessionUsage? LastUsage { get; init; }
     public CliExecution? Execution { get; init; }
+    /// <summary>Auto-commit produced on the progress→review transition; null when no commit recorded.</summary>
+    public JobCommitInfo? Commit { get; init; }
 }
 
 public record SessionUsage
@@ -152,6 +154,32 @@ public record UpdateJobFileRequest
 public record GitCommitRequest
 {
     public string Message { get; init; } = "";
+}
+
+public record ProjectSettings
+{
+    /// <summary>When true, transition <c>3-progress → 4-review</c> auto-commits and stamps the SHA on the job.</summary>
+    public bool AutoCommit { get; init; }
+}
+
+public record SetAutoCommitRequest
+{
+    public bool Enabled { get; init; }
+}
+
+/// <summary>
+/// Snapshot of the commit a job produced when transitioning from progress to
+/// review. Cached in <c>job.json</c> so the board card and detail view can
+/// render file count + SHA without re-running git per render.
+/// </summary>
+public record JobCommitInfo
+{
+    public string Sha { get; init; } = "";
+    public string ShortSha { get; init; } = "";
+    public string Message { get; init; } = "";
+    public int FilesChanged { get; init; }
+    public List<string> Files { get; init; } = [];
+    public DateTime At { get; init; }
 }
 
 public record WatchPathEntry

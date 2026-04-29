@@ -302,6 +302,62 @@ public class GitService
         }
     }
 
+    /// <summary>
+    /// Returns the file list (status + path) for an already-recorded SHA via
+    /// <c>git show --name-status</c>. Used by the detail view to show what a
+    /// past auto-commit touched without re-deriving from numstat.
+    /// </summary>
+    public List<GitFileChange> GetCommitFiles(string jobId, string? watchPath, string sha)
+    {
+        var root = ResolveRepoRoot(jobId, watchPath);
+        if (root == null || string.IsNullOrWhiteSpace(sha)) return [];
+
+        var (output, _, code) = RunGit(root, $"show --name-status --pretty=format: {sha}");
+        if (code != 0) return [];
+
+        var files = new List<GitFileChange>();
+        foreach (var line in output.Split('\n'))
+        {
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            var parts = line.Split('\t');
+            if (parts.Length < 2) continue;
+            var status = parts[0].Trim();
+            // Renames look like "R100\told\tnew" — show the new path.
+            var path = parts[^1].Trim();
+            files.Add(new GitFileChange(status, path, 0, 0));
+        }
+
+        return files
+            .OrderBy(f => f.Path, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Convenience used by the auto-commit hook on the progress→review move:
+    /// generates a Conventional Commit message via Haiku and commits in one
+    /// go. Returns the commit result and the message that was used so the
+    /// caller can persist it on the job.
+    /// </summary>
+    public async Task<(GitCommitResult Result, string Message)> AutoCommitAsync(
+        string jobId, string? watchPath, CancellationToken ct = default)
+    {
+        var statusBefore = GetStatus(jobId, watchPath);
+        if (!statusBefore.IsRepo)
+            return (new GitCommitResult(false, null, statusBefore.Error ?? "Not a git repo"), "");
+        if (statusBefore.FilesChanged == 0)
+            return (new GitCommitResult(false, null, "Nothing to commit — working tree is clean."), "");
+
+        var msg = await GenerateCommitMessageAsync(jobId, watchPath, ct);
+        var message = msg.Message;
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            // Fall back to a deterministic message so an LLM hiccup does not block the auto-commit.
+            message = $"chore: snapshot for review ({statusBefore.FilesChanged} file{(statusBefore.FilesChanged == 1 ? "" : "s")} changed)";
+        }
+        var result = Commit(jobId, watchPath, message);
+        return (result, message);
+    }
+
     public bool OpenInVsCode(string jobId, string? watchPath, out string? error)
     {
         error = null;

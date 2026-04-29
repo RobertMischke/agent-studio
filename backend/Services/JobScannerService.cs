@@ -169,6 +169,9 @@ public class JobScannerService
                 CliType = raw.TryGetProperty("cliType", out var ct) ? ct.GetString() : null,
                 UseOwnSession = raw.TryGetProperty("useOwnSession", out var uos) && uos.ValueKind is JsonValueKind.True or JsonValueKind.False
                     ? uos.GetBoolean()
+                    : null,
+                Commit = raw.TryGetProperty("commit", out var commit) && commit.ValueKind == JsonValueKind.Object
+                    ? JsonSerializer.Deserialize<JobCommitInfo>(commit.GetRawText(), JsonOpts)
                     : null
             };
         }
@@ -441,6 +444,21 @@ public class JobScannerService
         var info = FindJob(jobId, watchPath);
         if (info == null) return false;
         UpdateJobJsonField(info.FolderPath, "useOwnSession", useOwn);
+        return true;
+    }
+
+    public bool SetJobCommit(string jobId, JobCommitInfo commit, string? watchPath = null)
+    {
+        var info = FindJob(jobId, watchPath);
+        if (info == null) return false;
+        UpdateJobJsonField(info.FolderPath, "commit", commit);
+        return true;
+    }
+
+    public bool SetJobCommitOnFolder(string folderPath, JobCommitInfo commit)
+    {
+        if (!Directory.Exists(folderPath)) return false;
+        UpdateJobJsonField(folderPath, "commit", commit);
         return true;
     }
 
