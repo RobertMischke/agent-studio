@@ -278,7 +278,7 @@ public static class JobEndpoints
             if (info == null)
                 return Results.NotFound(new { error = "Job not found" });
 
-            var logPath = Path.Combine(info.FolderPath, "logs", "cli-output.log");
+            var logPath = JobPaths.CliOutputLog(info.FolderPath);
             if (!File.Exists(logPath))
                 return Results.BadRequest(new { error = "No cli-output.log on disk yet — run the task at least once before regenerating the protocol." });
 

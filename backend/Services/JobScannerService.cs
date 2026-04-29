@@ -129,7 +129,23 @@ public class JobScannerService
 
             var lastActivity = GetLastActivityTime(jobDir);
             var totalSize = GetDirectorySize(jobDir);
-            var resolvedId = raw.TryGetProperty("id", out var id) ? id.GetString() ?? Path.GetFileName(jobDir) : Path.GetFileName(jobDir);
+
+            // The folder name is the canonical job id. Anything else (URL slugs,
+            // log paths, MoveJob targets, the runner's job lookups) keys off the
+            // folder name, so a divergent `id` field in job.json silently breaks
+            // those paths. If we see one, surface a warning and self-heal the
+            // file so the divergence does not survive the next scan.
+            var folderId = Path.GetFileName(jobDir);
+            if (raw.TryGetProperty("id", out var id)
+                && id.GetString() is { Length: > 0 } jsonId
+                && jsonId != folderId)
+            {
+                _logger.LogWarning(
+                    "Job folder '{Dir}' has divergent id '{JsonId}' in job.json — rewriting to match folder name '{FolderId}'.",
+                    jobDir, jsonId, folderId);
+                UpdateJobJsonField(jobDir, "id", folderId);
+            }
+            var resolvedId = folderId;
 
             return new JobInfo
             {

@@ -178,7 +178,7 @@ public class TaskRunnerService : BackgroundService
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return [];
 
-        var logPath = Path.Combine(info.FolderPath, "logs", "cli-output.log");
+        var logPath = JobPaths.CliOutputLog(info.FolderPath);
         var liveOutput = _router.Get(info.CliType).GetOutput(info.JobKey);
 
         if (liveOutput.Count > 0)
@@ -361,11 +361,7 @@ public class ProjectRunner
             _activeJobId = jobId;
             NotifyStatus();
 
-            var jobFolder = FindJobFolder(jobId);
-            if (jobFolder != null)
-            {
-                Directory.CreateDirectory(Path.Combine(jobFolder, "logs"));
-            }
+            Directory.CreateDirectory(JobPaths.LogsDir(info.FolderPath));
 
             // Resolve / persist a stable session name so follow-ups can use --resume.
             // Only Copilot uses a pre-generated slug as its resume handle. Claude /
@@ -403,10 +399,8 @@ public class ProjectRunner
                 _scanner.SetJobSessionName(jobId, sessionName, Entry.Path);
             }
 
-            var promptPath = jobFolder != null
-                ? Path.Combine(jobFolder, "prompt.md")
-                : Path.Combine(info.FolderPath, "prompt.md");
-            var jobFolderPath = jobFolder ?? info.FolderPath;
+            var promptPath = Path.Combine(info.FolderPath, "prompt.md");
+            var jobFolderPath = info.FolderPath;
 
             // Resume mode kicks in when the job was already in 3-progress at the
             // moment we were asked to start it — i.e. a previous CLI run crashed,
@@ -498,11 +492,7 @@ public class ProjectRunner
             _activeJobId = jobId;
             NotifyStatus();
 
-            var jobFolder = FindJobFolder(jobId);
-            if (jobFolder != null)
-            {
-                Directory.CreateDirectory(Path.Combine(jobFolder, "logs"));
-            }
+            Directory.CreateDirectory(JobPaths.LogsDir(info.FolderPath));
 
             _logger.LogInformation("[taskboard] continue requested for job {JobId} (user follow-up)", jobId);
             _logger.LogInformation("[taskboard] restoring session {SessionId}", info.SessionName);
@@ -627,7 +617,8 @@ public class ProjectRunner
         }
 
         // Write CLI output to log file
-        WriteCliLog(_activeJobId, cli);
+        var activeInfo = _scanner.FindJob(_activeJobId, Entry.Path);
+        if (activeInfo != null) WriteCliLog(activeInfo, cli);
 
         var finishedJobId = _activeJobId;
         // Move job to 4-review
@@ -657,18 +648,14 @@ public class ProjectRunner
         NotifyStatus();
     }
 
-    private void WriteCliLog(string jobId, ICliExecutionService cli)
+    private void WriteCliLog(JobInfo info, ICliExecutionService cli)
     {
         try
         {
-            var jobFolder = FindJobFolder(jobId);
-            if (jobFolder == null) return;
+            Directory.CreateDirectory(JobPaths.LogsDir(info.FolderPath));
+            var logPath = JobPaths.CliOutputLog(info.FolderPath);
 
-            var logsDir = Path.Combine(jobFolder, "logs");
-            Directory.CreateDirectory(logsDir);
-
-            var logPath = Path.Combine(logsDir, "cli-output.log");
-            var output = cli.GetOutput(GetJobKey(jobId));
+            var output = cli.GetOutput(info.JobKey);
             var logContent = string.Join(Environment.NewLine,
                 output.Select(l => $"[{l.Timestamp:HH:mm:ss.fff}] [{l.Stream}] {l.Text}"));
 
@@ -680,18 +667,8 @@ public class ProjectRunner
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to write CLI log for job {JobId}", jobId);
+            _logger.LogError(ex, "Failed to write CLI log for job {JobId}", info.Id);
         }
-    }
-
-    private string? FindJobFolder(string jobId)
-    {
-        foreach (var state in JobStates.All)
-        {
-            var folder = Path.Combine(Entry.Path, state, jobId);
-            if (Directory.Exists(folder)) return folder;
-        }
-        return null;
     }
 
     private string GetJobKey(string jobId) => JobIdentity.CreateKey(Entry.Path, jobId);

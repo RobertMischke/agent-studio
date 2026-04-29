@@ -41,7 +41,7 @@ public sealed class SummaryGenerationService
 
         try
         {
-            var logPath = Path.Combine(info.FolderPath, "logs", "cli-output.log");
+            var logPath = JobPaths.CliOutputLog(info.FolderPath);
             if (!File.Exists(logPath))
             {
                 Fail(key, "cli-output.log not found");
