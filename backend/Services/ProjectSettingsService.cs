@@ -52,6 +52,21 @@ public class ProjectSettingsService
         }
     }
 
+    /// <summary>
+    /// Persists the runner mode for a project so the auto-pickup toggle survives
+    /// a backend restart. Null clears the persisted value (revert to default).
+    /// </summary>
+    public void SetRunnerMode(string projectName, string? mode)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
+            _cache[projectName] = current with { RunnerMode = mode };
+            Persist();
+        }
+    }
+
     private void EnsureLoaded()
     {
         lock (_lock)

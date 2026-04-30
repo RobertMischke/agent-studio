@@ -160,6 +160,13 @@ public record ProjectSettings
 {
     /// <summary>When true, transition <c>3-progress → 4-review</c> auto-commits and stamps the SHA on the job.</summary>
     public bool AutoCommit { get; init; }
+
+    /// <summary>
+    /// Last runner mode chosen by the user for this project ("manual", "auto-single",
+    /// "auto-continuous", "paused"). Restored at backend startup so the auto-pickup
+    /// toggle survives self-rebuild / restart. Null means "use the default (manual)".
+    /// </summary>
+    public string? RunnerMode { get; init; }
 }
 
 public record SetAutoCommitRequest

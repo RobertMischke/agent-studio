@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Text.Json;
 using OrchestratorApi.Models;
 
 namespace OrchestratorApi.Services.Cli;
@@ -223,6 +224,27 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         catch (Exception ex) { _logger.LogWarning(ex, "Failed to reset CLI output log {Path}", logPath); }
         _processes[jobKey] = info;
 
+        // Persist the live PID + identity so a startup reaper can kill the
+        // process if the backend died before MonitorProcessAsync removed it.
+        // Failure here is non-fatal — the worst case is one orphan that the
+        // user has to clean up manually after a hard crash.
+        try
+        {
+            UpsertActiveJob(new ActiveJob
+            {
+                JobKey = jobKey,
+                JobId = jobId,
+                ProcessId = process.Id,
+                ProcessName = SafeProcessName(process),
+                ProcessStartTimeUtc = SafeProcessStartTime(process),
+                StartedAt = execution.StartedAt
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to record active-job entry for {JobId} ({Cli})", jobId, CliType);
+        }
+
         OnStarted?.Invoke(jobKey, execution);
         _logger.LogInformation("Started {Cli} CLI for job {JobId} (PID {Pid}) in {Cwd}",
             CliType, jobId, process.Id, workingDirectory);
@@ -319,10 +341,20 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         _processes.Values.Any(p => p.WorkingDirectory == rootPath && !p.Process.HasExited);
 
     /// <summary>
-    /// Default implementation: nothing to reattach. Subclasses can override if they
-    /// persist process info between restarts (Copilot does this in its own service).
+    /// Startup hook. Default behaviour for base-class CLIs (Claude / Codex /
+    /// Gemini) is to <b>reap</b> orphaned processes — kill any CLI process that
+    /// outlived a previous backend run. We deliberately do not re-attach: the
+    /// stdout pipe is unrecoverable, so an orphan would keep mutating the repo
+    /// while the user's UI is blind. Killing on startup eliminates the
+    /// double-execution risk and lets the resume-prompt logic in
+    /// <see cref="ProjectRunner"/> drive a clean fresh continuation.
+    /// <para>
+    /// Subclasses that genuinely want re-attach semantics (Copilot today) can
+    /// override this — Copilot does so in its own service and never enters
+    /// this base implementation because it doesn't extend the base class.
+    /// </para>
     /// </summary>
-    public virtual void ReattachOnStartup() { }
+    public virtual void ReattachOnStartup() => ReapOrphans();
 
     private async Task ReadStreamAsync(string jobKey, StreamReader reader, string stream, ProcInfo info, CancellationToken ct)
     {
@@ -384,6 +416,12 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         {
             try { await process.WaitForExitAsync(ct); }
             catch (OperationCanceledException) { Stop(jobKey); }
+
+            // Drop the active-job entry as soon as the process is known to be
+            // gone, before any subscriber notifications. Keeps the reaper file
+            // tight and avoids killing the next process that gets the same PID.
+            try { RemoveActiveJob(jobKey); }
+            catch (Exception ex) { _logger.LogDebug(ex, "Failed to clear active-job entry for {JobKey}", jobKey); }
 
             var duration = (DateTime.UtcNow - info.Execution.StartedAt).TotalSeconds;
             int? exitCode = null;
@@ -455,6 +493,177 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         var chars = value.Select(c => invalid.Contains(c) || c == ':' ? '_' : c).ToArray();
         var name = new string(chars);
         return name.Length > 180 ? name[^180..] : name;
+    }
+
+    // ── Active-job tracking + orphan reaper ──────────────────────────────
+    //
+    // Why this exists: a CLI run is a child process of the backend. On a
+    // backend crash / `dotnet watch` rebuild / IDE stop, that child can
+    // outlive its parent — silently editing files, calling APIs, burning
+    // quota with no UI to watch it. The next backend start therefore reaps:
+    // reads the persisted PIDs, kills any that are still alive (with a
+    // PID-recycling check via process name + start time), and clears the
+    // file. Cheaper and less risky than re-attaching, which would need a
+    // working stdout pipe we can't get back.
+
+    private record ActiveJob
+    {
+        public string JobKey { get; init; } = "";
+        public string JobId { get; init; } = "";
+        public int ProcessId { get; init; }
+        public string? ProcessName { get; init; }
+        public DateTime? ProcessStartTimeUtc { get; init; }
+        public DateTime StartedAt { get; init; }
+    }
+
+    private readonly object _activeJobsLock = new();
+    private static readonly JsonSerializerOptions ActiveJobsJsonOpts = new() { WriteIndented = true };
+
+    private string GetActiveJobsPath()
+    {
+        var taskRepo = _configuration["TaskRepository"];
+        var baseDir = !string.IsNullOrWhiteSpace(taskRepo)
+            ? Path.Combine(taskRepo, ".runtime")
+            : Path.Combine(AppContext.BaseDirectory, "runtime");
+        Directory.CreateDirectory(baseDir);
+        return Path.Combine(baseDir, $"active-jobs-{CliType}.json");
+    }
+
+    private List<ActiveJob> ReadActiveJobs()
+    {
+        var path = GetActiveJobsPath();
+        if (!File.Exists(path)) return [];
+        try
+        {
+            return JsonSerializer.Deserialize<List<ActiveJob>>(File.ReadAllText(path)) ?? [];
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to read active-jobs file at {Path}", path);
+            return [];
+        }
+    }
+
+    private void WriteActiveJobs(List<ActiveJob> list)
+    {
+        try
+        {
+            File.WriteAllText(GetActiveJobsPath(), JsonSerializer.Serialize(list, ActiveJobsJsonOpts));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to write active-jobs file");
+        }
+    }
+
+    private void UpsertActiveJob(ActiveJob entry)
+    {
+        lock (_activeJobsLock)
+        {
+            var list = ReadActiveJobs();
+            list.RemoveAll(e => e.JobKey == entry.JobKey);
+            list.Add(entry);
+            WriteActiveJobs(list);
+        }
+    }
+
+    private void RemoveActiveJob(string jobKey)
+    {
+        lock (_activeJobsLock)
+        {
+            var list = ReadActiveJobs();
+            var removed = list.RemoveAll(e => e.JobKey == jobKey);
+            if (removed > 0) WriteActiveJobs(list);
+        }
+    }
+
+    private static string? SafeProcessName(Process p)
+    {
+        try { return p.ProcessName; } catch { return null; }
+    }
+
+    private static DateTime? SafeProcessStartTime(Process p)
+    {
+        try { return p.StartTime.ToUniversalTime(); } catch { return null; }
+    }
+
+    /// <summary>
+    /// Reads the persisted active-jobs file and kills any process that is
+    /// still alive (orphan from a previous backend run). PID recycling is
+    /// guarded by matching <see cref="Process.ProcessName"/> and
+    /// <see cref="Process.StartTime"/> against the persisted values — a
+    /// 5-second tolerance accounts for clock skew between the recorded UTC
+    /// time and what Windows reports back. The file is always cleared at
+    /// the end so a half-clean run never leaves partial state behind.
+    /// </summary>
+    protected void ReapOrphans()
+    {
+        lock (_activeJobsLock)
+        {
+            var list = ReadActiveJobs();
+            if (list.Count == 0) return;
+
+            foreach (var entry in list)
+            {
+                Process? proc = null;
+                try { proc = Process.GetProcessById(entry.ProcessId); }
+                catch (ArgumentException) { proc = null; }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "GetProcessById failed for {Pid} ({Cli})", entry.ProcessId, CliType);
+                    continue;
+                }
+
+                if (proc == null) continue;
+
+                try
+                {
+                    if (proc.HasExited) continue;
+
+                    // PID-recycling guard: if the running process clearly isn't
+                    // the one we recorded, leave it alone.
+                    if (!string.IsNullOrEmpty(entry.ProcessName))
+                    {
+                        var liveName = SafeProcessName(proc);
+                        if (!string.IsNullOrEmpty(liveName) &&
+                            !string.Equals(liveName, entry.ProcessName, StringComparison.OrdinalIgnoreCase))
+                        {
+                            _logger.LogDebug("Skipping reap of PID {Pid}: name '{Live}' != recorded '{Recorded}'",
+                                entry.ProcessId, liveName, entry.ProcessName);
+                            continue;
+                        }
+                    }
+                    if (entry.ProcessStartTimeUtc.HasValue)
+                    {
+                        var liveStart = SafeProcessStartTime(proc);
+                        if (liveStart.HasValue &&
+                            Math.Abs((liveStart.Value - entry.ProcessStartTimeUtc.Value).TotalSeconds) > 5)
+                        {
+                            _logger.LogDebug("Skipping reap of PID {Pid}: start time mismatch ({Live} vs {Recorded})",
+                                entry.ProcessId, liveStart, entry.ProcessStartTimeUtc);
+                            continue;
+                        }
+                    }
+
+                    proc.Kill(entireProcessTree: true);
+                    _logger.LogWarning("Reaped orphan {Cli} CLI for job {Job} (PID {Pid}) left over from a previous backend run",
+                        CliType, entry.JobId, entry.ProcessId);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to reap PID {Pid} ({Cli})", entry.ProcessId, CliType);
+                }
+                finally
+                {
+                    try { proc.Dispose(); } catch { }
+                }
+            }
+
+            // Always wipe the file: any process that legitimately survives
+            // (PID-recycling skip) was not ours to track anyway. New runs
+            // will repopulate via UpsertActiveJob.
+            WriteActiveJobs([]);
+        }
     }
 
     /// <summary>Per-process bookkeeping shared with subclasses.</summary>

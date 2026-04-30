@@ -13,6 +13,7 @@ public class TaskRunnerService : BackgroundService
     private readonly CliRouter _router;
     private readonly ContextUsageParser _contextUsageParser;
     private readonly SummaryGenerationService _summaryService;
+    private readonly ProjectSettingsService _projectSettings;
     private readonly ConcurrentDictionary<string, ProjectRunner> _runners = new();
 
     public event Action<string, ProjectRunnerStatus>? OnRunnerStatusChanged;
@@ -24,7 +25,8 @@ public class TaskRunnerService : BackgroundService
         CopilotCliService cli,
         CliRouter router,
         ContextUsageParser contextUsageParser,
-        SummaryGenerationService summaryService)
+        SummaryGenerationService summaryService,
+        ProjectSettingsService projectSettings)
     {
         _config = config;
         _logger = logger;
@@ -33,6 +35,7 @@ public class TaskRunnerService : BackgroundService
         _router = router;
         _contextUsageParser = contextUsageParser;
         _summaryService = summaryService;
+        _projectSettings = projectSettings;
     }
 
     public SummaryGenerationService SummaryService => _summaryService;
@@ -59,7 +62,20 @@ public class TaskRunnerService : BackgroundService
 
             var runner = new ProjectRunner(entry.Name, entry, _logger, _scanner, _router, _summaryService);
             runner.OnStatusChanged += status => OnRunnerStatusChanged?.Invoke(entry.Name, status);
+            // Persist every mode change so the auto-pickup toggle survives
+            // backend restarts. Includes implicit transitions like "auto-single
+            // → manual" after a job completes.
+            runner.OnModePersist += mode => _projectSettings.SetRunnerMode(entry.Name, mode);
             _runners[entry.Name] = runner;
+
+            // Restore last saved mode (if any) after wiring the persist hook so
+            // the restore itself is idempotent and doesn't double-write.
+            var savedMode = _projectSettings.Get(entry.Name).RunnerMode;
+            if (!string.IsNullOrWhiteSpace(savedMode) && savedMode != "manual")
+            {
+                runner.RestoreMode(savedMode!);
+                _logger.LogInformation("Restored runner mode '{Mode}' for project '{Name}'", savedMode, entry.Name);
+            }
             _logger.LogInformation("Initialized runner for project '{Name}' (Root: {RootPath})", entry.Name, entry.RootPath);
         }
 
@@ -289,6 +305,13 @@ public class ProjectRunner
     public WatchPathEntry Entry { get; }
 
     public event Action<ProjectRunnerStatus>? OnStatusChanged;
+    /// <summary>
+    /// Raised whenever the mode changes through any path (explicit
+    /// <see cref="SetMode"/> or implicit auto-single → manual revert).
+    /// Wired by <see cref="TaskRunnerService"/> to persist the new mode.
+    /// Restoration via <see cref="RestoreMode"/> does NOT fire this event.
+    /// </summary>
+    public event Action<string>? OnModePersist;
 
     public ProjectRunner(string projectName, WatchPathEntry entry, ILogger logger, JobScannerService scanner, CliRouter router, SummaryGenerationService summaryService)
     {
@@ -309,6 +332,19 @@ public class ProjectRunner
     {
         _mode = mode;
         _logger.LogInformation("Runner '{Project}' mode set to '{Mode}'", ProjectName, mode);
+        try { OnModePersist?.Invoke(mode); }
+        catch (Exception ex) { _logger.LogWarning(ex, "OnModePersist subscriber threw for {Project}", ProjectName); }
+        NotifyStatus();
+    }
+
+    /// <summary>
+    /// Re-applies a previously saved mode at startup without re-firing the persist
+    /// hook (the value already came from the store). Status is broadcast so any
+    /// already-connected clients see the restored mode.
+    /// </summary>
+    public void RestoreMode(string mode)
+    {
+        _mode = mode;
         NotifyStatus();
     }
 
@@ -344,8 +380,10 @@ public class ProjectRunner
         {
             if (_mode == "auto-single")
             {
-                _mode = "manual";
-                NotifyStatus();
+                // Route through SetMode so the revert is persisted — otherwise a
+                // backend restart right after this would resurrect "auto-single"
+                // and immediately pick up another job.
+                SetMode("manual");
             }
             return;
         }

@@ -119,7 +119,10 @@ cliRouter.OnStarted += (cliType, jobId, exec) =>
 cliRouter.OnFinished += (cliType, jobId, exec) =>
     hubContext.Clients.All.SendAsync("cliFinished", jobId, exec.ExitCode, exec.DurationSeconds, exec.Status, cliType);
 
-// Reattach to any CLI processes that survived the previous app run (Copilot only for now)
+// Per-CLI startup hook. Copilot re-attaches to surviving processes (its own
+// implementation); Claude / Codex / Gemini reap orphans — see
+// CliExecutionServiceBase.ReattachOnStartup. Must run before any new CLI run
+// is started so we never have two processes editing the same repo.
 cliRouter.ReattachAll();
 
 // Wire up Runner status → SignalR push
