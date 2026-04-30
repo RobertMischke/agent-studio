@@ -1409,6 +1409,19 @@ export class JobDetailComponent implements OnDestroy {
       this.activeInspectorTab.set('protocol');
     }
 
+    // Symmetric counterpart: when a job we're watching transitions into
+    // 3-progress (runner auto-pickup, manual start, or continuation from
+    // review), demote Protokoll → Aktivität so the live CLI output is what
+    // the user sees instead of a stale summary from the previous run. Only
+    // applies when the user hasn't manually picked the protocol tab.
+    if (
+      !this.userTouchedInspectorTab &&
+      this.activeInspectorTab() === 'protocol' &&
+      d.info.state === '3-progress'
+    ) {
+      this.activeInspectorTab.set('activity');
+    }
+
     // Manual-regenerate poll lifecycle: once the backend flips out of
     // "generating", stop hammering the detail endpoint.
     if (this.regeneratingSummary() && d.summaryState?.status !== 'generating') {
