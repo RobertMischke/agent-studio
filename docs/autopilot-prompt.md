@@ -85,10 +85,12 @@ Keep it factual and concise. The reviewer opens `status.md` and sees exactly wha
 
 Wenn die Aufgabe visuelle Änderungen beinhaltet:
 1. Erstelle `results/` im **Job-Ordner** (z.B. `.orchestrator/jobs/3-progress/my-task/results/`)
-2. Speichere Playwright-Screenshots dort
-3. Verlinke im Report: `![Beschreibung](results/dateiname.png)`
+2. **Kopiere** Playwright-Screenshots dorthin — `frontend/e2e/test-results/` wird beim nächsten Lauf überschrieben und ist gitignored, daher flüchtig.
+3. Verlinke im Report mit relativem Präfix: `![Beschreibung](results/dateiname.png)`. Im lokalen Reader löst das Frontend `results/<name>` automatisch gegen die API auf.
 
 Nur bei Bedarf — nicht jeder Job braucht Screenshots. Bei UI/Styling/Layout sind sie Pflicht.
+
+Vollständige Bild-Lebensdauer-Regeln (per-CLI-Verhalten, `attachments/` vs `results/`, Render-Pfade) stehen in [`docs/protocol-style.md`](protocol-style.md).
 
 ## Job File Contract
 

@@ -689,6 +689,18 @@ public class JobScannerService
     }
 
     public (string? Path, string? ContentType) ResolveAttachment(string jobId, string fileName, string? watchPath = null)
+        => ResolveJobBinaryFile(jobId, "attachments", fileName, watchPath);
+
+    /// <summary>
+    /// Read-only counterpart to <see cref="ResolveAttachment"/> for the
+    /// <c>results/</c> folder where agents drop screenshots they want to keep
+    /// in the protocol. Same path-traversal guards, same image content-type
+    /// mapping. See <c>docs/protocol-style.md</c> for the folder contract.
+    /// </summary>
+    public (string? Path, string? ContentType) ResolveResult(string jobId, string fileName, string? watchPath = null)
+        => ResolveJobBinaryFile(jobId, "results", fileName, watchPath);
+
+    private (string? Path, string? ContentType) ResolveJobBinaryFile(string jobId, string subDir, string fileName, string? watchPath)
     {
         if (string.IsNullOrWhiteSpace(fileName) || fileName.Contains("..") || fileName.Contains('/') || fileName.Contains('\\'))
             return (null, null);
@@ -696,8 +708,8 @@ public class JobScannerService
         var info = FindJob(jobId, watchPath);
         if (info == null) return (null, null);
 
-        var attachmentsDir = Path.Combine(info.FolderPath, "attachments");
-        var fullPath = Path.Combine(attachmentsDir, fileName);
+        var dir = Path.Combine(info.FolderPath, subDir);
+        var fullPath = Path.Combine(dir, fileName);
         if (!File.Exists(fullPath)) return (null, null);
 
         var ext = Path.GetExtension(fileName).ToLowerInvariant();

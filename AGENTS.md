@@ -43,6 +43,7 @@ If a request implies any of the out-of-scope items, surface the conflict to the 
 | Frontend | `frontend/` | Angular 21 standalone components, signals state, PWA, runs on `http://localhost:4010`. |
 | E2E tests | `frontend/e2e/` | Playwright. See [frontend/e2e/README.md](frontend/e2e/README.md). |
 | Filesystem contract | `docs/filesystem-contract.md` | Job folder layout. |
+| Protocol & image style | `docs/protocol-style.md` | `status.md` shape, Activity Log markers, `attachments/` vs `results/`, per-CLI image retention. |
 | Orchestrator prompt | `docs/autopilot-prompt.md` | Canonical workflow copied into watched targets. |
 | Repo prompts | `.github/prompts/` | Reusable prompt templates. |
 | Backend lifecycle | `api.sh` | start / stop / restart / status (sh — agents must use this). |
@@ -97,6 +98,8 @@ After **every change with visual or behavioural impact** in the frontend (layout
 4. For changes that touch CLI execution paths (Claude / Codex / Copilot), run `claude-hello-world.spec.ts` (or the equivalent for the affected CLI) end-to-end. It is `@billable` — uses real quota — but cheap (one Haiku call, ~10s).
 
 Skip Playwright only if the change is provably non-visual and non-behavioural (pure rename, comment edit, dependency bump with no API surface change). Document the reason in the PR description if you skip. **Do not ask before skipping; decide, document, move on.**
+
+Playwright's `test-results/` folder is **scratch** — overwritten on every run, gitignored. Any screenshot that should survive past the next test run must be copied into the relevant `<job>/results/` folder so it ends up next to the Activity Log. The full image lifecycle (per-CLI retention rules, `attachments/` vs `results/`, how the protocol pane resolves them) lives in [docs/protocol-style.md](docs/protocol-style.md) — read it before changing anything image-related.
 
 The full E2E setup, conventions, and authoring rules live in [frontend/e2e/README.md](frontend/e2e/README.md).
 

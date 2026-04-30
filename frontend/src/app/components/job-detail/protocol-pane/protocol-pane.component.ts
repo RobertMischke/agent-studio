@@ -1,7 +1,8 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, computed, inject, input, output, signal } from '@angular/core';
 import { JobDetail, JobSummaryStatus } from '../../../models/job.model';
 import { ActivityLogViewComponent } from '../../activity-log-view';
-import { markdownToHtml } from '../../markdown-utils';
+import { markdownToHtml, MarkdownImageOptions } from '../../markdown-utils';
+import { resolveProtocolImageSrc } from './protocol-image-resolver';
 import { copyTextToClipboard } from '../../../services/clipboard.util';
 import {
   formatTokens as fmtTokens,
@@ -119,7 +120,16 @@ export class ProtocolPaneComponent implements OnDestroy {
   formatRateWindow(window: string | null): string { return fmtRateWindow(window); }
   formatResetIn(epoch: number): string { return fmtResetIn(epoch, this.nowTick()); }
 
-  renderMarkdown(md: string): string { return markdownToHtml(md); }
+  renderMarkdown(md: string): string {
+    return markdownToHtml(md, this.markdownOptions());
+  }
+
+  private markdownOptions(): MarkdownImageOptions {
+    const info = this.detail().info;
+    return {
+      resolveImageSrc: (src) => resolveProtocolImageSrc(src, info.id, info.watchPath)
+    };
+  }
 
   claudeSessionTooltip(): string {
     const cs = this.claudeSession();

@@ -134,6 +134,16 @@ public static class JobEndpoints
             return path is null ? Results.NotFound() : Results.File(path, contentType);
         });
 
+        // Read-only mirror of /attachments/ for the job's `results/` folder — the
+        // place where agents drop screenshots that should survive past the next
+        // Playwright run. The protocol pane resolves `results/<name>` references
+        // in status.md against this URL. See docs/protocol-style.md.
+        group.MapGet("/{jobId}/results/{fileName}", (string jobId, string fileName, string? watchPath, JobScannerService scanner) =>
+        {
+            var (path, contentType) = scanner.ResolveResult(jobId, fileName, watchPath);
+            return path is null ? Results.NotFound() : Results.File(path, contentType);
+        });
+
         group.MapPost("/reorder", (ReorderRequest req, JobScannerService scanner) =>
         {
             var jobs = req.Jobs.Count > 0

@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
+import { DatePipe } from '@angular/common';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { html as diff2html } from 'diff2html';
 import { ColorSchemeType } from 'diff2html/lib-esm/types';
@@ -21,6 +22,7 @@ import { GitPaneService } from '../git-pane.service';
   selector: 'app-git-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [DatePipe],
   templateUrl: './git-pane.component.html',
   styleUrls: ['./git-pane.component.scss']
 })

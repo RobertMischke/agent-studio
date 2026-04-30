@@ -118,8 +118,11 @@ public sealed class SummaryGenerationService
         - 0–3 Bullet-Punkte mit Warnungen, Fehlern, Workarounds; sonst weglassen.
 
         ## Bilder
-        - Wenn im Log Pfade auf `attachments/*.png|jpg|webp` o. Ä. vorkommen,
-          liste sie als `![](attachments/<name>)`. Sonst Sektion weglassen.
+        - Wenn im Log Bild-Pfade vorkommen (typisch unter `results/`,
+          `attachments/`, oder bare Datei­namen wie `foo.png`), liste **alle**
+          eindeutigen Treffer als `![](<pfad>)`. Bevorzuge das Präfix
+          `results/<name>` für vom Lauf produzierte Screenshots, `attachments/<name>`
+          für Eingaben aus dem Prompt. Sonst Sektion weglassen.
 
         Regeln:
         - Keine Floskeln, kein Marketing-Ton.
