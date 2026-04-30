@@ -1,5 +1,5 @@
-import { Injectable, OnDestroy, signal } from '@angular/core';
-import { GitStatus, JobInfo } from '../../models/job.model';
+import { Injectable, OnDestroy, computed, signal } from '@angular/core';
+import { GitStatus, JobCommitDetail, JobInfo } from '../../models/job.model';
 import { JobService } from '../../services/job.service';
 import { ErrorDialogService } from '../../services/error-dialog.service';
 
@@ -23,6 +23,15 @@ export class GitPaneService implements OnDestroy {
   readonly committing = signal(false);
   readonly generatingMsg = signal(false);
 
+  // Commit-history view: when the task has an auto-commit recorded, the
+  // pane switches from "live working tree" to "what this task changed".
+  // That data survives future work in the repo and is what the user wants
+  // to see when reviewing a finished task.
+  readonly commitDetail = signal<JobCommitDetail | null>(null);
+  readonly viewMode = computed<'commit' | 'worktree'>(() =>
+    this.commitDetail()?.commit ? 'commit' : 'worktree'
+  );
+
   private currentJob: JobInfo | null = null;
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -35,6 +44,9 @@ export class GitPaneService implements OnDestroy {
   startAutoRefresh(intervalMs = 5000): void {
     if (this.refreshTimer) return;
     this.refreshTimer = setInterval(() => {
+      // In commit mode the displayed snapshot is historical — polling the
+      // working tree would just churn for nothing.
+      if (this.viewMode() === 'commit') return;
       if (!this.committing() && !this.generatingMsg()) {
         this.refresh();
       }
@@ -59,18 +71,49 @@ export class GitPaneService implements OnDestroy {
    * we don't blow away in-flight selections.
    */
   setJob(info: JobInfo | null | undefined): void {
-    if (this.currentJob && info && this.currentJob.id === info.id && this.currentJob.watchPath === info.watchPath) {
-      this.currentJob = info;
+    const sameJob = this.currentJob && info
+      && this.currentJob.id === info.id
+      && this.currentJob.watchPath === info.watchPath;
+    if (sameJob) {
+      const hadCommit = !!this.currentJob!.commit;
+      this.currentJob = info!;
+      // The auto-commit lands on the progress→review transition, so a
+      // refresh of the same job can flip from "no commit" to "has commit".
+      // Load the snapshot lazily when that happens.
+      if (!hadCommit && info!.commit) this.loadCommitDetail();
       return;
     }
     this.currentJob = info ?? null;
     this.status.set(null);
+    this.commitDetail.set(null);
     this.selectedDiffPath.set(null);
     this.diffText.set('');
     this.commitMessage.set('');
     this.loading.set(false);
     this.committing.set(false);
     this.generatingMsg.set(false);
+    if (info?.commit) this.loadCommitDetail();
+  }
+
+  /**
+   * Load the recorded-commit snapshot for the current job. Tasks that have
+   * been auto-committed on progress→review carry a JobCommitInfo on
+   * job.json — the backend re-derives the file list from `git show` so the
+   * pane stays accurate even after history rewrites.
+   */
+  loadCommitDetail(): void {
+    const info = this.currentJob;
+    if (!info) return;
+    this.jobService.getJobCommit(info.id, info.watchPath).subscribe({
+      next: (detail) => {
+        this.commitDetail.set(detail);
+        // Default-select the first changed file so the diff is visible at a
+        // glance — matches the user's intent of "show me the changes".
+        const first = detail?.files?.[0]?.path ?? null;
+        if (first) this.selectDiffPath(first);
+      },
+      error: () => this.commitDetail.set(null)
+    });
   }
 
   refresh(): void {
@@ -106,7 +149,13 @@ export class GitPaneService implements OnDestroy {
     if (!info) return;
     this.selectedDiffPath.set(path);
     this.diffText.set('');
-    this.jobService.getGitDiff(info.id, path, info.watchPath).subscribe({
+    // In commit mode the diff comes from `git show <sha> -- <path>` so we
+    // see the historical change, not whatever the working tree looks like
+    // right now.
+    const stream$ = this.viewMode() === 'commit'
+      ? this.jobService.getJobCommitDiff(info.id, path, info.watchPath)
+      : this.jobService.getGitDiff(info.id, path, info.watchPath);
+    stream$.subscribe({
       next: (text: unknown) => this.diffText.set(typeof text === 'string' ? text : ''),
       error: () => this.diffText.set('(failed to load diff)')
     });

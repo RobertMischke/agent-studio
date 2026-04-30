@@ -1,7 +1,9 @@
 <section class="pane pane--git" [style.flex]="maximized() ? '1 1 100%' : weight()" data-testid="pane-git">
   <header class="pane__header">
-    <h3 class="pane__title">⎇ Git view</h3>
-    <button class="btn-sm" (click)="git.refresh()" [disabled]="git.loading()" title="Refresh git status">↻</button>
+    <h3 class="pane__title">{{ git.viewMode() === 'commit' ? '⏺ Task commit' : '⎇ Git view' }}</h3>
+    @if (git.viewMode() === 'worktree') {
+      <button class="btn-sm" (click)="git.refresh()" [disabled]="git.loading()" title="Refresh git status">↻</button>
+    }
     <button class="pane__maximize"
             data-testid="pane-maximize-git"
             (click)="maximizeToggle.emit()"
@@ -11,7 +13,59 @@
     <button class="pane__hide" (click)="hide.emit()" title="Hide panel">×</button>
   </header>
   <div class="pane__body git-view">
-    @if (git.status(); as g) {
+    @if (git.viewMode() === 'commit') {
+      @if (git.commitDetail()?.commit; as c) {
+        <div class="git-view__commit-header" data-testid="git-commit-header">
+          <div class="git-view__commit-row">
+            <span class="git-view__commit-sha" data-testid="git-commit-sha">⏺ {{ c.shortSha }}</span>
+            <span class="git-view__commit-files">{{ c.filesChanged }} {{ c.filesChanged === 1 ? 'file' : 'files' }}</span>
+            <span class="git-view__commit-when">{{ c.at | date:'medium' }}</span>
+          </div>
+          <pre class="git-view__commit-msg-display" data-testid="git-commit-message">{{ c.message }}</pre>
+        </div>
+        @if (git.commitDetail()?.files?.length) {
+          <ul class="git-view__files" data-testid="git-files">
+            @for (f of git.commitDetail()!.files; track f.path) {
+              <li class="git-view__file"
+                  [class.git-view__file--selected]="git.selectedDiffPath() === f.path"
+                  (click)="git.selectDiffPath(f.path)">
+                <span class="git-view__file-status" [title]="f.status">{{ f.status.trim() || '·' }}</span>
+                <span class="git-view__file-path">{{ f.path }}</span>
+                @if (f.added || f.removed) {
+                  <span class="git-view__file-stat">+{{ f.added }}/−{{ f.removed }}</span>
+                }
+              </li>
+            }
+          </ul>
+        } @else {
+          <div class="git-view__empty">No files recorded for this commit.</div>
+        }
+
+        @if (git.selectedDiffPath()) {
+          <div class="git-view__diff-wrap"
+               [class.git-view__diff-wrap--maximized]="diffMaximized()"
+               data-testid="git-diff-wrap">
+            <div class="git-view__diff-toolbar">
+              <span class="git-view__diff-path">{{ git.selectedDiffPath() }}</span>
+              <span class="git-view__diff-mode">{{ diffMaximized() ? 'side-by-side' : 'line-by-line' }}</span>
+              <button class="pane__maximize"
+                      data-testid="git-diff-maximize"
+                      (click)="toggleDiffMaximize()"
+                      [title]="diffMaximized() ? 'Restore diff' : 'Maximize diff'">
+                {{ diffMaximized() ? '⤡' : '⤢' }}
+              </button>
+            </div>
+            @if (diffHtml(); as dh) {
+              <div class="git-view__diff" data-testid="git-diff" [innerHTML]="dh"></div>
+            } @else {
+              <div class="git-view__diff git-view__diff--placeholder" data-testid="git-diff">(loading…)</div>
+            }
+          </div>
+        }
+      } @else {
+        <div class="git-view__empty">Loading commit…</div>
+      }
+    } @else if (git.status(); as g) {
       @if (g.error) {
         <div class="git-view__empty">{{ g.error }}</div>
       } @else if (!g.isRepo) {

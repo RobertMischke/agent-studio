@@ -303,33 +303,69 @@ public class GitService
     }
 
     /// <summary>
-    /// Returns the file list (status + path) for an already-recorded SHA via
-    /// <c>git show --name-status</c>. Used by the detail view to show what a
-    /// past auto-commit touched without re-deriving from numstat.
+    /// Returns the file list (status + path + numstat) for an already-recorded
+    /// SHA via <c>git show --name-status</c> + <c>git show --numstat</c>. Used
+    /// by the detail view to show what a past auto-commit touched without
+    /// re-deriving from the live working tree.
     /// </summary>
     public List<GitFileChange> GetCommitFiles(string jobId, string? watchPath, string sha)
     {
         var root = ResolveRepoRoot(jobId, watchPath);
         if (root == null || string.IsNullOrWhiteSpace(sha)) return [];
 
-        var (output, _, code) = RunGit(root, $"show --name-status --pretty=format: {sha}");
-        if (code != 0) return [];
+        var (statusOut, _, statusCode) = RunGit(root, $"show --name-status --pretty=format: {sha}");
+        if (statusCode != 0) return [];
 
-        var files = new List<GitFileChange>();
-        foreach (var line in output.Split('\n'))
+        var statusByPath = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var line in statusOut.Split('\n'))
         {
             if (string.IsNullOrWhiteSpace(line)) continue;
             var parts = line.Split('\t');
             if (parts.Length < 2) continue;
-            var status = parts[0].Trim();
-            // Renames look like "R100\told\tnew" — show the new path.
-            var path = parts[^1].Trim();
-            files.Add(new GitFileChange(status, path, 0, 0));
+            // Renames look like "R100\told\tnew" — index by the new path.
+            statusByPath[parts[^1].Trim()] = parts[0].Trim();
         }
 
-        return files
+        var numstat = new Dictionary<string, (int Added, int Removed)>(StringComparer.Ordinal);
+        var (numOut, _, numCode) = RunGit(root, $"show --numstat --pretty=format: {sha}");
+        if (numCode == 0)
+        {
+            foreach (var line in numOut.Split('\n'))
+            {
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                var parts = line.Split('\t');
+                if (parts.Length < 3) continue;
+                var added = int.TryParse(parts[0], out var a) ? a : 0;
+                var removed = int.TryParse(parts[1], out var r) ? r : 0;
+                numstat[parts[^1].Trim()] = (added, removed);
+            }
+        }
+
+        return statusByPath
+            .Select(kv =>
+            {
+                var (added, removed) = numstat.TryGetValue(kv.Key, out var n) ? n : (0, 0);
+                return new GitFileChange(kv.Value, kv.Key, added, removed);
+            })
             .OrderBy(f => f.Path, StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    /// <summary>
+    /// Returns the unified diff for an already-recorded commit, optionally
+    /// scoped to a single path. Used by the detail view so a long-completed
+    /// task still surfaces "what changed in this commit" even after the
+    /// working tree has moved on.
+    /// </summary>
+    public string GetCommitDiff(string jobId, string? watchPath, string sha, string? path)
+    {
+        var root = ResolveRepoRoot(jobId, watchPath);
+        if (root == null || string.IsNullOrWhiteSpace(sha)) return "";
+        var args = string.IsNullOrWhiteSpace(path)
+            ? $"show --pretty=format: {sha}"
+            : $"show --pretty=format: {sha} -- \"{path.Replace("\"", "\\\"")}\"";
+        var (output, err, code) = RunGit(root, args);
+        return code == 0 ? output : err;
     }
 
     /// <summary>

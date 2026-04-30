@@ -74,6 +74,21 @@ export interface JobInfo {
   useOwnSession: boolean | null;
   lastUsage: SessionUsage | null;
   execution: CliExecution | null;
+  commit: JobCommitInfo | null;
+}
+
+export interface JobCommitInfo {
+  sha: string;
+  shortSha: string;
+  message: string;
+  filesChanged: number;
+  files: string[];
+  at: string;
+}
+
+export interface JobCommitDetail {
+  commit: JobCommitInfo | null;
+  files: GitFileChange[];
 }
 
 export interface SessionUsage {

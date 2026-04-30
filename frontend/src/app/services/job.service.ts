@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport, QuotaReport, QuotaSnapshot, GitStatus, ClaudeSessionResponse } from '../models/job.model';
+import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport, QuotaReport, QuotaSnapshot, GitStatus, ClaudeSessionResponse, JobCommitDetail } from '../models/job.model';
 import { ErrorDialogService } from './error-dialog.service';
 
 @Injectable({ providedIn: 'root' })
@@ -120,6 +120,19 @@ export class JobService {
 
   generateCommitMessage(jobId: string, watchPath?: string) {
     return this.http.post<{ message: string }>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/git/generate-message`, {}, this.withWatchPath(watchPath));
+  }
+
+  // Per-task commit snapshot — what the auto-commit recorded on the
+  // progress→review transition, plus a live re-derivation of the file list.
+  getJobCommit(jobId: string, watchPath?: string) {
+    return this.http.get<JobCommitDetail>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/commit`, this.withWatchPath(watchPath));
+  }
+
+  getJobCommitDiff(jobId: string, path: string | null, watchPath?: string) {
+    const opts = this.withWatchPath(watchPath);
+    const params = (opts.params as Record<string, string> | undefined) ?? {};
+    if (path) params['path'] = path;
+    return this.http.get(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/commit/diff`, { ...opts, params, responseType: 'text' });
   }
 
   openInVsCode(jobId: string, watchPath?: string) {

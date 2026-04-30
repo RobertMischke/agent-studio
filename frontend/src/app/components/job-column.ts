@@ -274,6 +274,15 @@ export class JobColumnComponent {
   isDragOver = false;
   dropIndex = -1;
 
+  // Auto-scroll the page while a card is being dragged near the viewport edges.
+  // HTML5 drag suppresses wheel/keyboard scroll, so without this the user is
+  // stuck at whatever scroll position the drag started in. Active only between
+  // dragstart and dragend on a card from this column.
+  private autoScrollVelocity = 0;
+  private autoScrollRaf: number | null = null;
+  private readonly onAutoScrollDragOver = (e: DragEvent) => this.updateAutoScrollVelocity(e);
+  private readonly onAutoScrollEnd = () => this.stopAutoScroll();
+
   canAddTask(): boolean {
     const s = this.state();
     return s === '1-preparation' || s === '2-ready';
@@ -312,6 +321,49 @@ export class JobColumnComponent {
   onDragStart(event: DragEvent, job: JobInfo) {
     event.dataTransfer?.setData('text/plain', JSON.stringify({ jobId: job.id, watchPath: job.watchPath, jobKey: job.jobKey }));
     event.dataTransfer?.setData('application/x-source-state', job.state);
+    this.startAutoScroll();
+  }
+
+  private startAutoScroll() {
+    document.addEventListener('dragover', this.onAutoScrollDragOver);
+    document.addEventListener('dragend', this.onAutoScrollEnd);
+    document.addEventListener('drop', this.onAutoScrollEnd);
+  }
+
+  private updateAutoScrollVelocity(event: DragEvent) {
+    const EDGE_PX = 80;
+    const MAX_SPEED = 22;
+    const y = event.clientY;
+    const h = window.innerHeight;
+    let velocity = 0;
+    if (y >= 0 && y < EDGE_PX) {
+      velocity = -MAX_SPEED * (1 - y / EDGE_PX);
+    } else if (y > h - EDGE_PX && y <= h) {
+      velocity = MAX_SPEED * (1 - (h - y) / EDGE_PX);
+    }
+    this.autoScrollVelocity = velocity;
+    if (velocity !== 0 && this.autoScrollRaf === null) {
+      const tick = () => {
+        if (this.autoScrollVelocity === 0) {
+          this.autoScrollRaf = null;
+          return;
+        }
+        window.scrollBy(0, this.autoScrollVelocity);
+        this.autoScrollRaf = requestAnimationFrame(tick);
+      };
+      this.autoScrollRaf = requestAnimationFrame(tick);
+    }
+  }
+
+  private stopAutoScroll() {
+    this.autoScrollVelocity = 0;
+    if (this.autoScrollRaf !== null) {
+      cancelAnimationFrame(this.autoScrollRaf);
+      this.autoScrollRaf = null;
+    }
+    document.removeEventListener('dragover', this.onAutoScrollDragOver);
+    document.removeEventListener('dragend', this.onAutoScrollEnd);
+    document.removeEventListener('drop', this.onAutoScrollEnd);
   }
 
   onDragOver(event: DragEvent) {

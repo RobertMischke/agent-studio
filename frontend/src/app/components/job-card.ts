@@ -47,6 +47,12 @@ if (typeof window !== 'undefined') {
           }
         </div>
       }
+      @if (job().commit; as c) {
+        <div class="job-card__commit" [title]="commitTooltip()" data-testid="job-card-commit">
+          <span class="job-card__commit-sha">⏺ {{ c.shortSha }}</span>
+          <span class="job-card__commit-files">{{ c.filesChanged }} {{ c.filesChanged === 1 ? 'file' : 'files' }}</span>
+        </div>
+      }
       <div class="job-card__activity">
         Last activity: {{ relativeActivity() }}
       </div>
@@ -187,6 +193,20 @@ if (typeof window !== 'undefined') {
     .job-card__git-count { color: #fbbf24; font-weight: 600; }
     .job-card__git-count--clean { color: #86efac; }
     .job-card__git-stat { color: #94a3b8; font-family: var(--font-mono, monospace); font-size: 10px; }
+    .job-card__commit {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 2px 8px;
+      margin: 0 0 6px;
+      border-radius: 999px;
+      background: rgba(16, 185, 129, 0.10);
+      border: 1px solid rgba(16, 185, 129, 0.25);
+      font-size: 11px;
+      color: #86efac;
+    }
+    .job-card__commit-sha { font-family: var(--font-mono, monospace); font-weight: 600; }
+    .job-card__commit-files { color: #94a3b8; }
   `]
 })
 export class JobCardComponent implements OnInit, OnDestroy {
@@ -211,6 +231,13 @@ export class JobCardComponent implements OnInit, OnDestroy {
     const g = this.gitPill();
     if (!g) return '';
     return `Branch: ${g.branch ?? '(detached)'}\n${g.filesChanged} changed file(s) in ${g.rootPath}\n+${g.totalAdded} / −${g.totalRemoved}`;
+  });
+
+  readonly commitTooltip = computed(() => {
+    const c = this.job().commit;
+    if (!c) return '';
+    const subject = (c.message || '').split('\n')[0];
+    return `${c.shortSha} — ${subject}\n${c.filesChanged} file(s) changed`;
   });
 
   ngOnInit(): void { this.stopPolling = this.gitSummary.ensurePolling(); }

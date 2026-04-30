@@ -165,3 +165,41 @@
   justify-content: flex-end;
   gap: 8px;
 }
+
+/*
+ * Header rendered when the pane is in commit mode (the task already had
+ * its progress→review auto-commit recorded). Styled close to the live
+ * working-tree summary so the visual rhythm of the pane stays consistent.
+ */
+.git-view__commit-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.22);
+}
+.git-view__commit-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 12px;
+}
+.git-view__commit-sha {
+  font-family: var(--font-mono, monospace);
+  font-weight: 600;
+  color: #86efac;
+}
+.git-view__commit-files { color: #cbd5e1; }
+.git-view__commit-when { color: #94a3b8; margin-left: auto; }
+.git-view__commit-msg-display {
+  margin: 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(0,0,0,0.25);
+  color: #cbd5e1;
+  font: 12px/1.5 var(--font-mono, monospace);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
