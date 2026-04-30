@@ -50,24 +50,28 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
           }
         } @else {
           @for (job of jobs(); track job.jobKey; let i = $index) {
-            <div class="column__drop-zone"
-                 [class.column__drop-zone--active]="dropIndex === i"
-                 (dragover)="onCardDragOver($event, i)"
-                 (dragleave)="onCardDragLeave()"
-                 (drop)="onCardDrop($event, i)">
-            </div>
+            @if (!reorderDisabled()) {
+              <div class="column__drop-zone"
+                   [class.column__drop-zone--active]="dropIndex === i"
+                   (dragover)="onCardDragOver($event, i)"
+                   (dragleave)="onCardDragLeave()"
+                   (drop)="onCardDrop($event, i)">
+              </div>
+            }
             <app-job-card
               [job]="job"
               (click)="jobClick.emit(job)"
               draggable="true"
               (dragstart)="onDragStart($event, job)" />
           }
-          <div class="column__drop-zone column__drop-zone--last"
-               [class.column__drop-zone--active]="dropIndex === jobs().length"
-               (dragover)="onCardDragOver($event, jobs().length)"
-               (dragleave)="onCardDragLeave()"
-               (drop)="onCardDrop($event, jobs().length)">
-          </div>
+          @if (!reorderDisabled()) {
+            <div class="column__drop-zone column__drop-zone--last"
+                 [class.column__drop-zone--active]="dropIndex === jobs().length"
+                 (dragover)="onCardDragOver($event, jobs().length)"
+                 (dragleave)="onCardDragLeave()"
+                 (drop)="onCardDrop($event, jobs().length)">
+            </div>
+          }
           @if (jobs().length === 0) {
             <div class="column__empty">No jobs</div>
           }
@@ -240,6 +244,7 @@ export class JobColumnComponent {
   readonly icon = input<string>('');
   readonly state = input.required<string>();
   readonly jobs = input.required<JobInfo[]>();
+  readonly reorderDisabled = input<boolean>(false);
   readonly jobClick = output<JobInfo>();
   readonly jobDrop = output<{ jobId: string; watchPath: string; targetState: string }>();
   readonly jobReorder = output<{ state: string; jobs: JobOrderItem[] }>();
