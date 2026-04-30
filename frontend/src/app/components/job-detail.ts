@@ -1375,10 +1375,15 @@ export class JobDetailComponent implements OnDestroy {
       // refreshes for the same job (e.g. execution status changes) must
       // preserve the live CLI output and view state.
       this.showLogOverlay.set(false);
-      // Default tab: Protokoll once a summary exists, otherwise Aktivität.
+      // Default tab:
+      //  • In-progress jobs always start on Aktivität — the live CLI output is
+      //    what the user wants to see; any existing protocol from a prior run
+      //    is stale until the current run finishes.
+      //  • Otherwise: Protokoll if a summary exists, else Aktivität.
       // The auto-switch effect below promotes Aktivität → Protokoll once
       // Haiku finishes, unless the user has manually picked a tab.
-      this.activeInspectorTab.set(d.statusMarkdown ? 'protocol' : 'activity');
+      const isInProgress = d.info.state === '3-progress';
+      this.activeInspectorTab.set(isInProgress ? 'activity' : (d.statusMarkdown ? 'protocol' : 'activity'));
       this.userTouchedInspectorTab = false;
       this.showCliConfig.set(false);
       this.cliTestResult.set(null);
@@ -1391,10 +1396,13 @@ export class JobDetailComponent implements OnDestroy {
     }
 
     // Auto-promote Aktivität → Protokoll the moment a fresh summary lands,
-    // but only when the user hasn't actively chosen a tab themselves.
+    // but only when the user hasn't actively chosen a tab themselves and the
+    // job has left 3-progress — while the run is live we keep showing the
+    // activity log even if a stale summary from a previous attempt exists.
     if (
       !this.userTouchedInspectorTab &&
       this.activeInspectorTab() === 'activity' &&
+      d.info.state !== '3-progress' &&
       d.summaryState?.status === 'ready' &&
       d.statusMarkdown
     ) {
