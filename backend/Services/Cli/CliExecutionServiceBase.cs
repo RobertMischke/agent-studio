@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Text.Json;
 using OrchestratorApi.Models;
 
 namespace OrchestratorApi.Services.Cli;
@@ -213,12 +212,15 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             Model = string.IsNullOrWhiteSpace(model) ? null : model
         };
 
+        var logPath = GetOutputLogPath(jobKey);
         var info = new ProcInfo(process, execution, workingDirectory)
         {
-            OutputLogPath = GetOutputLogPath(jobKey),
+            OutputLogPath = logPath,
+            OutputLog = new CliOutputLogStore(logPath),
             SessionName = sessionName
         };
-        ResetOutputLog(info.OutputLogPath);
+        try { info.OutputLog.Reset(); }
+        catch (Exception ex) { _logger.LogWarning(ex, "Failed to reset CLI output log {Path}", logPath); }
         _processes[jobKey] = info;
 
         OnStarted?.Invoke(jobKey, execution);
@@ -239,7 +241,8 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
                    + (resumeSession ? " (resume)" : "")
         };
         info.OutputBuffer.Add(startedLine);
-        try { AppendOutputLine(info.OutputLogPath, startedLine); } catch { }
+        if (!info.OutputLog.Append(startedLine))
+            _logger.LogWarning("Failed to persist 'started' line for job {JobId} to {Path}", jobId, info.OutputLogPath);
         try { OnOutput?.Invoke(jobKey, startedLine); } catch { }
 
         _ = ReadStreamAsync(jobKey, process.StandardOutput, "stdout", info, ct);
@@ -280,8 +283,31 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         catch { return false; }
     }
 
-    public List<CliOutputLine> GetOutput(string jobKey) =>
-        _processes.TryGetValue(jobKey, out var info) ? info.OutputBuffer.ToList() : [];
+    public List<CliOutputLine> GetOutput(string jobKey)
+    {
+        if (_processes.TryGetValue(jobKey, out var info))
+            return info.OutputBuffer.ToList();
+
+        // No live process. Either the backend was restarted while a CLI run
+        // was in flight, or the post-exit retention window elapsed. Recover
+        // from the persisted JSONL so the Activity Log isn't blank — this is
+        // the durability guarantee callers depend on.
+        return CliOutputLogStore.ReadAll(GetOutputLogPath(jobKey));
+    }
+
+    public void DiscardPersistedOutput(string jobKey)
+    {
+        // If the process is still tracked, drop the open writer first so the
+        // Windows file handle is released before delete.
+        if (_processes.TryGetValue(jobKey, out var info))
+        {
+            try { info.OutputLog.Dispose(); } catch { /* already disposed */ }
+        }
+
+        var path = GetOutputLogPath(jobKey);
+        try { if (File.Exists(path)) File.Delete(path); }
+        catch (Exception ex) { _logger.LogDebug(ex, "Could not delete persisted CLI log {Path}", path); }
+    }
 
     public CliExecution? GetExecution(string jobKey) =>
         _processes.TryGetValue(jobKey, out var info) ? info.Execution : null;
@@ -315,10 +341,12 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
                 };
 
                 // Persist the raw line to the on-disk log unconditionally so
-                // we never lose the source-of-truth bytes from the CLI. The
-                // visible buffer + event stream get the transformed lines.
-                try { AppendOutputLine(info.OutputLogPath, rawLine); }
-                catch (Exception ex) { _logger.LogWarning(ex, "Failed to append output line for {JobId}", jobKey); }
+                // we never lose the source-of-truth bytes from the CLI — the
+                // store flushes to disk per line so a backend crash here can
+                // lose at most an in-flight write, never an acknowledged one.
+                // The visible buffer + event stream get the transformed lines.
+                if (!info.OutputLog.Append(rawLine))
+                    _logger.LogWarning("Failed to persist CLI output line for {JobId}", jobKey);
 
                 IEnumerable<CliOutputLine> transformed;
                 try { transformed = TransformReadLine(rawLine); }
@@ -380,7 +408,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
                 Text = $"[taskboard] {CliType} CLI exited: status={status}, exitCode={exitCode?.ToString() ?? "?"}, duration={duration:F1}s"
             };
             info.OutputBuffer.Add(exitLine);
-            try { AppendOutputLine(info.OutputLogPath, exitLine); } catch { }
+            info.OutputLog.Append(exitLine);
             try { OnOutput?.Invoke(jobKey, exitLine); } catch { }
 
             try { OnFinished?.Invoke(jobKey, finalExecution); }
@@ -391,7 +419,8 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
 
             _ = Task.Delay(TimeSpan.FromMinutes(30), CancellationToken.None).ContinueWith(_ =>
             {
-                _processes.TryRemove(jobKey, out ProcInfo? _removed);
+                if (_processes.TryRemove(jobKey, out var removed))
+                    removed.OutputLog.Dispose();
             });
         }
         catch (Exception ex)
@@ -404,7 +433,12 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
 
     // ── Output log persistence ───────────────────────────────────────────
 
-    private string GetOutputLogPath(string jobKey)
+    /// <summary>
+    /// Resolve the per-job runtime JSONL path. Public so the runner can
+    /// recover the Activity Log from disk after a backend restart, when no
+    /// <see cref="ProcInfo"/> exists in memory anymore.
+    /// </summary>
+    public string GetOutputLogPath(string jobKey)
     {
         var taskRepo = _configuration["TaskRepository"];
         var baseDir = !string.IsNullOrWhiteSpace(taskRepo)
@@ -423,26 +457,6 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         return name.Length > 180 ? name[^180..] : name;
     }
 
-    private static readonly object _outputLogLock = new();
-    private static readonly JsonSerializerOptions OutputLineJsonOpts = new() { WriteIndented = false };
-
-    private static void ResetOutputLog(string? path)
-    {
-        if (string.IsNullOrEmpty(path)) return;
-        try { File.WriteAllText(path, string.Empty); } catch { }
-    }
-
-    private static void AppendOutputLine(string? path, CliOutputLine line)
-    {
-        if (string.IsNullOrEmpty(path)) return;
-        try
-        {
-            var json = JsonSerializer.Serialize(line, OutputLineJsonOpts);
-            lock (_outputLogLock) File.AppendAllText(path, json + Environment.NewLine);
-        }
-        catch { }
-    }
-
     /// <summary>Per-process bookkeeping shared with subclasses.</summary>
     protected sealed class ProcInfo
     {
@@ -452,6 +466,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         public List<CliOutputLine> OutputBuffer { get; } = [];
         public SessionUsage? LastUsage { get; set; }
         public string? OutputLogPath { get; init; }
+        public CliOutputLogStore OutputLog { get; init; } = null!;
         public string? SessionName { get; set; }
         /// <summary>For Codex: the UUID extracted from the first <c>session_meta</c> JSON line.</summary>
         public string? CapturedSessionId { get; set; }

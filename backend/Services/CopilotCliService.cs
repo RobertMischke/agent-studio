@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using OrchestratorApi.Models;
+using OrchestratorApi.Services.Cli;
 using OrchestratorApi.Services.Pty;
 
 namespace OrchestratorApi.Services;
@@ -173,11 +174,14 @@ public class CopilotCliService : ICliExecutionService
             Model = string.IsNullOrWhiteSpace(model) ? null : model
         };
 
+        var outputLogPath = GetOutputLogPath(jobKey);
         var info = new CliProcessInfo(process, execution, workingDirectory)
         {
-            OutputLogPath = GetOutputLogPath(jobKey)
+            OutputLogPath = outputLogPath,
+            OutputLog = new CliOutputLogStore(outputLogPath)
         };
-        ResetOutputLog(info.OutputLogPath);
+        try { info.OutputLog.Reset(); }
+        catch (Exception ex) { _logger.LogWarning(ex, "Failed to reset CLI output log {Path}", outputLogPath); }
         _processes[jobKey] = info;
 
         UpsertPersisted(new PersistedExecution
@@ -244,9 +248,23 @@ public class CopilotCliService : ICliExecutionService
 
     public List<CliOutputLine> GetOutput(string jobKey)
     {
-        return _processes.TryGetValue(jobKey, out var info)
-            ? info.OutputBuffer.ToList()
-            : [];
+        if (_processes.TryGetValue(jobKey, out var info))
+            return info.OutputBuffer.ToList();
+
+        // Fall back to the runtime JSONL — see CliExecutionServiceBase
+        // for the rationale (backend restart, post-exit cleanup).
+        return CliOutputLogStore.ReadAll(GetOutputLogPath(jobKey));
+    }
+
+    public void DiscardPersistedOutput(string jobKey)
+    {
+        if (_processes.TryGetValue(jobKey, out var info))
+        {
+            try { info.OutputLog?.Dispose(); } catch { /* already disposed */ }
+        }
+        var path = GetOutputLogPath(jobKey);
+        try { if (File.Exists(path)) File.Delete(path); }
+        catch (Exception ex) { _logger.LogDebug(ex, "Could not delete persisted CLI log {Path}", path); }
     }
 
     public CliExecution? GetExecution(string jobKey)
@@ -356,7 +374,8 @@ public class CopilotCliService : ICliExecutionService
                 while (info.OutputBuffer.Count > 5000)
                     info.OutputBuffer.RemoveAt(0);
 
-                AppendOutputLine(info.OutputLogPath, outputLine);
+                if (!info.OutputLog.Append(outputLine))
+                    _logger.LogWarning("Failed to persist CLI output line for {JobId}", jobKey);
 
                 TryParseUsage(line, info);
 
@@ -605,56 +624,6 @@ public class CopilotCliService : ICliExecutionService
         return name.Length > 180 ? name[^180..] : name;
     }
 
-    private static readonly object _outputLogLock = new();
-    private static readonly JsonSerializerOptions OutputLineJsonOpts = new() { WriteIndented = false };
-
-    private static void ResetOutputLog(string? path)
-    {
-        if (string.IsNullOrEmpty(path)) return;
-        try
-        {
-            // Each fresh execution gets a clean log; previous runs are intentionally
-            // overwritten because we don't want stale output bleeding into a new session.
-            File.WriteAllText(path, string.Empty);
-        }
-        catch { /* best effort */ }
-    }
-
-    private static void AppendOutputLine(string? path, CliOutputLine line)
-    {
-        if (string.IsNullOrEmpty(path)) return;
-        try
-        {
-            var json = JsonSerializer.Serialize(line, OutputLineJsonOpts);
-            lock (_outputLogLock)
-            {
-                File.AppendAllText(path, json + Environment.NewLine);
-            }
-        }
-        catch { /* best effort: never fail the read loop because of disk issues */ }
-    }
-
-    private static List<CliOutputLine> ReadOutputLog(string? path)
-    {
-        var lines = new List<CliOutputLine>();
-        if (string.IsNullOrEmpty(path) || !File.Exists(path)) return lines;
-        try
-        {
-            foreach (var raw in File.ReadAllLines(path))
-            {
-                if (string.IsNullOrWhiteSpace(raw)) continue;
-                try
-                {
-                    var entry = JsonSerializer.Deserialize<CliOutputLine>(raw);
-                    if (entry != null) lines.Add(entry);
-                }
-                catch { /* skip malformed line */ }
-            }
-        }
-        catch { /* best effort */ }
-        return lines;
-    }
-
     private List<PersistedExecution> ReadPersistedExecutions()
     {
         var path = GetPersistencePath();
@@ -765,10 +734,11 @@ public class CopilotCliService : ICliExecutionService
                 var logPath = pe.OutputLogPath ?? GetOutputLogPath(pe.JobKey);
                 var info = new CliProcessInfo(proc, execution, pe.WorkingDirectory)
                 {
-                    OutputLogPath = logPath
+                    OutputLogPath = logPath,
+                    OutputLog = new CliOutputLogStore(logPath)
                 };
                 // Rehydrate buffer from the on-disk capture so the user sees the full history.
-                foreach (var historical in ReadOutputLog(logPath))
+                foreach (var historical in CliOutputLogStore.ReadAll(logPath))
                 {
                     info.OutputBuffer.Add(historical);
                     TryParseUsage(historical.Text, info);
@@ -800,6 +770,7 @@ public class CopilotCliService : ICliExecutionService
         public List<CliOutputLine> OutputBuffer { get; } = [];
         public SessionUsage? LastUsage { get; set; }
         public string? OutputLogPath { get; init; }
+        public CliOutputLogStore OutputLog { get; init; } = null!;
 
         public CliProcessInfo(Process process, CliExecution execution, string workingDirectory)
         {

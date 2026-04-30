@@ -30,6 +30,17 @@ public interface ICliExecutionService
     bool SendInput(string jobKey, string input);
 
     List<CliOutputLine> GetOutput(string jobKey);
+
+    /// <summary>
+    /// Called by the runner once the per-run JSONL has been merged into the
+    /// job's durable <c>logs/cli-output.log</c>. The CLI backend should drop
+    /// its runtime JSONL so that, after the in-memory buffer is evicted, the
+    /// disk-fallback path in <see cref="GetOutput"/> doesn't double up lines
+    /// already present in the consolidated log. No-op if the backend doesn't
+    /// keep a runtime JSONL.
+    /// </summary>
+    void DiscardPersistedOutput(string jobKey);
+
     CliExecution? GetExecution(string jobKey);
     SessionUsage? GetLastUsage(string jobKey);
     bool IsRunningForProject(string rootPath);

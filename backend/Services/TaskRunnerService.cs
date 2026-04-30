@@ -644,9 +644,16 @@ public class ProjectRunner
             _scanner.SetJobSessionName(_activeJobId, capturedSessionId, Entry.Path);
         }
 
-        // Write CLI output to log file
+        // Write CLI output to log file. The runtime JSONL is the durable
+        // backup that lets us recover the Activity Log after a backend
+        // restart; once the consolidated cli-output.log has it, the JSONL
+        // can go so the disk-fallback path in GetOutput doesn't replay the
+        // same lines after the in-memory buffer is evicted.
         var activeInfo = _scanner.FindJob(_activeJobId, Entry.Path);
-        if (activeInfo != null) WriteCliLog(activeInfo, cli);
+        if (activeInfo != null && WriteCliLog(activeInfo, cli))
+        {
+            cli.DiscardPersistedOutput(jobKey);
+        }
 
         var finishedJobId = _activeJobId;
         // Move job to 4-review
@@ -676,7 +683,12 @@ public class ProjectRunner
         NotifyStatus();
     }
 
-    private void WriteCliLog(JobInfo info, ICliExecutionService cli)
+    /// <returns>
+    /// True if the consolidated <c>logs/cli-output.log</c> was updated. The
+    /// caller uses this signal to decide whether the runtime JSONL backup
+    /// can now be discarded.
+    /// </returns>
+    private bool WriteCliLog(JobInfo info, ICliExecutionService cli)
     {
         try
         {
@@ -684,6 +696,14 @@ public class ProjectRunner
             var logPath = JobPaths.CliOutputLog(info.FolderPath);
 
             var output = cli.GetOutput(info.JobKey);
+            if (output.Count == 0)
+            {
+                // GetOutput already falls back to the on-disk JSONL when the
+                // in-memory buffer is gone, so an empty result means nothing
+                // to flush — don't truncate the existing log.
+                return false;
+            }
+
             var logContent = string.Join(Environment.NewLine,
                 output.Select(l => $"[{l.Timestamp:HH:mm:ss.fff}] [{l.Stream}] {l.Text}"));
 
@@ -692,10 +712,12 @@ public class ProjectRunner
                 File.AppendAllText(logPath, Environment.NewLine + logContent, System.Text.Encoding.UTF8);
             else
                 File.WriteAllText(logPath, logContent, System.Text.Encoding.UTF8);
+            return true;
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to write CLI log for job {JobId}", info.Id);
+            return false;
         }
     }
 
