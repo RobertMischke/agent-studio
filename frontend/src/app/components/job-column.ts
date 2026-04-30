@@ -136,14 +136,34 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
       font-size: 13px;
       padding: 24px 0;
     }
+    /* The drop-zone occupies just 2px of layout space but extends its hit
+       target via padding + negative margins, eating into the surrounding
+       8px flex gaps. This makes it ~14px tall to the cursor without
+       changing the visual rhythm of the column. */
     .column__drop-zone {
-      height: 4px;
-      border-radius: 2px;
-      transition: height 0.15s, background 0.15s;
+      position: relative;
+      height: 2px;
+      padding: 6px 0;
+      margin: -6px 0;
+      flex-shrink: 0;
     }
-    .column__drop-zone--active {
-      height: 8px;
-      background: rgba(99, 102, 241, 0.5);
+    .column__drop-zone::before {
+      content: '';
+      position: absolute;
+      left: 4px;
+      right: 4px;
+      top: 50%;
+      height: 2px;
+      transform: translateY(-50%);
+      border-radius: 2px;
+      background: transparent;
+      transition: background 0.08s ease, height 0.08s ease;
+      pointer-events: none;
+    }
+    .column__drop-zone--active::before {
+      background: rgba(99, 102, 241, 0.9);
+      height: 4px;
+      box-shadow: 0 0 8px rgba(99, 102, 241, 0.6);
     }
     .column__add {
       margin-top: 4px;
@@ -300,7 +320,13 @@ export class JobColumnComponent {
   }
 
   onDragLeave(event: DragEvent) {
+    // dragleave fires whenever the cursor moves between child elements; only
+    // clear state when the cursor has actually left the column boundary.
+    const related = event.relatedTarget as Node | null;
+    const target = event.currentTarget as Node | null;
+    if (related && target && (target as Element).contains(related)) return;
     this.isDragOver = false;
+    this.dropIndex = -1;
   }
 
   onCardDragOver(event: DragEvent, index: number) {
@@ -310,7 +336,10 @@ export class JobColumnComponent {
   }
 
   onCardDragLeave() {
-    this.dropIndex = -1;
+    // Intentionally a no-op: dragleave on a drop-zone fires when entering an
+    // adjacent zone or card and would cause the active indicator to flicker.
+    // The column-level onDragLeave clears dropIndex when the cursor truly
+    // leaves the column.
   }
 
   onCardDrop(event: DragEvent, index: number) {
