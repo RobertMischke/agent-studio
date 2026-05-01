@@ -1,4 +1,4 @@
-using OrchestratorApi.Services;
+using OrchestratorApi.Services.Runner;
 using Xunit;
 
 namespace OrchestratorApi.Tests;
@@ -17,7 +17,7 @@ public class TaskRunnerPromptTests
     [Fact]
     public void BuildFreshStartPrompt_PointsAtPromptFileAndJobFolder()
     {
-        var p = ProjectRunner.BuildFreshStartPrompt(
+        var p = RunPlanner.BuildFreshStartPrompt(
             @"C:\jobs\fix-bug\prompt.md",
             @"C:\jobs\fix-bug");
 
@@ -29,7 +29,7 @@ public class TaskRunnerPromptTests
     [Fact]
     public void BuildResumeContinuationPrompt_RestoresJobContext()
     {
-        var p = ProjectRunner.BuildResumeContinuationPrompt(@"C:\jobs\fix-bug");
+        var p = RunPlanner.BuildResumeContinuationPrompt(@"C:\jobs\fix-bug");
 
         Assert.Contains("Resume the interrupted task", p);
         Assert.Contains(@"C:\jobs\fix-bug", p);
@@ -44,8 +44,8 @@ public class TaskRunnerPromptTests
     [Fact]
     public void BuildResumeContinuationPrompt_DiffersFromFreshStartPrompt()
     {
-        var fresh = ProjectRunner.BuildFreshStartPrompt(@"C:\jobs\x\prompt.md", @"C:\jobs\x");
-        var resume = ProjectRunner.BuildResumeContinuationPrompt(@"C:\jobs\x");
+        var fresh = RunPlanner.BuildFreshStartPrompt(@"C:\jobs\x\prompt.md", @"C:\jobs\x");
+        var resume = RunPlanner.BuildResumeContinuationPrompt(@"C:\jobs\x");
 
         Assert.NotEqual(fresh, resume);
     }
@@ -69,7 +69,7 @@ public class TaskRunnerPromptTests
     [InlineData("taskboard-no-timestamp", false)]
     public void IsPlaceholderSessionSlug_RecognisesGeneratedShape(string? input, bool expected)
     {
-        Assert.Equal(expected, ProjectRunner.IsPlaceholderSessionSlug(input));
+        Assert.Equal(expected, RunPlanner.IsPlaceholderSessionSlug(input));
     }
 
     /// <summary>
@@ -91,7 +91,7 @@ public class TaskRunnerPromptTests
     public void ShouldUseResumePrompt_OnlyFiresWhenContextExists(
         string initialState, bool resume, bool sessionDropped, bool expected)
     {
-        Assert.Equal(expected, ProjectRunner.ShouldUseResumePrompt(initialState, resume, sessionDropped));
+        Assert.Equal(expected, RunPlanner.ShouldUseResumePrompt(initialState, resume, sessionDropped));
     }
 
     /// <summary>
@@ -106,7 +106,7 @@ public class TaskRunnerPromptTests
     [Fact]
     public void BuildRecoveryContinuationPrompt_AcknowledgesLossAndIncludesFollowup()
     {
-        var p = ProjectRunner.BuildRecoveryContinuationPrompt(
+        var p = RunPlanner.BuildRecoveryContinuationPrompt(
             @"C:\jobs\fix-bug",
             "Please continue with adding the chat compose box.");
 
@@ -133,7 +133,7 @@ public class TaskRunnerPromptTests
     [Fact]
     public void BuildRecoveryContinuationPrompt_HandlesEmptyFollowupGracefully()
     {
-        var p = ProjectRunner.BuildRecoveryContinuationPrompt(@"C:\jobs\fix-bug", "");
+        var p = RunPlanner.BuildRecoveryContinuationPrompt(@"C:\jobs\fix-bug", "");
         Assert.Contains(@"C:\jobs\fix-bug", p);
         Assert.Contains("User follow-up:", p);
     }

@@ -1,11 +1,11 @@
 using OrchestratorApi.Models;
-using OrchestratorApi.Services;
+using OrchestratorApi.Services.Runner;
 using Xunit;
 
 namespace OrchestratorApi.Tests;
 
 /// <summary>
-/// Decision-tree matrix for <see cref="ProjectRunner.PlanRun"/> — the single
+/// Decision-tree matrix for <see cref="RunPlanner.PlanRun"/> — the single
 /// place that maps (intent × job state × session state × CLI compatibility) to
 /// a <see cref="RunPlan"/>. The whole point of having one planner is that this
 /// matrix locks every cell of the table; if a future change introduces a path
@@ -44,7 +44,7 @@ public class TaskRunnerPlanTests
         System.Func<string?, bool>? compat = null,
         string? followup = null)
     {
-        return ProjectRunner.PlanRun(
+        return RunPlanner.PlanRun(
             intent,
             state,
             sessionName,
