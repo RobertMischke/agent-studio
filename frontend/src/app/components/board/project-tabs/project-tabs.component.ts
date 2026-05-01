@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { projectIdentity } from '../../../services/project-identity.util';
 
 export interface ProjectRunnerIndicator { icon: string; cls: string; }
 
@@ -31,4 +32,6 @@ export class ProjectTabsComponent {
 
   readonly toggle = output<string>();
   readonly toggleAuto = output<string>();
+
+  readonly identityFor = (name: string) => projectIdentity(name);
 }

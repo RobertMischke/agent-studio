@@ -1,6 +1,7 @@
 import { Component, computed, input, output } from '@angular/core';
 import { JobInfo, JobOrderItem } from '../models/job.model';
 import { JobCardComponent } from './job-card';
+import { projectIdentity } from '../services/project-identity.util';
 
 const ARCHIVE_VISIBLE_LIMIT = 20;
 
@@ -35,9 +36,14 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
             <button type="button"
                     class="archive-row"
                     [attr.data-testid]="'archive-row'"
+                    [style.--project-color]="identityFor(job.projectName).color"
+                    [style.--project-on]="identityFor(job.projectName).onColor"
                     (click)="jobClick.emit(job)">
               <span class="archive-row__date">{{ formatShortDate(job.lastActivity) }}</span>
-              <span class="archive-row__project">{{ job.projectName }}</span>
+              <span class="archive-row__project">
+                <span class="archive-row__disk" aria-hidden="true">{{ identityFor(job.projectName).initial }}</span>
+                {{ job.projectName }}
+              </span>
               <span class="archive-row__title">{{ job.title || job.id }}</span>
             </button>
           }
@@ -234,10 +240,25 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
       font-variant-numeric: tabular-nums;
     }
     .archive-row__project {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
       font-size: 10px;
       text-transform: uppercase;
       letter-spacing: 0.04em;
-      color: #8b5cf6;
+      color: var(--project-color, #8b5cf6);
+    }
+    .archive-row__disk {
+      display: inline-grid;
+      place-items: center;
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      background: var(--project-color, #8b5cf6);
+      color: var(--project-on, #0b1020);
+      font-size: 8px;
+      font-weight: 800;
+      flex: 0 0 auto;
     }
     .archive-row__title {
       overflow: hidden;
@@ -307,6 +328,8 @@ export class JobColumnComponent {
     if (!this.isArchive()) return 0;
     return Math.max(0, this.jobs().length - ARCHIVE_VISIBLE_LIMIT);
   });
+
+  readonly identityFor = (name: string) => projectIdentity(name);
 
   formatShortDate(iso: string | null | undefined): string {
     if (!iso) return '—';

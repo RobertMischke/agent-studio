@@ -2,6 +2,7 @@ import { Component, OnDestroy, OnInit, computed, inject, input, signal } from '@
 import { JobInfo } from '../models/job.model';
 import { GitSummaryService } from '../services/git-summary.service';
 import { cliTypeIcon } from '../services/format.util';
+import { projectIdentity } from '../services/project-identity.util';
 
 // Shared 'now' signal that ticks every 30s so all relative timestamps update in lockstep
 // without re-reading Date.now() during change detection (which causes NG0100).
@@ -14,9 +15,21 @@ if (typeof window !== 'undefined') {
   selector: 'app-job-card',
   standalone: true,
   template: `
-    <div class="job-card" [class]="'job-card--' + job().state" data-testid="job-card">
+    <div class="job-card"
+         [class]="'job-card--' + job().state"
+         [class.job-card--running]="isRunning()"
+         [style.--project-color]="identity().color"
+         [style.--project-border]="identity().border"
+         [style.--project-soft]="identity().soft"
+         [style.--project-on]="identity().onColor"
+         data-testid="job-card"
+         [attr.data-project]="job().projectName"
+         [attr.data-running]="isRunning() ? 'true' : null">
       <div class="job-card__header">
-        <span class="job-card__project">{{ job().projectName }}</span>
+        <span class="job-card__project" data-testid="job-card-project">
+          <span class="job-card__project-disk" aria-hidden="true">{{ identity().initial }}</span>
+          <span class="job-card__project-name">{{ job().projectName }}</span>
+        </span>
         <span class="job-card__order">#{{ job().order }}</span>
       </div>
       <h3 class="job-card__title">{{ job().title || job().id }}</h3>
@@ -78,6 +91,40 @@ if (typeof window !== 'undefined') {
     .job-card--4-review { --state-color: #f59e0b; }
     .job-card--5-completed { --state-color: #10b981; }
 
+    /* Running tasks should jump out of the column. We brighten the surface,
+       widen the state accent, and add a slow breathing glow so the eye is
+       drawn to whatever is happening *right now* without constant motion
+       fatigue. */
+    .job-card--running {
+      background:
+        linear-gradient(180deg, rgba(59,130,246,0.16), rgba(59,130,246,0.04)) ,
+        #1e1e2e;
+      border-color: rgba(59,130,246,0.45);
+      border-left-width: 6px;
+      box-shadow:
+        0 0 0 1px rgba(59,130,246,0.18),
+        0 8px 22px rgba(59,130,246,0.20);
+      animation: job-running-glow 2.4s ease-in-out infinite;
+    }
+    .job-card--running:hover {
+      transform: translateY(-2px);
+      box-shadow:
+        0 0 0 1px rgba(59,130,246,0.30),
+        0 14px 32px rgba(59,130,246,0.30);
+    }
+    @keyframes job-running-glow {
+      0%, 100% {
+        box-shadow:
+          0 0 0 1px rgba(59,130,246,0.18),
+          0 8px 22px rgba(59,130,246,0.18);
+      }
+      50% {
+        box-shadow:
+          0 0 0 1px rgba(96,165,250,0.40),
+          0 14px 36px rgba(59,130,246,0.32);
+      }
+    }
+
     .job-card__header {
       display: flex;
       justify-content: space-between;
@@ -85,14 +132,39 @@ if (typeof window !== 'undefined') {
       margin-bottom: 8px;
     }
     .job-card__project {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
       font-size: 11px;
       text-transform: uppercase;
       letter-spacing: 0.05em;
-      color: #8b5cf6;
+      color: var(--project-color, #8b5cf6);
       font-weight: 600;
-      background: rgba(139,92,246,0.1);
-      padding: 1px 6px;
-      border-radius: 4px;
+      background: var(--project-soft, rgba(139,92,246,0.10));
+      border: 1px solid var(--project-border, transparent);
+      padding: 2px 8px 2px 3px;
+      border-radius: 999px;
+      max-width: 100%;
+      overflow: hidden;
+    }
+    .job-card__project-disk {
+      display: inline-grid;
+      place-items: center;
+      width: 16px;
+      height: 16px;
+      border-radius: 999px;
+      background: var(--project-color, #8b5cf6);
+      color: var(--project-on, #0b1020);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0;
+      flex: 0 0 auto;
+    }
+    .job-card__project-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
     }
     .job-card__order {
       font-size: 11px;
@@ -278,6 +350,10 @@ export class JobCardComponent implements OnInit, OnDestroy {
     const t = this.job().cliType;
     return t ? cliTypeIcon(t) : '🤖';
   });
+
+  readonly identity = computed(() => projectIdentity(this.job().projectName));
+
+  readonly isRunning = computed(() => this.job().execution?.status === 'running');
 
   readonly relativeActivity = computed(() => {
     const dateStr = this.job().lastActivity;

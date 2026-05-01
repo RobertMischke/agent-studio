@@ -11,6 +11,7 @@ import { cliTypeLabel as fmtCliTypeLabel, formatMultiplier as fmtMultiplier } fr
 import { CreateJobDialogComponent, PendingAttachment } from './components/board/create-job-dialog/create-job-dialog.component';
 import { ErrorDialogComponent } from './components/board/error-dialog/error-dialog.component';
 import { ProjectAutoInfo, ProjectTabsComponent } from './components/board/project-tabs/project-tabs.component';
+import { projectIdentity } from './services/project-identity.util';
 
 @Component({
   selector: 'app-root',
@@ -100,11 +101,16 @@ import { ProjectAutoInfo, ProjectTabsComponent } from './components/board/projec
                         @for (job of group.jobs; track job.jobKey) {
                           <button class="task-nav__item"
                                   [class.task-nav__item--active]="isSelectedJob(job)"
+                                  [style.--project-color]="identityFor(job.projectName).color"
+                                  [style.--project-on]="identityFor(job.projectName).onColor"
                                   (click)="openDetail(job)">
                             <span class="task-nav__item-title">{{ job.title || job.id }}</span>
                             <span class="task-nav__item-meta">
                               <span>#{{ job.order }}</span>
-                              <span>{{ job.projectName }}</span>
+                              <span class="task-nav__item-project">
+                                <span class="task-nav__item-disk" aria-hidden="true">{{ identityFor(job.projectName).initial }}</span>
+                                {{ job.projectName }}
+                              </span>
                             </span>
                           </button>
                         }
@@ -252,25 +258,50 @@ import { ProjectAutoInfo, ProjectTabsComponent } from './components/board/projec
     .header__subtitle { font-size: 13px; color: #64748b; }
     .header__actions { display: flex; gap: 12px; }
     .header__filters { display: flex; gap: 8px; align-items: center; }
+    /* Filter chip carries each project's identity colour as a CSS variable
+       supplied per chip; the active state pulls the chip into the project's
+       hue so a five-to-ten-project header is scannable at a glance. */
     .filter-chip {
-      background: rgba(255,255,255,0.10);
-      border: 1px solid rgba(255,255,255,0.20);
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid var(--project-border, rgba(255,255,255,0.20));
       color: #e2e8f0;
-      padding: 5px 14px;
+      padding: 4px 12px 4px 4px;
       border-radius: 20px;
       cursor: pointer;
       font-size: 12px;
       font-weight: 600;
       transition: all 0.15s;
     }
-    .filter-chip:hover { background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.30); color: #ffffff; }
-    .filter-chip--active {
-      background: rgba(139,92,246,0.45);
-      border-color: rgba(167,139,250,0.85);
-      color: #ffffff;
-      box-shadow: 0 0 0 1px rgba(167,139,250,0.25), 0 2px 6px rgba(139,92,246,0.30);
+    .filter-chip__disk {
+      display: inline-grid;
+      place-items: center;
+      width: 18px;
+      height: 18px;
+      border-radius: 999px;
+      background: var(--project-color, #8b5cf6);
+      color: var(--project-on, #0b1020);
+      font-size: 11px;
+      font-weight: 800;
+      flex: 0 0 auto;
     }
-    .filter-chip--active:hover { background: rgba(139,92,246,0.6); }
+    .filter-chip:hover {
+      background: var(--project-soft, rgba(255,255,255,0.18));
+      border-color: var(--project-border, rgba(255,255,255,0.30));
+      color: #ffffff;
+    }
+    .filter-chip--active {
+      background: var(--project-soft, rgba(139,92,246,0.45));
+      border-color: var(--project-border, rgba(167,139,250,0.85));
+      color: #ffffff;
+      box-shadow: 0 0 0 1px var(--project-border, rgba(167,139,250,0.25)), 0 2px 6px rgba(0,0,0,0.30);
+    }
+    .filter-chip--active:hover {
+      background: var(--project-soft, rgba(139,92,246,0.6));
+      filter: brightness(1.15);
+    }
     .runner-dot { font-size: 10px; margin-right: 2px; }
     .runner-dot--running { animation: pulse-runner 1.5s infinite; }
     @keyframes pulse-runner {
@@ -837,6 +868,24 @@ import { ProjectAutoInfo, ProjectTabsComponent } from './components/board/projec
       text-transform: uppercase;
       letter-spacing: 0.04em;
     }
+    .task-nav__item-project {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      color: var(--project-color, #94a3b8);
+    }
+    .task-nav__item-disk {
+      display: inline-grid;
+      place-items: center;
+      width: 14px;
+      height: 14px;
+      border-radius: 999px;
+      background: var(--project-color, #94a3b8);
+      color: var(--project-on, #0b1020);
+      font-size: 9px;
+      font-weight: 800;
+      flex: 0 0 auto;
+    }
     .task-nav__group-toggle {
       display: inline-block;
       width: 12px;
@@ -1342,6 +1391,7 @@ export class App implements OnInit {
   readonly isProjectActiveFn = (name: string) => this.isProjectActive(name);
   readonly getRunnerIndicatorFn = (name: string) => this.getRunnerIndicator(name);
   readonly getAutoInfoFn = (name: string) => this.getAutoInfo(name);
+  readonly identityFor = (name: string) => projectIdentity(name);
 
   getRunnerIndicator(name: string): { icon: string; cls: string } | null {
     const status = this.jobService.runnerStatus();

@@ -25,6 +25,15 @@
           </div>
         </div>
       } @else {
+        <div class="detail__project"
+             data-testid="detail-project"
+             [style.--project-color]="identity().color"
+             [style.--project-border]="identity().border"
+             [style.--project-soft]="identity().soft"
+             [style.--project-on]="identity().onColor">
+          <span class="detail__project-disk" aria-hidden="true">{{ identity().initial }}</span>
+          <span class="detail__project-name">{{ info().projectName }}</span>
+        </div>
         <h2 class="detail__title"
             (click)="startTitleEdit.emit()"
             title="Click to rename">
