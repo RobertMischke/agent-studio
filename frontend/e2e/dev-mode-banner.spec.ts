@@ -33,7 +33,8 @@ test.describe('DEV-mode visual markers', () => {
     const svgFavicon = await page
       .locator('link[rel="icon"][type="image/svg+xml"]')
       .getAttribute('href');
-    expect(svgFavicon).toBe('icons-dev/icon.svg');
+    expect(svgFavicon).toMatch(/^data:image\/svg\+xml;utf8,/);
+    expect(decodeURIComponent(svgFavicon!)).toContain('>DEV<');
 
     await page.screenshot({ path: 'test-results/dev-banner.png', fullPage: false });
   });
