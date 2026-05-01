@@ -108,17 +108,44 @@ public class TaskRunnerPlanTests
     /// accidentally accepted it as a resume handle, Claude's `-r` would hang
     /// or reply "I don't see an interrupted task" — the exact regression the
     /// placeholder check exists to prevent.
+    ///
+    /// On a strict-compat CLI like Claude, the placeholder slug fails the UUID
+    /// shape check before the placeholder check fires — so the recovery reason
+    /// reads "not a valid claude session" rather than the more specific
+    /// "legacy placeholder slug" text. Either way the run lands in recovery,
+    /// which is the user-visible property that matters.
     /// </summary>
     [Fact]
-    public void Continue_WithPlaceholderSlug_RoutesToRecovery()
+    public void Continue_WithPlaceholderSlug_OnClaude_RoutesToRecovery()
     {
         var p = Plan(RunIntent.UserContinue, JobStates.Progress, sessionName: PlaceholderSlug,
                      followup: "go on");
 
         Assert.Equal("recovery", p.EventKind);
         Assert.False(p.ResumeFlag);
-        Assert.Equal("recorded id is a legacy placeholder slug", p.EventReason);
         Assert.True(p.MarkSessionChainRecovery);
+        // Strict-compat CLI rejects the slug at the UUID gate — so we report
+        // the compat-fail reason rather than the placeholder-fail reason.
+        Assert.Contains("not a valid claude session", p.EventReason ?? "",
+                        System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// On a permissive-compat CLI (Copilot), the placeholder slug passes the
+    /// "is non-empty" compat check, so the planner's dedicated placeholder
+    /// branch fires and the reason text identifies it as a legacy slug. This
+    /// is the path that the placeholder regex was actually written for.
+    /// </summary>
+    [Fact]
+    public void Continue_WithPlaceholderSlug_OnCopilot_RoutesToRecoveryWithPlaceholderReason()
+    {
+        var p = Plan(RunIntent.UserContinue, JobStates.Progress, sessionName: PlaceholderSlug,
+                     cliType: CliTypes.Copilot, compat: PermissiveCompat, followup: "go on");
+
+        Assert.Equal("recovery", p.EventKind);
+        Assert.False(p.ResumeFlag);
+        Assert.True(p.MarkSessionChainRecovery);
+        Assert.Equal("recorded id is a legacy placeholder slug", p.EventReason);
     }
 
     /// <summary>
