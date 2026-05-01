@@ -4,6 +4,47 @@ using OrchestratorApi.Services.Cli;
 
 namespace OrchestratorApi.Services;
 
+/// <summary>
+/// Why an upcoming CLI run was triggered. The planner uses this single
+/// dimension to decide between the start-shaped and continue-shaped
+/// branches; everything else (session state, job state, CLI compatibility)
+/// is plain data. Keeping the trigger reason explicit in one enum is what
+/// lets <see cref="ProjectRunner.PlanRun"/> own the whole decision tree
+/// instead of having the start and continue endpoints reinvent it
+/// independently.
+/// </summary>
+public enum RunIntent
+{
+    /// <summary>User clicked Play / hit /jobs/{id}/start.</summary>
+    ManualStart,
+    /// <summary>Auto-pickup tick chose this job from the ready queue.</summary>
+    AutoPickup,
+    /// <summary>User typed in the chat / hit /jobs/{id}/continue with a follow-up.</summary>
+    UserContinue
+}
+
+/// <summary>
+/// Pure description of what a single CLI invocation should do. Produced by
+/// <see cref="ProjectRunner.PlanRun"/> from inputs (intent, job state,
+/// session state, CLI capabilities) and consumed by the runner which then
+/// applies side-effects (state moves, scanner writes, log writes, event
+/// append, CLI start). Splitting plan from apply keeps the decision tree
+/// fully unit-testable without mocking the scanner or CLI.
+/// </summary>
+public sealed record RunPlan(
+    string Prompt,
+    string? SessionToResume,
+    bool ResumeFlag,
+    string EventKind,
+    string? EventReason,
+    string? EventInputSessionId,
+    bool MoveJobToProgress,
+    bool MarkSessionChainRecovery,
+    bool WriteCutMarker,
+    string? CutMarkerReason,
+    string? PersistSessionName,
+    bool ClearStaleSessionName);
+
 public class TaskRunnerService : BackgroundService
 {
     private readonly IConfiguration _config;
@@ -391,37 +432,64 @@ public class ProjectRunner
             return;
         }
 
-        await StartJobInternalAsync(nextJob.Id, ct);
+        await RunCliAsync(nextJob.Id, RunIntent.AutoPickup, followupPrompt: null, ct);
     }
 
-    public async Task<(CliExecution? Execution, string? Error)> StartJobManualAsync(string jobId, CancellationToken ct)
+    public Task<(CliExecution? Execution, string? Error)> StartJobManualAsync(string jobId, CancellationToken ct)
+        => RunCliAsync(jobId, RunIntent.ManualStart, followupPrompt: null, ct);
+
+    /// <summary>
+    /// Sends a follow-up prompt into the CLI session that was originally created
+    /// for this job (via <c>--resume</c>). When no compatible session is on
+    /// record, the planner falls back to <b>recovery mode</b>: a fresh CLI run
+    /// instructed to reconstruct context from the job folder. Moves the job back
+    /// to <c>3-progress</c> if it sits in <c>4-review</c> or <c>5-completed</c>.
+    /// </summary>
+    public Task<(CliExecution? Execution, string? Error)> ContinueJobAsync(string jobId, string followupPrompt, CancellationToken ct)
+        => RunCliAsync(jobId, RunIntent.UserContinue, followupPrompt, ct);
+
+    /// <summary>
+    /// Single entry point for spawning the CLI for a job. <see cref="PlanRun"/>
+    /// owns the full decision tree (resume vs recovery vs fresh, prompt choice,
+    /// session-event shape, state moves); this method only applies the side
+    /// effects the plan describes. Both the start endpoints and the continue
+    /// endpoint route through here so a fix in one path can never miss its
+    /// sibling — that divergence is the bug class this refactor exists to
+    /// prevent.
+    /// </summary>
+    private async Task<(CliExecution? Execution, string? Error)> RunCliAsync(
+        string jobId, RunIntent intent, string? followupPrompt, CancellationToken ct)
     {
         if (_activeJobId != null)
         {
-            _logger.LogWarning("Runner '{Project}' already has active job {JobId}", ProjectName, _activeJobId);
+            if (intent == RunIntent.ManualStart)
+                _logger.LogWarning("Runner '{Project}' already has active job {JobId}", ProjectName, _activeJobId);
             return (null, $"Runner '{ProjectName}' is already executing job '{_activeJobId}'");
         }
 
-        return await StartJobInternalAsync(jobId, ct);
-    }
-
-    private async Task<(CliExecution? Execution, string? Error)> StartJobInternalAsync(string jobId, CancellationToken ct)
-    {
         _processing = true;
         try
         {
             var info = _scanner.FindJob(jobId, Entry.Path);
             if (info == null) return (null, "Job not found");
 
-            // Capture state BEFORE moving to 3-progress so we can tell a fresh
-            // start (job sits in 2-ready) apart from a resume after the previous
-            // run was interrupted (job already in 3-progress because it was
-            // started before but never reached 4-review). Same callsite, same
-            // CLI args — only the injected prompt and the structured logging
-            // differ between the two cases.
+            var cli = GetCliFor(info);
             var initialState = info.State;
+            var promptPath = Path.Combine(info.FolderPath, "prompt.md");
+            var jobFolder = info.FolderPath;
 
-            if (info.State == JobStates.Ready)
+            var plan = PlanRun(
+                intent,
+                initialState,
+                info.SessionName,
+                cli.CliType,
+                cli.IsCompatibleSessionName,
+                jobId,
+                promptPath,
+                jobFolder,
+                followupPrompt);
+
+            if (plan.MoveJobToProgress && info.State != JobStates.Progress)
             {
                 _scanner.MoveJob(jobId, JobStates.Progress, Entry.Path);
                 info = _scanner.FindJob(jobId, Entry.Path) ?? info;
@@ -432,116 +500,39 @@ public class ProjectRunner
 
             Directory.CreateDirectory(JobPaths.LogsDir(info.FolderPath));
 
-            // Resolve / persist a stable session name so follow-ups can use --resume.
-            // Only Copilot uses a pre-generated slug as its resume handle. Claude /
-            // Codex / Gemini emit a real session UUID in their first stream-json
-            // frame and we capture it in OnCliFinished — until then SessionName
-            // stays null. Pre-generating a slug for them used to backfire: the
-            // slug failed IsCompatibleSessionName on the next run, the cross-CLI
-            // guard treated it as a dropped foreign session, and the resume
-            // prompt was injected into what was actually a fresh start.
-            var cli = GetCliFor(info);
-            var sessionName = info.SessionName;
-            // Cross-CLI guard: a session name recorded under another CLI (e.g.
-            // Copilot's slug) is meaningless to Claude/Codex and used to make
-            // them hang on `-r`. Drop it and let the fresh-session branch pick
-            // up. Legacy placeholder slugs we generated ourselves (pattern
-            // `taskboard-…-yyyyMMddHHmm`) are recognised and dropped quietly:
-            // they never represented a real session, so there's nothing to
-            // reconstruct via the resume prompt.
-            var sessionDropped = false;
-            if (!string.IsNullOrWhiteSpace(sessionName) && !cli.IsCompatibleSessionName(sessionName))
-            {
-                var isLegacyPlaceholder = IsPlaceholderSessionSlug(sessionName);
-                _logger.LogInformation(
-                    "Dropping {Kind} sessionName '{Session}' for {Cli} job {JobId}",
-                    isLegacyPlaceholder ? "legacy placeholder" : "incompatible",
-                    sessionName, cli.CliType, jobId);
-                sessionName = null;
-                // Genuine cross-CLI drops break the chain; mark it so the chip
-                // can show the cut. Legacy placeholders never represented a
-                // real session — quiet drop, no chain break.
-                if (!isLegacyPlaceholder)
-                {
-                    _scanner.MarkSessionChainRecovery(jobId, Entry.Path);
-                }
-                else
-                {
-                    _scanner.SetJobSessionName(jobId, null, Entry.Path);
-                }
-                sessionDropped = !isLegacyPlaceholder;
-            }
-            var resume = !string.IsNullOrWhiteSpace(sessionName);
-            if (!resume && cli.CliType == CliTypes.Copilot)
-            {
-                sessionName = BuildSessionName(jobId);
-                _scanner.SetJobSessionName(jobId, sessionName, Entry.Path);
-            }
+            // Diagnostic logs — surface the planner's decision in one place so
+            // operators reading the log can tell which branch fired without
+            // grepping for old per-method messages.
+            _logger.LogInformation(
+                "[taskboard] {Intent} for job {JobId} on {Cli}: kind={Kind} resume={Resume} session={Session} reason={Reason}",
+                intent, jobId, cli.CliType, plan.EventKind, plan.ResumeFlag,
+                plan.SessionToResume ?? "<none>", plan.EventReason ?? "<none>");
+            _logger.LogInformation("[taskboard] using working directory {Path}", Entry.RootPath);
 
-            var promptPath = Path.Combine(info.FolderPath, "prompt.md");
-            var jobFolderPath = info.FolderPath;
-
-            // Resume mode kicks in when the job was already in 3-progress at the
-            // moment we were asked to start it — i.e. a previous CLI run crashed,
-            // timed out, was killed, or hit an API error before reaching review.
-            // Without an explicit resume prompt the agent only sees a fresh
-            // "Lies prompt.md und führe den Task aus" message and treats the new
-            // turn as a fresh request: it loses the in-flight state, asks "what
-            // should I continue with?", and falls back to generic repo context.
-            //
-            // Two prerequisites for the resume prompt to actually pay off:
-            //   (a) we have a real session to load via `-r` (resume == true), OR
-            //   (b) we've just dropped a foreign-CLI session — the previous agent
-            //       wrote files we can reconstruct from.
-            // If neither holds (state is 3-progress but no UUID was ever captured
-            // and no foreign session was dropped), the "interrupted" run never
-            // produced anything to continue from — sending the resume prompt just
-            // makes the agent reply "I don't see an interrupted task" and quit.
-            // Treat that case as a fresh start.
-            var useResumePrompt = ShouldUseResumePrompt(initialState, resume, sessionDropped);
-
-            string prompt;
-            if (useResumePrompt)
-            {
-                _logger.LogInformation("[taskboard] resume detected for job {JobId} (initialState={State}, sessionDropped={Dropped})",
-                    jobId, initialState, sessionDropped);
-                if (resume)
-                    _logger.LogInformation("[taskboard] restoring session {SessionId}", sessionName);
-                else
-                    _logger.LogInformation("[taskboard] no compatible session to restore — falling back to fresh session with continuation prompt");
-                _logger.LogInformation("[taskboard] restoring job {JobId}", jobId);
-                _logger.LogInformation("[taskboard] using working directory {Path}", Entry.RootPath);
-                _logger.LogInformation("[taskboard] injecting continuation prompt (jobFolder={JobFolder})", jobFolderPath);
-                prompt = BuildResumeContinuationPrompt(jobFolderPath);
-            }
-            else
-            {
-                prompt = BuildFreshStartPrompt(promptPath, jobFolderPath);
-            }
-
-            // Record a session-event before the process starts so the chip
-            // flips immediately. Kind tells start vs resume-on-3-progress (we
-            // log the latter as "continue" — same shape as user-driven
-            // continues — and recovery when nothing was resumable but the
-            // resume prompt fired thanks to a dropped session).
-            string startKind;
-            if (sessionDropped) startKind = "recovery";
-            else if (resume) startKind = "continue";
-            else startKind = "start";
+            if (plan.ClearStaleSessionName)
+                _scanner.SetJobSessionName(jobId, null, Entry.Path);
+            if (plan.PersistSessionName != null)
+                _scanner.SetJobSessionName(jobId, plan.PersistSessionName, Entry.Path);
+            if (plan.MarkSessionChainRecovery)
+                _scanner.MarkSessionChainRecovery(jobId, Entry.Path);
+            if (plan.WriteCutMarker)
+                AppendSessionCutMarkerToCliLog(info, plan.CutMarkerReason ?? "session lost");
 
             _scanner.AppendSessionEvent(jobId, new SessionEvent
             {
                 Ts = DateTime.UtcNow,
-                Kind = startKind,
+                Kind = plan.EventKind,
                 Cli = cli.CliType,
-                InputSessionId = resume ? sessionName : null,
+                InputSessionId = plan.EventInputSessionId,
                 CapturedSessionId = null,
-                Resumed = resume,
-                Reason = sessionDropped ? "previous session was for another CLI — files reconstructed" : null
+                Resumed = plan.ResumeFlag,
+                Reason = plan.EventReason
             }, Entry.Path);
 
             _activeCliType = cli.CliType;
-            var (execution, cliError) = await cli.StartAsync(jobId, GetJobKey(jobId), prompt, Entry.RootPath, sessionName, resume, info.Model, ct);
+            var (execution, cliError) = await cli.StartAsync(
+                jobId, GetJobKey(jobId), plan.Prompt, Entry.RootPath,
+                plan.SessionToResume, plan.ResumeFlag, info.Model, ct);
 
             if (execution == null)
             {
@@ -560,116 +551,122 @@ public class ProjectRunner
     }
 
     /// <summary>
-    /// Sends a follow-up prompt into the CLI session that was originally created
-    /// for this job (via <c>--resume</c>). When no compatible session is on
-    /// record, falls back to <b>recovery mode</b>: a fresh CLI run that is
-    /// instructed to reconstruct context from the job folder (prompt.md /
-    /// status.md / cli-output.log / git status). The user gets the continuation
-    /// they asked for instead of a 400 error — the cost is whatever conversation
-    /// memory wasn't already on disk.
-    /// Moves the job back to <c>3-progress</c> if it sits in <c>4-review</c>
-    /// or <c>5-completed</c>.
+    /// Pure decision function: maps (intent, job state, session state, CLI
+    /// capabilities) to a <see cref="RunPlan"/>. No I/O, no field access — fully
+    /// unit-testable across the (intent × state × session) matrix in
+    /// <c>TaskRunnerPlanTests</c>. Whenever you change a branch here, add or
+    /// adjust the matrix row that locks it in; that is what stops the
+    /// start/continue divergence the previous design kept producing.
     /// </summary>
-    public async Task<(CliExecution? Execution, string? Error)> ContinueJobAsync(string jobId, string followupPrompt, CancellationToken ct)
+    public static RunPlan PlanRun(
+        RunIntent intent,
+        string initialState,
+        string? sessionName,
+        string cliType,
+        Func<string?, bool> isCompatibleSessionName,
+        string jobId,
+        string promptPath,
+        string jobFolder,
+        string? followupPrompt)
     {
-        if (_activeJobId != null)
+        if (intent == RunIntent.UserContinue)
         {
-            return (null, $"Runner '{ProjectName}' is already executing job '{_activeJobId}'");
-        }
-
-        _processing = true;
-        try
-        {
-            var info = _scanner.FindJob(jobId, Entry.Path);
-            if (info == null) return (null, "Job not found");
-
-            var cli = GetCliFor(info);
-
-            // Decide whether this is a real resume or a recovery-continue. We
-            // only resume when (a) there is a recorded session id, (b) it is
-            // compatible with the current CLI, and (c) it is not one of the
-            // legacy placeholder slugs we minted before real session capture.
-            string? resumeReason = null;
-            var hasSession = !string.IsNullOrWhiteSpace(info.SessionName);
-            var compatible = hasSession && cli.IsCompatibleSessionName(info.SessionName);
-            var placeholder = IsPlaceholderSessionSlug(info.SessionName);
+            var hasSession = !string.IsNullOrWhiteSpace(sessionName);
+            var compatible = hasSession && isCompatibleSessionName(sessionName);
+            var placeholder = IsPlaceholderSessionSlug(sessionName);
             var canResume = hasSession && compatible && !placeholder;
+            string? reason =
+                !hasSession ? "no session recorded"
+                : !compatible ? $"recorded id is not a valid {cliType} session"
+                : placeholder ? "recorded id is a legacy placeholder slug"
+                : null;
+            var moveToProgress = initialState is JobStates.Review or JobStates.Completed or JobStates.Ready;
 
-            if (!hasSession) resumeReason = "no session recorded";
-            else if (!compatible) resumeReason = $"recorded id is not a valid {cli.CliType} session";
-            else if (placeholder) resumeReason = "recorded id is a legacy placeholder slug";
-
-            // Bring the job back into 3-progress so the runner workflow stays consistent
-            if (info.State is JobStates.Review or JobStates.Completed or JobStates.Ready)
-            {
-                _scanner.MoveJob(jobId, JobStates.Progress, Entry.Path);
-            }
-
-            _activeJobId = jobId;
-            NotifyStatus();
-
-            Directory.CreateDirectory(JobPaths.LogsDir(info.FolderPath));
-
-            string promptToSend;
-            string? sessionToResume;
-            bool resumeFlag;
-            string evtKind;
             if (canResume)
             {
-                promptToSend = followupPrompt;
-                sessionToResume = info.SessionName;
-                resumeFlag = true;
-                evtKind = "continue";
-                _logger.LogInformation("[taskboard] continue requested for job {JobId} (user follow-up)", jobId);
-                _logger.LogInformation("[taskboard] restoring session {SessionId}", info.SessionName);
+                return new RunPlan(
+                    Prompt: followupPrompt ?? string.Empty,
+                    SessionToResume: sessionName,
+                    ResumeFlag: true,
+                    EventKind: "continue",
+                    EventReason: null,
+                    EventInputSessionId: sessionName,
+                    MoveJobToProgress: moveToProgress,
+                    MarkSessionChainRecovery: false,
+                    WriteCutMarker: false,
+                    CutMarkerReason: null,
+                    PersistSessionName: null,
+                    ClearStaleSessionName: false);
+            }
+
+            return new RunPlan(
+                Prompt: BuildRecoveryContinuationPrompt(jobFolder, followupPrompt ?? string.Empty),
+                SessionToResume: null,
+                ResumeFlag: false,
+                EventKind: "recovery",
+                EventReason: reason,
+                EventInputSessionId: null,
+                MoveJobToProgress: moveToProgress,
+                MarkSessionChainRecovery: true,
+                WriteCutMarker: true,
+                CutMarkerReason: reason ?? "session lost",
+                PersistSessionName: null,
+                ClearStaleSessionName: false);
+        }
+
+        // ManualStart / AutoPickup share the same plan shape — only the trigger
+        // differs, and that is logged at the call site, not branched here.
+        var moveStartToProgress = initialState == JobStates.Ready;
+        var startSession = sessionName;
+        var sessionDropped = false;
+        var clearStale = false;
+        var markRecovery = false;
+        if (!string.IsNullOrWhiteSpace(startSession) && !isCompatibleSessionName(startSession))
+        {
+            var isLegacyPlaceholder = IsPlaceholderSessionSlug(startSession);
+            startSession = null;
+            if (isLegacyPlaceholder)
+            {
+                clearStale = true;
             }
             else
             {
-                // Recovery: log a visible cut marker into cli-output.log, mark
-                // the chain break in job.json, and send the recovery prompt
-                // with the user's follow-up appended so the agent rebuilds
-                // context from disk and continues with what the user asked for.
-                AppendSessionCutMarkerToCliLog(info, resumeReason ?? "session lost");
-                _scanner.MarkSessionChainRecovery(jobId, Entry.Path);
-                promptToSend = BuildRecoveryContinuationPrompt(info.FolderPath, followupPrompt);
-                sessionToResume = null;
-                resumeFlag = false;
-                evtKind = "recovery";
-                _logger.LogInformation("[taskboard] continue→recovery for job {JobId} ({Reason})", jobId, resumeReason);
+                markRecovery = true;
+                sessionDropped = true;
             }
-
-            _logger.LogInformation("[taskboard] using working directory {Path}", Entry.RootPath);
-
-            // Emit a session-event row before the CLI starts so the chip flips
-            // immediately. CapturedSessionId is filled later in OnCliFinished.
-            _scanner.AppendSessionEvent(jobId, new SessionEvent
-            {
-                Ts = DateTime.UtcNow,
-                Kind = evtKind,
-                Cli = cli.CliType,
-                InputSessionId = canResume ? info.SessionName : null,
-                CapturedSessionId = null,
-                Resumed = canResume,
-                Reason = canResume ? null : resumeReason
-            }, Entry.Path);
-
-            _activeCliType = cli.CliType;
-            var (execution, cliError) = await cli.StartAsync(jobId, GetJobKey(jobId), promptToSend, Entry.RootPath, sessionToResume, resumeFlag, info.Model, ct);
-
-            if (execution == null)
-            {
-                _activeJobId = null;
-                _activeCliType = null;
-                NotifyStatus();
-                return (null, cliError ?? $"Failed to {(canResume ? "resume" : "recover")} {cli.CliType} CLI session");
-            }
-
-            return (execution, null);
         }
-        finally
+        var resume = !string.IsNullOrWhiteSpace(startSession);
+        string? persistSessionName = null;
+        if (!resume && cliType == CliTypes.Copilot)
         {
-            _processing = false;
+            // Copilot uses the persisted name as the resume handle — pre-generate
+            // a slug now so the next run can find it. Other CLIs capture a real
+            // UUID during streaming and leave SessionName null until then.
+            startSession = BuildSessionName(jobId);
+            persistSessionName = startSession;
         }
+
+        var useResumePrompt = ShouldUseResumePrompt(initialState, resume, sessionDropped);
+        var prompt = useResumePrompt
+            ? BuildResumeContinuationPrompt(jobFolder)
+            : BuildFreshStartPrompt(promptPath, jobFolder);
+
+        string evtKind = sessionDropped ? "recovery" : (resume ? "continue" : "start");
+        string? evtReason = sessionDropped ? "previous session was for another CLI — files reconstructed" : null;
+
+        return new RunPlan(
+            Prompt: prompt,
+            SessionToResume: startSession,
+            ResumeFlag: resume,
+            EventKind: evtKind,
+            EventReason: evtReason,
+            EventInputSessionId: resume ? startSession : null,
+            MoveJobToProgress: moveStartToProgress,
+            MarkSessionChainRecovery: markRecovery,
+            WriteCutMarker: false,
+            CutMarkerReason: null,
+            PersistSessionName: persistSessionName,
+            ClearStaleSessionName: clearStale);
     }
 
     /// <summary>
