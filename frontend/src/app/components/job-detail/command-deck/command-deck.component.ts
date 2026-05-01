@@ -30,12 +30,17 @@ export class CommandDeckComponent {
   readonly canStart = input(false);
   readonly starting = input(false);
   readonly elapsedTime = input('');
+  /** Compact mode: hides selectors and shows a "Show setup" toggle.
+   *  Owned by the parent (auto-collapsed while a run is active, manually
+   *  re-expandable). The component just renders what it's told. */
+  readonly collapsed = input(false);
 
   readonly projectChange = output<string>();
   readonly cliTypeChange = output<CliType>();
   readonly modelChange = output<string>();
   readonly start = output<void>();
   readonly stop = output<void>();
+  readonly toggleCollapsed = output<void>();
 
   readonly cliTypes = CLI_TYPES;
   cliTypeLabel(t: CliType): string { return fmtCliTypeLabel(t); }

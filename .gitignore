@@ -19,3 +19,5 @@ test-results/
 
 # Per-checkout local config overrides (e.g. Environment:IsDev for the dev banner)
 backend/appsettings.Local.json
+.frontend.pid
+.frontend.log

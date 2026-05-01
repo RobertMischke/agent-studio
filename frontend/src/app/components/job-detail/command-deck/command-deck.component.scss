@@ -77,6 +77,40 @@
   animation: cdpulse 1.5s infinite;
 }
 .commandbar__action { padding: 5px 12px; font-size: 12px; }
+.commandbar__spacer { flex: 1 1 auto; }
+.commandbar__compact-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.commandbar__chip {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(99,102,241,0.18);
+  color: #c7d2fe;
+  border: 1px solid rgba(99,102,241,0.28);
+  white-space: nowrap;
+}
+.commandbar__chip--muted {
+  background: rgba(255,255,255,0.04);
+  color: #94a3b8;
+  border-color: rgba(255,255,255,0.08);
+  font-family: var(--font-mono, monospace);
+}
+.commandbar__toggle {
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.12);
+  color: #cbd5e1;
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.commandbar__toggle:hover { background: rgba(255,255,255,0.06); color: #e2e8f0; }
+.commandbar--collapsed { padding: 4px 10px; }
 
 .btn-exec {
   border: none;

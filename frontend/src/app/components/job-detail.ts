@@ -1,4 +1,4 @@
-import { Component, inject, input, output, signal, effect, OnDestroy, ViewEncapsulation } from '@angular/core';
+import { Component, computed, inject, input, output, signal, effect, OnDestroy, ViewEncapsulation } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { JobDetail, WatchPathEntry, CliSettings, CliModelInfo, CliType, CLI_TYPES } from '../models/job.model';
 import { JobService } from '../services/job.service';
@@ -66,11 +66,13 @@ import { markdownToHtml } from './markdown-utils';
         [canStart]="canStartJob()"
         [starting]="starting()"
         [elapsedTime]="elapsedTime()"
+        [collapsed]="setupCollapsed()"
         (projectChange)="onProjectChange($event)"
         (cliTypeChange)="onCliTypeChange($event)"
         (modelChange)="onModelDraftChange($event)"
         (start)="startJob()"
-        (stop)="stopJob()" />
+        (stop)="stopJob()"
+        (toggleCollapsed)="toggleSetupCollapsed()" />
 
 
       @if (showCliConfig() && cliTypeDraft() === 'copilot') {
@@ -1283,6 +1285,14 @@ export class JobDetailComponent implements OnDestroy {
   readonly cliTesting = signal(false);
   readonly showLogOverlay = signal(false);
   readonly activeInspectorTab = signal<'protocol' | 'activity'>('protocol');
+  /** When true while a run is active, the user has manually expanded the
+   *  setup bar and we keep it expanded until the run ends or they toggle it
+   *  off. Reset on job switch and when the run ends so the next run starts
+   *  collapsed again. */
+  readonly setupExpandedDuringRun = signal(false);
+  /** Effective collapsed state: auto-collapse while running, unless the user
+   *  explicitly hit "Show setup". Always expanded when not running. */
+  readonly setupCollapsed = computed(() => this.isRunning() && !this.setupExpandedDuringRun());
   readonly tokenDraft = signal('');
   readonly showToken = signal(false);
   readonly tokenSaving = signal(false);
@@ -1349,6 +1359,14 @@ export class JobDetailComponent implements OnDestroy {
 
   cliTypeLabel(t: CliType): string { return fmtCliTypeLabel(t); }
 
+  /** When the run ends, drop the user's "Show setup" override so the next run
+   *  starts compact again. Idempotent — only writes when the flag would change. */
+  private resetSetupExpandWhenIdle = effect(() => {
+    if (!this.isRunning() && this.setupExpandedDuringRun()) {
+      this.setupExpandedDuringRun.set(false);
+    }
+  });
+
   private detailEffect = effect(() => {
     const d = this.detail();
     const isJobSwitch = this.currentJobKey !== d.info.jobKey;
@@ -1391,6 +1409,7 @@ export class JobDetailComponent implements OnDestroy {
       this.editingTitle.set(false);
       this.savingTitle.set(false);
       this.followupPrompt.set('');
+      this.setupExpandedDuringRun.set(false);
       this.cliPoll.resetForJobSwitch();
       this.lastShownFailureKey = null;
     }
@@ -1724,6 +1743,13 @@ export class JobDetailComponent implements OnDestroy {
   onInspectorTabChange(tab: 'protocol' | 'activity') {
     this.userTouchedInspectorTab = true;
     this.activeInspectorTab.set(tab);
+  }
+
+  /** Flips the setup bar between compact (default while running) and the full
+   *  selectors. Only meaningful while a run is active — when not running, the
+   *  bar is always expanded and the toggle isn't shown. */
+  toggleSetupCollapsed() {
+    this.setupExpandedDuringRun.update(v => !v);
   }
 
   startTitleEdit() {

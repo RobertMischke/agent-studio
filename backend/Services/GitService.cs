@@ -69,10 +69,11 @@ public class GitService
                 list.Add(new GitProjectSummary(entry.Name, "", false, null, 0, 0, 0));
                 continue;
             }
-            var root = entry.RootPath;
-            if (!Directory.Exists(Path.Combine(root, ".git")) && !File.Exists(Path.Combine(root, ".git")))
+            var configured = entry.RootPath;
+            var root = ResolveGitToplevel(configured);
+            if (root == null)
             {
-                list.Add(new GitProjectSummary(entry.Name, root, false, null, 0, 0, 0));
+                list.Add(new GitProjectSummary(entry.Name, configured, false, null, 0, 0, 0));
                 continue;
             }
 
@@ -94,7 +95,7 @@ public class GitService
             }
 
             list.Add(new GitProjectSummary(
-                entry.Name, root, true,
+                entry.Name, configured, true,
                 string.IsNullOrWhiteSpace(branchOut) ? null : branchOut.Trim(),
                 fileCount, added, removed));
         }
@@ -118,11 +119,12 @@ public class GitService
 
     public GitStatusResult GetStatus(string jobId, string? watchPath)
     {
-        var root = ResolveRepoRoot(jobId, watchPath);
-        if (root == null)
+        var configured = ResolveRepoRoot(jobId, watchPath);
+        if (configured == null)
             return new GitStatusResult(false, null, 0, 0, 0, [], "Job not found or project has no RootPath configured.");
-        if (!Directory.Exists(Path.Combine(root, ".git")) && !File.Exists(Path.Combine(root, ".git")))
-            return new GitStatusResult(false, null, 0, 0, 0, [], $"Not a git repository: {root}");
+        var root = ResolveGitToplevel(configured);
+        if (root == null)
+            return new GitStatusResult(false, null, 0, 0, 0, [], $"Not a git repository: {configured}");
 
         var (statusOut, statusErr, statusCode) = RunGit(root, "status --porcelain=v1");
         if (statusCode != 0)
@@ -188,7 +190,9 @@ public class GitService
 
     public string GetDiff(string jobId, string? watchPath, string? path)
     {
-        var root = ResolveRepoRoot(jobId, watchPath);
+        var configured = ResolveRepoRoot(jobId, watchPath);
+        if (configured == null) return "";
+        var root = ResolveGitToplevel(configured);
         if (root == null) return "";
         // HEAD diff catches both staged and unstaged. For untracked files we
         // fall back to showing the file body so the panel isn't empty.
@@ -214,8 +218,10 @@ public class GitService
         if (string.IsNullOrWhiteSpace(message))
             return new GitCommitResult(false, null, "Commit message is required.");
 
-        var root = ResolveRepoRoot(jobId, watchPath);
-        if (root == null) return new GitCommitResult(false, null, "Could not resolve repo root.");
+        var configured = ResolveRepoRoot(jobId, watchPath);
+        if (configured == null) return new GitCommitResult(false, null, "Could not resolve repo root.");
+        var root = ResolveGitToplevel(configured);
+        if (root == null) return new GitCommitResult(false, null, $"Not a git repository: {configured}");
 
         var (_, addErr, addCode) = RunGit(root, "add -A");
         if (addCode != 0) return new GitCommitResult(false, null, $"git add failed: {addErr.Trim()}");
@@ -242,8 +248,10 @@ public class GitService
     public async Task<GenerateMessageResult> GenerateCommitMessageAsync(
         string jobId, string? watchPath, CancellationToken ct = default)
     {
-        var root = ResolveRepoRoot(jobId, watchPath);
-        if (root == null) return new GenerateMessageResult(null, "Could not resolve repo root.");
+        var configured = ResolveRepoRoot(jobId, watchPath);
+        if (configured == null) return new GenerateMessageResult(null, "Could not resolve repo root.");
+        var root = ResolveGitToplevel(configured);
+        if (root == null) return new GenerateMessageResult(null, $"Not a git repository: {configured}");
 
         var (diff, _, code) = RunGit(root, "diff HEAD");
         if (code != 0 || string.IsNullOrWhiteSpace(diff))
@@ -310,8 +318,10 @@ public class GitService
     /// </summary>
     public List<GitFileChange> GetCommitFiles(string jobId, string? watchPath, string sha)
     {
-        var root = ResolveRepoRoot(jobId, watchPath);
-        if (root == null || string.IsNullOrWhiteSpace(sha)) return [];
+        var configured = ResolveRepoRoot(jobId, watchPath);
+        if (configured == null || string.IsNullOrWhiteSpace(sha)) return [];
+        var root = ResolveGitToplevel(configured);
+        if (root == null) return [];
 
         var (statusOut, _, statusCode) = RunGit(root, $"show --name-status --pretty=format: {sha}");
         if (statusCode != 0) return [];
@@ -359,8 +369,10 @@ public class GitService
     /// </summary>
     public string GetCommitDiff(string jobId, string? watchPath, string sha, string? path)
     {
-        var root = ResolveRepoRoot(jobId, watchPath);
-        if (root == null || string.IsNullOrWhiteSpace(sha)) return "";
+        var configured = ResolveRepoRoot(jobId, watchPath);
+        if (configured == null || string.IsNullOrWhiteSpace(sha)) return "";
+        var root = ResolveGitToplevel(configured);
+        if (root == null) return "";
         var args = string.IsNullOrWhiteSpace(path)
             ? $"show --pretty=format: {sha}"
             : $"show --pretty=format: {sha} -- \"{path.Replace("\"", "\\\"")}\"";
@@ -434,6 +446,22 @@ public class GitService
             .SkipWhile(l => l.StartsWith("```"))
             .Reverse().SkipWhile(l => l.StartsWith("```") || string.IsNullOrWhiteSpace(l)).Reverse();
         return string.Join("\n", lines).Trim();
+    }
+
+    /// <summary>
+    /// Resolves a configured project path to its git work-tree toplevel via
+    /// <c>git rev-parse --show-toplevel</c>. Returns the toplevel (which may
+    /// equal the input or be a parent directory) or null if the path is not
+    /// inside a git repository.
+    /// </summary>
+    private static string? ResolveGitToplevel(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path)) return null;
+        var (output, _, code) = RunGit(path, "rev-parse --show-toplevel");
+        if (code != 0) return null;
+        var toplevel = output.Trim();
+        if (string.IsNullOrEmpty(toplevel)) return null;
+        return toplevel.Replace('/', Path.DirectorySeparatorChar);
     }
 
     private static (string Out, string Err, int Code) RunGit(string cwd, string args, string? stdin = null)
