@@ -138,16 +138,23 @@ The backend endpoints serve only files whose names contain no path separators an
 
 ### 4.3 Git policy
 
-Job folders are checked into the **target project's** repo (the watched workspace), not this app's repo. Recommended `.gitignore` for the watched workspace:
+Job folders are checked into the **target project's** repo (the watched workspace), not this app's repo. The product position is: **the protocol is the durable record; the screenshots are local proof.** Logs are text and cheap, so they push; images are heavy binaries and stay local.
+
+Recommended `.gitignore` for the watched workspace — match whichever job layout is in use:
 
 ```gitignore
-# Keep the audit trail (text), drop the heavy artefacts (binaries).
-.orchestrator/jobs/**/results/
+# Canonical layout (filesystem-contract.md).
 .orchestrator/jobs/**/attachments/
-.orchestrator/jobs/**/logs/
+.orchestrator/jobs/**/results/
+
+# Flat per-state layout (e.g. projects/<project>/<state>/<job>/).
+**/attachments/
+**/results/
 ```
 
-Logs may be re-included if their text-only nature outweighs the size; images stay out by default. The product position is: **the protocol is the durable record; the screenshots are local proof.** This is intentional and the user has signed off — see the job folder for the original prompt.
+The `**/attachments/` and `**/results/` patterns are broad on purpose: any folder named `attachments/` or `results/` anywhere in the workspace is treated as job-local image scratch. Adopt the canonical layout if that's too broad for your repo. Logs (`logs/`) are intentionally **not** ignored — they're the audit trail.
+
+Already-committed images are not retroactively untracked by adding these rules. If a workspace has historical images in git, run `git rm --cached <path>` once to stop tracking them; the files stay on disk.
 
 ---
 
