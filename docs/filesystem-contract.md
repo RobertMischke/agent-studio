@@ -65,6 +65,8 @@ Each job folder uses this structure:
 
 **States:** `1-preparation` -> `2-ready` -> `3-progress` -> `4-review` -> `5-completed` -> `6-archive`
 
+The application owns transitions between these states. Successful CLI runs move from `3-progress` to `4-review`; failed or stopped runs stay in `3-progress` for inspection, restart, or continuation.
+
 ### prompt.md
 
 ```markdown

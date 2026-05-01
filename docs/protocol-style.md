@@ -60,7 +60,7 @@ Lines may contain:
 
 ### 3.1 Canonical structure
 
-[`prompts/runtime/summary-protocol.md`](../prompts/runtime/summary-protocol.md) is rendered by `SummaryGenerationService` and instructs Haiku to emit exactly this English shape:
+[`prompts/runtime/summary-protocol.md`](../prompts/runtime/summary-protocol.md) is rendered by `SummaryGenerationService` after a successful CLI completion and instructs Haiku to emit exactly this English shape:
 
 ```markdown
 # Status

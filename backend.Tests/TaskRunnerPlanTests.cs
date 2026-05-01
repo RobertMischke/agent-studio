@@ -396,6 +396,18 @@ public class TaskRunnerPlanTests
         if (p.EventKind == "recovery") Assert.False(string.IsNullOrEmpty(p.EventReason));
     }
 
+    [Theory]
+    [InlineData("completed", true)]
+    [InlineData("COMPLETED", true)]
+    [InlineData("failed", false)]
+    [InlineData("cancelled", false)]
+    [InlineData("running", false)]
+    [InlineData(null, false)]
+    public void CompletionPolicy_OnlyCompletedRunsMoveToReview(string? status, bool expected)
+    {
+        Assert.Equal(expected, RunCompletionPolicy.ShouldMoveToReview(status));
+    }
+
     private static string? Var(RunPlan plan, string key) =>
         plan.PromptVariables.TryGetValue(key, out var value) ? value : null;
 }

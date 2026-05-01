@@ -305,8 +305,7 @@ public class ProjectRunner
                 cli.DiscardPersistedOutput(jobKey);
             }
 
-            var completed = string.Equals(execution.Status, "completed", StringComparison.OrdinalIgnoreCase);
-            if (completed)
+            if (RunCompletionPolicy.ShouldMoveToReview(execution.Status))
             {
                 var outcome = await _transitions.MoveAsync(jobId, JobStates.Review, Entry.Path, CancellationToken.None);
                 if (outcome.Status == MoveJobStatus.Success)

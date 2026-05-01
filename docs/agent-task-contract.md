@@ -53,6 +53,8 @@ The visible task states are:
 
 State transitions are application-controlled. A task can sit in `3-progress` without a live CLI process after a stop, crash, or backend restart. Treat the live CLI execution state as the real signal for whether work is currently running.
 
+Only successful CLI runs move automatically from `3-progress` to `4-review`. Failed or stopped runs stay in `3-progress` so the user can inspect the log, restart, or continue the task.
+
 ## Task Files
 
 Each task folder may contain:

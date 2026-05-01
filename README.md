@@ -77,9 +77,9 @@ Toggle the Git panel to see what the agent actually changed in the project's wor
 
 ![Review protocol in protocol view](docs/images/detail-quality-gate.png)
 
-Before a task lands in `4-review`, the application captures the run log, writes a concise English protocol into `status.md`, and preserves review evidence such as screenshots under the job's `results/` folder.
+When a CLI run completes successfully, the application captures the run log, moves the task to `4-review`, writes a concise English protocol into `status.md`, and preserves review evidence such as screenshots under the job's `results/` folder.
 
-The agent works on the selected task. The application owns pickup, continuation, stopping, state movement, protocol generation, and the one-active-task rule. That boundary is the point: the queue keeps moving without asking the model to decide what should run next.
+Failed or stopped runs stay in `3-progress` so the user can inspect, restart, or continue them. The agent works on the selected task. The application owns pickup, continuation, stopping, state movement, protocol generation, and the one-active-task rule. That boundary is the point: the queue keeps moving without asking the model to decide what should run next.
 
 ---
 

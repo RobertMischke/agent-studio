@@ -135,6 +135,8 @@ States:
 
 Only jobs in `2-ready` or `3-progress` can be started via `/api/jobs/{id}/start`. New jobs default to `1-preparation`; the create endpoint accepts an optional `targetState` to land directly in `2-ready`.
 
+Successful CLI runs move from `3-progress` to `4-review` through application code. Failed or stopped runs stay in `3-progress` for inspection, restart, or continuation.
+
 See `docs/filesystem-contract.md` for full details.
 
 ## Code Conventions
