@@ -17,7 +17,7 @@
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-PORT=5030
+PORT="${PORT:-5030}"
 BASE_URL="http://127.0.0.1:${PORT}"
 HEALTH_URL="${BASE_URL}/healthz"
 PROJECT_FILE="${SCRIPT_DIR}/backend/OrchestratorApi.csproj"
