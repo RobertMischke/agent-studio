@@ -1,6 +1,6 @@
 # Agent Task Processor
 
-**Stop being the bottleneck.** A local Kanban board that feeds your coding-agent CLIs a continuous queue of work — using the subscriptions you already pay for, on the machine you already own.
+**Stop being the bottleneck.** A local Kanban board that feeds your coding-agent CLIs a continuous queue of work, using the subscriptions you already pay for, on the machine you already own.
 
 ![Board overview](docs/images/board-overview.png)
 
@@ -12,7 +12,7 @@
 
 Modern coding agents can run for hours. They don't get tired. They don't context-switch. They just need a steady queue of work.
 
-The bottleneck isn't the model. It's the human babysitting it — paste a prompt, watch it run, review, paste the next one. Every minute spent on that loop is a minute your subscription's token bucket sits idle.
+The bottleneck isn't the model. It's the human babysitting it: paste a prompt, watch it run, review, paste the next one. Every minute spent on that loop is a minute your subscription's token bucket sits idle.
 
 ```
   WITHOUT a queue                          WITH Agent Task Processor
@@ -30,13 +30,13 @@ The bottleneck isn't the model. It's the human babysitting it — paste a prompt
                                           utilization: ~95% of the hour
 ```
 
-The board exists to make the queue the only thing you maintain. Tasks land in `2-ready`, the runner walks them through `3-progress → 4-review` automatically, and your role shrinks to **review** — the one part that actually needs you.
+The board exists to make the queue the only thing you maintain. Tasks land in `2-ready`, the runner walks them through `3-progress → 4-review` automatically, and your role shrinks to **review**, the one part that actually needs you.
 
 ---
 
 ## Principles
 
-**Sequential, never parallel — within a project.** One task at a time per project. No worktrees. No branch-per-task. No intra-project fan-out. Parallelism only exists *across* projects (different watch paths run independently).
+**Sequential within a project, never parallel.** One task at a time per project. No worktrees. No branch-per-task. No intra-project fan-out. Parallelism only exists *across* projects (different watch paths run independently).
 
 **Use what you already pay for.** The runner drives **your** Claude Code, Codex, Copilot, and Gemini CLIs through their existing subscriptions. **No API keys. No per-token billing.** Your Pro/Max plan is the budget; the board's job is to use as much of it as productively as possible.
 
@@ -46,40 +46,40 @@ The board exists to make the queue the only thing you maintain. Tasks land in `2
 |---|---|
 | Worktrees | Spinning up a worktree per task triples I/O for no gain when work is sequential. |
 | Virtualization / sandboxes | Adds startup latency and forces the agent to re-discover the workspace every run. |
-| Cross-task orchestration | Workflow engines, branch coordination, merge bots — all overhead the sequential model removes by construction. |
+| Cross-task orchestration | Workflow engines, branch coordination, merge bots. The sequential model removes this overhead by construction. |
 | API-key-based execution | Subscriptions already cover this. Paying twice is silly. |
 
-The product is small on purpose. Any feature that pulls toward "let's run two agents on one project" is out of scope — that's where complexity (and bills) explode.
+The product is small on purpose. Any feature that pulls toward "let's run two agents on one project" is out of scope. That's where complexity (and bills) explode.
 
 ---
 
 ## What you see
 
-### Board — every watched project, every state
+### Board: every watched project, every state
 
 ![Board overview](docs/images/board-overview.png)
 
-Five lanes — `1-preparation`, `2-ready`, `3-progress`, `4-review`, `5-completed` — driven directly off the filesystem. Each card shows the CLI, the model, the task size, and last activity. The pill in the header says how many projects are running on auto-pickup.
+Five lanes, `1-preparation`, `2-ready`, `3-progress`, `4-review`, `5-completed`, are driven directly off the filesystem. Each card shows the CLI, the model, the task size, and last activity. The pill in the header says how many projects are running on auto-pickup.
 
-### Detail view — task description + live protocol
+### Detail view: task description + live protocol
 
 ![Detail view, task + protocol panes](docs/images/detail-protocol.png)
 
-Click a card and you get the prompt on the left and the agent's protocol on the right. The protocol is a parsed, human-readable summary of what the agent has done so far — pulled from `status.md` and `cli-output.log` and re-rendered after every run.
+Click a card and you get the prompt on the left and the agent's protocol on the right. The protocol is a parsed, human-readable summary of what the agent has done so far, pulled from `status.md` and `cli-output.log` and re-rendered after every run.
 
-### Three panes — task, protocol, live git
+### Three panes: task, protocol, live git
 
 ![Three-pane layout with git view](docs/images/detail-three-panes.png)
 
 Toggle the Git panel to see what the agent actually changed in the project's working tree, file by file, while it works. No leaving the board to alt-tab into a terminal.
 
-### Quality Gate — what makes a task review-ready
+### Quality Gate: what makes a task review-ready
 
 ![Quality Gate in protocol view](docs/images/detail-quality-gate.png)
 
 Before any task moves from `3-progress` to `4-review`, the agent fills out an **Edge-Case Quality Gate**: runtime states observed, signal-vs-property check, crash recovery, failure UX, reversibility. The gate is recorded in `status.md` and visible in the protocol pane.
 
-A job without a Quality Gate section is not ready for review — full stop.
+A job without a Quality Gate section is not ready for review. Full stop.
 
 ---
 
@@ -130,7 +130,7 @@ All code edits happen in the **dev** checkout. The stable checkout exists for re
 These markers activate when the backend serves `/api/environment` with `{ isDev: true }`, which it does iff a local-only `backend/appsettings.Local.json` file is present:
 
 ```json
-// backend/appsettings.Local.json — gitignored, dev checkout only
+// backend/appsettings.Local.json, gitignored, dev checkout only
 {
   "Environment": {
     "IsDev": true
@@ -156,7 +156,7 @@ The file is gitignored so it stays per-checkout. Stable lacks the file, so the s
 
 ### Supported CLIs
 
-Claude Code, Codex, GitHub Copilot, Gemini. The contract every CLI must satisfy — process lifecycle, session model, model selection, quota probing, logging, cancellation — is in [docs/supported-clis.md](docs/supported-clis.md).
+Claude Code, Codex, GitHub Copilot, Gemini. The contract every CLI must satisfy, including process lifecycle, session model, model selection, quota probing, logging, and cancellation, is in [docs/supported-clis.md](docs/supported-clis.md).
 
 ### Keeping target projects in sync
 
@@ -166,8 +166,9 @@ When the workflow or folder schema changes, run the `/sync-target-instructions` 
 
 ## Docs
 
-- [AGENTS.md](AGENTS.md) — canonical agent instructions
-- [docs/supported-clis.md](docs/supported-clis.md) — CLI integration contract
-- [docs/filesystem-contract.md](docs/filesystem-contract.md) — job folder contract
-- [docs/autopilot-prompt.md](docs/autopilot-prompt.md) — orchestrator workflow + Quality Gate definition
-- [PATHS.md](PATHS.md) — path conventions
+- [AGENTS.md](AGENTS.md) - canonical agent instructions
+- [ROADMAP.md](ROADMAP.md) - product direction, roadmap themes, and decision principles
+- [docs/supported-clis.md](docs/supported-clis.md) - CLI integration contract
+- [docs/filesystem-contract.md](docs/filesystem-contract.md) - job folder contract
+- [docs/autopilot-prompt.md](docs/autopilot-prompt.md) - orchestrator workflow + Quality Gate definition
+- [PATHS.md](PATHS.md) - path conventions

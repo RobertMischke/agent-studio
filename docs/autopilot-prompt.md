@@ -1,4 +1,4 @@
-# Orchestrator — Autopilot Workflow
+# Orchestrator - Autopilot Workflow
 
 This project is monitored by the Agent Task Processor. Job folders live under `.orchestrator/jobs/` in numbered state folders.
 
@@ -21,13 +21,13 @@ This project is monitored by the Agent Task Processor. Job folders live under `.
 
 Follow this loop **strictly one job at a time, start to finish**:
 
-1. **Scan** `.orchestrator/jobs/2-ready/` — this is the ONLY folder you pick work from
-2. **Pick ONE job** — the one with the lowest `order` in `job.json`. If `2-ready/` is empty → **STOP completely**
+1. **Scan** `.orchestrator/jobs/2-ready/` - this is the ONLY folder you pick work from
+2. **Pick ONE job** - the one with the lowest `order` in `job.json`. If `2-ready/` is empty → **STOP completely**
 3. **Move** the job folder from `2-ready/` into `3-progress/` (physically move the directory)
 4. **Update** `job.json` → set `"state": "3-progress"`
-5. **Read** `prompt.md` inside the job folder — this is your task description. Only NOW do you look at the task.
-6. **Execute** the task described in `prompt.md` — work in the **project source tree** (src/, lib/, etc.), NOT inside the job folder
-7. **Write the completion report** into the job's `status.md` (see format below) — this is the RESULT of the job
+5. **Read** `prompt.md` inside the job folder - this is your task description. Only NOW do you look at the task.
+6. **Execute** the task described in `prompt.md` - work in the **project source tree** (src/, lib/, etc.), NOT inside the job folder
+7. **Write the completion report** into the job's `status.md` (see format below) - this is the RESULT of the job
 8. **If UI changes**: save Playwright screenshots into the job's `results/` folder, link them in `status.md`
 9. **Move** the job folder from `3-progress/` into `4-review/`
 10. **Update** `job.json` → set `"state": "4-review"`
@@ -61,14 +61,14 @@ NOT somewhere else. NOT in a separate folder. Into `status.md` INSIDE the job fo
 - ✅ Konkrete Aktion 2
 
 ## Offen
-- ❌ Was nicht gemacht wurde — kurze Begründung
-- ⚠️ Teilweise erledigt — was fehlt noch
+- ❌ Was nicht gemacht wurde - kurze Begründung
+- ⚠️ Teilweise erledigt - was fehlt noch
 
 (Abschnitt "Offen" weglassen wenn alles erledigt ist)
 
 ## Geänderte Dateien
-- `path/to/file.ts` — was geändert wurde
-- `path/to/other.ts` — was geändert wurde
+- `path/to/file.ts` - was geändert wurde
+- `path/to/other.ts` - was geändert wurde
 
 ## Ergebnis
 1–2 Sätze: Was der User sehen wird / was erreicht wurde.
@@ -85,10 +85,10 @@ Keep it factual and concise. The reviewer opens `status.md` and sees exactly wha
 
 Wenn die Aufgabe visuelle Änderungen beinhaltet:
 1. Erstelle `results/` im **Job-Ordner** (z.B. `.orchestrator/jobs/3-progress/my-task/results/`)
-2. **Kopiere** Playwright-Screenshots dorthin — `frontend/e2e/test-results/` wird beim nächsten Lauf überschrieben und ist gitignored, daher flüchtig.
+2. **Kopiere** Playwright-Screenshots dorthin - `frontend/e2e/test-results/` wird beim nächsten Lauf überschrieben und ist gitignored, daher flüchtig.
 3. Verlinke im Report mit relativem Präfix: `![Beschreibung](results/dateiname.png)`. Im lokalen Reader löst das Frontend `results/<name>` automatisch gegen die API auf.
 
-Nur bei Bedarf — nicht jeder Job braucht Screenshots. Bei UI/Styling/Layout sind sie Pflicht.
+Nur bei Bedarf - nicht jeder Job braucht Screenshots. Bei UI/Styling/Layout sind sie Pflicht.
 
 Vollständige Bild-Lebensdauer-Regeln (per-CLI-Verhalten, `attachments/` vs `results/`, Render-Pfade) stehen in [`docs/protocol-style.md`](protocol-style.md).
 
@@ -98,8 +98,8 @@ Jeder Job-Ordner enthält:
 
 ```
 my-task/
-  job.json       ← Metadaten (id, title, state, order, agent) — id und createdAt NIE ändern
-  prompt.md      ← Aufgabenbeschreibung — NUR LESEN, nie verändern
+  job.json       ← Metadaten (id, title, state, order, agent) - id und createdAt NIE ändern
+  prompt.md      ← Aufgabenbeschreibung - NUR LESEN, nie verändern
   status.md      ← HIERHIN kommt der Completion Report (siehe Format oben)
   results/       ← Screenshots (optional, nur bei visuellen Änderungen)
   logs/          ← Build-Outputs etc. (optional)
@@ -109,10 +109,10 @@ my-task/
 
 ## Edge-Case Quality Gate (MANDATORY before moving to 4-review)
 
-Before step 9 (move to `4-review/`), pause and run this self-review on the change you just made. Treat it as a checklist — answer each question explicitly in `status.md` under a `## Quality Gate` section. If a question reveals a gap, fix it first.
+Before step 9 (move to `4-review/`), pause and run this self-review on the change you just made. Treat it as a checklist - answer each question explicitly in `status.md` under a `## Quality Gate` section. If a question reveals a gap, fix it first.
 
 1. **What states does this feature observe?** List every relevant runtime state (e.g. job state folders, runner mode, CLI execution status, network reachability). For each, ask: does my change behave correctly in that state, or did I implicitly assume only one of them?
-2. **Is the signal I check the same as the property I care about?** A folder name, a flag, a string label — these are often *proxies*. Confirm the proxy matches the real condition (e.g. "CLI is currently running" is not the same as "job sits in `3-progress/`").
+2. **Is the signal I check the same as the property I care about?** A folder name, a flag, a string label - these are often *proxies*. Confirm the proxy matches the real condition (e.g. "CLI is currently running" is not the same as "job sits in `3-progress/`").
 3. **What happens after a crash, restart, or stop?** Persistent state often outlives the process that owns it. Walk through the recovery path.
 4. **Failure UX.** If the operation can fail server-side, can the user reach the failing action at all? Prefer disabling the affordance over showing a modal after the fact.
 5. **Reversibility.** If the change locks/blocks something, is there a clear path to unlock without restarting the app?
@@ -128,21 +128,27 @@ Record the answers in `status.md`:
 - Reversibility: <how the user gets out of locked states>
 ```
 
-If you cannot answer one honestly, the job is not ready for review — go back to step 6.
+If you cannot answer one honestly, the job is not ready for review - go back to step 6.
+
+## Documentation Drift Check (MANDATORY before moving to 4-review)
+
+Before moving a finished CLI task to `4-review/`, check whether the change affects README, ROADMAP.md, AGENTS.md, or docs. Update the relevant file in the same task when the change affects product direction, public behavior, architecture, CLI contracts, filesystem contracts, or agent workflow.
+
+If no documentation update is needed, record that briefly in `status.md`.
 
 ## Rules
 
-- **ONLY** pick jobs from `2-ready/` — ignore all other state folders
+- **ONLY** pick jobs from `2-ready/` - ignore all other state folders
 - Never modify `prompt.md`
 - Write the completion report into the job's `status.md` BEFORE moving to `4-review/`
 - Work in the project source tree, not inside the job folder
 - Update `job.json` `"state"` to match the folder the job is in
 - Screenshots go into `results/` inside the job folder, linked from `status.md`
 
-## Shell policy — sh, not PowerShell
+## Shell policy - sh, not PowerShell
 
 - **Never invoke PowerShell from the agent.** Background launches and PID tracking break, the agent waits for prompts that never arrive.
 - Use bash / sh (Git Bash on Windows is fine). Prefer existing `.sh` entrypoints (e.g. `./api.sh`) over inline shell snippets.
-- For Windows-specific binaries (`tasklist`, `taskkill`, `netstat`), call them directly from sh — do not wrap in `powershell -c`.
+- For Windows-specific binaries (`tasklist`, `taskkill`, `netstat`), call them directly from sh - do not wrap in `powershell -c`.
 - For file creation, use plain `cat <<'EOF' > path` heredocs or the agent's Write tool. No `Out-File`, `Set-Content`, here-strings.
 - If a build cannot run in the current environment, state the concrete reason in `status.md` and continue with static verification.
