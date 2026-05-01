@@ -1,11 +1,12 @@
 using OrchestratorApi.Models;
+using OrchestratorApi.Services;
 using OrchestratorApi.Services.Runner;
 using Xunit;
 
 namespace OrchestratorApi.Tests;
 
 /// <summary>
-/// Decision-tree matrix for <see cref="RunPlanner.PlanRun"/> — the single
+/// Decision-tree matrix for <see cref="RunPlanner.PlanRun"/> - the single
 /// place that maps (intent × job state × session state × CLI compatibility) to
 /// a <see cref="RunPlan"/>. The whole point of having one planner is that this
 /// matrix locks every cell of the table; if a future change introduces a path
@@ -16,10 +17,10 @@ namespace OrchestratorApi.Tests;
 /// The bug class this guards against: pre-refactor, "Start" and "Continue"
 /// owned independent decision trees and the recovery fix landed only on one
 /// side, so user follow-ups on a job without a captured session got a 400
-/// "This job has no session yet — start it once before continuing" while the
+/// "This job has no session yet - start it once before continuing" while the
 /// Play button worked. Same inputs, different outputs depending on which
 /// endpoint you reached. The planner now serialises both intents through one
-/// function — these tests prove they cannot diverge silently.
+/// function - these tests prove they cannot diverge silently.
 /// </summary>
 public class TaskRunnerPlanTests
 {
@@ -77,12 +78,13 @@ public class TaskRunnerPlanTests
         Assert.True(p.MarkSessionChainRecovery);
         Assert.True(p.WriteCutMarker);
         Assert.Equal("no session recorded", p.EventReason);
-        Assert.Contains("please continue with the chat box", p.Prompt);
-        Assert.Contains("session was lost", p.Prompt, System.StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(RuntimePromptService.RunnerRecoveryContinuation, p.PromptTemplate);
+        Assert.Null(p.PromptOverride);
+        Assert.Equal("please continue with the chat box", Var(p, "user_followup"));
     }
 
     /// <summary>
-    /// Continue against a real captured UUID — the happy path. Resume flag on,
+    /// Continue against a real captured UUID - the happy path. Resume flag on,
     /// session passed through, no recovery side-effects, prompt is the raw
     /// follow-up so the agent receives it as the next conversation turn.
     /// </summary>
@@ -98,7 +100,8 @@ public class TaskRunnerPlanTests
         Assert.Equal(ValidUuid, p.EventInputSessionId);
         Assert.False(p.MarkSessionChainRecovery);
         Assert.False(p.WriteCutMarker);
-        Assert.Equal("tighten the spacing", p.Prompt);
+        Assert.Null(p.PromptTemplate);
+        Assert.Equal("tighten the spacing", p.PromptOverride);
         Assert.Null(p.EventReason);
     }
 
@@ -106,11 +109,11 @@ public class TaskRunnerPlanTests
     /// Legacy placeholder slug from before real session capture: the planner
     /// must treat it as "no session" and route through recovery. If we
     /// accidentally accepted it as a resume handle, Claude's `-r` would hang
-    /// or reply "I don't see an interrupted task" — the exact regression the
+    /// or reply "I don't see an interrupted task" - the exact regression the
     /// placeholder check exists to prevent.
     ///
     /// On a strict-compat CLI like Claude, the placeholder slug fails the UUID
-    /// shape check before the placeholder check fires — so the recovery reason
+    /// shape check before the placeholder check fires - so the recovery reason
     /// reads "not a valid claude session" rather than the more specific
     /// "legacy placeholder slug" text. Either way the run lands in recovery,
     /// which is the user-visible property that matters.
@@ -124,7 +127,7 @@ public class TaskRunnerPlanTests
         Assert.Equal("recovery", p.EventKind);
         Assert.False(p.ResumeFlag);
         Assert.True(p.MarkSessionChainRecovery);
-        // Strict-compat CLI rejects the slug at the UUID gate — so we report
+        // Strict-compat CLI rejects the slug at the UUID gate - so we report
         // the compat-fail reason rather than the placeholder-fail reason.
         Assert.Contains("not a valid claude session", p.EventReason ?? "",
                         System.StringComparison.OrdinalIgnoreCase);
@@ -169,7 +172,7 @@ public class TaskRunnerPlanTests
     /// <summary>
     /// Continue from 4-review/5-completed (user re-opens a finished job with a
     /// follow-up): the plan must signal MoveJobToProgress so the runner state
-    /// machine stays consistent — without that, the job would stay in review
+    /// machine stays consistent - without that, the job would stay in review
     /// while a CLI is actively writing to it. This is the move-policy
     /// asymmetry vs Start (which only moves from Ready → Progress); both must
     /// be preserved.
@@ -209,12 +212,13 @@ public class TaskRunnerPlanTests
         Assert.True(p.MoveJobToProgress);
         Assert.False(p.MarkSessionChainRecovery);
         Assert.False(p.WriteCutMarker);
-        Assert.Contains("prompt.md", p.Prompt);
+        Assert.Equal(RuntimePromptService.RunnerFreshStart, p.PromptTemplate);
+        Assert.Equal(@"C:\jobs\fix-bug\prompt.md", Var(p, "prompt_path"));
         Assert.Null(p.PersistSessionName);
     }
 
     /// <summary>
-    /// Auto-pickup is identical to manual start — only the trigger reason
+    /// Auto-pickup is identical to manual start - only the trigger reason
     /// differs, the plan must not. Locks in the symmetry; if a future change
     /// adds an Auto-only branch, this test catches it.
     /// </summary>
@@ -222,12 +226,19 @@ public class TaskRunnerPlanTests
     public void AutoPickup_AndManualStart_ProducePlansThatDifferOnlyByTrigger()
     {
         var manual = Plan(RunIntent.ManualStart, JobStates.Ready, sessionName: null);
-        var auto   = Plan(RunIntent.AutoPickup,  JobStates.Ready, sessionName: null);
-        Assert.Equal(manual, auto);
+        var auto = Plan(RunIntent.AutoPickup, JobStates.Ready, sessionName: null);
+
+        Assert.Equal(manual.PromptTemplate, auto.PromptTemplate);
+        Assert.Equal(manual.PromptOverride, auto.PromptOverride);
+        Assert.Equal(manual.SessionToResume, auto.SessionToResume);
+        Assert.Equal(manual.ResumeFlag, auto.ResumeFlag);
+        Assert.Equal(manual.EventKind, auto.EventKind);
+        Assert.Equal(manual.EventReason, auto.EventReason);
+        Assert.Equal(manual.MoveJobToProgress, auto.MoveJobToProgress);
     }
 
     /// <summary>
-    /// Job stuck in 3-progress with a captured UUID — previous run was
+    /// Job stuck in 3-progress with a captured UUID - previous run was
     /// interrupted. The planner detects "interrupted resume" via the
     /// ShouldUseResumePrompt rule and switches to the resume continuation
     /// prompt that re-anchors the agent to the job folder.
@@ -240,14 +251,14 @@ public class TaskRunnerPlanTests
         Assert.Equal("continue", p.EventKind);
         Assert.True(p.ResumeFlag);
         Assert.Equal(ValidUuid, p.SessionToResume);
-        Assert.Contains("Resume the interrupted task", p.Prompt);
+        Assert.Equal(RuntimePromptService.RunnerResumeInterrupted, p.PromptTemplate);
         Assert.False(p.MoveJobToProgress); // already there
     }
 
     /// <summary>
     /// Job in 3-progress but no UUID was ever captured (e.g. CLI crashed
     /// before the first stream-json frame). Sending the resume prompt here
-    /// would just make the agent reply "I don't see an interrupted task" — so
+    /// would just make the agent reply "I don't see an interrupted task" - so
     /// the plan must fall back to a fresh start with the regular prompt.
     /// </summary>
     [Fact]
@@ -257,8 +268,7 @@ public class TaskRunnerPlanTests
 
         Assert.Equal("start", p.EventKind);
         Assert.False(p.ResumeFlag);
-        Assert.Contains("prompt.md", p.Prompt);
-        Assert.DoesNotContain("Resume the interrupted task", p.Prompt);
+        Assert.Equal(RuntimePromptService.RunnerFreshStart, p.PromptTemplate);
     }
 
     /// <summary>
@@ -277,13 +287,13 @@ public class TaskRunnerPlanTests
         Assert.Null(p.SessionToResume);
         Assert.True(p.MarkSessionChainRecovery);
         Assert.False(p.ClearStaleSessionName); // recovery, not a quiet drop
-        Assert.Contains("Resume the interrupted task", p.Prompt);
-        Assert.Equal("previous session was for another CLI — files reconstructed", p.EventReason);
+        Assert.Equal(RuntimePromptService.RunnerResumeInterrupted, p.PromptTemplate);
+        Assert.Equal("previous session was for another CLI. Files reconstructed.", p.EventReason);
     }
 
     /// <summary>
     /// Legacy placeholder on a Claude start: dropped quietly (ClearStale, no
-    /// chain-break mark, no recovery event) — placeholders never represented
+    /// chain-break mark, no recovery event) - placeholders never represented
     /// real sessions, so there is nothing to recover from and the chip should
     /// not show a cut.
     /// </summary>
@@ -295,7 +305,7 @@ public class TaskRunnerPlanTests
         Assert.Equal("start", p.EventKind);
         Assert.True(p.ClearStaleSessionName);
         Assert.False(p.MarkSessionChainRecovery);
-        Assert.DoesNotContain("Resume the interrupted task", p.Prompt);
+        Assert.Equal(RuntimePromptService.RunnerFreshStart, p.PromptTemplate);
     }
 
     /// <summary>
@@ -346,8 +356,8 @@ public class TaskRunnerPlanTests
 
     /// <summary>
     /// THE invariant. No matter the intent, no matter the session state, the
-    /// planner must always produce a runnable plan — never throw, never
-    /// produce a "this is impossible" sentinel. The "no session yet — start it
+    /// planner must always produce a runnable plan - never throw, never
+    /// produce a "this is impossible" sentinel. The "no session yet - start it
     /// once" 400 was the violation of this property; this test enumerates the
     /// matrix that has to stay green.
     /// </summary>
@@ -375,7 +385,8 @@ public class TaskRunnerPlanTests
         var p = Plan(intent, state, sessionName, followup: "go");
 
         Assert.NotNull(p);
-        Assert.False(string.IsNullOrEmpty(p.Prompt), "Plan must always carry a prompt");
+        Assert.True(!string.IsNullOrEmpty(p.PromptOverride) || !string.IsNullOrEmpty(p.PromptTemplate),
+            "Plan must always carry a prompt override or template");
         Assert.Contains(p.EventKind, new[] { "start", "continue", "recovery" });
         // resume flag and session-to-resume must agree
         if (p.ResumeFlag) Assert.NotNull(p.SessionToResume);
@@ -384,4 +395,7 @@ public class TaskRunnerPlanTests
         // a recovery event must explain itself
         if (p.EventKind == "recovery") Assert.False(string.IsNullOrEmpty(p.EventReason));
     }
+
+    private static string? Var(RunPlan plan, string key) =>
+        plan.PromptVariables.TryGetValue(key, out var value) ? value : null;
 }

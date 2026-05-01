@@ -54,9 +54,10 @@ If a request implies any of the out-of-scope items, surface the conflict to the 
 | E2E tests | `frontend/e2e/` | Playwright. See [frontend/e2e/README.md](frontend/e2e/README.md). |
 | Filesystem contract | `docs/filesystem-contract.md` | Job folder layout. |
 | Protocol & image style | `docs/protocol-style.md` | `status.md` shape, Activity Log markers, `attachments/` vs `results/`, per-CLI image retention. |
-| Orchestrator prompt | `docs/autopilot-prompt.md` | Canonical workflow copied into watched targets. |
+| Agent task contract | `docs/agent-task-contract.md` | App-owned lifecycle boundary copied into watched targets. |
 | Product roadmap | `ROADMAP.md` | Product thesis, roadmap themes, hard boundaries, and decision principles. |
 | Repo prompts | `.github/prompts/` | Reusable prompt templates. |
+| Runtime prompts | `prompts/runtime/` | Editable Markdown templates rendered by backend runtime services. |
 | Backend lifecycle | `api.sh` | start / stop / restart / status (sh; agents must use this). |
 
 ### Service & data layout (backend)
@@ -89,11 +90,7 @@ If a request implies any of the out-of-scope items, surface the conflict to the 
 
 ### Watched workspaces
 
-Default dev configuration watches:
-- `C:\Projects\agent-taskboard-workspace\projects\agent-taskboard` (this app's own task folders)
-- `C:\Projects\agent-taskboard-workspace\projects\runbook`
-
-Use `/api/watch-paths` to enumerate at runtime. Never hardcode paths in tests; read them from there.
+Local watch configuration usually lives in gitignored `backend/appsettings.Local.json`. Use `/api/watch-paths` to enumerate effective watch paths at runtime; it includes pointer resolution through `.orchestrator.yml` and `TaskRepository`. Never hardcode paths in tests; read them from there.
 
 _(Shell policy, Backend Control, Frontend Control, and Build/Test/Verify are documented below under "Shell policy: sh, not PowerShell".)_
 
@@ -127,13 +124,13 @@ Each job folder contains:
 
 - `job.json`: metadata (id, title, state, order, agent, cliType, model, sessionName).
 - `prompt.md`: task description.
-- `status.md`: processing protocol or log.
+- `status.md`: generated review protocol.
 - `logs/`: optional log files (CLI stdout/stderr lives here as `cli-output.log`).
 
 States:
 
 ```text
-1-preparation -> 2-ready -> 3-progress -> 4-review -> 5-completed
+1-preparation -> 2-ready -> 3-progress -> 4-review -> 5-completed -> 6-archive
 ```
 
 Only jobs in `2-ready` or `3-progress` can be started via `/api/jobs/{id}/start`. New jobs default to `1-preparation`; the create endpoint accepts an optional `targetState` to land directly in `2-ready`.
@@ -152,10 +149,10 @@ See `docs/filesystem-contract.md` for full details.
 
 Prefer `data-testid="..."` for stable test hooks. If a feature you're touching lacks one and a spec needs it, add it to the component rather than reaching for a CSS-class selector.
 
-## Orchestrator Instructions
+## Watched Target Instructions
 
-This repository uses the orchestrator pattern for dependent projects. The shared autopilot workflow is defined in `docs/autopilot-prompt.md`; treat it as the single source of truth.
+This repository uses an app-owned task lifecycle for dependent projects. The shared boundary is defined in [docs/agent-task-contract.md](docs/agent-task-contract.md); treat it as the single source of truth for what the application controls and what the CLI agent controls.
 
 After any CLI-executed task finishes, check whether [README.md](README.md), [ROADMAP.md](ROADMAP.md), AGENTS.md, or docs need to be updated. Update them in the same task when the change affects product direction, public behavior, architecture, CLI contracts, filesystem contracts, or agent workflow. If no documentation update is needed, say so briefly in the task report.
 
-When onboarding or resyncing a watched target project, use `.github/prompts/sync-target-instructions.prompt.md`. Target projects should receive an `AGENTS.md` with the orchestrator workflow. Add a lightweight `.github/copilot-instructions.md` only as a compatibility shim when that project still needs Copilot Chat repository instructions.
+When onboarding or resyncing a watched target project, use [.github/prompts/sync-target-instructions.prompt.md](.github/prompts/sync-target-instructions.prompt.md). Target projects should receive an `AGENTS.md` with the agent task contract. Add a lightweight `.github/copilot-instructions.md` only as a compatibility shim when that project still needs Copilot Chat repository instructions.

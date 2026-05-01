@@ -1,4 +1,5 @@
 using OrchestratorApi.Models;
+using OrchestratorApi.Services;
 using OrchestratorApi.Services.Cli;
 using OrchestratorApi.Services.Jobs;
 
@@ -19,6 +20,8 @@ public class ProjectRunner
     private readonly JobSessionLog _sessions;
     private readonly CliRouter _router;
     private readonly SummaryGenerationService _summaryService;
+    private readonly RuntimePromptService _prompts;
+    private readonly JobTransitionService _transitions;
     private string _mode = "manual";
     private string? _activeJobId;
     private string? _activeCliType;
@@ -44,7 +47,9 @@ public class ProjectRunner
         JobStateMachine states,
         JobSessionLog sessions,
         CliRouter router,
-        SummaryGenerationService summaryService)
+        SummaryGenerationService summaryService,
+        RuntimePromptService prompts,
+        JobTransitionService transitions)
     {
         ProjectName = projectName;
         Entry = entry;
@@ -54,6 +59,8 @@ public class ProjectRunner
         _sessions = sessions;
         _router = router;
         _summaryService = summaryService;
+        _prompts = prompts;
+        _transitions = transitions;
 
         // Listen across all CLI backends for completion of the active job.
         _router.OnFinished += (cliType, jobKey, exec) => OnCliFinished(cliType, jobKey, exec);
@@ -111,7 +118,7 @@ public class ProjectRunner
         {
             if (_mode == "auto-single")
             {
-                // Route through SetMode so the revert is persisted — otherwise a
+                // Route through SetMode so the revert is persisted - otherwise a
                 // backend restart right after this would resurrect "auto-single"
                 // and immediately pick up another job.
                 SetMode("manual");
@@ -141,7 +148,7 @@ public class ProjectRunner
     /// session-event shape, state moves); this method only applies the side
     /// effects the plan describes. Both the start endpoints and the continue
     /// endpoint route through here so a fix in one path can never miss its
-    /// sibling — that divergence is the bug class this design exists to prevent.
+    /// sibling - that divergence is the bug class this design exists to prevent.
     /// </summary>
     private async Task<(CliExecution? Execution, string? Error)> RunCliAsync(
         string jobId, RunIntent intent, string? followupPrompt, CancellationToken ct)
@@ -181,12 +188,14 @@ public class ProjectRunner
                 info = _scanner.FindJob(jobId, Entry.Path) ?? info;
             }
 
+            var prompt = RenderPrompt(plan, info);
+
             _activeJobId = jobId;
             NotifyStatus();
 
             Directory.CreateDirectory(JobPaths.LogsDir(info.FolderPath));
 
-            // Diagnostic logs — surface the planner's decision in one place so
+            // Diagnostic logs - surface the planner's decision in one place so
             // operators reading the log can tell which branch fired without
             // grepping for old per-method messages.
             _logger.LogInformation(
@@ -217,7 +226,7 @@ public class ProjectRunner
 
             _activeCliType = cli.CliType;
             var (execution, cliError) = await cli.StartAsync(
-                jobId, GetJobKey(jobId), plan.Prompt, Entry.RootPath,
+                jobId, GetJobKey(jobId), prompt, Entry.RootPath,
                 plan.SessionToResume, plan.ResumeFlag, info.Model, ct);
 
             if (execution == null)
@@ -238,79 +247,111 @@ public class ProjectRunner
 
     private void OnCliFinished(string cliType, string jobKey, CliExecution execution)
     {
-        if (GetActiveJobKey() != jobKey || _activeJobId == null) return;
+        var activeJobId = _activeJobId;
+        if (GetActiveJobKey() != jobKey || activeJobId == null) return;
         if (_activeCliType != null && !string.Equals(cliType, _activeCliType, StringComparison.OrdinalIgnoreCase)) return;
 
-        _logger.LogInformation("Job {JobId} finished in project '{Project}' on {Cli} with status {Status}",
-            _activeJobId, ProjectName, cliType, execution.Status);
+        _ = Task.Run(() => OnCliFinishedAsync(cliType, jobKey, execution, activeJobId));
+    }
 
-        var cli = _router.Get(cliType);
-
-        // Persist last token/usage summary (best-effort)
-        var usage = cli.GetLastUsage(jobKey);
-        if (usage != null)
+    private async Task OnCliFinishedAsync(string cliType, string jobKey, CliExecution execution, string jobId)
+    {
+        try
         {
-            _sessions.UpdateLastUsage(_activeJobId, usage, Entry.Path);
-        }
+            if (GetActiveJobKey() != jobKey || _activeJobId != jobId) return;
+            if (_activeCliType != null && !string.Equals(cliType, _activeCliType, StringComparison.OrdinalIgnoreCase)) return;
 
-        // Persist the captured session UUID so follow-ups can resume.
-        // Claude / Codex / Gemini all auto-create a UUID on first run and
-        // surface it in their JSON output; we capture it during streaming
-        // and write it back here. Without this, Continue always loses
-        // context because info.SessionName never advances past the slug.
-        var capturedSessionId = cli switch
-        {
-            ClaudeCliService claude => claude.GetCapturedSessionId(jobKey),
-            CodexCliService codex   => codex.GetCapturedSessionId(jobKey),
-            GeminiCliService gemini => gemini.GetCapturedSessionId(jobKey),
-            _ => null
-        };
-        if (!string.IsNullOrWhiteSpace(capturedSessionId))
-        {
-            // Append to the chain (and update sessionName in lockstep). Forking
-            // CLIs emit a new id on every --resume; preserving the chain lets the
-            // user see how often the session has been continued.
-            _sessions.AppendSessionToChain(_activeJobId, capturedSessionId!, Entry.Path);
-            _sessions.BackfillLatestSessionEventCapturedId(_activeJobId, capturedSessionId!, Entry.Path);
-        }
+            _logger.LogInformation("Job {JobId} finished in project '{Project}' on {Cli} with status {Status}",
+                jobId, ProjectName, cliType, execution.Status);
 
-        // Write CLI output to log file. The runtime JSONL is the durable
-        // backup that lets us recover the Activity Log after a backend
-        // restart; once the consolidated cli-output.log has it, the JSONL
-        // can go so the disk-fallback path in GetOutput doesn't replay the
-        // same lines after the in-memory buffer is evicted.
-        var activeInfo = _scanner.FindJob(_activeJobId, Entry.Path);
-        if (activeInfo != null && WriteCliLog(activeInfo, cli))
-        {
-            cli.DiscardPersistedOutput(jobKey);
-        }
+            var cli = _router.Get(cliType);
 
-        var finishedJobId = _activeJobId;
-        // Move job to 4-review
-        _states.MoveJob(_activeJobId, JobStates.Review, Entry.Path);
-
-        // Fire-and-forget Haiku summary on successful completion. Skipped for
-        // failed/cancelled runs because partial logs rarely yield useful
-        // protocols and the user can re-run if needed.
-        if (string.Equals(execution.Status, "completed", StringComparison.OrdinalIgnoreCase))
-        {
-            _ = Task.Run(async () =>
+            // Persist last token/usage summary (best-effort)
+            var usage = cli.GetLastUsage(jobKey);
+            if (usage != null)
             {
-                try
-                {
-                    var info = _scanner.FindJob(finishedJobId, Entry.Path);
-                    if (info != null) await _summaryService.GenerateAsync(info);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Summary generation crashed for {JobId}", finishedJobId);
-                }
-            });
-        }
+                _sessions.UpdateLastUsage(jobId, usage, Entry.Path);
+            }
 
-        _activeJobId = null;
-        _activeCliType = null;
-        NotifyStatus();
+            // Persist the captured session UUID so follow-ups can resume.
+            // Claude / Codex / Gemini all auto-create a UUID on first run and
+            // surface it in their JSON output; we capture it during streaming
+            // and write it back here. Without this, Continue always loses
+            // context because info.SessionName never advances past the slug.
+            var capturedSessionId = cli switch
+            {
+                ClaudeCliService claude => claude.GetCapturedSessionId(jobKey),
+                CodexCliService codex   => codex.GetCapturedSessionId(jobKey),
+                GeminiCliService gemini => gemini.GetCapturedSessionId(jobKey),
+                _ => null
+            };
+            if (!string.IsNullOrWhiteSpace(capturedSessionId))
+            {
+                // Append to the chain (and update sessionName in lockstep). Forking
+                // CLIs emit a new id on every --resume; preserving the chain lets the
+                // user see how often the session has been continued.
+                _sessions.AppendSessionToChain(jobId, capturedSessionId!, Entry.Path);
+                _sessions.BackfillLatestSessionEventCapturedId(jobId, capturedSessionId!, Entry.Path);
+            }
+
+            // Write CLI output to log file. The runtime JSONL is the durable
+            // backup that lets us recover the Activity Log after a backend
+            // restart; once the consolidated cli-output.log has it, the JSONL
+            // can go so the disk-fallback path in GetOutput doesn't replay the
+            // same lines after the in-memory buffer is evicted.
+            var activeInfo = _scanner.FindJob(jobId, Entry.Path);
+            if (activeInfo != null && WriteCliLog(activeInfo, cli))
+            {
+                cli.DiscardPersistedOutput(jobKey);
+            }
+
+            var completed = string.Equals(execution.Status, "completed", StringComparison.OrdinalIgnoreCase);
+            if (completed)
+            {
+                var outcome = await _transitions.MoveAsync(jobId, JobStates.Review, Entry.Path, CancellationToken.None);
+                if (outcome.Status == MoveJobStatus.Success)
+                {
+                    // Fire-and-forget Haiku summary on successful completion.
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            var info = _scanner.FindJob(jobId, Entry.Path);
+                            if (info != null) await _summaryService.GenerateAsync(info);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Summary generation crashed for {JobId}", jobId);
+                        }
+                    });
+                }
+                else
+                {
+                    _logger.LogWarning(
+                        "Job {JobId} completed but could not move to review: {Status} {Message}",
+                        jobId, outcome.Status, outcome.Message);
+                }
+            }
+            else
+            {
+                _logger.LogInformation(
+                    "Job {JobId} finished with status {Status}. Leaving it in progress for review or recovery.",
+                    jobId, execution.Status);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Runner finalization crashed for {JobId}", jobId);
+        }
+        finally
+        {
+            if (_activeJobId == jobId)
+            {
+                _activeJobId = null;
+                _activeCliType = null;
+                NotifyStatus();
+            }
+        }
     }
 
     /// <summary>
@@ -326,7 +367,7 @@ public class ProjectRunner
             Directory.CreateDirectory(JobPaths.LogsDir(info.FolderPath));
             var logPath = JobPaths.CliOutputLog(info.FolderPath);
             var ts = DateTime.UtcNow.ToString("HH:mm:ss.fff");
-            var line = $"[{ts}] [system] ─── Session lost ({reason}) — recovering from job folder ───";
+            var line = $"[{ts}] [system] --- Session lost ({reason}) - recovering from job folder ---";
             var prefix = File.Exists(logPath) && new FileInfo(logPath).Length > 0
                 ? Environment.NewLine
                 : string.Empty;
@@ -355,7 +396,7 @@ public class ProjectRunner
             {
                 // GetOutput already falls back to the on-disk JSONL when the
                 // in-memory buffer is gone, so an empty result means nothing
-                // to flush — don't truncate the existing log.
+                // to flush - don't truncate the existing log.
                 return false;
             }
 
@@ -379,6 +420,20 @@ public class ProjectRunner
     private ICliExecutionService GetCliFor(JobInfo info) => _router.Get(info.CliType);
     private string GetJobKey(string jobId) => JobIdentity.CreateKey(Entry.Path, jobId);
     private string? GetActiveJobKey() => _activeJobId != null ? GetJobKey(_activeJobId) : null;
+
+    private string RenderPrompt(RunPlan plan, JobInfo info)
+    {
+        if (plan.PromptOverride != null) return plan.PromptOverride;
+        if (string.IsNullOrWhiteSpace(plan.PromptTemplate))
+            throw new InvalidOperationException("Run plan has neither a prompt template nor a prompt override.");
+
+        var values = new Dictionary<string, string?>(plan.PromptVariables)
+        {
+            ["prompt_path"] = Path.Combine(info.FolderPath, "prompt.md"),
+            ["job_folder"] = info.FolderPath
+        };
+        return _prompts.Render(plan.PromptTemplate, values);
+    }
 
     private JobInfo? GetNextReadyJob()
     {

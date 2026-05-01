@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Microsoft.Extensions.Logging.Abstractions;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.Cli;
 using OrchestratorApi.Services.Jobs;
@@ -38,12 +39,18 @@ public class GitService
     private readonly ILogger<GitService> _logger;
     private readonly JobScannerService _scanner;
     private readonly IConfiguration _config;
+    private readonly RuntimePromptService _prompts;
 
-    public GitService(ILogger<GitService> logger, JobScannerService scanner, IConfiguration config)
+    public GitService(
+        ILogger<GitService> logger,
+        JobScannerService scanner,
+        IConfiguration config,
+        RuntimePromptService? prompts = null)
     {
         _logger = logger;
         _scanner = scanner;
         _config = config;
+        _prompts = prompts ?? new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
     }
 
     private readonly object _summaryLock = new();
@@ -109,7 +116,7 @@ public class GitService
         return list;
     }
 
-    /// <summary>Resolve the repo root for a job — the watch entry's RootPath.</summary>
+    /// <summary>Resolve the repo root for a job - the watch entry's RootPath.</summary>
     public string? ResolveRepoRoot(string jobId, string? watchPath)
     {
         var info = _scanner.FindJob(jobId, watchPath);
@@ -145,7 +152,7 @@ public class GitService
             statusByPath[path] = code;
         }
 
-        // numstat — combine staged + unstaged so we get a useful per-file count
+        // numstat - combine staged + unstaged so we get a useful per-file count
         // even for files only changed unstaged. Untracked files won't appear in
         // diff output; we add zero counts for those.
         var numstat = new Dictionary<string, (int Added, int Removed)>(StringComparer.Ordinal);
@@ -231,9 +238,9 @@ public class GitService
         var (_, commitErr, commitCode) = RunGit(root, "commit -F -", stdin: message);
         if (commitCode != 0)
         {
-            // "nothing to commit" — surface as a soft success-with-info, not an error.
+            // "nothing to commit" is a soft success-with-info, not an error.
             if (commitErr.Contains("nothing to commit", StringComparison.OrdinalIgnoreCase))
-                return new GitCommitResult(false, null, "Nothing to commit — working tree is clean.");
+                return new GitCommitResult(false, null, "Nothing to commit. Working tree is clean.");
             return new GitCommitResult(false, null, commitErr.Trim());
         }
 
@@ -256,18 +263,14 @@ public class GitService
 
         var (diff, _, code) = RunGit(root, "diff HEAD");
         if (code != 0 || string.IsNullOrWhiteSpace(diff))
-            return new GenerateMessageResult(null, "No diff against HEAD — nothing to summarise.");
+            return new GenerateMessageResult(null, "No diff against HEAD. Nothing to summarise.");
 
-        // Bound the prompt size — Haiku handles plenty but huge diffs
+        // Bound the prompt size. Haiku handles plenty but huge diffs
         // just waste latency for a commit message.
-        if (diff.Length > 60_000) diff = diff[..60_000] + "\n[…truncated]";
+        if (diff.Length > 60_000) diff = diff[..60_000] + "\n[truncated]";
 
-        var prompt =
-            "Write a single Conventional Commit message for the following diff. " +
-            "Use one short subject line (<=72 chars), then an optional body of " +
-            "1-3 short bullet points. Output ONLY the commit message — no markdown " +
-            "fences, no preamble, no trailing notes.\n\n" +
-            "DIFF:\n" + diff;
+        var prompt = _prompts.Render(RuntimePromptService.CommitMessage,
+            new Dictionary<string, string?> { ["diff"] = diff });
 
         var claudePath = _config["ClaudeCli:Path"] ?? "claude";
         var model = _config["ClaudeCli:CommitMsgModel"] ?? "claude-haiku-4-5";
@@ -280,15 +283,20 @@ public class GitService
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
-            CreateNoWindow = true
+            CreateNoWindow = true,
+            StandardInputEncoding = System.Text.Encoding.UTF8,
+            StandardOutputEncoding = System.Text.Encoding.UTF8,
+            StandardErrorEncoding = System.Text.Encoding.UTF8
         };
-        psi.ArgumentList.Add("-p"); psi.ArgumentList.Add(prompt);
+        psi.ArgumentList.Add("-p");
         psi.ArgumentList.Add("--model"); psi.ArgumentList.Add(model);
         psi.ArgumentList.Add("--dangerously-skip-permissions");
 
         try
         {
             using var p = Process.Start(psi)!;
+            await p.StandardInput.WriteAsync(prompt.AsMemory(), ct);
+            p.StandardInput.Close();
             var stdoutTask = p.StandardOutput.ReadToEndAsync(ct);
             var stderrTask = p.StandardError.ReadToEndAsync(ct);
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -333,7 +341,7 @@ public class GitService
             if (string.IsNullOrWhiteSpace(line)) continue;
             var parts = line.Split('\t');
             if (parts.Length < 2) continue;
-            // Renames look like "R100\told\tnew" — index by the new path.
+            // Renames look like "R100\told\tnew" - index by the new path.
             statusByPath[parts[^1].Trim()] = parts[0].Trim();
         }
 
@@ -394,7 +402,7 @@ public class GitService
         if (!statusBefore.IsRepo)
             return (new GitCommitResult(false, null, statusBefore.Error ?? "Not a git repo"), "");
         if (statusBefore.FilesChanged == 0)
-            return (new GitCommitResult(false, null, "Nothing to commit — working tree is clean."), "");
+            return (new GitCommitResult(false, null, "Nothing to commit. Working tree is clean."), "");
 
         var msg = await GenerateCommitMessageAsync(jobId, watchPath, ct);
         var message = msg.Message;

@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using OrchestratorApi.Models;
+using OrchestratorApi.Services;
 
 namespace OrchestratorApi.Services.Runner;
 
@@ -31,7 +32,9 @@ public enum RunIntent
 /// tree fully unit-testable without mocking the scanner or CLI.
 /// </summary>
 public sealed record RunPlan(
-    string Prompt,
+    string? PromptTemplate,
+    IReadOnlyDictionary<string, string?> PromptVariables,
+    string? PromptOverride,
     string? SessionToResume,
     bool ResumeFlag,
     string EventKind,
@@ -45,7 +48,7 @@ public sealed record RunPlan(
     bool ClearStaleSessionName);
 
 /// <summary>
-/// Pure decision library for runner invocations — no I/O, no field access,
+/// Pure decision library for runner invocations - no I/O, no field access,
 /// no DI. Owns the full mapping from (intent × job state × session state ×
 /// CLI compatibility) to a <see cref="RunPlan"/>, plus the prompt builders
 /// and slug heuristics those decisions reference.
@@ -53,7 +56,7 @@ public sealed record RunPlan(
 /// Why this is a separate static class: the previous design hid this logic
 /// inside a stateful runner that also managed lifecycle and side-effects,
 /// so the start and continue endpoints reinvented the decision tree
-/// independently — and a recovery fix landed only on one side, producing
+/// independently - and a recovery fix landed only on one side, producing
 /// the "no session yet" 400 the user reported. Pulling the planner out as
 /// a pure library makes that divergence structurally impossible: there is
 /// only one function to change, and the matrix in <c>TaskRunnerPlanTests</c>
@@ -64,7 +67,7 @@ public static class RunPlanner
     /// <summary>
     /// Maps a trigger + observed state to a fully-described <see cref="RunPlan"/>.
     /// Called from <see cref="ProjectRunner.RunCliAsync"/>; never throws, never
-    /// returns null — the contract is "always produces a runnable plan", which
+    /// returns null - the contract is "always produces a runnable plan", which
     /// is the property that closes the "no session yet" bug class.
     /// </summary>
     public static RunPlan PlanRun(
@@ -94,7 +97,9 @@ public static class RunPlanner
             if (canResume)
             {
                 return new RunPlan(
-                    Prompt: followupPrompt ?? string.Empty,
+                    PromptTemplate: null,
+                    PromptVariables: EmptyPromptVariables,
+                    PromptOverride: followupPrompt ?? string.Empty,
                     SessionToResume: sessionName,
                     ResumeFlag: true,
                     EventKind: "continue",
@@ -109,7 +114,12 @@ public static class RunPlanner
             }
 
             return new RunPlan(
-                Prompt: BuildRecoveryContinuationPrompt(jobFolder, followupPrompt ?? string.Empty),
+                PromptTemplate: RuntimePromptService.RunnerRecoveryContinuation,
+                PromptVariables: PromptVariables(
+                    promptPath: promptPath,
+                    jobFolder: jobFolder,
+                    userFollowup: followupPrompt ?? string.Empty),
+                PromptOverride: null,
                 SessionToResume: null,
                 ResumeFlag: false,
                 EventKind: "recovery",
@@ -123,7 +133,7 @@ public static class RunPlanner
                 ClearStaleSessionName: false);
         }
 
-        // ManualStart / AutoPickup share the same plan shape — only the trigger
+        // ManualStart / AutoPickup share the same plan shape - only the trigger
         // differs, and that is logged at the call site, not branched here.
         var moveStartToProgress = initialState == JobStates.Ready;
         var startSession = sessionName;
@@ -148,7 +158,7 @@ public static class RunPlanner
         string? persistSessionName = null;
         if (!resume && cliType == CliTypes.Copilot)
         {
-            // Copilot uses the persisted name as the resume handle — pre-generate
+            // Copilot uses the persisted name as the resume handle - pre-generate
             // a slug now so the next run can find it. Other CLIs capture a real
             // UUID during streaming and leave SessionName null until then.
             startSession = BuildSessionName(jobId);
@@ -156,15 +166,17 @@ public static class RunPlanner
         }
 
         var useResumePrompt = ShouldUseResumePrompt(initialState, resume, sessionDropped);
-        var prompt = useResumePrompt
-            ? BuildResumeContinuationPrompt(jobFolder)
-            : BuildFreshStartPrompt(promptPath, jobFolder);
+        var promptTemplate = useResumePrompt
+            ? RuntimePromptService.RunnerResumeInterrupted
+            : RuntimePromptService.RunnerFreshStart;
 
         string evtKind = sessionDropped ? "recovery" : (resume ? "continue" : "start");
-        string? evtReason = sessionDropped ? "previous session was for another CLI — files reconstructed" : null;
+        string? evtReason = sessionDropped ? "previous session was for another CLI. Files reconstructed." : null;
 
         return new RunPlan(
-            Prompt: prompt,
+            PromptTemplate: promptTemplate,
+            PromptVariables: PromptVariables(promptPath, jobFolder, userFollowup: null),
+            PromptOverride: null,
             SessionToResume: startSession,
             ResumeFlag: resume,
             EventKind: evtKind,
@@ -183,7 +195,7 @@ public static class RunPlanner
     /// instead of the fresh-start prompt.
     /// <list type="bullet">
     /// <item>Sending it when no real session exists and nothing was dropped just
-    /// gets a "I don't see an interrupted task" reply and an exit — so a job that
+    /// gets a "I don't see an interrupted task" reply and an exit - so a job that
     /// happens to be in 3-progress without a captured UUID is treated as a fresh
     /// start.</item>
     /// <item><c>sessionDropped</c> means the persisted session id was for another
@@ -200,7 +212,7 @@ public static class RunPlanner
 
     /// <summary>
     /// True for slugs we generated via <see cref="BuildSessionName"/> on an earlier
-    /// run. These were never real sessions on the agent side — recognising them
+    /// run. These were never real sessions on the agent side - recognising them
     /// lets the cross-CLI guard drop them silently instead of treating the
     /// next start as a recovery from an interrupted run.
     /// </summary>
@@ -223,47 +235,17 @@ public static class RunPlanner
         return $"taskboard-{slug}-{DateTime.UtcNow:yyyyMMddHHmm}";
     }
 
-    /// <summary>
-    /// Initial-run prompt: instructs the agent to read the task prompt and
-    /// execute it. Used only for fresh starts (job came from 2-ready).
-    /// </summary>
-    public static string BuildFreshStartPrompt(string promptPath, string jobFolder)
-        => $"Lies @\"{promptPath}\" und führe den Task aus. Der Job-Ordner ist \"{jobFolder}\".";
+    private static readonly IReadOnlyDictionary<string, string?> EmptyPromptVariables =
+        new Dictionary<string, string?>();
 
-    /// <summary>
-    /// Resume prompt: forces the agent to rebuild context from the job folder
-    /// before doing anything else. Sent when the previous run was interrupted
-    /// (job already in 3-progress) or when the persisted session id had to be
-    /// dropped as incompatible — in both cases the model would otherwise treat
-    /// the new turn as a fresh request and ask the user what to continue with.
-    /// English on purpose: works across Claude / Codex / Gemini / Copilot
-    /// regardless of the user's chat language.
-    /// </summary>
-    public static string BuildResumeContinuationPrompt(string jobFolder)
-        => "Resume the interrupted task.\n\n"
-         + "Task folder:\n"
-         + $"{jobFolder}\n\n"
-         + "Read job.json, prompt.md, status.md and existing logs first.\n"
-         + "Reconstruct progress from files and continue implementation.\n"
-         + "Do not ask what to do unless required files are missing.";
-
-    /// <summary>
-    /// Recovery prompt for the continue endpoint when the previous CLI session
-    /// is lost or incompatible. Tells the agent to rebuild context from the
-    /// job folder + git, then act on the user's follow-up that's appended at
-    /// the bottom. Bounded ("last ~200 lines") so we don't ask the agent to
-    /// drag a massive log into context. English on purpose — works across all
-    /// supported CLIs.
-    /// </summary>
-    public static string BuildRecoveryContinuationPrompt(string jobFolder, string userFollowup)
-        => "Continue this task — the previous CLI session was lost and cannot be resumed.\n\n"
-         + "Task folder:\n"
-         + $"{jobFolder}\n\n"
-         + "Reconstruct context before doing anything else:\n"
-         + "1. Read job.json, prompt.md, status.md.\n"
-         + "2. Read the last ~200 lines of logs/cli-output.log to see what the previous run was doing.\n"
-         + "3. Run `git status` and `git diff` in the working directory to see the current change set.\n\n"
-         + "Then continue with the user's follow-up below. Treat this as a continuation, not a new task — keep the existing changes and protocol, append rather than restart.\n\n"
-         + "User follow-up:\n"
-         + (userFollowup?.TrimEnd() ?? string.Empty);
+    private static IReadOnlyDictionary<string, string?> PromptVariables(
+        string promptPath,
+        string jobFolder,
+        string? userFollowup) =>
+        new Dictionary<string, string?>
+        {
+            ["prompt_path"] = promptPath,
+            ["job_folder"] = jobFolder,
+            ["user_followup"] = userFollowup
+        };
 }

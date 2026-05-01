@@ -27,6 +27,8 @@ public class TaskRunnerService : BackgroundService
     private readonly CliRouter _router;
     private readonly ContextUsageParser _contextUsageParser;
     private readonly SummaryGenerationService _summaryService;
+    private readonly RuntimePromptService _prompts;
+    private readonly JobTransitionService _transitions;
     private readonly ProjectSettingsService _projectSettings;
     private readonly ConcurrentDictionary<string, ProjectRunner> _runners = new();
 
@@ -43,6 +45,8 @@ public class TaskRunnerService : BackgroundService
         CliRouter router,
         ContextUsageParser contextUsageParser,
         SummaryGenerationService summaryService,
+        RuntimePromptService prompts,
+        JobTransitionService transitions,
         ProjectSettingsService projectSettings)
     {
         _config = config;
@@ -55,6 +59,8 @@ public class TaskRunnerService : BackgroundService
         _router = router;
         _contextUsageParser = contextUsageParser;
         _summaryService = summaryService;
+        _prompts = prompts;
+        _transitions = transitions;
         _projectSettings = projectSettings;
     }
 
@@ -80,7 +86,7 @@ public class TaskRunnerService : BackgroundService
                 continue;
             }
 
-            var runner = new ProjectRunner(entry.Name, entry, _logger, _scanner, _states, _sessions, _router, _summaryService);
+            var runner = new ProjectRunner(entry.Name, entry, _logger, _scanner, _states, _sessions, _router, _summaryService, _prompts, _transitions);
             runner.OnStatusChanged += status => OnRunnerStatusChanged?.Invoke(entry.Name, status);
             // Persist every mode change so the auto-pickup toggle survives
             // backend restarts. Includes implicit transitions like "auto-single
@@ -102,10 +108,10 @@ public class TaskRunnerService : BackgroundService
         // Check CLI availability
         if (!_cli.IsAvailable())
         {
-            _logger.LogWarning("Copilot CLI not available — runners will be in manual/board-only mode");
+            _logger.LogWarning("Copilot CLI not available - runners will be in manual/board-only mode");
         }
 
-        // Run the loop — poll every 5 seconds for auto-mode runners
+        // Run the loop - poll every 5 seconds for auto-mode runners
         while (!stoppingToken.IsCancellationRequested)
         {
             foreach (var runner in _runners.Values)
@@ -143,7 +149,7 @@ public class TaskRunnerService : BackgroundService
         if (info == null) return (null, "Job not found");
 
         var runner = _runners.Values.FirstOrDefault(r => r.Entry.Name == info.ProjectName);
-        if (runner == null) return (null, $"No runner configured for project '{info.ProjectName}' — check RootPath in WatchPaths config");
+        if (runner == null) return (null, $"No runner configured for project '{info.ProjectName}' - check RootPath in WatchPaths config");
 
         // Persist CLI type override before validity check so the next iteration picks it up.
         if (!string.IsNullOrWhiteSpace(cliTypeOverride) && cliTypeOverride != info.CliType)
@@ -170,7 +176,7 @@ public class TaskRunnerService : BackgroundService
     /// with the current CLI), <see cref="ProjectRunner.ContinueJobAsync"/>
     /// switches to a fresh-session run with a recovery prompt that instructs
     /// the agent to reconstruct context from the job folder. The user gets the
-    /// continuation they asked for instead of a 400 — at the cost of conversation
+    /// continuation they asked for instead of a 400 - at the cost of conversation
     /// memory that wasn't already on disk.
     /// </summary>
     public async Task<(CliExecution? Execution, string? Error)> ContinueJobAsync(string jobId, string followupPrompt, string? watchPath = null, string? modelOverride = null, CancellationToken ct = default)
@@ -198,7 +204,7 @@ public class TaskRunnerService : BackgroundService
     /// Persist the user's follow-up as a <c>[user]</c>-stream line in
     /// <c>logs/cli-output.log</c>. The activity log polls this file, so writing
     /// the line synchronously before the CLI starts means the user sees their
-    /// own message in the conversation immediately — no silent gap between
+    /// own message in the conversation immediately - no silent gap between
     /// click and the agent's first reply.
     /// </summary>
     private void AppendUserPromptToCliLog(JobInfo info, string prompt)
@@ -229,7 +235,7 @@ public class TaskRunnerService : BackgroundService
 
     /// <summary>
     /// True only when a CLI process is currently executing this job.
-    /// The "3-progress" folder alone is not enough — a job can sit there
+    /// The "3-progress" folder alone is not enough - a job can sit there
     /// after a stop / crash / restart without a live process.
     /// </summary>
     public bool IsJobLive(string jobId, string? watchPath = null)

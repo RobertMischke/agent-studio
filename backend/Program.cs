@@ -23,7 +23,7 @@ AppDomain.CurrentDomain.UnhandledException += (_, e) =>
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Local-only override file (gitignored) — sets per-checkout flags such as
+// Local-only override file (gitignored) - sets per-checkout flags such as
 // Environment:IsDev. Loaded after appsettings.Development.json so a developer
 // can flip the dev banner / dev PWA icon on for their checkout without
 // committing the toggle.
@@ -33,6 +33,7 @@ builder.Services.AddSingleton<JobScannerService>();
 builder.Services.AddSingleton<JobStateMachine>();
 builder.Services.AddSingleton<JobMutationService>();
 builder.Services.AddSingleton<JobSessionLog>();
+builder.Services.AddSingleton<JobTransitionService>();
 builder.Services.AddSingleton<JobWatcherService>();
 builder.Services.AddSingleton<CopilotCliEnvironment>();
 builder.Services.AddSingleton<CopilotModelDiscovery>();
@@ -46,6 +47,7 @@ builder.Services.AddSingleton<CliRouter>();
 builder.Services.AddSingleton<SessionRegistry>();
 builder.Services.AddSingleton<ContextUsageParser>();
 builder.Services.AddSingleton<SummaryGenerationService>();
+builder.Services.AddSingleton<RuntimePromptService>();
 builder.Services.AddSingleton<TaskRunnerService>();
 builder.Services.AddSingleton<GitService>();
 builder.Services.AddSingleton<ProjectSettingsService>();
@@ -129,7 +131,7 @@ cliRouter.OnFinished += (cliType, jobId, exec) =>
     hubContext.Clients.All.SendAsync("cliFinished", jobId, exec.ExitCode, exec.DurationSeconds, exec.Status, cliType);
 
 // Per-CLI startup hook. Copilot re-attaches to surviving processes (its own
-// implementation); Claude / Codex / Gemini reap orphans — see
+// implementation); Claude / Codex / Gemini reap orphans - see
 // CliExecutionServiceBase.ReattachOnStartup. Must run before any new CLI run
 // is started so we never have two processes editing the same repo.
 cliRouter.ReattachAll();

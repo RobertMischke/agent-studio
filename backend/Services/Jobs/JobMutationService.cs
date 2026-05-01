@@ -44,7 +44,7 @@ public class JobMutationService
         if (info == null) return false;
         var normalized = CliTypes.Normalize(cliType);
         JobJsonFile.UpdateField(info.FolderPath, "cliType", normalized, _logger);
-        // Switching CLI invalidates the previous session — clear it so the next run mints a new one.
+        // Switching CLI invalidates the previous session - clear it so the next run mints a new one.
         if (!string.Equals(normalized, info.CliType, StringComparison.OrdinalIgnoreCase))
         {
             JobJsonFile.UpdateField(info.FolderPath, "sessionName", "", _logger);
@@ -151,7 +151,7 @@ public class JobMutationService
         if (info == null) return false;
 
         // Liveness (is a CLI actually running?) is checked by the endpoint via
-        // TaskRunnerService.IsJobLive — the "3-progress" folder alone is not a
+        // TaskRunnerService.IsJobLive - the "3-progress" folder alone is not a
         // reliable signal because jobs stay there after stop / crash / restart.
 
         var filePath = Path.Combine(info.FolderPath, fileName);
@@ -206,7 +206,7 @@ public class JobMutationService
         if (content.Length > 10 * 1024 * 1024) return (null, "File too large (max 10 MB)");
 
         var ext = ResolveImageExtension(originalFileName, contentType);
-        if (ext == null) return (null, "Unsupported file type — only png, jpg, gif, webp allowed");
+        if (ext == null) return (null, "Unsupported file type - only png, jpg, gif, webp allowed");
 
         var attachmentsDir = Path.Combine(info.FolderPath, "attachments");
         Directory.CreateDirectory(attachmentsDir);
@@ -245,7 +245,7 @@ public class JobMutationService
 
     /// <summary>
     /// Appends a "Continuous Session Nachtrag" block to <c>prompt.md</c> so the user's follow-up
-    /// stays visible as part of the task description. <c>status.md</c> is intentionally not touched —
+    /// stays visible as part of the task description. <c>status.md</c> is intentionally not touched -
     /// it is owned by the post-run summary generator.
     /// </summary>
     public bool AppendContinuationNote(string jobId, string followupPrompt, string? watchPath = null)
@@ -256,7 +256,7 @@ public class JobMutationService
         if (info == null) return false;
 
         var timestamp = DateTime.Now.ToString("yyyy-MM-dd HH:mm");
-        var block = $"\n\n---\n\n## Continuous Session Nachtrag — {timestamp}\n\n{followupPrompt.TrimEnd()}\n";
+        var block = $"\n\n---\n\n## Continuous Session Note - {timestamp}\n\n{followupPrompt.TrimEnd()}\n";
 
         AppendWithLeadingNewline(Path.Combine(info.FolderPath, "prompt.md"), block);
         return true;
@@ -279,7 +279,7 @@ public class JobMutationService
         }
         catch
         {
-            // Best-effort append — failure to persist the addendum should not block the CLI resume.
+            // Best-effort append - failure to persist the addendum should not block the CLI resume.
         }
     }
 

@@ -4,8 +4,6 @@ Single source of truth for **what a job's protocol looks like** and **how images
 
 > **Language:** English. See [AGENTS.md](../AGENTS.md#documentation-language).
 
----
-
 ## 1. Two artefacts, two audiences
 
 A finished job exposes two views of what happened:
@@ -17,8 +15,8 @@ A finished job exposes two views of what happened:
 
 Keep the boundary clean:
 
-- The Activity Log is **mechanical** — every tool call, every command, every diff snippet. Don't curate it.
-- The Protocol is **editorial** — 5–10 bullet points the reviewer can scan in 30 seconds. It is regenerated from the log on demand and overwritten on the next run, so do not hand-edit it.
+- The Activity Log is **mechanical**. Every tool call, every command, every diff snippet. Do not curate it.
+- The Protocol is **editorial**. 5 to 10 bullet points the reviewer can scan in 30 seconds. It is regenerated from the log on demand and overwritten on the next run, so do not hand-edit it.
 
 > ⚠ Agents must **never write `status.md` themselves.** It is owned by [`SummaryGenerationService`](../backend/Services/SummaryGenerationService.cs) and rewritten on each run from the CLI output. Anything written by hand is lost.
 
@@ -42,7 +40,7 @@ The frontend's [`activity-log.parser`](../frontend/src/app/components/activity-l
 
 Rules:
 
-- ANSI escapes are stripped on write (the base class does this — don't re-add them).
+- ANSI escapes are stripped on write. The base class does this; do not re-add them.
 - UTF-8 only. The base class forces UTF-8 stdout/stderr; do not override.
 - Streamed line-by-line, never buffered until the run finishes.
 
@@ -52,8 +50,8 @@ See [docs/supported-clis.md §2.5](supported-clis.md) for the per-CLI translatio
 
 Lines may contain:
 
-- Absolute project paths (e.g. `C:\Projects\…\frontend\src\foo.ts`) — the parser leaves these inline.
-- Relative paths from the job folder (e.g. `attachments/abc.png`, `results/foo.png`) — these are how images travel from the log into the protocol.
+- Absolute project paths, for example `C:\Projects\...\frontend\src\foo.ts`. The parser leaves these inline.
+- Relative paths from the job folder, for example `attachments/abc.png`, `results/foo.png`. These are how images travel from the log into the protocol.
 - Inline code spans in single backticks. Avoid triple backticks in marker lines.
 
 ---
@@ -62,47 +60,48 @@ Lines may contain:
 
 ### 3.1 Canonical structure
 
-`SummaryGenerationService` instructs Haiku to emit exactly this shape (German, by product decision):
+[`prompts/runtime/summary-protocol.md`](../prompts/runtime/summary-protocol.md) is rendered by `SummaryGenerationService` and instructs Haiku to emit exactly this English shape:
 
 ```markdown
 # Status
 
-- Ergebnis: <Erfolg|Teilweise|Fehlgeschlagen>
-- Dauer: <z. B. 4 min>
+- Result: <Success|Partial|Failed>
+- Duration: <for example, 4 min>
 
-## Was wurde gemacht
-- 3–7 Bullet-Punkte mit konkreten Aktionen (Dateien, Befehle, Ergebnisse).
+## What Was Done
+- 3 to 7 concrete bullets with actions, files, commands, and results.
 
-## Offene Punkte
-- 0–5 Bullet-Punkte oder „Keine".
+## Open Items
+- 0 to 5 bullets, or "None."
 
-## Auffälligkeiten
-- 0–3 Bullet-Punkte mit Warnungen, Fehlern, Workarounds; sonst weglassen.
+## Notes
+- 0 to 3 bullets with warnings, failures, or workarounds. Omit this section when empty.
 
-## Bilder
-- ![](results/<name>.png) oder ![](attachments/<name>.png) — Sektion entfällt, wenn keine Bilder im Log auftauchen.
+## Images
+- ![](results/<name>.png) or ![](attachments/<name>.png). Omit this section when no images appear in the log.
 ```
 
 Hard rules:
 
-- No `# Status` is omitted; no extra `H1`s are added.
-- Total prose ≤ 250 words. Images don't count.
+- No `# Status` is omitted. No extra `H1`s are added.
+- Total prose is at most 250 words. Images do not count.
 - Paths and commands in single backticks.
 - No marketing tone, no recap of what the user already asked for.
+- No em dashes.
 
 If you change the prompt, mirror the change here and bump the example.
 
 ### 3.2 Why it's regenerated, not hand-written
 
 - The reviewer always sees a fresh summary of the **most recent** run, not stale text from a previous attempt.
-- The "Neu generieren" button in the protocol pane re-runs Haiku against the same `cli-output.log` — useful when the first summary missed a detail.
+- The "Regenerate" button in the protocol pane re-runs Haiku against the same `cli-output.log`. This is useful when the first summary missed a detail.
 - This means hand-writing into `status.md` is destructive: the next regen erases it. The model name for this rule is "the log is the truth, the protocol is the projection."
 
 ---
 
 ## 4. Image flow
 
-Two folders, two purposes — keep them separate:
+Two folders, two purposes. Keep them separate:
 
 | Folder | Direction | Lifetime | Used by |
 |--------|-----------|----------|---------|
@@ -116,12 +115,12 @@ Bare filenames in `status.md` (e.g. `![](foo.png)` with no folder prefix) are re
 | CLI | Image-producing capability | Default landing spot | Retention rule |
 |-----|---------------------------|----------------------|----------------|
 | **Claude Code** | None native. Produces images only by running tools (Playwright, custom scripts). | Wherever the tool writes them. | Agent must `cp`/`mv` into `<job>/results/` before declaring done. Otherwise lost on next Playwright run. |
-| **Codex CLI** | Same as Claude — no native screenshot capability. | Tool-driven. | Same. Copy into `<job>/results/`. |
-| **GitHub Copilot CLI** | Same — no native screenshot. | Tool-driven. | Same. Copy into `<job>/results/`. |
-| **Gemini CLI** | Same — no native screenshot. | Tool-driven. | Same. Copy into `<job>/results/`. |
+| **Codex CLI** | Same as Claude. No native screenshot capability. | Tool-driven. | Same. Copy into `<job>/results/`. |
+| **GitHub Copilot CLI** | Same. No native screenshot capability. | Tool-driven. | Same. Copy into `<job>/results/`. |
+| **Gemini CLI** | Same. No native screenshot capability. | Tool-driven. | Same. Copy into `<job>/results/`. |
 | **Playwright** (driven by any CLI above) | `page.screenshot()` writes wherever the spec says. Project-wide default `outputDir: 'test-results'`. | `frontend/e2e/test-results/<spec>/<artifact>.png`, **always overwritten** on the next run. | **Ephemeral.** Anything worth keeping must be copied into `<job>/results/` in the same task. The `test-results/` folder is `.gitignore`d and treated as scratch. |
 
-**The retention rule, restated:** if the screenshot matters for the protocol, it must end up under `<job>/results/`. Anywhere else is treated as scratch and may disappear on the next test run, the next CI cleanup, or a `git clean`. Don't reference `test-results/<…>.png` from `status.md` — it works locally for ten minutes and breaks for the reviewer.
+**The retention rule, restated:** if the screenshot matters for the protocol, it must end up under `<job>/results/`. Anywhere else is treated as scratch and may disappear on the next test run, the next CI cleanup, or a `git clean`. Do not reference `test-results/<...>.png` from `status.md`; it works locally for ten minutes and breaks for the reviewer.
 
 ### 4.2 Local rendering
 
@@ -134,13 +133,13 @@ The protocol pane renders `status.md` through [`markdownToHtml`](../frontend/src
 | `<name>.png` (no prefix) | `/api/jobs/{jobId}/results/{name}?watchPath=…` (fallback for legacy protocols) |
 | Absolute `http(s)://…` | passed through unchanged |
 
-The backend endpoints serve only files whose names contain no path separators and live directly under `attachments/` or `results/`. They reject `..`, `/`, and `\` — see [`JobScannerService.ResolveAttachment`](../backend/Services/JobScannerService.cs) and the `results/` mirror.
+The backend endpoints serve only files whose names contain no path separators and live directly under `attachments/` or `results/`. They reject `..`, `/`, and `\`; see [`JobScannerService.ResolveAttachment`](../backend/Services/Jobs/JobScannerService.cs) and the `results/` mirror.
 
 ### 4.3 Git policy
 
 Job folders are checked into the **target project's** repo (the watched workspace), not this app's repo. The product position is: **the protocol is the durable record; the screenshots are local proof.** Logs are text and cheap, so they push; images are heavy binaries and stay local.
 
-Recommended `.gitignore` for the watched workspace — match whichever job layout is in use:
+Recommended `.gitignore` for the watched workspace. Match whichever job layout is in use:
 
 ```gitignore
 # Canonical layout (filesystem-contract.md).
@@ -152,7 +151,7 @@ Recommended `.gitignore` for the watched workspace — match whichever job layou
 **/results/
 ```
 
-The `**/attachments/` and `**/results/` patterns are broad on purpose: any folder named `attachments/` or `results/` anywhere in the workspace is treated as job-local image scratch. Adopt the canonical layout if that's too broad for your repo. Logs (`logs/`) are intentionally **not** ignored — they're the audit trail.
+The `**/attachments/` and `**/results/` patterns are broad on purpose: any folder named `attachments/` or `results/` anywhere in the workspace is treated as job-local image scratch. Adopt the canonical layout if that is too broad for your repo. Logs (`logs/`) are intentionally **not** ignored; they are the audit trail.
 
 Already-committed images are not retroactively untracked by adding these rules. If a workspace has historical images in git, run `git rm --cached <path>` once to stop tracking them; the files stay on disk.
 
@@ -162,9 +161,9 @@ Already-committed images are not retroactively untracked by adding these rules. 
 
 Before you touch any of the moving parts:
 
-1. If you change the **Haiku prompt** in `SummaryGenerationService.BuildPrompt`, update §3.1 in this file in the same PR.
+1. If you change the **Haiku prompt** in `prompts/runtime/summary-protocol.md`, update section 3.1 in this file in the same PR.
 2. If you change the **marker-line vocabulary**, update §2.1 here and the corresponding row in [docs/supported-clis.md §2.5](supported-clis.md).
 3. If you add a new **image folder** convention, add a row to §4 and a resolver branch in `protocol-pane.component.ts`.
 4. If you add a new **CLI**, fill in its row in §4.1 with observed behaviour, not assumptions.
 
-The single-source-of-truth rule from [AGENTS.md](../AGENTS.md): if the doc and the code disagree, the doc is wrong — fix it.
+The single-source-of-truth rule from [AGENTS.md](../AGENTS.md): if the doc and the code disagree, the doc is wrong. Fix it.

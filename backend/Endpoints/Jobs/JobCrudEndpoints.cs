@@ -44,25 +44,23 @@ public static class JobCrudEndpoints
         });
 
         group.MapPut("/{jobId}/state", async (string jobId, string? watchPath, MoveJobRequest req,
-            JobScannerService scanner, JobStateMachine states, JobMutationService mutations,
-            GitService git, ProjectSettingsService settings, ILogger<Program> logger,
+            JobTransitionService transitions,
             CancellationToken ct) =>
         {
             if (!JobStates.All.Contains(req.TargetState))
                 return Results.BadRequest($"Invalid state. Allowed: {string.Join(", ", JobStates.All)}");
 
-            return MoveResult(await MoveAndMaybeAutoCommitAsync(scanner, states, mutations, git, settings, logger, jobId, req.TargetState, watchPath, ct));
+            return MoveResult(await transitions.MoveAsync(jobId, req.TargetState, watchPath, ct));
         });
 
         group.MapPost("/{jobId}/move", async (string jobId, string? watchPath, MoveJobRequest req,
-            JobScannerService scanner, JobStateMachine states, JobMutationService mutations,
-            GitService git, ProjectSettingsService settings, ILogger<Program> logger,
+            JobTransitionService transitions,
             CancellationToken ct) =>
         {
             if (!JobStates.All.Contains(req.TargetState))
                 return Results.BadRequest($"Invalid state. Allowed: {string.Join(", ", JobStates.All)}");
 
-            return MoveResult(await MoveAndMaybeAutoCommitAsync(scanner, states, mutations, git, settings, logger, jobId, req.TargetState, watchPath, ct));
+            return MoveResult(await transitions.MoveAsync(jobId, req.TargetState, watchPath, ct));
         });
 
         group.MapDelete("/{jobId}", (string jobId, string? watchPath, JobStateMachine states) =>

@@ -59,7 +59,7 @@ The product is small on purpose. Any feature that pulls toward "let's run two ag
 
 ![Board overview](docs/images/board-overview.png)
 
-Five lanes, `1-preparation`, `2-ready`, `3-progress`, `4-review`, `5-completed`, are driven directly off the filesystem. Each card shows the CLI, the model, the task size, and last activity. The pill in the header says how many projects are running on auto-pickup.
+Six lanes, `1-preparation`, `2-ready`, `3-progress`, `4-review`, `5-completed`, and `6-archive`, are driven directly off the filesystem. Each card shows the CLI, the model, the task size, and last activity. The pill in the header says how many projects are running on auto-pickup.
 
 ### Detail view: task description + live protocol
 
@@ -73,13 +73,13 @@ Click a card and you get the prompt on the left and the agent's protocol on the 
 
 Toggle the Git panel to see what the agent actually changed in the project's working tree, file by file, while it works. No leaving the board to alt-tab into a terminal.
 
-### Quality Gate: what makes a task review-ready
+### Review handoff: what makes a task review-ready
 
-![Quality Gate in protocol view](docs/images/detail-quality-gate.png)
+![Review protocol in protocol view](docs/images/detail-quality-gate.png)
 
-Before any task moves from `3-progress` to `4-review`, the agent fills out an **Edge-Case Quality Gate**: runtime states observed, signal-vs-property check, crash recovery, failure UX, reversibility. The gate is recorded in `status.md` and visible in the protocol pane.
+Before a task lands in `4-review`, the application captures the run log, writes a concise English protocol into `status.md`, and preserves review evidence such as screenshots under the job's `results/` folder.
 
-A job without a Quality Gate section is not ready for review. Full stop.
+The agent works on the selected task. The application owns pickup, continuation, stopping, state movement, protocol generation, and the one-active-task rule. That boundary is the point: the queue keeps moving without asking the model to decide what should run next.
 
 ---
 
@@ -97,7 +97,8 @@ A job without a Quality Gate section is not ready for review. Full stop.
 │                             │────►│        ├── 2-ready/              │
 │  Reads / watches the        │     │        ├── 3-progress/           │
 │  target's jobs/ folder.     │     │        ├── 4-review/             │
-│  Stores no jobs of its own. │     │        └── 5-completed/          │
+│  Stores no jobs of its own. │     │        ├── 5-completed/          │
+│                             │     │        └── 6-archive/            │
 └─────────────────────────────┘     └──────────────────────────────────┘
 ```
 
@@ -160,7 +161,7 @@ Claude Code, Codex, GitHub Copilot, Gemini. The contract every CLI must satisfy,
 
 ### Keeping target projects in sync
 
-When the workflow or folder schema changes, run the `/sync-target-instructions` prompt against each target.
+When the agent task contract or folder schema changes, run the `/sync-target-instructions` prompt against each target.
 
 ---
 
@@ -170,5 +171,6 @@ When the workflow or folder schema changes, run the `/sync-target-instructions` 
 - [ROADMAP.md](ROADMAP.md) - product direction, roadmap themes, and decision principles
 - [docs/supported-clis.md](docs/supported-clis.md) - CLI integration contract
 - [docs/filesystem-contract.md](docs/filesystem-contract.md) - job folder contract
-- [docs/autopilot-prompt.md](docs/autopilot-prompt.md) - orchestrator workflow + Quality Gate definition
+- [docs/agent-task-contract.md](docs/agent-task-contract.md) - application and agent ownership boundary
+- [prompts/runtime/](prompts/runtime/) - editable backend runtime prompt templates
 - [PATHS.md](PATHS.md) - path conventions

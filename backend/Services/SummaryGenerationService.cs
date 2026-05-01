@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using Microsoft.Extensions.Logging.Abstractions;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.Cli;
 
@@ -8,7 +9,7 @@ namespace OrchestratorApi.Services;
 /// <summary>
 /// Builds the post-run <c>status.md</c> protocol by handing the tail of the CLI
 /// output log to a one-shot Claude Haiku subprocess. Runs fire-and-forget after
-/// each successful CLI completion. State is in-memory only — after a backend
+/// each successful CLI completion. State is in-memory only - after a backend
 /// restart, jobs whose summary was mid-flight fall back to <c>None|Ready</c>
 /// based on whether <c>status.md</c> exists on disk.
 /// </summary>
@@ -19,12 +20,22 @@ public sealed class SummaryGenerationService
 
     private readonly ILogger<SummaryGenerationService> _logger;
     private readonly IConfiguration _configuration;
+    private readonly RuntimePromptService _prompts;
     private readonly ConcurrentDictionary<string, JobSummaryState> _states = new();
 
     public SummaryGenerationService(ILogger<SummaryGenerationService> logger, IConfiguration configuration)
+        : this(logger, configuration, new RuntimePromptService(configuration, NullLogger<RuntimePromptService>.Instance))
+    {
+    }
+
+    public SummaryGenerationService(
+        ILogger<SummaryGenerationService> logger,
+        IConfiguration configuration,
+        RuntimePromptService prompts)
     {
         _logger = logger;
         _configuration = configuration;
+        _prompts = prompts;
     }
 
     public JobSummaryState? GetState(string jobKey)
@@ -44,13 +55,14 @@ public sealed class SummaryGenerationService
             var logPath = JobPaths.CliOutputLog(info.FolderPath);
             if (!File.Exists(logPath))
             {
-                Fail(key, "No CLI output to summarise yet — the task has not been run (logs/cli-output.log is missing). Start it once, then try again.");
+                Fail(key, "No CLI output to summarise yet. The task has not been run (logs/cli-output.log is missing). Start it once, then try again.");
                 return;
             }
 
             var rawLog = await File.ReadAllTextAsync(logPath, ct);
             var truncated = TruncateTail(rawLog, MaxLogChars);
-            var prompt = BuildPrompt(truncated);
+            var prompt = _prompts.Render(RuntimePromptService.SummaryProtocol,
+                new Dictionary<string, string?> { ["log"] = truncated });
 
             var (ok, summary, error) = await RunHaikuAsync(prompt, info.FolderPath, ct);
             if (!ok || string.IsNullOrWhiteSpace(summary))
@@ -93,45 +105,8 @@ public sealed class SummaryGenerationService
     {
         if (text.Length <= maxChars) return text;
         var tail = text[^maxChars..];
-        return "[…earlier output truncated]\n" + tail;
+        return "[earlier output truncated]\n" + tail;
     }
-
-    private static string BuildPrompt(string log) =>
-        """
-        Du bist ein technischer Protokollant. Aus dem nachfolgenden Agenten-Log
-        erzeuge eine knappe deutschsprachige Zusammenfassung als Markdown.
-
-        Gliederung exakt wie folgt (keine zusätzlichen H1):
-
-        # Status
-
-        - Ergebnis: <Erfolg|Teilweise|Fehlgeschlagen>
-        - Dauer: <z. B. 4 min>
-
-        ## Was wurde gemacht
-        - 3–7 Bullet-Punkte mit konkreten Aktionen (Dateien, Befehle, Ergebnisse).
-
-        ## Offene Punkte
-        - 0–5 Bullet-Punkte oder „Keine".
-
-        ## Auffälligkeiten
-        - 0–3 Bullet-Punkte mit Warnungen, Fehlern, Workarounds; sonst weglassen.
-
-        ## Bilder
-        - Wenn im Log Bild-Pfade vorkommen (typisch unter `results/`,
-          `attachments/`, oder bare Datei­namen wie `foo.png`), liste **alle**
-          eindeutigen Treffer als `![](<pfad>)`. Bevorzuge das Präfix
-          `results/<name>` für vom Lauf produzierte Screenshots, `attachments/<name>`
-          für Eingaben aus dem Prompt. Sonst Sektion weglassen.
-
-        Regeln:
-        - Keine Floskeln, kein Marketing-Ton.
-        - Pfade und Befehle in `Backticks`.
-        - Maximal 250 Wörter Text (Bilder zählen nicht).
-        - Antworte ausschließlich mit dem Markdown — keine Vorrede, keine Code-Fences drumherum.
-
-        LOG:
-        """ + "\n" + log;
 
     private async Task<(bool Ok, string? Summary, string? Error)> RunHaikuAsync(
         string prompt, string workingDirectory, CancellationToken ct)
