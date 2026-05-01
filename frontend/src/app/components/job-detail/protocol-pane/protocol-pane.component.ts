@@ -116,6 +116,11 @@ export class ProtocolPaneComponent implements OnDestroy {
     () => this.detail().summaryState?.status ?? 'none'
   );
 
+  // While the job is in 3-progress, the live Aktivität feed is what the user
+  // came here to see — surface it as the leftmost tab. Outside that state we
+  // keep the historical Protokoll-first order so the summary stays primary.
+  readonly inProgress = computed(() => this.detail().info.state === '3-progress');
+
   // The button is meaningful only after the task has produced a cli-output.log.
   // We can't see the disk from here, so use "summary has been touched" as a
   // proxy: any non-`none` status means the runner already attempted to summarize

@@ -72,8 +72,10 @@
   <div class="pane__body">
     <section class="inspector">
       <div class="inspector__header">
-        <div class="inspector__tabs inspector__tabs--pill" role="tablist">
-          <button class="inspector__tab"
+        <div class="inspector__tabs inspector__tabs--pill"
+             [class.inspector__tabs--activity-first]="inProgress()"
+             role="tablist">
+          <button class="inspector__tab inspector__tab--protocol"
                   role="tab"
                   data-testid="inspector-tab-protocol"
                   [class.inspector__tab--active]="activeInspectorTab() === 'protocol'"
@@ -85,7 +87,7 @@
               <span class="inspector__tab-spinner" aria-hidden="true"></span>
             }
           </button>
-          <button class="inspector__tab"
+          <button class="inspector__tab inspector__tab--activity"
                   role="tab"
                   data-testid="inspector-tab-activity"
                   [class.inspector__tab--active]="activeInspectorTab() === 'activity'"
