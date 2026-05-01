@@ -1,5 +1,6 @@
 using OrchestratorApi.Models;
 using OrchestratorApi.Services;
+using OrchestratorApi.Services.Jobs;
 
 namespace OrchestratorApi.Endpoints;
 

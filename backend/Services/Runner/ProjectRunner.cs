@@ -1,5 +1,6 @@
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.Cli;
+using OrchestratorApi.Services.Jobs;
 
 namespace OrchestratorApi.Services.Runner;
 
@@ -14,6 +15,8 @@ public class ProjectRunner
 {
     private readonly ILogger _logger;
     private readonly JobScannerService _scanner;
+    private readonly JobStateMachine _states;
+    private readonly JobSessionLog _sessions;
     private readonly CliRouter _router;
     private readonly SummaryGenerationService _summaryService;
     private string _mode = "manual";
@@ -38,6 +41,8 @@ public class ProjectRunner
         WatchPathEntry entry,
         ILogger logger,
         JobScannerService scanner,
+        JobStateMachine states,
+        JobSessionLog sessions,
         CliRouter router,
         SummaryGenerationService summaryService)
     {
@@ -45,6 +50,8 @@ public class ProjectRunner
         Entry = entry;
         _logger = logger;
         _scanner = scanner;
+        _states = states;
+        _sessions = sessions;
         _router = router;
         _summaryService = summaryService;
 
@@ -170,7 +177,7 @@ public class ProjectRunner
 
             if (plan.MoveJobToProgress && info.State != JobStates.Progress)
             {
-                _scanner.MoveJob(jobId, JobStates.Progress, Entry.Path);
+                _states.MoveJob(jobId, JobStates.Progress, Entry.Path);
                 info = _scanner.FindJob(jobId, Entry.Path) ?? info;
             }
 
@@ -189,15 +196,15 @@ public class ProjectRunner
             _logger.LogInformation("[taskboard] using working directory {Path}", Entry.RootPath);
 
             if (plan.ClearStaleSessionName)
-                _scanner.SetJobSessionName(jobId, null, Entry.Path);
+                _sessions.SetJobSessionName(jobId, null, Entry.Path);
             if (plan.PersistSessionName != null)
-                _scanner.SetJobSessionName(jobId, plan.PersistSessionName, Entry.Path);
+                _sessions.SetJobSessionName(jobId, plan.PersistSessionName, Entry.Path);
             if (plan.MarkSessionChainRecovery)
-                _scanner.MarkSessionChainRecovery(jobId, Entry.Path);
+                _sessions.MarkSessionChainRecovery(jobId, Entry.Path);
             if (plan.WriteCutMarker)
                 AppendSessionCutMarkerToCliLog(info, plan.CutMarkerReason ?? "session lost");
 
-            _scanner.AppendSessionEvent(jobId, new SessionEvent
+            _sessions.AppendSessionEvent(jobId, new SessionEvent
             {
                 Ts = DateTime.UtcNow,
                 Kind = plan.EventKind,
@@ -243,7 +250,7 @@ public class ProjectRunner
         var usage = cli.GetLastUsage(jobKey);
         if (usage != null)
         {
-            _scanner.UpdateLastUsage(_activeJobId, usage, Entry.Path);
+            _sessions.UpdateLastUsage(_activeJobId, usage, Entry.Path);
         }
 
         // Persist the captured session UUID so follow-ups can resume.
@@ -263,8 +270,8 @@ public class ProjectRunner
             // Append to the chain (and update sessionName in lockstep). Forking
             // CLIs emit a new id on every --resume; preserving the chain lets the
             // user see how often the session has been continued.
-            _scanner.AppendSessionToChain(_activeJobId, capturedSessionId!, Entry.Path);
-            _scanner.BackfillLatestSessionEventCapturedId(_activeJobId, capturedSessionId!, Entry.Path);
+            _sessions.AppendSessionToChain(_activeJobId, capturedSessionId!, Entry.Path);
+            _sessions.BackfillLatestSessionEventCapturedId(_activeJobId, capturedSessionId!, Entry.Path);
         }
 
         // Write CLI output to log file. The runtime JSONL is the durable
@@ -280,7 +287,7 @@ public class ProjectRunner
 
         var finishedJobId = _activeJobId;
         // Move job to 4-review
-        _scanner.MoveJob(_activeJobId, JobStates.Review, Entry.Path);
+        _states.MoveJob(_activeJobId, JobStates.Review, Entry.Path);
 
         // Fire-and-forget Haiku summary on successful completion. Skipped for
         // failed/cancelled runs because partial logs rarely yield useful

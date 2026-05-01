@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.Cli;
+using OrchestratorApi.Services.Jobs;
 using OrchestratorApi.Services.Runner;
 
 namespace OrchestratorApi.Services;
@@ -19,6 +20,9 @@ public class TaskRunnerService : BackgroundService
     private readonly IConfiguration _config;
     private readonly ILogger<TaskRunnerService> _logger;
     private readonly JobScannerService _scanner;
+    private readonly JobStateMachine _states;
+    private readonly JobMutationService _mutations;
+    private readonly JobSessionLog _sessions;
     private readonly CopilotCliService _cli;
     private readonly CliRouter _router;
     private readonly ContextUsageParser _contextUsageParser;
@@ -32,6 +36,9 @@ public class TaskRunnerService : BackgroundService
         IConfiguration config,
         ILogger<TaskRunnerService> logger,
         JobScannerService scanner,
+        JobStateMachine states,
+        JobMutationService mutations,
+        JobSessionLog sessions,
         CopilotCliService cli,
         CliRouter router,
         ContextUsageParser contextUsageParser,
@@ -41,6 +48,9 @@ public class TaskRunnerService : BackgroundService
         _config = config;
         _logger = logger;
         _scanner = scanner;
+        _states = states;
+        _mutations = mutations;
+        _sessions = sessions;
         _cli = cli;
         _router = router;
         _contextUsageParser = contextUsageParser;
@@ -70,7 +80,7 @@ public class TaskRunnerService : BackgroundService
                 continue;
             }
 
-            var runner = new ProjectRunner(entry.Name, entry, _logger, _scanner, _router, _summaryService);
+            var runner = new ProjectRunner(entry.Name, entry, _logger, _scanner, _states, _sessions, _router, _summaryService);
             runner.OnStatusChanged += status => OnRunnerStatusChanged?.Invoke(entry.Name, status);
             // Persist every mode change so the auto-pickup toggle survives
             // backend restarts. Includes implicit transitions like "auto-single
@@ -138,7 +148,7 @@ public class TaskRunnerService : BackgroundService
         // Persist CLI type override before validity check so the next iteration picks it up.
         if (!string.IsNullOrWhiteSpace(cliTypeOverride) && cliTypeOverride != info.CliType)
         {
-            _scanner.SetJobCliType(jobId, CliTypes.Normalize(cliTypeOverride), watchPath);
+            _mutations.SetJobCliType(jobId, CliTypes.Normalize(cliTypeOverride), watchPath);
             info = _scanner.FindJob(jobId, watchPath) ?? info;
         }
 
@@ -148,7 +158,7 @@ public class TaskRunnerService : BackgroundService
         // Persist override on the job so subsequent runs reuse it
         if (!string.IsNullOrWhiteSpace(modelOverride) && modelOverride != info.Model)
         {
-            _scanner.SetJobModel(jobId, modelOverride, watchPath);
+            _mutations.SetJobModel(jobId, modelOverride, watchPath);
         }
 
         return await runner.StartJobManualAsync(jobId, ct);
@@ -175,10 +185,10 @@ public class TaskRunnerService : BackgroundService
 
         if (!string.IsNullOrWhiteSpace(modelOverride) && modelOverride != info.Model)
         {
-            _scanner.SetJobModel(jobId, modelOverride, watchPath);
+            _mutations.SetJobModel(jobId, modelOverride, watchPath);
         }
 
-        _scanner.AppendContinuationNote(jobId, followupPrompt, watchPath);
+        _mutations.AppendContinuationNote(jobId, followupPrompt, watchPath);
         AppendUserPromptToCliLog(info, followupPrompt);
 
         return await runner.ContinueJobAsync(jobId, followupPrompt, ct);
@@ -284,7 +294,7 @@ public class TaskRunnerService : BackgroundService
             };
         }
 
-        _scanner.UpdateContextUsage(jobId, snapshot, watchPath);
+        _mutations.UpdateContextUsage(jobId, snapshot, watchPath);
         return (snapshot, null);
     }
 

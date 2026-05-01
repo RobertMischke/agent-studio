@@ -1,5 +1,6 @@
 using OrchestratorApi.Models;
 using OrchestratorApi.Services;
+using OrchestratorApi.Services.Jobs;
 
 namespace OrchestratorApi.Endpoints.Jobs;
 
@@ -21,14 +22,14 @@ public static class JobFilesEndpoints
             return content is null ? Results.NotFound() : Results.Text(content);
         });
 
-        group.MapPut("/{jobId}/files/{fileName}", (string jobId, string fileName, string? watchPath, UpdateJobFileRequest req, JobScannerService scanner, TaskRunnerService runner) =>
+        group.MapPut("/{jobId}/files/{fileName}", (string jobId, string fileName, string? watchPath, UpdateJobFileRequest req, JobMutationService mutations, TaskRunnerService runner) =>
         {
             if (runner.IsJobLive(jobId, watchPath))
                 return Results.Conflict("Cannot edit while the CLI is running for this task — stop it first.");
 
             try
             {
-                var success = scanner.UpdateJobFile(jobId, fileName, req.Content, watchPath);
+                var success = mutations.UpdateJobFile(jobId, fileName, req.Content, watchPath);
                 return success ? Results.Ok() : Results.NotFound("Job not found or file is not editable.");
             }
             catch (IOException ex)
@@ -43,7 +44,7 @@ public static class JobFilesEndpoints
 
         // Prompt-editor screenshot uploads — written to <job>/attachments/<id>.<ext> and
         // referenced from prompt.md as a relative path so the CLI agent finds them on disk.
-        group.MapPost("/{jobId}/attachments", async (string jobId, string? watchPath, HttpRequest request, JobScannerService scanner) =>
+        group.MapPost("/{jobId}/attachments", async (string jobId, string? watchPath, HttpRequest request, JobMutationService mutations) =>
         {
             if (!request.HasFormContentType)
                 return Results.BadRequest(new { error = "multipart/form-data expected" });
@@ -56,7 +57,7 @@ public static class JobFilesEndpoints
             using var ms = new MemoryStream();
             await file.CopyToAsync(ms);
 
-            var (fileName, error) = scanner.SaveAttachment(jobId, watchPath, ms.ToArray(), file.FileName, file.ContentType);
+            var (fileName, error) = mutations.SaveAttachment(jobId, watchPath, ms.ToArray(), file.FileName, file.ContentType);
             if (fileName is null) return Results.BadRequest(new { error });
 
             // Relative URL so the editor renders it via the API; markdown stores `attachments/<file>`.

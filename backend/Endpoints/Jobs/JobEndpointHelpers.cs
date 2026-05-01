@@ -1,6 +1,7 @@
 using OrchestratorApi.Models;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.Cli;
+using OrchestratorApi.Services.Jobs;
 
 namespace OrchestratorApi.Endpoints.Jobs;
 
@@ -28,7 +29,8 @@ internal static class JobEndpointHelpers
     /// never gets stuck mid-pipeline because the LLM call timed out.
     /// </summary>
     internal static async Task<MoveJobOutcome> MoveAndMaybeAutoCommitAsync(
-        JobScannerService scanner, GitService git, ProjectSettingsService settings, ILogger logger,
+        JobScannerService scanner, JobStateMachine states, JobMutationService mutations,
+        GitService git, ProjectSettingsService settings, ILogger logger,
         string jobId, string targetState, string? watchPath, CancellationToken ct)
     {
         var info = scanner.FindJob(jobId, watchPath);
@@ -69,13 +71,13 @@ internal static class JobEndpointHelpers
             }
         }
 
-        var outcome = scanner.MoveJob(jobId, targetState, watchPath);
+        var outcome = states.MoveJob(jobId, targetState, watchPath);
         if (outcome.Status == MoveJobStatus.Success && commitToStamp != null)
         {
             // Re-resolve the job — its FolderPath has shifted from progress/ to review/.
             var moved = scanner.FindJob(jobId, watchPath);
             if (moved != null)
-                scanner.SetJobCommitOnFolder(moved.FolderPath, commitToStamp);
+                mutations.SetJobCommitOnFolder(moved.FolderPath, commitToStamp);
         }
 
         return outcome;

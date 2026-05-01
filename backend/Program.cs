@@ -2,6 +2,7 @@ using OrchestratorApi.Endpoints;
 using OrchestratorApi.Hubs;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.Cli;
+using OrchestratorApi.Services.Jobs;
 using OrchestratorApi.Services.Pty;
 using OrchestratorApi.Services.Quota;
 using Microsoft.AspNetCore.SignalR;
@@ -29,6 +30,9 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
 
 builder.Services.AddSingleton<JobScannerService>();
+builder.Services.AddSingleton<JobStateMachine>();
+builder.Services.AddSingleton<JobMutationService>();
+builder.Services.AddSingleton<JobSessionLog>();
 builder.Services.AddSingleton<JobWatcherService>();
 builder.Services.AddSingleton<CopilotCliEnvironment>();
 builder.Services.AddSingleton<CopilotModelDiscovery>();
@@ -108,8 +112,7 @@ app.UseExceptionHandler(exceptionApp =>
 app.UseCors();
 
 // Ensure state folders exist and migrate legacy flat jobs
-var scanner = app.Services.GetRequiredService<JobScannerService>();
-scanner.EnsureStateFoldersAndMigrate();
+app.Services.GetRequiredService<JobStateMachine>().EnsureStateFoldersAndMigrate();
 
 // Wire up FileSystemWatcher → SignalR push
 var watcher = app.Services.GetRequiredService<JobWatcherService>();

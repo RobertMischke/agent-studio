@@ -1,5 +1,6 @@
 using OrchestratorApi.Models;
 using OrchestratorApi.Services;
+using OrchestratorApi.Services.Jobs;
 
 namespace OrchestratorApi.Endpoints.Jobs;
 
@@ -59,11 +60,11 @@ public static class JobRunnerEndpoints
         // gives the user a paper trail when continuations don't behave as
         // expected. Includes the current sessionChain so the frontend can
         // render a chip without a second round-trip.
-        group.MapGet("/{jobId}/session-events", (string jobId, string? watchPath, JobScannerService scanner) =>
+        group.MapGet("/{jobId}/session-events", (string jobId, string? watchPath, JobScannerService scanner, JobSessionLog sessions) =>
         {
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
-            var events = scanner.ReadSessionEvents(jobId, watchPath);
+            var events = sessions.ReadSessionEvents(jobId, watchPath);
             return Results.Ok(new
             {
                 events,

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.Cli;
+using OrchestratorApi.Services.Jobs;
 
 namespace OrchestratorApi.Services;
 

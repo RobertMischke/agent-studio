@@ -2,12 +2,13 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services;
+using OrchestratorApi.Services.Jobs;
 using Xunit;
 
 namespace OrchestratorApi.Tests;
 
 /// <summary>
-/// Locks in the failure-mode contract for <see cref="JobScannerService.MoveJob"/>.
+/// Locks in the failure-mode contract for <see cref="JobStateMachine.MoveJob"/>.
 /// The pre-existing-target-folder case used to surface as a generic 404 in the UI;
 /// it must now return <c>TargetFolderExists</c> so the endpoint can map it to 409
 /// with a message that points at the stale duplicate.
@@ -30,7 +31,7 @@ public class JobScannerMoveTests : IDisposable
         try { Directory.Delete(_watchPath, recursive: true); } catch { /* best-effort */ }
     }
 
-    private JobScannerService BuildScanner()
+    private JobStateMachine BuildStateMachine()
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -40,7 +41,8 @@ public class JobScannerMoveTests : IDisposable
             })
             .Build();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        return new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
+        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
+        return new JobStateMachine(scanner, NullLogger<JobStateMachine>.Instance);
     }
 
     private void WriteJob(string state, string slug)
@@ -56,7 +58,7 @@ public class JobScannerMoveTests : IDisposable
     {
         WriteJob(JobStates.Completed, "demo-task");
 
-        var outcome = BuildScanner().MoveJob("demo-task", JobStates.Archive, _watchPath);
+        var outcome = BuildStateMachine().MoveJob("demo-task", JobStates.Archive, _watchPath);
 
         Assert.Equal(MoveJobStatus.Success, outcome.Status);
         Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Archive, "demo-task")));
@@ -66,7 +68,7 @@ public class JobScannerMoveTests : IDisposable
     [Fact]
     public void MoveJob_UnknownId_ReturnsNotFound()
     {
-        var outcome = BuildScanner().MoveJob("ghost", JobStates.Archive, _watchPath);
+        var outcome = BuildStateMachine().MoveJob("ghost", JobStates.Archive, _watchPath);
 
         Assert.Equal(MoveJobStatus.NotFound, outcome.Status);
     }
@@ -77,7 +79,7 @@ public class JobScannerMoveTests : IDisposable
         WriteJob(JobStates.Completed, "duplicate-slug");
         WriteJob(JobStates.Archive, "duplicate-slug");
 
-        var outcome = BuildScanner().MoveJob("duplicate-slug", JobStates.Archive, _watchPath);
+        var outcome = BuildStateMachine().MoveJob("duplicate-slug", JobStates.Archive, _watchPath);
 
         Assert.Equal(MoveJobStatus.TargetFolderExists, outcome.Status);
         Assert.NotNull(outcome.Message);

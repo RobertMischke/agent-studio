@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services;
+using OrchestratorApi.Services.Jobs;
 using Xunit;
 
 namespace OrchestratorApi.Tests;
@@ -37,7 +38,7 @@ public class SessionEventsTests : IDisposable
         try { Directory.Delete(_watchPath, recursive: true); } catch { /* best-effort */ }
     }
 
-    private JobScannerService BuildScanner()
+    private (JobScannerService Scanner, JobSessionLog Sessions) BuildServices()
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -47,7 +48,9 @@ public class SessionEventsTests : IDisposable
             })
             .Build();
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
-        return new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
+        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
+        var sessions = new JobSessionLog(scanner, NullLogger<JobSessionLog>.Instance);
+        return (scanner, sessions);
     }
 
     private void WriteJob(string state, string slug, string? sessionName = null, string[]? sessionChain = null)
@@ -72,9 +75,9 @@ public class SessionEventsTests : IDisposable
     public void AppendSessionEvent_WritesJsonlRow()
     {
         WriteJob(JobStates.Progress, "demo-task");
-        var scanner = BuildScanner();
+        var (_, sessions) = BuildServices();
 
-        var ok = scanner.AppendSessionEvent("demo-task", new SessionEvent
+        var ok = sessions.AppendSessionEvent("demo-task", new SessionEvent
         {
             Ts = new DateTime(2026, 5, 1, 14, 22, 10, DateTimeKind.Utc),
             Kind = "continue",
@@ -86,7 +89,7 @@ public class SessionEventsTests : IDisposable
         }, _watchPath);
 
         Assert.True(ok);
-        var events = scanner.ReadSessionEvents("demo-task", _watchPath);
+        var events = sessions.ReadSessionEvents("demo-task", _watchPath);
         Assert.Single(events);
         Assert.Equal("continue", events[0].Kind);
         Assert.Equal("claude", events[0].Cli);
@@ -98,16 +101,16 @@ public class SessionEventsTests : IDisposable
     public void ReadSessionEvents_TolerantToTornLines()
     {
         WriteJob(JobStates.Progress, "demo-task");
-        var scanner = BuildScanner();
-        scanner.AppendSessionEvent("demo-task", new SessionEvent { Ts = DateTime.UtcNow, Kind = "start" }, _watchPath);
+        var (_, sessions) = BuildServices();
+        sessions.AppendSessionEvent("demo-task", new SessionEvent { Ts = DateTime.UtcNow, Kind = "start" }, _watchPath);
 
         // Inject a malformed trailing line — simulates a torn write.
         var path = Path.Combine(_watchPath, JobStates.Progress, "demo-task", "logs", "session-events.jsonl");
         File.AppendAllText(path, "{not-valid-json" + Environment.NewLine);
 
-        scanner.AppendSessionEvent("demo-task", new SessionEvent { Ts = DateTime.UtcNow, Kind = "continue" }, _watchPath);
+        sessions.AppendSessionEvent("demo-task", new SessionEvent { Ts = DateTime.UtcNow, Kind = "continue" }, _watchPath);
 
-        var events = scanner.ReadSessionEvents("demo-task", _watchPath);
+        var events = sessions.ReadSessionEvents("demo-task", _watchPath);
         Assert.Equal(2, events.Count); // torn line was skipped
         Assert.Equal("start", events[0].Kind);
         Assert.Equal("continue", events[1].Kind);
@@ -117,14 +120,14 @@ public class SessionEventsTests : IDisposable
     public void BackfillLatestSessionEventCapturedId_RewritesLastRow()
     {
         WriteJob(JobStates.Progress, "demo-task");
-        var scanner = BuildScanner();
-        scanner.AppendSessionEvent("demo-task", new SessionEvent { Ts = DateTime.UtcNow, Kind = "start", Cli = "claude" }, _watchPath);
-        scanner.AppendSessionEvent("demo-task", new SessionEvent { Ts = DateTime.UtcNow, Kind = "continue", Cli = "claude", InputSessionId = "abc-123", Resumed = true }, _watchPath);
+        var (_, sessions) = BuildServices();
+        sessions.AppendSessionEvent("demo-task", new SessionEvent { Ts = DateTime.UtcNow, Kind = "start", Cli = "claude" }, _watchPath);
+        sessions.AppendSessionEvent("demo-task", new SessionEvent { Ts = DateTime.UtcNow, Kind = "continue", Cli = "claude", InputSessionId = "abc-123", Resumed = true }, _watchPath);
 
-        var ok = scanner.BackfillLatestSessionEventCapturedId("demo-task", "def-456", _watchPath);
+        var ok = sessions.BackfillLatestSessionEventCapturedId("demo-task", "def-456", _watchPath);
 
         Assert.True(ok);
-        var events = scanner.ReadSessionEvents("demo-task", _watchPath);
+        var events = sessions.ReadSessionEvents("demo-task", _watchPath);
         Assert.Equal(2, events.Count);
         Assert.Null(events[0].CapturedSessionId); // first event untouched
         Assert.Equal("def-456", events[1].CapturedSessionId);
@@ -135,9 +138,9 @@ public class SessionEventsTests : IDisposable
     public void AppendSessionToChain_ExtendsChainAndUpdatesSessionName()
     {
         WriteJob(JobStates.Progress, "demo-task", sessionName: "abc-123", sessionChain: ["abc-123"]);
-        var scanner = BuildScanner();
+        var (scanner, sessions) = BuildServices();
 
-        scanner.AppendSessionToChain("demo-task", "def-456", _watchPath);
+        sessions.AppendSessionToChain("demo-task", "def-456", _watchPath);
 
         var info = scanner.FindJob("demo-task", _watchPath)!;
         Assert.Equal(["abc-123", "def-456"], info.SessionChain);
@@ -148,9 +151,9 @@ public class SessionEventsTests : IDisposable
     public void AppendSessionToChain_IsIdempotentForSameTail()
     {
         WriteJob(JobStates.Progress, "demo-task", sessionName: "abc-123", sessionChain: ["abc-123"]);
-        var scanner = BuildScanner();
+        var (scanner, sessions) = BuildServices();
 
-        scanner.AppendSessionToChain("demo-task", "abc-123", _watchPath);
+        sessions.AppendSessionToChain("demo-task", "abc-123", _watchPath);
 
         var info = scanner.FindJob("demo-task", _watchPath)!;
         Assert.Equal(["abc-123"], info.SessionChain);
@@ -166,9 +169,9 @@ public class SessionEventsTests : IDisposable
     public void MarkSessionChainRecovery_AppendsMarkerAndClearsCurrent()
     {
         WriteJob(JobStates.Progress, "demo-task", sessionName: "abc-123", sessionChain: ["abc-123"]);
-        var scanner = BuildScanner();
+        var (scanner, sessions) = BuildServices();
 
-        scanner.MarkSessionChainRecovery("demo-task", _watchPath);
+        sessions.MarkSessionChainRecovery("demo-task", _watchPath);
 
         var info = scanner.FindJob("demo-task", _watchPath)!;
         Assert.Equal(["abc-123", "(recovery)"], info.SessionChain);
@@ -182,9 +185,9 @@ public class SessionEventsTests : IDisposable
     {
         // Brand-new job that's never started — there's nothing to mark a break on.
         WriteJob(JobStates.Progress, "demo-task");
-        var scanner = BuildScanner();
+        var (scanner, sessions) = BuildServices();
 
-        scanner.MarkSessionChainRecovery("demo-task", _watchPath);
+        sessions.MarkSessionChainRecovery("demo-task", _watchPath);
 
         var info = scanner.FindJob("demo-task", _watchPath)!;
         Assert.Empty(info.SessionChain);
@@ -200,7 +203,7 @@ public class SessionEventsTests : IDisposable
     public void SessionChain_ReadsLegacySessionNameAsSingleElement()
     {
         WriteJob(JobStates.Progress, "legacy-task", sessionName: "legacy-uuid");
-        var scanner = BuildScanner();
+        var (scanner, _) = BuildServices();
 
         var info = scanner.FindJob("legacy-task", _watchPath)!;
         Assert.Equal(["legacy-uuid"], info.SessionChain);
@@ -210,7 +213,7 @@ public class SessionEventsTests : IDisposable
     public void SessionChain_EmptyForBrandNewJob()
     {
         WriteJob(JobStates.Progress, "fresh-task");
-        var scanner = BuildScanner();
+        var (scanner, _) = BuildServices();
 
         var info = scanner.FindJob("fresh-task", _watchPath)!;
         Assert.Empty(info.SessionChain);

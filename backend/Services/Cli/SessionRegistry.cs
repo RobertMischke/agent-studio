@@ -1,5 +1,6 @@
 using System.Text.Json;
 using OrchestratorApi.Models;
+using OrchestratorApi.Services.Jobs;
 
 namespace OrchestratorApi.Services.Cli;
 

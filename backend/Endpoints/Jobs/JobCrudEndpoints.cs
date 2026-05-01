@@ -1,6 +1,7 @@
 using OrchestratorApi.Models;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.Cli;
+using OrchestratorApi.Services.Jobs;
 using static OrchestratorApi.Endpoints.Jobs.JobEndpointHelpers;
 
 namespace OrchestratorApi.Endpoints.Jobs;
@@ -43,78 +44,80 @@ public static class JobCrudEndpoints
         });
 
         group.MapPut("/{jobId}/state", async (string jobId, string? watchPath, MoveJobRequest req,
-            JobScannerService scanner, GitService git, ProjectSettingsService settings, ILogger<Program> logger,
+            JobScannerService scanner, JobStateMachine states, JobMutationService mutations,
+            GitService git, ProjectSettingsService settings, ILogger<Program> logger,
             CancellationToken ct) =>
         {
             if (!JobStates.All.Contains(req.TargetState))
                 return Results.BadRequest($"Invalid state. Allowed: {string.Join(", ", JobStates.All)}");
 
-            return MoveResult(await MoveAndMaybeAutoCommitAsync(scanner, git, settings, logger, jobId, req.TargetState, watchPath, ct));
+            return MoveResult(await MoveAndMaybeAutoCommitAsync(scanner, states, mutations, git, settings, logger, jobId, req.TargetState, watchPath, ct));
         });
 
         group.MapPost("/{jobId}/move", async (string jobId, string? watchPath, MoveJobRequest req,
-            JobScannerService scanner, GitService git, ProjectSettingsService settings, ILogger<Program> logger,
+            JobScannerService scanner, JobStateMachine states, JobMutationService mutations,
+            GitService git, ProjectSettingsService settings, ILogger<Program> logger,
             CancellationToken ct) =>
         {
             if (!JobStates.All.Contains(req.TargetState))
                 return Results.BadRequest($"Invalid state. Allowed: {string.Join(", ", JobStates.All)}");
 
-            return MoveResult(await MoveAndMaybeAutoCommitAsync(scanner, git, settings, logger, jobId, req.TargetState, watchPath, ct));
+            return MoveResult(await MoveAndMaybeAutoCommitAsync(scanner, states, mutations, git, settings, logger, jobId, req.TargetState, watchPath, ct));
         });
 
-        group.MapDelete("/{jobId}", (string jobId, string? watchPath, JobScannerService scanner) =>
+        group.MapDelete("/{jobId}", (string jobId, string? watchPath, JobStateMachine states) =>
         {
-            var success = scanner.DeleteJob(jobId, watchPath);
+            var success = states.DeleteJob(jobId, watchPath);
             return success ? Results.Ok() : Results.NotFound();
         });
 
-        group.MapPost("/", (CreateJobRequest req, JobScannerService scanner) =>
+        group.MapPost("/", (CreateJobRequest req, JobMutationService mutations) =>
         {
             if (string.IsNullOrWhiteSpace(req.Title))
                 return Results.BadRequest("Title is required");
 
-            var jobId = scanner.CreateJob(req);
+            var jobId = mutations.CreateJob(req);
             return jobId is null ? Results.Conflict("Job already exists or invalid input") : Results.Ok(new { id = jobId });
         });
 
-        group.MapPost("/reorder", (ReorderRequest req, JobScannerService scanner) =>
+        group.MapPost("/reorder", (ReorderRequest req, JobStateMachine states) =>
         {
             var jobs = req.Jobs.Count > 0
                 ? req.Jobs
                 : req.JobIds.Select(id => new JobOrderItem { JobId = id }).ToList();
-            var success = scanner.ReorderJobs(jobs);
+            var success = states.ReorderJobs(jobs);
             return success ? Results.Ok() : Results.BadRequest("Reorder failed");
         });
 
-        group.MapPost("/{jobId}/change-project", (string jobId, string? watchPath, ChangeProjectRequest req, JobScannerService scanner) =>
+        group.MapPost("/{jobId}/change-project", (string jobId, string? watchPath, ChangeProjectRequest req, JobStateMachine states) =>
         {
-            var success = scanner.ChangeProject(jobId, req.TargetWatchPath, watchPath);
+            var success = states.ChangeProject(jobId, req.TargetWatchPath, watchPath);
             return success ? Results.Ok() : Results.BadRequest("Failed to change project");
         });
 
-        group.MapPut("/{jobId}/model", (string jobId, string? watchPath, SetJobModelRequest req, JobScannerService scanner) =>
+        group.MapPut("/{jobId}/model", (string jobId, string? watchPath, SetJobModelRequest req, JobMutationService mutations) =>
         {
-            var success = scanner.SetJobModel(jobId, req?.Model, watchPath);
+            var success = mutations.SetJobModel(jobId, req?.Model, watchPath);
             return success ? Results.Ok() : Results.NotFound();
         });
 
-        group.MapPut("/{jobId}/cli-type", (string jobId, string? watchPath, SetJobCliTypeRequest req, JobScannerService scanner) =>
+        group.MapPut("/{jobId}/cli-type", (string jobId, string? watchPath, SetJobCliTypeRequest req, JobMutationService mutations) =>
         {
             if (req is null || !CliTypes.IsValid(req.CliType))
                 return Results.BadRequest(new { error = $"cliType must be one of {string.Join(", ", CliTypes.All)}" });
-            var ok = scanner.SetJobCliType(jobId, req.CliType, watchPath);
+            var ok = mutations.SetJobCliType(jobId, req.CliType, watchPath);
             if (!ok) return Results.NotFound();
             if (req.UseOwnSession.HasValue)
-                scanner.SetJobUseOwnSession(jobId, req.UseOwnSession.Value, watchPath);
+                mutations.SetJobUseOwnSession(jobId, req.UseOwnSession.Value, watchPath);
             return Results.Ok();
         });
 
-        group.MapPut("/{jobId}/title", (string jobId, string? watchPath, SetJobTitleRequest req, JobScannerService scanner) =>
+        group.MapPut("/{jobId}/title", (string jobId, string? watchPath, SetJobTitleRequest req, JobMutationService mutations) =>
         {
             if (req is null || string.IsNullOrWhiteSpace(req.Title))
                 return Results.BadRequest(new { error = "Title is required" });
 
-            var success = scanner.SetJobTitle(jobId, req.Title, watchPath);
+            var success = mutations.SetJobTitle(jobId, req.Title, watchPath);
             return success ? Results.Ok() : Results.NotFound();
         });
     }
