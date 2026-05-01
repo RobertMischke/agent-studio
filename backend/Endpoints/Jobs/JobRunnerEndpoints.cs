@@ -1,0 +1,102 @@
+using OrchestratorApi.Models;
+using OrchestratorApi.Services;
+
+namespace OrchestratorApi.Endpoints.Jobs;
+
+/// <summary>
+/// CLI execution surface for one job: <c>start</c>, <c>stop</c>,
+/// <c>continue</c>, the <c>output</c> buffer the protocol pane polls,
+/// the session-event log that drives the "session continued / lost"
+/// chip, and the manual <c>summary/regenerate</c> + <c>context-usage/refresh</c>
+/// triggers. All routes funnel through <see cref="TaskRunnerService"/>;
+/// this file is the HTTP shell.
+/// </summary>
+public static class JobRunnerEndpoints
+{
+    public static void MapJobRunnerEndpoints(this RouteGroupBuilder group)
+    {
+        group.MapPost("/{jobId}/start", async (string jobId, string? watchPath, StartJobRequest? req, TaskRunnerService runner, JobScannerService scanner, CancellationToken ct) =>
+        {
+            var job = scanner.FindJob(jobId, watchPath);
+            if (job == null)
+                return Results.NotFound(new { error = "Job not found" });
+
+            if (job.State is not (JobStates.Ready or JobStates.Progress))
+                return Results.BadRequest(new { error = $"Job is in state '{job.State}' — only jobs in 'ready' or 'progress' can be started" });
+
+            var (execution, error) = await runner.StartJobAsync(jobId, watchPath, req?.Model, req?.CliType, ct);
+            return execution is not null
+                ? Results.Ok(execution)
+                : Results.BadRequest(new { error = error ?? "Cannot start job" });
+        });
+
+        group.MapPost("/{jobId}/stop", (string jobId, string? watchPath, TaskRunnerService runner) =>
+        {
+            var success = runner.StopJob(jobId, watchPath);
+            return success ? Results.Ok() : Results.NotFound();
+        });
+
+        group.MapPost("/{jobId}/continue", async (string jobId, string? watchPath, ContinueJobRequest req, TaskRunnerService runner, CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(req?.Prompt))
+                return Results.BadRequest(new { error = "Prompt is required" });
+
+            var (execution, error) = await runner.ContinueJobAsync(jobId, req.Prompt, watchPath, req.Model, ct);
+            return execution is not null
+                ? Results.Ok(execution)
+                : Results.BadRequest(new { error = error ?? "Cannot continue job" });
+        });
+
+        group.MapGet("/{jobId}/output", (string jobId, string? watchPath, TaskRunnerService runner) =>
+        {
+            var output = runner.GetJobOutput(jobId, watchPath);
+            return Results.Ok(output);
+        });
+
+        // Returns the session-event log for a job: one record per start /
+        // continue / recovery, with input + captured session ids and a
+        // `resumed` boolean. Drives the "session continued / lost" chip and
+        // gives the user a paper trail when continuations don't behave as
+        // expected. Includes the current sessionChain so the frontend can
+        // render a chip without a second round-trip.
+        group.MapGet("/{jobId}/session-events", (string jobId, string? watchPath, JobScannerService scanner) =>
+        {
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info == null) return Results.NotFound(new { error = "Job not found" });
+            var events = scanner.ReadSessionEvents(jobId, watchPath);
+            return Results.Ok(new
+            {
+                events,
+                sessionChain = info.SessionChain,
+                currentSessionId = info.SessionName
+            });
+        });
+
+        // Manual re-trigger of the Haiku summary that the runner normally fires
+        // post-execution. Surfaced behind a button while we iterate on the prompt
+        // and observe failure modes — overwrites status.md when Haiku succeeds.
+        // Pre-flight checks (e.g. missing cli-output.log) happen inside
+        // GenerateAsync so the failure mode is recorded as a regular Failed
+        // SummaryState the UI can render in-place — surfacing the precise
+        // reason via the banner instead of a top-level error dialog.
+        group.MapPost("/{jobId}/summary/regenerate", (string jobId, string? watchPath, JobScannerService scanner, SummaryGenerationService summaries) =>
+        {
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info == null)
+                return Results.NotFound(new { error = "Job not found" });
+
+            // Fire-and-forget — the frontend polls summaryState until it flips
+            // out of "generating", same path the post-run summary uses.
+            _ = summaries.GenerateAsync(info);
+            return Results.Accepted();
+        });
+
+        group.MapPost("/{jobId}/context-usage/refresh", async (string jobId, string? watchPath, TaskRunnerService runner, CancellationToken ct) =>
+        {
+            var (snapshot, error) = await runner.RefreshContextUsageAsync(jobId, watchPath, ct);
+            return snapshot is not null
+                ? Results.Ok(snapshot)
+                : Results.BadRequest(new { error = error ?? "Cannot refresh context usage" });
+        });
+    }
+}

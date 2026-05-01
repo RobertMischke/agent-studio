@@ -136,7 +136,7 @@ var taskRunner = app.Services.GetRequiredService<TaskRunnerService>();
 taskRunner.OnRunnerStatusChanged += (projectName, status) =>
     hubContext.Clients.All.SendAsync("runnerStatusChanged", projectName, status.Mode, status.ActiveJobId);
 
-app.MapJobEndpoints();
+app.MapAllEndpoints();
 app.MapHub<JobHub>("/hubs/jobs");
 
 app.Run();

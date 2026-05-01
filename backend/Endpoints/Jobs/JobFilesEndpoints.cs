@@ -1,0 +1,88 @@
+using OrchestratorApi.Models;
+using OrchestratorApi.Services;
+
+namespace OrchestratorApi.Endpoints.Jobs;
+
+/// <summary>
+/// Read/write of files inside a job folder: <c>prompt.md</c> /
+/// <c>status.md</c> via <c>/files/{name}</c>, plus the
+/// <c>attachments/</c> upload/download surface used by the prompt
+/// editor and the read-only <c>results/</c> mirror that backs
+/// <c>status.md</c> image references. See
+/// <c>docs/protocol-style.md</c> for the storage contract.
+/// </summary>
+public static class JobFilesEndpoints
+{
+    public static void MapJobFilesEndpoints(this RouteGroupBuilder group)
+    {
+        group.MapGet("/{jobId}/files/{fileName}", (string jobId, string fileName, string? watchPath, JobScannerService scanner) =>
+        {
+            var content = scanner.ReadJobFile(jobId, fileName, watchPath);
+            return content is null ? Results.NotFound() : Results.Text(content);
+        });
+
+        group.MapPut("/{jobId}/files/{fileName}", (string jobId, string fileName, string? watchPath, UpdateJobFileRequest req, JobScannerService scanner, TaskRunnerService runner) =>
+        {
+            if (runner.IsJobLive(jobId, watchPath))
+                return Results.Conflict("Cannot edit while the CLI is running for this task — stop it first.");
+
+            try
+            {
+                var success = scanner.UpdateJobFile(jobId, fileName, req.Content, watchPath);
+                return success ? Results.Ok() : Results.NotFound("Job not found or file is not editable.");
+            }
+            catch (IOException ex)
+            {
+                // File was locked by another process (editor, indexer, AV) for longer than
+                // the retry window. Surface a tidy 503 instead of a stack-trace modal.
+                return Results.Json(
+                    new { error = "File is temporarily locked by another process — try saving again in a moment.", detail = ex.Message },
+                    statusCode: StatusCodes.Status503ServiceUnavailable);
+            }
+        });
+
+        // Prompt-editor screenshot uploads — written to <job>/attachments/<id>.<ext> and
+        // referenced from prompt.md as a relative path so the CLI agent finds them on disk.
+        group.MapPost("/{jobId}/attachments", async (string jobId, string? watchPath, HttpRequest request, JobScannerService scanner) =>
+        {
+            if (!request.HasFormContentType)
+                return Results.BadRequest(new { error = "multipart/form-data expected" });
+
+            var form = await request.ReadFormAsync();
+            var file = form.Files["file"] ?? form.Files.FirstOrDefault();
+            if (file is null || file.Length == 0)
+                return Results.BadRequest(new { error = "No file uploaded" });
+
+            using var ms = new MemoryStream();
+            await file.CopyToAsync(ms);
+
+            var (fileName, error) = scanner.SaveAttachment(jobId, watchPath, ms.ToArray(), file.FileName, file.ContentType);
+            if (fileName is null) return Results.BadRequest(new { error });
+
+            // Relative URL so the editor renders it via the API; markdown stores `attachments/<file>`.
+            var watchPathQuery = string.IsNullOrEmpty(watchPath) ? "" : $"?watchPath={Uri.EscapeDataString(watchPath)}";
+            return Results.Ok(new
+            {
+                fileName,
+                relativePath = $"attachments/{fileName}",
+                url = $"/api/jobs/{Uri.EscapeDataString(jobId)}/attachments/{fileName}{watchPathQuery}"
+            });
+        }).DisableAntiforgery();
+
+        group.MapGet("/{jobId}/attachments/{fileName}", (string jobId, string fileName, string? watchPath, JobScannerService scanner) =>
+        {
+            var (path, contentType) = scanner.ResolveAttachment(jobId, fileName, watchPath);
+            return path is null ? Results.NotFound() : Results.File(path, contentType);
+        });
+
+        // Read-only mirror of /attachments/ for the job's `results/` folder — the
+        // place where agents drop screenshots that should survive past the next
+        // Playwright run. The protocol pane resolves `results/<name>` references
+        // in status.md against this URL. See docs/protocol-style.md.
+        group.MapGet("/{jobId}/results/{fileName}", (string jobId, string fileName, string? watchPath, JobScannerService scanner) =>
+        {
+            var (path, contentType) = scanner.ResolveResult(jobId, fileName, watchPath);
+            return path is null ? Results.NotFound() : Results.File(path, contentType);
+        });
+    }
+}
