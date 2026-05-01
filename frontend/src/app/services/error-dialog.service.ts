@@ -175,6 +175,10 @@ function extractHttpMessage(error: HttpErrorResponse): string | null {
     return 'Backend not reachable — is the API running on localhost:5030?';
   }
 
+  if (error.status === 500 && isEmptyHttpPayload(error.error)) {
+    return 'Backend returned 500 with an empty body — the API is likely down or crashed mid-request. Run `./api.sh status` and `./api.sh restart` to recover.';
+  }
+
   if (typeof error.error === 'string' && error.error.trim()) {
     return error.error.trim();
   }
@@ -190,6 +194,13 @@ function extractHttpMessage(error: HttpErrorResponse): string | null {
   }
 
   return error.message || null;
+}
+
+function isEmptyHttpPayload(payload: unknown): boolean {
+  if (payload === null || payload === undefined) return true;
+  if (typeof payload === 'string') return payload.trim().length === 0;
+  if (typeof payload === 'object') return Object.keys(payload as Record<string, unknown>).length === 0;
+  return false;
 }
 
 function extractObjectMessage(value: unknown): string | null {

@@ -45,6 +45,24 @@ export interface ClaudeSessionResponse {
   rateLimit: ClaudeRateLimitSnapshot | null;
 }
 
+/** One row in `logs/session-events.jsonl` for a job. */
+export interface SessionEvent {
+  ts: string;                       // ISO timestamp
+  kind: 'start' | 'continue' | 'recovery';
+  cli: string | null;
+  inputSessionId: string | null;
+  capturedSessionId: string | null;
+  resumed: boolean;
+  reason: string | null;
+}
+
+export interface SessionEventsResponse {
+  events: SessionEvent[];
+  /** Ordered list of CLI session ids; the literal string `(recovery)` marks a chain break. */
+  sessionChain: string[];
+  currentSessionId: string | null;
+}
+
 export interface GitProjectSummary {
   projectName: string;
   rootPath: string;

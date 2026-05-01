@@ -1,0 +1,104 @@
+using System.Diagnostics;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
+using OrchestratorApi.Services;
+using Xunit;
+
+namespace OrchestratorApi.Tests;
+
+/// <summary>
+/// A configured project RootPath may sit one or more levels below the actual
+/// git work-tree (e.g. <c>C:\Projects\Runbook\App</c> inside a repo at
+/// <c>C:\Projects\Runbook</c>). The Git view must still recognise it as a
+/// repository — git itself does, via <c>rev-parse --show-toplevel</c>.
+/// </summary>
+public class GitServiceToplevelTests : IDisposable
+{
+    private readonly string _tempDir;
+
+    public GitServiceToplevelTests()
+    {
+        _tempDir = Path.Combine(Path.GetTempPath(), "git-toplevel-tests-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(_tempDir);
+    }
+
+    public void Dispose()
+    {
+        try
+        {
+            // .git contains readonly pack files on Windows; clear before deleting.
+            foreach (var f in Directory.EnumerateFiles(_tempDir, "*", SearchOption.AllDirectories))
+            {
+                try { File.SetAttributes(f, FileAttributes.Normal); } catch { }
+            }
+            Directory.Delete(_tempDir, recursive: true);
+        }
+        catch { /* best-effort */ }
+    }
+
+    [Fact]
+    public void GetSummaries_RootPathIsSubfolderOfGitRepo_IsReportedAsRepo()
+    {
+        var repoRoot = Path.Combine(_tempDir, "repo");
+        var subfolder = Path.Combine(repoRoot, "App");
+        Directory.CreateDirectory(subfolder);
+
+        RunGit(repoRoot, "init -q -b main");
+        RunGit(repoRoot, "config user.email test@example.com");
+        RunGit(repoRoot, "config user.name test");
+        File.WriteAllText(Path.Combine(repoRoot, "README.md"), "seed");
+        RunGit(repoRoot, "add -A");
+        RunGit(repoRoot, "commit -q -m seed");
+
+        var git = BuildGitService(("Sub", subfolder));
+
+        var summary = Assert.Single(git.GetSummaries());
+        Assert.True(summary.IsRepo,
+            "RootPath inside a git repo must resolve to its toplevel (git rev-parse --show-toplevel).");
+        Assert.Equal(subfolder, summary.RootPath);
+        Assert.Equal("main", summary.Branch);
+    }
+
+    [Fact]
+    public void GetSummaries_RootPathOutsideAnyRepo_IsNotReportedAsRepo()
+    {
+        var bare = Path.Combine(_tempDir, "no-repo");
+        Directory.CreateDirectory(bare);
+
+        var git = BuildGitService(("Bare", bare));
+
+        var summary = Assert.Single(git.GetSummaries());
+        Assert.False(summary.IsRepo);
+    }
+
+    private GitService BuildGitService(params (string Name, string RootPath)[] entries)
+    {
+        var dict = new Dictionary<string, string?>();
+        for (var i = 0; i < entries.Length; i++)
+        {
+            dict[$"WatchPaths:{i}:Name"] = entries[i].Name;
+            dict[$"WatchPaths:{i}:RootPath"] = entries[i].RootPath;
+            dict[$"WatchPaths:{i}:Path"] = Path.Combine(entries[i].RootPath, ".orchestrator", "jobs");
+        }
+        var config = new ConfigurationBuilder().AddInMemoryCollection(dict).Build();
+        var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
+        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
+        return new GitService(NullLogger<GitService>.Instance, scanner, config);
+    }
+
+    private static void RunGit(string cwd, string args)
+    {
+        var psi = new ProcessStartInfo
+        {
+            FileName = "git",
+            Arguments = args,
+            WorkingDirectory = cwd,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        using var p = Process.Start(psi)!;
+        p.WaitForExit(15_000);
+    }
+}

@@ -172,7 +172,8 @@ public class JobScannerService
                     : null,
                 Commit = raw.TryGetProperty("commit", out var commit) && commit.ValueKind == JsonValueKind.Object
                     ? JsonSerializer.Deserialize<JobCommitInfo>(commit.GetRawText(), JsonOpts)
-                    : null
+                    : null,
+                SessionChain = ReadSessionChain(raw)
             };
         }
         catch (Exception ex)
@@ -407,6 +408,166 @@ public class JobScannerService
         if (info == null) return false;
         UpdateJobJsonField(info.FolderPath, "sessionName", sessionName ?? "");
         return true;
+    }
+
+    /// <summary>
+    /// Reads <c>sessionChain</c> from job.json with a tolerant fallback: if the
+    /// field is missing but a legacy <c>sessionName</c> exists, return a single-
+    /// element chain. Anything else returns an empty list.
+    /// </summary>
+    private static List<string> ReadSessionChain(JsonElement raw)
+    {
+        if (raw.TryGetProperty("sessionChain", out var chain) && chain.ValueKind == JsonValueKind.Array)
+        {
+            var list = new List<string>();
+            foreach (var item in chain.EnumerateArray())
+            {
+                if (item.ValueKind == JsonValueKind.String && item.GetString() is { Length: > 0 } s)
+                    list.Add(s);
+            }
+            return list;
+        }
+        if (raw.TryGetProperty("sessionName", out var sn) && sn.ValueKind == JsonValueKind.String
+            && sn.GetString() is { Length: > 0 } legacy)
+        {
+            return [legacy];
+        }
+        return [];
+    }
+
+    /// <summary>
+    /// Appends <paramref name="sessionId"/> to the job's <c>sessionChain</c>
+    /// (no-op if the id is already the chain's tail) and updates
+    /// <c>sessionName</c> in lockstep so the existing single-id consumers keep
+    /// working. Used after a CLI emits its session UUID so a later
+    /// <c>--resume</c> can still see the latest fork as the tail.
+    /// </summary>
+    public bool AppendSessionToChain(string jobId, string sessionId, string? watchPath = null)
+    {
+        if (string.IsNullOrWhiteSpace(sessionId)) return false;
+        var info = FindJob(jobId, watchPath);
+        if (info == null) return false;
+        var chain = new List<string>(info.SessionChain);
+        if (chain.Count == 0 || !string.Equals(chain[^1], sessionId, StringComparison.Ordinal))
+        {
+            chain.Add(sessionId);
+            UpdateJobJsonField(info.FolderPath, "sessionChain", chain);
+        }
+        UpdateJobJsonField(info.FolderPath, "sessionName", sessionId);
+        return true;
+    }
+
+    /// <summary>
+    /// Resets the chain when a recovery-continue is performed. The previous
+    /// session ids are preserved as history, but a sentinel <c>"(recovery)"</c>
+    /// marker is appended so consumers can spot chain breaks. The next captured
+    /// session id will start the new chain segment.
+    /// </summary>
+    public bool MarkSessionChainRecovery(string jobId, string? watchPath = null)
+    {
+        var info = FindJob(jobId, watchPath);
+        if (info == null) return false;
+        var chain = new List<string>(info.SessionChain);
+        if (chain.Count > 0 && chain[^1] != "(recovery)")
+        {
+            chain.Add("(recovery)");
+            UpdateJobJsonField(info.FolderPath, "sessionChain", chain);
+        }
+        UpdateJobJsonField(info.FolderPath, "sessionName", "");
+        return true;
+    }
+
+    private static readonly JsonSerializerOptions SessionEventJsonOpts = new()
+    {
+        WriteIndented = false,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.Never
+    };
+
+    /// <summary>
+    /// Append-one-line writer for <c>logs/session-events.jsonl</c>. JSONL keeps
+    /// the file cheap to tail and tolerant to interrupted writes — a torn line
+    /// is one lost event, not a corrupted document.
+    /// </summary>
+    public bool AppendSessionEvent(string jobId, SessionEvent evt, string? watchPath = null)
+    {
+        var info = FindJob(jobId, watchPath);
+        if (info == null) return false;
+        try
+        {
+            Directory.CreateDirectory(JobPaths.LogsDir(info.FolderPath));
+            var path = JobPaths.SessionEventsLog(info.FolderPath);
+            var line = JsonSerializer.Serialize(evt, SessionEventJsonOpts) + Environment.NewLine;
+            File.AppendAllText(path, line, Encoding.UTF8);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to append session event for job {JobId}", jobId);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Rewrites the last row in <c>session-events.jsonl</c> with the
+    /// <paramref name="capturedSessionId"/>. Called from <c>OnCliFinished</c>
+    /// after a CLI emits its session UUID. Best-effort: a missing or
+    /// unparseable last line is ignored. Used to fill in the
+    /// <c>capturedSessionId</c> that the start-of-run event couldn't know yet.
+    /// </summary>
+    public bool BackfillLatestSessionEventCapturedId(string jobId, string capturedSessionId, string? watchPath = null)
+    {
+        if (string.IsNullOrWhiteSpace(capturedSessionId)) return false;
+        var info = FindJob(jobId, watchPath);
+        if (info == null) return false;
+        var path = JobPaths.SessionEventsLog(info.FolderPath);
+        if (!File.Exists(path)) return false;
+        try
+        {
+            var lines = File.ReadAllLines(path).ToList();
+            // Find last non-empty line
+            var idx = lines.FindLastIndex(l => !string.IsNullOrWhiteSpace(l));
+            if (idx < 0) return false;
+            SessionEvent? evt;
+            try { evt = JsonSerializer.Deserialize<SessionEvent>(lines[idx], JsonOpts); }
+            catch { return false; }
+            if (evt == null) return false;
+            var updated = evt with { CapturedSessionId = capturedSessionId };
+            lines[idx] = JsonSerializer.Serialize(updated, SessionEventJsonOpts);
+            File.WriteAllLines(path, lines, Encoding.UTF8);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to backfill captured session id for job {JobId}", jobId);
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Reads <c>logs/session-events.jsonl</c> into a list. Tolerant to torn
+    /// trailing lines: a line that fails to parse is skipped.
+    /// </summary>
+    public List<SessionEvent> ReadSessionEvents(string jobId, string? watchPath = null)
+    {
+        var info = FindJob(jobId, watchPath);
+        if (info == null) return [];
+        var path = JobPaths.SessionEventsLog(info.FolderPath);
+        if (!File.Exists(path)) return [];
+        var result = new List<SessionEvent>();
+        foreach (var line in File.ReadAllLines(path))
+        {
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            try
+            {
+                var evt = JsonSerializer.Deserialize<SessionEvent>(line, JsonOpts);
+                if (evt != null) result.Add(evt);
+            }
+            catch
+            {
+                // Best-effort: skip torn / malformed lines.
+            }
+        }
+        return result;
     }
 
     public bool UpdateLastUsage(string jobId, SessionUsage usage, string? watchPath = null)

@@ -93,4 +93,48 @@ public class TaskRunnerPromptTests
     {
         Assert.Equal(expected, ProjectRunner.ShouldUseResumePrompt(initialState, resume, sessionDropped));
     }
+
+    /// <summary>
+    /// Recovery-continuation prompt fires when the user clicks Continue but
+    /// the previous CLI session is gone. Must (a) acknowledge the loss so the
+    /// agent doesn't treat the run as a brand-new task, (b) point at the job
+    /// folder and instruct it to read prompt/status/log + run git, (c) include
+    /// the user's actual follow-up so the run continues with what they asked
+    /// for, and (d) bound the log read so we don't blow context on a giant
+    /// log. English-only because the prompt has to work across CLIs.
+    /// </summary>
+    [Fact]
+    public void BuildRecoveryContinuationPrompt_AcknowledgesLossAndIncludesFollowup()
+    {
+        var p = ProjectRunner.BuildRecoveryContinuationPrompt(
+            @"C:\jobs\fix-bug",
+            "Please continue with adding the chat compose box.");
+
+        Assert.Contains("session was lost", p, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(@"C:\jobs\fix-bug", p);
+        Assert.Contains("prompt.md", p);
+        Assert.Contains("status.md", p);
+        Assert.Contains("cli-output.log", p);
+        Assert.Contains("git status", p);
+        Assert.Contains("git diff", p);
+        Assert.Contains("Please continue with adding the chat compose box.", p);
+        // Bounded log read: the prompt must not just say "read logs/" — it has to cap the read.
+        Assert.Contains("200 lines", p);
+        // Treat as continuation, not restart.
+        Assert.Contains("continuation", p, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Empty / whitespace follow-up: prompt should still be valid (no
+    /// crashing TrimEnd, no trailing "User follow-up:" with nothing under it
+    /// that the agent would fixate on). The user-follow-up section just
+    /// degrades to an empty trailer.
+    /// </summary>
+    [Fact]
+    public void BuildRecoveryContinuationPrompt_HandlesEmptyFollowupGracefully()
+    {
+        var p = ProjectRunner.BuildRecoveryContinuationPrompt(@"C:\jobs\fix-bug", "");
+        Assert.Contains(@"C:\jobs\fix-bug", p);
+        Assert.Contains("User follow-up:", p);
+    }
 }

@@ -31,6 +31,14 @@ public record JobInfo
     public CliExecution? Execution { get; init; }
     /// <summary>Auto-commit produced on the progress→review transition; null when no commit recorded.</summary>
     public JobCommitInfo? Commit { get; init; }
+    /// <summary>
+    /// Ordered history of CLI session ids used by this job (oldest → newest). Each
+    /// successful resume of a forking CLI (Claude / Codex / Gemini) appends a new
+    /// id. <see cref="SessionName"/> is always the chain's last entry.
+    /// A recovery-continue (session lost, reconstructed from job folder) breaks
+    /// the chain — the next captured id will start a new logical chain segment.
+    /// </summary>
+    public List<string> SessionChain { get; init; } = [];
 }
 
 public record SessionUsage
@@ -39,6 +47,27 @@ public record SessionUsage
     public string? Tokens { get; init; }
     public string? Changes { get; init; }
     public string? Requests { get; init; }
+}
+
+/// <summary>
+/// One row in <c>logs/session-events.jsonl</c>. Records every start / continue
+/// / recovery so the user can see whether a follow-up actually loaded the
+/// previous CLI session or had to reconstruct from files.
+/// </summary>
+public record SessionEvent
+{
+    public DateTime Ts { get; init; }
+    /// <summary><c>start</c> | <c>continue</c> | <c>recovery</c></summary>
+    public string Kind { get; init; } = "";
+    public string? Cli { get; init; }
+    /// <summary>Session id we attempted to resume (null on fresh start / recovery).</summary>
+    public string? InputSessionId { get; init; }
+    /// <summary>Session id the CLI emitted in this run (filled after the run starts streaming).</summary>
+    public string? CapturedSessionId { get; init; }
+    /// <summary>True when we passed <c>-r</c> and the CLI accepted it; false on fresh start / recovery / dropped session.</summary>
+    public bool Resumed { get; init; }
+    /// <summary>Human-readable note when <see cref="Resumed"/> is false (e.g. <c>no session recorded</c>, <c>incompatible session id</c>).</summary>
+    public string? Reason { get; init; }
 }
 
 public record JobDetail

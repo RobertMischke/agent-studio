@@ -11,6 +11,7 @@ import {
 } from '../../../services/format.util';
 import { ClaudeSessionPollService } from '../claude-session-poll.service';
 import { CliOutputPollService } from '../cli-output-poll.service';
+import { SessionEventsPollService } from '../session-events-poll.service';
 import { NowTickService } from '../../../services/now-tick.service';
 
 export type InspectorTab = 'protocol' | 'activity';
@@ -56,15 +57,69 @@ export class ProtocolPaneComponent implements OnDestroy {
   // Live data — injected from the parent's local providers.
   private readonly claudePoll = inject(ClaudeSessionPollService);
   private readonly cliPoll = inject(CliOutputPollService);
+  private readonly sessionEventsPoll = inject(SessionEventsPollService);
   private readonly nowTick = inject(NowTickService).now;
 
   readonly claudeSession = this.claudePoll.session;
   readonly claudeRateLimit = this.claudePoll.rateLimit;
   readonly cliOutput = this.cliPoll.output;
 
+  /**
+   * Drives the session-status chip in the header. Shape:
+   *   - kind: "continued" | "lost" | "fresh" | null
+   *   - chainLength: number of real session ids ever recorded
+   *   - segmentCount: bumps every time the chain breaks (recovery)
+   *   - tooltip: human-readable summary of the latest event
+   * Returns null when there are no events yet (never been started).
+   */
+  readonly sessionChip = computed(() => {
+    const r = this.sessionEventsPoll.response();
+    if (!r || r.events.length === 0) return null;
+    const last = r.events[r.events.length - 1];
+    const chainLength = r.sessionChain.filter((s) => s && s !== '(recovery)').length;
+    const segmentCount = r.sessionChain.filter((s) => s === '(recovery)').length + (chainLength > 0 ? 1 : 0);
+
+    let kind: 'continued' | 'lost' | 'fresh';
+    let label: string;
+    let emoji: string;
+    if (last.kind === 'recovery') {
+      kind = 'lost';
+      emoji = '⚠';
+      label = 'session lost — recovered';
+    } else if (last.kind === 'continue') {
+      kind = 'continued';
+      emoji = '✓';
+      label = `session continued${chainLength > 1 ? ` (chain: ${chainLength})` : ''}`;
+    } else {
+      kind = 'fresh';
+      emoji = '●';
+      label = 'session started';
+    }
+
+    const reasonLine = last.reason ? `Reason: ${last.reason}\n` : '';
+    const inputLine = last.inputSessionId ? `Resumed from: ${last.inputSessionId}\n` : '';
+    const capturedLine = last.capturedSessionId ? `Captured: ${last.capturedSessionId}\n` : '';
+    const tooltip = [
+      `Last event: ${last.kind} (${last.cli ?? '?'})`,
+      `When: ${last.ts}`,
+      reasonLine.trim(),
+      inputLine.trim(),
+      capturedLine.trim(),
+      `Chain length: ${chainLength}`,
+      segmentCount > 1 ? `Chain breaks: ${segmentCount - 1}` : ''
+    ].filter(Boolean).join('\n');
+
+    return { kind, label, emoji, tooltip, chainLength, segmentCount };
+  });
+
   readonly summaryStatus = computed<JobSummaryStatus>(
     () => this.detail().summaryState?.status ?? 'none'
   );
+
+  // While the job is in 3-progress, the live Aktivität feed is what the user
+  // came here to see — surface it as the leftmost tab. Outside that state we
+  // keep the historical Protokoll-first order so the summary stays primary.
+  readonly inProgress = computed(() => this.detail().info.state === '3-progress');
 
   // The button is meaningful only after the task has produced a cli-output.log.
   // We can't see the disk from here, so use "summary has been touched" as a

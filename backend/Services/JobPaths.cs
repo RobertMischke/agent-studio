@@ -8,8 +8,10 @@ namespace OrchestratorApi.Services;
 internal static class JobPaths
 {
     public const string CliOutputLogFileName = "cli-output.log";
+    public const string SessionEventsLogFileName = "session-events.jsonl";
     public const string LogsDirName = "logs";
 
     public static string LogsDir(string jobFolder) => Path.Combine(jobFolder, LogsDirName);
     public static string CliOutputLog(string jobFolder) => Path.Combine(jobFolder, LogsDirName, CliOutputLogFileName);
+    public static string SessionEventsLog(string jobFolder) => Path.Combine(jobFolder, LogsDirName, SessionEventsLogFileName);
 }
