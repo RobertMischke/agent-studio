@@ -17,6 +17,7 @@ import {
 } from '../services/format.util';
 import { LayoutPanesService } from './job-detail/layout-panes.service';
 import { ClaudeSessionPollService } from './job-detail/claude-session-poll.service';
+import { SessionEventsPollService } from './job-detail/session-events-poll.service';
 import { GitPaneService } from './job-detail/git-pane.service';
 import { GitPaneComponent } from './job-detail/git-pane/git-pane.component';
 import { CliOutputPollService } from './job-detail/cli-output-poll.service';
@@ -33,7 +34,7 @@ import { markdownToHtml } from './markdown-utils';
   selector: 'app-job-detail',
   standalone: true,
   imports: [FormsModule, GitPaneComponent, CommandDeckComponent, PromptPaneComponent, LogOverlayComponent, ProtocolPaneComponent, DetailHeaderComponent, CliConfigCardComponent, PaneToggleBarComponent],
-  providers: [LayoutPanesService, ClaudeSessionPollService, GitPaneService, CliOutputPollService],
+  providers: [LayoutPanesService, ClaudeSessionPollService, SessionEventsPollService, GitPaneService, CliOutputPollService],
   // Keep styles global to this subtree so the still-inline class rules
   // (.pane*, .detail*, .inspector*, .notes-panel*, .sidebar-card*, …)
   // continue to reach the now-extracted sub-components without having
@@ -1243,6 +1244,11 @@ export class JobDetailComponent implements OnDestroy {
   readonly claudeSession = this.claudePoll.session;
   readonly claudeRateLimit = this.claudePoll.rateLimit;
 
+  // Per-job session-event log — drives the "session continued / lost"
+  // chip in the protocol pane header. Polled at a slower 10 s cadence
+  // because events only flip on start/continue/recovery, not per turn.
+  private readonly sessionEventsPoll = inject(SessionEventsPollService);
+
   // Git view state lives in GitPaneService (provided locally on this
   // component). Facades below keep the existing call sites unchanged.
   private readonly git = inject(GitPaneService);
@@ -1548,6 +1554,11 @@ export class JobDetailComponent implements OnDestroy {
     this.claudePoll.syncTo(this.detail()?.info ?? null);
   });
 
+  // Same bridge for the session-event poller (10 s cadence).
+  private readonly sessionEventsEffect = effect(() => {
+    this.sessionEventsPoll.syncTo(this.detail()?.info ?? null);
+  });
+
   canStartJob(): boolean {
     const state = this.detail().info.state;
     return (state === '2-ready' || state === '3-progress') && !this.isRunning();
@@ -1561,6 +1572,7 @@ export class JobDetailComponent implements OnDestroy {
       next: (exec) => {
         this.starting.set(false);
         this.cliPoll.beginRun(new Date(exec.startedAt));
+        this.sessionEventsPoll.refresh();
       },
       error: (err) => {
         this.starting.set(false);
@@ -1593,6 +1605,7 @@ export class JobDetailComponent implements OnDestroy {
       next: (exec) => {
         this.continuing.set(false);
         this.cliPoll.beginContinuation(new Date(exec.startedAt));
+        this.sessionEventsPoll.refresh();
       },
       error: (err) => {
         this.continuing.set(false);

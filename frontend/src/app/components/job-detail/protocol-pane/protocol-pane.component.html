@@ -22,6 +22,13 @@
               aria-label="Protocol generation failed">⚠</span>
       }
     </div>
+    @if (sessionChip(); as chip) {
+      <span class="pane__telemetry pane__session-chip pane__session-chip--{{ chip.kind }}"
+            [title]="chip.tooltip"
+            [attr.data-testid]="'session-chip-' + chip.kind">
+        {{ chip.emoji }} {{ chip.label }}
+      </span>
+    }
     @if (claudeSession(); as cs) {
       @if (cs.error && !cs.turnCount) {
         <span class="pane__telemetry pane__telemetry--err"

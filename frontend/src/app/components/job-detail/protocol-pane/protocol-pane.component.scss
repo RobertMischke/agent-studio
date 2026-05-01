@@ -319,6 +319,39 @@
   50%      { transform: rotate(8deg) scale(1.15); opacity: 1; }
 }
 
+/* Session continuity chip — green when a CLI session was successfully
+ * resumed/started, amber when continue had to fall back to a recovery
+ * (session lost; reconstructed from job folder). The tooltip carries the
+ * full event detail. Keeping it in the same row as the existing
+ * .pane__telemetry chips so the header layout stays compact. */
+.pane__session-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.78em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  cursor: help;
+
+  &--continued {
+    background: rgba(34, 197, 94, 0.10);
+    border-color: rgba(34, 197, 94, 0.40);
+    color: #86efac;
+  }
+  &--fresh {
+    background: rgba(99, 102, 241, 0.10);
+    border-color: rgba(99, 102, 241, 0.40);
+    color: #c7d2fe;
+  }
+  &--lost {
+    background: rgba(245, 158, 11, 0.12);
+    border-color: rgba(245, 158, 11, 0.50);
+    color: #fcd34d;
+  }
+}
+
 @keyframes pane-livedot-pulse {
   0%, 100% { opacity: 1; transform: scale(1); }
   50%      { opacity: 0.5; transform: scale(0.85); }

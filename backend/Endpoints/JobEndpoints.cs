@@ -307,6 +307,25 @@ public static class JobEndpoints
             return Results.Ok(output);
         });
 
+        // Returns the session-event log for a job: one record per start /
+        // continue / recovery, with input + captured session ids and a
+        // `resumed` boolean. Drives the "session continued / lost" chip and
+        // gives the user a paper trail when continuations don't behave as
+        // expected. Includes the current sessionChain so the frontend can
+        // render a chip without a second round-trip.
+        group.MapGet("/{jobId}/session-events", (string jobId, string? watchPath, JobScannerService scanner) =>
+        {
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info == null) return Results.NotFound(new { error = "Job not found" });
+            var events = scanner.ReadSessionEvents(jobId, watchPath);
+            return Results.Ok(new
+            {
+                events,
+                sessionChain = info.SessionChain,
+                currentSessionId = info.SessionName
+            });
+        });
+
         // Manual re-trigger of the Haiku summary that the runner normally fires
         // post-execution. Surfaced behind a button while we iterate on the prompt
         // and observe failure modes — overwrites status.md when Haiku succeeds.
