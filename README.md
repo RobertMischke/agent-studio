@@ -119,6 +119,27 @@ Backend on `http://localhost:5030`, frontend on `http://localhost:4010`. Agents 
 npm start --prefix frontend          # or VS Code task "Frontend: Start"
 ```
 
+### Dev vs. stable checkout
+
+All code edits happen in the **dev** checkout. The stable checkout exists for reference and gets changes via `git pull` from `main`, never via direct edits. The dev checkout marks itself visually so the two never get confused:
+
+- An orange "DEV" stripe is pinned to the top of the window.
+- The PWA install icon and favicon use an orange variant with a "DEV" corner ribbon.
+- The window title becomes `Agent Task Processor (DEV)`.
+
+These markers activate when the backend serves `/api/environment` with `{ isDev: true }`, which it does iff a local-only `backend/appsettings.Local.json` file is present:
+
+```json
+// backend/appsettings.Local.json — gitignored, dev checkout only
+{
+  "Environment": {
+    "IsDev": true
+  }
+}
+```
+
+The file is gitignored so it stays per-checkout. Stable lacks the file, so the same code produces the un-marked appearance there.
+
 ### Configuration
 
 ```json

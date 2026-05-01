@@ -22,6 +22,12 @@ AppDomain.CurrentDomain.UnhandledException += (_, e) =>
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Local-only override file (gitignored) — sets per-checkout flags such as
+// Environment:IsDev. Loaded after appsettings.Development.json so a developer
+// can flip the dev banner / dev PWA icon on for their checkout without
+// committing the toggle.
+builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
+
 builder.Services.AddSingleton<JobScannerService>();
 builder.Services.AddSingleton<JobWatcherService>();
 builder.Services.AddSingleton<CopilotCliEnvironment>();

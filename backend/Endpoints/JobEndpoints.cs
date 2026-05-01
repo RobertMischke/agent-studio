@@ -340,6 +340,15 @@ public static class JobEndpoints
             return Results.Ok(entries);
         });
 
+        // Returns flags that vary by per-checkout local config (appsettings.Local.json).
+        // The frontend reads this before bootstrap to decide whether to show the DEV
+        // banner and swap the PWA icon / favicon to the dev variants.
+        app.MapGet("/api/environment", (IConfiguration config) =>
+        {
+            var isDev = config.GetValue<bool>("Environment:IsDev");
+            return Results.Ok(new { isDev });
+        });
+
         // Lists the centrally-managed agent-rule files that are appended as a
         // system-prompt overlay to every Claude job. Used by the Job Detail
         // header to show "Active rules" so the user can verify what's in scope.

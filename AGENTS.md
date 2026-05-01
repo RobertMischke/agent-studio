@@ -6,6 +6,12 @@
 
 Agent Task Processor is a local AI work monitor: a .NET 10 backend plus an Angular 21 frontend that watches external job folders and displays agent progress as a Kanban board.
 
+## Edit only the dev checkout
+
+This repository is checked out twice in the parent `agent-taskboard-devspace/` folder — `agent-taskboard-dev/` (active development) and `agent-taskboard-stable/` (reference). **All edits go to the dev checkout.** Stable receives changes via `git pull` from `main` and is never edited directly.
+
+The dev checkout marks itself visually (orange "DEV" stripe, orange PWA icon, `(DEV)` window title) when `backend/appsettings.Local.json` contains `{ "Environment": { "IsDev": true } }`. That file is gitignored, so the same source tree renders un-marked on stable.
+
 Keep the product boundary clear:
 - This repository contains the task processor app source code, prompts, and docs.
 - Job folders live in watched target projects under `.orchestrator/jobs/`.

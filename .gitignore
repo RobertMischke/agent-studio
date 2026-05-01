@@ -16,3 +16,6 @@ artifacts/
 .claude-screenshots
 frontend/e2e/_baselines*
 test-results/
+
+# Per-checkout local config overrides (e.g. Environment:IsDev for the dev banner)
+backend/appsettings.Local.json

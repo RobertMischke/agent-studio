@@ -1,0 +1,24 @@
+{
+  "name": "Agent Task Processor (DEV)",
+  "short_name": "Task Processor DEV",
+  "description": "Agent Task Processor – DEV checkout",
+  "display": "standalone",
+  "background_color": "#1a1208",
+  "theme_color": "#f59e0b",
+  "scope": "./",
+  "start_url": "./",
+  "icons": [
+    {
+      "src": "icons-dev/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icons-dev/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}
