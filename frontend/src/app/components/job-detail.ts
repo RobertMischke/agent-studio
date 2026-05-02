@@ -101,6 +101,7 @@ import { markdownToHtml } from './markdown-utils';
         @if (isPaneRendered('prompt')) {
           <app-prompt-pane
             [markdown]="detail().promptMarkdown || ''"
+            [history]="detail().promptHistory || []"
             [maximized]="maximizedPane() === 'prompt'"
             [weight]="paneWeights().prompt"
             [isRunning]="isRunning()"

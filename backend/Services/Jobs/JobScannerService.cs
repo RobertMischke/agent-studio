@@ -228,11 +228,46 @@ public class JobScannerService
         {
             Info = info,
             PromptMarkdown = ReadFileOrNull(Path.Combine(dir, "prompt.md")),
+            PromptHistory = ReadPromptHistory(dir),
             StatusMarkdown = statusMd,
             ContextUsage = ReadContextUsage(dir),
             Log = BuildLog(dir),
             SummaryState = ResolveSummaryState(info.JobKey, statusMd)
         };
+    }
+
+    /// <summary>
+    /// Reads any <c>prompt-N.md</c> siblings of <c>prompt.md</c> in the job
+    /// folder and returns them ordered by N. Used by the Task Description
+    /// pane to render the blog-style timeline of task extensions written by
+    /// Extend mode.
+    /// </summary>
+    private static List<JobPromptHistoryEntry> ReadPromptHistory(string jobFolder)
+    {
+        var result = new List<JobPromptHistoryEntry>();
+        if (!Directory.Exists(jobFolder)) return result;
+        foreach (var path in Directory.EnumerateFiles(jobFolder, "prompt-*.md"))
+        {
+            var name = Path.GetFileNameWithoutExtension(path);
+            var dash = name.IndexOf('-');
+            if (dash < 0 || dash >= name.Length - 1) continue;
+            if (!int.TryParse(name[(dash + 1)..], out var index)) continue;
+            string body;
+            try { body = File.ReadAllText(path); }
+            catch { continue; }
+            DateTime writtenAt;
+            try { writtenAt = File.GetLastWriteTimeUtc(path); }
+            catch { writtenAt = DateTime.UtcNow; }
+            result.Add(new JobPromptHistoryEntry
+            {
+                Index = index,
+                FileName = Path.GetFileName(path),
+                Markdown = body,
+                WrittenAt = writtenAt
+            });
+        }
+        result.Sort((a, b) => a.Index.CompareTo(b.Index));
+        return result;
     }
 
     /// <summary>

@@ -1,5 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { MarkdownRichEditorComponent } from '../../markdown-rich-editor';
+import { JobPromptHistoryEntry } from '../../../models/job.model';
+import { markdownToHtml } from '../../markdown-utils';
 
 /**
  * Prompt pane of the job-detail view: renders prompt.md inside the
@@ -16,6 +18,7 @@ import { MarkdownRichEditorComponent } from '../../markdown-rich-editor';
 })
 export class PromptPaneComponent {
   readonly markdown = input<string>('');
+  readonly history = input<JobPromptHistoryEntry[]>([]);
   readonly maximized = input(false);
   readonly weight = input<number>(1);
   readonly isRunning = input(false);
@@ -25,4 +28,15 @@ export class PromptPaneComponent {
   readonly maximizeToggle = output<void>();
   readonly hide = output<void>();
   readonly save = output<string>();
+
+  renderMarkdown(md: string): string {
+    return markdownToHtml(md ?? '');
+  }
+
+  formatTime(iso: string): string {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleString();
+  }
 }

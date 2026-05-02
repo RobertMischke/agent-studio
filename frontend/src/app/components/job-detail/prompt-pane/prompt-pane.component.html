@@ -16,5 +16,23 @@
                               [jobId]="jobId()"
                               [watchPath]="watchPath()"
                               (save)="save.emit($event)" />
+
+    @if (history().length > 0) {
+      <section class="prompt-history" data-testid="prompt-history">
+        <header class="prompt-history__head">
+          <span class="prompt-history__title">Task extensions</span>
+          <span class="prompt-history__hint">Added via Extend mode in chat. Original task is above; entries below are read-only.</span>
+        </header>
+        @for (entry of history(); track entry.fileName) {
+          <article class="prompt-history__entry" [attr.data-testid]="'prompt-history-entry-' + entry.index">
+            <header class="prompt-history__entry-head">
+              <span class="prompt-history__badge">{{ entry.fileName }}</span>
+              <span class="prompt-history__time">{{ formatTime(entry.writtenAt) }}</span>
+            </header>
+            <div class="prompt-history__body markdown" [innerHTML]="renderMarkdown(entry.markdown)"></div>
+          </article>
+        }
+      </section>
+    }
   </div>
 </section>

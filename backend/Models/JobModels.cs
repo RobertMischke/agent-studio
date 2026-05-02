@@ -74,10 +74,29 @@ public record JobDetail
 {
     public JobInfo Info { get; init; } = new();
     public string? PromptMarkdown { get; init; }
+    /// <summary>
+    /// Append-only timeline of task extensions: <c>prompt-1.md</c>,
+    /// <c>prompt-2.md</c>, ... written by Extend mode. Empty when the user
+    /// has never extended the task. Read in the order the timeline was
+    /// written; the original task body is in <see cref="PromptMarkdown"/>.
+    /// </summary>
+    public List<JobPromptHistoryEntry> PromptHistory { get; init; } = [];
     public string? StatusMarkdown { get; init; }
     public ContextUsageSnapshot? ContextUsage { get; init; }
     public List<JobLogEntry> Log { get; init; } = [];
     public JobSummaryState? SummaryState { get; init; }
+}
+
+/// <summary>
+/// One entry in the task's prompt-extension timeline. Index matches the
+/// filename suffix (<c>prompt-3.md</c> → Index = 3).
+/// </summary>
+public record JobPromptHistoryEntry
+{
+    public int Index { get; init; }
+    public string FileName { get; init; } = "";
+    public string Markdown { get; init; } = "";
+    public DateTime WrittenAt { get; init; }
 }
 
 public enum JobSummaryStatus

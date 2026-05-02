@@ -185,9 +185,23 @@ export interface JobSummaryState {
   bytesWritten: number | null;
 }
 
+/**
+ * One entry in the prompt-extension timeline. Backend writes prompt-1.md,
+ * prompt-2.md, ... when the user sends a follow-up in Extend mode. The
+ * Task Description pane renders these as a blog-style sequence below the
+ * original task body.
+ */
+export interface JobPromptHistoryEntry {
+  index: number;
+  fileName: string;
+  markdown: string;
+  writtenAt: string;
+}
+
 export interface JobDetail {
   info: JobInfo;
   promptMarkdown: string | null;
+  promptHistory: JobPromptHistoryEntry[];
   statusMarkdown: string | null;
   contextUsage: ContextUsageSnapshot | null;
   log: JobLogEntry[];
