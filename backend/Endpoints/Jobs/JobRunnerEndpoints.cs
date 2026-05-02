@@ -1,6 +1,7 @@
 using OrchestratorApi.Models;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.Runner;
 
 namespace OrchestratorApi.Endpoints.Jobs;
 
@@ -23,12 +24,19 @@ public static class JobRunnerEndpoints
                 return Results.NotFound(new { error = "Job not found" });
 
             if (job.State is not (JobStates.Ready or JobStates.Progress))
-                return Results.BadRequest(new { error = $"Job is in state '{job.State}' — only jobs in 'ready' or 'progress' can be started" });
+                return Results.BadRequest(new { error = $"Job is in state '{job.State}' - only jobs in 'ready' or 'progress' can be started" });
 
-            var (execution, error) = await runner.StartJobAsync(jobId, watchPath, req?.Model, req?.CliType, ct);
-            return execution is not null
-                ? Results.Ok(execution)
-                : Results.BadRequest(new { error = error ?? "Cannot start job" });
+            try
+            {
+                var resp = await runner.StartJobAsync(jobId, watchPath, req?.Model, req?.CliType, ct);
+                return resp.Status == "queued"
+                    ? Results.Accepted(value: resp)
+                    : Results.Ok(resp);
+            }
+            catch (JobOperationException ex)
+            {
+                return Results.Json(new { error = ex.Message }, statusCode: ex.Status);
+            }
         });
 
         group.MapPost("/{jobId}/stop", (string jobId, string? watchPath, TaskRunnerService runner) =>
@@ -43,10 +51,17 @@ public static class JobRunnerEndpoints
                 return Results.BadRequest(new { error = "Prompt is required" });
 
             var mode = ContinueModes.Normalize(req.Mode);
-            var (execution, error) = await runner.ContinueJobAsync(jobId, req.Prompt, watchPath, req.Model, mode, ct);
-            return execution is not null
-                ? Results.Ok(execution)
-                : Results.BadRequest(new { error = error ?? "Cannot continue job" });
+            try
+            {
+                var resp = await runner.ContinueJobAsync(jobId, req.Prompt, watchPath, req.Model, mode, ct);
+                return resp.Status == "queued"
+                    ? Results.Accepted(value: resp)
+                    : Results.Ok(resp);
+            }
+            catch (JobOperationException ex)
+            {
+                return Results.Json(new { error = ex.Message }, statusCode: ex.Status);
+            }
         });
 
         group.MapGet("/{jobId}/output", (string jobId, string? watchPath, TaskRunnerService runner) =>

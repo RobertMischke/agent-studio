@@ -65,6 +65,59 @@ public class JobStateMachine
         }
     }
 
+    /// <summary>
+    /// Move a job to <c>2-ready</c> and reorder it to position 1 (next pickup).
+    /// Used by the busy-project queue path: when a follow-up arrives for a
+    /// non-active job, this promotes the target so the auto-pickup loop will
+    /// run it next.
+    ///
+    /// <para>Other queued jobs that already carry a <see cref="JobInfo.PendingIntent"/>
+    /// keep their relative order in front of this one, so the user's earlier
+    /// queued intents are not overtaken. Plain queued jobs (no pending
+    /// intent) shuffle down by one.</para>
+    /// </summary>
+    /// <returns>The 1-based position of the target in the new <c>2-ready</c> ordering, or 0 on failure.</returns>
+    public int PromoteToReadyTop(string jobId, string? watchPath = null)
+    {
+        var info = _scanner.FindJob(jobId, watchPath);
+        if (info == null) return 0;
+
+        if (info.State != JobStates.Ready)
+        {
+            var moved = MoveJob(jobId, JobStates.Ready, watchPath);
+            if (moved.Status != MoveJobStatus.Success) return 0;
+        }
+
+        // Recompute order across all 2-ready jobs in the same project, with
+        // the rule above. We only need to bump the moved job; everyone else
+        // keeps relative order.
+        var ready = _scanner.ScanAllJobs()
+            .Where(j => j.WatchPath == info.WatchPath && j.State == JobStates.Ready)
+            .OrderBy(j => j.Order)
+            .ToList();
+
+        // Build the new ordering: existing pending-intent jobs first (keep
+        // their relative order), then the promoted job, then the rest.
+        var pendingHead = ready.Where(j => j.Id != jobId && j.PendingIntent != null).ToList();
+        var rest = ready.Where(j => j.Id != jobId && j.PendingIntent == null).ToList();
+        var target = ready.FirstOrDefault(j => j.Id == jobId)
+                     ?? _scanner.FindJob(jobId, watchPath); // post-move re-fetch
+        if (target == null) return 0;
+
+        var ordered = new List<JobInfo>();
+        ordered.AddRange(pendingHead);
+        ordered.Add(target);
+        ordered.AddRange(rest);
+
+        var step = 10;
+        for (int i = 0; i < ordered.Count; i++)
+        {
+            JobJsonFile.UpdateOrder(ordered[i].FolderPath, (i + 1) * step, _logger);
+        }
+
+        return ordered.FindIndex(j => j.Id == jobId) + 1;
+    }
+
     public bool DeleteJob(string jobId, string? watchPath = null)
     {
         var info = _scanner.FindJob(jobId, watchPath);

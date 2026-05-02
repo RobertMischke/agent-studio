@@ -248,6 +248,124 @@ public class JobMutationService
     /// stays visible as part of the task description. <c>status.md</c> is intentionally not touched -
     /// it is owned by the post-run summary generator.
     /// </summary>
+    /// <summary>
+    /// Persist a user follow-up as a saved <see cref="PendingIntent"/> on the
+    /// target job. Used by the busy-project queue path: when the user sends a
+    /// follow-up to a job that is not the project's current active job, the
+    /// intent is saved here, the job is later promoted to <c>2-ready</c>, and
+    /// the auto-pickup loop consumes the saved intent on its next tick.
+    /// Latest-wins: a second save overwrites the first.
+    /// </summary>
+    public PendingIntent? SavePendingIntent(
+        string jobId,
+        string mode,
+        string prompt,
+        string reason,
+        string? activeJobId,
+        string? watchPath = null)
+    {
+        var info = _scanner.FindJob(jobId, watchPath);
+        if (info == null) return null;
+        var intent = new PendingIntent
+        {
+            Mode = ContinueModes.Normalize(mode),
+            Prompt = prompt ?? string.Empty,
+            SavedAt = DateTime.UtcNow,
+            SavedReason = string.IsNullOrWhiteSpace(reason) ? "project-busy" : reason,
+            SavedAgainstActiveJobId = activeJobId
+        };
+        try
+        {
+            var path = Path.Combine(info.FolderPath, "pending-intent.json");
+            File.WriteAllText(path,
+                JsonSerializer.Serialize(intent, _pendingIntentWriteOpts),
+                Encoding.UTF8);
+            return intent;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to save pending-intent.json for {JobId}", jobId);
+            return null;
+        }
+    }
+
+    private static readonly JsonSerializerOptions _pendingIntentWriteOpts = new()
+    {
+        WriteIndented = true,
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+    };
+
+    /// <summary>
+    /// Read and consume a saved pending intent. Returns null when there is
+    /// nothing to consume. The file is renamed to
+    /// <c>pending-intent.consumed.json</c> first, then deleted on success;
+    /// if the caller's run fails to spawn, the rollback rule is to rename it
+    /// back so the next tick retries instead of losing the user's input.
+    /// </summary>
+    public PendingIntent? ReadAndStashPendingIntent(string jobFolder)
+    {
+        var path = Path.Combine(jobFolder, "pending-intent.json");
+        if (!File.Exists(path)) return null;
+        try
+        {
+            var raw = File.ReadAllText(path);
+            var intent = JsonSerializer.Deserialize<PendingIntent>(raw, JobJsonFile.ReadOpts);
+            if (intent == null) return null;
+            var stash = Path.Combine(jobFolder, "pending-intent.consumed.json");
+            if (File.Exists(stash)) File.Delete(stash);
+            File.Move(path, stash);
+            return intent;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to read pending-intent.json at {Path}", path);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Finalize a successful pending-intent consumption: drop the stashed
+    /// <c>pending-intent.consumed.json</c>. Call once the run is known to
+    /// have spawned successfully.
+    /// </summary>
+    public void DiscardStashedPendingIntent(string jobFolder)
+    {
+        var stash = Path.Combine(jobFolder, "pending-intent.consumed.json");
+        if (File.Exists(stash))
+        {
+            try { File.Delete(stash); }
+            catch (Exception ex) { _logger.LogDebug(ex, "Could not delete {Stash}", stash); }
+        }
+    }
+
+    /// <summary>
+    /// Roll back a failed pending-intent consumption: move the stash back to
+    /// <c>pending-intent.json</c> so the next pickup tries again. If the
+    /// canonical file already exists (rare race), the stash is dropped to
+    /// honor latest-wins.
+    /// </summary>
+    public void RollbackStashedPendingIntent(string jobFolder)
+    {
+        var stash = Path.Combine(jobFolder, "pending-intent.consumed.json");
+        if (!File.Exists(stash)) return;
+        var canonical = Path.Combine(jobFolder, "pending-intent.json");
+        try
+        {
+            if (File.Exists(canonical))
+            {
+                File.Delete(stash);
+            }
+            else
+            {
+                File.Move(stash, canonical);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to roll back pending-intent at {Stash}", stash);
+        }
+    }
+
     public bool AppendContinuationNote(string jobId, string followupPrompt, string? watchPath = null)
     {
         if (string.IsNullOrWhiteSpace(followupPrompt)) return false;

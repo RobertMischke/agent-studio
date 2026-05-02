@@ -23,6 +23,7 @@ public class ProjectRunner
     private readonly RuntimePromptService _prompts;
     private readonly JobTransitionService _transitions;
     private readonly OrchestratorChatLog _chatLog;
+    private readonly JobMutationService _mutations;
     private string _mode = "manual";
     private string? _activeJobId;
     private string? _activeCliType;
@@ -61,7 +62,8 @@ public class ProjectRunner
         SummaryGenerationService summaryService,
         RuntimePromptService prompts,
         JobTransitionService transitions,
-        OrchestratorChatLog chatLog)
+        OrchestratorChatLog chatLog,
+        JobMutationService mutations)
     {
         ProjectName = projectName;
         Entry = entry;
@@ -74,6 +76,7 @@ public class ProjectRunner
         _prompts = prompts;
         _transitions = transitions;
         _chatLog = chatLog;
+        _mutations = mutations;
 
         // Listen across all CLI backends for completion of the active job.
         _router.OnFinished += (cliType, jobKey, exec) => OnCliFinished(cliType, jobKey, exec);
@@ -142,7 +145,7 @@ public class ProjectRunner
         await RunCliAsync(nextJob.Id, RunIntent.AutoPickup, followupPrompt: null, reissueAttempt: 0, mode: null, ct);
     }
 
-    public Task<(CliExecution? Execution, string? Error)> StartJobManualAsync(string jobId, CancellationToken ct)
+    public Task<RunOutcome> StartJobManualAsync(string jobId, CancellationToken ct)
         => RunCliAsync(jobId, RunIntent.ManualStart, followupPrompt: null, reissueAttempt: 0, mode: null, ct);
 
     /// <summary>
@@ -152,7 +155,7 @@ public class ProjectRunner
     /// instructed to reconstruct context from the job folder. Moves the job back
     /// to <c>3-progress</c> if it sits in <c>4-review</c> or <c>5-completed</c>.
     /// </summary>
-    public Task<(CliExecution? Execution, string? Error)> ContinueJobAsync(string jobId, string followupPrompt, string? mode, CancellationToken ct)
+    public Task<RunOutcome> ContinueJobAsync(string jobId, string followupPrompt, string? mode, CancellationToken ct)
         => RunCliAsync(jobId, RunIntent.UserContinue, followupPrompt, reissueAttempt: 0, mode: mode, ct);
 
     /// <summary>
@@ -163,21 +166,50 @@ public class ProjectRunner
     /// endpoint route through here so a fix in one path can never miss its
     /// sibling - that divergence is the bug class this design exists to prevent.
     /// </summary>
-    private async Task<(CliExecution? Execution, string? Error)> RunCliAsync(
+    private async Task<RunOutcome> RunCliAsync(
         string jobId, RunIntent intent, string? followupPrompt, int reissueAttempt, string? mode, CancellationToken ct)
     {
         if (_activeJobId != null)
         {
             if (intent == RunIntent.ManualStart)
                 _logger.LogWarning("Runner '{Project}' already has active job {JobId}", ProjectName, _activeJobId);
-            return (null, $"Runner '{ProjectName}' is already executing job '{_activeJobId}'");
+            // Look up the active job's title for the queued response so the
+            // TaskRunnerService can shape a friendly meta message without
+            // re-scanning. Best-effort; null title is fine.
+            string? activeTitle = null;
+            try { activeTitle = _scanner.FindJob(_activeJobId!, Entry.Path)?.Title; } catch { }
+            return RunOutcome.Reject(new RunRejection(
+                Reason: RunRejectReason.ProjectBusy,
+                Message: $"Runner '{ProjectName}' is already executing job '{_activeJobId}'",
+                BusyJobId: _activeJobId,
+                BusyJobTitle: activeTitle));
         }
 
         _processing = true;
         try
         {
             var info = _scanner.FindJob(jobId, Entry.Path);
-            if (info == null) return (null, "Job not found");
+            if (info == null) return RunOutcome.Reject(new RunRejection(RunRejectReason.JobNotFound, "Job not found"));
+
+            // Auto-pickup consumes a saved pending-intent if there is one,
+            // turning what would have been a fresh-start run into a
+            // UserContinue with the saved prompt + mode. This is the runtime
+            // half of the busy-project queue: TaskRunnerService writes the
+            // intent + promotes to 2-ready; the auto-pickup here picks the
+            // job and runs the saved continue.
+            if (intent == RunIntent.AutoPickup && info.PendingIntent != null)
+            {
+                var stashed = _mutations.ReadAndStashPendingIntent(info.FolderPath);
+                if (stashed != null && !string.IsNullOrWhiteSpace(stashed.Prompt))
+                {
+                    _logger.LogInformation(
+                        "[taskboard] auto-pickup of {JobId} consuming saved {Mode} intent ({Chars} chars)",
+                        jobId, stashed.Mode, stashed.Prompt.Length);
+                    intent = RunIntent.UserContinue;
+                    followupPrompt = stashed.Prompt;
+                    mode = stashed.Mode;
+                }
+            }
 
             var cli = GetCliFor(info);
             var initialState = info.State;
@@ -266,10 +298,18 @@ public class ProjectRunner
                 _activeJobId = null;
                 _activeCliType = null;
                 NotifyStatus();
-                return (null, cliError ?? $"Failed to start {cli.CliType} CLI process");
+                // Roll back the consumed pending-intent on spawn failure so
+                // the next auto-pickup retries instead of losing the user's
+                // input.
+                _mutations.RollbackStashedPendingIntent(info.FolderPath);
+                return RunOutcome.Reject(new RunRejection(
+                    Reason: RunRejectReason.CliUnavailable,
+                    Message: cliError ?? $"Failed to start {cli.CliType} CLI process"));
             }
 
-            return (execution, null);
+            // Spawn succeeded; drop the stashed intent (we've consumed it).
+            _mutations.DiscardStashedPendingIntent(info.FolderPath);
+            return RunOutcome.Started(execution);
         }
         finally
         {

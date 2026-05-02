@@ -89,7 +89,7 @@ public class TaskRunnerService : BackgroundService
                 continue;
             }
 
-            var runner = new ProjectRunner(entry.Name, entry, _logger, _scanner, _states, _sessions, _router, _summaryService, _prompts, _transitions, _chatLog);
+            var runner = new ProjectRunner(entry.Name, entry, _logger, _scanner, _states, _sessions, _router, _summaryService, _prompts, _transitions, _chatLog, _mutations);
             runner.OnStatusChanged += status => OnRunnerStatusChanged?.Invoke(entry.Name, status);
             // Persist every mode change so the auto-pickup toggle survives
             // backend restarts. Includes implicit transitions like "auto-single
@@ -146,13 +146,13 @@ public class TaskRunnerService : BackgroundService
         return true;
     }
 
-    public async Task<(CliExecution? Execution, string? Error)> StartJobAsync(string jobId, string? watchPath = null, string? modelOverride = null, string? cliTypeOverride = null, CancellationToken ct = default)
+    public async Task<ContinueJobResponse> StartJobAsync(string jobId, string? watchPath = null, string? modelOverride = null, string? cliTypeOverride = null, CancellationToken ct = default)
     {
         var info = _scanner.FindJob(jobId, watchPath);
-        if (info == null) return (null, "Job not found");
+        if (info == null) throw new JobOperationException("Job not found", 404);
 
         var runner = _runners.Values.FirstOrDefault(r => r.Entry.Name == info.ProjectName);
-        if (runner == null) return (null, $"No runner configured for project '{info.ProjectName}' - check RootPath in WatchPaths config");
+        if (runner == null) throw new JobOperationException($"No runner configured for project '{info.ProjectName}' - check RootPath in WatchPaths config", 400);
 
         // Persist CLI type override before validity check so the next iteration picks it up.
         if (!string.IsNullOrWhiteSpace(cliTypeOverride) && cliTypeOverride != info.CliType)
@@ -162,7 +162,7 @@ public class TaskRunnerService : BackgroundService
         }
 
         var cli = _router.Get(info.CliType);
-        if (!cli.IsAvailable()) return (null, $"{cli.CliType} CLI is not installed or not on PATH");
+        if (!cli.IsAvailable()) throw new JobOperationException($"{cli.CliType} CLI is not installed or not on PATH", 400);
 
         // Persist override on the job so subsequent runs reuse it
         if (!string.IsNullOrWhiteSpace(modelOverride) && modelOverride != info.Model)
@@ -170,7 +170,8 @@ public class TaskRunnerService : BackgroundService
             _mutations.SetJobModel(jobId, modelOverride, watchPath);
         }
 
-        return await runner.StartJobManualAsync(jobId, ct);
+        var outcome = await runner.StartJobManualAsync(jobId, ct);
+        return ShapeOutcome(outcome, info, jobId, watchPath, mode: ContinueModes.Continue, prompt: string.Empty);
     }
 
     /// <summary>
@@ -182,15 +183,15 @@ public class TaskRunnerService : BackgroundService
     /// continuation they asked for instead of a 400 - at the cost of conversation
     /// memory that wasn't already on disk.
     /// </summary>
-    public async Task<(CliExecution? Execution, string? Error)> ContinueJobAsync(string jobId, string followupPrompt, string? watchPath = null, string? modelOverride = null, string? mode = null, CancellationToken ct = default)
+    public async Task<ContinueJobResponse> ContinueJobAsync(string jobId, string followupPrompt, string? watchPath = null, string? modelOverride = null, string? mode = null, CancellationToken ct = default)
     {
         var info = _scanner.FindJob(jobId, watchPath);
-        if (info == null) return (null, "Job not found");
+        if (info == null) throw new JobOperationException("Job not found", 404);
 
         var runner = _runners.Values.FirstOrDefault(r => r.Entry.Name == info.ProjectName);
-        if (runner == null) return (null, $"No runner configured for project '{info.ProjectName}'");
+        if (runner == null) throw new JobOperationException($"No runner configured for project '{info.ProjectName}'", 400);
         var cli = _router.Get(info.CliType);
-        if (!cli.IsAvailable()) return (null, $"{cli.CliType} CLI is not installed or not on PATH");
+        if (!cli.IsAvailable()) throw new JobOperationException($"{cli.CliType} CLI is not installed or not on PATH", 400);
 
         if (!string.IsNullOrWhiteSpace(modelOverride) && modelOverride != info.Model)
         {
@@ -221,7 +222,80 @@ public class TaskRunnerService : BackgroundService
         _mutations.AppendContinuationNote(jobId, followupPrompt, watchPath);
         AppendUserPromptToCliLog(info, followupPrompt);
 
-        return await runner.ContinueJobAsync(jobId, followupPrompt, normalizedMode, ct);
+        var outcome = await runner.ContinueJobAsync(jobId, followupPrompt, normalizedMode, ct);
+        return ShapeOutcome(outcome, info, jobId, watchPath, normalizedMode, followupPrompt);
+    }
+
+    /// <summary>
+    /// Translates a <see cref="RunOutcome"/> from <see cref="ProjectRunner"/>
+    /// into a <see cref="ContinueJobResponse"/> for the HTTP layer. The
+    /// busy-project case is the load-bearing branch: the user's intent gets
+    /// saved as a draft on the target job, the job is promoted to the top of
+    /// <c>2-ready</c>, the chat receives an orchestrator <c>[queued]</c>
+    /// meta line, and the response is shaped as <c>status: "queued"</c>
+    /// (the endpoint returns 202). Other rejection reasons surface as
+    /// <see cref="JobOperationException"/>.
+    /// </summary>
+    private ContinueJobResponse ShapeOutcome(
+        RunOutcome outcome,
+        JobInfo info,
+        string jobId,
+        string? watchPath,
+        string mode,
+        string prompt)
+    {
+        if (outcome.Execution != null)
+        {
+            return new ContinueJobResponse { Status = "started", Execution = outcome.Execution };
+        }
+
+        var rej = outcome.Rejection ?? new RunRejection(RunRejectReason.None, "unknown");
+
+        if (rej.Reason == RunRejectReason.ProjectBusy)
+        {
+            // Save user intent + promote the target job to top of 2-ready,
+            // then post the orchestrator meta line into the chat. From the
+            // user's seat, the modal disappears and the chat reflects the
+            // queued state.
+            var savedIntent = _mutations.SavePendingIntent(
+                jobId, mode, prompt,
+                reason: "project-busy",
+                activeJobId: rej.BusyJobId,
+                watchPath: watchPath);
+
+            var fromState = info.State;
+            var position = _states.PromoteToReadyTop(jobId, watchPath);
+
+            try
+            {
+                var refreshed = _scanner.FindJob(jobId, watchPath) ?? info;
+                _chatLog.Append(refreshed, OrchestratorMessageKind.Decision,
+                    $"[queued] Saved your follow-up. Project busy with \"{rej.BusyJobTitle ?? rej.BusyJobId ?? "another task"}\"; this task moved from {fromState} to 2-ready (position {position}). Will run on next auto-pickup.");
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to write [queued] meta for {JobId}", jobId);
+            }
+
+            return new ContinueJobResponse
+            {
+                Status = "queued",
+                Queued = new ContinueJobQueuedInfo
+                {
+                    Reason = "project-busy",
+                    ActiveJobId = rej.BusyJobId,
+                    ActiveJobTitle = rej.BusyJobTitle,
+                    Position = position > 0 ? position : 1,
+                    PromotedFromState = fromState
+                }
+            };
+        }
+
+        if (rej.Reason == RunRejectReason.JobNotFound)
+            throw new JobOperationException(rej.Message ?? "Job not found", 404);
+
+        // CliUnavailable, None, or anything else: 400 with the message.
+        throw new JobOperationException(rej.Message ?? "Cannot start job", 400);
     }
 
     /// <summary>

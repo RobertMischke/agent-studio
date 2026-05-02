@@ -90,10 +90,20 @@ export async function startJob(
   watchPath: string,
   opts: StartJobOptions = {}
 ): Promise<JobExecution> {
-  return api<JobExecution>(
+  // /start returns ContinueJobResponse: { status: "started", execution }
+  // when running now, or { status: "queued", queued: { ... } } when the
+  // project is busy. Tests that call this helper expect the running
+  // case; unwrap to the execution and throw if we got queued instead.
+  const resp = await api<{ status: string; execution?: JobExecution; queued?: unknown }>(
     `/api/jobs/${encodeURIComponent(jobId)}/start?watchPath=${encodeURIComponent(watchPath)}`,
     { method: 'POST', body: JSON.stringify({ model: opts.model ?? null, cliType: opts.cliType ?? null }) }
   );
+  if (resp.status !== 'started' || !resp.execution) {
+    throw new Error(
+      `startJob(${jobId}): expected status=started, got status=${resp.status}. queued=${JSON.stringify(resp.queued ?? null)}`
+    );
+  }
+  return resp.execution;
 }
 
 export async function getJobOutput(jobId: string, watchPath: string): Promise<unknown> {

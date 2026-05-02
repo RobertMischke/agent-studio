@@ -1,5 +1,5 @@
 import { Component, OnDestroy, OnInit, computed, inject, input, signal } from '@angular/core';
-import { JobInfo } from '../models/job.model';
+import { JobInfo, PendingIntent } from '../models/job.model';
 import { GitSummaryService } from '../services/git-summary.service';
 import { cliTypeIcon } from '../services/format.util';
 import { projectIdentity } from '../services/project-identity.util';
@@ -39,6 +39,13 @@ if (typeof window !== 'undefined') {
           <span class="job-card__execution-pill" [class]="'job-card__execution-pill--' + badge.tone">
             <span class="job-card__execution-dot"></span>
             {{ badge.label }}
+          </span>
+        }
+        @if (job().pendingIntent; as pi) {
+          <span class="job-card__pending-pill"
+                [title]="pendingTooltip(pi)"
+                data-testid="job-card-pending">
+            ⏳ {{ pi.mode }}
           </span>
         }
       </div>
@@ -189,7 +196,8 @@ if (typeof window !== 'undefined') {
       margin-bottom: 10px;
     }
     .job-card__state-pill,
-    .job-card__execution-pill {
+    .job-card__execution-pill,
+    .job-card__pending-pill {
       display: inline-flex;
       align-items: center;
       gap: 6px;
@@ -198,6 +206,12 @@ if (typeof window !== 'undefined') {
       font-size: 11px;
       font-weight: 600;
       letter-spacing: 0.02em;
+    }
+    .job-card__pending-pill {
+      color: #f9e2af;
+      background: rgba(249, 226, 175, 0.12);
+      border: 1px solid rgba(249, 226, 175, 0.28);
+      cursor: help;
     }
     .job-card__state-pill {
       background: rgba(255,255,255,0.06);
@@ -338,6 +352,15 @@ export class JobCardComponent implements OnInit, OnDestroy {
     }
 
     return null;
+  }
+
+  pendingTooltip(pi: PendingIntent): string {
+    const when = (() => {
+      try { return new Date(pi.savedAt).toLocaleString(); }
+      catch { return pi.savedAt; }
+    })();
+    const preview = (pi.prompt ?? '').slice(0, 120);
+    return `Pending follow-up (${pi.mode}) saved ${when}.\nWill run on next auto-pickup.\n\n${preview}${(pi.prompt ?? '').length > 120 ? '...' : ''}`;
   }
 
   formatSize(bytes: number): string {

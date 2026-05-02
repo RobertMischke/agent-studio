@@ -39,6 +39,13 @@ public record JobInfo
     /// the chain; the next captured id will start a new logical chain segment.
     /// </summary>
     public List<string> SessionChain { get; init; } = [];
+    /// <summary>
+    /// Saved user intent waiting for the auto-pickup loop to run. Populated
+    /// when the user sends a follow-up to a job that is not the project's
+    /// current active job; cleared once the runner consumes it. See
+    /// <see cref="PendingIntent"/>.
+    /// </summary>
+    public PendingIntent? PendingIntent { get; init; }
 }
 
 public record SessionUsage
@@ -297,6 +304,57 @@ public record ContinueJobRequest
     /// See <see cref="ContinueModes"/>.
     /// </summary>
     public string? Mode { get; init; }
+}
+
+/// <summary>
+/// Discriminated response for <c>POST /api/jobs/{id}/continue</c> and
+/// <c>POST /api/jobs/{id}/start</c>. <c>started</c> means the run is
+/// actually live; <c>queued</c> means the project was busy with another
+/// job, the user's intent has been saved as a draft on the target task,
+/// and the target task has been moved to the top of <c>2-ready</c> so the
+/// auto-pickup loop will run it on the next tick. The frontend treats
+/// queued as success-with-info (no modal); the chat carries the
+/// orchestrator's <c>[queued]</c> meta line for user-facing feedback.
+/// </summary>
+public record ContinueJobResponse
+{
+    /// <summary><c>started</c> | <c>queued</c></summary>
+    public string Status { get; init; } = "started";
+    public CliExecution? Execution { get; init; }
+    public ContinueJobQueuedInfo? Queued { get; init; }
+}
+
+public record ContinueJobQueuedInfo
+{
+    /// <summary><c>project-busy</c> is the only reason today.</summary>
+    public string Reason { get; init; } = "project-busy";
+    /// <summary>The job that was running when the user's send hit; for context only.</summary>
+    public string? ActiveJobId { get; init; }
+    public string? ActiveJobTitle { get; init; }
+    /// <summary>Where in the <c>2-ready</c> queue the target ended up (1 = next pickup).</summary>
+    public int Position { get; init; }
+    /// <summary>The state the target was in before the queue promotion.</summary>
+    public string? PromotedFromState { get; init; }
+}
+
+/// <summary>
+/// Saved user intent on a job that could not run immediately because the
+/// project was busy. Persisted as <c>pending-intent.json</c> in the job
+/// folder. The auto-pickup loop reads and consumes this when it runs the
+/// job, which turns the auto-pickup into a UserContinue with the saved
+/// follow-up + mode instead of a fresh start.
+/// </summary>
+public record PendingIntent
+{
+    public int Version { get; init; } = 1;
+    /// <summary>One of <see cref="ContinueModes"/>.</summary>
+    public string Mode { get; init; } = ContinueModes.Continue;
+    public string Prompt { get; init; } = "";
+    public DateTime SavedAt { get; init; }
+    /// <summary><c>project-busy</c> for now.</summary>
+    public string SavedReason { get; init; } = "project-busy";
+    /// <summary>Diagnostic only: which job was active when this was saved.</summary>
+    public string? SavedAgainstActiveJobId { get; init; }
 }
 
 /// <summary>

@@ -93,6 +93,8 @@ export interface JobInfo {
   lastUsage: SessionUsage | null;
   execution: CliExecution | null;
   commit: JobCommitInfo | null;
+  /** Saved user intent waiting for the auto-pickup loop. Surfaces in the UI as a ⏳ badge. */
+  pendingIntent?: PendingIntent | null;
 }
 
 export interface JobCommitInfo {
@@ -176,6 +178,43 @@ export type JobSummaryStatus = 'none' | 'generating' | 'ready' | 'failed';
  *             the request is new.
  */
 export type ContinueMode = 'continue' | 'steer' | 'extend' | 'newTask';
+
+/**
+ * Saved user intent waiting for the auto-pickup loop to run. Populated when
+ * the user sends a follow-up to a job that is not the project's current
+ * active job; the project busy at the time saved this draft on disk.
+ * Mirrors backend `PendingIntent`.
+ */
+export interface PendingIntent {
+  version: number;
+  mode: ContinueMode;
+  prompt: string;
+  savedAt: string;
+  savedReason: string;
+  savedAgainstActiveJobId: string | null;
+}
+
+/**
+ * Discriminated response for `POST /api/jobs/{id}/continue` and `/start`.
+ * `started` means the run is live; `queued` means the project was busy
+ * with another job, the user's intent has been saved on the target task,
+ * and the target task is now at the top of `2-ready`. The frontend treats
+ * `queued` as success-with-info (no modal); the chat carries the
+ * orchestrator's `[queued]` line.
+ */
+export interface ContinueJobResponse {
+  status: 'started' | 'queued';
+  execution?: CliExecution | null;
+  queued?: ContinueJobQueuedInfo | null;
+}
+
+export interface ContinueJobQueuedInfo {
+  reason: 'project-busy';
+  activeJobId?: string | null;
+  activeJobTitle?: string | null;
+  position: number;
+  promotedFromState?: string | null;
+}
 
 export interface JobSummaryState {
   status: JobSummaryStatus;

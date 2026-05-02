@@ -183,7 +183,8 @@ public class JobScannerService
                 Commit = raw.TryGetProperty("commit", out var commit) && commit.ValueKind == JsonValueKind.Object
                     ? JsonSerializer.Deserialize<JobCommitInfo>(commit.GetRawText(), JobJsonFile.ReadOpts)
                     : null,
-                SessionChain = ReadSessionChain(raw)
+                SessionChain = ReadSessionChain(raw),
+                PendingIntent = ReadPendingIntent(jobDir)
             };
         }
         catch (Exception ex)
@@ -234,6 +235,25 @@ public class JobScannerService
             Log = BuildLog(dir),
             SummaryState = ResolveSummaryState(info.JobKey, statusMd)
         };
+    }
+
+    /// <summary>
+    /// Reads <c>pending-intent.json</c> if present. Returns null when the
+    /// job has no saved follow-up draft. See <see cref="PendingIntent"/>.
+    /// </summary>
+    private static PendingIntent? ReadPendingIntent(string jobFolder)
+    {
+        var path = Path.Combine(jobFolder, "pending-intent.json");
+        if (!File.Exists(path)) return null;
+        try
+        {
+            var raw = File.ReadAllText(path);
+            return JsonSerializer.Deserialize<PendingIntent>(raw, JobJsonFile.ReadOpts);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     /// <summary>

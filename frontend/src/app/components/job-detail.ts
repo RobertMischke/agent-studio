@@ -1620,10 +1620,15 @@ export class JobDetailComponent implements OnDestroy {
     this.starting.set(true);
     const model = this.modelDraft().trim() || undefined;
     this.jobService.startJob(this.detail().info.id, this.detail().info.watchPath, model).subscribe({
-      next: (exec) => {
+      next: (resp) => {
         this.starting.set(false);
-        this.cliPoll.beginRun(new Date(exec.startedAt));
-        this.sessionEventsPoll.refresh();
+        if (resp.status === 'started' && resp.execution) {
+          this.cliPoll.beginRun(new Date(resp.execution.startedAt));
+          this.sessionEventsPoll.refresh();
+        }
+        // status === 'queued': no modal, no error. The orchestrator's
+        // [queued] meta line lands in the activity log on the next poll
+        // tick. The job's pendingIntent badge will appear on the card.
       },
       error: (err) => {
         this.starting.set(false);
@@ -1653,10 +1658,16 @@ export class JobDetailComponent implements OnDestroy {
     this.followupPrompt.set('');
     const model = this.modelDraft().trim() || undefined;
     this.jobService.continueJob(this.detail().info.id, prompt, this.detail().info.watchPath, model, undefined, this.continueMode()).subscribe({
-      next: (exec) => {
+      next: (resp) => {
         this.continuing.set(false);
-        this.cliPoll.beginContinuation(new Date(exec.startedAt));
-        this.sessionEventsPoll.refresh();
+        if (resp.status === 'started' && resp.execution) {
+          this.cliPoll.beginContinuation(new Date(resp.execution.startedAt));
+          this.sessionEventsPoll.refresh();
+        }
+        // status === 'queued': the project was busy. The backend already
+        // saved the user's intent + posted a [queued] orchestrator line
+        // into the chat; nothing more for us to do here. The optimistic
+        // user-message echo above stays so the chat reads forward.
       },
       error: (err) => {
         this.continuing.set(false);
