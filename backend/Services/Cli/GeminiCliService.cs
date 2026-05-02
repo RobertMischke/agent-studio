@@ -55,14 +55,21 @@ public sealed class GeminiCliService : CliExecutionServiceBase
     {
         // Order matters less for gemini than for codex, but keep it stable so
         // logs / arg parsers see the same shape every run.
-        //   gemini -p "<prompt>" -o stream-json --skip-trust -y [-m <id>] [-r <uuid>]
+        //   gemini -p " " -o stream-json --skip-trust -y [-m <id>] [-r <uuid>]
         //
+        // -p with a single-space placeholder forces non-interactive mode; per
+        // gemini's --help "Appended to input on stdin (if any)", the actual
+        // multi-line prompt is piped via stdin (see GetPromptStdinPayload).
+        // The placeholder space is appended after our stdin content; trailing
+        // whitespace is meaningless to the model. Embedding the rendered
+        // prompt as a quoted -p value broke Claude runs on Windows
+        // (ADR-0008) and the same cmd.exe quoting/length limit applies here.
         // -y / --yolo: auto-approve tool calls (analogous to Claude's
         //              --dangerously-skip-permissions). Required for unattended
         //              runs because the default tool-approval prompt is interactive.
         // --skip-trust: bypass the "Do you trust this folder?" dialog. Without it
         //              the CLI blocks on a modal dialog and never reaches the prompt.
-        var args = new List<string> { "-p", Quote(prompt), "-o", "stream-json", "--skip-trust", "-y" };
+        var args = new List<string> { "-p", "\" \"", "-o", "stream-json", "--skip-trust", "-y" };
 
         if (!string.IsNullOrWhiteSpace(model))
         {
@@ -83,6 +90,19 @@ public sealed class GeminiCliService : CliExecutionServiceBase
             WorkingDirectory = workingDirectory
         };
     }
+
+    /// <summary>
+    /// Pipe the rendered prompt through stdin. -p still gets a one-character
+    /// placeholder to keep the CLI in non-interactive mode; gemini's --help
+    /// guarantees stdin is concatenated with -p, so the real task body
+    /// arrives via stdin without any quoting/length surface in argv.
+    /// </summary>
+    protected override string? GetPromptStdinPayload(
+        string prompt,
+        string? sessionName,
+        bool resumeSession,
+        string? model)
+        => prompt;
 
     // The init frame's UUID is rendered by TransformReadLine into a marker line
     //   "● Session init <uuid> (<model>)"

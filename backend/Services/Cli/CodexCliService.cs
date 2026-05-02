@@ -57,7 +57,13 @@ public sealed class CodexCliService : CliExecutionServiceBase
         string? model)
     {
         // For Codex, sessionName is the session UUID (or null for a fresh session).
-        // codex exec [resume <uuid>] [--json] [-m <model>] "<prompt>"
+        // codex exec [resume <uuid>] [--json] [-m <model>] -
+        // The trailing "-" tells codex exec to read instructions from stdin
+        // (per its --help: "If `-` is used, instructions are read from
+        // stdin"). We pipe the rendered prompt via stdin instead of embedding
+        // it in argv because cmd.exe truncates multi-line quoted arguments
+        // on Windows; the same root cause was breaking Claude runs before
+        // ADR-0008's fix and almost certainly affects Codex the same way.
         var args = new List<string> { "exec" };
 
         if (resumeSession && !string.IsNullOrWhiteSpace(sessionName))
@@ -75,7 +81,7 @@ public sealed class CodexCliService : CliExecutionServiceBase
             args.Add(Quote(model));
         }
 
-        args.Add(Quote(prompt));
+        args.Add("-");
 
         return new ProcessStartInfo
         {
@@ -84,6 +90,19 @@ public sealed class CodexCliService : CliExecutionServiceBase
             WorkingDirectory = workingDirectory
         };
     }
+
+    /// <summary>
+    /// Pipe the rendered prompt through stdin instead of embedding it in argv.
+    /// See the BuildStartInfo comment and ClaudeCliService for the diagnosis;
+    /// the same Windows quoting / length truncation hits any CLI that takes
+    /// prompt content as a quoted positional argument.
+    /// </summary>
+    protected override string? GetPromptStdinPayload(
+        string prompt,
+        string? sessionName,
+        bool resumeSession,
+        string? model)
+        => prompt;
 
     /// <summary>
     /// Codex emits the session UUID on the very first <c>{"type":"session_meta",...}</c>
