@@ -1,0 +1,8 @@
+{
+  "id": "04-styling",
+  "title": "Style the page (intentionally open spec; the user may steer this)",
+  "order": 40,
+  "agent": "claude",
+  "cliType": "claude",
+  "model": "claude-haiku-4-5"
+}
