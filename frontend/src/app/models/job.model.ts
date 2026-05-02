@@ -457,5 +457,11 @@ export interface QuotaSnapshot {
 
 export interface QuotaReport {
   at: string;
+  /**
+   * Cache TTL in seconds. The UI computes the "stale" badge as
+   * `now - snapshot.fetchedAt > ttlSeconds`. When the field is missing
+   * (older backends), treat as 600.
+   */
+  ttlSeconds?: number;
   snapshots: QuotaSnapshot[];
 }

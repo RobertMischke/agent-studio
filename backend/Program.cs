@@ -62,6 +62,7 @@ builder.Services.AddSingleton<IQuotaProbe, CopilotQuotaProbe>();
 builder.Services.AddSingleton<IQuotaProbe, ClaudeQuotaProbe>();
 builder.Services.AddSingleton<IQuotaProbe, CodexQuotaProbe>();
 builder.Services.AddSingleton<IQuotaProbe, GeminiQuotaProbe>();
+builder.Services.AddSingleton<QuotaCacheStore>();
 builder.Services.AddSingleton<QuotaService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<JobWatcherService>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<TaskRunnerService>());

@@ -6,6 +6,7 @@ import { JobDetailComponent } from './components/job-detail';
 import { CliUsageSheetComponent } from './components/cli-usage-sheet';
 import { OrchestratorFeedComponent } from './components/orchestrator-feed';
 import { ProjectDetailComponent } from './components/project-detail';
+import { HeaderQuotaComponent } from './components/header-quota';
 import { JobService } from './services/job.service';
 import { JobDetail, JobInfo, GroupedJobs, WatchPathEntry, CliType, CLI_TYPES, CliModelInfo } from './models/job.model';
 import { ErrorDialogService } from './services/error-dialog.service';
@@ -17,7 +18,7 @@ import { projectIdentity } from './services/project-identity.util';
 
 @Component({
   selector: 'app-root',
-  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, ProjectDetailComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent],
+  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, ProjectDetailComponent, HeaderQuotaComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent],
   // Keep styles global to this subtree — the App shell still owns the
   // .header*, .filter-chip*, .overlay*, .create-dialog*, .error-dialog*
   // class rules used by the extracted dialogs and project-tabs.
@@ -39,6 +40,7 @@ import { projectIdentity } from './services/project-identity.util';
           (toggle)="toggleProject($event)"
           (toggleAuto)="onToggleAuto($event)"
           (openDetail)="openProjectDetail($event)" />
+        <app-header-quota class="header__quota" />
         <div class="header__actions">
           <button class="btn btn--sort"
                   data-testid="lane-sort-toggle"
@@ -283,6 +285,7 @@ import { projectIdentity } from './services/project-identity.util';
     }
     .header__subtitle { font-size: 13px; color: #64748b; }
     .header__actions { display: flex; gap: 12px; }
+    .header__quota { margin-left: auto; }
     .header__filters { display: flex; gap: 8px; align-items: center; }
     /* Filter chip carries each project's identity colour as a CSS variable
        supplied per chip; the active state pulls the chip into the project's

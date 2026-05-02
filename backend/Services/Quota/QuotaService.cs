@@ -22,24 +22,48 @@ public sealed class QuotaService
     private readonly ConcurrentDictionary<string, QuotaSnapshot> _cache = new();
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _locks = new();
     private readonly TimeSpan _ttl;
+    private readonly QuotaCacheStore _store;
 
     public QuotaService(
         ILogger<QuotaService> logger,
         IEnumerable<IQuotaProbe> probes,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        QuotaCacheStore store)
     {
         _logger = logger;
         _probes = probes.ToDictionary(p => p.CliType, StringComparer.OrdinalIgnoreCase);
         var ttlSec = int.TryParse(configuration["Quota:TtlSeconds"], out var t) ? t : 600;
         _ttl = TimeSpan.FromSeconds(ttlSec);
+        _store = store;
+
+        // Hydrate the in-memory cache from disk on startup so the
+        // header / strip have something to render before the first
+        // probe completes (probes take 30+ seconds per CLI). Stale
+        // detection is the consumer's responsibility via TtlSeconds.
+        try
+        {
+            foreach (var snap in _store.Read())
+            {
+                if (!string.IsNullOrWhiteSpace(snap.CliType)) _cache[snap.CliType] = snap;
+            }
+            _logger.LogInformation("Hydrated quota cache from disk ({Count} snapshots).", _cache.Count);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to hydrate quota cache from disk");
+        }
     }
 
     public IReadOnlyCollection<string> Probes => _probes.Keys.ToList();
+
+    /// <summary>Cache TTL exposed so callers can render a "stale" badge.</summary>
+    public TimeSpan Ttl => _ttl;
 
     public QuotaReport GetCached()
     {
         return new QuotaReport
         {
+            TtlSeconds = (int)_ttl.TotalSeconds,
             Snapshots = _probes.Keys
                 .Select(k => _cache.TryGetValue(k, out var s) ? s : new QuotaSnapshot { CliType = k })
                 .ToList()
@@ -83,6 +107,7 @@ public sealed class QuotaService
             cts.CancelAfter(TimeSpan.FromSeconds(45));
             var snap = await probe.ProbeAsync(cts.Token);
             _cache[cliType] = snap;
+            PersistCache();
             return snap;
         }
         catch (Exception ex)
@@ -90,8 +115,19 @@ public sealed class QuotaService
             _logger.LogWarning(ex, "Quota probe for {Cli} threw", cliType);
             var snap = new QuotaSnapshot { CliType = cliType, Error = ex.Message };
             _cache[cliType] = snap;
+            PersistCache();
             return snap;
         }
         finally { sem.Release(); }
+    }
+
+    /// <summary>
+    /// Push the current in-memory cache to disk. Best-effort and async-
+    /// safe; failures are logged inside the store and never thrown.
+    /// </summary>
+    private void PersistCache()
+    {
+        try { _store.Write(_cache.Values); }
+        catch (Exception ex) { _logger.LogDebug(ex, "Quota cache persist failed"); }
     }
 }
