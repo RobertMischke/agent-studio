@@ -135,7 +135,14 @@ public static class RunPlanner
 
         // ManualStart / AutoPickup share the same plan shape - only the trigger
         // differs, and that is logged at the call site, not branched here.
-        var moveStartToProgress = initialState == JobStates.Ready;
+        // Ready -> Progress is the normal pickup path. Review/Completed ->
+        // Progress fires when the user re-starts a finished task (typically
+        // after editing prompt.md): the job moves back into the active lane
+        // so its CLI run is visible in the runner's status, and the state
+        // matches the actual situation (a process is working on it).
+        var moveStartToProgress =
+            initialState == JobStates.Ready
+            || initialState is JobStates.Review or JobStates.Completed;
         var startSession = sessionName;
         var sessionDropped = false;
         var clearStale = false;
@@ -165,13 +172,30 @@ public static class RunPlanner
             persistSessionName = startSession;
         }
 
-        var useResumePrompt = ShouldUseResumePrompt(initialState, resume, sessionDropped);
-        var promptTemplate = useResumePrompt
-            ? RuntimePromptService.RunnerResumeInterrupted
-            : RuntimePromptService.RunnerFreshStart;
+        var promptTemplate = SelectStartPromptTemplate(initialState, resume, sessionDropped);
 
-        string evtKind = sessionDropped ? "recovery" : (resume ? "continue" : "start");
-        string? evtReason = sessionDropped ? "previous session was for another CLI. Files reconstructed." : null;
+        string evtKind;
+        string? evtReason;
+        if (sessionDropped)
+        {
+            evtKind = "recovery";
+            evtReason = "previous session was for another CLI. Files reconstructed.";
+        }
+        else if (resume && initialState is JobStates.Review or JobStates.Completed)
+        {
+            // Re-starting an already-finished task with the same session is
+            // almost always a "user updated the prompt and wants the agent to
+            // act on the delta" event - not a plain continue and not a fresh
+            // start. The dedicated event kind makes that intent visible to
+            // anyone reading the session log.
+            evtKind = "restart";
+            evtReason = "previous run completed; user re-started with updated prompt.";
+        }
+        else
+        {
+            evtKind = resume ? "continue" : "start";
+            evtReason = null;
+        }
 
         return new RunPlan(
             PromptTemplate: promptTemplate,
@@ -208,6 +232,31 @@ public static class RunPlanner
         if (sessionDropped) return true;
         if (initialState == JobStates.Progress && resume) return true;
         return false;
+    }
+
+    /// <summary>
+    /// Picks the bootstrap template for a manual/auto start. Three branches:
+    /// <list type="bullet">
+    /// <item><c>RunnerResumeInterrupted</c> when we're recovering an in-flight
+    /// job (Progress + resume, or session was dropped) - the agent reconstructs
+    /// from job evidence.</item>
+    /// <item><c>RunnerResumeRestart</c> when the user re-starts a task that
+    /// already finished (Review/Completed) with the same session - the agent is
+    /// told the previous run completed and to act on the delta in
+    /// <c>prompt.md</c>. This closes the bug where re-issuing the fresh-start
+    /// bootstrap on a finished session made Claude reply "I'll wait for your
+    /// request" because the new turn looked like a duplicate of turn 1.</item>
+    /// <item><c>RunnerFreshStart</c> for everything else, including any start
+    /// without a resumable session.</item>
+    /// </list>
+    /// </summary>
+    public static string SelectStartPromptTemplate(string initialState, bool resume, bool sessionDropped)
+    {
+        if (ShouldUseResumePrompt(initialState, resume, sessionDropped))
+            return RuntimePromptService.RunnerResumeInterrupted;
+        if (resume && initialState is JobStates.Review or JobStates.Completed)
+            return RuntimePromptService.RunnerResumeRestart;
+        return RuntimePromptService.RunnerFreshStart;
     }
 
     /// <summary>

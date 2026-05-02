@@ -13,6 +13,7 @@ public sealed partial class RuntimePromptService
 {
     public const string RunnerFreshStart = "runner-fresh-start.md";
     public const string RunnerResumeInterrupted = "runner-resume-interrupted.md";
+    public const string RunnerResumeRestart = "runner-resume-restart.md";
     public const string RunnerRecoveryContinuation = "runner-recovery-continuation.md";
     public const string SummaryProtocol = "summary-protocol.md";
     public const string CommitMessage = "commit-message.md";

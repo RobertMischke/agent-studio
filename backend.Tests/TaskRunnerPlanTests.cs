@@ -327,6 +327,50 @@ public class TaskRunnerPlanTests
         Assert.StartsWith("taskboard-fix-bug-", p.PersistSessionName);
     }
 
+    /// <summary>
+    /// Re-starting a finished task (4-review or 5-completed) with a captured
+    /// session: this is the "user updated prompt.md and clicked Start again"
+    /// path. Pre-fix it routed through fresh-start, which made Claude reply
+    /// "I'll wait for your request" because the bootstrap turn was a duplicate
+    /// of the original turn 1. The dedicated restart template tells Claude the
+    /// previous run completed and to act on the delta.
+    /// </summary>
+    [Theory]
+    [InlineData(JobStates.Review)]
+    [InlineData(JobStates.Completed)]
+    public void Start_FromReviewOrCompletedWithSession_UsesRestartPrompt(string state)
+    {
+        var p = Plan(RunIntent.ManualStart, state, sessionName: ValidUuid);
+
+        Assert.Equal("restart", p.EventKind);
+        Assert.True(p.ResumeFlag);
+        Assert.Equal(ValidUuid, p.SessionToResume);
+        Assert.Equal(RuntimePromptService.RunnerResumeRestart, p.PromptTemplate);
+        Assert.True(p.MoveJobToProgress, "restart must move job back into the active lane");
+        Assert.False(p.MarkSessionChainRecovery);
+        Assert.False(p.WriteCutMarker);
+        Assert.Contains("re-started", p.EventReason ?? "", System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Re-start of a finished task without a captured session: there is no
+    /// session to resume, so the planner must fall back to a plain fresh start
+    /// (and still move the job out of review/completed, because a CLI run is
+    /// about to write to it).
+    /// </summary>
+    [Theory]
+    [InlineData(JobStates.Review)]
+    [InlineData(JobStates.Completed)]
+    public void Start_FromReviewOrCompletedNoSession_FallsBackToFreshStart(string state)
+    {
+        var p = Plan(RunIntent.ManualStart, state, sessionName: null);
+
+        Assert.Equal("start", p.EventKind);
+        Assert.False(p.ResumeFlag);
+        Assert.Equal(RuntimePromptService.RunnerFreshStart, p.PromptTemplate);
+        Assert.True(p.MoveJobToProgress);
+    }
+
     [Fact]
     public void Start_Claude_DoesNotPreGenerateSessionSlug()
     {
@@ -380,6 +424,10 @@ public class TaskRunnerPlanTests
     [InlineData(RunIntent.UserContinue, JobStates.Review,   null)]
     [InlineData(RunIntent.UserContinue, JobStates.Completed,ValidUuid)]
     [InlineData(RunIntent.UserContinue, JobStates.Completed,null)]
+    [InlineData(RunIntent.ManualStart,  JobStates.Review,   ValidUuid)]
+    [InlineData(RunIntent.ManualStart,  JobStates.Review,   null)]
+    [InlineData(RunIntent.ManualStart,  JobStates.Completed,ValidUuid)]
+    [InlineData(RunIntent.ManualStart,  JobStates.Completed,null)]
     public void Plan_AlwaysProducesRunnableOutput(RunIntent intent, string state, string? sessionName)
     {
         var p = Plan(intent, state, sessionName, followup: "go");
@@ -387,7 +435,7 @@ public class TaskRunnerPlanTests
         Assert.NotNull(p);
         Assert.True(!string.IsNullOrEmpty(p.PromptOverride) || !string.IsNullOrEmpty(p.PromptTemplate),
             "Plan must always carry a prompt override or template");
-        Assert.Contains(p.EventKind, new[] { "start", "continue", "recovery" });
+        Assert.Contains(p.EventKind, new[] { "start", "continue", "recovery", "restart" });
         // resume flag and session-to-resume must agree
         if (p.ResumeFlag) Assert.NotNull(p.SessionToResume);
         // a continuation event must reference the session it claims to resume
