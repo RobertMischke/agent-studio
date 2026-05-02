@@ -189,7 +189,8 @@ public class ProjectRunner
                 jobId,
                 promptPath,
                 jobFolder,
-                followupPrompt);
+                followupPrompt,
+                info.SessionChain);
 
             if (plan.MoveJobToProgress && info.State != JobStates.Progress)
             {

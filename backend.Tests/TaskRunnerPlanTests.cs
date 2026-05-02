@@ -43,7 +43,8 @@ public class TaskRunnerPlanTests
         string? sessionName,
         string cliType = CliTypes.Claude,
         System.Func<string?, bool>? compat = null,
-        string? followup = null)
+        string? followup = null,
+        IReadOnlyList<string>? sessionChain = null)
     {
         return RunPlanner.PlanRun(
             intent,
@@ -54,7 +55,47 @@ public class TaskRunnerPlanTests
             jobId: "fix-bug",
             promptPath: @"C:\jobs\fix-bug\prompt.md",
             jobFolder: @"C:\jobs\fix-bug",
-            followupPrompt: followup);
+            followupPrompt: followup,
+            sessionChain: sessionChain);
+    }
+
+    /// <summary>
+    /// Bug class: after a Recovery run the sessionName is cleared by
+    /// MarkSessionChainRecovery before the run starts; if the
+    /// post-run capture race lost the new UUID, sessionName stays empty
+    /// and the next follow-up loops back into Recovery, which clears the
+    /// chain again. The fallback fixes that by reading the latest
+    /// non-recovery, non-placeholder entry from sessionChain when
+    /// sessionName itself is empty.
+    /// </summary>
+    [Fact]
+    public void Continue_EmptySessionNameButChainHasUuid_ResumesFromChain()
+    {
+        const string priorUuid = "11111111-2222-4333-8444-555555555555";
+        var p = Plan(RunIntent.UserContinue, JobStates.Progress, sessionName: null,
+                     followup: "tighten the spacing",
+                     sessionChain: new[] { priorUuid });
+
+        Assert.Equal("continue", p.EventKind);
+        Assert.True(p.ResumeFlag);
+        Assert.Equal(priorUuid, p.SessionToResume);
+        Assert.Equal(priorUuid, p.PersistSessionName);
+        Assert.False(p.MarkSessionChainRecovery);
+    }
+
+    /// <summary>
+    /// Recovery sentinels and placeholder slugs in the chain must not be
+    /// mistaken for resumable session ids.
+    /// </summary>
+    [Fact]
+    public void Continue_ChainTailIsRecoverySentinel_StillRoutesToRecovery()
+    {
+        var p = Plan(RunIntent.UserContinue, JobStates.Progress, sessionName: null,
+                     followup: "do it",
+                     sessionChain: new[] { "(recovery)" });
+
+        Assert.Equal("recovery", p.EventKind);
+        Assert.False(p.ResumeFlag);
     }
 
     // ===== Continue (the original symptom path: "no session yet") =====

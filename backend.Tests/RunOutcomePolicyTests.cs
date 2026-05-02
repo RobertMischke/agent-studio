@@ -62,12 +62,13 @@ public class RunOutcomePolicyTests
         new(kind, "summary", sentinel, sentinel ? "DONE" : null, sentinel ? null : "heuristic", agentChars, agentChars / 5, duration);
 
     /// <summary>
-    /// THE regression: session-lost recovery ran with a user follow-up,
-    /// agent exited 4.6 s with no output. Policy must re-issue with stronger
-    /// framing and post a meta message into the chat.
+    /// Recovery + follow-up + fast no-output: do NOT auto-re-issue. The
+    /// previous behavior re-issued and burned quota stacking another
+    /// recovery on top of a broken capture. Today the policy posts a meta
+    /// message asking the user to re-send instead.
     /// </summary>
     [Fact]
-    public void Recovery_NoOpWithFollowup_Reissues()
+    public void Recovery_NoOpWithFollowup_DoesNotAutoReissue()
     {
         var action = RunOutcomePolicy.Decide(
             RunIntent.UserContinue,
@@ -76,47 +77,46 @@ public class RunOutcomePolicyTests
             followupPrompt: "Please process the task again",
             reissueAttempt: 0);
 
-        Assert.Equal(OutcomeActionKind.ReissueWithStrongerFraming, action.Kind);
-        Assert.Equal(1, action.RetryAttempt);
-        Assert.Equal("Please process the task again", action.FollowupRetryPrompt);
-        Assert.Contains("Re-issuing", action.MetaMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(OutcomeActionKind.NotifyUserAndAccept, action.Kind);
+        Assert.Contains("Recovery from session loss", action.MetaMessage, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
-    /// "Done" after 3 seconds with a 5-char reply is structurally the same
-    /// failure shape as a NoOp - the agent didn't perform the work. Policy
-    /// must still re-issue.
+    /// Resume-continue with follow-up + fast no-output IS the case where
+    /// auto-reissue still fires: the session was alive, the agent had real
+    /// context, and it still ignored the follow-up. One retry with sharper
+    /// framing, then stop.
     /// </summary>
     [Fact]
-    public void Recovery_FastFakeDoneWithFollowup_Reissues()
+    public void ResumeContinue_NoOpWithFollowup_Reissues()
     {
         var action = RunOutcomePolicy.Decide(
             RunIntent.UserContinue,
-            RecoveryPlan(),
-            Outcome(AgentOutcomeKind.Done, sentinel: false, duration: 3.0, agentChars: 5),
-            followupPrompt: "redo it",
+            ContinuePlan(),
+            Outcome(AgentOutcomeKind.NoOp, duration: 4.6, agentChars: 0),
+            followupPrompt: "Please tighten the spacing",
             reissueAttempt: 0);
 
         Assert.Equal(OutcomeActionKind.ReissueWithStrongerFraming, action.Kind);
-        Assert.True(action.IsHeuristicFallback);
+        Assert.Equal(1, action.RetryAttempt);
+        Assert.Equal("Please tighten the spacing", action.FollowupRetryPrompt);
     }
 
     /// <summary>
-    /// One auto-reissue, then the orchestrator stops and tells the user.
-    /// Without this cap, a deterministic loop could burn quota.
+    /// Same shape as above but we already re-issued once: orchestrator stops
+    /// and asks the user to step in.
     /// </summary>
     [Fact]
-    public void Recovery_NoOpAfterReissue_GivesUp()
+    public void ResumeContinue_NoOpAfterReissue_GivesUp()
     {
         var action = RunOutcomePolicy.Decide(
             RunIntent.UserContinue,
-            RecoveryPlan(),
+            ContinuePlan(),
             Outcome(AgentOutcomeKind.NoOp, duration: 4.6, agentChars: 0),
             followupPrompt: "do it",
             reissueAttempt: RunOutcomePolicy.MaxAutoReissueAttempts);
 
         Assert.Equal(OutcomeActionKind.NotifyUserAndStop, action.Kind);
-        Assert.Contains("retried", action.MetaMessage, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

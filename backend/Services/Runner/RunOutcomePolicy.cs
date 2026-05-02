@@ -69,44 +69,52 @@ public static class RunOutcomePolicy
     {
         var heuristic = !outcome.MatchedSentinel;
         var hasFollowup = !string.IsNullOrWhiteSpace(followupPrompt);
+        var isRecovery = string.Equals(plan.EventKind, "recovery", StringComparison.OrdinalIgnoreCase);
+        var isResumeContinue = intent == RunIntent.UserContinue
+            && string.Equals(plan.EventKind, "continue", StringComparison.OrdinalIgnoreCase)
+            && plan.ResumeFlag;
 
-        // The case the user complained about: session lost, recovery ran with a
-        // user follow-up, and the run came back as Done/NoOp without honoring
-        // the request. The orchestrator re-issues with a sharper prompt that
-        // makes the follow-up the primary instruction.
-        var isRecoveryWithFollowup =
-            intent == RunIntent.UserContinue
-            && string.Equals(plan.EventKind, "recovery", StringComparison.OrdinalIgnoreCase)
-            && hasFollowup;
-
+        // No-effort completion: agent exited fast with little or no text. We
+        // only treat this as a re-issue trigger on a real Resume-continue. On
+        // a Recovery run, a fast exit usually means the agent never had
+        // session context (Claude CLI capture failed once and we are now
+        // re-recovering from disk); auto-re-issuing in that case stacks
+        // another recovery on top of the same broken state and burns quota.
         var lookedLikeNoEffortDone =
             outcome.Kind == AgentOutcomeKind.Done
             && outcome.DurationSeconds < AgentOutcomeAnalyzer.NoOpDurationThresholdSeconds
-            && outcome.AgentTextChars < 20;
+            && outcome.AgentTextChars < 50;
 
-        if ((isRecoveryWithFollowup || (intent == RunIntent.UserContinue && hasFollowup))
-            && (outcome.Kind == AgentOutcomeKind.NoOp || lookedLikeNoEffortDone)
-            && reissueAttempt < MaxAutoReissueAttempts)
+        var triggersReissue =
+            isResumeContinue
+            && hasFollowup
+            && (outcome.Kind == AgentOutcomeKind.NoOp || lookedLikeNoEffortDone);
+
+        if (triggersReissue && reissueAttempt < MaxAutoReissueAttempts)
         {
-            var msg = isRecoveryWithFollowup
-                ? "Session was lost and the agent exited without acting on your follow-up. Re-issuing your request as the primary task."
-                : "The agent exited without acting on your follow-up. Re-issuing your request with a sharper framing.";
             return new OutcomeAction(
                 Kind: OutcomeActionKind.ReissueWithStrongerFraming,
-                MetaMessage: msg,
+                MetaMessage: "The agent exited without acting on your follow-up. Re-issuing your request with a sharper framing.",
                 IsHeuristicFallback: heuristic,
                 FollowupRetryPrompt: followupPrompt,
                 RetryAttempt: reissueAttempt + 1);
         }
-
-        // Same shape, but we have already re-issued once. Stop and tell the user.
-        if ((isRecoveryWithFollowup || (intent == RunIntent.UserContinue && hasFollowup))
-            && (outcome.Kind == AgentOutcomeKind.NoOp || lookedLikeNoEffortDone)
-            && reissueAttempt >= MaxAutoReissueAttempts)
+        if (triggersReissue && reissueAttempt >= MaxAutoReissueAttempts)
         {
             return new OutcomeAction(
                 Kind: OutcomeActionKind.NotifyUserAndStop,
                 MetaMessage: "I retried your follow-up once and the agent still exited without acting on it. Please rephrase or check the agent CLI.",
+                IsHeuristicFallback: heuristic);
+        }
+
+        // Recovery + follow-up + fast no-output: do NOT auto-re-issue. Tell
+        // the user what happened so they can re-send or rephrase. The
+        // follow-up is preserved in cli-output.log either way.
+        if (isRecovery && hasFollowup && (outcome.Kind == AgentOutcomeKind.NoOp || lookedLikeNoEffortDone))
+        {
+            return new OutcomeAction(
+                Kind: OutcomeActionKind.NotifyUserAndAccept,
+                MetaMessage: "Recovery from session loss did not produce useful output. Your follow-up is preserved in the log; you can re-send it or rephrase.",
                 IsHeuristicFallback: heuristic);
         }
 

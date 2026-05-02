@@ -79,13 +79,22 @@ public static class RunPlanner
         string jobId,
         string promptPath,
         string jobFolder,
-        string? followupPrompt)
+        string? followupPrompt,
+        IReadOnlyList<string>? sessionChain = null)
     {
         if (intent == RunIntent.UserContinue)
         {
-            var hasSession = !string.IsNullOrWhiteSpace(sessionName);
-            var compatible = hasSession && isCompatibleSessionName(sessionName);
-            var placeholder = IsPlaceholderSessionSlug(sessionName);
+            // sessionName may be empty when MarkSessionChainRecovery cleared it
+            // before the previous run completed, but the previous run actually
+            // captured a UUID we could resume. Falling back to the chain's
+            // latest non-recovery entry rescues that case so a follow-up after
+            // a recovery does not loop into recovery again.
+            var resumeCandidate = !string.IsNullOrWhiteSpace(sessionName)
+                ? sessionName
+                : LatestRealSessionId(sessionChain);
+            var hasSession = !string.IsNullOrWhiteSpace(resumeCandidate);
+            var compatible = hasSession && isCompatibleSessionName(resumeCandidate);
+            var placeholder = IsPlaceholderSessionSlug(resumeCandidate);
             var canResume = hasSession && compatible && !placeholder;
             string? reason =
                 !hasSession ? "no session recorded"
@@ -100,16 +109,18 @@ public static class RunPlanner
                     PromptTemplate: null,
                     PromptVariables: EmptyPromptVariables,
                     PromptOverride: followupPrompt ?? string.Empty,
-                    SessionToResume: sessionName,
+                    SessionToResume: resumeCandidate,
                     ResumeFlag: true,
                     EventKind: "continue",
                     EventReason: null,
-                    EventInputSessionId: sessionName,
+                    EventInputSessionId: resumeCandidate,
                     MoveJobToProgress: moveToProgress,
                     MarkSessionChainRecovery: false,
                     WriteCutMarker: false,
                     CutMarkerReason: null,
-                    PersistSessionName: null,
+                    // Persist the chain-recovered id so SessionName advances
+                    // in lockstep and the next planner pass sees it directly.
+                    PersistSessionName: string.IsNullOrWhiteSpace(sessionName) ? resumeCandidate : null,
                     ClearStaleSessionName: false);
             }
 
@@ -268,6 +279,27 @@ public static class RunPlanner
     public static bool IsPlaceholderSessionSlug(string? sessionName)
         => !string.IsNullOrWhiteSpace(sessionName)
            && PlaceholderSessionSlugRegex.IsMatch(sessionName!);
+
+    /// <summary>
+    /// Returns the latest non-recovery, non-placeholder entry in
+    /// <paramref name="chain"/>, or null when no such entry exists. Used by
+    /// <see cref="PlanRun"/> as the fallback resume candidate when
+    /// <c>sessionName</c> is empty but the chain still records a real
+    /// captured id from an earlier run.
+    /// </summary>
+    public static string? LatestRealSessionId(IReadOnlyList<string>? chain)
+    {
+        if (chain == null) return null;
+        for (var i = chain.Count - 1; i >= 0; i--)
+        {
+            var entry = chain[i];
+            if (string.IsNullOrWhiteSpace(entry)) continue;
+            if (string.Equals(entry, "(recovery)", StringComparison.Ordinal)) continue;
+            if (IsPlaceholderSessionSlug(entry)) continue;
+            return entry;
+        }
+        return null;
+    }
 
     private static readonly Regex PlaceholderSessionSlugRegex =
         new(@"^taskboard-[A-Za-z0-9_-]+-\d{12}$", RegexOptions.Compiled);
