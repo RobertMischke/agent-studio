@@ -21,17 +21,16 @@ Keep the product boundary clear:
 
 ## Architecture Decisions Archive
 
-**Repository docs are the durable archive for architecture decisions, non-goals, and reasoning styles.** Anything important that emerges from a chat conversation - especially a "do not do X" rule, a deliberate trade-off, or a reasoning style the user wants future contributors to apply - has to land in writing before the conversation ends. README, ROADMAP, AGENTS, the per-topic files in `docs/`, and the chronological log in [docs/architecture-decisions.md](docs/architecture-decisions.md) are the system. Memory in your runtime, chat scrollback, and PR descriptions are not.
+[docs/architecture-decisions.md](docs/architecture-decisions.md) holds the durable archive of **load-bearing** decisions: product boundaries, architectural philosophies, hard non-goals, and reasoning styles. The bar is high. Bug fixes, defensive guards, individual feature choices, and policy tweaks belong in commits and code comments, not in this file. If an entry would read like a changelog line, it does not belong there.
 
-What this means in practice for every chat-driven change:
+Two questions to use as the bar:
 
-1. **Capture the decision, not just the code.** If the conversation produced a structural rule ("we treat orchestrator-to-CLI communication as a core capability"), a non-goal ("never spawn a new job folder for an extension"), or a reasoning style ("deterministic over heuristic; pure functions with their own test matrix"), add or update an ADR in [docs/architecture-decisions.md](docs/architecture-decisions.md). One ADR per decision; the file's header explains the required shape (decision, context, non-goals, reasoning style, implementation pointers, status).
-2. **Surface non-goals explicitly.** Patterns that look attractive but were ruled out belong in the ADR's "Non-goals" section and, where relevant, in the README or ROADMAP "Hard Boundaries". Future agents must be able to find "we considered X and chose not to" without re-running the conversation.
-3. **Keep README, ROADMAP, AGENTS in sync.** When a decision changes how the product is described, what the architecture looks like, or how agents should work, update the matching narrative section in those files in the same change. The ADR captures the *why*; the README/ROADMAP/AGENTS sections explain the *current shape*. The two must not drift.
-4. **Update topic-specific docs.** CLI contracts go in [docs/agent-task-contract.md](docs/agent-task-contract.md). Filesystem layout goes in [docs/filesystem-contract.md](docs/filesystem-contract.md). Per-CLI playbooks live under [docs/cli-skills/](docs/cli-skills/). When a decision touches one of these surfaces, that file is updated alongside the ADR.
-5. **Numbering and supersession.** ADR numbers are monotonic and never reused. When a later decision overturns an earlier one, leave the original ADR in place and add a new one whose `Status` line points back. Never delete history silently.
+1. **Would a future contributor re-derive this the wrong way without it?** If yes, ADR. If the code + tests already make the decision obvious, no ADR.
+2. **Does this say "we deliberately do not do X"?** Non-goals are the highest-value content here, especially patterns that look attractive but were ruled out.
 
-This is a recurring chore, not an optional polish step. If a chat ends without the relevant docs updated, the decision is effectively lost. Treat the documentation update as part of the task, the same way Playwright coverage is part of every visual change.
+When a chat lands on a decision that clears the bar, add or supersede an entry. Keep the surrounding narrative in sync: README and ROADMAP describe the current product shape, AGENTS describes how agents work in this repo, the ADR file explains the *why* and what was ruled out. Do not let those drift.
+
+Do not over-archive. Most chat-driven changes are commits, not ADRs.
 
 ## Documentation Language
 

@@ -1,28 +1,28 @@
 # Architecture Decisions
 
-This file is the durable archive for architecture decisions, non-goals, and reasoning styles that emerge from any chat session with this repository. README, ROADMAP, AGENTS, and topic-specific docs (in this folder) are the system where those decisions live; this file is the chronological index that points at them.
+Only structural, load-bearing decisions land here. The bar is high: a decision belongs in this file when a future contributor would re-derive it the wrong way without it, or when there is a non-obvious thing the project deliberately does **not** do. Bug fixes, policy tweaks, defensive hardening, and individual feature choices stay in commits and code comments. If an entry reads like a changelog line, it is too small for this file.
 
-Each entry below captures one decision: what was decided, why, what is explicitly **not** going to happen, and how the reasoning was reached. Add a new entry whenever a chat conversation lands on something that future contributors should not have to re-derive. Update or supersede an entry when the underlying decision changes; never delete history silently.
+Rough sizing test: an ADR captures a product or architecture *boundary* (sequential per project, deterministic orchestrator, four interaction modes), not a *fix* (re-issue policy details, capture-failure diagnostics, save-race guard). When a later decision changes a load-bearing one, supersede the old entry rather than deleting it.
 
-The required shape for each entry:
+Each entry uses the same shape:
 
 ```markdown
-## ADR-NNNN - Short title (YYYY-MM-DD)
+## ADR-NNNN - Title (YYYY-MM-DD)
 
-**Decision.** One sentence: what was decided.
+**Decision.** One sentence.
 
-**Context.** Why the question came up. What was happening when the decision was made.
+**Context.** Why the question came up.
 
-**Non-goals (do not do).** Bullet list of things this decision rules out, including patterns that look attractive but are off the table.
+**Non-goals.** What this decision rules out, especially patterns that look attractive but are off the table.
 
-**Reasoning style.** Short note on the approach used to reach the decision (deterministic vs. heuristic, structural vs. cosmetic, prompt vs. code, etc.). Future agents should be able to apply the same lens to similar questions.
+**Reasoning style.** The lens future agents should reuse for similar questions.
 
-**Implementation pointers.** File paths, function names, doc sections, or commit hashes that carry the decision today.
+**Implementation pointers.** Files / functions / commits that carry the decision today.
 
-**Status.** `Accepted` | `Superseded by ADR-MMMM` | `Deprecated`.
+**Status.** Accepted | Superseded by ADR-MMMM | Deprecated.
 ```
 
-Numbering is monotonic and never reused. When an ADR is superseded, leave the original entry in place and add a new ADR that supersedes it.
+Numbering is monotonic. Never reuse a number; never silently delete history.
 
 ---
 
@@ -50,133 +50,53 @@ Numbering is monotonic and never reused. When an ADR is superseded, leave the or
 
 **Decision.** The orchestrator parses CLI output for typed signals (`[[TASK_DONE]]`, `[[TASK_BLOCKED:<reason>]]`, `[[TASK_NEEDS_INPUT:<reason>]]`, `[[TASK_NOOP]]`), applies a deterministic post-run policy, and speaks for itself in the activity log when it makes a decision. Prompt wording remains useful, but is not the load-bearing layer.
 
-**Context.** A session-loss recovery run silently no-op'd a user follow-up and replied "task done" in 4.6 s. The orchestrator accepted that report and moved on. The user surfaced the failure and asked for the steering layer to live in code, not in the prompt.
+**Context.** A session-loss recovery run silently no-op'd a user follow-up and replied "task done" in 4.6 s. The orchestrator accepted that report. The user surfaced the failure and asked for the steering layer to live in code, not in the prompt.
 
 **Non-goals.**
 - Building behavior that relies on the agent obeying soft instructions in a prompt template.
 - Hiding orchestrator decisions in backend logs only; the chat must surface them.
 - Adding an LLM call to classify outcomes when a hardcoded sentinel can.
 
-**Reasoning style.** Pure-function libraries with their own test matrix per concern (parser → policy → meta channel). Heuristics are allowed only as a fallback and must announce themselves with a meta message so the user sees when the deterministic contract did not match.
+**Reasoning style.** Pure-function libraries with their own test matrix per concern: parser, policy, meta channel. Heuristics are allowed only as a fallback and must announce themselves with a meta message so the user sees when the deterministic contract did not match.
 
-**Implementation pointers.** [backend/Services/Runner/AgentOutcomeAnalyzer.cs](../backend/Services/Runner/AgentOutcomeAnalyzer.cs); [backend/Services/Runner/RunOutcomePolicy.cs](../backend/Services/Runner/RunOutcomePolicy.cs); [backend/Services/Runner/OrchestratorChatLog.cs](../backend/Services/Runner/OrchestratorChatLog.cs); [docs/agent-task-contract.md](agent-task-contract.md) "Output Contract"; [README.md](../README.md) "Deterministic orchestration over prompt trust"; commit `cc284cc`.
-
-**Status.** Accepted.
-
----
-
-## ADR-0003 - Recovery never auto-re-issues; sessionChain is the fallback resume (2026-05-02)
-
-**Decision.** Auto-re-issue fires only on a real Resume-Continue (`plan.EventKind=continue` AND `plan.ResumeFlag`). Recovery + follow-up + no-output posts a meta message and stops. When `sessionName` is empty but the chain still records a non-recovery, non-placeholder UUID, the planner resumes from that chain entry instead of routing back to Recovery.
-
-**Context.** A user-reported recovery loop kept emitting "session lost - recovering from job folder" on every follow-up after a single capture race lost the UUID. The previous re-issue policy then attached "Re-issuing your request as the primary task" to runs that were unrelated new requests, compounding the confusion.
-
-**Non-goals.**
-- Stacking automatic retries on a Recovery run; it just burns quota and stacks more recovery on top of broken state.
-- Treating a fast no-output Recovery exit as evidence the agent ignored the user. It is more often evidence we lost session capture.
-- Reintroducing the empty-string `sessionName` as the only resume signal; the chain is now part of the resume contract.
-
-**Reasoning style.** Symptom in the chat → root cause in the planner + policy. Diagnose two interacting bugs separately, fix each with a small structural change, lock both with planner-matrix tests. Defensive fallback (chain) before chasing the underlying capture race.
-
-**Implementation pointers.** [backend/Services/Runner/RunPlanner.cs](../backend/Services/Runner/RunPlanner.cs) (`LatestRealSessionId`, mode-aware Continue branch); [backend/Services/Runner/RunOutcomePolicy.cs](../backend/Services/Runner/RunOutcomePolicy.cs) (Recovery branch); commit `9969857`.
-
-**Status.** Superseded in part by ADR-0006: the "Recovery never auto-re-issues" rule is overturned (graceful recovery). The sessionChain fallback half remains accepted.
-
----
-
-## ADR-0005 - Permissive Claude session-id capture + visible capture diagnostics (2026-05-02)
-
-**Decision.** ClaudeCliService now captures the session UUID from any canonical UUID on any stdout line, not only from the `● Session init <uuid>` marker. The first UUID wins; later ones in the same run are ignored. When a CLI run finishes without capturing a UUID, the orchestrator posts a `[capture-fail]` meta message into the chat. When a follow-up routes to Recovery because no session is on record, a `[fallback]` meta message names the mode the user picked and the reason Recovery was chosen. Repeated identical heuristic verdicts inside a Recovery cascade are suppressed after the first.
-
-**Context.** Even after ADR-0003 (sessionChain fallback, Recovery never auto-re-issues), the user observed runs where every follow-up still routed to Recovery and the chat piled up identical "Heuristic verdict: needsinput" notes. Inspection of the activity log showed the agent emitting normal text but no `● Session init <uuid>` marker, so the strict marker regex never fired and the chain stayed empty. The user asked for the Continue path to actually carry the conversation forward and for the loop, when it does happen, to be diagnosable from the chat alone.
-
-**Non-goals.**
-- Letting capture failures be silent. The chat must always say so.
-- Treating a tool-result UUID later in a run as the session id. We capture only the first UUID we see, which is structurally the session frame.
-- Spamming the chat with the same heuristic verdict on every Recovery iteration. One announcement per signature is enough.
-- Fixing the root cause of Claude Code's missing marker frame in this commit; the fallback is defensive while we keep the diagnostic data needed to diagnose the underlying CLI behavior.
-
-**Reasoning style.** Defense in depth: keep the strict marker as the intended path, add a permissive UUID match as a safety net, and surface every state transition in the chat so the user can debug the loop without reading backend logs. Suppression by signature, not by time, so the orchestrator stays talkative when the situation actually changes.
-
-**Implementation pointers.** [backend/Services/Cli/ClaudeCliService.cs](../backend/Services/Cli/ClaudeCliService.cs) (`AnyUuidRegex`, hardened `OnOutputLine`); [backend/Services/Runner/ProjectRunner.cs](../backend/Services/Runner/ProjectRunner.cs) (`_lastMetaSignature` suppression, `[capture-fail]` after `OnCliFinished`, `[fallback]` before Recovery starts).
+**Implementation pointers.** [backend/Services/Runner/AgentOutcomeAnalyzer.cs](../backend/Services/Runner/AgentOutcomeAnalyzer.cs); [backend/Services/Runner/RunOutcomePolicy.cs](../backend/Services/Runner/RunOutcomePolicy.cs); [backend/Services/Runner/OrchestratorChatLog.cs](../backend/Services/Runner/OrchestratorChatLog.cs); [docs/agent-task-contract.md](agent-task-contract.md) "Output Contract"; [README.md](../README.md) "Deterministic orchestration over prompt trust".
 
 **Status.** Accepted.
 
 ---
 
-## ADR-0008 - Editor no-clobber rule: stub-mount autosaves never overwrite prompt.md (2026-05-02)
-
-**Decision.** The markdown rich editor only persists its current value when both (a) the value diverges from what the parent committed and (b) a real user edit actually happened in this mount. The rule lives as a pure helper `shouldEmitEditorSave` so it has its own unit tests independent of Tiptap and Angular. After every successful save the user-edit flag resets to false so a subsequent stub remount cannot piggy-back on it.
-
-**Context.** The user reported a crash-class data-loss bug twice in this conversation: open a job with a real `prompt.md`, the Task Description renders empty, the file on disk is empty. Diagnosis: on mount, the parent passes `value=''` until detail() resolves; Tiptap's `onUpdate` was firing for the constructor's content load on the bundled version, which scheduled a 600 ms autosave. If detail() took longer than 600 ms (or if the user navigated detail panes during the race window), the save fired with the stub empty value, the parent wrote `prompt.md=''` to disk, and the next refetch read that back into the editor, wiping the user's input permanently.
-
-**Non-goals.**
-- Removing autosave. The 600 ms autosave is a usability commitment; we do not regress to "Ctrl+S or lose work".
-- Blocking deliberate empty saves. If the user clears the prompt on purpose, that must persist. The user-edit flag distinguishes intent from race.
-- Hiding the rule inside the component. It moves to its own file (`markdown-rich-editor.guard.ts`) so the test does not have to spin up Angular's JIT compiler.
-- Trusting Tiptap's onUpdate signal alone to mean "user input". Versions differ; the guard treats divergence + an explicit interaction flag as the only authority.
-
-**Reasoning style.** Pure rule + minimal flag. The structural property is the single function `shouldEmitEditorSave`; the imperative flag `hasUserEdit` is the only state the component tracks beyond what Tiptap already gives it. Tests cover the four corners of (current vs committed) x (hasUserEdit). The flag resets on every successful save so the same race can never reuse a latched true.
-
-**Implementation pointers.** [frontend/src/app/components/markdown-rich-editor.guard.ts](../frontend/src/app/components/markdown-rich-editor.guard.ts), [frontend/src/app/components/markdown-rich-editor.spec.ts](../frontend/src/app/components/markdown-rich-editor.spec.ts), and the wired `hasUserEdit` flag + `emitSave` guard in [frontend/src/app/components/markdown-rich-editor.ts](../frontend/src/app/components/markdown-rich-editor.ts).
-
-**Status.** Accepted.
-
----
-
-## ADR-0007 - Runner prompts put user content first; behavioral changes need a live probe (2026-05-02)
-
-**Decision.** Every runner prompt template now places the user task (or user follow-up) at the very top of the rendered string. Bootstrap framing, run context, and rules come after, separated by a horizontal rule. The bootstrap headlines no longer contain the literal word "(system)". The output contract is reduced to a single short tail line. Behavioral changes to prompt templates must be verified by running the `@billable` `claude-hello-world.spec.ts` (or the per-CLI equivalent) before the change is committed - unit tests on rendered string content do not catch regressions in agent behavior.
-
-**Context.** A previous round of edits added an output-contract block, restructured the recovery template, and led with `# Task Runner Bootstrap (system)` headlines. In production, Claude Code started replying "I'll wait for your actual request" and exiting in 3-4 seconds for *every* run, including fresh starts on jobs with real prompts. The unit tests stayed green because they only verified that strings appeared in the rendered template; nothing exercised the actual CLI. The user surfaced this as "Tasks werden überhaupt nicht mehr bearbeitet" and asked why tests did not catch it.
-
-**Non-goals.**
-- Hand-waving the test gap. Pure-function tests are necessary but not sufficient for prompt changes; this ADR makes the live-probe requirement explicit.
-- Making the bootstrap longer. The minimum viable framing wins. Anything that pushes the user task more than a few hundred characters down the prompt is suspect.
-- Calling the framing "system metadata" inside the user prompt. That label tells the LLM to ignore it and wait for a real user message.
-- Making the output contract a featured section. The orchestrator parses the tokens whether or not the agent emits them; making the contract loud in the prompt does not increase compliance, only confusion.
-
-**Reasoning style.** Two-layer regression: a structural mistake in the prompt (user content buried below system framing) plus a process mistake (no behavioral verification before commit). The structural fix is mechanical: invert the order, drop the "(system)" labels, shorten the contract. The process fix is the live probe requirement; we add a structural unit-test guard ("user task header appears before run-context header") so the order-of-content cannot regress silently, but we name the live probe as the ground truth.
-
-**Implementation pointers.** [prompts/runtime/runner-fresh-start.md](../prompts/runtime/runner-fresh-start.md), [prompts/runtime/runner-resume-interrupted.md](../prompts/runtime/runner-resume-interrupted.md), [prompts/runtime/runner-resume-restart.md](../prompts/runtime/runner-resume-restart.md), [prompts/runtime/runner-recovery-continuation.md](../prompts/runtime/runner-recovery-continuation.md); structural assertions in [backend.Tests/TaskRunnerPromptTests.cs](../backend.Tests/TaskRunnerPromptTests.cs); the live probe is `frontend/e2e/claude-hello-world.spec.ts`.
-
-**Status.** Accepted.
-
----
-
-## ADR-0006 - Graceful Recovery: re-issue once even when the session is unrecoverable (2026-05-02)
-
-**Decision.** When a UserContinue follow-up routes to Recovery and the agent exits no-op or fast-Done, the orchestrator re-issues the follow-up exactly once with a recovery-aware prompt instead of stopping. The re-issue prompt explicitly tells the agent that conversation history is gone, names the job folder evidence as the only context, and forbids "I'll wait for your next request" as an answer. The retry budget (`MaxAutoReissueAttempts = 1`) is shared with the Resume-Continue path; one shot, then `NotifyUserAndStop`.
-
-**Context.** ADR-0003 ruled out auto-re-issue on Recovery to avoid stacking another broken-state run on top of a capture failure. In practice the user observed this as "I sent a follow-up and nothing happened, three times in a row." The user surfaced the trade-off: even if compounding risk exists, dropping the follow-up silently is worse than trying once with a sharper prompt. The product principle is graceful recovery, not graceful give-up.
-
-**Non-goals.**
-- Unlimited retries. The cap stays at one to avoid quota burn loops.
-- Retrying when the agent emitted real work or an explicit `[[TASK_BLOCKED]]` / `[[TASK_NEEDS_INPUT]]` sentinel. The re-issue trigger is still the no-effort shape (NoOp or fast-Done with tiny text).
-- Hiding the re-issue. The chat must show a `[reissue]` meta message naming the recovery context.
-- Patching the missing-marker capture failure here. ADR-0005 owns that; this ADR is the user-facing rescue when capture has already failed.
-
-**Reasoning style.** Trade-off resolved in favor of the user's stated preference: "selbst wenn die Session nicht fortgesetzt werden kann, möchte ich, dass es weitergeht." When two principles conflict (don't compound broken state vs. don't drop user requests), pick the one the user named, bound the worst case with a retry cap, and make every step visible in the chat so the user can intervene.
-
-**Implementation pointers.** [backend/Services/Runner/RunOutcomePolicy.cs](../backend/Services/Runner/RunOutcomePolicy.cs) (`triggersReissue` now includes `isRecovery`; `BuildReissueFollowupPrompt` accepts `recoveryContext`); [backend/Services/Runner/ProjectRunner.cs](../backend/Services/Runner/ProjectRunner.cs) (passes `wasRecovery` through to the prompt builder); supersedes ADR-0003's "Recovery never auto-re-issues" half. SessionChain fallback from ADR-0003 is still in force.
-
-**Status.** Accepted.
-
----
-
-## ADR-0004 - Four follow-up interaction modes; Extend writes a prompt-N.md timeline (2026-05-02)
+## ADR-0003 - Four follow-up interaction modes; Extend writes a prompt-N.md timeline (2026-05-02)
 
 **Decision.** `ContinueJobRequest.Mode` is a typed string with four values: `continue`, `steer`, `extend`, `newTask`. Each value selects a prompt frame in `RunPlanner.BuildContinuePrompt`. Extend mode also writes a new `prompt-N.md` (1-based) into the same job folder; the original `prompt.md` is never overwritten. The Task Description pane renders the timeline blog-style.
 
 **Context.** The user's actual workflow is a living chat session: continue, course-correct, extend the task, or open a new sub-task without losing context. Treating every follow-up as a generic next message produced "I'll wait for your request" no-ops on extensions. A single mode value carries the user's intent through the whole run.
 
 **Non-goals.**
-- Spawning a new job folder per extension. The user explicitly chose "same folder, blog-style timeline" because new folders multiply state for no gain.
-- Editing `prompt.md` in place when the user extends. The original task body stays intact; extensions are append-only.
-- Hiding the mode behind a hotkey or hover menu. The pill row is intentionally loud so the user always sees what they are about to send.
+- Spawning a new job folder per extension. Same folder, blog-style timeline.
+- Editing `prompt.md` in place when the user extends. Extensions are append-only.
+- Hiding the mode behind a hotkey or hover menu. The pill row is intentionally loud.
 
 **Reasoning style.** UX state is backend state too: the mode is a typed wire field, not a frontend-only flag. Extensions are evidence on disk, not just turns in a chat buffer, so any restart, log inspection, or Haiku summary can read the full timeline.
 
-**Implementation pointers.** [backend/Models/JobModels.cs](../backend/Models/JobModels.cs) (`ContinueModes`, `JobPromptHistoryEntry`); [backend/Services/Runner/RunPlanner.cs](../backend/Services/Runner/RunPlanner.cs) `BuildContinuePrompt`; [backend/Services/TaskRunnerService.cs](../backend/Services/TaskRunnerService.cs) `NextPromptHistoryIndex`; [frontend/src/app/components/job-detail/protocol-pane/protocol-pane.component.ts](../frontend/src/app/components/job-detail/protocol-pane/protocol-pane.component.ts) (`modeOptions`); [frontend/src/app/components/job-detail/prompt-pane/prompt-pane.component.html](../frontend/src/app/components/job-detail/prompt-pane/prompt-pane.component.html) (history block); commits `2b43c7f`, `49fdb57`, `55b8598`.
+**Implementation pointers.** [backend/Models/JobModels.cs](../backend/Models/JobModels.cs) (`ContinueModes`, `JobPromptHistoryEntry`); [backend/Services/Runner/RunPlanner.cs](../backend/Services/Runner/RunPlanner.cs) `BuildContinuePrompt`; [backend/Services/TaskRunnerService.cs](../backend/Services/TaskRunnerService.cs) prompt-history append; [frontend/src/app/components/job-detail/protocol-pane/protocol-pane.component.ts](../frontend/src/app/components/job-detail/protocol-pane/protocol-pane.component.ts) (mode pills); [frontend/src/app/components/job-detail/prompt-pane/prompt-pane.component.html](../frontend/src/app/components/job-detail/prompt-pane/prompt-pane.component.html) (history block).
+
+**Status.** Accepted.
+
+---
+
+## ADR-0004 - Behavioral changes need a live probe (2026-05-02)
+
+**Decision.** Any change to a file under `prompts/runtime/` or to a code path that determines what the CLI actually does (driver flags, output parser, post-run policy) is a behavioral change against the agent, not a textual change. Unit tests on rendered string content or pure-function inputs are necessary but not sufficient. Before claiming such a change is safe, run the `@billable` `claude-hello-world.spec.ts` (or the per-CLI equivalent) end-to-end and confirm the agent produces real work. Structural unit-test guards (e.g. "user task header appears before run-context header") sit alongside the live probe; they prevent silent regressions of the structural property but do not replace the probe.
+
+**Context.** Two production-breaking regressions slipped through pure-function tests in this conversation: a session-capture loop and a prompt-restructure that made every Claude run exit in 3 s with "I'll wait for your request". Both passed unit tests because the tests verified template strings and planner outputs, not Claude's behavior on the resulting prompt. The user surfaced both as "tasks aren't being processed" and asked why tests didn't catch it.
+
+**Non-goals.**
+- Hand-waving the test gap as "integration is hard". The `@billable` probe exists, costs one Haiku call (~10 s), and is the ground truth.
+- Shipping prompt-template edits without verification because "it should work". If the probe cannot be run in the current session, say so explicitly; do not silently ship.
+- Moving every behavioral concern into Playwright. Pure-function tests stay; they pin the structural shape so the live probe only has to verify the wiring.
+
+**Reasoning style.** Two-layer regression always has two layers of fix: a structural guard and a behavioral probe. Pure-function tests pin properties (order of content, planner decisions, sentinel parsing); the live probe is the only thing that proves the resulting prompt actually drives the CLI.
+
+**Implementation pointers.** [AGENTS.md](../AGENTS.md) "Prompt-template changes: live probe required"; [frontend/e2e/claude-hello-world.spec.ts](../frontend/e2e/claude-hello-world.spec.ts); structural assertions in [backend.Tests/TaskRunnerPromptTests.cs](../backend.Tests/TaskRunnerPromptTests.cs).
 
 **Status.** Accepted.
