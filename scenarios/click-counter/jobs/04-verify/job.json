@@ -1,0 +1,8 @@
+{
+  "id": "04-verify",
+  "title": "Verify the click-counter is complete and document how to run it",
+  "order": 40,
+  "agent": "claude",
+  "cliType": "claude",
+  "model": "claude-haiku-4-5"
+}

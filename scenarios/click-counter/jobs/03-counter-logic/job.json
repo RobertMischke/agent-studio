@@ -1,0 +1,8 @@
+{
+  "id": "03-counter-logic",
+  "title": "Wire the click-counter behavior",
+  "order": 30,
+  "agent": "claude",
+  "cliType": "claude",
+  "model": "claude-haiku-4-5"
+}

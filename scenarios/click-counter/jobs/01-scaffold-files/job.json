@@ -1,0 +1,8 @@
+{
+  "id": "01-scaffold-files",
+  "title": "Scaffold the click-counter project files",
+  "order": 10,
+  "agent": "claude",
+  "cliType": "claude",
+  "model": "claude-haiku-4-5"
+}
