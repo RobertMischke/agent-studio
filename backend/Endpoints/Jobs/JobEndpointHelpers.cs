@@ -23,7 +23,10 @@ internal static class JobEndpointHelpers
     internal static JobInfo WithRuntime(JobInfo job, CliRouter router, TaskRunnerService runners)
     {
         var exec = router.Get(job.CliType).GetExecution(job.JobKey);
-        var loop = runners.GetStuckLoopStateForJob(job.Id, job.WatchPath);
+        // Look up auto-loop state by ProjectName (O(1) ConcurrentDictionary
+        // hit) rather than by re-scanning all jobs from disk. Locked by
+        // JobsEndpointPerfTests.WithRuntime_Over200Jobs_FinishesWellUnderOneSecond.
+        var loop = runners.GetStuckLoopStateForJob(job.Id, job.ProjectName);
         // The summarizer is fire-and-forget after a job lands in 4-review.
         // We surface its in-progress state on the JobInfo so the kanban
         // card can show "auto-reviewing" instead of looking idle while

@@ -135,6 +135,21 @@ Local watch configuration usually lives in gitignored `backend/appsettings.Local
 
 _(Shell policy, Backend Control, Frontend Control, and Build/Test/Verify are documented below under "Shell policy: sh, not PowerShell".)_
 
+### Regression-proofing: data, then five-whys, then test-then-fix
+
+When the user reports a regression ("X is suddenly slow", "Y broke after Z"), the workflow is:
+
+1. **Reproduce with measurement, not theory.** Time the slow path, profile the failing path, capture the bad output. State the numbers in the chat. Hypotheses without measurement are rejected on principle.
+2. **Five whys against the data.** Walk back from the symptom to a single root cause. Each "why" must be backed by code or measurement, not by intuition. Stop when one more "why" would leave the codebase.
+3. **Why didn't the existing test catch it?** Before writing the fix, name the gap in the test suite that let the regression ship. That gap is what the new test must close. If the answer is "we have no test for that whole layer," say so explicitly so the gap is visible.
+4. **Write the regression test FIRST and prove it FAILS on the broken code.** A test that only passes after the fix proves the fix builds; a test that fails before and passes after proves the fix actually addresses the regression. Until the test fails on HEAD, the fix is speculative.
+5. **Apply the fix and watch the same test go green.** No other change in the same commit unless it is required by the fix.
+6. **Re-run the original measurement.** Numbers in the chat: before vs. after. The fix is not done until the user-visible metric is back in range.
+
+Worked example: the auto-loop snapshot folded onto every JobInfo in `WithRuntime` made `/api/jobs/grouped` a 15-second call (frontend polls every 5 s, so the UI froze permanently). The diagnostic showed `loopMs ≈ 7800ms` per call dominating; the cause was `GetStuckLoopStateForJob` resolving the project via `JobScannerService.FindJob`, which performs a full disk rescan on every invocation. The regression test [`JobsEndpointPerfTests.WithRuntime_Over200Jobs_FinishesWellUnderOneSecond`](backend.Tests/JobsEndpointPerfTests.cs) builds a 200-job board, runs the overlay, asserts under 1 s. It failed at 19 s on the broken code and passed at well under 50 ms after the fix (look up by `ProjectName` against the in-memory `_runners` dictionary instead of re-scanning disk).
+
+Endpoints that are polled by the UI carry an extra obligation: the perf test must reflect a realistic workload (≥ 150-200 jobs for the kanban endpoints) so a future O(N²) regression cannot hide behind a small fixture. New per-job overlay logic that calls back into a scanner method is a smell; review it on the way in.
+
 ### Prompt-template changes: live probe required
 
 Any change to a file under `prompts/runtime/` (the runner bootstrap templates, the summary template, the commit-message template) is a behavioral change against the agent CLI, not a textual change. Unit tests on rendered string content cannot catch a regression in how the CLI reacts to the new wording or structure - that lesson is recorded in [ADR-0007](docs/architecture-decisions.md). Before claiming a prompt change is safe, run the `@billable` `claude-hello-world.spec.ts` (or the equivalent for the affected CLI) end-to-end and confirm the agent produces real output, not a fast "I'll wait for your request" exit. The structural unit-test guards in [backend.Tests/TaskRunnerPromptTests.cs](backend.Tests/TaskRunnerPromptTests.cs) (e.g. "user task header appears before run-context header") are necessary, not sufficient.

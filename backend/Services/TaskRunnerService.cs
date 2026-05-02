@@ -384,16 +384,21 @@ public class TaskRunnerService : BackgroundService
 
     /// <summary>
     /// Snapshot of the auto-loop state for one job (null when no loop is in
-    /// flight). Looks up the project runner for the job's watch path and
-    /// asks it for the live counter. Used by the jobs endpoint so the UI
-    /// can render the loop badge ("auto-loop 2/5") on the active job card.
+    /// flight). The caller passes the project name directly so the lookup
+    /// is O(1) - the previous variant accepted only <c>watchPath</c> and
+    /// resolved the project via <see cref="JobScannerService.FindJob"/>,
+    /// which performs a full disk rescan per call. With the runtime
+    /// overlay applied to every JobInfo, that turned <c>/api/jobs</c> and
+    /// <c>/api/jobs/grouped</c> into O(N^2) disk reads (~7-15 s on a
+    /// 150-job board) and froze the polling UI. Locked by
+    /// <c>JobsEndpointPerfTests.WithRuntime_Over200Jobs_FinishesWellUnderOneSecond</c>.
     /// </summary>
-    public StuckLoopState? GetStuckLoopStateForJob(string jobId, string? watchPath = null)
+    public StuckLoopState? GetStuckLoopStateForJob(string jobId, string projectName)
     {
-        var info = _scanner.FindJob(jobId, watchPath);
-        if (info == null) return null;
-        var runner = _runners.Values.FirstOrDefault(r => r.Entry.Name == info.ProjectName);
-        return runner?.GetStuckLoopState(jobId);
+        if (string.IsNullOrEmpty(projectName)) return null;
+        return _runners.TryGetValue(projectName, out var runner)
+            ? runner.GetStuckLoopState(jobId)
+            : null;
     }
 
     private static WatchdogConfig LoadWatchdogConfig(IConfiguration cfg)
