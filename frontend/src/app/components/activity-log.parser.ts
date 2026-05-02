@@ -179,6 +179,176 @@ function groupToChatMessage(group: ActivityLogGroup, index: number): ChatMessage
   };
 }
 
+// =================================================================
+// Conversation turn builder (Activity Log "Conversation" mode)
+// =================================================================
+//
+// The Conversation view collapses the raw activity stream into the kind of
+// alternating dialogue a human reader expects:
+//
+//   user -> tool burst (collapsed) -> agent text turn -> tool burst -> ...
+//
+// One "turn" is a contiguous run of same-role groups - so a sequence of 12
+// reads + 3 edits becomes a single tool burst with counts ("12 reads, 3
+// edits"), and a sequence of 4 agent message lines becomes one big readable
+// agent turn whose body is rendered as Markdown. This is the structure the
+// user explicitly asked for: hide tool noise, keep responses prominent and
+// legible.
+
+export type ConversationTurnKind = 'agent' | 'user' | 'tools' | 'system';
+
+export interface ToolBurstSummary {
+  total: number;
+  counts: Partial<Record<ActivityLogKind, number>>;
+  /**
+   * One example label per kind (e.g. "Read prompt.md") so the collapsed badge
+   * can show what was actually done without expanding the full list.
+   */
+  samples: Partial<Record<ActivityLogKind, string>>;
+}
+
+export interface ConversationTurn {
+  id: string;
+  kind: ConversationTurnKind;
+  timestamp: string;
+  status: 'ok' | 'error' | 'neutral';
+  /** Source groups, kept so the UI can offer "expand the underlying tools" or copy. */
+  groups: ActivityLogGroup[];
+  /**
+   * For agent / user / system turns this is the joined raw text. It is fed
+   * through {@link renderMarkdown} on the view side (we keep this layer free
+   * of HTML so it stays unit-testable as plain strings).
+   */
+  text: string;
+  /** Populated only for kind === 'tools'. */
+  toolSummary?: ToolBurstSummary;
+}
+
+function isToolKind(kind: ActivityLogKind): boolean {
+  return TOOL_KINDS.includes(kind);
+}
+
+/**
+ * Maps a sequence of {@link ActivityLogGroup}s into a sequence of conversation
+ * turns. Adjacent groups of the same role are merged. Errors that aren't
+ * tool errors surface as their own `system` turns so they're never buried
+ * inside an agent block.
+ */
+export function buildConversationTurns(groups: ActivityLogGroup[]): ConversationTurn[] {
+  const turns: ConversationTurn[] = [];
+  let i = 0;
+  while (i < groups.length) {
+    const group = groups[i];
+    const role = roleFor(group);
+
+    // Collect the contiguous run of same-role groups.
+    const run: ActivityLogGroup[] = [group];
+    i += 1;
+    while (i < groups.length && roleFor(groups[i]) === role) {
+      run.push(groups[i]);
+      i += 1;
+    }
+
+    turns.push(turnFromRun(run, role, turns.length));
+  }
+  return turns;
+}
+
+function roleFor(group: ActivityLogGroup): ConversationTurnKind {
+  const isUser = group.lines.length > 0 && group.lines[0].stream === 'user';
+  if (isUser) return 'user';
+  if (isToolKind(group.kind)) return 'tools';
+  if (group.kind === 'error' || group.status === 'error') return 'system';
+  return 'agent';
+}
+
+function turnFromRun(run: ActivityLogGroup[], kind: ConversationTurnKind, index: number): ConversationTurn {
+  const firstLine = run[0]?.lines[0];
+  const timestamp = firstLine ? firstLine.timestamp : new Date().toISOString();
+  const status: 'ok' | 'error' | 'neutral' = run.some((g) => g.status === 'error')
+    ? 'error'
+    : kind === 'user'
+      ? 'neutral'
+      : 'ok';
+
+  if (kind === 'tools') {
+    return {
+      id: `turn-${index}-tools`,
+      kind,
+      timestamp,
+      status,
+      groups: run,
+      text: '',
+      toolSummary: summarizeToolBurst(run)
+    };
+  }
+
+  return {
+    id: `turn-${index}-${kind}`,
+    kind,
+    timestamp,
+    status,
+    groups: run,
+    text: turnTextFromGroups(run, kind)
+  };
+}
+
+/**
+ * Joins a run of agent / user / system groups into the readable text body of
+ * a single turn. We use group titles (the first line of each group) rather
+ * than the entire `lines` array to avoid reintroducing tool-output noise that
+ * the parser already classified as continuation. Blank lines between titles
+ * are preserved as paragraph breaks so the Markdown renderer can pick them
+ * up as `<p>` boundaries.
+ */
+function turnTextFromGroups(run: ActivityLogGroup[], kind: ConversationTurnKind): string {
+  const segments: string[] = [];
+  for (const group of run) {
+    if (kind === 'user') {
+      segments.push(group.title);
+      continue;
+    }
+    // For agent / system turns, the model's text was emitted as a sequence of
+    // lines that the backend split per newline. Re-join them with single
+    // newlines so paragraph structure (blank line = new <p>) survives.
+    const lines = group.lines.map((l) => l.text).filter((t) => t !== undefined);
+    segments.push(lines.join('\n'));
+  }
+  return segments.join('\n\n').trim();
+}
+
+export function summarizeToolBurst(groups: ActivityLogGroup[]): ToolBurstSummary {
+  const counts: Partial<Record<ActivityLogKind, number>> = {};
+  const samples: Partial<Record<ActivityLogKind, string>> = {};
+  let total = 0;
+  for (const group of groups) {
+    // The parser pre-compresses runs of reads/searches into a batch group with
+    // title "Reading files (3)" - so the count for a batch is its line count
+    // divided by 2 (action + continuation per item) and the sample comes from
+    // the first underlying continuation. For simple groups, count = 1.
+    const batchSize = inferBatchSize(group);
+    counts[group.kind] = (counts[group.kind] ?? 0) + batchSize;
+    total += batchSize;
+    if (!samples[group.kind]) {
+      samples[group.kind] = sampleLabelFor(group);
+    }
+  }
+  return { total, counts, samples };
+}
+
+function inferBatchSize(group: ActivityLogGroup): number {
+  // A compressed batch group's title looks like "Reading files (3)".
+  const m = /\((\d+)\)\s*$/.exec(group.title);
+  if (m) return Math.max(1, Number(m[1]));
+  return 1;
+}
+
+function sampleLabelFor(group: ActivityLogGroup): string {
+  if (group.subtitle) return group.subtitle;
+  // Strip the trailing batch count if present so the sample is a real label.
+  return group.title.replace(/\s*\(\d+\)\s*$/, '');
+}
+
 function toolAvatarFor(kind: ActivityLogKind): string {
   switch (kind) {
     case 'read': return '📖';

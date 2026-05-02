@@ -62,7 +62,9 @@ test.describe('Task log — copy buttons', () => {
 
     await page.goto(`/?job=${encodeURIComponent(target.id)}&watchPath=${encodeURIComponent(target.watchPath)}`);
     await page.getByTestId('inspector-tab-activity').click();
-    await page.getByTestId('activity-log-mode-raw').click();
+    // Trace mode is the post-revamp equivalent of the old Raw mode: a
+    // chronological view of every parsed group with stream tags.
+    await page.getByTestId('activity-log-mode-trace').click();
 
     const copyBtn = page.getByTestId('activity-log-copy');
     await expect(copyBtn).toBeVisible({ timeout: 5_000 });

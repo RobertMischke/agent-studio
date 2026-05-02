@@ -72,19 +72,20 @@ test.describe('Continuation log accumulation', () => {
     await expect(activityTab).toBeVisible({ timeout: 10_000 });
     await activityTab.click();
 
-    // Switch to Raw mode for a reliable line-count check.
-    const rawBtn = page.getByTestId('activity-log-mode-raw');
-    await expect(rawBtn).toBeVisible({ timeout: 5_000 });
-    await rawBtn.click();
+    // Switch to Trace mode (post-revamp equivalent of Raw) for a reliable
+    // line-count check. Trace shows every parsed group with all its lines.
+    const traceBtn = page.getByTestId('activity-log-mode-trace');
+    await expect(traceBtn).toBeVisible({ timeout: 5_000 });
+    await traceBtn.click();
 
     const body = page.getByTestId('activity-log-body');
     await expect(body).toBeVisible();
 
-    // At least one activity line must be visible — if the protocol were reset,
+    // At least one trace group must be visible - if the protocol were reset,
     // this container would be empty.
-    const lines = body.locator('.activity-line');
-    await expect(lines.first()).toBeVisible({ timeout: 5_000 });
-    const visibleCount = await lines.count();
+    const groups = body.locator('.trace-group');
+    await expect(groups.first()).toBeVisible({ timeout: 5_000 });
+    const visibleCount = await groups.count();
     expect(visibleCount).toBeGreaterThan(0);
 
     await body.screenshot({ path: 'continuation-log-accumulation.png' });
@@ -109,22 +110,29 @@ test.describe('Continuation log accumulation', () => {
     await expect(activityTab).toBeVisible({ timeout: 10_000 });
     await activityTab.click();
 
-    // Raw mode: each API line maps to one rendered row.
-    await page.getByTestId('activity-log-mode-raw').click();
+    // Trace mode: per-group view. We expand all groups to count their lines
+    // and compare against the API line count.
+    await page.getByTestId('activity-log-mode-trace').click();
 
     const body = page.getByTestId('activity-log-body');
-    await expect(body.locator('.activity-line').first()).toBeVisible({ timeout: 5_000 });
+    await expect(body.locator('.trace-group').first()).toBeVisible({ timeout: 5_000 });
 
-    // The summary shows "N / N lines" — extract the total.
-    const summary = page.locator('.activity-log__summary span').last();
-    const summaryText = await summary.textContent();
-    // Format is "N / M lines" where M is the total.
-    const totalMatch = summaryText?.match(/(\d+)\s+lines/);
-    if (totalMatch) {
-      const uiTotal = parseInt(totalMatch[1], 10);
-      // UI total must equal or exceed the API total (filters may hide some).
-      expect(uiTotal).toBeGreaterThanOrEqual(apiLineCount);
+    // Expand every trace group so all .trace-line elements are mounted.
+    const headers = body.locator('.trace-group__header');
+    const headerCount = await headers.count();
+    for (let i = 0; i < headerCount; i++) {
+      const expanded = await headers.nth(i).getAttribute('aria-expanded');
+      if (expanded !== 'true') {
+        // Tolerate already-expanded groups; clicking on collapsed ones expands them.
+        await headers.nth(i).click({ trial: false }).catch(() => undefined);
+      }
     }
+
+    const traceLines = body.locator('.trace-line');
+    const uiTotal = await traceLines.count();
+    // UI total must equal or exceed the API total (debug-noise toggle may
+    // hide some session/init frames; we don't account for that here).
+    expect(uiTotal).toBeGreaterThanOrEqual(apiLineCount);
 
     await body.screenshot({ path: 'continuation-log-accumulation-count.png' });
   });

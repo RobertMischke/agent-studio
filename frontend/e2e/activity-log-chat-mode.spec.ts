@@ -19,14 +19,15 @@ async function findJobWithOutput(): Promise<{ id: string; watchPath: string } | 
 }
 
 /**
- * Activity log — chat-window style view.
+ * Activity log — Conversation/Trace modes.
  *
- * The activity log offers three modes: Chat (Copilot/Cursor-style bubbles
- * with avatars), Parsed (collapsible groups), and Raw (line-by-line).
- * Toggling Chat must render bubbles with role data and group tool calls.
+ * The activity log offers two modes: Conversation (chat-style with grouped
+ * agent text and collapsible tool bursts) and Trace (chronological dump for
+ * debugging). The redesign replaced the prior 3-mode (chat/parsed/raw) UI
+ * because the per-kind filter checkboxes added more friction than value.
  */
-test.describe('Activity log — chat mode', () => {
-  test('chat mode renders message bubbles with agent and tool roles', async ({ page }) => {
+test.describe('Activity log — conversation mode', () => {
+  test('conversation mode renders agent / user / tool turns', async ({ page }) => {
     const target = await findJobWithOutput();
     if (!target) {
       test.skip(true, 'No job with CLI output available');
@@ -39,39 +40,27 @@ test.describe('Activity log — chat mode', () => {
     await expect(activityTab).toBeVisible({ timeout: 10_000 });
     await activityTab.click();
 
-    const chatModeBtn = page.getByTestId('activity-log-mode-chat');
-    await expect(chatModeBtn).toBeVisible({ timeout: 5_000 });
-    await chatModeBtn.click();
+    const conversationBtn = page.getByTestId('activity-log-mode-conversation');
+    await expect(conversationBtn).toBeVisible({ timeout: 5_000 });
+    await conversationBtn.click();
 
-    const chat = page.getByTestId('activity-log-chat');
-    await expect(chat).toBeVisible();
+    const convo = page.getByTestId('activity-log-conversation');
+    await expect(convo).toBeVisible();
 
-    // At least one message bubble should render.
-    const bubbles = chat.locator('.chat-msg');
-    await expect(bubbles.first()).toBeVisible({ timeout: 5_000 });
-    const count = await bubbles.count();
+    // At least one turn should render.
+    const turns = convo.locator('.convo-turn');
+    await expect(turns.first()).toBeVisible({ timeout: 5_000 });
+    const count = await turns.count();
     expect(count).toBeGreaterThan(0);
 
-    // Each bubble has a role attribute that should be one of the known values.
-    const roles = await bubbles.evaluateAll((els) => els.map((el) => el.getAttribute('data-role')));
-    for (const r of roles) {
-      expect(['agent', 'tool', 'system']).toContain(r);
-    }
-
-    // Capture a screenshot of the chat view for visual inspection.
-    // Saved to a fixed path so it survives Playwright's per-test cleanup.
-    // Use the bounded body container so the image is one viewport tall, not
-    // the full scroll height (which can be tens of thousands of pixels for
-    // long jobs).
+    // Capture a screenshot for visual inspection.
     const body = page.getByTestId('activity-log-body');
-    // Scroll up a few viewport heights so the screenshot shows agent and
-    // tool-call bubbles, not just the trailing System ERROR.
     await body.evaluate((el) => { el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight - 800); });
     await page.waitForTimeout(150);
-    await body.screenshot({ path: 'activity-log-chat-mode.png' });
+    await body.screenshot({ path: 'activity-log-conversation-mode.png' });
   });
 
-  test('switching back to Parsed restores the group view', async ({ page }) => {
+  test('switching to Trace restores the per-group view', async ({ page }) => {
     const target = await findJobWithOutput();
     if (!target) {
       test.skip(true, 'No job with CLI output available');
@@ -81,12 +70,12 @@ test.describe('Activity log — chat mode', () => {
     await page.goto(`/?job=${encodeURIComponent(target.id)}&watchPath=${encodeURIComponent(target.watchPath)}`);
     await page.getByTestId('inspector-tab-activity').click();
 
-    await page.getByTestId('activity-log-mode-chat').click();
-    await expect(page.getByTestId('activity-log-chat')).toBeVisible();
+    await page.getByTestId('activity-log-mode-conversation').click();
+    await expect(page.getByTestId('activity-log-conversation')).toBeVisible();
 
-    await page.getByTestId('activity-log-mode-parsed').click();
-    await expect(page.getByTestId('activity-log-chat')).toHaveCount(0);
-    // Parsed mode shows the activity-group elements.
-    await expect(page.locator('.activity-group').first()).toBeVisible({ timeout: 5_000 });
+    await page.getByTestId('activity-log-mode-trace').click();
+    await expect(page.getByTestId('activity-log-conversation')).toHaveCount(0);
+    await expect(page.getByTestId('activity-log-trace')).toBeVisible();
+    await expect(page.locator('.trace-group').first()).toBeVisible({ timeout: 5_000 });
   });
 });

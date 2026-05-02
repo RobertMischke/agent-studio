@@ -134,12 +134,12 @@ test.describe('Activity tab — interactive chat continuation', () => {
     await send.click();
 
     // Optimistic echo: the user's message must appear in the activity log
-    // *immediately* — before the response lands and before the next 2 s poll.
-    // The default Activity tab mode is "Parsed" so we check the parsed-mode
-    // testid; chat-mode coverage is handled in a dedicated assertion below.
-    const userGroup = page.getByTestId('activity-group-user').last();
-    await expect(userGroup).toBeVisible({ timeout: 1000 });
-    await expect(userGroup).toContainText(followup);
+    // *immediately* - before the response lands and before the next 2 s poll.
+    // The default Activity tab mode is "Conversation"; user turns are
+    // rendered with data-testid="convo-turn-user".
+    const userTurn = page.getByTestId('convo-turn-user').last();
+    await expect(userTurn).toBeVisible({ timeout: 1000 });
+    await expect(userTurn).toContainText(followup);
 
     // Input clears on send.
     await expect(input).toHaveValue('');

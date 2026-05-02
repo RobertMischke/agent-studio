@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildChatMessages,
+  buildConversationTurns,
   defaultActivityLogFilters,
   filterActivityGroups,
   flattenActivityLines,
-  parseActivityLog
+  parseActivityLog,
+  summarizeToolBurst
 } from './activity-log.parser';
 import { CliOutputLine } from '../models/job.model';
 
@@ -83,6 +85,75 @@ describe('parseActivityLog', () => {
     expect(messages[0].role).toBe('user');
     expect(messages[0].author).toBe('You');
     expect(messages[0].title).toBe('please switch to dark mode');
+  });
+});
+
+describe('buildConversationTurns', () => {
+  it('groups consecutive tool actions into a single tool burst with counts', () => {
+    const groups = parseActivityLog([
+      line('* Read prompt.md'),
+      line('  | prompt.md'),
+      line('* Read status.md'),
+      line('  | status.md'),
+      line('* Read job.json'),
+      line('  | job.json'),
+      line('Looks good — fix is small.'),
+      line('Will adjust spacing.')
+    ]);
+    const turns = buildConversationTurns(groups);
+
+    // The 3 reads compress into one batch group, then the agent text becomes
+    // its own turn. Result: 2 turns in alternation (tools, agent).
+    expect(turns.map((t) => t.kind)).toEqual(['tools', 'agent']);
+    expect(turns[0].toolSummary?.total).toBeGreaterThanOrEqual(3);
+    expect(turns[0].toolSummary?.counts.read).toBeGreaterThanOrEqual(3);
+    expect(turns[1].text).toContain('Looks good');
+    expect(turns[1].text).toContain('Will adjust spacing');
+  });
+
+  it('keeps user messages as their own turn between agent runs', () => {
+    const groups = parseActivityLog([
+      line('* Read prompt.md'),
+      line('  | prompt.md'),
+      line('please continue', 'user'),
+      line('Done — committed.', 'stdout')
+    ]);
+    const turns = buildConversationTurns(groups);
+
+    expect(turns.map((t) => t.kind)).toEqual(['tools', 'user', 'agent']);
+    expect(turns[1].text).toBe('please continue');
+    expect(turns[2].text).toContain('Done');
+  });
+
+  it('treats unattached errors as system turns so they are not buried', () => {
+    const groups = parseActivityLog([
+      line('Build started.'),
+      line('x Some failure', 'stderr'),
+      line('Recovered.', 'stdout')
+    ]);
+    const turns = buildConversationTurns(groups);
+
+    expect(turns.map((t) => t.kind)).toContain('system');
+    const sys = turns.find((t) => t.kind === 'system');
+    expect(sys?.status).toBe('error');
+  });
+});
+
+describe('summarizeToolBurst', () => {
+  it('counts batched groups by their batch size, not by group count', () => {
+    const groups = parseActivityLog([
+      line('* Read prompt.md'),
+      line('  | prompt.md'),
+      line('* Read status.md'),
+      line('  | status.md'),
+      line('* Read job.json'),
+      line('  | job.json')
+    ]);
+    // The parser compresses adjacent reads into one group with title
+    // "Reading files (3)"; the summary must recover the original count of 3.
+    const summary = summarizeToolBurst(groups);
+    expect(summary.total).toBe(3);
+    expect(summary.counts.read).toBe(3);
   });
 });
 
