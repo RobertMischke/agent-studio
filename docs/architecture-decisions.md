@@ -104,6 +104,26 @@ Numbering is monotonic and never reused. When an ADR is superseded, leave the or
 
 ---
 
+## ADR-0008 - Editor no-clobber rule: stub-mount autosaves never overwrite prompt.md (2026-05-02)
+
+**Decision.** The markdown rich editor only persists its current value when both (a) the value diverges from what the parent committed and (b) a real user edit actually happened in this mount. The rule lives as a pure helper `shouldEmitEditorSave` so it has its own unit tests independent of Tiptap and Angular. After every successful save the user-edit flag resets to false so a subsequent stub remount cannot piggy-back on it.
+
+**Context.** The user reported a crash-class data-loss bug twice in this conversation: open a job with a real `prompt.md`, the Task Description renders empty, the file on disk is empty. Diagnosis: on mount, the parent passes `value=''` until detail() resolves; Tiptap's `onUpdate` was firing for the constructor's content load on the bundled version, which scheduled a 600 ms autosave. If detail() took longer than 600 ms (or if the user navigated detail panes during the race window), the save fired with the stub empty value, the parent wrote `prompt.md=''` to disk, and the next refetch read that back into the editor, wiping the user's input permanently.
+
+**Non-goals.**
+- Removing autosave. The 600 ms autosave is a usability commitment; we do not regress to "Ctrl+S or lose work".
+- Blocking deliberate empty saves. If the user clears the prompt on purpose, that must persist. The user-edit flag distinguishes intent from race.
+- Hiding the rule inside the component. It moves to its own file (`markdown-rich-editor.guard.ts`) so the test does not have to spin up Angular's JIT compiler.
+- Trusting Tiptap's onUpdate signal alone to mean "user input". Versions differ; the guard treats divergence + an explicit interaction flag as the only authority.
+
+**Reasoning style.** Pure rule + minimal flag. The structural property is the single function `shouldEmitEditorSave`; the imperative flag `hasUserEdit` is the only state the component tracks beyond what Tiptap already gives it. Tests cover the four corners of (current vs committed) x (hasUserEdit). The flag resets on every successful save so the same race can never reuse a latched true.
+
+**Implementation pointers.** [frontend/src/app/components/markdown-rich-editor.guard.ts](../frontend/src/app/components/markdown-rich-editor.guard.ts), [frontend/src/app/components/markdown-rich-editor.spec.ts](../frontend/src/app/components/markdown-rich-editor.spec.ts), and the wired `hasUserEdit` flag + `emitSave` guard in [frontend/src/app/components/markdown-rich-editor.ts](../frontend/src/app/components/markdown-rich-editor.ts).
+
+**Status.** Accepted.
+
+---
+
 ## ADR-0007 - Runner prompts put user content first; behavioral changes need a live probe (2026-05-02)
 
 **Decision.** Every runner prompt template now places the user task (or user follow-up) at the very top of the rendered string. Bootstrap framing, run context, and rules come after, separated by a horizontal rule. The bootstrap headlines no longer contain the literal word "(system)". The output contract is reduced to a single short tail line. Behavioral changes to prompt templates must be verified by running the `@billable` `claude-hello-world.spec.ts` (or the per-CLI equivalent) before the change is committed - unit tests on rendered string content do not catch regressions in agent behavior.

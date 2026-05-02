@@ -2,6 +2,7 @@ import { AfterViewInit, Component, ElementRef, HostListener, OnDestroy, ViewChil
 import { FormsModule } from '@angular/forms';
 import type { Editor } from '@tiptap/core';
 import { htmlToMarkdown, markdownToHtml, MarkdownImageOptions } from './markdown-utils';
+import { shouldEmitEditorSave } from './markdown-rich-editor.guard';
 
 type EditorState = 'idle' | 'dirty' | 'saved';
 
@@ -324,6 +325,18 @@ export class MarkdownRichEditorComponent implements AfterViewInit, OnDestroy {
   private savedTimer: ReturnType<typeof setTimeout> | null = null;
   private autosaveTimer: ReturnType<typeof setTimeout> | null = null;
   private dragCounter = 0;
+  /**
+   * True only after a real user edit has touched the editor. Tiptap's
+   * onUpdate fires for both user input and (in some configurations) the
+   * initial constructor content load, which used to race against the
+   * parent's async detail() fetch: an autosave fired with the stub empty
+   * value before the real prompt arrived, clobbering prompt.md on disk.
+   * We gate scheduleAutosave on this flag and flip it only inside an
+   * onUpdate that observes content actually different from
+   * <see cref="committedValue"/>. Programmatic setContent calls in
+   * <see cref="valueEffect"/> use `emitUpdate: false` so they never flip it.
+   */
+  private hasUserEdit = false;
   // Sync the parent-provided value into the editor whenever it changes. We
   // read sourceValue/committedValue via untracked() so user edits (which write
   // sourceValue) don't re-trigger this effect and revert the user's typing.
@@ -403,8 +416,17 @@ export class MarkdownRichEditorComponent implements AfterViewInit, OnDestroy {
         }
       },
       onUpdate: ({ editor }) => {
-        this.sourceValue.set(htmlToMarkdown(editor.getHTML(), this.markdownOptions()));
-        this.scheduleAutosave();
+        const next = htmlToMarkdown(editor.getHTML(), this.markdownOptions());
+        this.sourceValue.set(next);
+        // Only count this as a user edit (and therefore arm autosave) when
+        // the new content actually diverges from what the parent told us.
+        // Tiptap fires onUpdate for the constructor's content load on some
+        // versions; without this guard a stub empty mount would autosave ''
+        // before the real prompt arrives and clobber prompt.md on disk.
+        if (next !== this.committedValue()) {
+          this.hasUserEdit = true;
+          this.scheduleAutosave();
+        }
       }
     });
   }
@@ -425,6 +447,10 @@ export class MarkdownRichEditorComponent implements AfterViewInit, OnDestroy {
   updateSource(value: string): void {
     this.sourceValue.set(value);
     this.editor?.commands.setContent(this.toHtml(value), { emitUpdate: false });
+    // Source-mode edit is unambiguously user-driven (the textarea binds to
+    // ngModelChange); flag hasUserEdit so the no-clobber rule lets the
+    // resulting autosave through.
+    if (value !== this.committedValue()) this.hasUserEdit = true;
     this.scheduleAutosave();
   }
 
@@ -458,7 +484,21 @@ export class MarkdownRichEditorComponent implements AfterViewInit, OnDestroy {
   emitSave(): void {
     if (this.readOnly()) return;
     const value = this.sourceValue();
+    // No-clobber rule: don't persist the editor value unless the user
+    // actually touched it AND it diverges from what the parent committed.
+    // Without this guard, the empty initial-mount race overwrites
+    // prompt.md before the parent's async detail() fetch arrives. See
+    // shouldEmitEditorSave for the full rationale.
+    if (!shouldEmitEditorSave({
+      current: value,
+      committed: this.committedValue(),
+      hasUserEdit: this.hasUserEdit
+    })) return;
     this.committedValue.set(value);
+    // After a real save, clear the user-edit flag so a fresh remount-with-
+    // stub-value race cannot reuse the latched true to push another empty.
+    // The next user keystroke will set it again.
+    this.hasUserEdit = false;
     this.save.emit(value);
     if (this.savedTimer) clearTimeout(this.savedTimer);
     this.savedAt.set(Date.now());
