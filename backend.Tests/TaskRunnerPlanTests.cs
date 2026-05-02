@@ -456,6 +456,154 @@ public class TaskRunnerPlanTests
         Assert.Equal(expected, RunCompletionPolicy.ShouldMoveToReview(status));
     }
 
+    // =================================================================
+    // "Fluffy chat" continuation matrix
+    //
+    // What we want: the user sends a follow-up, the agent replies, the
+    // user sends another follow-up — repeat without surprises. Each
+    // turn must produce a plan that resumes the prior session, sends
+    // the user's followup as the next conversation turn, and never
+    // fires recovery / chain-break side effects when the chain is
+    // intact. These tests lock the per-turn plan shape so a refactor
+    // of the planner can't silently change the chat semantics.
+    // =================================================================
+
+    /// <summary>
+    /// First follow-up after a fresh start: the planner must resume the
+    /// captured UUID, pass the followup as the prompt override, and not move
+    /// the job (it's already in 3-progress).
+    /// </summary>
+    [Fact]
+    public void Continue_FirstFollowupAfterFreshStart_ResumesSessionWithoutSideEffects()
+    {
+        var p = Plan(RunIntent.UserContinue, JobStates.Progress, sessionName: ValidUuid,
+                     followup: "Now also add tests.");
+
+        Assert.Equal("continue", p.EventKind);
+        Assert.True(p.ResumeFlag);
+        Assert.Equal(ValidUuid, p.SessionToResume);
+        Assert.Equal("Now also add tests.", p.PromptOverride);
+        Assert.Null(p.PromptTemplate);            // no bootstrap on a continuation
+        Assert.False(p.MoveJobToProgress);
+        Assert.False(p.MarkSessionChainRecovery);
+        Assert.False(p.WriteCutMarker);
+        Assert.Null(p.PersistSessionName);
+    }
+
+    /// <summary>
+    /// Long back-and-forth: two consecutive follow-ups must produce identical
+    /// plan shapes. This is the property the user actually feels as "fluffy
+    /// chat" — every turn behaves the same, no random recovery or template
+    /// swap mid-conversation.
+    /// </summary>
+    [Fact]
+    public void Continue_TwoConsecutiveFollowupsProduceSamePlanShape()
+    {
+        var first  = Plan(RunIntent.UserContinue, JobStates.Progress, sessionName: ValidUuid, followup: "first");
+        var second = Plan(RunIntent.UserContinue, JobStates.Progress, sessionName: ValidUuid, followup: "second");
+
+        Assert.Equal(first.EventKind, second.EventKind);
+        Assert.Equal(first.ResumeFlag, second.ResumeFlag);
+        Assert.Equal(first.SessionToResume, second.SessionToResume);
+        Assert.Equal(first.PromptTemplate, second.PromptTemplate);   // both null
+        Assert.Equal(first.MoveJobToProgress, second.MoveJobToProgress);
+        Assert.Equal(first.MarkSessionChainRecovery, second.MarkSessionChainRecovery);
+        // Only the prompt content differs.
+        Assert.NotEqual(first.PromptOverride, second.PromptOverride);
+    }
+
+    /// <summary>
+    /// Continue from Review (user reopened a finished job and typed in chat):
+    /// move job back to 3-progress, resume, attach the followup. Distinct
+    /// from ManualStart-from-Review which uses the restart bootstrap; this
+    /// path skips the bootstrap because the user is providing fresh
+    /// instructions verbatim.
+    /// </summary>
+    [Fact]
+    public void Continue_FromReview_MovesToProgressAndResumesWithFollowupVerbatim()
+    {
+        var p = Plan(RunIntent.UserContinue, JobStates.Review, sessionName: ValidUuid,
+                     followup: "One more tweak: tighten the spacing.");
+
+        Assert.Equal("continue", p.EventKind);
+        Assert.True(p.ResumeFlag);
+        Assert.Equal(ValidUuid, p.SessionToResume);
+        Assert.True(p.MoveJobToProgress, "review → progress when continuing");
+        Assert.Equal("One more tweak: tighten the spacing.", p.PromptOverride);
+        Assert.Null(p.PromptTemplate);
+    }
+
+    /// <summary>
+    /// Empty follow-up is still a valid plan (recovery path passes empty
+    /// string when the runner has no user text). Locks: empty prompt does
+    /// not crash and does not flip the kind.
+    /// </summary>
+    [Fact]
+    public void Continue_EmptyFollowup_StillProducesRunnablePlan()
+    {
+        var p = Plan(RunIntent.UserContinue, JobStates.Progress, sessionName: ValidUuid, followup: "");
+
+        Assert.Equal("continue", p.EventKind);
+        Assert.True(p.ResumeFlag);
+        Assert.Equal(string.Empty, p.PromptOverride);
+        Assert.NotNull(p.SessionToResume);
+    }
+
+    /// <summary>
+    /// Recovery boundary: if the persisted session is dropped and we re-start
+    /// from Progress, the plan must NOT use the chat-continuation path —
+    /// recovery hands control to the runner-recovery-continuation prompt
+    /// which tells the agent to reconstruct from job folder. This test pins
+    /// the "no silent recovery" property: only an explicit Continue with a
+    /// followup hits recovery, never a Continue with a fresh session.
+    /// </summary>
+    [Fact]
+    public void Continue_AfterChainRecovery_StartsFreshButKeepsUserFollowup()
+    {
+        var p = Plan(RunIntent.UserContinue, JobStates.Progress, sessionName: null,
+                     followup: "Pick up where you left off please.");
+
+        Assert.Equal("recovery", p.EventKind);
+        Assert.False(p.ResumeFlag);
+        Assert.Null(p.SessionToResume);
+        Assert.Equal(RuntimePromptService.RunnerRecoveryContinuation, p.PromptTemplate);
+        Assert.True(p.MarkSessionChainRecovery);
+        Assert.True(p.WriteCutMarker);
+        // The followup is woven into the recovery-prompt template via
+        // PromptVariables, not as a literal override.
+        Assert.Null(p.PromptOverride);
+        Assert.Equal("Pick up where you left off please.", Var(p, "user_followup"));
+    }
+
+    /// <summary>
+    /// A Copilot session whose persisted slug DOESN'T match the
+    /// <c>taskboard-...-NNNNNNNNNNNN</c> placeholder shape (e.g. a slug from
+    /// a previous version of the app or one entered manually). Continue
+    /// must resume via the slug. This is the only Copilot continue shape
+    /// that actually resumes today — the auto-generated slug from
+    /// <see cref="RunPlanner.BuildSessionName"/> is treated as a legacy
+    /// placeholder and routes to recovery (see
+    /// <see cref="Continue_WithPlaceholderSlug_OnCopilot_RoutesToRecoveryWithPlaceholderReason"/>).
+    /// That asymmetry is intentional today: when we changed Copilot's
+    /// resume semantics, the placeholder guard kept old jobs from
+    /// resuming with a slug that was never a real session on Copilot's
+    /// side. If Copilot's CLI surfaces a real session ID, it should be
+    /// stored under a non-placeholder shape and follow this path.
+    /// </summary>
+    [Fact]
+    public void Continue_CopilotNonPlaceholderSlugSession_ResumesViaSlug()
+    {
+        const string copilotSlug = "user-named-session-2026";  // doesn't match placeholder regex
+        var p = Plan(RunIntent.UserContinue, JobStates.Progress, sessionName: copilotSlug,
+                     cliType: CliTypes.Copilot, compat: PermissiveCompat,
+                     followup: "Try running the tests.");
+
+        Assert.Equal("continue", p.EventKind);
+        Assert.True(p.ResumeFlag);
+        Assert.Equal(copilotSlug, p.SessionToResume);
+        Assert.False(p.MarkSessionChainRecovery);
+    }
+
     private static string? Var(RunPlan plan, string key) =>
         plan.PromptVariables.TryGetValue(key, out var value) ? value : null;
 }
