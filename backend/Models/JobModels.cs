@@ -36,7 +36,7 @@ public record JobInfo
     /// successful resume of a forking CLI (Claude / Codex / Gemini) appends a new
     /// id. <see cref="SessionName"/> is always the chain's last entry.
     /// A recovery-continue (session lost, reconstructed from job folder) breaks
-    /// the chain — the next captured id will start a new logical chain segment.
+    /// the chain; the next captured id will start a new logical chain segment.
     /// </summary>
     public List<string> SessionChain { get; init; } = [];
 }
