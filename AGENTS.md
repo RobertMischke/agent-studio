@@ -120,6 +120,12 @@ Local watch configuration usually lives in gitignored `backend/appsettings.Local
 
 _(Shell policy, Backend Control, Frontend Control, and Build/Test/Verify are documented below under "Shell policy: sh, not PowerShell".)_
 
+### Prompt-template changes: live probe required
+
+Any change to a file under `prompts/runtime/` (the runner bootstrap templates, the summary template, the commit-message template) is a behavioral change against the agent CLI, not a textual change. Unit tests on rendered string content cannot catch a regression in how the CLI reacts to the new wording or structure - that lesson is recorded in [ADR-0007](docs/architecture-decisions.md). Before claiming a prompt change is safe, run the `@billable` `claude-hello-world.spec.ts` (or the equivalent for the affected CLI) end-to-end and confirm the agent produces real output, not a fast "I'll wait for your request" exit. The structural unit-test guards in [backend.Tests/TaskRunnerPromptTests.cs](backend.Tests/TaskRunnerPromptTests.cs) (e.g. "user task header appears before run-context header") are necessary, not sufficient.
+
+If the prompt change cannot be live-probed in the current session (no quota, no machine access), say so explicitly; do not silently ship and hope.
+
 ### Visual & behavioural changes: Playwright is mandatory
 
 **Default = always test. Never ask the user whether to run Playwright or write a spec. Just do it, with priority.** Asking ("should I add a spec?", "want me to verify?") is a regression. Treat the test + screenshot deliverable as part of the task itself.

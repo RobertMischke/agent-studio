@@ -104,6 +104,26 @@ Numbering is monotonic and never reused. When an ADR is superseded, leave the or
 
 ---
 
+## ADR-0007 - Runner prompts put user content first; behavioral changes need a live probe (2026-05-02)
+
+**Decision.** Every runner prompt template now places the user task (or user follow-up) at the very top of the rendered string. Bootstrap framing, run context, and rules come after, separated by a horizontal rule. The bootstrap headlines no longer contain the literal word "(system)". The output contract is reduced to a single short tail line. Behavioral changes to prompt templates must be verified by running the `@billable` `claude-hello-world.spec.ts` (or the per-CLI equivalent) before the change is committed - unit tests on rendered string content do not catch regressions in agent behavior.
+
+**Context.** A previous round of edits added an output-contract block, restructured the recovery template, and led with `# Task Runner Bootstrap (system)` headlines. In production, Claude Code started replying "I'll wait for your actual request" and exiting in 3-4 seconds for *every* run, including fresh starts on jobs with real prompts. The unit tests stayed green because they only verified that strings appeared in the rendered template; nothing exercised the actual CLI. The user surfaced this as "Tasks werden überhaupt nicht mehr bearbeitet" and asked why tests did not catch it.
+
+**Non-goals.**
+- Hand-waving the test gap. Pure-function tests are necessary but not sufficient for prompt changes; this ADR makes the live-probe requirement explicit.
+- Making the bootstrap longer. The minimum viable framing wins. Anything that pushes the user task more than a few hundred characters down the prompt is suspect.
+- Calling the framing "system metadata" inside the user prompt. That label tells the LLM to ignore it and wait for a real user message.
+- Making the output contract a featured section. The orchestrator parses the tokens whether or not the agent emits them; making the contract loud in the prompt does not increase compliance, only confusion.
+
+**Reasoning style.** Two-layer regression: a structural mistake in the prompt (user content buried below system framing) plus a process mistake (no behavioral verification before commit). The structural fix is mechanical: invert the order, drop the "(system)" labels, shorten the contract. The process fix is the live probe requirement; we add a structural unit-test guard ("user task header appears before run-context header") so the order-of-content cannot regress silently, but we name the live probe as the ground truth.
+
+**Implementation pointers.** [prompts/runtime/runner-fresh-start.md](../prompts/runtime/runner-fresh-start.md), [prompts/runtime/runner-resume-interrupted.md](../prompts/runtime/runner-resume-interrupted.md), [prompts/runtime/runner-resume-restart.md](../prompts/runtime/runner-resume-restart.md), [prompts/runtime/runner-recovery-continuation.md](../prompts/runtime/runner-recovery-continuation.md); structural assertions in [backend.Tests/TaskRunnerPromptTests.cs](../backend.Tests/TaskRunnerPromptTests.cs); the live probe is `frontend/e2e/claude-hello-world.spec.ts`.
+
+**Status.** Accepted.
+
+---
+
 ## ADR-0006 - Graceful Recovery: re-issue once even when the session is unrecoverable (2026-05-02)
 
 **Decision.** When a UserContinue follow-up routes to Recovery and the agent exits no-op or fast-Done, the orchestrator re-issues the follow-up exactly once with a recovery-aware prompt instead of stopping. The re-issue prompt explicitly tells the agent that conversation history is gone, names the job folder evidence as the only context, and forbids "I'll wait for your next request" as an answer. The retry budget (`MaxAutoReissueAttempts = 1`) is shared with the Resume-Continue path; one shot, then `NotifyUserAndStop`.

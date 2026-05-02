@@ -1,61 +1,25 @@
-<!--
-  System bootstrap for Agent Task Processor. The heading and these instructions
-  are NOT the user's task - they are framing for the runner. The user's task is
-  embedded below under "## User task".
--->
-
-# Task Runner Bootstrap (system)
-
-You are executing exactly one task selected by Agent Task Processor. The
-heading above is system metadata, not the task. The user's task is the title
-plus the body under "## User task" further down - read both carefully before
-doing anything else. If "## User task" is empty, fall back to reading the file
-at `{{prompt_path}}`.
-
-Working directory for implementation:
-{{working_directory}}
-
-Git repository path for status, diff, and commits:
-{{repository_path}}
-
-Job folder for task metadata and evidence:
-{{job_folder}}
-
-Task prompt path (source of truth on disk):
-{{prompt_path}}
-
-Attachments:
-- Any `attachments/<file>` path in the user task is relative to the job
-  folder above. Resolve it to `{{job_folder}}/attachments/<file>` when you
-  need to read it.
-- Files currently in the attachments folder:
-{{attachments_list}}
-
-Rules:
-- Do not scan for other tasks.
-- Do not move the job folder.
-- Do not edit the job state in job.json.
-- Do not start another task.
-- Treat the application as the owner of pickup, stop, continue, and state transitions.
-- Work in the working directory above unless you are reading or writing task evidence in the job folder.
-- Run git status and git diff in the repository path above when checking changes.
-- If screenshots or result files matter for review, place them under the job folder's results/ directory.
-- Do not move queue state or rely on hand-written status.md content for durable evidence.
-
-Output contract (machine-read by the orchestrator):
-When you finish, emit exactly one of these tokens on its own line so the
-orchestrator can react deterministically. Do not paraphrase them.
-- `[[TASK_DONE]]` - the task is fully done.
-- `[[TASK_BLOCKED:<short reason>]]` - you cannot proceed; explain briefly.
-- `[[TASK_NEEDS_INPUT:<short reason>]]` - you need user input to continue.
-- `[[TASK_NOOP]]` - intentionally did nothing (rare; explain why).
-If you skip the token, the orchestrator falls back to a heuristic and warns
-the user that the contract did not match.
-
-## User task
-
-**Title:** {{title}}
-
-**Body:**
+# {{title}}
 
 {{prompt_text}}
+
+---
+
+Context for this run (read after the task above):
+
+- Working directory: `{{working_directory}}`
+- Git repository for status/diff/commits: `{{repository_path}}`
+- Job folder for task metadata and evidence: `{{job_folder}}`
+- Task prompt path on disk: `{{prompt_path}}`
+- Attachments folder (relative `attachments/<file>` paths resolve under the job folder):
+{{attachments_list}}
+
+Rules for this run:
+
+- Work on this task only. Do not scan for or pick up other tasks.
+- Do not move the job folder. Do not edit `state` in `job.json`. The application owns pickup, stop, continue, and state transitions.
+- Do the implementation in the working directory above. Read or write task evidence in the job folder.
+- Run git status and git diff in the repository path above when you need to inspect changes.
+- Place review-relevant screenshots / result files under the job folder's `results/` directory.
+- Do not rely on hand-written `status.md`; the application regenerates it from logs.
+
+When you finish, end your reply with one of these tokens on its own line: `[[TASK_DONE]]`, `[[TASK_BLOCKED:<short reason>]]`, `[[TASK_NEEDS_INPUT:<short reason>]]`, or `[[TASK_NOOP]]` (rare). The orchestrator parses this token to decide what happens next.

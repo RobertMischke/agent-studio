@@ -28,10 +28,18 @@ public class TaskRunnerPromptTests
         Assert.Contains(@"C:\jobs\fix-bug", p);
         Assert.Contains(@"C:\Projects\Runbook\App", p);
         Assert.Contains(@"C:\Projects\Runbook", p);
-        Assert.Contains("Do not scan for other tasks", p);
-        Assert.Contains("Do not move the job folder", p);
-        Assert.Contains("application as the owner", p);
-        Assert.Contains("Run git status and git diff in the repository path", p);
+        Assert.Contains("Do not scan for or pick up other tasks", p);
+        Assert.Contains("do not move the job folder", p, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("application owns pickup", p);
+        Assert.Contains("git status and git diff", p);
+
+        // Structural property: the user task header must come before the
+        // run-context framing. With user content second, Claude treats the
+        // bootstrap as a system stub and replies "I'll wait for your actual
+        // request." This guards against the regression that broke production.
+        var taskHeader = p.IndexOf("# ", StringComparison.Ordinal);
+        var contextHeader = p.IndexOf("Context for this run", StringComparison.Ordinal);
+        Assert.InRange(taskHeader, 0, contextHeader);
     }
 
     [Fact]
@@ -39,12 +47,15 @@ public class TaskRunnerPromptTests
     {
         var p = Prompts().Render(RuntimePromptService.RunnerResumeInterrupted, new Dictionary<string, string?>
         {
+            ["prompt_path"] = @"C:\jobs\fix-bug\prompt.md",
             ["job_folder"] = @"C:\jobs\fix-bug",
             ["working_directory"] = @"C:\Projects\Runbook\App",
-            ["repository_path"] = @"C:\Projects\Runbook"
+            ["repository_path"] = @"C:\Projects\Runbook",
+            ["title"] = "Improve the layout of the taskbar.",
+            ["prompt_text"] = "(body)"
         });
 
-        Assert.Contains("Resume the interrupted task", p);
+        Assert.Contains("Resume this interrupted task", p);
         Assert.Contains(@"C:\jobs\fix-bug", p);
         Assert.Contains(@"C:\Projects\Runbook\App", p);
         Assert.Contains(@"C:\Projects\Runbook", p);
@@ -52,8 +63,7 @@ public class TaskRunnerPromptTests
         Assert.Contains("prompt.md", p);
         Assert.Contains("status.md", p);
         Assert.Contains("logs", p);
-        Assert.Contains("Do not move the job folder", p);
-        Assert.Contains("Do not ask what to do", p);
+        Assert.Contains("do not move the job folder", p, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
@@ -81,8 +91,8 @@ public class TaskRunnerPromptTests
         Assert.Contains("git status", p);
         Assert.Contains("git diff", p);
         // Standard guardrails still apply.
-        Assert.Contains("Do not scan for other tasks", p);
-        Assert.Contains("Do not move the job folder", p);
+        Assert.Contains("do not scan", p, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("do not move the job folder", p, StringComparison.OrdinalIgnoreCase);
         // Variables are expanded.
         Assert.Contains("Improve the layout of the taskbar.", p);
         Assert.Contains("(updated body)", p);
@@ -112,7 +122,14 @@ public class TaskRunnerPromptTests
         Assert.Contains("PRIMARY INSTRUCTION", p, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("[[TASK_BLOCKED", p);
         // Standard guardrails still apply.
-        Assert.Contains("Do not move the job folder", p);
+        Assert.Contains("do not move the job folder", p, StringComparison.OrdinalIgnoreCase);
+
+        // Structural property: the user follow-up must be the very first
+        // visible line, before any framing. With framing first, Claude
+        // treats the prompt as a system stub and replies "I'll wait."
+        var followupIndex = p.IndexOf("Please continue with adding the chat compose box.", StringComparison.Ordinal);
+        var primaryHeader = p.IndexOf("PRIMARY INSTRUCTION", StringComparison.OrdinalIgnoreCase);
+        Assert.InRange(followupIndex, 0, primaryHeader);
     }
 
     [Fact]

@@ -1,59 +1,26 @@
-<!--
-  System bootstrap for Agent Task Processor (resume path). The heading and
-  these instructions are NOT the user's task - they are framing for the
-  runner. The user's task is embedded below under "## User task".
--->
-
-# Task Runner Bootstrap (system) - Resume
-
-Resume the interrupted task selected by Agent Task Processor. The heading
-above is system metadata, not the task. The user's task is the title plus the
-body under "## User task" further down - read it together with the existing
-job evidence before continuing.
-
-Working directory for implementation:
-{{working_directory}}
-
-Git repository path for status, diff, and commits:
-{{repository_path}}
-
-Job folder for task metadata and evidence:
-{{job_folder}}
-
-Task prompt path (source of truth on disk):
-{{prompt_path}}
-
-Attachments:
-- Any `attachments/<file>` path in the user task is relative to the job
-  folder above. Resolve it to `{{job_folder}}/attachments/<file>` when you
-  need to read it.
-- Files currently in the attachments folder:
-{{attachments_list}}
-
-Reconstruct context before doing anything else:
-1. Read job.json, prompt.md, status.md, and existing logs.
-2. Inspect the repository path above with git status and git diff.
-3. Continue the existing implementation instead of restarting the task.
-
-Rules:
-- Do not scan for other tasks.
-- Do not move the job folder.
-- Do not edit the job state in job.json.
-- Do not start another task.
-- Treat the application as the owner of pickup, stop, continue, and state transitions.
-- Work in the working directory above unless you are reading or writing task evidence in the job folder.
-- Do not ask what to do unless required files are missing or contradictory.
-
-Output contract (machine-read by the orchestrator):
-End your run with exactly one of these tokens on its own line:
-`[[TASK_DONE]]`, `[[TASK_BLOCKED:<reason>]]`, `[[TASK_NEEDS_INPUT:<reason>]]`,
-or `[[TASK_NOOP]]`. The orchestrator uses the token to decide what happens
-next without re-reading your prose.
-
-## User task
-
-**Title:** {{title}}
-
-**Body:**
+# {{title}}
 
 {{prompt_text}}
+
+---
+
+Resume this interrupted task. The previous CLI run did not finish; existing changes and evidence are intact, so continue from them rather than starting over.
+
+Reconstruct context before continuing:
+
+1. Read `job.json`, `prompt.md`, `status.md`, and `logs/cli-output.log` if they exist.
+2. Run git status and git diff in `{{repository_path}}` to see what is already in place.
+3. Continue the existing implementation; do not re-do completed work.
+
+Run context:
+
+- Working directory: `{{working_directory}}`
+- Git repository: `{{repository_path}}`
+- Job folder: `{{job_folder}}`
+- Task prompt path: `{{prompt_path}}`
+- Attachments folder:
+{{attachments_list}}
+
+Rules: same as a fresh run. Work on this task only, do not move the job folder, do not edit `state` in `job.json`, do not scan for other tasks, and do not start another task. Do not ask what to do unless required files are missing or contradictory.
+
+When you finish, end your reply with one of these tokens on its own line: `[[TASK_DONE]]`, `[[TASK_BLOCKED:<short reason>]]`, `[[TASK_NEEDS_INPUT:<short reason>]]`, or `[[TASK_NOOP]]`. The orchestrator parses this token to decide what happens next.
