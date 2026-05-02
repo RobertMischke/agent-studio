@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport, QuotaReport, QuotaSnapshot, GitStatus, ClaudeSessionResponse, JobCommitDetail, SessionEventsResponse, ContinueMode, ContinueJobResponse } from '../models/job.model';
+import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport, QuotaReport, QuotaSnapshot, GitStatus, ClaudeSessionResponse, JobCommitDetail, SessionEventsResponse, ContinueMode, ContinueJobResponse, OrchestratorLogResponse } from '../models/job.model';
 import { ErrorDialogService } from './error-dialog.service';
 
 @Injectable({ providedIn: 'root' })
@@ -226,6 +226,18 @@ export class JobService {
   // Runner management
   getRunnerStatus() {
     return this.http.get<RunnerStatus>(`${this.baseUrl}/runner/status`);
+  }
+
+  /**
+   * Read the orchestrator's chronological feed for one project: decisions
+   * made, actions taken (queued follow-ups, watchdog kills, recovery
+   * fallbacks), and eventually user interventions. Backed by
+   * `<watchPath>/.orchestrator/orchestrator.jsonl`.
+   */
+  getOrchestratorLog(projectName: string) {
+    return this.http.get<OrchestratorLogResponse>(
+      `${this.baseUrl}/runner/${encodeURIComponent(projectName)}/orchestrator-log`
+    );
   }
 
   setRunnerMode(projectName: string, mode: string) {

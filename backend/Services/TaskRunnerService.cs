@@ -31,6 +31,7 @@ public class TaskRunnerService : BackgroundService
     private readonly JobTransitionService _transitions;
     private readonly ProjectSettingsService _projectSettings;
     private readonly OrchestratorChatLog _chatLog;
+    private readonly OrchestratorLog _orchestratorLog;
     private readonly ConcurrentDictionary<string, ProjectRunner> _runners = new();
 
     public event Action<string, ProjectRunnerStatus>? OnRunnerStatusChanged;
@@ -49,7 +50,8 @@ public class TaskRunnerService : BackgroundService
         RuntimePromptService prompts,
         JobTransitionService transitions,
         ProjectSettingsService projectSettings,
-        OrchestratorChatLog chatLog)
+        OrchestratorChatLog chatLog,
+        OrchestratorLog orchestratorLog)
     {
         _config = config;
         _logger = logger;
@@ -65,6 +67,7 @@ public class TaskRunnerService : BackgroundService
         _transitions = transitions;
         _projectSettings = projectSettings;
         _chatLog = chatLog;
+        _orchestratorLog = orchestratorLog;
     }
 
     public SummaryGenerationService SummaryService => _summaryService;
@@ -89,7 +92,7 @@ public class TaskRunnerService : BackgroundService
                 continue;
             }
 
-            var runner = new ProjectRunner(entry.Name, entry, _logger, _scanner, _states, _sessions, _router, _summaryService, _prompts, _transitions, _chatLog, _mutations);
+            var runner = new ProjectRunner(entry.Name, entry, _logger, _scanner, _states, _sessions, _router, _summaryService, _prompts, _transitions, _chatLog, _mutations, _orchestratorLog);
             runner.ConfigureWatchdog(LoadWatchdogConfig(_config));
             runner.OnStatusChanged += status => OnRunnerStatusChanged?.Invoke(entry.Name, status);
             // Persist every mode change so the auto-pickup toggle survives
@@ -270,8 +273,20 @@ public class TaskRunnerService : BackgroundService
             try
             {
                 var refreshed = _scanner.FindJob(jobId, watchPath) ?? info;
+                var summary = $"Saved follow-up for \"{refreshed.Title}\"; project busy with \"{rej.BusyJobTitle ?? rej.BusyJobId ?? "another task"}\". Promoted from {fromState} to 2-ready (position {position}).";
                 _chatLog.Append(refreshed, OrchestratorMessageKind.Decision,
                     $"[queued] Saved your follow-up. Project busy with \"{rej.BusyJobTitle ?? rej.BusyJobId ?? "another task"}\"; this task moved from {fromState} to 2-ready (position {position}). Will run on next auto-pickup.");
+
+                _orchestratorLog.Append(refreshed.WatchPath, new OrchestratorLogEntry
+                {
+                    Kind = OrchestratorLogKinds.Decision,
+                    Topic = OrchestratorLogTopics.TaskQueued,
+                    JobId = jobId,
+                    Summary = summary,
+                    Reasoning = $"User sent a {mode} follow-up while the project was running another job. " +
+                                $"Saved the prompt as pending-intent.json on the target task and promoted the task to top of 2-ready " +
+                                $"so the auto-pickup loop runs it on the next tick. Active job at the time: {rej.BusyJobId}."
+                });
             }
             catch (Exception ex)
             {

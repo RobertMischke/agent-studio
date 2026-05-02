@@ -23,6 +23,7 @@ public class ProjectRunner
     private readonly RuntimePromptService _prompts;
     private readonly JobTransitionService _transitions;
     private readonly OrchestratorChatLog _chatLog;
+    private readonly OrchestratorLog _orchestratorLog;
     private readonly JobMutationService _mutations;
     private string _mode = "manual";
     private string? _activeJobId;
@@ -63,7 +64,8 @@ public class ProjectRunner
         RuntimePromptService prompts,
         JobTransitionService transitions,
         OrchestratorChatLog chatLog,
-        JobMutationService mutations)
+        JobMutationService mutations,
+        OrchestratorLog orchestratorLog)
     {
         ProjectName = projectName;
         Entry = entry;
@@ -77,6 +79,7 @@ public class ProjectRunner
         _transitions = transitions;
         _chatLog = chatLog;
         _mutations = mutations;
+        _orchestratorLog = orchestratorLog;
 
         // Listen across all CLI backends for completion of the active job.
         _router.OnFinished += (cliType, jobKey, exec) => OnCliFinished(cliType, jobKey, exec);
@@ -374,6 +377,14 @@ public class ProjectRunner
             case WatchdogState.Hung:
                 _chatLog.Append(info, OrchestratorMessageKind.GiveUp,
                     $"[watchdog] Killed after {silence:F0}s of silence. Process tree terminated; the run will finalize as failed.");
+                _orchestratorLog.Append(info.WatchPath, new OrchestratorLogEntry
+                {
+                    Kind = OrchestratorLogKinds.Action,
+                    Topic = OrchestratorLogTopics.Watchdog,
+                    JobId = jobId,
+                    Summary = $"Watchdog killed \"{info.Title}\" after {silence:F0}s of silence.",
+                    Reasoning = $"No streamed output from the CLI for {silence:F0}s (run age {age:F0}s). Threshold: {_watchdogConfig.HungSeconds:F0}s. Process tree terminated; the run finalizes as failed."
+                });
                 try { cli.Stop(jobKey); }
                 catch (Exception ex) { _logger.LogWarning(ex, "Watchdog kill failed for {JobId}", jobId); }
                 break;

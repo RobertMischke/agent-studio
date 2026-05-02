@@ -216,6 +216,35 @@ export interface ContinueJobQueuedInfo {
   promotedFromState?: string | null;
 }
 
+/**
+ * One entry in the orchestrator log feed for a project. Mirrors backend
+ * `OrchestratorLogEntry`. Kinds: decision / action / observation /
+ * intervention. Topics group entries in the UI feed.
+ */
+export interface OrchestratorLogEntry {
+  ts: string;
+  kind: 'decision' | 'action' | 'observation' | 'intervention';
+  topic: string;
+  summary: string;
+  reasoning?: string | null;
+  jobId?: string | null;
+  tokenUsage?: OrchestratorTokenUsage | null;
+  userOverride?: { at: string; newDirection: string } | null;
+}
+
+export interface OrchestratorTokenUsage {
+  model?: string | null;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+}
+
+export interface OrchestratorLogResponse {
+  project: string;
+  entries: OrchestratorLogEntry[];
+}
+
 export interface JobSummaryState {
   status: JobSummaryStatus;
   startedAt: string | null;

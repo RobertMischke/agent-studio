@@ -1,5 +1,7 @@
 using OrchestratorApi.Models;
 using OrchestratorApi.Services;
+using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.Runner;
 
 namespace OrchestratorApi.Endpoints;
 
@@ -38,5 +40,19 @@ public static class RunnerEndpoints
             var success = runner.StopRunner(projectName);
             return success ? Results.Ok() : Results.NotFound();
         });
+
+        // Orchestrator log: chronological feed of decisions / actions /
+        // observations / interventions for the named project. Read-only;
+        // entries are appended by the runner today and (Phase D+) by a
+        // dedicated orchestrator process. The frontend renders this as
+        // the "Orchestrator" feed in the project detail view.
+        runnerGroup.MapGet("/{projectName}/orchestrator-log",
+            (string projectName, JobScannerService scanner, OrchestratorLog log) =>
+            {
+                var entry = scanner.GetWatchPaths().FirstOrDefault(e => e.Name == projectName);
+                if (entry == null) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+                var entries = log.Read(entry.Path);
+                return Results.Ok(new { project = projectName, entries });
+            });
     }
 }

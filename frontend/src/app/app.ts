@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { JobColumnComponent } from './components/job-column';
 import { JobDetailComponent } from './components/job-detail';
 import { CliUsageSheetComponent } from './components/cli-usage-sheet';
+import { OrchestratorFeedComponent } from './components/orchestrator-feed';
 import { JobService } from './services/job.service';
 import { JobDetail, JobInfo, GroupedJobs, WatchPathEntry, CliType, CLI_TYPES, CliModelInfo } from './models/job.model';
 import { ErrorDialogService } from './services/error-dialog.service';
@@ -15,7 +16,7 @@ import { projectIdentity } from './services/project-identity.util';
 
 @Component({
   selector: 'app-root',
-  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent],
+  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent],
   // Keep styles global to this subtree — the App shell still owns the
   // .header*, .filter-chip*, .overlay*, .create-dialog*, .error-dialog*
   // class rules used by the extracted dialogs and project-tabs.
@@ -45,6 +46,9 @@ import { projectIdentity } from './services/project-identity.util';
           </button>
           <button class="btn" (click)="usageSheet.toggle()" title="CLI sessions">
             🪙 Usage
+          </button>
+          <button class="btn" (click)="toggleOrchFeed()" [title]="orchFeedTooltip()">
+            📜 Feed
           </button>
           <button class="btn btn--create" (click)="openCreate()">
             ＋ Add Task
@@ -149,6 +153,15 @@ import { projectIdentity } from './services/project-identity.util';
 
         <app-cli-usage-sheet #usageSheet class="app__sidesheet" />
       </div>
+
+      @if (orchFeedProject(); as proj) {
+        <div class="overlay" (click)="closeOrchFeed()">
+          <div class="overlay__panel" (click)="$event.stopPropagation()">
+            <button class="overlay__close" (click)="closeOrchFeed()" title="Close">×</button>
+            <app-orchestrator-feed [projectName]="proj" />
+          </div>
+        </div>
+      }
 
       @if (showCreate()) {
         <app-create-job-dialog
@@ -418,6 +431,31 @@ import { projectIdentity } from './services/project-identity.util';
       place-items: center;
       z-index: 100;
     }
+    .overlay__panel {
+      position: relative;
+      background: #1e1e2e;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 16px;
+      width: min(960px, 94vw);
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+    .overlay__close {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: rgba(255,255,255,0.06);
+      color: #cdd6f4;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 6px;
+      width: 28px;
+      height: 28px;
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+      z-index: 1;
+    }
+    .overlay__close:hover { background: rgba(255,255,255,0.12); }
     .create-dialog {
       background: #1e1e2e;
       border: 1px solid rgba(255,255,255,0.1);
@@ -981,6 +1019,12 @@ import { projectIdentity } from './services/project-identity.util';
 export class App implements OnInit {
   readonly selectedJob = signal<JobDetail | null>(null);
   readonly showCreate = signal(false);
+  /**
+   * When non-null, names the project whose orchestrator feed is currently
+   * open as an overlay. The toolbar button toggles this for the active
+   * project; the overlay closes on backdrop click.
+   */
+  readonly orchFeedProject = signal<string | null>(null);
   readonly watchPaths = signal<WatchPathEntry[]>([]);
   readonly activeProjects = signal<Set<string>>(new Set(JSON.parse(localStorage.getItem('activeProjects') ?? '[]')));
   readonly sideSheetWidth = signal<number>(parseInt(localStorage.getItem('sideSheetWidth') ?? '280'));
@@ -1250,6 +1294,42 @@ export class App implements OnInit {
     this.newWatchPath = this.pickCreateWatchPath();
     this.loadCreateModels(this.newCliType);
     this.showCreate.set(true);
+  }
+
+  /**
+   * Toggle the orchestrator feed overlay. Picks the project to show by
+   * preferring (1) the currently open detail's project, (2) the first
+   * active project filter, (3) the first known watch path. Closes the
+   * overlay if it is already open.
+   */
+  toggleOrchFeed(): void {
+    if (this.orchFeedProject() != null) {
+      this.closeOrchFeed();
+      return;
+    }
+    const project = this.pickOrchFeedProject();
+    if (project) this.orchFeedProject.set(project);
+  }
+
+  closeOrchFeed(): void {
+    this.orchFeedProject.set(null);
+  }
+
+  /** Tooltip for the toolbar button; shows which project the feed will open for. */
+  orchFeedTooltip(): string {
+    const project = this.pickOrchFeedProject();
+    return project
+      ? `Open orchestrator feed for "${project}"`
+      : 'No project selected';
+  }
+
+  private pickOrchFeedProject(): string | null {
+    const detail = this.selectedJob();
+    if (detail?.info?.projectName) return detail.info.projectName;
+    const active = [...this.activeProjects()];
+    if (active.length > 0) return active[0];
+    const watchPaths = this.watchPaths();
+    return watchPaths.length > 0 ? watchPaths[0].name : null;
   }
 
   private pickCreateWatchPath(): string {

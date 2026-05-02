@@ -35,6 +35,7 @@ builder.Services.AddSingleton<JobStateMachine>();
 builder.Services.AddSingleton<JobMutationService>();
 builder.Services.AddSingleton<JobSessionLog>();
 builder.Services.AddSingleton<OrchestratorChatLog>();
+builder.Services.AddSingleton<OrchestratorLog>();
 builder.Services.AddSingleton<JobTransitionService>();
 builder.Services.AddSingleton<JobWatcherService>();
 builder.Services.AddSingleton<CopilotCliEnvironment>();
