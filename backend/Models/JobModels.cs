@@ -56,6 +56,16 @@ public record JobInfo
     /// circuit breaker stops the loop.
     /// </summary>
     public AutoLoopSnapshot? AutoLoop { get; init; }
+
+    /// <summary>
+    /// Live summary-generation state for jobs in 4-review. Set when the
+    /// post-completion Haiku summarizer is currently running for this
+    /// job; the UI shows an "auto-reviewing" pill so the user can see
+    /// that the orchestrator is still working on the card after it
+    /// landed in review, instead of treating an empty status.md as a
+    /// dead card.
+    /// </summary>
+    public JobSummaryState? SummaryState { get; init; }
 }
 
 /// <summary>

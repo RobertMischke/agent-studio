@@ -56,6 +56,15 @@ if (typeof window !== 'undefined') {
             ↻ auto-loop {{ al.iteration }}/{{ al.maxIterations }}
           </span>
         }
+        @if (reviewBadge(); as rb) {
+          <span class="job-card__review-pill"
+                [class]="'job-card__review-pill--' + rb.tone"
+                [title]="rb.tooltip"
+                data-testid="job-card-review">
+            <span class="job-card__review-dot"></span>
+            {{ rb.label }}
+          </span>
+        }
       </div>
       <div class="job-card__meta">
         <span class="job-card__agent">{{ agentIcon() }} {{ job().agent || 'unknown' }}</span>
@@ -244,6 +253,49 @@ if (typeof window !== 'undefined') {
       background: rgba(253, 230, 138, 0.12);
       border-color: rgba(253, 230, 138, 0.32);
     }
+    /* Auto-review pill: shown while the post-completion summarizer is
+       still running on a card that just landed in 4-review (amber, with
+       a pulsing dot to mirror the running execution pill), or briefly
+       after it finishes/fails so the user sees the result. Mirrors the
+       visual vocabulary of the execution pill so "something is happening
+       on this card" reads consistently across lanes. */
+    .job-card__review-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      border: 1px solid transparent;
+      cursor: help;
+    }
+    .job-card__review-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: currentColor;
+      flex: 0 0 auto;
+    }
+    .job-card__review-pill--generating {
+      color: #fcd34d;
+      background: rgba(252, 211, 77, 0.14);
+      border-color: rgba(252, 211, 77, 0.32);
+    }
+    .job-card__review-pill--generating .job-card__review-dot {
+      animation: pulse-running 1.3s infinite;
+    }
+    .job-card__review-pill--ready {
+      color: #86efac;
+      background: rgba(134, 239, 172, 0.12);
+      border-color: rgba(134, 239, 172, 0.28);
+    }
+    .job-card__review-pill--failed {
+      color: #fda4af;
+      background: rgba(244, 63, 94, 0.14);
+      border-color: rgba(244, 63, 94, 0.25);
+    }
     .job-card__state-pill {
       background: rgba(255,255,255,0.06);
       color: #cbd5e1;
@@ -384,6 +436,29 @@ export class JobCardComponent implements OnInit, OnDestroy {
 
     return null;
   }
+
+  /**
+   * Review-pill descriptor: shows the auto-review (Haiku summarizer)
+   * status on a card that landed in 4-review. Returns null when there
+   * is nothing to show (no run, or the user already moved on).
+   */
+  readonly reviewBadge = computed<{ label: string; tone: 'generating' | 'ready' | 'failed'; tooltip: string } | null>(() => {
+    const s = this.job().summaryState;
+    if (!s) return null;
+    switch (s.status) {
+      case 'generating':
+        return { label: 'auto-reviewing', tone: 'generating',
+                 tooltip: 'Orchestrator is summarizing the run output (Haiku). The card will become quiet once status.md has been written.' };
+      case 'ready':
+        return { label: 'review ready', tone: 'ready',
+                 tooltip: s.bytesWritten ? `Auto-review wrote ${s.bytesWritten} bytes to status.md.` : 'Auto-review finished.' };
+      case 'failed':
+        return { label: 'review failed', tone: 'failed',
+                 tooltip: s.errorMessage ?? 'Auto-review failed.' };
+      default:
+        return null;
+    }
+  });
 
   /** Hot-state threshold: amber pill once the loop is at 80% of the iteration cap. */
   readonly loopHot = computed(() => {

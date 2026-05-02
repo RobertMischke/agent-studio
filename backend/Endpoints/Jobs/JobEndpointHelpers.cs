@@ -24,6 +24,12 @@ internal static class JobEndpointHelpers
     {
         var exec = router.Get(job.CliType).GetExecution(job.JobKey);
         var loop = runners.GetStuckLoopStateForJob(job.Id, job.WatchPath);
+        // The summarizer is fire-and-forget after a job lands in 4-review.
+        // We surface its in-progress state on the JobInfo so the kanban
+        // card can show "auto-reviewing" instead of looking idle while
+        // the Haiku call is still working. Only return non-None states
+        // so the field stays absent on cards where nothing is happening.
+        var summary = runners.SummaryService.GetState(job.JobKey);
         return job with
         {
             Execution = exec,
@@ -38,7 +44,8 @@ internal static class JobEndpointHelpers
                 LastQuestion = loop.LastQuestion,
                 LastReply = loop.LastReply,
                 LastError = loop.LastError
-            }
+            },
+            SummaryState = summary != null && summary.Status != JobSummaryStatus.None ? summary : null
         };
     }
 

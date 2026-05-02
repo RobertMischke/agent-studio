@@ -103,6 +103,13 @@ export interface JobInfo {
    * circuit breaker stops it.
    */
   autoLoop?: AutoLoopSnapshot | null;
+  /**
+   * Live state of the post-completion summary (Haiku) call. Populated only
+   * while the summarizer is generating or just finished. The card shows an
+   * "auto-reviewing" pill so the user knows the orchestrator is still
+   * working on a card that just landed in 4-review.
+   */
+  summaryState?: JobSummaryState | null;
 }
 
 export interface AutoLoopSnapshot {
