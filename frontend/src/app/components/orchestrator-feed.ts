@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { OrchestratorLogEntry } from '../models/job.model';
 import { JobService } from '../services/job.service';
 
@@ -18,6 +19,7 @@ import { JobService } from '../services/job.service';
 @Component({
   selector: 'app-orchestrator-feed',
   standalone: true,
+  imports: [FormsModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <section class="orch-feed" data-testid="orchestrator-feed">
@@ -57,6 +59,35 @@ import { JobService } from '../services/job.service';
                 <summary>Why</summary>
                 <p>{{ entry.reasoning }}</p>
               </details>
+            }
+            @if (entry.kind === 'decision' && entry.jobId) {
+              @if (overridingTs() === entry.ts) {
+                <div class="orch-feed__override-form">
+                  <textarea class="orch-feed__override-input"
+                            placeholder="Your direction. Will be sent as a Steer follow-up."
+                            [(ngModel)]="overrideDraft"
+                            data-testid="orchestrator-override-input"
+                            rows="3"></textarea>
+                  <div class="orch-feed__override-actions">
+                    <button class="orch-feed__override-cancel"
+                            (click)="cancelOverride()"
+                            [disabled]="submittingOverride()">Cancel</button>
+                    <button class="orch-feed__override-submit"
+                            (click)="submitOverride(entry)"
+                            [disabled]="submittingOverride() || !overrideDraft.trim()"
+                            data-testid="orchestrator-override-submit">
+                      {{ submittingOverride() ? 'Sending...' : 'Send override' }}
+                    </button>
+                  </div>
+                </div>
+              } @else {
+                <button class="orch-feed__override"
+                        (click)="startOverride(entry)"
+                        data-testid="orchestrator-override-start"
+                        title="Disagree with this decision? Send a Steer follow-up to the agent.">
+                  Override this decision
+                </button>
+              }
             }
           </li>
         }
@@ -143,6 +174,71 @@ import { JobService } from '../services/job.service';
     }
     .orch-feed__reasoning summary:hover { color: #cdd6f4; }
     .orch-feed__reasoning p { margin: 6px 0 0; color: rgba(255,255,255,0.75); font-size: 0.84rem; }
+    /*
+     * Override controls. The plain "Override this decision" link sits
+     * unobtrusively under the summary; clicking it expands an inline
+     * textarea + Send/Cancel pair. Loud styling on Send so the user is
+     * sure they are taking an action that goes back to the agent.
+     */
+    .orch-feed__override {
+      margin-top: 6px;
+      background: transparent;
+      border: 1px dashed rgba(249, 226, 175, 0.35);
+      color: #fcd34d;
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 0.78rem;
+      cursor: pointer;
+    }
+    .orch-feed__override:hover { background: rgba(249, 226, 175, 0.08); }
+    .orch-feed__override-form {
+      margin-top: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 8px;
+      border: 1px solid rgba(249, 226, 175, 0.40);
+      border-radius: 8px;
+      background: rgba(249, 226, 175, 0.06);
+    }
+    .orch-feed__override-input {
+      width: 100%;
+      box-sizing: border-box;
+      background: rgba(0,0,0,0.30);
+      color: #cdd6f4;
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 6px;
+      padding: 6px 8px;
+      font-family: inherit;
+      font-size: 0.85rem;
+      resize: vertical;
+      min-height: 60px;
+    }
+    .orch-feed__override-input:focus { outline: none; border-color: rgba(249, 226, 175, 0.60); }
+    .orch-feed__override-actions { display: flex; gap: 8px; justify-content: flex-end; }
+    .orch-feed__override-cancel,
+    .orch-feed__override-submit {
+      border-radius: 6px;
+      padding: 4px 12px;
+      font-size: 0.80rem;
+      cursor: pointer;
+      border: 1px solid transparent;
+    }
+    .orch-feed__override-cancel {
+      background: rgba(255,255,255,0.06);
+      color: #cdd6f4;
+      border-color: rgba(255,255,255,0.12);
+    }
+    .orch-feed__override-cancel:hover:not(:disabled) { background: rgba(255,255,255,0.10); }
+    .orch-feed__override-submit {
+      background: rgba(249, 226, 175, 0.20);
+      color: #1e1e2e;
+      border-color: rgba(249, 226, 175, 0.50);
+      font-weight: 700;
+    }
+    .orch-feed__override-submit:hover:not(:disabled) { background: rgba(249, 226, 175, 0.35); }
+    .orch-feed__override-submit:disabled,
+    .orch-feed__override-cancel:disabled { opacity: 0.5; cursor: not-allowed; }
   `]
 })
 export class OrchestratorFeedComponent implements OnInit, OnDestroy {
@@ -152,6 +248,12 @@ export class OrchestratorFeedComponent implements OnInit, OnDestroy {
   readonly entries = signal<OrchestratorLogEntry[]>([]);
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
+  /** Timestamp of the entry currently being overridden (one at a time). */
+  readonly overridingTs = signal<string | null>(null);
+  /** Submit-in-flight flag so the user cannot double-send. */
+  readonly submittingOverride = signal(false);
+  /** Two-way bound textarea draft. Cleared after each submit / cancel. */
+  overrideDraft = '';
   private pollTimer: ReturnType<typeof setInterval> | null = null;
 
   /** UI shows newest entries first; the on-disk log is oldest first. */
@@ -202,6 +304,40 @@ export class OrchestratorFeedComponent implements OnInit, OnDestroy {
     } catch {
       return iso;
     }
+  }
+
+  startOverride(entry: OrchestratorLogEntry): void {
+    this.overridingTs.set(entry.ts);
+    this.overrideDraft = '';
+  }
+
+  cancelOverride(): void {
+    this.overridingTs.set(null);
+    this.overrideDraft = '';
+  }
+
+  submitOverride(entry: OrchestratorLogEntry): void {
+    const direction = (this.overrideDraft ?? '').trim();
+    if (!direction || !entry.jobId) return;
+    this.submittingOverride.set(true);
+    this.jobService.overrideOrchestratorEntry(this.projectName(), {
+      originalTs: entry.ts,
+      jobId: entry.jobId,
+      newDirection: direction
+    }).subscribe({
+      next: () => {
+        this.submittingOverride.set(false);
+        this.overridingTs.set(null);
+        this.overrideDraft = '';
+        // Refresh so the new intervention entry shows up.
+        this.refresh(true);
+      },
+      error: (err) => {
+        this.submittingOverride.set(false);
+        const message = err?.error?.error || err?.message || 'Override failed';
+        this.error.set(message);
+      }
+    });
   }
 
   tokenTooltip(tu: NonNullable<OrchestratorLogEntry['tokenUsage']>): string {

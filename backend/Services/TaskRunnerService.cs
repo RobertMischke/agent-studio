@@ -32,6 +32,7 @@ public class TaskRunnerService : BackgroundService
     private readonly ProjectSettingsService _projectSettings;
     private readonly OrchestratorChatLog _chatLog;
     private readonly OrchestratorLog _orchestratorLog;
+    private readonly OrchestratorRunner _orchestratorRunner;
     private readonly ConcurrentDictionary<string, ProjectRunner> _runners = new();
 
     public event Action<string, ProjectRunnerStatus>? OnRunnerStatusChanged;
@@ -51,7 +52,8 @@ public class TaskRunnerService : BackgroundService
         JobTransitionService transitions,
         ProjectSettingsService projectSettings,
         OrchestratorChatLog chatLog,
-        OrchestratorLog orchestratorLog)
+        OrchestratorLog orchestratorLog,
+        OrchestratorRunner orchestratorRunner)
     {
         _config = config;
         _logger = logger;
@@ -68,6 +70,7 @@ public class TaskRunnerService : BackgroundService
         _projectSettings = projectSettings;
         _chatLog = chatLog;
         _orchestratorLog = orchestratorLog;
+        _orchestratorRunner = orchestratorRunner;
     }
 
     public SummaryGenerationService SummaryService => _summaryService;
@@ -92,7 +95,7 @@ public class TaskRunnerService : BackgroundService
                 continue;
             }
 
-            var runner = new ProjectRunner(entry.Name, entry, _logger, _scanner, _states, _sessions, _router, _summaryService, _prompts, _transitions, _chatLog, _mutations, _orchestratorLog);
+            var runner = new ProjectRunner(entry.Name, entry, _logger, _scanner, _states, _sessions, _router, _summaryService, _prompts, _transitions, _chatLog, _mutations, _orchestratorLog, _orchestratorRunner, _projectSettings);
             runner.ConfigureWatchdog(LoadWatchdogConfig(_config));
             runner.OnStatusChanged += status => OnRunnerStatusChanged?.Invoke(entry.Name, status);
             // Persist every mode change so the auto-pickup toggle survives

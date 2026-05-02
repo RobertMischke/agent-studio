@@ -54,5 +54,66 @@ public static class RunnerEndpoints
                 var entries = log.Read(entry.Path);
                 return Results.Ok(new { project = projectName, entries });
             });
+
+        // User override on an orchestrator decision (Phase F). Appends an
+        // intervention entry to the feed and, when the named job is in a
+        // continuable state, routes the new direction through the existing
+        // Continue path so the override actually takes effect on the agent.
+        runnerGroup.MapPost("/{projectName}/orchestrator-log/override",
+            async (string projectName, OrchestratorOverrideRequest req, JobScannerService scanner, OrchestratorLog log, TaskRunnerService runner, CancellationToken ct) =>
+            {
+                if (string.IsNullOrWhiteSpace(req?.NewDirection))
+                    return Results.BadRequest(new { error = "newDirection is required" });
+
+                var watchEntry = scanner.GetWatchPaths().FirstOrDefault(e => e.Name == projectName);
+                if (watchEntry == null) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+
+                // Always record the intervention in the feed, regardless of
+                // whether we can route the follow-up. The audit trail is
+                // half the value.
+                log.Append(watchEntry.Path, new OrchestratorLogEntry
+                {
+                    Kind = OrchestratorLogKinds.Intervention,
+                    Topic = "user-override",
+                    JobId = string.IsNullOrWhiteSpace(req.JobId) ? null : req.JobId,
+                    Summary = $"User overrode an orchestrator entry from {req.OriginalTs:u}.",
+                    Reasoning = $"New direction: {Truncate(req.NewDirection, 600)}",
+                    UserOverride = new OrchestratorIntervention
+                    {
+                        At = DateTime.UtcNow,
+                        NewDirection = req.NewDirection
+                    }
+                });
+
+                // If the override names a job, treat the new direction as a
+                // Continue follow-up. Reuses the busy-project queue path:
+                // when the project is currently busy with another job, the
+                // intent is saved on the target and runs on next pickup.
+                if (!string.IsNullOrWhiteSpace(req.JobId))
+                {
+                    try
+                    {
+                        await runner.ContinueJobAsync(req.JobId, req.NewDirection, watchEntry.Path, modelOverride: null, mode: "steer", ct);
+                    }
+                    catch (Exception ex)
+                    {
+                        return Results.Ok(new
+                        {
+                            applied = false,
+                            error = ex.Message,
+                            note = "Override recorded in the feed; Continue could not be routed."
+                        });
+                    }
+                    return Results.Ok(new { applied = true });
+                }
+
+                return Results.Ok(new { applied = false, note = "Override recorded in the feed; no jobId was given to route to." });
+            });
+
+        static string Truncate(string s, int max)
+        {
+            if (string.IsNullOrEmpty(s) || s.Length <= max) return s;
+            return s[..(max - 1)].TrimEnd() + "...";
+        }
     }
 }

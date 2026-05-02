@@ -222,11 +222,38 @@ public record ProjectSettings
     /// toggle survives self-rebuild / restart. Null means "use the default (manual)".
     /// </summary>
     public string? RunnerMode { get; init; }
+
+    /// <summary>
+    /// Model the orchestrator uses when it makes decisions on behalf of the
+    /// user in auto mode (Phase E and later). Defaults to the strongest
+    /// Claude model (<c>claude-opus-4-7</c>) so decisions are high-quality;
+    /// the user can downgrade to Sonnet for cost. Null means use the default.
+    /// </summary>
+    public string? OrchestratorModel { get; init; }
 }
 
 public record SetAutoCommitRequest
 {
     public bool Enabled { get; init; }
+}
+
+public record SetOrchestratorModelRequest
+{
+    public string? Model { get; init; }
+}
+
+/// <summary>
+/// Body for <c>POST /api/runner/{projectName}/orchestrator-log/override</c>.
+/// The user is overriding an orchestrator decision: <see cref="OriginalTs"/>
+/// names the entry being overridden (timestamp from the feed),
+/// <see cref="NewDirection"/> is the new follow-up the user wants applied
+/// to <see cref="JobId"/>.
+/// </summary>
+public record OrchestratorOverrideRequest
+{
+    public DateTime OriginalTs { get; init; }
+    public string JobId { get; init; } = "";
+    public string NewDirection { get; init; } = "";
 }
 
 /// <summary>

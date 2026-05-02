@@ -67,6 +67,21 @@ public class ProjectSettingsService
         }
     }
 
+    /// <summary>
+    /// Sets the model the orchestrator uses when deciding on the user's
+    /// behalf in auto mode. Null clears (revert to default Opus).
+    /// </summary>
+    public void SetOrchestratorModel(string projectName, string? model)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
+            _cache[projectName] = current with { OrchestratorModel = string.IsNullOrWhiteSpace(model) ? null : model.Trim() };
+            Persist();
+        }
+    }
+
     private void EnsureLoaded()
     {
         lock (_lock)

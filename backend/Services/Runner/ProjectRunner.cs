@@ -25,6 +25,8 @@ public class ProjectRunner
     private readonly OrchestratorChatLog _chatLog;
     private readonly OrchestratorLog _orchestratorLog;
     private readonly JobMutationService _mutations;
+    private readonly OrchestratorRunner _orchestratorRunner;
+    private readonly ProjectSettingsService _projectSettings;
     private string _mode = "manual";
     private string? _activeJobId;
     private string? _activeCliType;
@@ -65,7 +67,9 @@ public class ProjectRunner
         JobTransitionService transitions,
         OrchestratorChatLog chatLog,
         JobMutationService mutations,
-        OrchestratorLog orchestratorLog)
+        OrchestratorLog orchestratorLog,
+        OrchestratorRunner orchestratorRunner,
+        ProjectSettingsService projectSettings)
     {
         ProjectName = projectName;
         Entry = entry;
@@ -80,6 +84,8 @@ public class ProjectRunner
         _chatLog = chatLog;
         _mutations = mutations;
         _orchestratorLog = orchestratorLog;
+        _orchestratorRunner = orchestratorRunner;
+        _projectSettings = projectSettings;
 
         // Listen across all CLI backends for completion of the active job.
         _router.OnFinished += (cliType, jobKey, exec) => OnCliFinished(cliType, jobKey, exec);
@@ -408,6 +414,139 @@ public class ProjectRunner
     /// <summary>Set by <see cref="TaskRunnerService"/> on construction.</summary>
     public void ConfigureWatchdog(WatchdogConfig config) => _watchdogConfig = config;
 
+    private static bool IsAutoMode(string mode)
+        => string.Equals(mode, "auto-continuous", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(mode, "auto-single", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Phase E. The active agent emitted [[TASK_NEEDS_INPUT:...]] in auto
+    /// mode; the user is not here to answer. Spawn the orchestrator with
+    /// the project's configured model (default Opus 4.7), ask it for the
+    /// reply the user would give, log the decision (with token usage), and
+    /// feed the reply back as a Continue follow-up so the run picks up
+    /// where it asked. If the orchestrator declines (returns BLOCK or
+    /// errors), accept the NeedsInput state and notify the user via the
+    /// chat - the same fallback the manual path uses.
+    /// </summary>
+    private async Task RunOrchestratorDecisionAsync(JobInfo info, string jobId, AgentOutcome outcome)
+    {
+        try
+        {
+            // Release the active-job latch so the orchestrator's spawned
+            // Continue can claim it; we mirror the re-issue path's release.
+            _activeJobId = null;
+            _activeCliType = null;
+            _activeIntent = default;
+            _activeFollowup = null;
+            _activePlan = null;
+            _activeReissueAttempt = 0;
+            NotifyStatus();
+
+            var promptPath = Path.Combine(info.FolderPath, "prompt.md");
+            var promptText = ReadPromptText(promptPath);
+            var lastAgentText = outcome.Summary ?? "(no agent summary captured)";
+
+            var orchestratorPrompt = BuildOrchestratorPrompt(info, promptText, lastAgentText);
+            var modelOverride = _projectSettings.Get(info.ProjectName).OrchestratorModel;
+
+            _logger.LogInformation(
+                "[orchestrator] auto-deciding for {JobId} on model {Model}",
+                jobId, modelOverride ?? OrchestratorRunner.DefaultModel);
+
+            var result = await _orchestratorRunner.DecideAsync(
+                orchestratorPrompt,
+                modelOverride,
+                Entry.RootPath,
+                CancellationToken.None);
+
+            if (!result.Success || string.IsNullOrWhiteSpace(result.ReplyText)
+                || result.ReplyText.Trim().Equals("BLOCK", StringComparison.OrdinalIgnoreCase))
+            {
+                // Orchestrator declined or errored. Surface the question to
+                // the user the same way the manual path does, plus a meta
+                // line explaining why the orchestrator could not decide.
+                var why = result.ErrorMessage ?? "the orchestrator chose to defer this decision";
+                _chatLog.Append(info, OrchestratorMessageKind.Decision,
+                    $"[orchestrator] Declined to auto-decide on agent's NEEDS_INPUT: {why}. Leaving the question for you.");
+                _orchestratorLog.Append(info.WatchPath, new OrchestratorLogEntry
+                {
+                    Kind = OrchestratorLogKinds.Observation,
+                    Topic = "agent-needs-input",
+                    JobId = jobId,
+                    Summary = $"Orchestrator declined to decide for \"{info.Title}\".",
+                    Reasoning = why,
+                    TokenUsage = result.TokenUsage
+                });
+                return;
+            }
+
+            var reply = result.ReplyText.Trim();
+            _chatLog.Append(info, OrchestratorMessageKind.Decision,
+                $"[orchestrator] Auto-mode decision: {Truncate(reply, 200)}");
+            _orchestratorLog.Append(info.WatchPath, new OrchestratorLogEntry
+            {
+                Kind = OrchestratorLogKinds.Decision,
+                Topic = "agent-needs-input",
+                JobId = jobId,
+                Summary = $"Auto-decided for \"{info.Title}\": {Truncate(reply, 140)}",
+                Reasoning = $"Project mode is {_mode}; the active agent emitted NEEDS_INPUT and the orchestrator was invoked to reply on the user's behalf. " +
+                            $"The reply will be sent as a Continue follow-up. Model: {result.Model}.",
+                TokenUsage = result.TokenUsage
+            });
+
+            // Feed the orchestrator's reply back as a Continue. Reuses the
+            // existing path (RunPlanner picks Resume vs Recovery based on
+            // captured session id), so this is structurally identical to
+            // the user typing the same reply in the chat.
+            await RunCliAsync(jobId, RunIntent.UserContinue, reply, reissueAttempt: 0,
+                              mode: ContinueModes.Continue, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Orchestrator decision flow crashed for {JobId}", jobId);
+            try
+            {
+                _chatLog.Append(info, OrchestratorMessageKind.Decision,
+                    "[orchestrator] Auto-decision flow crashed; left the agent's question for you.");
+            }
+            catch { }
+        }
+    }
+
+    /// <summary>
+    /// Build the prompt the orchestrator's one-shot Claude call sees. Kept
+    /// here instead of in a runtime template file because the framing is
+    /// load-bearing for the decision contract: the orchestrator must know
+    /// it can return BLOCK to defer, and must reply in the user's voice
+    /// not the orchestrator's.
+    /// </summary>
+    private static string BuildOrchestratorPrompt(JobInfo info, string promptText, string lastAgentText)
+    {
+        return
+            "You are the project orchestrator for Agent Task Processor. " +
+            "The user has set this project to auto mode and stepped away. " +
+            "The active task agent just asked for input and is waiting. " +
+            "Your job: decide what the user would have replied, in one short paragraph, in the user's voice. " +
+            "The reply will be sent back to the agent as a Continue follow-up.\n\n" +
+            $"Project: {info.ProjectName}\n" +
+            $"Task: {info.Title}\n\n" +
+            "Original task description:\n" +
+            (string.IsNullOrWhiteSpace(promptText) ? "(empty)" : promptText) +
+            "\n\nThe agent's last message you need to answer:\n" +
+            lastAgentText +
+            "\n\nReasoning style:\n" +
+            "- If the agent's question has an obvious right answer in context, give it directly.\n" +
+            "- If the question is ambiguous and multiple paths are reasonable, pick the simpler path and say why in one short sentence.\n" +
+            "- If you genuinely cannot decide without user knowledge that you do not have, reply with exactly: BLOCK\n\n" +
+            "Reply now with the user-style follow-up directly. Do not preface with \"I would say\" or similar. Plain text, no markdown headings.";
+    }
+
+    private static string Truncate(string s, int max)
+    {
+        if (string.IsNullOrEmpty(s) || s.Length <= max) return s;
+        return s[..(max - 1)].TrimEnd() + "...";
+    }
+
     private void OnCliFinished(string cliType, string jobKey, CliExecution execution)
     {
         var activeJobId = _activeJobId;
@@ -560,6 +699,21 @@ public class ProjectRunner
                     });
                     return;
                 }
+            }
+
+            // Auto-mode NeedsInput: when the project's runner is in an auto
+            // mode and the agent emitted [[TASK_NEEDS_INPUT:...]] (or the
+            // heuristic landed on NeedsInput with substantial text), we ask
+            // the orchestrator to decide on the user's behalf and feed the
+            // decision back as a Continue follow-up. Manual mode keeps
+            // today's path: the question stays in the chat for the user.
+            if (capturedPlan != null
+                && (outcome.Kind == AgentOutcomeKind.NeedsInput)
+                && IsAutoMode(_mode)
+                && activeInfo != null)
+            {
+                _ = Task.Run(() => RunOrchestratorDecisionAsync(activeInfo, jobId, outcome));
+                return;
             }
 
             if (RunCompletionPolicy.ShouldMoveToReview(execution.Status))

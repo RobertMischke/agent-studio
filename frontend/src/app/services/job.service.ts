@@ -240,6 +240,21 @@ export class JobService {
     );
   }
 
+  /**
+   * Override an orchestrator decision. Appends an intervention entry to
+   * the feed, and (when `jobId` is provided) routes `newDirection`
+   * through the Continue path as a Steer-mode follow-up.
+   */
+  overrideOrchestratorEntry(
+    projectName: string,
+    body: { originalTs: string; jobId: string; newDirection: string }
+  ) {
+    return this.http.post<{ applied: boolean; error?: string; note?: string }>(
+      `${this.baseUrl}/runner/${encodeURIComponent(projectName)}/orchestrator-log/override`,
+      body
+    );
+  }
+
   setRunnerMode(projectName: string, mode: string) {
     return this.http.put(`${this.baseUrl}/runner/${encodeURIComponent(projectName)}/mode`, { mode });
   }
