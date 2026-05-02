@@ -4,6 +4,7 @@ import { JobService } from '../services/job.service';
 import { GroupedJobs, OrchestratorLogEntry, OrchestratorSession, RunnerStatus } from '../models/job.model';
 import { OrchestratorRunner_KnownModels } from './project-detail.models';
 import { TokenSummaryBlockComponent } from './token-summary-block';
+import { GlobalOrchestratorCardComponent } from './global-orchestrator-card';
 
 interface ProjectSettingsRow {
   autoCommit: boolean;
@@ -24,7 +25,7 @@ interface ProjectSettingsRow {
 @Component({
   selector: 'app-project-detail',
   standalone: true,
-  imports: [FormsModule, TokenSummaryBlockComponent],
+  imports: [FormsModule, TokenSummaryBlockComponent, GlobalOrchestratorCardComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <section class="proj-detail" data-testid="project-detail">
@@ -34,6 +35,8 @@ interface ProjectSettingsRow {
           📜 Open feed
         </button>
       </header>
+
+      <app-global-orchestrator-card />
 
       @if (paths(); as p) {
         <dl class="proj-detail__paths">
@@ -135,13 +138,17 @@ interface ProjectSettingsRow {
         } @else {
           <ul class="proj-detail__entries">
             @for (entry of recentEntries(); track entry.ts) {
-              <li class="proj-detail__entry">
+              <li class="proj-detail__entry"
+                  [class.proj-detail__entry--decision]="entry.kind === 'decision'"
+                  [class.proj-detail__entry--action]="entry.kind === 'action'"
+                  [class.proj-detail__entry--observation]="entry.kind === 'observation'"
+                  [class.proj-detail__entry--intervention]="entry.kind === 'intervention'">
+                <p>{{ entry.summary }}</p>
                 <header>
                   <span class="proj-detail__entry-kind">{{ entry.kind }}</span>
                   <span class="proj-detail__entry-topic">{{ entry.topic }}</span>
                   <span class="proj-detail__entry-ts">{{ formatTime(entry.ts) }}</span>
                 </header>
-                <p>{{ entry.summary }}</p>
               </li>
             }
           </ul>
@@ -183,13 +190,24 @@ interface ProjectSettingsRow {
     .proj-detail__paths dt { color: rgba(255,255,255,0.55); }
     .proj-detail__paths dd { margin: 0; color: #cdd6f4; font-family: var(--font-mono, monospace); word-break: break-all; }
 
-    .proj-detail__group { margin-bottom: 18px; }
+    /*
+     * Section spacing: was 18px (tight, "super technisch" per user
+     * feedback). Bump to 28px so each group reads as its own thought
+     * with breathing room above and below. Section titles drop the
+     * uppercase + 0.78rem treatment for a normal-case 0.95rem with
+     * a softer divider line; closer to a doc, further from a control
+     * panel.
+     */
+    .proj-detail__group { margin-bottom: 28px; }
     .proj-detail__group h3 {
-      margin: 0 0 6px;
-      font-size: 0.78rem;
-      color: rgba(255,255,255,0.55);
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
+      margin: 0 0 12px;
+      padding-bottom: 6px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #cbd5e1;
+      letter-spacing: 0;
+      text-transform: none;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
     }
     .proj-detail__hint {
       margin: 6px 0 0;
@@ -254,25 +272,37 @@ interface ProjectSettingsRow {
     .proj-detail__count-num { color: #cdd6f4; font-size: 1.15rem; font-weight: 700; font-variant-numeric: tabular-nums; }
     .proj-detail__count-state { color: rgba(255,255,255,0.55); font-size: 0.70rem; text-transform: uppercase; letter-spacing: 0.04em; }
 
-    .proj-detail__entries { list-style: none; padding: 0; margin: 6px 0 0; display: flex; flex-direction: column; gap: 6px; }
+    /*
+     * Recent-activity entries: drop the boxed "card" treatment and the
+     * uppercase metadata bar. The summary itself is the headline; the
+     * kind / topic / timestamp move below as quiet metadata. Looks
+     * more like a feed of notes, less like a status table.
+     */
+    .proj-detail__entries { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 14px; }
     .proj-detail__entry {
-      padding: 6px 10px;
-      border-radius: 6px;
-      border: 1px solid rgba(255,255,255,0.08);
-      background: rgba(15,23,42,0.55);
+      padding: 0;
+      border: none;
+      border-left: 2px solid rgba(255,255,255,0.10);
+      padding-left: 12px;
+      background: none;
     }
+    .proj-detail__entry--decision { border-left-color: rgba(196,181,253,0.50); }
+    .proj-detail__entry--action { border-left-color: rgba(125,211,252,0.50); }
+    .proj-detail__entry--observation { border-left-color: rgba(148,163,184,0.40); }
+    .proj-detail__entry--intervention { border-left-color: rgba(249,226,175,0.55); }
+    .proj-detail__entry p { margin: 0 0 6px; color: #e2e8f0; font-size: 0.92rem; line-height: 1.5; }
     .proj-detail__entry header {
       display: flex;
-      gap: 8px;
+      gap: 10px;
       align-items: baseline;
-      font-size: 0.70rem;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      color: rgba(255,255,255,0.55);
+      font-size: 0.76rem;
+      letter-spacing: 0;
+      color: rgba(255,255,255,0.50);
+      text-transform: none;
     }
-    .proj-detail__entry-kind { font-weight: 700; color: #cdd6f4; }
-    .proj-detail__entry-ts { margin-left: auto; font-variant-numeric: tabular-nums; text-transform: none; letter-spacing: 0; }
-    .proj-detail__entry p { margin: 4px 0 0; color: #e2e8f0; font-size: 0.84rem; }
+    .proj-detail__entry-kind { font-weight: 600; color: #cbd5e1; }
+    .proj-detail__entry-topic { padding: 1px 6px; border-radius: 3px; background: rgba(255,255,255,0.05); font-family: var(--font-mono, monospace); font-size: 0.72rem; }
+    .proj-detail__entry-ts { margin-left: auto; font-variant-numeric: tabular-nums; }
 
     .proj-detail__empty { color: rgba(255,255,255,0.5); font-style: italic; margin: 4px 0 0; font-size: 0.82rem; }
 

@@ -23,6 +23,18 @@ public static class RunnerEndpoints
             return Results.Ok(runner.GetStatus());
         });
 
+        // Global orchestrator session: the singleton that lives above the
+        // per-project orchestrators. Surfaces the same shape as the per-
+        // project session so the frontend can reuse the rendering. Lives
+        // at /api/runner/global/orchestrator-session for symmetry with the
+        // per-project route.
+        runnerGroup.MapGet("/global/orchestrator-session",
+            (GlobalOrchestratorSessionStore store) =>
+            {
+                var session = store.Read();
+                return Results.Ok(new { project = "(global)", session });
+            });
+
         runnerGroup.MapPut("/{projectName}/mode", (string projectName, SetRunnerModeRequest req, TaskRunnerService runner) =>
         {
             var success = runner.SetMode(projectName, req.Mode);

@@ -182,3 +182,24 @@ Numbering is monotonic. Never reuse a number; never silently delete history.
 **Implementation pointers.** [backend/Services/Runner/StuckLoopGuard.cs](../backend/Services/Runner/StuckLoopGuard.cs) (pure-function `Empty` / `Next` / `Decide` / `FormatBreakerMessage`); [backend.Tests/StuckLoopGuardTests.cs](../backend.Tests/StuckLoopGuardTests.cs) (8 tests locking the contract); [backend/Services/Runner/ProjectRunner.cs](../backend/Services/Runner/ProjectRunner.cs) (`_stuckLoops` per-job counter, gate at the entry of `RunOrchestratorDecisionAsync`, advance after each call, reset in `OnCliFinishedAsync` on non-NeedsInput outcomes); [backend/Services/TaskRunnerService.cs](../backend/Services/TaskRunnerService.cs) (`LoadStuckLoopBudget` from `StuckLoop:*`, `GetStuckLoopStateForJob` for the API surface); UI snapshot via `WithRuntime` in [JobEndpointHelpers.cs](../backend/Endpoints/Jobs/JobEndpointHelpers.cs) and the `auto-loop N/M` pill in [job-card.ts](../frontend/src/app/components/job-card.ts).
 
 **Status.** Accepted.
+
+---
+
+## ADR-0009 - Global orchestrator above per-project orchestrators (2026-05-02)
+
+**Decision.** A singleton "global orchestrator" Claude session is booted at app start in addition to the per-project orchestrators (ADR-0007). The global session knows the watched-project roster and current job-state counts; it exists to answer cross-project questions (which project is starving, what's happening across the board, where should the user look first) and explicitly does NOT reach into any single task's NEEDS_INPUT decision - that stays the per-project orchestrator's job. The session id is persisted at `<TaskRepository>/.runtime/global-orchestrator-session.json`, exposed at `GET /api/runner/global/orchestrator-session`, and shown in the UI as a card at the top of the orchestrator panel.
+
+**Context.** ADR-0007 deliberately kept orchestrator sessions per-project so context never leaks across projects. That works for "what should this single agent do next?" but leaves a gap for the user's cross-project questions ("welche Projekte brauchen jetzt Aufmerksamkeit?"). Without a global view, every cross-project question forces the user to scan all projects manually. A second session, sitting above the per-project ones, fills that gap without violating the per-project isolation: the global session has only roster-level facts, never the contents of a single project's docs.
+
+**Non-goals.**
+- Sharing the global session WITH any per-project session. They are independent Claude sessions; the global one cannot peek inside a project session and vice versa. ADR-0007's isolation is preserved.
+- Letting the global orchestrator decide on a single agent's NEEDS_INPUT. That stays per-project; the boot prompt explicitly tells the global model to defer there.
+- Calling Anthropic's HTTP API directly. Same non-goal as ADR-0006/0007: subscriptions still bill the work.
+- A long-lived global *process*. We invoke `claude -p ... -r <id>` per question and let the process exit.
+- Replacing the per-project orchestrator. The per-project sessions stay; the global one is additive.
+
+**Reasoning style.** Mirror what already worked for per-project (ADR-0007): persist the session id on disk, reuse on restart, fall back to a fresh boot when the id is stale. Keep the boot prompt small (project roster + per-state job counts) so even on Opus the boot is a few cents. The boundary between "global" and "per-project" is the same boundary the user sees in the UI - one card for the board, one card per project.
+
+**Implementation pointers.** [backend/Services/Runner/GlobalOrchestratorSession.cs](../backend/Services/Runner/GlobalOrchestratorSession.cs) (record + store + AccumulateUsage); [backend/Services/Runner/GlobalOrchestratorBootstrap.cs](../backend/Services/Runner/GlobalOrchestratorBootstrap.cs) (boot prompt builder + boot flow); kicked off in [TaskRunnerService.ExecuteAsync](../backend/Services/TaskRunnerService.cs) right after the per-project boots; read endpoint in [RunnerEndpoints.cs](../backend/Endpoints/RunnerEndpoints.cs); UI in [frontend/src/app/components/global-orchestrator-card.ts](../frontend/src/app/components/global-orchestrator-card.ts), mounted at the top of [project-detail.ts](../frontend/src/app/components/project-detail.ts) and [orchestrator-feed.ts](../frontend/src/app/components/orchestrator-feed.ts).
+
+**Status.** Accepted.

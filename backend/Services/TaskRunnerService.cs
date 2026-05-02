@@ -34,6 +34,7 @@ public class TaskRunnerService : BackgroundService
     private readonly OrchestratorLog _orchestratorLog;
     private readonly OrchestratorRunner _orchestratorRunner;
     private readonly OrchestratorSessionStore _orchestratorSessions;
+    private readonly GlobalOrchestratorBootstrap _globalOrchestrator;
     private readonly ConcurrentDictionary<string, ProjectRunner> _runners = new();
 
     public event Action<string, ProjectRunnerStatus>? OnRunnerStatusChanged;
@@ -55,7 +56,8 @@ public class TaskRunnerService : BackgroundService
         OrchestratorChatLog chatLog,
         OrchestratorLog orchestratorLog,
         OrchestratorRunner orchestratorRunner,
-        OrchestratorSessionStore orchestratorSessions)
+        OrchestratorSessionStore orchestratorSessions,
+        GlobalOrchestratorBootstrap globalOrchestrator)
     {
         _config = config;
         _logger = logger;
@@ -74,6 +76,7 @@ public class TaskRunnerService : BackgroundService
         _orchestratorLog = orchestratorLog;
         _orchestratorRunner = orchestratorRunner;
         _orchestratorSessions = orchestratorSessions;
+        _globalOrchestrator = globalOrchestrator;
     }
 
     public SummaryGenerationService SummaryService => _summaryService;
@@ -150,6 +153,16 @@ public class TaskRunnerService : BackgroundService
                 catch (Exception ex) { _logger.LogWarning(ex, "Orchestrator boot failed for {Project}", snapshot.ProjectName); }
             }, stoppingToken);
         }
+
+        // Boot the global orchestrator. Sits above the per-project ones; one
+        // session for cross-project decisions, persisted under TaskRepository
+        // so it survives restarts. Fire-and-forget for the same reason as
+        // the per-project boots: a slow boot must not block app startup.
+        _ = Task.Run(async () =>
+        {
+            try { await _globalOrchestrator.BootAsync(stoppingToken); }
+            catch (Exception ex) { _logger.LogWarning(ex, "Global orchestrator boot failed"); }
+        }, stoppingToken);
 
         // Run the loop - poll every 5 seconds for auto-mode runners
         while (!stoppingToken.IsCancellationRequested)

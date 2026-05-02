@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { OrchestratorLogEntry } from '../models/job.model';
 import { JobService } from '../services/job.service';
 import { TokenSummaryBlockComponent } from './token-summary-block';
+import { GlobalOrchestratorCardComponent } from './global-orchestrator-card';
 
 /**
  * Per-project orchestrator log feed. Reads
@@ -20,13 +21,15 @@ import { TokenSummaryBlockComponent } from './token-summary-block';
 @Component({
   selector: 'app-orchestrator-feed',
   standalone: true,
-  imports: [FormsModule, TokenSummaryBlockComponent],
+  imports: [FormsModule, TokenSummaryBlockComponent, GlobalOrchestratorCardComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <section class="orch-feed" data-testid="orchestrator-feed">
       <header class="orch-feed__head">
-        <h2 class="orch-feed__title">⚙ Orchestrator feed</h2>
-        <span class="orch-feed__sub">{{ projectName() }} — {{ entries().length }} entries</span>
+        <div class="orch-feed__title-block">
+          <h2 class="orch-feed__title">Orchestrator activity</h2>
+          <p class="orch-feed__sub">{{ projectName() }} · {{ entries().length }} {{ entries().length === 1 ? 'entry' : 'entries' }}</p>
+        </div>
         <button class="orch-feed__refresh" (click)="refresh()" [disabled]="loading()" data-testid="orchestrator-refresh">
           {{ loading() ? '…' : 'Refresh' }}
         </button>
@@ -34,6 +37,8 @@ import { TokenSummaryBlockComponent } from './token-summary-block';
       @if (error()) {
         <div class="orch-feed__error">{{ error() }}</div>
       }
+
+      <app-global-orchestrator-card />
 
       <app-token-summary-block [projectName]="projectName()" />
 
@@ -47,7 +52,8 @@ import { TokenSummaryBlockComponent } from './token-summary-block';
               [class.orch-feed__entry--action]="entry.kind === 'action'"
               [class.orch-feed__entry--observation]="entry.kind === 'observation'"
               [class.orch-feed__entry--intervention]="entry.kind === 'intervention'">
-            <header class="orch-feed__entry-head">
+            <p class="orch-feed__summary">{{ entry.summary }}</p>
+            <footer class="orch-feed__entry-head">
               <span class="orch-feed__kind">{{ kindLabel(entry.kind) }}</span>
               <span class="orch-feed__topic">{{ entry.topic }}</span>
               <span class="orch-feed__ts">{{ formatTime(entry.ts) }}</span>
@@ -56,8 +62,7 @@ import { TokenSummaryBlockComponent } from './token-summary-block';
                   {{ tu.model || '?' }} · ↑{{ tu.inputTokens }} ↓{{ tu.outputTokens }}
                 </span>
               }
-            </header>
-            <p class="orch-feed__summary">{{ entry.summary }}</p>
+            </footer>
             @if (entry.reasoning) {
               <details class="orch-feed__reasoning">
                 <summary>Why</summary>
@@ -99,17 +104,34 @@ import { TokenSummaryBlockComponent } from './token-summary-block';
     </section>
   `,
   styles: [`
-    :host { display: block; padding: 16px; max-width: 880px; margin: 0 auto; }
+    /*
+     * Visual redesign: drop the dense gear-icon + uppercase header in
+     * favor of a stacked title block with a quiet subtitle. Less
+     * "control panel", more "page". Width is also widened from 880px
+     * so the longer entry summaries breathe.
+     */
+    :host { display: block; padding: 24px 28px; max-width: 920px; margin: 0 auto; }
     .orch-feed__head {
       display: flex;
-      align-items: baseline;
-      gap: 12px;
-      margin-bottom: 14px;
-      padding-bottom: 8px;
-      border-bottom: 1px solid rgba(255,255,255,0.08);
+      align-items: flex-start;
+      gap: 16px;
+      margin-bottom: 24px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
     }
-    .orch-feed__title { margin: 0; color: #f9e2af; font-size: 1.05rem; letter-spacing: 0.04em; }
-    .orch-feed__sub { color: rgba(255,255,255,0.55); font-size: 0.78rem; }
+    .orch-feed__title-block { flex: 1; }
+    .orch-feed__title {
+      margin: 0;
+      color: #f1f5f9;
+      font-size: 1.35rem;
+      font-weight: 600;
+      letter-spacing: 0;
+    }
+    .orch-feed__sub {
+      margin: 4px 0 0;
+      color: rgba(255,255,255,0.50);
+      font-size: 0.86rem;
+    }
     .orch-feed__refresh {
       margin-left: auto;
       background: rgba(255,255,255,0.06);
@@ -136,40 +158,47 @@ import { TokenSummaryBlockComponent } from './token-summary-block';
       padding: 24px 0;
       text-align: center;
     }
-    .orch-feed__list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
+    /*
+     * Entry layout: drop the boxy card treatment in favor of a left
+     * accent line + generous gap. The summary is the headline (1rem,
+     * relaxed line height); kind / topic / time / tokens collapse into
+     * a single quiet line below it. Closer to a feed of human notes,
+     * further from the previous "control panel" feel.
+     */
+    .orch-feed__list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 22px; }
     .orch-feed__entry {
-      padding: 10px 14px;
-      border-radius: 8px;
-      border: 1px solid rgba(255,255,255,0.10);
-      background: rgba(15,23,42,0.55);
+      padding: 0 0 0 14px;
+      border-left: 2px solid rgba(255,255,255,0.10);
+      background: none;
     }
-    .orch-feed__entry--decision { border-color: rgba(196,181,253,0.30); background: rgba(76,29,149,0.12); }
-    .orch-feed__entry--action { border-color: rgba(125,211,252,0.30); background: rgba(14,165,233,0.10); }
-    .orch-feed__entry--observation { border-color: rgba(148,163,184,0.20); }
-    .orch-feed__entry--intervention { border-color: rgba(249,226,175,0.40); background: rgba(249,226,175,0.10); }
+    .orch-feed__entry--decision { border-left-color: rgba(196,181,253,0.55); }
+    .orch-feed__entry--action { border-left-color: rgba(125,211,252,0.55); }
+    .orch-feed__entry--observation { border-left-color: rgba(148,163,184,0.40); }
+    .orch-feed__entry--intervention { border-left-color: rgba(249,226,175,0.65); }
+    .orch-feed__summary {
+      color: #f1f5f9;
+      margin: 0 0 6px;
+      font-size: 1.0rem;
+      line-height: 1.55;
+    }
     .orch-feed__entry-head {
       display: flex;
       align-items: baseline;
-      gap: 10px;
-      font-size: 0.72rem;
-      color: rgba(255,255,255,0.6);
-      letter-spacing: 0.04em;
-      text-transform: uppercase;
-      margin-bottom: 4px;
+      gap: 12px;
+      font-size: 0.78rem;
+      color: rgba(255,255,255,0.55);
       flex-wrap: wrap;
     }
-    .orch-feed__kind { font-weight: 700; color: #cdd6f4; }
-    .orch-feed__topic { padding: 1px 6px; border-radius: 4px; background: rgba(255,255,255,0.06); }
-    .orch-feed__ts { margin-left: auto; font-variant-numeric: tabular-nums; text-transform: none; letter-spacing: 0; }
+    .orch-feed__kind { font-weight: 600; color: #cbd5e1; }
+    .orch-feed__topic { padding: 1px 6px; border-radius: 3px; background: rgba(255,255,255,0.05); font-family: var(--font-mono, monospace); font-size: 0.74rem; }
+    .orch-feed__ts { font-variant-numeric: tabular-nums; }
     .orch-feed__tokens {
+      margin-left: auto;
       font-family: var(--font-mono, monospace);
-      font-size: 0.7rem;
-      color: #94a3b8;
+      font-size: 0.74rem;
+      color: rgba(255,255,255,0.45);
       cursor: help;
-      text-transform: none;
-      letter-spacing: 0;
     }
-    .orch-feed__summary { color: #e2e8f0; margin: 2px 0 4px; font-size: 0.88rem; line-height: 1.45; }
     .orch-feed__reasoning summary {
       cursor: pointer;
       color: rgba(255,255,255,0.55);

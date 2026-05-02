@@ -267,6 +267,18 @@ export class JobService {
   }
 
   /**
+   * Read the singleton global orchestrator session. The wire shape mirrors
+   * the per-project endpoint (`{ project, session }`) so the UI can reuse
+   * the same renderer; `project` comes back as the literal string
+   * "(global)" so the user sees that this is the cross-project session.
+   */
+  getGlobalOrchestratorSession() {
+    return this.http.get<OrchestratorSessionResponse>(
+      `${this.baseUrl}/runner/global/orchestrator-session`
+    );
+  }
+
+  /**
    * Per-project token rollup. Returns total amounts, per-model
    * breakdown, and a theoretical API-cost estimate. The cost is a
    * comparison against Anthropic's published API rates, not the user's
