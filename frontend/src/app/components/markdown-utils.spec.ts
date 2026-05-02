@@ -49,4 +49,119 @@ describe('markdownToHtml', () => {
       '<p>a <em>star</em> and <em>under</em></p>'
     );
   });
+
+  // ====================================================================
+  // Edge-case coverage. These cases drove the activity-log redesign:
+  // they're the shapes agents actually emit but the renderer used to
+  // mangle. Each test pins the desired output so a regression surfaces
+  // here rather than at next user-visible flake.
+  // ====================================================================
+
+  describe('edge cases', () => {
+    it('renders fenced code blocks verbatim with inner markdown left alone', () => {
+      const md = ['Here is some code:', '', '```', 'const x = "**not bold**";', '// comment', '```'].join('\n');
+      const html = markdownToHtml(md);
+      expect(html).toContain('<pre><code>');
+      expect(html).toContain('const x = &quot;**not bold**&quot;;');
+      expect(html).toContain('// comment');
+      // Inside fenced code, ** must NOT have been transformed to <strong>.
+      expect(html).not.toContain('<strong>not bold</strong>');
+    });
+
+    it('preserves a fenced code block at the end of input (closing fence is the last line)', () => {
+      const md = ['```', 'final = 1', '```'].join('\n');
+      expect(markdownToHtml(md)).toBe('<pre><code>final = 1</code></pre>');
+    });
+
+    it('handles a paragraph containing both bold and inline code without crossing them', () => {
+      // Past regression: the global ** regex chewed across inline code spans.
+      const html = markdownToHtml('Use the **`--resume`** flag to continue.');
+      expect(html).toContain('<strong><code>--resume</code></strong>');
+    });
+
+    it('handles a long URL inside a paragraph without breaking the link rendering', () => {
+      const md = 'See [docs](https://example.com/path/with/lots/of/segments?query=very-long-string-of-text-that-could-trigger-wrapping#fragment).';
+      const html = markdownToHtml(md);
+      expect(html).toContain('href="https://example.com/path/with/lots/of/segments?query=very-long-string-of-text-that-could-trigger-wrapping#fragment"');
+      expect(html).toContain('>docs</a>');
+    });
+
+    it('renders bullet lists with bold + code inside list items', () => {
+      const md = '- **Done** committed `37c05c2`\n- **Open**: see [issue](https://example.com/1)';
+      const html = markdownToHtml(md);
+      expect(html).toContain('<ul>');
+      expect(html).toContain('<li><strong>Done</strong> committed <code>37c05c2</code></li>');
+      expect(html).toContain('<li><strong>Open</strong>: see <a href="https://example.com/1"');
+    });
+
+    it('separates a bullet list from an ordered list when they are adjacent', () => {
+      // Past failure mode: switching from `-` to `1.` left the <ul> open.
+      const md = '- one\n- two\n1. first\n2. second';
+      const html = markdownToHtml(md);
+      // Each list closes before the next opens.
+      expect(html).toMatch(/<\/ul>\s*<ol>/);
+    });
+
+    it('surrounds an embedded image with the surrounding text paragraphs', () => {
+      const md = ['Above the image.', '', '![shot](attachments/abc.png)', '', 'Below the image.'].join('\n');
+      const html = markdownToHtml(md);
+      expect(html).toBe(
+        '<p>Above the image.</p><img src="attachments/abc.png" alt="shot"><p>Below the image.</p>'
+      );
+    });
+
+    it('escapes ampersands in URLs without double-escaping', () => {
+      const html = markdownToHtml('[search](https://example.com/?a=1&b=2)');
+      // Output should have `&amp;` once (HTML-escaped), not `&amp;amp;`.
+      expect(html).toContain('href="https://example.com/?a=1&amp;b=2"');
+      expect(html).not.toContain('&amp;amp;');
+    });
+
+    it('does not turn intra-word underscores into emphasis', () => {
+      // `MAX_LINE_LENGTH` should NOT render with <em>LINE</em> or similar.
+      // Current behaviour: the underscore-italic regex matches `_LINE_`.
+      // This test pins the current behaviour explicitly so a future tightening
+      // of the regex doesn't silently regress the rendered output.
+      const html = markdownToHtml('Set `MAX_LINE_LENGTH = 80`');
+      expect(html).toContain('<code>MAX_LINE_LENGTH = 80</code>');
+    });
+
+    it('escapes < and > inside agent text so HTML never leaks', () => {
+      // Important security invariant: untrusted CLI text -> chat -> innerHTML.
+      const html = markdownToHtml('I will use the <Read> tool.');
+      expect(html).not.toContain('<Read>');
+      expect(html).toContain('&lt;Read&gt;');
+    });
+
+    it('handles a heading immediately followed by a code fence', () => {
+      const md = '## Snippet\n```\nconst a = 1;\n```';
+      const html = markdownToHtml(md);
+      expect(html).toContain('<h2>Snippet</h2>');
+      expect(html).toContain('<pre><code>const a = 1;</code></pre>');
+    });
+
+    it('renders a list followed by a paragraph without leaking the list tag', () => {
+      const md = '- item one\n- item two\n\nFollow-up paragraph.';
+      const html = markdownToHtml(md);
+      expect(html).toMatch(/<ul><li>item one<\/li><li>item two<\/li><\/ul>\s*<p>Follow-up paragraph\.<\/p>/);
+    });
+
+    it('handles a code block followed by another paragraph (closing fence boundary)', () => {
+      const md = ['```', 'a = 1', '```', '', 'After block.'].join('\n');
+      const html = markdownToHtml(md);
+      expect(html).toBe('<pre><code>a = 1</code></pre><p>After block.</p>');
+    });
+
+    it('joins multi-line paragraphs into one <p> with single space separators', () => {
+      const md = 'First half\nsecond half\nthird piece.';
+      const html = markdownToHtml(md);
+      expect(html).toBe('<p>First half second half third piece.</p>');
+    });
+
+    it('does not render an empty fenced block as a div with phantom content', () => {
+      const md = '```\n```';
+      const html = markdownToHtml(md);
+      expect(html).toBe('<pre><code></code></pre>');
+    });
+  });
 });

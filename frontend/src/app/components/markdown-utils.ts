@@ -17,6 +17,8 @@ const IMG_OPEN = 'XmdImgOpenA93f4X';
 const IMG_CLOSE = 'XmdImgCloseA93f4X';
 const LINK_OPEN = 'XmdLnkOpenA93f4X';
 const LINK_CLOSE = 'XmdLnkCloseA93f4X';
+const CODE_OPEN = 'XmdCodeOpenA93f4X';
+const CODE_CLOSE = 'XmdCodeCloseA93f4X';
 
 export function markdownToHtml(markdown: string, options: MarkdownImageOptions = {}): string {
   const lines = markdown.replace(/\r\n/g, '\n').split('\n');
@@ -201,27 +203,46 @@ function nodeToMarkdown(node: ChildNode, options: MarkdownImageOptions): string 
 }
 
 function formatInline(value: string, options: MarkdownImageOptions): string {
-  const escaped = escapeHtml(value);
-
-  // Image refs are extracted before the other inline rules so we can emit raw
-  // <img> markup without it being re-escaped. Placeholders survive the rest
-  // of the inline formatting and are swapped back at the end.
+  // Order matters here: extract structured spans (images, links, inline code)
+  // from the *raw* input before HTML-escaping. Two reasons:
+  //
+  //  1. URLs inside [..](..) must not be double-escaped. Past bug:
+  //     `[x](https://e.com/?a=1&b=2)` produced `&amp;amp;` because the input
+  //     was escapeHtml'd first (turning `&` into `&amp;`) and then the URL
+  //     was escapeAttribute'd again inside renderLink.
+  //  2. Inline code spans (`MAX_LINE_LENGTH`) must not be touched by the
+  //     bold/italic regex. Past bug: the underscore-italic regex matched
+  //     across the code span boundary and rendered `MAX<em>LINE</em>LENGTH`.
+  //
+  // Each extraction stores the rendered HTML on the side and replaces the
+  // original span with a unique sentinel token. Once bold/italic/escape are
+  // done, we splice the rendered HTML back in.
   const images: string[] = [];
-  const withImages = escaped.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_full, alt, src) => {
+  const links: string[] = [];
+  const codes: string[] = [];
+
+  // Image first because `![..](..)` is a superset of `[..](..)`.
+  let stripped = value.replace(/!\[([^\]]*)\]\(([^)\s]+)\)/g, (_full, alt, src) => {
     images.push(renderImage(alt, src, options));
     return `${IMG_OPEN}${images.length - 1}${IMG_CLOSE}`;
   });
-
-  // Same trick for plain links: pull them out so the bold/italic regex doesn't
-  // chew their content, and so the URL goes through `safeLinkUrl` once.
-  const links: string[] = [];
-  const withLinks = withImages.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_full, label, url) => {
+  // Then plain links.
+  stripped = stripped.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (_full, label, url) => {
     links.push(renderLink(label, url));
     return `${LINK_OPEN}${links.length - 1}${LINK_CLOSE}`;
   });
+  // Then inline code spans. The contents are HTML-escaped at render time so
+  // they survive innerHTML safely; we hold them as already-rendered HTML
+  // strings until the splice step.
+  stripped = stripped.replace(/`([^`]+)`/g, (_full, body: string) => {
+    codes.push(`<code>${escapeHtml(body)}</code>`);
+    return `${CODE_OPEN}${codes.length - 1}${CODE_CLOSE}`;
+  });
 
-  const formatted = withLinks
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
+  // Now safely escape the residue (no <a>, <img>, <code> tokens left to mangle).
+  const escaped = escapeHtml(stripped);
+
+  const formatted = escaped
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
     .replace(/__([^_]+)__/g, '<strong>$1</strong>')
     .replace(/_([^_]+)_/g, '<em>$1</em>')
@@ -229,12 +250,15 @@ function formatInline(value: string, options: MarkdownImageOptions): string {
 
   return formatted
     .replace(/XmdImgOpenA93f4X(\d+)XmdImgCloseA93f4X/g, (_full, idx) => images[Number(idx)] ?? '')
-    .replace(/XmdLnkOpenA93f4X(\d+)XmdLnkCloseA93f4X/g, (_full, idx) => links[Number(idx)] ?? '');
+    .replace(/XmdLnkOpenA93f4X(\d+)XmdLnkCloseA93f4X/g, (_full, idx) => links[Number(idx)] ?? '')
+    .replace(/XmdCodeOpenA93f4X(\d+)XmdCodeCloseA93f4X/g, (_full, idx) => codes[Number(idx)] ?? '');
 }
 
 function renderLink(label: string, url: string): string {
   const safe = safeLinkUrl(url);
-  return `<a href="${escapeAttribute(safe)}" target="_blank" rel="noopener noreferrer">${label}</a>`;
+  // Label is raw user-supplied text — must be HTML-escaped for the inner-text
+  // position. URL goes into an attribute so it gets the attribute escape.
+  return `<a href="${escapeAttribute(safe)}" target="_blank" rel="noopener noreferrer">${escapeHtml(label)}</a>`;
 }
 
 /**
