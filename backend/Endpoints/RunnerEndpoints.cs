@@ -55,6 +55,21 @@ public static class RunnerEndpoints
                 return Results.Ok(new { project = projectName, entries });
             });
 
+        // Long-lived orchestrator session for the project. Surfaces the
+        // session id (so the user can `claude -r <id>` themselves to
+        // inspect or talk directly to it), the boot prompt preview ("what
+        // did you read on boot?"), the boot reply preview ("what did you
+        // say back?"), and cumulative token totals across the session's
+        // lifetime. Read-only.
+        runnerGroup.MapGet("/{projectName}/orchestrator-session",
+            (string projectName, JobScannerService scanner, OrchestratorSessionStore sessions) =>
+            {
+                var entry = scanner.GetWatchPaths().FirstOrDefault(e => e.Name == projectName);
+                if (entry == null) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+                var session = sessions.Read(entry.Path);
+                return Results.Ok(new { project = projectName, session });
+            });
+
         // Token summary: per-project rollup of orchestrator-log token
         // amounts plus a *theoretical* API-cost estimate. The frontend
         // renders amounts prominently, the cost smaller and behind a

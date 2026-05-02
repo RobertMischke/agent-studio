@@ -26,6 +26,7 @@ public class ProjectRunner
     private readonly OrchestratorLog _orchestratorLog;
     private readonly JobMutationService _mutations;
     private readonly OrchestratorRunner _orchestratorRunner;
+    private readonly OrchestratorSessionStore _orchestratorSessions;
     private readonly ProjectSettingsService _projectSettings;
     private string _mode = "manual";
     private string? _activeJobId;
@@ -69,6 +70,7 @@ public class ProjectRunner
         JobMutationService mutations,
         OrchestratorLog orchestratorLog,
         OrchestratorRunner orchestratorRunner,
+        OrchestratorSessionStore orchestratorSessions,
         ProjectSettingsService projectSettings)
     {
         ProjectName = projectName;
@@ -85,6 +87,7 @@ public class ProjectRunner
         _mutations = mutations;
         _orchestratorLog = orchestratorLog;
         _orchestratorRunner = orchestratorRunner;
+        _orchestratorSessions = orchestratorSessions;
         _projectSettings = projectSettings;
 
         // Listen across all CLI backends for completion of the active job.
@@ -419,6 +422,130 @@ public class ProjectRunner
         || string.Equals(mode, "auto-single", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
+    /// Boot the long-lived orchestrator session for this project (Phase H).
+    /// Reads the persisted session id; if one is already on disk, we
+    /// keep it and skip the boot call so a backend restart does not
+    /// re-burn a few thousand input tokens. Otherwise sends a boot
+    /// prompt that loads the project's README / AGENTS / ROADMAP plus
+    /// recent orchestrator activity, captures the resulting session id,
+    /// and persists it. Fire-and-forget from the runner host service.
+    /// </summary>
+    public async Task BootOrchestratorSessionAsync(CancellationToken ct)
+    {
+        var existing = _orchestratorSessions.Read(Entry.Path);
+        if (existing != null && !string.IsNullOrWhiteSpace(existing.SessionId))
+        {
+            _logger.LogInformation(
+                "[orchestrator] reusing persisted session {SessionId} for {Project} (calls so far: {Calls})",
+                existing.SessionId, ProjectName, existing.Calls);
+            return;
+        }
+
+        var modelOverride = _projectSettings.Get(ProjectName).OrchestratorModel;
+        var modelId = string.IsNullOrWhiteSpace(modelOverride) ? OrchestratorRunner.DefaultModel : modelOverride!;
+
+        var bootPrompt = BuildOrchestratorBootPrompt();
+
+        _logger.LogInformation("[orchestrator] booting session for {Project} on {Model}", ProjectName, modelId);
+        var result = await _orchestratorRunner.DecideAsync(bootPrompt, modelId, Entry.RootPath, ct);
+        if (!result.Success || string.IsNullOrWhiteSpace(result.CapturedSessionId))
+        {
+            _logger.LogWarning(
+                "[orchestrator] boot failed for {Project}: success={Success}, sessionId={SessionId}, error={Error}",
+                ProjectName, result.Success, result.CapturedSessionId, result.ErrorMessage);
+            return;
+        }
+
+        var session = new OrchestratorSession(
+            SessionId: result.CapturedSessionId!,
+            Model: result.Model,
+            BootedAt: DateTime.UtcNow,
+            BootPromptPreview: TruncatePreview(bootPrompt, 2000),
+            BootReplyPreview: TruncatePreview(result.ReplyText, 600),
+            CumulativeInputTokens: result.TokenUsage?.InputTokens ?? 0,
+            CumulativeOutputTokens: result.TokenUsage?.OutputTokens ?? 0,
+            CumulativeCacheReadTokens: result.TokenUsage?.CacheReadTokens ?? 0,
+            CumulativeCacheCreationTokens: result.TokenUsage?.CacheCreationTokens ?? 0,
+            Calls: 1,
+            LastUsedAt: DateTime.UtcNow,
+            LastError: null);
+        _orchestratorSessions.Write(Entry.Path, session);
+
+        _orchestratorLog.Append(Entry.Path, new OrchestratorLogEntry
+        {
+            Kind = OrchestratorLogKinds.Action,
+            Topic = "orchestrator-boot",
+            Summary = $"Orchestrator session booted on {result.Model}.",
+            Reasoning = $"Session id: {session.SessionId}. Boot loaded project README / AGENTS / ROADMAP plus recent orchestrator activity. Subsequent decisions resume this session.",
+            TokenUsage = result.TokenUsage
+        });
+    }
+
+    /// <summary>
+    /// Build the boot prompt: project facts, the top of any README /
+    /// AGENTS / ROADMAP at the watched path's repository, and a
+    /// summary of recent orchestrator activity. Truncated so the boot
+    /// stays cheap. Total target: under 8 KB so even on Opus the boot
+    /// is a few cents at most.
+    /// </summary>
+    private string BuildOrchestratorBootPrompt()
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"You are the orchestrator for the project \"{ProjectName}\" running in Agent Task Processor.");
+        sb.AppendLine();
+        sb.AppendLine("Project context:");
+        sb.AppendLine($"- Watch path: {Entry.Path}");
+        sb.AppendLine($"- Working directory: {Entry.RootPath}");
+        if (!string.IsNullOrWhiteSpace(Entry.RepositoryPath))
+            sb.AppendLine($"- Git repository: {Entry.RepositoryPath}");
+        sb.AppendLine();
+
+        AppendDocSnippet(sb, "AGENTS.md", Entry.RootPath, 2_000);
+        AppendDocSnippet(sb, "README.md", Entry.RootPath, 2_000);
+        AppendDocSnippet(sb, "ROADMAP.md", Entry.RootPath, 1_500);
+
+        // Recent orchestrator activity, last 10 entries newest-first.
+        var entries = _orchestratorLog.Read(Entry.Path);
+        if (entries.Count > 0)
+        {
+            sb.AppendLine("Recent orchestrator activity (newest first, latest 10):");
+            foreach (var e in entries.AsEnumerable().Reverse().Take(10))
+                sb.AppendLine($"- [{e.Kind}/{e.Topic}] {e.Summary}");
+            sb.AppendLine();
+        }
+
+        sb.AppendLine("Your role:");
+        sb.AppendLine("- When the runner sends you a NEEDS_INPUT decision request, reply with the user-style follow-up to send back to the agent.");
+        sb.AppendLine("- When the runner sends you a status query, summarize concisely.");
+        sb.AppendLine("- The conversation history accumulated in this session is your memory across decisions; you do not need to be re-briefed each turn.");
+        sb.AppendLine("- If you genuinely cannot decide without user knowledge that you do not have, reply with exactly: BLOCK");
+        sb.AppendLine();
+        sb.AppendLine("Acknowledge readiness with a single short sentence describing which docs you saw on boot. The first real decision request will follow.");
+        return sb.ToString();
+    }
+
+    private static void AppendDocSnippet(System.Text.StringBuilder sb, string fileName, string root, int maxChars)
+    {
+        try
+        {
+            var path = Path.Combine(root, fileName);
+            if (!File.Exists(path)) return;
+            var text = File.ReadAllText(path);
+            if (string.IsNullOrWhiteSpace(text)) return;
+            sb.AppendLine($"--- {fileName} (truncated to {maxChars} chars) ---");
+            sb.AppendLine(text.Length > maxChars ? text[..maxChars] + "\n... [truncated]" : text);
+            sb.AppendLine();
+        }
+        catch { /* best-effort: missing or unreadable docs are fine */ }
+    }
+
+    private static string TruncatePreview(string s, int max)
+    {
+        if (string.IsNullOrEmpty(s)) return "";
+        return s.Length <= max ? s : s[..max] + "...";
+    }
+
+    /// <summary>
     /// Phase E. The active agent emitted [[TASK_NEEDS_INPUT:...]] in auto
     /// mode; the user is not here to answer. Spawn the orchestrator with
     /// the project's configured model (default Opus 4.7), ask it for the
@@ -449,15 +576,50 @@ public class ProjectRunner
             var orchestratorPrompt = BuildOrchestratorPrompt(info, promptText, lastAgentText);
             var modelOverride = _projectSettings.Get(info.ProjectName).OrchestratorModel;
 
+            // Resume the long-lived session if one is on disk; the
+            // orchestrator already has project context + recent decisions
+            // in its history, so a tighter "current question" prompt is
+            // enough. Falls back to one-shot if no session is booted yet
+            // (boot at app start may still be in flight or have failed).
+            var session = _orchestratorSessions.Read(Entry.Path);
+            var modelToUse = modelOverride ?? session?.Model ?? OrchestratorRunner.DefaultModel;
             _logger.LogInformation(
-                "[orchestrator] auto-deciding for {JobId} on model {Model}",
-                jobId, modelOverride ?? OrchestratorRunner.DefaultModel);
+                "[orchestrator] auto-deciding for {JobId} on model {Model} (session={SessionId})",
+                jobId, modelToUse, session?.SessionId ?? "<one-shot>");
 
-            var result = await _orchestratorRunner.DecideAsync(
-                orchestratorPrompt,
-                modelOverride,
-                Entry.RootPath,
-                CancellationToken.None);
+            OrchestratorDecisionResult result;
+            if (session != null && !string.IsNullOrWhiteSpace(session.SessionId))
+            {
+                var resumePrompt = BuildOrchestratorResumePrompt(info, lastAgentText);
+                result = await _orchestratorRunner.ResumeAsync(
+                    session.SessionId, resumePrompt, modelToUse,
+                    Entry.RootPath, CancellationToken.None);
+
+                // If the session id was rejected (Anthropic rotated /
+                // retention expired), fall back to a fresh one-shot so
+                // the user's auto-mode is not stuck. Drop the stale
+                // session-id; the next boot tick will re-create one.
+                if (!result.Success && result.ErrorMessage != null
+                    && (result.ErrorMessage.Contains("session", StringComparison.OrdinalIgnoreCase)
+                        || result.ErrorMessage.Contains("not found", StringComparison.OrdinalIgnoreCase)))
+                {
+                    _logger.LogWarning("[orchestrator] resume rejected; clearing session and falling back to one-shot. error={Err}", result.ErrorMessage);
+                    _orchestratorSessions.Clear(Entry.Path);
+                    result = await _orchestratorRunner.DecideAsync(
+                        orchestratorPrompt, modelToUse, Entry.RootPath, CancellationToken.None);
+                }
+                else if (result.Success)
+                {
+                    // Accumulate cumulative usage onto the persisted session.
+                    var updated = OrchestratorSessionStore.AccumulateUsage(session, result.TokenUsage, error: null);
+                    _orchestratorSessions.Write(Entry.Path, updated);
+                }
+            }
+            else
+            {
+                result = await _orchestratorRunner.DecideAsync(
+                    orchestratorPrompt, modelToUse, Entry.RootPath, CancellationToken.None);
+            }
 
             if (!result.Success || string.IsNullOrWhiteSpace(result.ReplyText)
                 || result.ReplyText.Trim().Equals("BLOCK", StringComparison.OrdinalIgnoreCase))
@@ -511,6 +673,22 @@ public class ProjectRunner
             }
             catch { }
         }
+    }
+
+    /// <summary>
+    /// Tighter prompt for an orchestrator session that already has the
+    /// project's boot context loaded. We only re-send the current
+    /// situation; everything else is in the session memory.
+    /// </summary>
+    private static string BuildOrchestratorResumePrompt(JobInfo info, string lastAgentText)
+    {
+        return
+            $"NEEDS_INPUT decision request for task \"{info.Title}\" (id: {info.Id}).\n\n" +
+            "The agent's last message you need to answer:\n" +
+            lastAgentText +
+            "\n\nReply with the user-style follow-up to send back to the agent. " +
+            "Reply with exactly BLOCK if you cannot decide without user knowledge you do not have. " +
+            "Plain text, no markdown headings.";
     }
 
     /// <summary>

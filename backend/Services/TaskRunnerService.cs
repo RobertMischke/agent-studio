@@ -33,6 +33,7 @@ public class TaskRunnerService : BackgroundService
     private readonly OrchestratorChatLog _chatLog;
     private readonly OrchestratorLog _orchestratorLog;
     private readonly OrchestratorRunner _orchestratorRunner;
+    private readonly OrchestratorSessionStore _orchestratorSessions;
     private readonly ConcurrentDictionary<string, ProjectRunner> _runners = new();
 
     public event Action<string, ProjectRunnerStatus>? OnRunnerStatusChanged;
@@ -53,7 +54,8 @@ public class TaskRunnerService : BackgroundService
         ProjectSettingsService projectSettings,
         OrchestratorChatLog chatLog,
         OrchestratorLog orchestratorLog,
-        OrchestratorRunner orchestratorRunner)
+        OrchestratorRunner orchestratorRunner,
+        OrchestratorSessionStore orchestratorSessions)
     {
         _config = config;
         _logger = logger;
@@ -71,6 +73,7 @@ public class TaskRunnerService : BackgroundService
         _chatLog = chatLog;
         _orchestratorLog = orchestratorLog;
         _orchestratorRunner = orchestratorRunner;
+        _orchestratorSessions = orchestratorSessions;
     }
 
     public SummaryGenerationService SummaryService => _summaryService;
@@ -95,7 +98,7 @@ public class TaskRunnerService : BackgroundService
                 continue;
             }
 
-            var runner = new ProjectRunner(entry.Name, entry, _logger, _scanner, _states, _sessions, _router, _summaryService, _prompts, _transitions, _chatLog, _mutations, _orchestratorLog, _orchestratorRunner, _projectSettings);
+            var runner = new ProjectRunner(entry.Name, entry, _logger, _scanner, _states, _sessions, _router, _summaryService, _prompts, _transitions, _chatLog, _mutations, _orchestratorLog, _orchestratorRunner, _orchestratorSessions, _projectSettings);
             runner.ConfigureWatchdog(LoadWatchdogConfig(_config));
             runner.OnStatusChanged += status => OnRunnerStatusChanged?.Invoke(entry.Name, status);
             // Persist every mode change so the auto-pickup toggle survives
@@ -119,6 +122,23 @@ public class TaskRunnerService : BackgroundService
         if (!_cli.IsAvailable())
         {
             _logger.LogWarning("Copilot CLI not available - runners will be in manual/board-only mode");
+        }
+
+        // Boot the orchestrator's long-lived Claude session per project so
+        // it has warm context (project README, recent activity, lane
+        // counts) ready for auto-mode decisions. Cheap when a session is
+        // already on disk - we only re-boot if the persisted file is
+        // missing. Fire-and-forget per project so a slow boot doesn't
+        // block app startup; a project whose boot fails is logged and
+        // the orchestrator falls back to one-shot calls on first use.
+        foreach (var runner in _runners.Values)
+        {
+            var snapshot = runner;
+            _ = Task.Run(async () =>
+            {
+                try { await snapshot.BootOrchestratorSessionAsync(stoppingToken); }
+                catch (Exception ex) { _logger.LogWarning(ex, "Orchestrator boot failed for {Project}", snapshot.ProjectName); }
+            }, stoppingToken);
         }
 
         // Run the loop - poll every 5 seconds for auto-mode runners

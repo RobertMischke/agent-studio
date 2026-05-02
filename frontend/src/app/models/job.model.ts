@@ -266,6 +266,33 @@ export interface TokenSummary {
   disclaimer: string;
 }
 
+/**
+ * Long-lived orchestrator session record. The orchestrator boots one of
+ * these per project at app start; subsequent decisions resume the same
+ * Claude session via `-r <sessionId>`, so the orchestrator carries
+ * project context and prior decisions in its conversation memory.
+ * Mirrors backend `OrchestratorSession`.
+ */
+export interface OrchestratorSession {
+  sessionId: string;
+  model: string;
+  bootedAt: string;
+  bootPromptPreview: string;
+  bootReplyPreview: string;
+  cumulativeInputTokens: number;
+  cumulativeOutputTokens: number;
+  cumulativeCacheReadTokens: number;
+  cumulativeCacheCreationTokens: number;
+  calls: number;
+  lastUsedAt: string;
+  lastError?: string | null;
+}
+
+export interface OrchestratorSessionResponse {
+  project: string;
+  session: OrchestratorSession | null;
+}
+
 export interface TokenSummaryByModel {
   model: string;
   calls: number;

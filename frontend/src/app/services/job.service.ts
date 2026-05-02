@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport, QuotaReport, QuotaSnapshot, GitStatus, ClaudeSessionResponse, JobCommitDetail, SessionEventsResponse, ContinueMode, ContinueJobResponse, OrchestratorLogResponse, TokenSummary } from '../models/job.model';
+import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport, QuotaReport, QuotaSnapshot, GitStatus, ClaudeSessionResponse, JobCommitDetail, SessionEventsResponse, ContinueMode, ContinueJobResponse, OrchestratorLogResponse, TokenSummary, OrchestratorSessionResponse } from '../models/job.model';
 import { ErrorDialogService } from './error-dialog.service';
 
 @Injectable({ providedIn: 'root' })
@@ -253,6 +253,17 @@ export class JobService {
 
   setProjectOrchestratorModel(projectName: string, model: string | null) {
     return this.http.put(`${this.baseUrl}/projects/${encodeURIComponent(projectName)}/orchestrator-model`, { model });
+  }
+
+  /**
+   * Read the long-lived orchestrator session for a project. Returns
+   * `{ project, session: null }` when no session has been booted yet
+   * (e.g. boot is still in flight after app start, or boot failed).
+   */
+  getOrchestratorSession(projectName: string) {
+    return this.http.get<OrchestratorSessionResponse>(
+      `${this.baseUrl}/runner/${encodeURIComponent(projectName)}/orchestrator-session`
+    );
   }
 
   /**

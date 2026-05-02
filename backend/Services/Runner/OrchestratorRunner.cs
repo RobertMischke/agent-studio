@@ -7,13 +7,16 @@ namespace OrchestratorApi.Services.Runner;
 /// <summary>
 /// Result of an orchestrator decision call: the orchestrator's reply text
 /// (the follow-up the user would have typed if they were here), token
-/// usage for the call, and a flag for whether the underlying CLI errored.
+/// usage for the call, the captured Claude session id (so the runner can
+/// resume the same session on the next call), and a flag for whether the
+/// underlying CLI errored.
 /// </summary>
 public sealed record OrchestratorDecisionResult(
     bool Success,
     string ReplyText,
     string Model,
     OrchestratorTokenUsage? TokenUsage,
+    string? CapturedSessionId,
     string? ErrorMessage);
 
 /// <summary>
@@ -52,24 +55,53 @@ public class OrchestratorRunner
     /// to <see cref="DefaultModel"/> if the caller doesn't override it
     /// from project settings.
     /// </summary>
-    public async Task<OrchestratorDecisionResult> DecideAsync(
+    public Task<OrchestratorDecisionResult> DecideAsync(
         string prompt,
         string? model,
         string workingDirectory,
         CancellationToken ct = default)
+        => InvokeAsync(prompt, model, workingDirectory, resumeSessionId: null, ct);
+
+    /// <summary>
+    /// Resume an existing orchestrator session via <c>claude -r &lt;sessionId&gt;</c>.
+    /// The session keeps the boot-time context (project facts, recent
+    /// activity) and accumulates conversation history, so subsequent
+    /// decisions cost less on framing.
+    /// </summary>
+    public Task<OrchestratorDecisionResult> ResumeAsync(
+        string sessionId,
+        string prompt,
+        string? model,
+        string workingDirectory,
+        CancellationToken ct = default)
+        => InvokeAsync(prompt, model, workingDirectory, resumeSessionId: sessionId, ct);
+
+    private async Task<OrchestratorDecisionResult> InvokeAsync(
+        string prompt,
+        string? model,
+        string workingDirectory,
+        string? resumeSessionId,
+        CancellationToken ct)
     {
         var modelId = string.IsNullOrWhiteSpace(model) ? DefaultModel : model!.Trim();
+
+        var args = new List<string>
+        {
+            "-p", Quote(prompt),
+            "--output-format", "json",
+            "--model", Quote(modelId),
+            "--dangerously-skip-permissions"
+        };
+        if (!string.IsNullOrWhiteSpace(resumeSessionId))
+        {
+            args.Add("-r");
+            args.Add(Quote(resumeSessionId!));
+        }
 
         var psi = new ProcessStartInfo
         {
             FileName = CliExecutionServiceBase.ResolveExecutable(_claude.GetCliPath()),
-            Arguments = string.Join(' ', new[]
-            {
-                "-p", Quote(prompt),
-                "--output-format", "json",
-                "--model", Quote(modelId),
-                "--dangerously-skip-permissions"
-            }),
+            Arguments = string.Join(' ', args),
             WorkingDirectory = workingDirectory,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -99,19 +131,19 @@ public class OrchestratorRunner
             {
                 var msg = string.IsNullOrWhiteSpace(stderr) ? $"claude CLI exited with code {process.ExitCode}" : stderr.Trim();
                 _logger.LogWarning("Orchestrator decision failed: exit={Exit}, stderr={Stderr}", process.ExitCode, msg);
-                return new OrchestratorDecisionResult(false, "", modelId, null, msg);
+                return new OrchestratorDecisionResult(false, "", modelId, null, null, msg);
             }
 
             return ParseResult(stdout, modelId);
         }
         catch (OperationCanceledException)
         {
-            return new OrchestratorDecisionResult(false, "", modelId, null, "cancelled");
+            return new OrchestratorDecisionResult(false, "", modelId, null, null, "cancelled");
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Orchestrator decision call failed to spawn or read");
-            return new OrchestratorDecisionResult(false, "", modelId, null, ex.Message);
+            return new OrchestratorDecisionResult(false, "", modelId, null, null, ex.Message);
         }
     }
 
@@ -126,7 +158,7 @@ public class OrchestratorRunner
     public static OrchestratorDecisionResult ParseResult(string stdout, string modelId)
     {
         if (string.IsNullOrWhiteSpace(stdout))
-            return new OrchestratorDecisionResult(false, "", modelId, null, "empty stdout");
+            return new OrchestratorDecisionResult(false, "", modelId, null, null, "empty stdout");
 
         try
         {
@@ -136,6 +168,7 @@ public class OrchestratorRunner
             var resultText = root.TryGetProperty("result", out var r) ? r.GetString() ?? "" : "";
             var isError = root.TryGetProperty("is_error", out var ie) && ie.ValueKind == JsonValueKind.True;
             string? declaredModel = root.TryGetProperty("model", out var md) ? md.GetString() : null;
+            string? sessionId = root.TryGetProperty("session_id", out var sid) ? sid.GetString() : null;
 
             OrchestratorTokenUsage? usage = null;
             if (root.TryGetProperty("usage", out var u) && u.ValueKind == JsonValueKind.Object)
@@ -155,11 +188,12 @@ public class OrchestratorRunner
                 ReplyText: resultText.Trim(),
                 Model: declaredModel ?? modelId,
                 TokenUsage: usage,
+                CapturedSessionId: string.IsNullOrWhiteSpace(sessionId) ? null : sessionId,
                 ErrorMessage: isError ? "is_error=true in CLI output" : null);
         }
         catch (Exception ex)
         {
-            return new OrchestratorDecisionResult(false, "", modelId, null, $"parse failed: {ex.Message}");
+            return new OrchestratorDecisionResult(false, "", modelId, null, null, $"parse failed: {ex.Message}");
         }
     }
 

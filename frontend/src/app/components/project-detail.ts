@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { JobService } from '../services/job.service';
-import { GroupedJobs, OrchestratorLogEntry, RunnerStatus } from '../models/job.model';
+import { GroupedJobs, OrchestratorLogEntry, OrchestratorSession, RunnerStatus } from '../models/job.model';
 import { OrchestratorRunner_KnownModels } from './project-detail.models';
 import { TokenSummaryBlockComponent } from './token-summary-block';
 
@@ -95,6 +95,35 @@ interface ProjectSettingsRow {
             </div>
           }
         </div>
+      </section>
+
+      <section class="proj-detail__group">
+        <h3>Orchestrator session</h3>
+        @if (orchSession(); as os) {
+          <dl class="proj-detail__paths proj-detail__session">
+            <div><dt>Status</dt><dd>● Live · model {{ os.model }}</dd></div>
+            <div><dt>Session id</dt><dd><code>{{ os.sessionId }}</code></dd></div>
+            <div><dt>Booted</dt><dd>{{ formatTime(os.bootedAt) }} · {{ os.calls }} call{{ os.calls === 1 ? '' : 's' }} so far</dd></div>
+            @if (os.lastError) {
+              <div><dt>Last error</dt><dd class="proj-detail__session-error">{{ os.lastError }}</dd></div>
+            }
+          </dl>
+          <details class="proj-detail__session-snap">
+            <summary>What the orchestrator read on boot</summary>
+            <pre class="proj-detail__session-pre">{{ os.bootPromptPreview }}</pre>
+          </details>
+          <details class="proj-detail__session-snap">
+            <summary>Boot reply ("I am ready ...")</summary>
+            <pre class="proj-detail__session-pre">{{ os.bootReplyPreview }}</pre>
+          </details>
+          <p class="proj-detail__hint">
+            Resume this session yourself with <code>claude -r {{ os.sessionId }}</code> from <code>{{ paths().path }}</code>.
+          </p>
+        } @else {
+          <p class="proj-detail__empty">
+            No session booted yet. The orchestrator boots one Claude session per project at app start; if this stays empty after a few seconds, the boot probably failed (check the API log) and decisions will fall back to one-shot calls.
+          </p>
+        }
       </section>
 
       <app-token-summary-block [projectName]="projectName()" />
@@ -246,6 +275,29 @@ interface ProjectSettingsRow {
     .proj-detail__entry p { margin: 4px 0 0; color: #e2e8f0; font-size: 0.84rem; }
 
     .proj-detail__empty { color: rgba(255,255,255,0.5); font-style: italic; margin: 4px 0 0; font-size: 0.82rem; }
+
+    .proj-detail__session dd code { font-size: 0.78rem; color: #c4b5fd; }
+    .proj-detail__session-error { color: #fda4af; }
+    .proj-detail__session-snap { margin: 6px 0; }
+    .proj-detail__session-snap summary {
+      cursor: pointer;
+      color: rgba(255,255,255,0.55);
+      font-size: 0.78rem;
+      user-select: none;
+    }
+    .proj-detail__session-snap summary:hover { color: #cdd6f4; }
+    .proj-detail__session-pre {
+      max-height: 240px;
+      overflow: auto;
+      background: rgba(0,0,0,0.30);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 0.78rem;
+      color: #cdd6f4;
+      white-space: pre-wrap;
+      margin: 6px 0 0;
+    }
   `]
 })
 export class ProjectDetailComponent implements OnInit, OnDestroy {
@@ -258,6 +310,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   readonly runnerStatus = signal<RunnerStatus | null>(null);
   readonly grouped = signal<GroupedJobs | null>(null);
   readonly recentEntries = signal<OrchestratorLogEntry[]>([]);
+  readonly orchSession = signal<OrchestratorSession | null>(null);
 
   // Two-way bound drafts so the form is responsive even before the
   // server round-trip completes.
@@ -379,6 +432,10 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
         const all = resp.entries ?? [];
         this.recentEntries.set(all.slice(-5).reverse());
       },
+      error: () => {}
+    });
+    this.jobService.getOrchestratorSession(this.projectName()).subscribe({
+      next: (resp) => this.orchSession.set(resp.session),
       error: () => {}
     });
   }

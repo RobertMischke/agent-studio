@@ -140,4 +140,25 @@ Numbering is monotonic. Never reuse a number; never silently delete history.
 
 **Implementation pointers.** [backend/Services/Runner/OrchestratorRunner.cs](../backend/Services/Runner/OrchestratorRunner.cs) (the one-shot CLI invoker), [backend/Services/Runner/OrchestratorLog.cs](../backend/Services/Runner/OrchestratorLog.cs), [backend/Services/Runner/TokenPricing.cs](../backend/Services/Runner/TokenPricing.cs), [backend/Services/Runner/TokenSummary.cs](../backend/Services/Runner/TokenSummary.cs); the auto-mode hook in [ProjectRunner.OnCliFinishedAsync](../backend/Services/Runner/ProjectRunner.cs); the override endpoint in [RunnerEndpoints.cs](../backend/Endpoints/RunnerEndpoints.cs); the per-project model setting in [ProjectSettings.OrchestratorModel](../backend/Models/JobModels.cs); [frontend/src/app/components/orchestrator-feed.ts](../frontend/src/app/components/orchestrator-feed.ts), [frontend/src/app/components/project-detail.ts](../frontend/src/app/components/project-detail.ts), [frontend/src/app/components/token-summary-block.ts](../frontend/src/app/components/token-summary-block.ts).
 
+**Status.** Superseded in part by ADR-0007: the "no long-lived process" non-goal is overturned. The session-id is now persisted per project and decisions resume the session via `claude -r`. The "no Anthropic API direct path" non-goal is still in force.
+
+---
+
+## ADR-0007 - Per-project long-lived orchestrator session for warm context (2026-05-02)
+
+**Decision.** Each watched project owns one Claude session that is booted on app start and reused for every later orchestrator decision via `claude -r <sessionId>`. The session id, boot prompt preview, boot reply preview, and cumulative token totals are persisted at `<watchPath>/.orchestrator/orchestrator-session.json`. The session id and what was loaded on boot are inspectable in the UI; the user can also resume the session in their own terminal via the displayed `claude -r <id>` command.
+
+**Context.** ADR-0006 ruled out a long-lived orchestrator process to keep things simple, on the assumption that prompt caching at the Anthropic side would handle repeated framing. In practice that left every decision as an opaque one-shot call: no warm project context, no inspectable "what does the orchestrator know about us", and token usage that piled up without being attributable to one running ledger. The user said it directly: *"ich hätte gerne irgendwie sowas wie: 'Was hast du alles gelesen? Wie wurdest du initialisiert?' Also soll nicht einfach nur im luftleeren Raum da sein. Am liebsten hätte ich glaube ich eine langlebige CLI Session, damit ich mich mit dem Ding wohlfühle."*
+
+**Non-goals.**
+- Calling Anthropic's HTTP API directly. Subscriptions still bill the work; ADR-0006's primary non-goal stays.
+- A long-lived orchestrator *process*. We invoke `claude -p ... -r <id>` per decision and let the process exit; the session lives on Anthropic's side, not ours. This keeps the runtime stateless and the failure mode visible (one process per decision, exits cleanly).
+- Sharing one session across projects. Each project's orchestrator has its own session so context does not leak; per ADR-0006 the orchestrator's model is also per-project.
+- Hiding the boot. Boot prompt + reply + session id are surfaced verbatim in the project detail panel so the user can audit what the orchestrator was told and what it acknowledged.
+- Eager re-boot on every backend restart. The persisted session id is reused; we only re-boot when no session is on disk, or when a resume call returns a "session not found" style error (we then drop the stale id and fall back to a one-shot for that decision).
+
+**Reasoning style.** Trust + transparency over runtime cleverness. The session-on-disk model fits the same pattern as job session UUIDs (ADR-0003 chain): write what the CLI gave us, resume by id, fall back to a fresh boot when the id is stale. Keep the boot small (project README/AGENTS/ROADMAP truncated, recent log entries) so even on Opus the boot is a few cents at most.
+
+**Implementation pointers.** [backend/Services/Runner/OrchestratorSession.cs](../backend/Services/Runner/OrchestratorSession.cs) (record + store + AccumulateUsage); [backend/Services/Runner/OrchestratorRunner.cs](../backend/Services/Runner/OrchestratorRunner.cs) (`DecideAsync` for boot, `ResumeAsync` for follow-ups, `CapturedSessionId` on the result); [backend/Services/Runner/ProjectRunner.cs](../backend/Services/Runner/ProjectRunner.cs) (`BootOrchestratorSessionAsync`, the resume path in the auto-mode NeedsInput hook, stale-session fallback); boot kicked off at app start by [TaskRunnerService.ExecuteAsync](../backend/Services/TaskRunnerService.cs); read endpoint `/api/runner/{name}/orchestrator-session` in [RunnerEndpoints.cs](../backend/Endpoints/RunnerEndpoints.cs); UI in [frontend/src/app/components/project-detail.ts](../frontend/src/app/components/project-detail.ts) "Orchestrator session" group.
+
 **Status.** Accepted.
