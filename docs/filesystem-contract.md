@@ -22,6 +22,8 @@ projectKey: my-project
 
 With that pointer, jobs are resolved under the configured `TaskRepository` at `projects/<projectKey>/`. The CLI still runs in the configured `RootPath`; the job folders are task metadata and evidence.
 
+`RootPath` is the implementation working directory for CLI runs and pointer lookup. A watch entry may also set `RepositoryPath` when Git operations should run from a different directory, such as a parent repository that contains the app folder. If `RepositoryPath` is omitted, Git operations fall back to `RootPath` and resolve the Git work-tree top-level from there.
+
 ## Job Folder Layout
 
 Each visible state is a folder, and each job is a subfolder inside one state:

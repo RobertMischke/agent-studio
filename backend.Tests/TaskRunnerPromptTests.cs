@@ -19,14 +19,19 @@ public class TaskRunnerPromptTests
         var p = Prompts().Render(RuntimePromptService.RunnerFreshStart, new Dictionary<string, string?>
         {
             ["prompt_path"] = @"C:\jobs\fix-bug\prompt.md",
-            ["job_folder"] = @"C:\jobs\fix-bug"
+            ["job_folder"] = @"C:\jobs\fix-bug",
+            ["working_directory"] = @"C:\Projects\Runbook\App",
+            ["repository_path"] = @"C:\Projects\Runbook"
         });
 
         Assert.Contains(@"C:\jobs\fix-bug\prompt.md", p);
         Assert.Contains(@"C:\jobs\fix-bug", p);
+        Assert.Contains(@"C:\Projects\Runbook\App", p);
+        Assert.Contains(@"C:\Projects\Runbook", p);
         Assert.Contains("Do not scan for other tasks", p);
         Assert.Contains("Do not move the job folder", p);
         Assert.Contains("application as the owner", p);
+        Assert.Contains("Run git status and git diff in the repository path", p);
     }
 
     [Fact]
@@ -34,11 +39,15 @@ public class TaskRunnerPromptTests
     {
         var p = Prompts().Render(RuntimePromptService.RunnerResumeInterrupted, new Dictionary<string, string?>
         {
-            ["job_folder"] = @"C:\jobs\fix-bug"
+            ["job_folder"] = @"C:\jobs\fix-bug",
+            ["working_directory"] = @"C:\Projects\Runbook\App",
+            ["repository_path"] = @"C:\Projects\Runbook"
         });
 
         Assert.Contains("Resume the interrupted task", p);
         Assert.Contains(@"C:\jobs\fix-bug", p);
+        Assert.Contains(@"C:\Projects\Runbook\App", p);
+        Assert.Contains(@"C:\Projects\Runbook", p);
         Assert.Contains("job.json", p);
         Assert.Contains("prompt.md", p);
         Assert.Contains("status.md", p);
@@ -53,11 +62,15 @@ public class TaskRunnerPromptTests
         var p = Prompts().Render(RuntimePromptService.RunnerRecoveryContinuation, new Dictionary<string, string?>
         {
             ["job_folder"] = @"C:\jobs\fix-bug",
+            ["working_directory"] = @"C:\Projects\Runbook\App",
+            ["repository_path"] = @"C:\Projects\Runbook",
             ["user_followup"] = "Please continue with adding the chat compose box."
         });
 
         Assert.Contains("previous CLI session was lost", p, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(@"C:\jobs\fix-bug", p);
+        Assert.Contains(@"C:\Projects\Runbook\App", p);
+        Assert.Contains(@"C:\Projects\Runbook", p);
         Assert.Contains("prompt.md", p);
         Assert.Contains("status.md", p);
         Assert.Contains("logs/cli-output.log", p);
@@ -85,6 +98,8 @@ public class TaskRunnerPromptTests
             {
                 ["prompt_path"] = "prompt.md",
                 ["job_folder"] = "job",
+                ["working_directory"] = "work",
+                ["repository_path"] = "repo",
                 ["user_followup"] = "follow up",
                 ["log"] = "log",
                 ["diff"] = "diff"

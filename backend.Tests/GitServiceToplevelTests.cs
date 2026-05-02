@@ -11,7 +11,7 @@ namespace OrchestratorApi.Tests;
 /// A configured project RootPath may sit one or more levels below the actual
 /// git work-tree (e.g. <c>C:\Projects\Runbook\App</c> inside a repo at
 /// <c>C:\Projects\Runbook</c>). The Git view must still recognise it as a
-/// repository — git itself does, via <c>rev-parse --show-toplevel</c>.
+/// repository; git itself does, via <c>rev-parse --show-toplevel</c>.
 /// </summary>
 public class GitServiceToplevelTests : IDisposable
 {
@@ -56,8 +56,32 @@ public class GitServiceToplevelTests : IDisposable
         var summary = Assert.Single(git.GetSummaries());
         Assert.True(summary.IsRepo,
             "RootPath inside a git repo must resolve to its toplevel (git rev-parse --show-toplevel).");
-        Assert.Equal(subfolder, summary.RootPath);
+        Assert.Equal(repoRoot, summary.RootPath);
+        Assert.Equal(repoRoot, summary.RepositoryPath);
         Assert.Equal("main", summary.Branch);
+    }
+
+    [Fact]
+    public void GetSummaries_RepositoryPathOverridesWorkingDirectory()
+    {
+        var repoRoot = Path.Combine(_tempDir, "repo");
+        var workingDirectory = Path.Combine(_tempDir, "source", "App");
+        Directory.CreateDirectory(repoRoot);
+        Directory.CreateDirectory(workingDirectory);
+
+        RunGit(repoRoot, "init -q -b main");
+        RunGit(repoRoot, "config user.email test@example.com");
+        RunGit(repoRoot, "config user.name test");
+        File.WriteAllText(Path.Combine(repoRoot, "README.md"), "seed");
+        RunGit(repoRoot, "add -A");
+        RunGit(repoRoot, "commit -q -m seed");
+
+        var git = BuildGitService(("Split", workingDirectory, repoRoot));
+
+        var summary = Assert.Single(git.GetSummaries());
+        Assert.True(summary.IsRepo);
+        Assert.Equal(repoRoot, summary.RootPath);
+        Assert.Equal(repoRoot, summary.RepositoryPath);
     }
 
     [Fact]
@@ -72,13 +96,15 @@ public class GitServiceToplevelTests : IDisposable
         Assert.False(summary.IsRepo);
     }
 
-    private GitService BuildGitService(params (string Name, string RootPath)[] entries)
+    private GitService BuildGitService(params (string Name, string RootPath, string? RepositoryPath)[] entries)
     {
         var dict = new Dictionary<string, string?>();
         for (var i = 0; i < entries.Length; i++)
         {
             dict[$"WatchPaths:{i}:Name"] = entries[i].Name;
             dict[$"WatchPaths:{i}:RootPath"] = entries[i].RootPath;
+            if (!string.IsNullOrWhiteSpace(entries[i].RepositoryPath))
+                dict[$"WatchPaths:{i}:RepositoryPath"] = entries[i].RepositoryPath;
             dict[$"WatchPaths:{i}:Path"] = Path.Combine(entries[i].RootPath, ".orchestrator", "jobs");
         }
         var config = new ConfigurationBuilder().AddInMemoryCollection(dict).Build();
@@ -86,6 +112,9 @@ public class GitServiceToplevelTests : IDisposable
         var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
         return new GitService(NullLogger<GitService>.Instance, scanner, config);
     }
+
+    private GitService BuildGitService(params (string Name, string RootPath)[] entries)
+        => BuildGitService(entries.Select(e => (e.Name, e.RootPath, (string?)null)).ToArray());
 
     private static void RunGit(string cwd, string args)
     {

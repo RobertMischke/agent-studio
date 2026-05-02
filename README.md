@@ -147,13 +147,19 @@ The file is gitignored so it stays per-checkout. Stable lacks the file, so the s
 // backend/appsettings.json
 {
   "WatchPaths": [
-    { "Name": "Runbook", "RootPath": "C:\\Projects\\Runbook\\App" },
+    {
+      "Name": "Runbook",
+      "RootPath": "C:\\Projects\\Runbook\\App",
+      "RepositoryPath": "C:\\Projects\\Runbook"
+    },
     { "Name": "My Other Project", "RootPath": "C:\\Projects\\OtherApp" }
   ]
 }
 ```
 
-`RootPath` is the project directory; the board reads `<RootPath>/.orchestrator.yml` for `projectKey` and resolves jobs under `agent-taskboard-workspace/projects/<projectKey>/`.
+`RootPath` is the CLI working directory and the place where the board reads `<RootPath>/.orchestrator.yml` for `projectKey`. Jobs then resolve under `agent-taskboard-workspace/projects/<projectKey>/`.
+
+`RepositoryPath` is optional. Use it when the Git repository root differs from the CLI working directory, for example a monorepo or a source app under a parent repository. Git status, diff, commits, and the VS Code handoff use `RepositoryPath`; when it is omitted, they fall back to `RootPath` and still ask Git for the work-tree top-level.
 
 ### Supported CLIs
 
