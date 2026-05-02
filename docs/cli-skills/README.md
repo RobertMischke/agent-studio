@@ -2,6 +2,8 @@
 
 This folder holds the operational reference for each coding-agent CLI the task processor drives. They are **required reading** when touching a CLI driver, and they are **shared across CLIs**: any agent driving this repo (Claude Code, Codex, Copilot, Gemini) is expected to load the matching skill before changing CLI integration code.
 
+These files are the current proto-skill set. The broader portable skill architecture is documented in [../skills-architecture.md](../skills-architecture.md): long term, standard and project-specific skills should live in the task processor's central skill library, with watched projects exposing a README lookup section so direct CLI sessions can discover them too. Until that migration exists, `docs/cli-skills/` remains the active source for CLI-driver operational skills.
+
 ## Index
 
 | Skill | Use when … |

@@ -97,6 +97,21 @@ Prompt wording remains the easiest way to steer behavior, but it is not the load
 
 ---
 
+## Portable skills, not CLI-local silos
+
+Skills are reusable specialist workflows: security review, Playwright visual verification, Angular UI work, backend API changes, log analysis, release preparation, and project-specific playbooks. They are **not** core lifecycle rules. Core orchestration is always active; skills are optional context that helps an agent do a situational workflow well.
+
+The skill model has two layers:
+
+1. **Central skill library.** Agent Task Processor owns the canonical skill library. Standard skills ship with the processor; project-specific skills are managed there too, scoped to one or more watched projects.
+2. **Project lookup contract.** Each watched project should expose a small README or agent-instruction section that tells direct CLI agents where to find the relevant central skills. That keeps skills useful even when the user works directly in Codex, Claude Code, Copilot, or Gemini outside the orchestrator.
+
+During a managed taskboard run, the orchestrator can attach selected skills to the prompt stack explicitly. During direct CLI work, the project's README acts as the common lookup point. Native CLI skill exports may be added later, but the Markdown lookup contract is the agent-neutral base.
+
+The full concept lives in [docs/skills-architecture.md](docs/skills-architecture.md). The load-bearing decision is archived in [docs/architecture-decisions.md](docs/architecture-decisions.md).
+
+---
+
 ## How it's wired
 
 ```
@@ -192,5 +207,6 @@ When the agent task contract or folder schema changes, run the `/sync-target-ins
 - [docs/supported-clis.md](docs/supported-clis.md) - CLI integration contract
 - [docs/filesystem-contract.md](docs/filesystem-contract.md) - job folder contract
 - [docs/agent-task-contract.md](docs/agent-task-contract.md) - application and agent ownership boundary
+- [docs/skills-architecture.md](docs/skills-architecture.md) - portable skills and project lookup contract
 - [prompts/runtime/](prompts/runtime/) - editable backend runtime prompt templates
 - [PATHS.md](PATHS.md) - path conventions

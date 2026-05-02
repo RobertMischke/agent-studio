@@ -68,6 +68,16 @@ Each task folder may contain:
 
 Agents may read all task files. Agents may write evidence files when useful, but must not change queue state. Do not rely on hand-written `status.md` content for durable evidence because the application may regenerate it from logs.
 
+## Skill Lookup
+
+Agent Task Processor may manage reusable standard skills and project-specific skills centrally. A watched project should expose a small README or agent-instruction section that points direct CLI agents to the relevant skills.
+
+This lookup section is for discoverability only. It does not transfer lifecycle ownership to the agent:
+
+- The application still owns queue state, task pickup, stop, continue, review movement, and summaries.
+- Skills may explain specialist workflows such as Playwright verification, security review, or project conventions.
+- Skills must not ask agents to move job folders, edit task state, or start other tasks.
+
 ## Output Contract (machine-read by the orchestrator)
 
 The orchestrator parses CLI output for typed signals so it can decide what to do next without re-reading the agent's prose. Treat these as a hard contract, not a suggestion.

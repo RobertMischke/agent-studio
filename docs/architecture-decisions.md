@@ -100,3 +100,23 @@ Numbering is monotonic. Never reuse a number; never silently delete history.
 **Implementation pointers.** [AGENTS.md](../AGENTS.md) "Prompt-template changes: live probe required"; [frontend/e2e/claude-hello-world.spec.ts](../frontend/e2e/claude-hello-world.spec.ts); structural assertions in [backend.Tests/TaskRunnerPromptTests.cs](../backend.Tests/TaskRunnerPromptTests.cs).
 
 **Status.** Accepted.
+
+---
+
+## ADR-0005 - Portable skills use a central library plus project lookup contract (2026-05-02)
+
+**Decision.** Skills are stored and managed as portable workspace knowledge in Agent Task Processor, while each watched project exposes a README or agent-instruction lookup section so direct CLI sessions can discover the same skills.
+
+**Context.** The user wants the orchestrator to be the main work surface, but also wants to move into direct Codex, Claude Code, Copilot, Gemini, or VS Code sessions without losing the reusable specialist workflows built up in the task processor. A skill system that only works during managed taskboard runs would create two disconnected worlds.
+
+**Non-goals.**
+- Making core orchestration depend on probabilistic skill activation.
+- Storing the canonical skill source separately per CLI.
+- Assuming every CLI has the same native skill mechanism.
+- Requiring users to remember skill paths manually when working in a child project.
+
+**Reasoning style.** Separate ownership from reach. The task processor owns the canonical skill library and deterministic attachment during managed runs. Watched projects own a small lookup contract that makes those skills visible to direct CLI sessions. Native CLI exports are adapters, not the source of truth.
+
+**Implementation pointers.** [docs/skills-architecture.md](skills-architecture.md); [README.md](../README.md) "Portable skills, not CLI-local silos"; [AGENTS.md](../AGENTS.md) "Portable Skills"; existing proto-skill files in [docs/cli-skills/](cli-skills/).
+
+**Status.** Accepted.

@@ -32,6 +32,21 @@ When a chat lands on a decision that clears the bar, add or supersede an entry. 
 
 Do not over-archive. Most chat-driven changes are commits, not ADRs.
 
+## Portable Skills
+
+Reusable specialist workflows are **portable skills**, not CLI-local silos. The canonical design is documented in [docs/skills-architecture.md](docs/skills-architecture.md).
+
+The rule of thumb:
+
+- Core orchestration rules are always active and stay in code, runtime prompts, AGENTS.md, and the target task contract.
+- Skills are optional, situational workflow guides. They explain how to do a specialist job; they must not own task lifecycle, state movement, review transitions, or queue policy.
+- Agent Task Processor is the central home for standard skills and project-specific skills.
+- Watched child projects should expose a small README or agent-instruction lookup section that tells direct CLI agents where to find the relevant skills.
+
+This lookup section matters because users may work both through the orchestrator and directly in Codex, Claude Code, Copilot, or Gemini from VS Code. Managed taskboard runs can attach selected skills explicitly; direct CLI sessions rely on the watched project's README or AGENTS.md lookup section. Native CLI skill exports may come later, but the Markdown lookup is the shared baseline.
+
+When changing skill behavior, keep [docs/architecture-decisions.md](docs/architecture-decisions.md) in sync if the change affects this boundary.
+
 ## Documentation Language
 
 All written artifacts in this repository (README, ROADMAP.md, AGENTS.md, docs/, prompts, code comments, commit messages, PR descriptions) are written in **English**. Chat conversation with the user may happen in any language, but anything you commit or write to disk in this repo stays English.
@@ -68,6 +83,7 @@ If a request implies any of the out-of-scope items, surface the conflict to the 
 | Filesystem contract | `docs/filesystem-contract.md` | Job folder layout. |
 | Protocol & image style | `docs/protocol-style.md` | `status.md` shape, Activity Log markers, `attachments/` vs `results/`, per-CLI image retention. |
 | Agent task contract | `docs/agent-task-contract.md` | App-owned lifecycle boundary copied into watched targets. |
+| Portable skills architecture | `docs/skills-architecture.md` | Central skill library, project README lookup contract, and future project-level checks. |
 | Product roadmap | `ROADMAP.md` | Product thesis, roadmap themes, hard boundaries, and decision principles. |
 | Repo prompts | `.github/prompts/` | Reusable prompt templates. |
 | Runtime prompts | `prompts/runtime/` | Editable Markdown templates rendered by backend runtime services. |
