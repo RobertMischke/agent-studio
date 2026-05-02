@@ -5,6 +5,7 @@ using OrchestratorApi.Services.Cli;
 using OrchestratorApi.Services.Jobs;
 using OrchestratorApi.Services.Pty;
 using OrchestratorApi.Services.Quota;
+using OrchestratorApi.Services.Runner;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.Diagnostics;
 
@@ -33,6 +34,7 @@ builder.Services.AddSingleton<JobScannerService>();
 builder.Services.AddSingleton<JobStateMachine>();
 builder.Services.AddSingleton<JobMutationService>();
 builder.Services.AddSingleton<JobSessionLog>();
+builder.Services.AddSingleton<OrchestratorChatLog>();
 builder.Services.AddSingleton<JobTransitionService>();
 builder.Services.AddSingleton<JobWatcherService>();
 builder.Services.AddSingleton<CopilotCliEnvironment>();

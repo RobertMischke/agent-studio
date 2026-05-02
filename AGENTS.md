@@ -60,6 +60,18 @@ If a request implies any of the out-of-scope items, surface the conflict to the 
 | Runtime prompts | `prompts/runtime/` | Editable Markdown templates rendered by backend runtime services. |
 | Backend lifecycle | `api.sh` | start / stop / restart / status (sh; agents must use this). |
 
+### Orchestration philosophy: deterministic over prompt-based
+
+The product treats orchestrator-to-CLI communication as a core capability. What the agent says about its own run is one input among several; the orchestrator is a deterministic arbiter, not a passive logger.
+
+Three layers, each with its own pure-function library and test matrix:
+
+1. `AgentOutcomeAnalyzer` (in [backend/Services/Runner/AgentOutcomeAnalyzer.cs](backend/Services/Runner/AgentOutcomeAnalyzer.cs)) parses the run's output buffer for hard sentinels (`[[TASK_DONE]]`, `[[TASK_BLOCKED:...]]`, `[[TASK_NEEDS_INPUT:...]]`, `[[TASK_NOOP]]`). Sentinel matches are authoritative. When no sentinel matches, the analyzer falls back to a heuristic and sets `MatchedSentinel = false` so the next layer can warn.
+2. `RunOutcomePolicy` (in [backend/Services/Runner/RunOutcomePolicy.cs](backend/Services/Runner/RunOutcomePolicy.cs)) maps `(intent, plan, outcome, follow-up, retry)` to a typed `OutcomeAction`. The load-bearing rule: when the agent reports a fast Done or NoOp on a `UserContinue` that carried a follow-up, the orchestrator re-issues the work itself with stronger framing once, then stops and asks the user. Heuristic verdicts always surface as a meta message.
+3. `OrchestratorChatLog` (in [backend/Services/Runner/OrchestratorChatLog.cs](backend/Services/Runner/OrchestratorChatLog.cs)) writes typed orchestrator messages (`decision`, `reissue`, `heuristic`, `giveup`) into `logs/cli-output.log` on the `[orchestrator]` stream. The frontend's activity-log parser renders them as a separate participant alongside `You` and the agent.
+
+When you change a CLI driver, prompt template, or the runner's post-run path, keep these three layers in mind. The agent contract that backs the sentinel grammar lives in [docs/agent-task-contract.md](docs/agent-task-contract.md); when you add or change a sentinel, update both that file and `AgentOutcomeAnalyzer.SentinelRegex`.
+
 ### Service & data layout (backend)
 
 - `Services/Cli/`: one driver per CLI: `ClaudeCliService`, `CodexCliService`, `CopilotCliService`, `GeminiCliService`, all extending `CliExecutionServiceBase` (except Copilot, which predates the base class). `CliRouter` picks the right one by `cliType`. The contract every driver must satisfy is documented in [docs/supported-clis.md](docs/supported-clis.md). **When you touch any of these files, also read the matching skill in [docs/cli-skills/](docs/cli-skills/) — [cli-overview](docs/cli-skills/cli-overview.md) plus the per-CLI skill ([cli-claude](docs/cli-skills/cli-claude.md), [cli-codex](docs/cli-skills/cli-codex.md), [cli-copilot](docs/cli-skills/cli-copilot.md), [cli-gemini](docs/cli-skills/cli-gemini.md)). The skills hold the operational knowledge that doesn't fit in code comments — frame catalogues, capture flows, known incidents, common-task playbooks. This is a hard rule for every CLI driving this repo (Claude Code, Codex, Copilot, Gemini): if the task touches a CLI driver, the matching skill is required reading before any code change. The pickup is enforced by two tests — a free scaffolding lock in [`backend.Tests/CliSkillFilesTests.cs`](backend.Tests/CliSkillFilesTests.cs) and a `@billable` live test in [`frontend/e2e/cli-skills-pickup.spec.ts`](frontend/e2e/cli-skills-pickup.spec.ts) that drives each CLI through the task processor and asserts it can echo back the sentinel string from the matching skill.**

@@ -1,6 +1,6 @@
 import { CliOutputLine } from '../models/job.model';
 
-export type ActivityLogKind = 'read' | 'search' | 'command' | 'edit' | 'task' | 'todo' | 'error' | 'message' | 'other';
+export type ActivityLogKind = 'read' | 'search' | 'command' | 'edit' | 'task' | 'todo' | 'error' | 'message' | 'orchestrator' | 'other';
 export type ActivityLogFilters = Record<ActivityLogKind, boolean>;
 
 export interface ActivityLogGroup {
@@ -15,7 +15,7 @@ export interface ActivityLogGroup {
 
 const actionStartRegex = /^(?<marker>[^\w\s]+|x|X|\*)\s+(?<label>.+)$/i;
 
-export const activityLogKinds: ActivityLogKind[] = ['read', 'search', 'command', 'edit', 'task', 'todo', 'error', 'message', 'other'];
+export const activityLogKinds: ActivityLogKind[] = ['read', 'search', 'command', 'edit', 'task', 'todo', 'error', 'message', 'orchestrator', 'other'];
 
 export const defaultActivityLogFilters: ActivityLogFilters = {
   read: true,
@@ -26,6 +26,7 @@ export const defaultActivityLogFilters: ActivityLogFilters = {
   todo: true,
   error: true,
   message: true,
+  orchestrator: true,
   other: true
 };
 
@@ -51,6 +52,26 @@ export function parseActivityLog(lines: CliOutputLine[]): ActivityLogGroup[] {
       groups.push(current);
       // Reset so any subsequent continuation/blank lines don't fold into
       // the user message group.
+      current = null;
+      continue;
+    }
+
+    // Orchestrator meta messages are written by the backend's
+    // OrchestratorChatLog. They are first-class chat participants alongside
+    // USER and AGENT, never folded into adjacent agent activity. Their text
+    // already carries a leading [tag] (decision / reissue / heuristic /
+    // giveup) which we keep as the title so the renderer can pick a glyph.
+    if (line.stream === 'orchestrator') {
+      current = {
+        id: `${groups.length}-${line.timestamp}-orchestrator`,
+        kind: 'orchestrator',
+        title: line.text,
+        subtitle: '',
+        status: 'neutral',
+        lines: [line],
+        collapsedByDefault: false
+      };
+      groups.push(current);
       current = null;
       continue;
     }
@@ -112,7 +133,7 @@ export function flattenActivityLines(groups: ActivityLogGroup[]): CliOutputLine[
   return groups.flatMap((group) => group.lines);
 }
 
-export type ChatRole = 'agent' | 'tool' | 'system' | 'user';
+export type ChatRole = 'agent' | 'tool' | 'system' | 'user' | 'orchestrator';
 
 export interface ChatMessage {
   id: string;
@@ -138,7 +159,10 @@ function groupToChatMessage(group: ActivityLogGroup, index: number): ChatMessage
   const isTool = TOOL_KINDS.includes(group.kind);
   const isError = group.kind === 'error' || group.status === 'error';
   const isUser = group.lines.length > 0 && group.lines[0].stream === 'user';
-  const role: ChatRole = isUser ? 'user'
+  const isOrchestrator = group.kind === 'orchestrator'
+    || (group.lines.length > 0 && group.lines[0].stream === 'orchestrator');
+  const role: ChatRole = isOrchestrator ? 'orchestrator'
+    : isUser ? 'user'
     : isError && !isTool ? 'system'
     : isTool ? 'tool'
     : 'agent';
@@ -146,21 +170,25 @@ function groupToChatMessage(group: ActivityLogGroup, index: number): ChatMessage
   const firstLine = group.lines[0];
   const timestamp = firstLine ? firstLine.timestamp : new Date().toISOString();
 
-  const author = isUser
-    ? 'You'
-    : isError && !isTool
-      ? 'System'
-      : isTool
-        ? 'Tool call'
-        : 'Agent';
+  const author = isOrchestrator
+    ? 'Orchestrator'
+    : isUser
+      ? 'You'
+      : isError && !isTool
+        ? 'System'
+        : isTool
+          ? 'Tool call'
+          : 'Agent';
 
-  const avatar = isUser
-    ? '🧑'
-    : isError && !isTool
-      ? '!'
-      : isTool
-        ? toolAvatarFor(group.kind)
-        : '🤖';
+  const avatar = isOrchestrator
+    ? '⚙'
+    : isUser
+      ? '🧑'
+      : isError && !isTool
+        ? '!'
+        : isTool
+          ? toolAvatarFor(group.kind)
+          : '🤖';
 
   const kindLabel = isTool ? activityKindLabel(group.kind) : (isError ? 'Error' : '');
 
@@ -195,7 +223,7 @@ function groupToChatMessage(group: ActivityLogGroup, index: number): ChatMessage
 // user explicitly asked for: hide tool noise, keep responses prominent and
 // legible.
 
-export type ConversationTurnKind = 'agent' | 'user' | 'tools' | 'system';
+export type ConversationTurnKind = 'agent' | 'user' | 'tools' | 'system' | 'orchestrator';
 
 export interface ToolBurstSummary {
   total: number;
@@ -257,6 +285,8 @@ export function buildConversationTurns(groups: ActivityLogGroup[]): Conversation
 function roleFor(group: ActivityLogGroup): ConversationTurnKind {
   const isUser = group.lines.length > 0 && group.lines[0].stream === 'user';
   if (isUser) return 'user';
+  if (group.kind === 'orchestrator'
+    || (group.lines.length > 0 && group.lines[0].stream === 'orchestrator')) return 'orchestrator';
   if (isToolKind(group.kind)) return 'tools';
   if (group.kind === 'error' || group.status === 'error') return 'system';
   return 'agent';
@@ -371,6 +401,7 @@ export function activityKindLabel(kind: ActivityLogKind): string {
     case 'todo': return 'Todos';
     case 'error': return 'Errors';
     case 'message': return 'Messages';
+    case 'orchestrator': return 'Orchestrator';
     case 'other': return 'Other';
   }
 }

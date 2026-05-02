@@ -58,6 +58,6 @@ public static partial class CliOutputLogParser
         };
     }
 
-    [GeneratedRegex(@"^\[(?<time>\d{2}:\d{2}:\d{2}(?:\.\d{3})?)\]\s+\[(?<stream>stdout|stderr|user|system)\]\s?(?<text>.*)$", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"^\[(?<time>\d{2}:\d{2}:\d{2}(?:\.\d{3})?)\]\s+\[(?<stream>stdout|stderr|user|system|orchestrator)\]\s?(?<text>.*)$", RegexOptions.IgnoreCase)]
     private static partial Regex PersistedLineRegex();
 }

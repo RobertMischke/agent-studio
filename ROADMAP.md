@@ -65,6 +65,15 @@ Make agent work easier to judge while it is still running:
 - Stronger Activity Log parsing across all supported CLIs.
 - Better usage, quota, and model feedback, including edge cases such as model-specific limits.
 
+### Deterministic Orchestration
+
+Treat orchestrator-to-CLI communication as a core capability instead of a side-effect of prompt wording. The orchestrator parses CLI output for typed signals, makes deterministic decisions, and speaks for itself in the chat when it does.
+
+- Hard agent signals (`[[TASK_DONE]]`, `[[TASK_BLOCKED:<reason>]]`, `[[TASK_NEEDS_INPUT:<reason>]]`, `[[TASK_NOOP]]`) parsed from CLI output. Authoritative when present.
+- A post-run policy that re-issues a follow-up the agent did not honor, instead of accepting the inconsistency. Bounded retry budget; meta message into the chat on every action.
+- An `Orchestrator` participant in the activity log so the user sees the system's decisions next to the agent's replies. Heuristic fallback always surfaces a warning.
+- Recovery after a session loss carries the user follow-up as the primary instruction, not a footer the agent can ignore.
+
 ### Focused UX
 
 Keep the app dense, fast, and pleasant to use:

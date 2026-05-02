@@ -1,0 +1,130 @@
+using OrchestratorApi.Models;
+using OrchestratorApi.Services.Runner;
+using Xunit;
+
+namespace OrchestratorApi.Tests;
+
+/// <summary>
+/// Locks the deterministic-signal contract between agent and orchestrator.
+/// The signals analyzed here are the load-bearing piece of the bigger
+/// orchestration philosophy (deterministic parsing over prompt trust):
+/// when a hard sentinel fires, the orchestrator treats it as authoritative;
+/// when no sentinel fires, the analyzer must signal that the verdict is a
+/// heuristic so <see cref="RunOutcomePolicy"/> can warn the user.
+/// </summary>
+public class AgentOutcomeAnalyzerTests
+{
+    private static List<CliOutputLine> Lines(params string[] texts)
+    {
+        var ts = new DateTime(2026, 5, 2, 10, 0, 0, DateTimeKind.Utc);
+        return texts.Select((t, i) => new CliOutputLine
+        {
+            Timestamp = ts.AddSeconds(i),
+            Stream = "stdout",
+            Text = t
+        }).ToList();
+    }
+
+    [Fact]
+    public void Sentinel_Done_IsAuthoritativeAndOverridesHeuristic()
+    {
+        var lines = Lines("I tried but I cannot find the file.", "[[TASK_DONE]]");
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, status: "completed", durationSeconds: 22.5);
+        Assert.Equal(AgentOutcomeKind.Done, outcome.Kind);
+        Assert.True(outcome.MatchedSentinel);
+        Assert.Equal("DONE", outcome.SentinelKeyword);
+    }
+
+    [Fact]
+    public void Sentinel_Blocked_CapturesReason()
+    {
+        var lines = Lines("Some text.", "[[TASK_BLOCKED:missing credentials]]");
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, "completed", 12.0);
+        Assert.Equal(AgentOutcomeKind.Blocked, outcome.Kind);
+        Assert.True(outcome.MatchedSentinel);
+        Assert.Equal("missing credentials", outcome.Reason);
+    }
+
+    [Fact]
+    public void Sentinel_NeedsInput_Recognised()
+    {
+        var lines = Lines("[[TASK_NEEDS_INPUT:please pick A or B]]");
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, "completed", 5.0);
+        Assert.Equal(AgentOutcomeKind.NeedsInput, outcome.Kind);
+        Assert.True(outcome.MatchedSentinel);
+    }
+
+    [Fact]
+    public void Sentinel_Noop_Recognised()
+    {
+        var lines = Lines("Nothing to do.", "[[TASK_NOOP]]");
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, "completed", 4.0);
+        Assert.Equal(AgentOutcomeKind.NoOp, outcome.Kind);
+        Assert.True(outcome.MatchedSentinel);
+    }
+
+    [Fact]
+    public void NoOutput_ShortDuration_ClassifiesNoOp()
+    {
+        // The exact failure shape the user reported: backend ran for 4.6s and
+        // produced nothing. This must be a clear NoOp so policy can re-issue.
+        var lines = new List<CliOutputLine>();
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, "completed", 4.6);
+        Assert.Equal(AgentOutcomeKind.NoOp, outcome.Kind);
+        Assert.False(outcome.MatchedSentinel);
+        Assert.Equal(0, outcome.AgentTextChars);
+    }
+
+    [Fact]
+    public void NoOutput_LongDuration_ClassifiesUnknown()
+    {
+        // 60 s with no output isn't strictly a no-op (it could be a CLI that
+        // suppressed everything); treat as unknown so the policy surfaces a
+        // heuristic warning instead of silently re-issuing.
+        var outcome = AgentOutcomeAnalyzer.Analyze(new List<CliOutputLine>(), "completed", 60.0);
+        Assert.Equal(AgentOutcomeKind.Unknown, outcome.Kind);
+        Assert.False(outcome.MatchedSentinel);
+    }
+
+    [Fact]
+    public void Heuristic_DoneTextWithoutSentinel_FlagsFallback()
+    {
+        var lines = Lines("Implemented the feature and committed the change.");
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, "completed", 30.0);
+        Assert.Equal(AgentOutcomeKind.Done, outcome.Kind);
+        Assert.False(outcome.MatchedSentinel);
+        Assert.Contains("heuristic", outcome.Reason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Heuristic_TerminalQuestion_ClassifiesNeedsInput()
+    {
+        var lines = Lines("Should I switch the tab to Markdown mode first?");
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, "completed", 12.0);
+        Assert.Equal(AgentOutcomeKind.NeedsInput, outcome.Kind);
+        Assert.False(outcome.MatchedSentinel);
+    }
+
+    [Fact]
+    public void SystemAndUserStreams_AreIgnored()
+    {
+        var ts = DateTime.UtcNow;
+        var lines = new List<CliOutputLine>
+        {
+            new() { Timestamp = ts, Stream = "user", Text = "please continue" },
+            new() { Timestamp = ts, Stream = "system", Text = "[taskboard] Started claude CLI" },
+            new() { Timestamp = ts, Stream = "orchestrator", Text = "[reissue] previous run no-op'd" }
+        };
+        // No agent text and a short duration => NoOp.
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, "completed", 4.6);
+        Assert.Equal(AgentOutcomeKind.NoOp, outcome.Kind);
+        Assert.Equal(0, outcome.AgentTextChars);
+    }
+
+    [Fact]
+    public void Failed_Status_DoesNotClassifyNoOp()
+    {
+        var outcome = AgentOutcomeAnalyzer.Analyze(new List<CliOutputLine>(), "failed", 4.6);
+        Assert.NotEqual(AgentOutcomeKind.NoOp, outcome.Kind);
+    }
+}

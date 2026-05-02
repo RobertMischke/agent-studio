@@ -42,6 +42,16 @@ Rules:
 - If screenshots or result files matter for review, place them under the job folder's results/ directory.
 - Do not move queue state or rely on hand-written status.md content for durable evidence.
 
+Output contract (machine-read by the orchestrator):
+When you finish, emit exactly one of these tokens on its own line so the
+orchestrator can react deterministically. Do not paraphrase them.
+- `[[TASK_DONE]]` - the task is fully done.
+- `[[TASK_BLOCKED:<short reason>]]` - you cannot proceed; explain briefly.
+- `[[TASK_NEEDS_INPUT:<short reason>]]` - you need user input to continue.
+- `[[TASK_NOOP]]` - intentionally did nothing (rare; explain why).
+If you skip the token, the orchestrator falls back to a heuristic and warns
+the user that the contract did not match.
+
 ## User task
 
 **Title:** {{title}}

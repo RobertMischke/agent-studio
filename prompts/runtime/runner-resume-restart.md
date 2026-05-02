@@ -50,6 +50,12 @@ Rules:
 - Treat the application as the owner of pickup, stop, continue, and state transitions.
 - Work in the working directory above unless you are reading or writing task evidence in the job folder.
 
+Output contract (machine-read by the orchestrator):
+End your run with exactly one of these tokens on its own line:
+`[[TASK_DONE]]`, `[[TASK_BLOCKED:<reason>]]`, `[[TASK_NEEDS_INPUT:<reason>]]`,
+or `[[TASK_NOOP]]`. The orchestrator uses the token to decide what happens
+next without re-reading your prose.
+
 ## User task (current version on disk)
 
 **Title:** {{title}}

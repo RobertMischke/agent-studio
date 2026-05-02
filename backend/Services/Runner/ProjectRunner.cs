@@ -22,10 +22,17 @@ public class ProjectRunner
     private readonly SummaryGenerationService _summaryService;
     private readonly RuntimePromptService _prompts;
     private readonly JobTransitionService _transitions;
+    private readonly OrchestratorChatLog _chatLog;
     private string _mode = "manual";
     private string? _activeJobId;
     private string? _activeCliType;
     private bool _processing;
+    // Tracks the last run's intent and follow-up so OnCliFinished can apply
+    // the post-run policy without re-deriving them from job state.
+    private RunIntent _activeIntent;
+    private string? _activeFollowup;
+    private RunPlan? _activePlan;
+    private int _activeReissueAttempt;
 
     public string ProjectName { get; }
     public WatchPathEntry Entry { get; }
@@ -49,7 +56,8 @@ public class ProjectRunner
         CliRouter router,
         SummaryGenerationService summaryService,
         RuntimePromptService prompts,
-        JobTransitionService transitions)
+        JobTransitionService transitions,
+        OrchestratorChatLog chatLog)
     {
         ProjectName = projectName;
         Entry = entry;
@@ -61,6 +69,7 @@ public class ProjectRunner
         _summaryService = summaryService;
         _prompts = prompts;
         _transitions = transitions;
+        _chatLog = chatLog;
 
         // Listen across all CLI backends for completion of the active job.
         _router.OnFinished += (cliType, jobKey, exec) => OnCliFinished(cliType, jobKey, exec);
@@ -126,11 +135,11 @@ public class ProjectRunner
             return;
         }
 
-        await RunCliAsync(nextJob.Id, RunIntent.AutoPickup, followupPrompt: null, ct);
+        await RunCliAsync(nextJob.Id, RunIntent.AutoPickup, followupPrompt: null, reissueAttempt: 0, ct);
     }
 
     public Task<(CliExecution? Execution, string? Error)> StartJobManualAsync(string jobId, CancellationToken ct)
-        => RunCliAsync(jobId, RunIntent.ManualStart, followupPrompt: null, ct);
+        => RunCliAsync(jobId, RunIntent.ManualStart, followupPrompt: null, reissueAttempt: 0, ct);
 
     /// <summary>
     /// Sends a follow-up prompt into the CLI session that was originally created
@@ -140,7 +149,7 @@ public class ProjectRunner
     /// to <c>3-progress</c> if it sits in <c>4-review</c> or <c>5-completed</c>.
     /// </summary>
     public Task<(CliExecution? Execution, string? Error)> ContinueJobAsync(string jobId, string followupPrompt, CancellationToken ct)
-        => RunCliAsync(jobId, RunIntent.UserContinue, followupPrompt, ct);
+        => RunCliAsync(jobId, RunIntent.UserContinue, followupPrompt, reissueAttempt: 0, ct);
 
     /// <summary>
     /// Single entry point for spawning the CLI for a job. <see cref="RunPlanner.PlanRun"/>
@@ -151,7 +160,7 @@ public class ProjectRunner
     /// sibling - that divergence is the bug class this design exists to prevent.
     /// </summary>
     private async Task<(CliExecution? Execution, string? Error)> RunCliAsync(
-        string jobId, RunIntent intent, string? followupPrompt, CancellationToken ct)
+        string jobId, RunIntent intent, string? followupPrompt, int reissueAttempt, CancellationToken ct)
     {
         if (_activeJobId != null)
         {
@@ -191,6 +200,10 @@ public class ProjectRunner
             var prompt = RenderPrompt(plan, info);
 
             _activeJobId = jobId;
+            _activeIntent = intent;
+            _activeFollowup = followupPrompt;
+            _activePlan = plan;
+            _activeReissueAttempt = reissueAttempt;
             NotifyStatus();
 
             Directory.CreateDirectory(JobPaths.LogsDir(info.FolderPath));
@@ -294,6 +307,12 @@ public class ProjectRunner
                 _sessions.BackfillLatestSessionEventCapturedId(jobId, capturedSessionId!, Entry.Path);
             }
 
+            // Snapshot the live output before we flush it to disk. The
+            // outcome analyzer needs the buffer to classify the run, and the
+            // post-run policy may re-issue another run on top before we let
+            // the regular review/summary pipeline proceed.
+            var liveOutputSnapshot = cli.GetOutput(jobKey);
+
             // Write CLI output to log file. The runtime JSONL is the durable
             // backup that lets us recover the Activity Log after a backend
             // restart; once the consolidated cli-output.log has it, the JSONL
@@ -305,10 +324,70 @@ public class ProjectRunner
                 cli.DiscardPersistedOutput(jobKey);
             }
 
+            // Apply the orchestrator's post-run policy. The policy is pure;
+            // we apply its decision here. The activeInfo lookup may fail
+            // (job folder moved between completion and lookup), in which
+            // case we skip the meta channel and fall through to the
+            // existing accept-path - the policy is a refinement, not a gate.
+            var capturedIntent = _activeIntent;
+            var capturedFollowup = _activeFollowup;
+            var capturedPlan = _activePlan;
+            var capturedAttempt = _activeReissueAttempt;
+            var outcome = AgentOutcomeAnalyzer.Analyze(
+                liveOutputSnapshot,
+                execution.Status ?? "completed",
+                execution.DurationSeconds ?? 0.0);
+            OutcomeAction? action = capturedPlan != null
+                ? RunOutcomePolicy.Decide(capturedIntent, capturedPlan, outcome, capturedFollowup, capturedAttempt)
+                : null;
+            if (action != null && activeInfo != null)
+            {
+                if (action.IsHeuristicFallback && !string.IsNullOrWhiteSpace(action.MetaMessage))
+                {
+                    _chatLog.Append(activeInfo, OrchestratorMessageKind.HeuristicFallback,
+                        $"{action.MetaMessage} (run summary: {outcome.Summary ?? "n/a"})");
+                }
+                else if (!string.IsNullOrWhiteSpace(action.MetaMessage))
+                {
+                    var kind = action.Kind switch
+                    {
+                        OutcomeActionKind.ReissueWithStrongerFraming => OrchestratorMessageKind.Reissue,
+                        OutcomeActionKind.NotifyUserAndStop          => OrchestratorMessageKind.GiveUp,
+                        _                                            => OrchestratorMessageKind.Decision
+                    };
+                    _chatLog.Append(activeInfo, kind, action.MetaMessage);
+                }
+
+                if (action.Kind == OutcomeActionKind.ReissueWithStrongerFraming
+                    && !string.IsNullOrWhiteSpace(action.FollowupRetryPrompt))
+                {
+                    // Release the active-job latch on the original run so the
+                    // re-issue can claim it. We then schedule the re-issue on
+                    // the thread pool so OnCliFinished returns promptly.
+                    _activeJobId = null;
+                    _activeCliType = null;
+                    NotifyStatus();
+                    var retryPrompt = RunOutcomePolicy.BuildReissueFollowupPrompt(action.FollowupRetryPrompt!);
+                    var retryAttempt = action.RetryAttempt;
+                    _ = Task.Run(async () =>
+                    {
+                        try
+                        {
+                            await RunCliAsync(jobId, RunIntent.UserContinue, retryPrompt, retryAttempt, CancellationToken.None);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "Re-issue run failed for {JobId}", jobId);
+                        }
+                    });
+                    return;
+                }
+            }
+
             if (RunCompletionPolicy.ShouldMoveToReview(execution.Status))
             {
-                var outcome = await _transitions.MoveAsync(jobId, JobStates.Review, Entry.Path, CancellationToken.None);
-                if (outcome.Status == MoveJobStatus.Success)
+                var moveOutcome = await _transitions.MoveAsync(jobId, JobStates.Review, Entry.Path, CancellationToken.None);
+                if (moveOutcome.Status == MoveJobStatus.Success)
                 {
                     // Fire-and-forget Haiku summary on successful completion.
                     _ = Task.Run(async () =>
@@ -328,7 +407,7 @@ public class ProjectRunner
                 {
                     _logger.LogWarning(
                         "Job {JobId} completed but could not move to review: {Status} {Message}",
-                        jobId, outcome.Status, outcome.Message);
+                        jobId, moveOutcome.Status, moveOutcome.Message);
                 }
             }
             else
@@ -348,6 +427,10 @@ public class ProjectRunner
             {
                 _activeJobId = null;
                 _activeCliType = null;
+                _activeIntent = default;
+                _activeFollowup = null;
+                _activePlan = null;
+                _activeReissueAttempt = 0;
                 NotifyStatus();
             }
         }

@@ -89,7 +89,7 @@ public class TaskRunnerPromptTests
     }
 
     [Fact]
-    public void RunnerRecoveryTemplate_IncludesFollowupAndBoundedLogRead()
+    public void RunnerRecoveryTemplate_MakesFollowupThePrimaryInstruction()
     {
         var p = Prompts().Render(RuntimePromptService.RunnerRecoveryContinuation, new Dictionary<string, string?>
         {
@@ -99,18 +99,48 @@ public class TaskRunnerPromptTests
             ["user_followup"] = "Please continue with adding the chat compose box."
         });
 
-        Assert.Contains("previous CLI session was lost", p, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("previous CLI session", p, StringComparison.OrdinalIgnoreCase);
         Assert.Contains(@"C:\jobs\fix-bug", p);
         Assert.Contains(@"C:\Projects\Runbook\App", p);
         Assert.Contains(@"C:\Projects\Runbook", p);
         Assert.Contains("prompt.md", p);
-        Assert.Contains("status.md", p);
-        Assert.Contains("logs/cli-output.log", p);
-        Assert.Contains("git status", p);
-        Assert.Contains("git diff", p);
+        // The follow-up must be present and explicitly framed as the primary
+        // instruction. The bug we are guarding against: an empty / "task done"
+        // reply when the original prompt is already finished but a follow-up
+        // exists.
         Assert.Contains("Please continue with adding the chat compose box.", p);
-        Assert.Contains("200 lines", p);
-        Assert.Contains("continuation", p, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("PRIMARY INSTRUCTION", p, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("[[TASK_BLOCKED", p);
+        // Standard guardrails still apply.
+        Assert.Contains("Do not move the job folder", p);
+    }
+
+    [Fact]
+    public void AllRunnerTemplates_SpellOutTheOutputContract()
+    {
+        var prompts = Prompts();
+        foreach (var template in new[]
+        {
+            RuntimePromptService.RunnerFreshStart,
+            RuntimePromptService.RunnerResumeInterrupted,
+            RuntimePromptService.RunnerResumeRestart,
+            RuntimePromptService.RunnerRecoveryContinuation
+        })
+        {
+            var rendered = prompts.Render(template, new Dictionary<string, string?>
+            {
+                ["prompt_path"] = "prompt.md",
+                ["job_folder"] = "job",
+                ["working_directory"] = "work",
+                ["repository_path"] = "repo",
+                ["user_followup"] = "follow up",
+                ["title"] = "title",
+                ["prompt_text"] = "body"
+            });
+            Assert.Contains("[[TASK_DONE]]", rendered);
+            Assert.Contains("[[TASK_BLOCKED", rendered);
+            Assert.Contains("[[TASK_NEEDS_INPUT", rendered);
+        }
     }
 
     [Fact]

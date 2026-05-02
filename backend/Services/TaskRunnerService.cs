@@ -30,6 +30,7 @@ public class TaskRunnerService : BackgroundService
     private readonly RuntimePromptService _prompts;
     private readonly JobTransitionService _transitions;
     private readonly ProjectSettingsService _projectSettings;
+    private readonly OrchestratorChatLog _chatLog;
     private readonly ConcurrentDictionary<string, ProjectRunner> _runners = new();
 
     public event Action<string, ProjectRunnerStatus>? OnRunnerStatusChanged;
@@ -47,7 +48,8 @@ public class TaskRunnerService : BackgroundService
         SummaryGenerationService summaryService,
         RuntimePromptService prompts,
         JobTransitionService transitions,
-        ProjectSettingsService projectSettings)
+        ProjectSettingsService projectSettings,
+        OrchestratorChatLog chatLog)
     {
         _config = config;
         _logger = logger;
@@ -62,6 +64,7 @@ public class TaskRunnerService : BackgroundService
         _prompts = prompts;
         _transitions = transitions;
         _projectSettings = projectSettings;
+        _chatLog = chatLog;
     }
 
     public SummaryGenerationService SummaryService => _summaryService;
@@ -86,7 +89,7 @@ public class TaskRunnerService : BackgroundService
                 continue;
             }
 
-            var runner = new ProjectRunner(entry.Name, entry, _logger, _scanner, _states, _sessions, _router, _summaryService, _prompts, _transitions);
+            var runner = new ProjectRunner(entry.Name, entry, _logger, _scanner, _states, _sessions, _router, _summaryService, _prompts, _transitions, _chatLog);
             runner.OnStatusChanged += status => OnRunnerStatusChanged?.Invoke(entry.Name, status);
             // Persist every mode change so the auto-pickup toggle survives
             // backend restarts. Includes implicit transitions like "auto-single

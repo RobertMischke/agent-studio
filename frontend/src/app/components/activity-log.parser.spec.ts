@@ -86,6 +86,26 @@ describe('parseActivityLog', () => {
     expect(messages[0].author).toBe('You');
     expect(messages[0].title).toBe('please switch to dark mode');
   });
+
+  it('keeps [orchestrator] stream lines as their own group with role "orchestrator"', () => {
+    const groups = parseActivityLog([
+      line('* Read prompt.md'),
+      line('  | prompt.md'),
+      line('[reissue] Session was lost and the agent exited without acting on your follow-up.', 'orchestrator'),
+      line('* Edit', 'stdout'),
+      line('  | Edit src/styles.css')
+    ]);
+
+    const kinds = groups.map(g => g.kind);
+    expect(kinds).toContain('orchestrator');
+    const orchestrator = groups.find(g => g.kind === 'orchestrator');
+    expect(orchestrator?.lines[0].stream).toBe('orchestrator');
+
+    const messages = buildChatMessages(groups);
+    const orchMsg = messages.find(m => m.role === 'orchestrator');
+    expect(orchMsg).toBeDefined();
+    expect(orchMsg?.author).toBe('Orchestrator');
+  });
 });
 
 describe('buildConversationTurns', () => {

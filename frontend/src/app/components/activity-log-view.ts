@@ -106,6 +106,7 @@ interface RenderedTurn {
                        [class.convo-turn--agent]="item.turn.kind === 'agent'"
                        [class.convo-turn--tools]="item.turn.kind === 'tools'"
                        [class.convo-turn--system]="item.turn.kind === 'system'"
+                       [class.convo-turn--orchestrator]="item.turn.kind === 'orchestrator'"
                        [class.convo-turn--error]="item.turn.status === 'error'"
                        [attr.data-testid]="testIdFor(item.turn)">
                 @switch (item.turn.kind) {
@@ -131,6 +132,14 @@ interface RenderedTurn {
                       <span class="convo-turn__time">{{ formatTime(item.turn.timestamp) }}</span>
                     </header>
                     <div class="convo-turn__body convo-turn__body--system"
+                         [innerHTML]="item.bodyHtml"></div>
+                  }
+                  @case ('orchestrator') {
+                    <header class="convo-turn__head">
+                      <span class="convo-turn__role">⚙ Orchestrator</span>
+                      <span class="convo-turn__time">{{ formatTime(item.turn.timestamp) }}</span>
+                    </header>
+                    <div class="convo-turn__body convo-turn__body--orchestrator"
                          [innerHTML]="item.bodyHtml"></div>
                   }
                   @case ('tools') {
@@ -349,6 +358,10 @@ interface RenderedTurn {
       background: rgba(127,29,29,0.18);
       border-color: rgba(251,113,133,0.4);
     }
+    .convo-turn--orchestrator {
+      background: rgba(120,113,108,0.18);
+      border-color: rgba(217,119,6,0.45);
+    }
     .convo-turn--tools {
       padding: 0;
       background: transparent;
@@ -367,6 +380,7 @@ interface RenderedTurn {
     .convo-turn--agent .convo-turn__head { color: #ddd6fe; }
     .convo-turn--user .convo-turn__head { color: #99f6e4; }
     .convo-turn--system .convo-turn__head { color: #fecaca; }
+    .convo-turn--orchestrator .convo-turn__head { color: #fbbf24; }
     .convo-turn__time {
       margin-left: auto;
       font-weight: 500;
@@ -708,6 +722,7 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
     if (turn.kind === 'agent') return 'convo-turn-agent';
     if (turn.kind === 'tools') return 'convo-turn-tools';
     if (turn.kind === 'system') return 'convo-turn-system';
+    if (turn.kind === 'orchestrator') return 'convo-turn-orchestrator';
     return null;
   }
 
@@ -883,6 +898,7 @@ function shortKindLabel(kind: ActivityLogKind, count: number): string {
     case 'todo': return plural ? 'todos' : 'todo';
     case 'error': return plural ? 'errors' : 'error';
     case 'message': return plural ? 'messages' : 'message';
+    case 'orchestrator': return plural ? 'orchestrator notes' : 'orchestrator note';
     case 'other': return 'other';
   }
 }
@@ -893,6 +909,7 @@ function roleHeading(kind: ConversationTurn['kind']): string {
     case 'user': return 'You';
     case 'system': return 'System';
     case 'tools': return 'Tools';
+    case 'orchestrator': return 'Orchestrator';
   }
 }
 
