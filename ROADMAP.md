@@ -2,7 +2,7 @@
 
 Agent Task Processor is a local control layer for keeping coding agents busy without turning a project into an orchestration platform.
 
-The product goal is simple: keep one coding task moving per project, reduce human babysitting, make review easier, and make security review a repeatable project-level habit.
+The product goal is simple: keep one coding task moving per project, reduce human babysitting, make review easier, and make security review a repeatable, documented project-level habit.
 
 ## Product Thesis
 
@@ -15,7 +15,7 @@ Modern coding agents are useful for long-running implementation work, but they s
 
 The product should feel like a workbench, not a command center. It should make one project easier to move through a sequence of tasks, then scale that same pattern across several projects.
 
-Security is part of that thesis. Frontier models are becoming strong enough at cyber tasks that the limiting factor shifts toward process: enough token budget, clear scope, repeatable specialist skills, captured evidence, and a review surface that shows what was checked. UK AISI's April 30, 2026 GPT-5.5 cyber evaluation is the reference point for this roadmap direction: models like GPT-5.5 and Mythos-class systems can outperform casual manual review on hard cyber tasks when given sufficient inference budget and tooling, but the result only becomes useful inside a documented workflow.
+Security is part of that thesis. Frontier models are becoming strong enough at cyber tasks that the limiting factor shifts toward process: enough token budget, clear scope, repeatable specialist skills, captured evidence, and a review surface that shows what was checked. UK AISI's April 30, 2026 GPT-5.5 cyber evaluation is the reference point for this roadmap direction: models like GPT-5.5 and Mythos-class systems can outperform casual manual review on hard cyber tasks when given sufficient inference budget and tooling, but the result only becomes useful inside a documented workflow. Documentation is the killer feature: a security review should record which model ran, how much token budget was spent, which process or skill was followed, which evidence was produced, and what conclusion a reviewer accepted.
 
 ## Current Shape
 
@@ -38,12 +38,14 @@ Make security a first-class project dimension, not a one-off task:
 
 - Project-level Security view that shows the latest security review, review date, outcome, evidence, and open risks.
 - Markdown-backed security history so reviews are durable, inspectable, and easy for direct CLI agents to read.
+- Security audit records that capture model, CLI, token budget or token usage where available, prompt or skill version, process checklist, evidence links, reviewer decision, and follow-up tasks.
+- A token-spend timeline for security work so teams can see whether a review was a quick smoke check or a deep multi-million-token investigation.
 - Standard security-review skill that can be selected for a task or project review.
 - Project-specific security skills for domain assumptions, threat model, sensitive data, authentication, deployment, and known risks.
 - A "security readiness" project action that can create a normal task to run or refresh a security review.
 - Roadmap linkage from the existing "Projekt Dimensionen Security und Architektur" task into the project view work.
 
-Security quality depends on model capability, sufficient token budget, the right process, and durable documentation. The app should optimize that loop instead of treating security as a vague label.
+Security quality depends on model capability, sufficient token budget, the right process, and durable documentation. The app should optimize that loop instead of treating security as a vague label. A security claim without the model, spend, process, evidence, and reviewer decision is not enough.
 
 ### Project Control
 
