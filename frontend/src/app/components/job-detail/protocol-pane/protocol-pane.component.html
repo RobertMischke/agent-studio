@@ -2,18 +2,18 @@
   <header class="pane__header pane__header--cool">
     <div class="pane__title-block">
       <span class="pane__title-icon">📜</span>
-      <h3 class="pane__title">Protokoll</h3>
+      <h3 class="pane__title">Protocol</h3>
       @if (hasActivity()) {
         <span class="pane__live-dot"
               [class.pane__live-dot--running]="isRunning()"
-              [title]="isRunning() ? 'Agent läuft' : 'Aktivität vorhanden'"
+              [title]="isRunning() ? 'Agent running' : 'Activity present'"
               data-testid="protocol-live-dot"></span>
       }
       @if (summaryStatus() === 'generating') {
         <span class="pane__spinner" data-testid="summary-generating"
-              title="Das Protokoll wird gerade aus dem CLI-Output zusammengefasst.">
+              title="The protocol is being summarized from the CLI output.">
           <span class="spinner-ring"></span>
-          <span>Protokoll wird erstellt…</span>
+          <span>Generating protocol…</span>
         </span>
       }
       @if (summaryStatus() === 'failed') {
@@ -90,7 +90,7 @@
                   [disabled]="!detail().statusMarkdown && summaryStatus() !== 'generating' && summaryStatus() !== 'failed'"
                   [attr.aria-selected]="activeInspectorTab() === 'protocol'"
                   (click)="activeInspectorTabChange.emit('protocol')">
-            <span>📜 Protokoll</span>
+            <span>📜 Protocol</span>
             @if (summaryStatus() === 'generating') {
               <span class="inspector__tab-spinner" aria-hidden="true"></span>
             }
@@ -101,7 +101,7 @@
                   [class.inspector__tab--active]="activeInspectorTab() === 'activity'"
                   [attr.aria-selected]="activeInspectorTab() === 'activity'"
                   (click)="activeInspectorTabChange.emit('activity')">
-            <span>⚡ Aktivität</span>
+            <span>⚡ Activity</span>
             @if (isRunning()) {
               <span class="inspector__tab-livedot" aria-hidden="true"></span>
             }
@@ -137,11 +137,11 @@
             @if (summaryStatus() === 'generating' && !detail().statusMarkdown) {
               <div class="notes-panel__placeholder" data-testid="protocol-generating-placeholder">
                 <span class="spinner-ring spinner-ring--lg"></span>
-                <p>Haiku fasst gerade den CLI-Output zusammen…</p>
+                <p>Haiku is summarizing the CLI output…</p>
               </div>
             } @else if (!detail().statusMarkdown && summaryStatus() !== 'failed') {
               <div class="notes-panel__placeholder">
-                <p>Noch kein Protokoll. Es wird nach dem ersten Lauf automatisch erstellt.</p>
+                <p>No protocol yet. It will be generated automatically after the first run.</p>
               </div>
             } @else if (detail().statusMarkdown) {
               <div class="notes-panel__toolbar">
@@ -149,11 +149,11 @@
                   <button type="button"
                           class="btn-regen"
                           data-testid="protocol-regenerate-summary"
-                          title="Den CLI-Output erneut von Haiku zusammenfassen lassen"
+                          title="Re-summarize the CLI output with Haiku"
                           [disabled]="!canRegenerate()"
                           (click)="regenerateSummary.emit()">
                     <span class="btn-regen__icon" aria-hidden="true">✨</span>
-                    <span>{{ regenerating() ? 'Erzeuge…' : 'Neu generieren' }}</span>
+                    <span>{{ regenerating() ? 'Generating…' : 'Regenerate' }}</span>
                   </button>
                 }
                 <button type="button"

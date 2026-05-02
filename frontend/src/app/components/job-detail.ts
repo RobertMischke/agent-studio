@@ -1367,7 +1367,7 @@ export class JobDetailComponent implements OnDestroy {
   promptDraftValue = '';
   // Tracks whether the user has explicitly chosen an inspector tab for the
   // current job. Reset on job switch. Used to block the "auto-switch to
-  // Protokoll once the summary lands" effect from clobbering a manual choice.
+  // Protocol once the summary lands" effect from clobbering a manual choice.
   private userTouchedInspectorTab = false;
   private lastCliConfigRequest = 0;
   private currentJobKey: string | null = null;
@@ -1451,11 +1451,11 @@ export class JobDetailComponent implements OnDestroy {
       // preserve the live CLI output and view state.
       this.showLogOverlay.set(false);
       // Default tab:
-      //  • In-progress jobs always start on Aktivität — the live CLI output is
+      //  • In-progress jobs always start on Activity — the live CLI output is
       //    what the user wants to see; any existing protocol from a prior run
       //    is stale until the current run finishes.
-      //  • Otherwise: Protokoll if a summary exists, else Aktivität.
-      // The auto-switch effect below promotes Aktivität → Protokoll once
+      //  • Otherwise: Protocol if a summary exists, else Activity.
+      // The auto-switch effect below promotes Activity → Protocol once
       // Haiku finishes, unless the user has manually picked a tab.
       const isInProgress = d.info.state === '3-progress';
       this.activeInspectorTab.set(isInProgress ? 'activity' : (d.statusMarkdown ? 'protocol' : 'activity'));
@@ -1471,7 +1471,7 @@ export class JobDetailComponent implements OnDestroy {
       this.lastShownFailureKey = null;
     }
 
-    // Auto-promote Aktivität → Protokoll the moment a fresh summary lands,
+    // Auto-promote Activity → Protocol the moment a fresh summary lands,
     // but only when the user hasn't actively chosen a tab themselves and the
     // job has left 3-progress — while the run is live we keep showing the
     // activity log even if a stale summary from a previous attempt exists.
@@ -1487,7 +1487,7 @@ export class JobDetailComponent implements OnDestroy {
 
     // Symmetric counterpart: when a job we're watching transitions into
     // 3-progress (runner auto-pickup, manual start, or continuation from
-    // review), demote Protokoll → Aktivität so the live CLI output is what
+    // review), demote Protocol → Activity so the live CLI output is what
     // the user sees instead of a stale summary from the previous run. Only
     // applies when the user hasn't manually picked the protocol tab.
     if (

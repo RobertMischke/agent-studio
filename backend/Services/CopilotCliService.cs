@@ -29,11 +29,11 @@ public class CopilotCliService : ICliExecutionService
 
     private static readonly string[] WindowsShellFallbackInstructions =
     [
-        "Wenn Shell-Kommandos notwendig sind, verwende auf Windows keine pwsh.exe-abhaengigen Befehle.",
-        "Bevorzuge cmd.exe, normale Windows-Batch-Syntax oder direkte Node/npm-Kommandos.",
-        "Falls eine Plan-Datei erstellt werden muss, nutze eine Methode ohne PowerShell-spezifische Syntax wie @'... '@, Out-File oder Set-Content.",
-        "Dokumentiere kurz, welche Alternative verwendet wurde.",
-        "Wenn ein Build in der aktuellen Umgebung nicht moeglich ist, nenne den konkreten Grund und fahre mit statischer Pruefung fort."
+        "If shell commands are required, do not use pwsh.exe-dependent commands on Windows.",
+        "Prefer cmd.exe, plain Windows batch syntax, or direct Node/npm commands.",
+        "If you need to create a plan file, use a method without PowerShell-specific syntax like @'... '@, Out-File, or Set-Content.",
+        "Briefly document which alternative was used.",
+        "If a build is not possible in the current environment, name the concrete reason and continue with static analysis."
     ];
 
     private readonly ILogger<CopilotCliService> _logger;
