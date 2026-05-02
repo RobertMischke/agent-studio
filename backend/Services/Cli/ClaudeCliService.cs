@@ -357,8 +357,14 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
             yield return line;
     }
 
-    private static string TrimSingleLine(string s) =>
-        s.Replace('\n', ' ').Replace('\r', ' ').Trim() is { } t && t.Length > 200 ? t[..200] + "…" : s.Trim();
+    private static string TrimSingleLine(string s)
+    {
+        // Newlines collapsed to spaces so the marker stays one line in the
+        // Activity Log. Cap at 200 chars with an ellipsis; the full command
+        // is already in the persisted JSONL via the raw `tool_use` payload.
+        var t = s.Replace('\n', ' ').Replace('\r', ' ').Trim();
+        return t.Length > 200 ? t[..200] + "…" : t;
+    }
 
     private static string FormatRelative(TimeSpan ts)
     {
