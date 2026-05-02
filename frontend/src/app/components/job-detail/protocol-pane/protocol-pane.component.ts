@@ -2,6 +2,8 @@ import { ChangeDetectionStrategy, Component, OnDestroy, computed, inject, input,
 import { JobDetail, JobSummaryStatus } from '../../../models/job.model';
 import { ActivityLogViewComponent } from '../../activity-log-view';
 import { markdownToHtml, MarkdownImageOptions } from '../../markdown-utils';
+import { buildConversationTurns, parseActivityLog } from '../../activity-log.parser';
+import { classifyOutcome, OutcomeAssessment, QuickReply } from '../../agent-outcome.util';
 import { resolveProtocolImageSrc } from './protocol-image-resolver';
 import { copyTextToClipboard } from '../../../services/clipboard.util';
 import {
@@ -132,6 +134,52 @@ export class ProtocolPaneComponent implements OnDestroy {
     return status !== 'none' || !!this.detail().statusMarkdown;
   });
 
+  /**
+   * Heuristic classification of the agent's last reply (see
+   * {@link classifyOutcome}). Drives the auto-eval banner above the chat
+   * input: a one-line summary of where the agent landed plus up to four
+   * quick-reply chips that pre-fill the follow-up prompt. While the CLI is
+   * actively running we suppress the banner — the "outcome" is still in
+   * flight and chips would race the streaming text.
+   */
+  readonly outcome = computed<OutcomeAssessment | null>(() => {
+    if (this.isRunning()) return null;
+    const lines = this.cliOutput();
+    if (lines.length === 0) return null;
+    const groups = parseActivityLog(lines);
+    const turns = buildConversationTurns(groups);
+    // Find the last agent turn; ignore trailing tool bursts so a final
+    // "ran tests" tool group does not eclipse the agent's text.
+    let lastAgent = '';
+    for (let i = turns.length - 1; i >= 0; i--) {
+      if (turns[i].kind === 'agent') {
+        lastAgent = turns[i].text;
+        break;
+      }
+    }
+    return classifyOutcome(lastAgent);
+  });
+
+  /** True when the auto-eval banner should be visible. */
+  readonly outcomeVisible = computed(() => {
+    const o = this.outcome();
+    if (!o) return false;
+    if (o.kind === 'unknown' && !o.question) return false;
+    return o.suggestions.length > 0;
+  });
+
+  /** Maps outcome kind to a short emoji glyph for the banner badge. */
+  outcomeEmoji(kind: string): string {
+    switch (kind) {
+      case 'done': return '✓';
+      case 'blocked': return '⚠';
+      case 'question': return '?';
+      case 'needs_input': return '?';
+      case 'progress': return '⏳';
+      default: return 'i';
+    }
+  }
+
   // "There is or was activity for this job" — drives the live-dot indicator.
   // True when CLI is running OR we have any output buffered OR the job has a
   // log/usage record from a previous run.
@@ -198,6 +246,17 @@ export class ProtocolPaneComponent implements OnDestroy {
       `Turns recorded: ${cs.turnCount}`,
       cs.lastTurnAt ? `Last turn: ${cs.lastTurnAt}` : ''
     ].filter(Boolean).join('\n');
+  }
+
+  /**
+   * Quick-reply chip click handler. Always pre-fills the input rather than
+   * sending immediately — the user reviews and confirms before the follow-up
+   * goes out. The default-false `autoSend` flag on individual chips is the
+   * future hook for one-click sends, kept here for symmetry but not wired up
+   * until we have telemetry that says it would not surprise users.
+   */
+  applyQuickReply(reply: QuickReply): void {
+    this.followupPromptChange.emit(reply.prompt);
   }
 
   rateLimitTooltip(): string {

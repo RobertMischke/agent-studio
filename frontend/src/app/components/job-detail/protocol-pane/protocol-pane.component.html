@@ -176,6 +176,31 @@
                 <div class="activity-panel__empty">Start the task to follow the agent output live.</div>
               }
 
+              @if (outcomeVisible()) {
+                @if (outcome(); as o) {
+                  <div class="auto-eval"
+                       [attr.data-kind]="o.kind"
+                       [attr.data-testid]="'auto-eval-banner'">
+                    <div class="auto-eval__head">
+                      <span class="auto-eval__badge"
+                            [attr.data-kind]="o.kind"
+                            [attr.aria-label]="o.kind">{{ outcomeEmoji(o.kind) }}</span>
+                      <span class="auto-eval__summary">{{ o.summary }}</span>
+                    </div>
+                    @if (o.suggestions.length > 0) {
+                      <div class="auto-eval__chips" role="group" aria-label="Quick replies">
+                        @for (chip of o.suggestions; track chip.label) {
+                          <button type="button"
+                                  class="auto-eval__chip"
+                                  [attr.data-testid]="'auto-eval-chip'"
+                                  (click)="applyQuickReply(chip)"
+                                  [title]="chip.prompt">{{ chip.label }}</button>
+                        }
+                      </div>
+                    }
+                  </div>
+                }
+              }
               <div class="chat-compose" data-testid="activity-chat-compose">
                 <textarea class="chat-compose__input"
                           data-testid="activity-chat-input"
