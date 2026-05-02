@@ -98,6 +98,71 @@ public class TaskRunnerPlanTests
         Assert.False(p.ResumeFlag);
     }
 
+    // ===== Continue modes =====
+
+    /// <summary>
+    /// Steer mode wraps the follow-up so the agent treats it as a course
+    /// correction, not a generic next message.
+    /// </summary>
+    [Fact]
+    public void Continue_SteerMode_WrapsAsCorrection()
+    {
+        var prompt = RunPlanner.BuildContinuePrompt(ContinueModes.Steer, "use Tailwind tokens, not CSS vars");
+        Assert.StartsWith("User correction", prompt, StringComparison.Ordinal);
+        Assert.Contains("use Tailwind tokens", prompt);
+    }
+
+    [Fact]
+    public void Continue_ExtendMode_TellsAgentAboutPromptHistory()
+    {
+        var prompt = RunPlanner.BuildContinuePrompt(ContinueModes.Extend, "also add a fullscreen image overlay");
+        Assert.Contains("prompt-N.md", prompt);
+        Assert.Contains("New extension", prompt);
+        Assert.Contains("also add a fullscreen image overlay", prompt);
+    }
+
+    [Fact]
+    public void Continue_NewTaskMode_FramesAsSubTask()
+    {
+        var prompt = RunPlanner.BuildContinuePrompt(ContinueModes.NewTask, "now switch focus to the activity log");
+        Assert.Contains("New sub-task", prompt);
+        Assert.Contains("switch focus to the activity log", prompt);
+    }
+
+    [Fact]
+    public void Continue_DefaultMode_PassesFollowupVerbatim()
+    {
+        var prompt = RunPlanner.BuildContinuePrompt(ContinueModes.Continue, "Looks good, ship it.");
+        Assert.Equal("Looks good, ship it.", prompt);
+    }
+
+    /// <summary>
+    /// Mode flows through to the resume plan and is reflected in the event
+    /// reason so the session-events log shows what kind of continuation
+    /// happened.
+    /// </summary>
+    [Fact]
+    public void Continue_SteerModeOnLiveSession_IsReflectedInEventReason()
+    {
+        var p = RunPlanner.PlanRun(
+            RunIntent.UserContinue,
+            JobStates.Progress,
+            sessionName: ValidUuid,
+            cliType: CliTypes.Claude,
+            isCompatibleSessionName: ClaudeCompat,
+            jobId: "fix-bug",
+            promptPath: @"C:\jobs\fix-bug\prompt.md",
+            jobFolder: @"C:\jobs\fix-bug",
+            followupPrompt: "use Tailwind tokens",
+            sessionChain: null,
+            continueMode: ContinueModes.Steer);
+
+        Assert.Equal("continue", p.EventKind);
+        Assert.True(p.ResumeFlag);
+        Assert.Contains("steer", p.EventReason ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+        Assert.StartsWith("User correction", p.PromptOverride ?? string.Empty, StringComparison.Ordinal);
+    }
+
     // ===== Continue (the original symptom path: "no session yet") =====
 
     /// <summary>

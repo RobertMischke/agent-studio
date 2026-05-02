@@ -269,6 +269,40 @@ public record ContinueJobRequest
     public string Prompt { get; init; } = "";
     public string? Model { get; init; }
     public string? CliType { get; init; }
+    /// <summary>
+    /// How the follow-up should be interpreted. <c>continue</c> (default) is a
+    /// next-turn message in the same conversation. <c>steer</c> frames the
+    /// follow-up as a course correction. <c>extend</c> appends a new prompt
+    /// file to the job folder so the task history grows blog-style.
+    /// <c>newTask</c> starts a new sub-task in the same session.
+    /// See <see cref="ContinueModes"/>.
+    /// </summary>
+    public string? Mode { get; init; }
+}
+
+/// <summary>
+/// String values accepted on <see cref="ContinueJobRequest.Mode"/>. Kept as
+/// constants (not an enum) so the JSON wire format is the literal string,
+/// which is friendlier for hand-written API calls and stable across enum
+/// renames.
+/// </summary>
+public static class ContinueModes
+{
+    public const string Continue = "continue";
+    public const string Steer    = "steer";
+    public const string Extend   = "extend";
+    public const string NewTask  = "newTask";
+
+    public static readonly string[] All = [Continue, Steer, Extend, NewTask];
+
+    public static string Normalize(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return Continue;
+        var v = value.Trim();
+        foreach (var m in All)
+            if (string.Equals(m, v, StringComparison.OrdinalIgnoreCase)) return m;
+        return Continue;
+    }
 }
 
 public record SetJobModelRequest

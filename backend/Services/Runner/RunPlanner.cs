@@ -80,8 +80,10 @@ public static class RunPlanner
         string promptPath,
         string jobFolder,
         string? followupPrompt,
-        IReadOnlyList<string>? sessionChain = null)
+        IReadOnlyList<string>? sessionChain = null,
+        string? continueMode = null)
     {
+        var mode = ContinueModes.Normalize(continueMode);
         if (intent == RunIntent.UserContinue)
         {
             // sessionName may be empty when MarkSessionChainRecovery cleared it
@@ -108,11 +110,11 @@ public static class RunPlanner
                 return new RunPlan(
                     PromptTemplate: null,
                     PromptVariables: EmptyPromptVariables,
-                    PromptOverride: followupPrompt ?? string.Empty,
+                    PromptOverride: BuildContinuePrompt(mode, followupPrompt),
                     SessionToResume: resumeCandidate,
                     ResumeFlag: true,
                     EventKind: "continue",
-                    EventReason: null,
+                    EventReason: mode == ContinueModes.Continue ? null : $"mode={mode}",
                     EventInputSessionId: resumeCandidate,
                     MoveJobToProgress: moveToProgress,
                     MarkSessionChainRecovery: false,
@@ -276,6 +278,28 @@ public static class RunPlanner
     /// lets the cross-CLI guard drop them silently instead of treating the
     /// next start as a recovery from an interrupted run.
     /// </summary>
+    /// <summary>
+    /// Wraps the user's follow-up with mode-specific framing. Continue is the
+    /// default and passes the follow-up through verbatim. Steer, Extend, and
+    /// NewTask wrap the follow-up so the agent treats it as a course
+    /// correction, an addition to the original task, or a new sub-task in the
+    /// same session, respectively.
+    /// </summary>
+    public static string BuildContinuePrompt(string mode, string? followup)
+    {
+        var body = (followup ?? string.Empty).TrimEnd();
+        return mode switch
+        {
+            ContinueModes.Steer =>
+                "User correction (override the current plan, then continue):\n\n" + body,
+            ContinueModes.Extend =>
+                "The user has extended the task. A new prompt-N.md file has been written to the job folder; the new instruction below is added to the existing work, not a replacement. Read prompt.md plus any prompt-N.md siblings in the job folder for the full timeline before acting.\n\nNew extension:\n" + body,
+            ContinueModes.NewTask =>
+                "New sub-task in the same session (keep prior context, but treat this as a new request):\n\n" + body,
+            _ => body
+        };
+    }
+
     public static bool IsPlaceholderSessionSlug(string? sessionName)
         => !string.IsNullOrWhiteSpace(sessionName)
            && PlaceholderSessionSlugRegex.IsMatch(sessionName!);

@@ -42,7 +42,8 @@ public static class JobRunnerEndpoints
             if (string.IsNullOrWhiteSpace(req?.Prompt))
                 return Results.BadRequest(new { error = "Prompt is required" });
 
-            var (execution, error) = await runner.ContinueJobAsync(jobId, req.Prompt, watchPath, req.Model, ct);
+            var mode = ContinueModes.Normalize(req.Mode);
+            var (execution, error) = await runner.ContinueJobAsync(jobId, req.Prompt, watchPath, req.Model, mode, ct);
             return execution is not null
                 ? Results.Ok(execution)
                 : Results.BadRequest(new { error = error ?? "Cannot continue job" });

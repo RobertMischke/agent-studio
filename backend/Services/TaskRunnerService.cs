@@ -182,7 +182,7 @@ public class TaskRunnerService : BackgroundService
     /// continuation they asked for instead of a 400 - at the cost of conversation
     /// memory that wasn't already on disk.
     /// </summary>
-    public async Task<(CliExecution? Execution, string? Error)> ContinueJobAsync(string jobId, string followupPrompt, string? watchPath = null, string? modelOverride = null, CancellationToken ct = default)
+    public async Task<(CliExecution? Execution, string? Error)> ContinueJobAsync(string jobId, string followupPrompt, string? watchPath = null, string? modelOverride = null, string? mode = null, CancellationToken ct = default)
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return (null, "Job not found");
@@ -197,10 +197,53 @@ public class TaskRunnerService : BackgroundService
             _mutations.SetJobModel(jobId, modelOverride, watchPath);
         }
 
+        var normalizedMode = ContinueModes.Normalize(mode);
+
+        // Extend mode: persist the new prompt as its own prompt-N.md so the
+        // task description grows blog-style. The agent still receives just
+        // the new prompt (the runner handles framing); the historical files
+        // are evidence and a renderable timeline for the UI.
+        if (normalizedMode == ContinueModes.Extend)
+        {
+            try
+            {
+                var nextIndex = NextPromptHistoryIndex(info.FolderPath);
+                var promptFile = Path.Combine(info.FolderPath, $"prompt-{nextIndex}.md");
+                await File.WriteAllTextAsync(promptFile, followupPrompt.TrimEnd() + Environment.NewLine, System.Text.Encoding.UTF8, ct);
+                _logger.LogInformation("Extend mode: wrote {File} for job {JobId}", Path.GetFileName(promptFile), jobId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to write extend prompt history for {JobId}", jobId);
+            }
+        }
+
         _mutations.AppendContinuationNote(jobId, followupPrompt, watchPath);
         AppendUserPromptToCliLog(info, followupPrompt);
 
-        return await runner.ContinueJobAsync(jobId, followupPrompt, ct);
+        return await runner.ContinueJobAsync(jobId, followupPrompt, normalizedMode, ct);
+    }
+
+    /// <summary>
+    /// Counts existing <c>prompt-N.md</c> files in the job folder and returns
+    /// the next free index (1-based). The original task lives in
+    /// <c>prompt.md</c>; extensions land as <c>prompt-1.md</c>,
+    /// <c>prompt-2.md</c>, ... so the timeline is obvious from a directory
+    /// listing alone.
+    /// </summary>
+    private static int NextPromptHistoryIndex(string jobFolder)
+    {
+        if (!Directory.Exists(jobFolder)) return 1;
+        var max = 0;
+        foreach (var path in Directory.EnumerateFiles(jobFolder, "prompt-*.md"))
+        {
+            var name = Path.GetFileNameWithoutExtension(path);
+            // name = "prompt-3"
+            var dash = name.IndexOf('-');
+            if (dash < 0 || dash >= name.Length - 1) continue;
+            if (int.TryParse(name[(dash + 1)..], out var n) && n > max) max = n;
+        }
+        return max + 1;
     }
 
     /// <summary>

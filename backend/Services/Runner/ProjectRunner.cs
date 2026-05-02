@@ -135,11 +135,11 @@ public class ProjectRunner
             return;
         }
 
-        await RunCliAsync(nextJob.Id, RunIntent.AutoPickup, followupPrompt: null, reissueAttempt: 0, ct);
+        await RunCliAsync(nextJob.Id, RunIntent.AutoPickup, followupPrompt: null, reissueAttempt: 0, mode: null, ct);
     }
 
     public Task<(CliExecution? Execution, string? Error)> StartJobManualAsync(string jobId, CancellationToken ct)
-        => RunCliAsync(jobId, RunIntent.ManualStart, followupPrompt: null, reissueAttempt: 0, ct);
+        => RunCliAsync(jobId, RunIntent.ManualStart, followupPrompt: null, reissueAttempt: 0, mode: null, ct);
 
     /// <summary>
     /// Sends a follow-up prompt into the CLI session that was originally created
@@ -148,8 +148,8 @@ public class ProjectRunner
     /// instructed to reconstruct context from the job folder. Moves the job back
     /// to <c>3-progress</c> if it sits in <c>4-review</c> or <c>5-completed</c>.
     /// </summary>
-    public Task<(CliExecution? Execution, string? Error)> ContinueJobAsync(string jobId, string followupPrompt, CancellationToken ct)
-        => RunCliAsync(jobId, RunIntent.UserContinue, followupPrompt, reissueAttempt: 0, ct);
+    public Task<(CliExecution? Execution, string? Error)> ContinueJobAsync(string jobId, string followupPrompt, string? mode, CancellationToken ct)
+        => RunCliAsync(jobId, RunIntent.UserContinue, followupPrompt, reissueAttempt: 0, mode: mode, ct);
 
     /// <summary>
     /// Single entry point for spawning the CLI for a job. <see cref="RunPlanner.PlanRun"/>
@@ -160,7 +160,7 @@ public class ProjectRunner
     /// sibling - that divergence is the bug class this design exists to prevent.
     /// </summary>
     private async Task<(CliExecution? Execution, string? Error)> RunCliAsync(
-        string jobId, RunIntent intent, string? followupPrompt, int reissueAttempt, CancellationToken ct)
+        string jobId, RunIntent intent, string? followupPrompt, int reissueAttempt, string? mode, CancellationToken ct)
     {
         if (_activeJobId != null)
         {
@@ -190,7 +190,8 @@ public class ProjectRunner
                 promptPath,
                 jobFolder,
                 followupPrompt,
-                info.SessionChain);
+                info.SessionChain,
+                continueMode: mode);
 
             if (plan.MoveJobToProgress && info.State != JobStates.Progress)
             {
@@ -374,7 +375,7 @@ public class ProjectRunner
                     {
                         try
                         {
-                            await RunCliAsync(jobId, RunIntent.UserContinue, retryPrompt, retryAttempt, CancellationToken.None);
+                            await RunCliAsync(jobId, RunIntent.UserContinue, retryPrompt, retryAttempt, ContinueModes.Continue, CancellationToken.None);
                         }
                         catch (Exception ex)
                         {
