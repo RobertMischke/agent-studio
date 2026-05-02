@@ -2,7 +2,7 @@
 
 Agent Task Processor is a local control layer for keeping coding agents busy without turning a project into an orchestration platform.
 
-The product goal is simple: keep one coding task moving per project, reduce human babysitting, and make review easier.
+The product goal is simple: keep one coding task moving per project, reduce human babysitting, make review easier, and make security review a repeatable project-level habit.
 
 ## Product Thesis
 
@@ -15,6 +15,8 @@ Modern coding agents are useful for long-running implementation work, but they s
 
 The product should feel like a workbench, not a command center. It should make one project easier to move through a sequence of tasks, then scale that same pattern across several projects.
 
+Security is part of that thesis. Frontier models are becoming strong enough at cyber tasks that the limiting factor shifts toward process: enough token budget, clear scope, repeatable specialist skills, captured evidence, and a review surface that shows what was checked. UK AISI's April 30, 2026 GPT-5.5 cyber evaluation is the reference point for this roadmap direction: models like GPT-5.5 and Mythos-class systems can outperform casual manual review on hard cyber tasks when given sufficient inference budget and tooling, but the result only becomes useful inside a documented workflow.
+
 ## Current Shape
 
 Today the application provides:
@@ -26,14 +28,29 @@ Today the application provides:
 - CLI execution for Claude Code, Codex, GitHub Copilot, and Gemini.
 - Live task output, protocol summaries, screenshots, and review evidence.
 - CLI quota and session visibility where the underlying tools expose enough data.
+- Early project-level planning tasks for Security and Architecture dimensions.
 
 ## Roadmap Themes
+
+### Security First
+
+Make security a first-class project dimension, not a one-off task:
+
+- Project-level Security view that shows the latest security review, review date, outcome, evidence, and open risks.
+- Markdown-backed security history so reviews are durable, inspectable, and easy for direct CLI agents to read.
+- Standard security-review skill that can be selected for a task or project review.
+- Project-specific security skills for domain assumptions, threat model, sensitive data, authentication, deployment, and known risks.
+- A "security readiness" project action that can create a normal task to run or refresh a security review.
+- Roadmap linkage from the existing "Projekt Dimensionen Security und Architektur" task into the project view work.
+
+Security quality depends on model capability, sufficient token budget, the right process, and durable documentation. The app should optimize that loop instead of treating security as a vague label.
 
 ### Project Control
 
 Make each watched project easier to inspect and operate:
 
 - Project detail pages with path, configuration, status, and quick actions.
+- Project dimensions for Security and Architecture, with current status plus historical Markdown records.
 - Clearer manual start vs. auto-pickup behavior.
 - Safer locking once a task has started, so completed or running work does not drift to another project by accident.
 - Better visibility into active CLI sessions that may already be working in the same project.
@@ -52,6 +69,7 @@ Make large boards easier to understand:
 Turn a pile of tasks into a useful product view:
 
 - A project roadmap view that groups open tasks by theme.
+- Security and Architecture should be recognized as project-level themes, not just tags.
 - Automatic intent extraction from task prompts.
 - Follow-up prompts such as "what should be next?", "what is duplicated?", or "what should be split?"
 - A path from planning output into a new task draft.
@@ -100,6 +118,7 @@ Planning and research tasks may eventually have a different concurrency model be
 When changing this product, prefer work that:
 
 - Reduces human babysitting.
+- Makes security review more repeatable, evidence-backed, and frequent.
 - Improves review quality.
 - Makes the current task state easier to see.
 - Preserves the sequential per-project execution model.

@@ -8,6 +8,18 @@
 
 ---
 
+## Security first
+
+Agent Task Processor makes security work repeatable instead of heroic. A human reviewer can miss an edge case because they are tired, rushed, or carrying the context in their head. A queued agent can spend millions of tokens on the same class of review every time, write down what it checked, preserve evidence, and leave a durable protocol for human review.
+
+That is the product bet: **with enough inference budget, the right process, and documented evidence, AI-assisted review can become more thorough than ordinary human-only security review.** The goal is not to trust a model blindly. The goal is to put frontier cyber capability inside a controlled workflow: clear task scope, project conventions, repeatable skills, logs, screenshots, summaries, and review gates.
+
+The external signal is getting hard to ignore. UK AISI's April 30, 2026 evaluation of OpenAI GPT-5.5 found it to be one of the strongest models they had tested on cyber tasks, with a 71.4% average pass rate on Expert-level advanced cyber tasks at a 50M-token budget, and the second model to complete one of their multi-step cyber-attack simulations end-to-end. AISI also notes that performance on the 32-step range continued to scale with inference compute. That supports the central premise here: security quality depends on model capability, sufficient token budget, and a process that captures what happened.
+
+Source: [UK AISI evaluation of OpenAI GPT-5.5 cyber capabilities](https://www.aisi.gov.uk/blog/our-evaluation-of-openais-gpt-5-5-cyber-capabilities).
+
+---
+
 ## The bottleneck is you
 
 Modern coding agents can run for hours. They don't get tired. They don't context-switch. They just need a steady queue of work.
@@ -37,6 +49,8 @@ The board exists to make the queue the only thing you maintain. Tasks land in `2
 ## Principles
 
 **Sequential within a project, never parallel.** One task at a time per project. No worktrees. No branch-per-task. No intra-project fan-out. Parallelism only exists *across* projects (different watch paths run independently).
+
+**Security is a first-class workstream.** Security review is not a side quest at the end of a feature. It is a repeatable project-level activity with its own skills, evidence, history, and review surface. The board should make it normal to ask "when was this last reviewed, what was checked, what changed since then, and what evidence supports the conclusion?"
 
 **Use what you already pay for.** The runner drives **your** Claude Code, Codex, Copilot, and Gemini CLIs through their existing subscriptions. **No API keys. No per-token billing.** Your Pro/Max plan is the budget; the board's job is to use as much of it as productively as possible.
 
