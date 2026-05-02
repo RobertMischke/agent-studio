@@ -88,11 +88,19 @@ test.describe('Claude Code — hello world @billable', () => {
     ).not.toMatch(/no stdin data received/i);
 
     // And the run itself shouldn't pay the 3-second stdin timeout anymore.
-    // Haiku Hello World finishes in well under 5 seconds when stdin is closed
-    // up front. We allow a generous 15s envelope to absorb cold-start jitter.
+    // The previous tight bound (15s) tracked the time the agent took to
+    // produce its reply. After we moved the prompt off the -p argument and
+    // onto stdin (so the agent actually receives the full multi-line task
+    // body instead of a truncated heading - the regression that hid behind
+    // this test for ages), the agent reads more text and the CLI's
+    // post-output shutdown adds a few seconds. The hard regression we want
+    // to catch is the 3s "no stdin data received" warning on every run, so
+    // 60s gives generous headroom while still flagging a true regression
+    // (and the explicit substring check above already pinpoints the
+    // warning if it returns).
     expect(
       e.durationSeconds!,
-      `run took ${e.durationSeconds}s — likely the 3s stdin warning regressed`
-    ).toBeLessThan(15);
+      `run took ${e.durationSeconds}s — way over the headroom budget; check for regressions`
+    ).toBeLessThan(60);
   });
 });

@@ -126,6 +126,23 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         bool resumeSession,
         string? model);
 
+    /// <summary>
+    /// Subclass hook: return the text the runner should write to the child's
+    /// stdin instead of (or after) closing it. Default null means "close
+    /// stdin immediately" - the legacy behavior. Claude overrides this so
+    /// the multi-KB rendered prompt gets piped through stdin instead of
+    /// embedded in argv, which on Windows is the difference between the
+    /// agent seeing the whole prompt and the agent seeing only the heading
+    /// (cmd.exe truncates long quoted args at the first newline / over the
+    /// length limit). When this returns non-null, BuildStartInfo MUST have
+    /// omitted the prompt from argv.
+    /// </summary>
+    protected virtual string? GetPromptStdinPayload(
+        string prompt,
+        string? sessionName,
+        bool resumeSession,
+        string? model) => null;
+
     /// <summary>Subclass hook: try to extract session metadata from a fresh output line.</summary>
     protected virtual void OnOutputLine(ProcInfo info, CliOutputLine line) { }
 
@@ -194,9 +211,27 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             process.Start();
             // Some CLIs (notably Claude Code) read stdin even when the prompt is
             // passed via -p, and emit a 3-second "no stdin data received" warning
-            // before continuing. We have no input to send, so signal EOF up front
-            // to skip the warning and the wasted wall time.
-            try { process.StandardInput.Close(); } catch { }
+            // before continuing. We either pipe the prompt through stdin (the
+            // Claude path - see GetPromptStdinPayload comment) or signal EOF
+            // immediately so the warning never fires. Both paths close stdin
+            // before any read is attempted.
+            var stdinPayload = GetPromptStdinPayload(prompt, sessionName, resumeSession, model);
+            try
+            {
+                if (!string.IsNullOrEmpty(stdinPayload))
+                {
+                    await process.StandardInput.WriteAsync(stdinPayload);
+                    await process.StandardInput.FlushAsync();
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to write stdin payload for {Cli} job {JobId}", CliType, jobId);
+            }
+            finally
+            {
+                try { process.StandardInput.Close(); } catch { }
+            }
         }
         catch (Exception ex)
         {

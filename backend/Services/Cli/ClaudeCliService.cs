@@ -53,8 +53,16 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         bool resumeSession,
         string? model)
     {
-        // claude -p <prompt> [--name <s>] [-r <s>] [--model <m>]
+        // claude -p [--name <s>] [-r <s>] [--model <m>]
         //   --output-format stream-json --verbose --dangerously-skip-permissions
+        //
+        // The user prompt is piped through STDIN (see GetPromptStdinPayload
+        // override). Embedding the rendered prompt as a quoted -p argument
+        // on Windows truncates the agent's view of the task at the first
+        // newline / over the cmd.exe length limit, so the agent sees only
+        // the heading and asks "what do you want me to do?". The base
+        // class writes our payload to stdin then closes it before any
+        // read is attempted.
         //
         // stream-json emits one NDJSON frame per assistant chunk / tool call /
         // tool result, flushed immediately. With the default text format the
@@ -63,7 +71,7 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         // is required by the CLI when stream-json is combined with `-p`.
         // TransformReadLine() in this class normalises the frames into the
         // marker-line convention the frontend parser already understands.
-        var args = new List<string> { "-p", Quote(prompt) };
+        var args = new List<string> { "-p" };
 
         // Claude Code CLI does not expose a `--name` flag; sessions are
         // identified by the UUID the CLI itself generates and emits in the
@@ -103,6 +111,22 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
             WorkingDirectory = workingDirectory
         };
     }
+
+    /// <summary>
+    /// Pipe the rendered prompt through stdin. Sending it as a quoted -p
+    /// argument on Windows fails for any prompt with newlines, embedded
+    /// quotes, backslashes, or that exceeds cmd.exe's command-line length
+    /// limit - in production this corrupted nearly every Claude run, with
+    /// the agent only seeing the title from the runtime template and
+    /// asking "what would you like me to do?". The base class writes our
+    /// payload to stdin then closes it before the CLI reads.
+    /// </summary>
+    protected override string? GetPromptStdinPayload(
+        string prompt,
+        string? sessionName,
+        bool resumeSession,
+        string? model)
+        => prompt;
 
     /// <summary>
     /// Resolves <c>AgentRules:CorePath</c> to an absolute existing file path.
