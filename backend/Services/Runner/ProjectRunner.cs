@@ -413,7 +413,8 @@ public class ProjectRunner
                     _activeJobId = null;
                     _activeCliType = null;
                     NotifyStatus();
-                    var retryPrompt = RunOutcomePolicy.BuildReissueFollowupPrompt(action.FollowupRetryPrompt!);
+                    var wasRecovery = string.Equals(capturedPlan!.EventKind, "recovery", StringComparison.OrdinalIgnoreCase);
+                    var retryPrompt = RunOutcomePolicy.BuildReissueFollowupPrompt(action.FollowupRetryPrompt!, recoveryContext: wasRecovery);
                     var retryAttempt = action.RetryAttempt;
                     _ = Task.Run(async () =>
                     {

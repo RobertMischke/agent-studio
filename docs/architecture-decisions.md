@@ -80,7 +80,7 @@ Numbering is monotonic and never reused. When an ADR is superseded, leave the or
 
 **Implementation pointers.** [backend/Services/Runner/RunPlanner.cs](../backend/Services/Runner/RunPlanner.cs) (`LatestRealSessionId`, mode-aware Continue branch); [backend/Services/Runner/RunOutcomePolicy.cs](../backend/Services/Runner/RunOutcomePolicy.cs) (Recovery branch); commit `9969857`.
 
-**Status.** Accepted.
+**Status.** Superseded in part by ADR-0006: the "Recovery never auto-re-issues" rule is overturned (graceful recovery). The sessionChain fallback half remains accepted.
 
 ---
 
@@ -99,6 +99,26 @@ Numbering is monotonic and never reused. When an ADR is superseded, leave the or
 **Reasoning style.** Defense in depth: keep the strict marker as the intended path, add a permissive UUID match as a safety net, and surface every state transition in the chat so the user can debug the loop without reading backend logs. Suppression by signature, not by time, so the orchestrator stays talkative when the situation actually changes.
 
 **Implementation pointers.** [backend/Services/Cli/ClaudeCliService.cs](../backend/Services/Cli/ClaudeCliService.cs) (`AnyUuidRegex`, hardened `OnOutputLine`); [backend/Services/Runner/ProjectRunner.cs](../backend/Services/Runner/ProjectRunner.cs) (`_lastMetaSignature` suppression, `[capture-fail]` after `OnCliFinished`, `[fallback]` before Recovery starts).
+
+**Status.** Accepted.
+
+---
+
+## ADR-0006 - Graceful Recovery: re-issue once even when the session is unrecoverable (2026-05-02)
+
+**Decision.** When a UserContinue follow-up routes to Recovery and the agent exits no-op or fast-Done, the orchestrator re-issues the follow-up exactly once with a recovery-aware prompt instead of stopping. The re-issue prompt explicitly tells the agent that conversation history is gone, names the job folder evidence as the only context, and forbids "I'll wait for your next request" as an answer. The retry budget (`MaxAutoReissueAttempts = 1`) is shared with the Resume-Continue path; one shot, then `NotifyUserAndStop`.
+
+**Context.** ADR-0003 ruled out auto-re-issue on Recovery to avoid stacking another broken-state run on top of a capture failure. In practice the user observed this as "I sent a follow-up and nothing happened, three times in a row." The user surfaced the trade-off: even if compounding risk exists, dropping the follow-up silently is worse than trying once with a sharper prompt. The product principle is graceful recovery, not graceful give-up.
+
+**Non-goals.**
+- Unlimited retries. The cap stays at one to avoid quota burn loops.
+- Retrying when the agent emitted real work or an explicit `[[TASK_BLOCKED]]` / `[[TASK_NEEDS_INPUT]]` sentinel. The re-issue trigger is still the no-effort shape (NoOp or fast-Done with tiny text).
+- Hiding the re-issue. The chat must show a `[reissue]` meta message naming the recovery context.
+- Patching the missing-marker capture failure here. ADR-0005 owns that; this ADR is the user-facing rescue when capture has already failed.
+
+**Reasoning style.** Trade-off resolved in favor of the user's stated preference: "selbst wenn die Session nicht fortgesetzt werden kann, möchte ich, dass es weitergeht." When two principles conflict (don't compound broken state vs. don't drop user requests), pick the one the user named, bound the worst case with a retry cap, and make every step visible in the chat so the user can intervene.
+
+**Implementation pointers.** [backend/Services/Runner/RunOutcomePolicy.cs](../backend/Services/Runner/RunOutcomePolicy.cs) (`triggersReissue` now includes `isRecovery`; `BuildReissueFollowupPrompt` accepts `recoveryContext`); [backend/Services/Runner/ProjectRunner.cs](../backend/Services/Runner/ProjectRunner.cs) (passes `wasRecovery` through to the prompt builder); supersedes ADR-0003's "Recovery never auto-re-issues" half. SessionChain fallback from ADR-0003 is still in force.
 
 **Status.** Accepted.
 

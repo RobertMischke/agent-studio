@@ -74,27 +74,35 @@ public static class RunOutcomePolicy
             && string.Equals(plan.EventKind, "continue", StringComparison.OrdinalIgnoreCase)
             && plan.ResumeFlag;
 
-        // No-effort completion: agent exited fast with little or no text. We
-        // only treat this as a re-issue trigger on a real Resume-continue. On
-        // a Recovery run, a fast exit usually means the agent never had
-        // session context (Claude CLI capture failed once and we are now
-        // re-recovering from disk); auto-re-issuing in that case stacks
-        // another recovery on top of the same broken state and burns quota.
+        // No-effort completion: agent exited fast with little or no text.
+        // Graceful Recovery (ADR-0006 supersedes ADR-0003): even when the
+        // prior session is unrecoverable, we re-issue ONCE with a sharper
+        // framing rather than letting the user's follow-up fall on the
+        // floor. The retry prompt makes the follow-up the only thing that
+        // matters and explicitly tells the agent that conversation history
+        // is gone, so "I'll wait for your next request" is not an
+        // acceptable answer. The retry budget is the same as the
+        // Resume-Continue path - one shot, then NotifyUserAndStop.
         var lookedLikeNoEffortDone =
             outcome.Kind == AgentOutcomeKind.Done
             && outcome.DurationSeconds < AgentOutcomeAnalyzer.NoOpDurationThresholdSeconds
             && outcome.AgentTextChars < 50;
 
+        var noEffortShape = outcome.Kind == AgentOutcomeKind.NoOp || lookedLikeNoEffortDone;
         var triggersReissue =
-            isResumeContinue
+            (isResumeContinue || isRecovery)
+            && intent == RunIntent.UserContinue
             && hasFollowup
-            && (outcome.Kind == AgentOutcomeKind.NoOp || lookedLikeNoEffortDone);
+            && noEffortShape;
 
         if (triggersReissue && reissueAttempt < MaxAutoReissueAttempts)
         {
+            var msg = isRecovery
+                ? "Recovery from session loss did not produce useful output. Re-issuing your follow-up with a sharper framing so the agent acts on it even without prior conversation context."
+                : "The agent exited without acting on your follow-up. Re-issuing your request with a sharper framing.";
             return new OutcomeAction(
                 Kind: OutcomeActionKind.ReissueWithStrongerFraming,
-                MetaMessage: "The agent exited without acting on your follow-up. Re-issuing your request with a sharper framing.",
+                MetaMessage: msg,
                 IsHeuristicFallback: heuristic,
                 FollowupRetryPrompt: followupPrompt,
                 RetryAttempt: reissueAttempt + 1);
@@ -103,18 +111,7 @@ public static class RunOutcomePolicy
         {
             return new OutcomeAction(
                 Kind: OutcomeActionKind.NotifyUserAndStop,
-                MetaMessage: "I retried your follow-up once and the agent still exited without acting on it. Please rephrase or check the agent CLI.",
-                IsHeuristicFallback: heuristic);
-        }
-
-        // Recovery + follow-up + fast no-output: do NOT auto-re-issue. Tell
-        // the user what happened so they can re-send or rephrase. The
-        // follow-up is preserved in cli-output.log either way.
-        if (isRecovery && hasFollowup && (outcome.Kind == AgentOutcomeKind.NoOp || lookedLikeNoEffortDone))
-        {
-            return new OutcomeAction(
-                Kind: OutcomeActionKind.NotifyUserAndAccept,
-                MetaMessage: "Recovery from session loss did not produce useful output. Your follow-up is preserved in the log; you can re-send it or rephrase.",
+                MetaMessage: "I retried your follow-up once and the agent still exited without acting on it. Please rephrase, check the agent CLI, or look at the Trace view.",
                 IsHeuristicFallback: heuristic);
         }
 
@@ -147,12 +144,27 @@ public static class RunOutcomePolicy
     /// Build the prompt used when the orchestrator re-issues a follow-up that
     /// the agent failed to honor. Kept here (next to the policy that decides
     /// to re-issue) so any change to the policy and its prompt move together.
+    ///
+    /// <para>
+    /// <paramref name="recoveryContext"/> is true when the previous run was a
+    /// Recovery (no resumable session). The framing then tells the agent
+    /// explicitly that conversation history is unavailable and that the
+    /// user request, plus any task evidence on disk (prompt.md, status.md,
+    /// logs), is the entire context. This is the load-bearing prompt for
+    /// graceful recovery: if it fails, the orchestrator gives up.
+    /// </para>
     /// </summary>
-    public static string BuildReissueFollowupPrompt(string originalFollowup) =>
-        "The previous run exited without acting on the user request below. "
-      + "Treat the user request as the only thing that matters now. "
-      + "Do not reply 'task done' unless you have actually performed the work the user asked for. "
-      + "If you cannot perform the request, emit [[TASK_BLOCKED:<reason>]] and explain why.\n\n"
-      + "User request:\n"
-      + originalFollowup.Trim();
+    public static string BuildReissueFollowupPrompt(string originalFollowup, bool recoveryContext = false)
+    {
+        var head = recoveryContext
+            ? "The previous CLI session for this task is unrecoverable. There is no conversation history to read; the only context you have is the job folder on disk (prompt.md, status.md, logs/cli-output.log) and the user request below. Do the work the user asked for, end-to-end. "
+              + "Reading 'I'll wait for your request' or 'standing by' as a valid answer is not acceptable - the user already gave you the request. "
+            : "The previous run exited without acting on the user request below. "
+              + "Treat the user request as the only thing that matters now. ";
+        return head
+             + "Do not reply 'task done' unless you have actually performed the work the user asked for. "
+             + "If you genuinely cannot perform the request, emit [[TASK_BLOCKED:<reason>]] and explain why.\n\n"
+             + "User request:\n"
+             + (originalFollowup ?? string.Empty).Trim();
+    }
 }

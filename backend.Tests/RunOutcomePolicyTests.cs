@@ -62,13 +62,14 @@ public class RunOutcomePolicyTests
         new(kind, "summary", sentinel, sentinel ? "DONE" : null, sentinel ? null : "heuristic", agentChars, agentChars / 5, duration);
 
     /// <summary>
-    /// Recovery + follow-up + fast no-output: do NOT auto-re-issue. The
-    /// previous behavior re-issued and burned quota stacking another
-    /// recovery on top of a broken capture. Today the policy posts a meta
-    /// message asking the user to re-send instead.
+    /// Graceful Recovery (ADR-0006): even when the prior session is
+    /// unrecoverable, Recovery + follow-up + no-output gets ONE re-issue
+    /// with a sharper, recovery-aware framing. The user explicitly asked
+    /// for "selbst wenn die Session nicht fortgesetzt werden kann, soll
+    /// es weitergehen", so dropping the follow-up is not acceptable.
     /// </summary>
     [Fact]
-    public void Recovery_NoOpWithFollowup_DoesNotAutoReissue()
+    public void Recovery_NoOpWithFollowup_GracefullyReissuesOnce()
     {
         var action = RunOutcomePolicy.Decide(
             RunIntent.UserContinue,
@@ -77,8 +78,43 @@ public class RunOutcomePolicyTests
             followupPrompt: "Please process the task again",
             reissueAttempt: 0);
 
-        Assert.Equal(OutcomeActionKind.NotifyUserAndAccept, action.Kind);
+        Assert.Equal(OutcomeActionKind.ReissueWithStrongerFraming, action.Kind);
+        Assert.Equal(1, action.RetryAttempt);
+        Assert.Equal("Please process the task again", action.FollowupRetryPrompt);
         Assert.Contains("Recovery from session loss", action.MetaMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// One auto-re-issue, then stop. The retry budget is shared across
+    /// Resume-continue and Recovery so a stuck loop cannot burn quota.
+    /// </summary>
+    [Fact]
+    public void Recovery_NoOpAfterReissue_GivesUp()
+    {
+        var action = RunOutcomePolicy.Decide(
+            RunIntent.UserContinue,
+            RecoveryPlan(),
+            Outcome(AgentOutcomeKind.NoOp, duration: 4.6, agentChars: 0),
+            followupPrompt: "do it",
+            reissueAttempt: RunOutcomePolicy.MaxAutoReissueAttempts);
+
+        Assert.Equal(OutcomeActionKind.NotifyUserAndStop, action.Kind);
+    }
+
+    /// <summary>
+    /// The recovery-aware re-issue prompt must explicitly tell the agent
+    /// the session is unrecoverable and that the user request is the only
+    /// context. Without this, the agent's "I'll wait for your next request"
+    /// reply (the symptom that triggered the redesign) repeats.
+    /// </summary>
+    [Fact]
+    public void RecoveryAwarePrompt_TellsAgentHistoryIsGone()
+    {
+        var prompt = RunOutcomePolicy.BuildReissueFollowupPrompt("look at the screenshot and improve the layout", recoveryContext: true);
+        Assert.Contains("unrecoverable", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("standing by", prompt, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("look at the screenshot and improve the layout", prompt);
+        Assert.Contains("[[TASK_BLOCKED", prompt);
     }
 
     /// <summary>
