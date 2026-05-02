@@ -46,6 +46,34 @@ public record JobInfo
     /// <see cref="PendingIntent"/>.
     /// </summary>
     public PendingIntent? PendingIntent { get; init; }
+
+    /// <summary>
+    /// Snapshot of the auto-mode "stuck loop" counter for this job, populated
+    /// at endpoint-read time from the in-memory state on the project's
+    /// runner. Null when no loop is in flight (the common case). When set,
+    /// the UI surfaces a "auto-loop N/M" badge so the user can see how
+    /// many orchestrator decisions have been spent on this job before the
+    /// circuit breaker stops the loop.
+    /// </summary>
+    public AutoLoopSnapshot? AutoLoop { get; init; }
+}
+
+/// <summary>
+/// Wire shape for <see cref="OrchestratorApi.Services.Runner.StuckLoopState"/>
+/// served to the frontend. A separate record so the wire contract is
+/// stable even if the in-memory record gains internal fields.
+/// </summary>
+public record AutoLoopSnapshot
+{
+    public int Iteration { get; init; }
+    public int MaxIterations { get; init; }
+    public long TokensUsed { get; init; }
+    public long MaxTokens { get; init; }
+    public DateTime StartedAt { get; init; }
+    public DateTime LastAt { get; init; }
+    public string? LastQuestion { get; init; }
+    public string? LastReply { get; init; }
+    public string? LastError { get; init; }
 }
 
 public record SessionUsage

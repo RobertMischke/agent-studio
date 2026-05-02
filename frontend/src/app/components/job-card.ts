@@ -1,5 +1,5 @@
 import { Component, OnDestroy, OnInit, computed, inject, input, signal } from '@angular/core';
-import { JobInfo, PendingIntent } from '../models/job.model';
+import { AutoLoopSnapshot, JobInfo, PendingIntent } from '../models/job.model';
 import { GitSummaryService } from '../services/git-summary.service';
 import { cliTypeIcon } from '../services/format.util';
 import { projectIdentity } from '../services/project-identity.util';
@@ -46,6 +46,14 @@ if (typeof window !== 'undefined') {
                 [title]="pendingTooltip(pi)"
                 data-testid="job-card-pending">
             ⏳ {{ pi.mode }}
+          </span>
+        }
+        @if (job().autoLoop; as al) {
+          <span class="job-card__loop-pill"
+                [class.job-card__loop-pill--hot]="loopHot()"
+                [title]="loopTooltip(al)"
+                data-testid="job-card-autoloop">
+            ↻ auto-loop {{ al.iteration }}/{{ al.maxIterations }}
           </span>
         }
       </div>
@@ -213,6 +221,29 @@ if (typeof window !== 'undefined') {
       border: 1px solid rgba(249, 226, 175, 0.28);
       cursor: help;
     }
+    /* Auto-loop pill: shown only while the orchestrator is actively
+       answering NEEDS_INPUT for this job. Cyan when within budget;
+       turns amber as the iteration counter approaches the cap so the
+       user can see the loop heading toward the circuit breaker. */
+    .job-card__loop-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      color: #a5f3fc;
+      background: rgba(165, 243, 252, 0.10);
+      border: 1px solid rgba(165, 243, 252, 0.28);
+      cursor: help;
+    }
+    .job-card__loop-pill--hot {
+      color: #fde68a;
+      background: rgba(253, 230, 138, 0.12);
+      border-color: rgba(253, 230, 138, 0.32);
+    }
     .job-card__state-pill {
       background: rgba(255,255,255,0.06);
       color: #cbd5e1;
@@ -352,6 +383,23 @@ export class JobCardComponent implements OnInit, OnDestroy {
     }
 
     return null;
+  }
+
+  /** Hot-state threshold: amber pill once the loop is at 80% of the iteration cap. */
+  readonly loopHot = computed(() => {
+    const al = this.job().autoLoop;
+    if (!al || al.maxIterations <= 0) return false;
+    return al.iteration / al.maxIterations >= 0.8;
+  });
+
+  loopTooltip(al: AutoLoopSnapshot): string {
+    const tokenLine = `${al.tokensUsed.toLocaleString()} / ${al.maxTokens.toLocaleString()} orchestrator tokens`;
+    const startedAt = (() => { try { return new Date(al.startedAt).toLocaleString(); } catch { return al.startedAt; } })();
+    const lastQ = (al.lastQuestion ?? '').slice(0, 160);
+    const lastErr = al.lastError ? `\nLast error: ${al.lastError}` : '';
+    return `Auto-loop: orchestrator answering NEEDS_INPUT for this job.\n` +
+           `Iteration ${al.iteration} of ${al.maxIterations}.\n` +
+           `${tokenLine}.\nStarted ${startedAt}.${lastErr}\n\nLast question: ${lastQ}${(al.lastQuestion ?? '').length > 160 ? '...' : ''}`;
   }
 
   pendingTooltip(pi: PendingIntent): string {

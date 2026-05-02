@@ -76,6 +76,16 @@ public class OrchestratorRunner
         CancellationToken ct = default)
         => InvokeAsync(prompt, model, workingDirectory, resumeSessionId: sessionId, ct);
 
+    /// <summary>
+     /// Hard ceiling for one orchestrator decision call. The boot prompt
+     /// embeds README/AGENTS/ROADMAP and the boot reply does real reading,
+     /// so even Opus can take ~60-90s. Keep this generous; the watchdog
+     /// surfaces "still running" via the orchestrator log instead. Caller
+     /// can override per call (tests use a low value to force the timeout
+     /// path deterministically).
+     /// </summary>
+     public static readonly TimeSpan DefaultTimeout = TimeSpan.FromMinutes(5);
+
     private async Task<OrchestratorDecisionResult> InvokeAsync(
         string prompt,
         string? model,
@@ -84,19 +94,7 @@ public class OrchestratorRunner
         CancellationToken ct)
     {
         var modelId = string.IsNullOrWhiteSpace(model) ? DefaultModel : model!.Trim();
-
-        var args = new List<string>
-        {
-            "-p", Quote(prompt),
-            "--output-format", "json",
-            "--model", Quote(modelId),
-            "--dangerously-skip-permissions"
-        };
-        if (!string.IsNullOrWhiteSpace(resumeSessionId))
-        {
-            args.Add("-r");
-            args.Add(Quote(resumeSessionId!));
-        }
+        var (args, _) = BuildArgs(modelId, resumeSessionId);
 
         var psi = new ProcessStartInfo
         {
@@ -114,37 +112,112 @@ public class OrchestratorRunner
         psi.Environment["LC_ALL"] = "C.UTF-8";
         psi.Environment["LANG"] = "C.UTF-8";
 
+        // Bound the call so a hung CLI cannot pin the orchestrator forever.
+        // The token chains the caller's ct with the timeout. Cancellation on
+        // either source surfaces a typed timeout/cancelled error so the
+        // policy layer can decide what to do (boot retries; auto-mode
+        // surfaces the question to the user).
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeoutCts.CancelAfter(DefaultTimeout);
+        var effectiveCt = timeoutCts.Token;
+
         try
         {
             using var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
             process.Start();
-            try { process.StandardInput.Close(); } catch { }
 
-            var stdoutTask = process.StandardOutput.ReadToEndAsync(ct);
-            var stderrTask = process.StandardError.ReadToEndAsync(ct);
+            // Pipe the prompt via stdin instead of a quoted -p argument.
+            // The boot prompt embeds README/AGENTS/ROADMAP markdown plus
+            // recent activity, easily pushing into the multi-KB range
+            // with newlines, backticks, double quotes, and backslashes.
+            // Passing that as a single quoted argument on Windows breaks
+            // through cmd.exe's command-line length and quoting limits;
+            // the failure mode in production was the CLI receiving the
+            // prompt with --output-format dropped from the args, then
+            // returning prose ("I'll wait for...") that ParseResult
+            // rejected with "'I' is an invalid start of a value". stdin
+            // sidesteps the entire quoting/length surface.
+            try
+            {
+                await process.StandardInput.WriteAsync(prompt.AsMemory(), effectiveCt);
+                await process.StandardInput.FlushAsync(effectiveCt);
+            }
+            finally
+            {
+                try { process.StandardInput.Close(); } catch { }
+            }
 
-            await process.WaitForExitAsync(ct);
+            var stdoutTask = process.StandardOutput.ReadToEndAsync(effectiveCt);
+            var stderrTask = process.StandardError.ReadToEndAsync(effectiveCt);
+
+            await process.WaitForExitAsync(effectiveCt);
             var stdout = await stdoutTask;
             var stderr = await stderrTask;
 
             if (process.ExitCode != 0)
             {
-                var msg = string.IsNullOrWhiteSpace(stderr) ? $"claude CLI exited with code {process.ExitCode}" : stderr.Trim();
-                _logger.LogWarning("Orchestrator decision failed: exit={Exit}, stderr={Stderr}", process.ExitCode, msg);
-                return new OrchestratorDecisionResult(false, "", modelId, null, null, msg);
+                // claude puts session-resume errors ("No conversation found
+                // with session ID: ...") on STDOUT, not stderr, then exits 1.
+                // We surface stdout into the error string so the policy layer
+                // (ProjectRunner.RunOrchestratorDecisionAsync) can detect and
+                // fall back to a fresh one-shot. Without this, the runner
+                // silently dropped the auto-mode decision instead of
+                // recovering.
+                var combined = string.IsNullOrWhiteSpace(stderr)
+                    ? (string.IsNullOrWhiteSpace(stdout)
+                        ? $"claude CLI exited with code {process.ExitCode}"
+                        : stdout.Trim())
+                    : stderr.Trim();
+                _logger.LogWarning(
+                    "Orchestrator decision failed: exit={Exit}, stdout={Stdout}, stderr={Stderr}",
+                    process.ExitCode, stdout?.Trim(), stderr?.Trim());
+                return new OrchestratorDecisionResult(false, "", modelId, null, null, combined);
             }
 
             return ParseResult(stdout, modelId);
         }
         catch (OperationCanceledException)
         {
-            return new OrchestratorDecisionResult(false, "", modelId, null, null, "cancelled");
+            // Distinguish caller-cancelled from timeout so the policy layer
+            // can react: timeout means the CLI hung; cancellation means the
+            // app is shutting down. Either way the process is killed below
+            // by the using-dispose; we just surface the right reason.
+            var reason = !ct.IsCancellationRequested && timeoutCts.IsCancellationRequested
+                ? $"timeout after {DefaultTimeout.TotalSeconds:F0}s"
+                : "cancelled";
+            _logger.LogWarning("Orchestrator decision {Reason}", reason);
+            return new OrchestratorDecisionResult(false, "", modelId, null, null, reason);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Orchestrator decision call failed to spawn or read");
             return new OrchestratorDecisionResult(false, "", modelId, null, null, ex.Message);
         }
+    }
+
+    /// <summary>
+    /// Build the argv list for one orchestrator invocation. Public so the
+    /// args contract can be locked by a unit test - the load-bearing rule
+    /// is "no prompt content in argv; prompt is piped via stdin", because
+    /// embedding multi-KB markdown into a Windows command line is the bug
+    /// class this rewrite exists to prevent.
+    /// </summary>
+    public static (List<string> Args, string ModelId) BuildArgs(string? model, string? resumeSessionId)
+    {
+        var modelId = string.IsNullOrWhiteSpace(model) ? DefaultModel : model!.Trim();
+        var args = new List<string>
+        {
+            "-p",                                     // print mode; reads prompt from stdin (no positional arg)
+            "--output-format", "json",
+            "--model", Quote(modelId),
+            "--dangerously-skip-permissions"
+        };
+        if (!string.IsNullOrWhiteSpace(resumeSessionId))
+        {
+            args.Add("-r");
+            args.Add(Quote(resumeSessionId!));
+        }
+        return (args, modelId);
     }
 
     /// <summary>

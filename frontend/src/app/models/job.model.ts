@@ -95,6 +95,26 @@ export interface JobInfo {
   commit: JobCommitInfo | null;
   /** Saved user intent waiting for the auto-pickup loop. Surfaces in the UI as a ⏳ badge. */
   pendingIntent?: PendingIntent | null;
+  /**
+   * Auto-mode "stuck loop" snapshot - populated only while the orchestrator is
+   * actively answering NEEDS_INPUT for this job. Mirrors backend
+   * `AutoLoopSnapshot`. The card shows a "auto-loop N/M" badge so the user
+   * can see how much of the budget the orchestrator has spent before the
+   * circuit breaker stops it.
+   */
+  autoLoop?: AutoLoopSnapshot | null;
+}
+
+export interface AutoLoopSnapshot {
+  iteration: number;
+  maxIterations: number;
+  tokensUsed: number;
+  maxTokens: number;
+  startedAt: string;
+  lastAt: string;
+  lastQuestion?: string | null;
+  lastReply?: string | null;
+  lastError?: string | null;
 }
 
 export interface JobCommitInfo {

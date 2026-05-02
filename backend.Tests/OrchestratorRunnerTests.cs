@@ -91,4 +91,63 @@ public class OrchestratorRunnerTests
         var result = OrchestratorRunner.ParseResult("", "claude-opus-4-7");
         Assert.False(result.Success);
     }
+
+    /// <summary>
+    /// Boot-bug regression: the prompt MUST NOT appear as an argv entry. It
+    /// is piped via stdin so multi-KB markdown with newlines, backticks,
+    /// double quotes, and Windows backslashes cannot break through cmd.exe's
+    /// command-line length and quoting limits. Production failure mode was
+    /// the CLI dropping --output-format from the args under the prompt blob,
+    /// then returning prose ("I'll wait for...") that ParseResult rejected
+    /// with "'I' is an invalid start of a value".
+    /// </summary>
+    [Fact]
+    public void BuildArgs_NeverEmbedsPromptContent()
+    {
+        var (args, modelId) = OrchestratorRunner.BuildArgs("claude-opus-4-7", resumeSessionId: null);
+
+        Assert.Equal("claude-opus-4-7", modelId);
+        Assert.Contains("-p", args);
+        Assert.Contains("--output-format", args);
+        var idx = args.IndexOf("--output-format");
+        Assert.Equal("json", args[idx + 1]);
+        Assert.Contains("--dangerously-skip-permissions", args);
+
+        // -p is always followed by another flag (no positional prompt arg).
+        var pIdx = args.IndexOf("-p");
+        Assert.True(args[pIdx + 1].StartsWith("--"),
+            $"Expected -p to be a bare flag, got followed by: {args[pIdx + 1]}");
+    }
+
+    [Fact]
+    public void BuildArgs_DefaultsModelWhenMissing()
+    {
+        var (_, modelId) = OrchestratorRunner.BuildArgs(null, null);
+        Assert.Equal(OrchestratorRunner.DefaultModel, modelId);
+
+        var (_, blank) = OrchestratorRunner.BuildArgs("   ", null);
+        Assert.Equal(OrchestratorRunner.DefaultModel, blank);
+    }
+
+    [Fact]
+    public void BuildArgs_AddsResumeFlagWhenSessionGiven()
+    {
+        var (args, _) = OrchestratorRunner.BuildArgs(
+            "claude-opus-4-7",
+            resumeSessionId: "a1b2c3d4-e5f6-4789-abcd-ef0123456789");
+
+        var rIdx = args.IndexOf("-r");
+        Assert.True(rIdx > 0, "expected -r flag");
+        Assert.Contains("a1b2c3d4-e5f6-4789-abcd-ef0123456789", args[rIdx + 1]);
+    }
+
+    [Fact]
+    public void BuildArgs_OmitsResumeWhenSessionMissing()
+    {
+        var (args, _) = OrchestratorRunner.BuildArgs("claude-opus-4-7", null);
+        Assert.DoesNotContain("-r", args);
+
+        var (blank, _) = OrchestratorRunner.BuildArgs("claude-opus-4-7", "   ");
+        Assert.DoesNotContain("-r", blank);
+    }
 }

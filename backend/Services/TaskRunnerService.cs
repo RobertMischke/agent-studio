@@ -80,6 +80,14 @@ public class TaskRunnerService : BackgroundService
 
     public CliRouter Router => _router;
 
+    /// <summary>
+    /// The active <see cref="StuckLoopBudget"/> read from configuration at
+    /// startup. Surfaced so endpoints can label the auto-loop snapshot
+    /// they return with the actual ceilings the runner is enforcing.
+    /// </summary>
+    public StuckLoopBudget StuckLoopBudget => _stuckLoopBudget;
+    private StuckLoopBudget _stuckLoopBudget = StuckLoopBudget.Default;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         // Initialize runners for each watch path
@@ -100,6 +108,8 @@ public class TaskRunnerService : BackgroundService
 
             var runner = new ProjectRunner(entry.Name, entry, _logger, _scanner, _states, _sessions, _router, _summaryService, _prompts, _transitions, _chatLog, _mutations, _orchestratorLog, _orchestratorRunner, _orchestratorSessions, _projectSettings);
             runner.ConfigureWatchdog(LoadWatchdogConfig(_config));
+            _stuckLoopBudget = LoadStuckLoopBudget(_config);
+            runner.ConfigureStuckLoopBudget(_stuckLoopBudget);
             runner.OnStatusChanged += status => OnRunnerStatusChanged?.Invoke(entry.Name, status);
             // Persist every mode change so the auto-pickup toggle survives
             // backend restarts. Includes implicit transitions like "auto-single
@@ -343,6 +353,36 @@ public class TaskRunnerService : BackgroundService
     /// set. Per-CLI overrides are not yet read here; we apply one config
     /// per project runner today.
     /// </summary>
+    /// <summary>
+    /// Loads <see cref="StuckLoopBudget"/> from <c>StuckLoop:*</c> configuration.
+    /// Falls back to <see cref="StuckLoopBudget.Default"/> when nothing is set.
+    /// Defaults are deliberately generous - the user can tighten via
+    /// appsettings if their CLI quota is small.
+    /// </summary>
+    private static StuckLoopBudget LoadStuckLoopBudget(IConfiguration cfg)
+    {
+        var section = cfg.GetSection("StuckLoop");
+        var d = StuckLoopBudget.Default;
+        if (!section.Exists()) return d;
+        return new StuckLoopBudget(
+            MaxIterations:          section.GetValue("MaxIterations", d.MaxIterations),
+            MaxOrchestratorTokens:  section.GetValue<long>("MaxOrchestratorTokens", d.MaxOrchestratorTokens));
+    }
+
+    /// <summary>
+    /// Snapshot of the auto-loop state for one job (null when no loop is in
+    /// flight). Looks up the project runner for the job's watch path and
+    /// asks it for the live counter. Used by the jobs endpoint so the UI
+    /// can render the loop badge ("auto-loop 2/5") on the active job card.
+    /// </summary>
+    public StuckLoopState? GetStuckLoopStateForJob(string jobId, string? watchPath = null)
+    {
+        var info = _scanner.FindJob(jobId, watchPath);
+        if (info == null) return null;
+        var runner = _runners.Values.FirstOrDefault(r => r.Entry.Name == info.ProjectName);
+        return runner?.GetStuckLoopState(jobId);
+    }
+
     private static WatchdogConfig LoadWatchdogConfig(IConfiguration cfg)
     {
         var section = cfg.GetSection("Watchdog");

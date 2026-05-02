@@ -16,15 +16,15 @@ public static class JobCrudEndpoints
 {
     public static void MapJobCrudEndpoints(this RouteGroupBuilder group)
     {
-        group.MapGet("/", (JobScannerService scanner, CliRouter router) =>
+        group.MapGet("/", (JobScannerService scanner, CliRouter router, TaskRunnerService runners) =>
         {
-            var jobs = scanner.ScanAllJobs().Select(job => WithExecution(job, router)).ToList();
+            var jobs = scanner.ScanAllJobs().Select(job => WithRuntime(job, router, runners)).ToList();
             return Results.Ok(jobs);
         });
 
-        group.MapGet("/grouped", (JobScannerService scanner, CliRouter router) =>
+        group.MapGet("/grouped", (JobScannerService scanner, CliRouter router, TaskRunnerService runners) =>
         {
-            var jobs = scanner.ScanAllJobs().Select(job => WithExecution(job, router)).ToList();
+            var jobs = scanner.ScanAllJobs().Select(job => WithRuntime(job, router, runners)).ToList();
             var grouped = new
             {
                 Preparation = jobs.Where(j => j.State == JobStates.Preparation).OrderBy(j => j.Order).ToList(),
@@ -37,10 +37,10 @@ public static class JobCrudEndpoints
             return Results.Ok(grouped);
         });
 
-        group.MapGet("/{jobId}", (string jobId, string? watchPath, JobScannerService scanner, CliRouter router) =>
+        group.MapGet("/{jobId}", (string jobId, string? watchPath, JobScannerService scanner, CliRouter router, TaskRunnerService runners) =>
         {
             var detail = scanner.GetJobDetail(jobId, watchPath);
-            return detail is null ? Results.NotFound() : Results.Ok(WithExecution(detail, router));
+            return detail is null ? Results.NotFound() : Results.Ok(WithRuntime(detail, router, runners));
         });
 
         group.MapPut("/{jobId}/state", async (string jobId, string? watchPath, MoveJobRequest req,

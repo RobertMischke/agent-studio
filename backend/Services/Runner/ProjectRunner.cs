@@ -43,6 +43,16 @@ public class ProjectRunner
     // message so the chat does not pile orchestrator notes on a stuck run.
     private string? _lastMetaSignature;
 
+    // Per-job stuck-loop counters. The auto-mode loop (agent emits
+    // NEEDS_INPUT -> orchestrator decides -> reply re-issued as Continue)
+    // can in theory run forever if the agent keeps asking. We track
+    // iterations + cumulative orchestrator tokens per job and let
+    // StuckLoopGuard decide when to break the loop. State lives in
+    // memory only; a backend restart resets it (a restart is itself a
+    // recovery boundary, so that's the desired behavior).
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, StuckLoopState> _stuckLoops = new();
+    private StuckLoopBudget _stuckLoopBudget = StuckLoopBudget.Default;
+
     public string ProjectName { get; }
     public WatchPathEntry Entry { get; }
 
@@ -417,6 +427,17 @@ public class ProjectRunner
     /// <summary>Set by <see cref="TaskRunnerService"/> on construction.</summary>
     public void ConfigureWatchdog(WatchdogConfig config) => _watchdogConfig = config;
 
+    /// <summary>Set by <see cref="TaskRunnerService"/> on construction.</summary>
+    public void ConfigureStuckLoopBudget(StuckLoopBudget budget) => _stuckLoopBudget = budget;
+
+    /// <summary>
+    /// Snapshot of the current auto-loop state for a job. Used by the
+    /// jobs endpoint so the UI can render a "stuck loop N/5" badge.
+    /// Returns null when no loop is in flight for this job.
+    /// </summary>
+    public StuckLoopState? GetStuckLoopState(string jobId) =>
+        _stuckLoops.TryGetValue(jobId, out var s) ? s : null;
+
     private static bool IsAutoMode(string mode)
         => string.Equals(mode, "auto-continuous", StringComparison.OrdinalIgnoreCase)
         || string.Equals(mode, "auto-single", StringComparison.OrdinalIgnoreCase);
@@ -559,6 +580,32 @@ public class ProjectRunner
     {
         try
         {
+            // Circuit breaker check BEFORE we release the active-job latch
+            // or call the orchestrator. If we've already burned the loop's
+            // iteration / token budget on this job, surface a meta line
+            // and leave the question for the user instead of spending more.
+            // The state survives until cleared on a non-NeedsInput outcome
+            // (Done/Blocked) - see OnCliFinishedAsync.
+            var existingLoop = _stuckLoops.TryGetValue(jobId, out var prior) ? prior : null;
+            if (existingLoop != null
+                && StuckLoopGuard.Decide(existingLoop, _stuckLoopBudget) == StuckLoopVerdict.CircuitBreak)
+            {
+                _logger.LogWarning(
+                    "[orchestrator] circuit-breaker fired for {JobId}: {Iters} iters, {Tokens} tokens",
+                    jobId, existingLoop.IterationCount, existingLoop.CumulativeOrchestratorTokens);
+                _chatLog.Append(info, OrchestratorMessageKind.GiveUp,
+                    StuckLoopGuard.FormatBreakerMessage(existingLoop, _stuckLoopBudget));
+                _orchestratorLog.Append(info.WatchPath, new OrchestratorLogEntry
+                {
+                    Kind = OrchestratorLogKinds.Intervention,
+                    Topic = "auto-loop-circuit-break",
+                    JobId = jobId,
+                    Summary = $"Auto-loop circuit-breaker fired for \"{info.Title}\".",
+                    Reasoning = $"Iterations {existingLoop.IterationCount}/{_stuckLoopBudget.MaxIterations}; orchestrator tokens {existingLoop.CumulativeOrchestratorTokens}/{_stuckLoopBudget.MaxOrchestratorTokens}. Loop stopped to preserve quota; awaiting user."
+                });
+                return;
+            }
+
             // Release the active-job latch so the orchestrator's spawned
             // Continue can claim it; we mirror the re-issue path's release.
             _activeJobId = null;
@@ -627,6 +674,15 @@ public class ProjectRunner
                 // Orchestrator declined or errored. Surface the question to
                 // the user the same way the manual path does, plus a meta
                 // line explaining why the orchestrator could not decide.
+                // Update the loop counter so a series of declines also
+                // hits the circuit breaker; the iteration is the "we
+                // tried" event, not "we succeeded".
+                _stuckLoops[jobId] = StuckLoopGuard.Next(
+                    existingLoop, result.TokenUsage,
+                    question: outcome.Summary, reply: null,
+                    error: result.ErrorMessage,
+                    now: DateTime.UtcNow);
+
                 var why = result.ErrorMessage ?? "the orchestrator chose to defer this decision";
                 _chatLog.Append(info, OrchestratorMessageKind.Decision,
                     $"[orchestrator] Declined to auto-decide on agent's NEEDS_INPUT: {why}. Leaving the question for you.");
@@ -643,16 +699,28 @@ public class ProjectRunner
             }
 
             var reply = result.ReplyText.Trim();
+
+            // Successful decision. Advance the loop counter so we know how
+            // many auto-decisions this job has burned and bail through the
+            // circuit breaker on the next NEEDS_INPUT if budget is gone.
+            var nextLoop = StuckLoopGuard.Next(
+                existingLoop, result.TokenUsage,
+                question: outcome.Summary, reply: reply,
+                error: null,
+                now: DateTime.UtcNow);
+            _stuckLoops[jobId] = nextLoop;
+
             _chatLog.Append(info, OrchestratorMessageKind.Decision,
-                $"[orchestrator] Auto-mode decision: {Truncate(reply, 200)}");
+                $"[orchestrator] Auto-mode decision (loop {nextLoop.IterationCount}/{_stuckLoopBudget.MaxIterations}): {Truncate(reply, 200)}");
             _orchestratorLog.Append(info.WatchPath, new OrchestratorLogEntry
             {
                 Kind = OrchestratorLogKinds.Decision,
                 Topic = "agent-needs-input",
                 JobId = jobId,
-                Summary = $"Auto-decided for \"{info.Title}\": {Truncate(reply, 140)}",
+                Summary = $"Auto-decided for \"{info.Title}\" (loop {nextLoop.IterationCount}/{_stuckLoopBudget.MaxIterations}): {Truncate(reply, 140)}",
                 Reasoning = $"Project mode is {_mode}; the active agent emitted NEEDS_INPUT and the orchestrator was invoked to reply on the user's behalf. " +
-                            $"The reply will be sent as a Continue follow-up. Model: {result.Model}.",
+                            $"The reply will be sent as a Continue follow-up. Model: {result.Model}. " +
+                            $"Cumulative orchestrator tokens this loop: {nextLoop.CumulativeOrchestratorTokens}.",
                 TokenUsage = result.TokenUsage
             });
 
@@ -893,6 +961,13 @@ public class ProjectRunner
                 _ = Task.Run(() => RunOrchestratorDecisionAsync(activeInfo, jobId, outcome));
                 return;
             }
+
+            // Loop closed: the agent did NOT come back with another
+            // NEEDS_INPUT. Whether that's Done, Blocked, or anything else,
+            // the auto-loop is no longer active for this job, so reset
+            // the stuck-loop counter. A future NEEDS_INPUT on the same
+            // job starts a fresh loop with a fresh budget.
+            _stuckLoops.TryRemove(jobId, out _);
 
             if (RunCompletionPolicy.ShouldMoveToReview(execution.Status))
             {
