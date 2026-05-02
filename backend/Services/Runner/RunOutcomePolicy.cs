@@ -115,14 +115,19 @@ public static class RunOutcomePolicy
                 IsHeuristicFallback: heuristic);
         }
 
-        // Heuristic verdicts always surface as a meta message so the user can
-        // see when the deterministic contract did not match. This is the
-        // "fallback warning" the philosophy section in ROADMAP describes.
-        if (heuristic && outcome.Kind != AgentOutcomeKind.Unknown)
+        // Heuristic verdicts surface only when the user gets actionable
+        // signal from the meta message. NeedsInput is the obvious skip:
+        // the agent's question is already visible in the chat and the
+        // frontend's quick-reply chips react to it directly; an extra
+        // "[heuristic] verdict: needsinput" line is just noise.
+        // Progress is similarly self-evident from the run still moving.
+        // We keep the warning for Done (the agent might be claiming done
+        // without doing the work) and Unknown (we genuinely cannot tell).
+        if (heuristic && outcome.Kind == AgentOutcomeKind.Done)
         {
             return new OutcomeAction(
                 Kind: OutcomeActionKind.NotifyUserAndAccept,
-                MetaMessage: $"No structured signal from the agent. Heuristic verdict: {outcome.Kind.ToString().ToLowerInvariant()}.",
+                MetaMessage: "[heuristic] Agent reports done (no structured signal).",
                 IsHeuristicFallback: true);
         }
 
@@ -130,7 +135,7 @@ public static class RunOutcomePolicy
         {
             return new OutcomeAction(
                 Kind: OutcomeActionKind.NotifyUserAndAccept,
-                MetaMessage: "Could not classify the agent's reply. Please review the activity log.",
+                MetaMessage: "[heuristic] Could not classify the agent's reply.",
                 IsHeuristicFallback: true);
         }
 

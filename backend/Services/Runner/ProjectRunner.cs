@@ -242,7 +242,7 @@ public class ProjectRunner
             {
                 var modeLabel = ContinueModes.Normalize(mode);
                 _chatLog.Append(info, OrchestratorMessageKind.Decision,
-                    $"[fallback] You sent a follow-up in '{modeLabel}' mode, but no {cli.CliType} session id is on record for this job ({plan.EventReason ?? "no session recorded"}). Falling back to Recovery: a fresh CLI run will rebuild context from the job folder. This is one of the known capture-loss symptoms; if it keeps happening, check the Trace view for a session frame.");
+                    $"[fallback] No {cli.CliType} session on record (mode: {modeLabel}); rebuilding context from job folder.");
             }
 
             _sessions.AppendSessionEvent(jobId, new SessionEvent
@@ -336,7 +336,7 @@ public class ProjectRunner
                 if (captureFailInfo != null)
                 {
                     _chatLog.Append(captureFailInfo, OrchestratorMessageKind.Decision,
-                        $"[capture-fail] No {cli.CliType} session id captured from this run. The next follow-up will route to Recovery (read job folder from disk) rather than resuming the conversation. If this repeats, check the Trace view for a `system` frame and confirm the CLI is producing stream-json output.");
+                        $"[capture-fail] No {cli.CliType} session id from this run; next follow-up will rebuild from disk.");
                 }
             }
 

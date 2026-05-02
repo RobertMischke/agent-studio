@@ -99,10 +99,13 @@ public class TaskRunnerPromptTests
     }
 
     [Fact]
-    public void RunnerRecoveryTemplate_MakesFollowupThePrimaryInstruction()
+    public void RunnerRecoveryTemplate_CarriesOriginalTaskAndFollowupBeforeFraming()
     {
         var p = Prompts().Render(RuntimePromptService.RunnerRecoveryContinuation, new Dictionary<string, string?>
         {
+            ["title"] = "Improve the layout of the taskbar.",
+            ["prompt_text"] = "The header is cramped; rearrange model and CLI selectors.",
+            ["prompt_path"] = @"C:\jobs\fix-bug\prompt.md",
             ["job_folder"] = @"C:\jobs\fix-bug",
             ["working_directory"] = @"C:\Projects\Runbook\App",
             ["repository_path"] = @"C:\Projects\Runbook",
@@ -114,22 +117,31 @@ public class TaskRunnerPromptTests
         Assert.Contains(@"C:\Projects\Runbook\App", p);
         Assert.Contains(@"C:\Projects\Runbook", p);
         Assert.Contains("prompt.md", p);
-        // The follow-up must be present and explicitly framed as the primary
-        // instruction. The bug we are guarding against: an empty / "task done"
-        // reply when the original prompt is already finished but a follow-up
-        // exists.
-        Assert.Contains("Please continue with adding the chat compose box.", p);
-        Assert.Contains("PRIMARY INSTRUCTION", p, StringComparison.OrdinalIgnoreCase);
         Assert.Contains("[[TASK_BLOCKED", p);
-        // Standard guardrails still apply.
         Assert.Contains("do not move the job folder", p, StringComparison.OrdinalIgnoreCase);
 
-        // Structural property: the user follow-up must be the very first
-        // visible line, before any framing. With framing first, Claude
-        // treats the prompt as a system stub and replies "I'll wait."
+        // Both the original task body AND the follow-up must appear in the
+        // rendered prompt. When the session is unrecoverable, the agent
+        // must still see the task it was hired for, not just the latest
+        // direction. Without this, the agent says "no context, please
+        // tell me what to do" - the symptom the user reported.
+        Assert.Contains("Improve the layout of the taskbar.", p);
+        Assert.Contains("The header is cramped; rearrange model and CLI selectors.", p);
+        Assert.Contains("Please continue with adding the chat compose box.", p);
+
+        // Structural property: original task body comes BEFORE the
+        // follow-up which comes BEFORE the framing block. The previous
+        // arrangement labelled the original task "reference only" and the
+        // agent treated it as ignorable.
+        var taskBodyIndex = p.IndexOf("The header is cramped", StringComparison.Ordinal);
         var followupIndex = p.IndexOf("Please continue with adding the chat compose box.", StringComparison.Ordinal);
-        var primaryHeader = p.IndexOf("PRIMARY INSTRUCTION", StringComparison.OrdinalIgnoreCase);
-        Assert.InRange(followupIndex, 0, primaryHeader);
+        var framingIndex = p.IndexOf("previous CLI session", StringComparison.OrdinalIgnoreCase);
+        Assert.InRange(taskBodyIndex, 0, followupIndex);
+        Assert.InRange(followupIndex, 0, framingIndex);
+
+        // The "reference only" framing is gone. The original task is the
+        // authoritative starting point, not a footnote.
+        Assert.DoesNotContain("reference only", p, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

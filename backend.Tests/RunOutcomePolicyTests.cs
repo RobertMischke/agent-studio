@@ -210,4 +210,41 @@ public class RunOutcomePolicyTests
 
         Assert.NotEqual(OutcomeActionKind.ReissueWithStrongerFraming, action.Kind);
     }
+
+    /// <summary>
+    /// The agent's question is already visible in the chat; an extra
+    /// "[heuristic] verdict: needsinput" line is just noise. Policy should
+    /// stay silent on NeedsInput so the user can respond directly to the
+    /// agent or use the quick-reply chips.
+    /// </summary>
+    [Fact]
+    public void RealRun_HeuristicNeedsInput_AcceptedSilently()
+    {
+        var action = RunOutcomePolicy.Decide(
+            RunIntent.UserContinue,
+            ContinuePlan(),
+            Outcome(AgentOutcomeKind.NeedsInput, sentinel: false, duration: 30.0, agentChars: 200),
+            followupPrompt: null,
+            reissueAttempt: 0);
+
+        Assert.Equal(OutcomeActionKind.Accept, action.Kind);
+        Assert.Equal(string.Empty, action.MetaMessage);
+    }
+
+    /// <summary>
+    /// Progress mid-run shape: the agent kept moving, no need for a meta
+    /// message. The activity log itself shows the run is alive.
+    /// </summary>
+    [Fact]
+    public void RealRun_HeuristicProgress_AcceptedSilently()
+    {
+        var action = RunOutcomePolicy.Decide(
+            RunIntent.ManualStart,
+            ContinuePlan(),
+            Outcome(AgentOutcomeKind.Progress, sentinel: false, duration: 45.0, agentChars: 800),
+            followupPrompt: null,
+            reissueAttempt: 0);
+
+        Assert.Equal(OutcomeActionKind.Accept, action.Kind);
+    }
 }
