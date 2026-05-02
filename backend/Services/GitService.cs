@@ -24,6 +24,7 @@ public record GenerateMessageResult(string? Message, string? Error);
 public record GitProjectSummary(
     string ProjectName,
     string RootPath,
+    string? RepositoryPath,
     bool IsRepo,
     string? Branch,
     int FilesChanged,
@@ -32,7 +33,7 @@ public record GitProjectSummary(
 
 /// <summary>
 /// Thin wrapper around git CLI for the per-task Git view. Operates on the
-/// project's RootPath (the watched repo), not on the job folder.
+/// project's configured repository path, not on the job folder.
 /// </summary>
 public class GitService
 {
@@ -72,16 +73,16 @@ public class GitService
         var list = new List<GitProjectSummary>();
         foreach (var entry in _scanner.GetWatchPaths())
         {
-            if (string.IsNullOrWhiteSpace(entry.RootPath))
+            var configured = ResolveConfiguredRepositoryPath(entry);
+            if (string.IsNullOrWhiteSpace(configured))
             {
-                list.Add(new GitProjectSummary(entry.Name, "", false, null, 0, 0, 0));
+                list.Add(new GitProjectSummary(entry.Name, "", null, false, null, 0, 0, 0));
                 continue;
             }
-            var configured = entry.RootPath;
             var root = ResolveGitToplevel(configured);
             if (root == null)
             {
-                list.Add(new GitProjectSummary(entry.Name, configured, false, null, 0, 0, 0));
+                list.Add(new GitProjectSummary(entry.Name, configured, configured, false, null, 0, 0, 0));
                 continue;
             }
 
@@ -103,7 +104,7 @@ public class GitService
             }
 
             list.Add(new GitProjectSummary(
-                entry.Name, configured, true,
+                entry.Name, root, root, true,
                 string.IsNullOrWhiteSpace(branchOut) ? null : branchOut.Trim(),
                 fileCount, added, removed));
         }
@@ -116,13 +117,15 @@ public class GitService
         return list;
     }
 
-    /// <summary>Resolve the repo root for a job - the watch entry's RootPath.</summary>
+    /// <summary>Resolve the repository root for a job.</summary>
     public string? ResolveRepoRoot(string jobId, string? watchPath)
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return null;
         var entry = _scanner.GetWatchPaths().FirstOrDefault(e => e.Name == info.ProjectName);
-        return string.IsNullOrWhiteSpace(entry?.RootPath) ? null : entry.RootPath;
+        var configured = entry == null ? null : ResolveConfiguredRepositoryPath(entry);
+        if (string.IsNullOrWhiteSpace(configured)) return null;
+        return ResolveGitToplevel(configured) ?? configured;
     }
 
     public GitStatusResult GetStatus(string jobId, string? watchPath)
@@ -471,6 +474,13 @@ public class GitService
         var toplevel = output.Trim();
         if (string.IsNullOrEmpty(toplevel)) return null;
         return toplevel.Replace('/', Path.DirectorySeparatorChar);
+    }
+
+    private static string? ResolveConfiguredRepositoryPath(WatchPathEntry entry)
+    {
+        if (!string.IsNullOrWhiteSpace(entry.RepositoryPath)) return entry.RepositoryPath;
+        if (!string.IsNullOrWhiteSpace(entry.RootPath)) return entry.RootPath;
+        return null;
     }
 
     private static (string Out, string Err, int Code) RunGit(string cwd, string args, string? stdin = null)

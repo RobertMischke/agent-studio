@@ -223,6 +223,7 @@ public record WatchPathEntry
     public string Name { get; init; } = "";
     public string Path { get; init; } = "";
     public string RootPath { get; init; } = "";
+    public string RepositoryPath { get; init; } = "";
 }
 
 public record CliExecution

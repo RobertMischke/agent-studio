@@ -426,12 +426,46 @@ public class ProjectRunner
         if (string.IsNullOrWhiteSpace(plan.PromptTemplate))
             throw new InvalidOperationException("Run plan has neither a prompt template nor a prompt override.");
 
+        var promptPath = Path.Combine(info.FolderPath, "prompt.md");
         var values = new Dictionary<string, string?>(plan.PromptVariables)
         {
-            ["prompt_path"] = Path.Combine(info.FolderPath, "prompt.md"),
-            ["job_folder"] = info.FolderPath
+            ["prompt_path"] = promptPath,
+            ["prompt_text"] = ReadPromptText(promptPath),
+            ["job_folder"] = info.FolderPath,
+            ["title"] = string.IsNullOrWhiteSpace(info.Title) ? "(untitled)" : info.Title,
+            ["working_directory"] = Entry.RootPath,
+            ["repository_path"] = string.IsNullOrWhiteSpace(Entry.RepositoryPath) ? Entry.RootPath : Entry.RepositoryPath,
+            ["attachments_list"] = BuildAttachmentsList(info.FolderPath)
         };
         return _prompts.Render(plan.PromptTemplate, values);
+    }
+
+    private static string ReadPromptText(string promptPath)
+    {
+        try
+        {
+            return File.Exists(promptPath) ? File.ReadAllText(promptPath).Trim() : string.Empty;
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    private static string BuildAttachmentsList(string jobFolder)
+    {
+        try
+        {
+            var dir = Path.Combine(jobFolder, "attachments");
+            if (!Directory.Exists(dir)) return "(none)";
+            var files = Directory.EnumerateFiles(dir).OrderBy(p => p).ToList();
+            if (files.Count == 0) return "(none)";
+            return string.Join("\n", files.Select(f => $"- `{Path.GetFileName(f)}` → `{f}`"));
+        }
+        catch
+        {
+            return "(none)";
+        }
     }
 
     private JobInfo? GetNextReadyJob()
