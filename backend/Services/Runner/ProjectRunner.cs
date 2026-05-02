@@ -123,6 +123,11 @@ public class ProjectRunner
 
     public async Task TickAsync(CancellationToken ct)
     {
+        // Watchdog ticks regardless of runner mode: even when auto-pickup is
+        // disabled, an active CLI on this project still needs to be watched
+        // for hangs. Cheap (one timestamp arithmetic per active job).
+        TickWatchdog();
+
         if (_mode is "manual" or "paused") return;
         if (_processing || _activeJobId != null) return;
 
@@ -316,6 +321,81 @@ public class ProjectRunner
             _processing = false;
         }
     }
+
+    /// <summary>
+    /// Per-tick watchdog pass. Walks the active CLI run for this project,
+    /// computes silence + age, calls <see cref="Watchdog.DecideState"/>,
+    /// and on a state transition either posts a chat meta message
+    /// (Quiet -> Suspicious, Suspicious -> Hung, etc.) or kills the
+    /// process tree (when transitioning into Hung). Same-state ticks are
+    /// silent so the chat does not pile up identical notes.
+    /// </summary>
+    private void TickWatchdog()
+    {
+        var jobId = _activeJobId;
+        var cliType = _activeCliType;
+        if (jobId == null || cliType == null) return;
+
+        ICliExecutionService cli;
+        try { cli = _router.Get(cliType); }
+        catch { return; }
+
+        var jobKey = JobIdentity.CreateKey(Entry.Path, jobId);
+        var exec = cli.GetExecution(jobKey);
+        if (exec == null || !string.Equals(exec.Status, "running", StringComparison.OrdinalIgnoreCase))
+            return;
+
+        var lastStreamed = cli.GetLastStreamedAt(jobKey) ?? exec.StartedAt;
+        var now = DateTime.UtcNow;
+        var silence = (now - lastStreamed).TotalSeconds;
+        var age     = (now - exec.StartedAt).TotalSeconds;
+
+        var prev = cli.GetWatchdogState(jobKey);
+        var next = Watchdog.DecideState(silence, age, _watchdogConfig);
+        if (!Watchdog.ShouldAnnounce(prev, next)) return;
+
+        cli.SetWatchdogState(jobKey, next);
+
+        var info = _scanner.FindJob(jobId, Entry.Path);
+        if (info == null) return;
+
+        switch (next)
+        {
+            case WatchdogState.Quiet:
+                // Yellow, informational only. Single-line chat note so the
+                // user sees that the watchdog is paying attention.
+                _chatLog.Append(info, OrchestratorMessageKind.Decision,
+                    $"[watchdog] Agent has been quiet {silence:F0}s. Watching; will warn at {_watchdogConfig.SuspiciousSeconds:F0}s.");
+                break;
+            case WatchdogState.Suspicious:
+                _chatLog.Append(info, OrchestratorMessageKind.Decision,
+                    $"[watchdog] Still silent at {silence:F0}s. Will kill at {_watchdogConfig.HungSeconds:F0}s if no signal arrives.");
+                break;
+            case WatchdogState.Hung:
+                _chatLog.Append(info, OrchestratorMessageKind.GiveUp,
+                    $"[watchdog] Killed after {silence:F0}s of silence. Process tree terminated; the run will finalize as failed.");
+                try { cli.Stop(jobKey); }
+                catch (Exception ex) { _logger.LogWarning(ex, "Watchdog kill failed for {JobId}", jobId); }
+                break;
+            case WatchdogState.Healthy:
+                if (prev != WatchdogState.Healthy)
+                {
+                    _chatLog.Append(info, OrchestratorMessageKind.Decision,
+                        "[watchdog] Agent resumed streaming. Back to healthy.");
+                }
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Watchdog thresholds for this runner. Loaded once from configuration
+    /// when the runner is constructed; reuse across ticks. Defaults applied
+    /// when nothing is configured.
+    /// </summary>
+    private WatchdogConfig _watchdogConfig = WatchdogConfig.Default;
+
+    /// <summary>Set by <see cref="TaskRunnerService"/> on construction.</summary>
+    public void ConfigureWatchdog(WatchdogConfig config) => _watchdogConfig = config;
 
     private void OnCliFinished(string cliType, string jobKey, CliExecution execution)
     {

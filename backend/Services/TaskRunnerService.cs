@@ -90,6 +90,7 @@ public class TaskRunnerService : BackgroundService
             }
 
             var runner = new ProjectRunner(entry.Name, entry, _logger, _scanner, _states, _sessions, _router, _summaryService, _prompts, _transitions, _chatLog, _mutations);
+            runner.ConfigureWatchdog(LoadWatchdogConfig(_config));
             runner.OnStatusChanged += status => OnRunnerStatusChanged?.Invoke(entry.Name, status);
             // Persist every mode change so the auto-pickup toggle survives
             // backend restarts. Includes implicit transitions like "auto-single
@@ -296,6 +297,26 @@ public class TaskRunnerService : BackgroundService
 
         // CliUnavailable, None, or anything else: 400 with the message.
         throw new JobOperationException(rej.Message ?? "Cannot start job", 400);
+    }
+
+    /// <summary>
+    /// Loads watchdog thresholds from <c>Watchdog:*</c> in configuration.
+    /// Falls back to <see cref="WatchdogConfig.Default"/> when nothing is
+    /// set. Per-CLI overrides are not yet read here; we apply one config
+    /// per project runner today.
+    /// </summary>
+    private static WatchdogConfig LoadWatchdogConfig(IConfiguration cfg)
+    {
+        var section = cfg.GetSection("Watchdog");
+        if (!section.Exists()) return WatchdogConfig.Default;
+        var d = WatchdogConfig.Default;
+        return new WatchdogConfig(
+            Enabled:              section.GetValue("Enabled", d.Enabled),
+            WarmUpGraceSeconds:   section.GetValue("WarmUpGraceSeconds", d.WarmUpGraceSeconds),
+            QuietSeconds:         section.GetValue("QuietSeconds", d.QuietSeconds),
+            SuspiciousSeconds:    section.GetValue("SuspiciousSeconds", d.SuspiciousSeconds),
+            HungSeconds:          section.GetValue("HungSeconds", d.HungSeconds),
+            TickIntervalSeconds:  section.GetValue("TickIntervalSeconds", d.TickIntervalSeconds));
     }
 
     /// <summary>

@@ -45,6 +45,25 @@ public interface ICliExecutionService
     SessionUsage? GetLastUsage(string jobKey);
     bool IsRunningForProject(string rootPath);
 
+    /// <summary>
+    /// UTC timestamp of the last <b>real</b> streamed line from this run
+    /// (not synthetic taskboard / orchestrator / watchdog markers), or
+    /// null if the run is unknown / has finished. The watchdog uses this
+    /// to compute silence duration. Should equal
+    /// <see cref="CliExecution.StartedAt"/> on a brand-new run before
+    /// the first frame arrives.
+    /// </summary>
+    DateTime? GetLastStreamedAt(string jobKey);
+
+    /// <summary>
+    /// Read / write the watchdog state previously announced for this run.
+    /// Used by the runner's per-tick announcer to suppress same-state
+    /// repeats. Defaults to <see cref="OrchestratorApi.Services.Runner.WatchdogState.Healthy"/>
+    /// for unknown runs.
+    /// </summary>
+    OrchestratorApi.Services.Runner.WatchdogState GetWatchdogState(string jobKey);
+    void SetWatchdogState(string jobKey, OrchestratorApi.Services.Runner.WatchdogState state);
+
     void ReattachOnStartup();
 
     /// <summary>Returns the set of models the user can select for this CLI.</summary>

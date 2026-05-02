@@ -369,6 +369,7 @@ public class CopilotCliService : ICliExecutionService
                 };
 
                 info.OutputBuffer.Add(outputLine);
+                info.LastStreamedAt = DateTime.UtcNow;
 
                 // Trim buffer if too large (keep last 5000 lines)
                 while (info.OutputBuffer.Count > 5000)
@@ -391,6 +392,19 @@ public class CopilotCliService : ICliExecutionService
 
     public SessionUsage? GetLastUsage(string jobKey)
         => _processes.TryGetValue(jobKey, out var info) ? info.LastUsage : null;
+
+    public DateTime? GetLastStreamedAt(string jobKey)
+        => _processes.TryGetValue(jobKey, out var info) ? info.LastStreamedAt : null;
+
+    public OrchestratorApi.Services.Runner.WatchdogState GetWatchdogState(string jobKey)
+        => _processes.TryGetValue(jobKey, out var info)
+            ? info.LastWatchdogState
+            : OrchestratorApi.Services.Runner.WatchdogState.Healthy;
+
+    public void SetWatchdogState(string jobKey, OrchestratorApi.Services.Runner.WatchdogState state)
+    {
+        if (_processes.TryGetValue(jobKey, out var info)) info.LastWatchdogState = state;
+    }
 
     private static readonly Regex TokensRegex = new(@"Tokens\s*(?<tokens>.+?)(?:\s{2,}|\s*\|\s*|$)", RegexOptions.Compiled);
     private static readonly Regex ChangesRegex = new(@"Changes\s*(?<changes>[+\-0-9\s]+)", RegexOptions.Compiled);
@@ -771,12 +785,15 @@ public class CopilotCliService : ICliExecutionService
         public SessionUsage? LastUsage { get; set; }
         public string? OutputLogPath { get; init; }
         public CliOutputLogStore OutputLog { get; init; } = null!;
+        public DateTime LastStreamedAt { get; set; }
+        public OrchestratorApi.Services.Runner.WatchdogState LastWatchdogState { get; set; } = OrchestratorApi.Services.Runner.WatchdogState.Healthy;
 
         public CliProcessInfo(Process process, CliExecution execution, string workingDirectory)
         {
             Process = process;
             Execution = execution;
             WorkingDirectory = workingDirectory;
+            LastStreamedAt = execution.StartedAt;
         }
     }
 

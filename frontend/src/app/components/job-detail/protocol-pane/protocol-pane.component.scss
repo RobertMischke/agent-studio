@@ -329,6 +329,49 @@
  * (session lost; reconstructed from job folder). The tooltip carries the
  * full event detail. Keeping it in the same row as the existing
  * .pane__telemetry chips so the header layout stays compact. */
+/*
+ * Watchdog chip in the protocol-pane header. State-tinted: green when
+ * the agent is streaming, yellow when quiet for 30s+, orange at 60s+
+ * (suspicious - kill threatens), red when killed at 120s+. Visible only
+ * while the run is active (driven by `isRunning`). Tooltip carries the
+ * full reasoning so a curious user can confirm what the chip means
+ * without leaving the page.
+ */
+.pane__watchdog {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.78em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  cursor: help;
+  font-variant-numeric: tabular-nums;
+
+  &[data-state="healthy"] {
+    background: rgba(34, 197, 94, 0.10);
+    border-color: rgba(34, 197, 94, 0.32);
+    color: #86efac;
+  }
+  &[data-state="quiet"] {
+    background: rgba(234, 179, 8, 0.12);
+    border-color: rgba(234, 179, 8, 0.40);
+    color: #fde68a;
+  }
+  &[data-state="suspicious"] {
+    background: rgba(249, 115, 22, 0.14);
+    border-color: rgba(249, 115, 22, 0.48);
+    color: #fdba74;
+  }
+  &[data-state="hung"] {
+    background: rgba(239, 68, 68, 0.18);
+    border-color: rgba(239, 68, 68, 0.55);
+    color: #fca5a5;
+    font-weight: 600;
+  }
+}
+
 .pane__session-chip {
   display: inline-flex;
   align-items: center;

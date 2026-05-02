@@ -46,6 +46,14 @@
         </span>
       }
     }
+    @if (watchdogPill(); as wp) {
+      @if (wp.visible) {
+        <span class="pane__watchdog"
+              [attr.data-state]="wp.state"
+              [title]="wp.tooltip"
+              data-testid="watchdog-chip">{{ wp.label }}</span>
+      }
+    }
     @if (claudeRateLimit(); as rl) {
       <span class="pane__telemetry pane__telemetry-rate"
             [class.pane__telemetry-rate--ok]="rl.status === 'allowed'"

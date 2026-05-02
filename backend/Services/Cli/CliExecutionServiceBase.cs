@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
 using OrchestratorApi.Models;
+using OrchestratorApi.Services.Runner;
 
 namespace OrchestratorApi.Services.Cli;
 
@@ -218,7 +219,8 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         {
             OutputLogPath = logPath,
             OutputLog = new CliOutputLogStore(logPath),
-            SessionName = sessionName
+            SessionName = sessionName,
+            LastStreamedAt = execution.StartedAt
         };
         try { info.OutputLog.Reset(); }
         catch (Exception ex) { _logger.LogWarning(ex, "Failed to reset CLI output log {Path}", logPath); }
@@ -340,6 +342,17 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
     public bool IsRunningForProject(string rootPath) =>
         _processes.Values.Any(p => p.WorkingDirectory == rootPath && !p.Process.HasExited);
 
+    public DateTime? GetLastStreamedAt(string jobKey) =>
+        _processes.TryGetValue(jobKey, out var info) ? info.LastStreamedAt : null;
+
+    public WatchdogState GetWatchdogState(string jobKey) =>
+        _processes.TryGetValue(jobKey, out var info) ? info.LastWatchdogState : WatchdogState.Healthy;
+
+    public void SetWatchdogState(string jobKey, WatchdogState state)
+    {
+        if (_processes.TryGetValue(jobKey, out var info)) info.LastWatchdogState = state;
+    }
+
     /// <summary>
     /// Startup hook. Default behaviour for base-class CLIs (Claude / Codex /
     /// Gemini) is to <b>reap</b> orphaned processes — kill any CLI process that
@@ -379,6 +392,13 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
                 // The visible buffer + event stream get the transformed lines.
                 if (!info.OutputLog.Append(rawLine))
                     _logger.LogWarning("Failed to persist CLI output line for {JobId}", jobKey);
+
+                // Watchdog silence-clock reset: any real stdout/stderr line
+                // counts as activity. Synthetic taskboard / orchestrator /
+                // watchdog lines arrive via different paths (Append on the
+                // OutputBuffer, not via this read loop) and therefore do not
+                // reset the clock.
+                info.LastStreamedAt = DateTime.UtcNow;
 
                 IEnumerable<CliOutputLine> transformed;
                 try { transformed = TransformReadLine(rawLine); }
@@ -683,6 +703,24 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         /// <summary>For Claude: the latest <c>rate_limit_event</c> frame parsed
         /// from the stream-json output. Null until the first event arrives.</summary>
         public ClaudeRateLimitSnapshot? LastRateLimit { get; set; }
+
+        /// <summary>
+        /// UTC timestamp of the most recent <b>real</b> streamed line - lines
+        /// that came off the CLI's stdout/stderr, not synthetic taskboard /
+        /// orchestrator / watchdog markers we emitted ourselves. Drives
+        /// <see cref="Watchdog"/> silence-clock decisions. Initialized to
+        /// <see cref="CliExecution.StartedAt"/> on spawn so the watchdog
+        /// starts measuring from run start, not from the synthetic Started
+        /// line we add immediately afterward.
+        /// </summary>
+        public DateTime LastStreamedAt { get; set; }
+
+        /// <summary>
+        /// Last <see cref="WatchdogState"/> the runner observed for this
+        /// process. Used by the runner's per-tick announcer so identical
+        /// states do not produce duplicate chat meta lines.
+        /// </summary>
+        public WatchdogState LastWatchdogState { get; set; } = WatchdogState.Healthy;
 
         public ProcInfo(Process process, CliExecution execution, string workingDirectory)
         {

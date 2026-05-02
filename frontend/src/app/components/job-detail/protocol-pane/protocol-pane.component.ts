@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, computed, inject, input, output, signal } from '@angular/core';
 import { ContinueMode, JobDetail, JobSummaryStatus } from '../../../models/job.model';
+import { deriveWatchdogPill } from './watchdog-state';
 import { ActivityLogViewComponent } from '../../activity-log-view';
 import { markdownToHtml, MarkdownImageOptions } from '../../markdown-utils';
 import { buildConversationTurns, parseActivityLog } from '../../activity-log.parser';
@@ -119,6 +120,19 @@ export class ProtocolPaneComponent implements OnDestroy {
   readonly summaryStatus = computed<JobSummaryStatus>(
     () => this.detail().summaryState?.status ?? 'none'
   );
+
+  /**
+   * Watchdog pill state derived purely from polled output frames + the
+   * NowTickService clock. Re-evaluates whenever cliOutput or the clock
+   * tick changes; the chip in the header reads .visible to decide
+   * whether to render at all and uses .label / .state / .tooltip for
+   * the visual.
+   */
+  readonly watchdogPill = computed(() => deriveWatchdogPill({
+    lines: this.cliOutput(),
+    isRunning: this.isRunning(),
+    now: new Date(this.nowTick())
+  }));
 
   /**
    * Order + labels for the mode pills above the chat input. Each option has a
