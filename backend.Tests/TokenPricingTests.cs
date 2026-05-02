@@ -1,0 +1,87 @@
+using OrchestratorApi.Services.Runner;
+using Xunit;
+
+namespace OrchestratorApi.Tests;
+
+/// <summary>
+/// Pins the per-model price math so a future price update has an exact
+/// place to update both the catalog and its assertions in lockstep.
+/// </summary>
+public class TokenPricingTests
+{
+    [Fact]
+    public void Estimate_OpusPrices_MatchAnthropicListed()
+    {
+        // Opus 4.7: $5/M input, $25/M output. 1M input + 200K output =
+        // $5 + $5 = $10.
+        var c = TokenPricing.Estimate("claude-opus-4-7",
+            inputTokens: 1_000_000, outputTokens: 200_000,
+            cacheReadTokens: 0, cacheCreationTokens: 0);
+        Assert.True(c.ModelKnown);
+        Assert.Equal(5.00m,  c.InputUsd);
+        Assert.Equal(5.00m,  c.OutputUsd);
+        Assert.Equal(10.00m, c.Total);
+    }
+
+    [Fact]
+    public void Estimate_SonnetPrices_AreThreeFifteen()
+    {
+        // 1M input + 1M output on Sonnet 4.6 = $3 + $15 = $18.
+        var c = TokenPricing.Estimate("claude-sonnet-4-6", 1_000_000, 1_000_000, 0, 0);
+        Assert.Equal(18.00m, c.Total);
+    }
+
+    [Fact]
+    public void Estimate_HaikuPrices_AreOneFive()
+    {
+        // 100K input + 50K output on Haiku 4.5 = $0.10 + $0.25 = $0.35.
+        var c = TokenPricing.Estimate("claude-haiku-4-5", 100_000, 50_000, 0, 0);
+        Assert.Equal(0.10m, c.InputUsd);
+        Assert.Equal(0.25m, c.OutputUsd);
+        Assert.Equal(0.35m, c.Total);
+    }
+
+    [Fact]
+    public void Estimate_CacheReadIsTenPercentOfInput()
+    {
+        // Sonnet $3/M input -> cache read $0.30/M.
+        // 10M cache reads -> $3.
+        var c = TokenPricing.Estimate("claude-sonnet-4-6", 0, 0,
+            cacheReadTokens: 10_000_000, cacheCreationTokens: 0);
+        Assert.Equal(3.00m, c.CacheReadUsd);
+        Assert.Equal(3.00m, c.Total);
+    }
+
+    [Fact]
+    public void Estimate_CacheWriteIs125PercentOfInput()
+    {
+        // Opus $5/M input -> cache write $6.25/M.
+        // 1M cache creation -> $6.25.
+        var c = TokenPricing.Estimate("claude-opus-4-7", 0, 0, 0, 1_000_000);
+        Assert.Equal(6.25m, c.CacheWriteUsd);
+    }
+
+    [Fact]
+    public void Estimate_UnknownModel_ReturnsZeroAndModelKnownFalse()
+    {
+        var c = TokenPricing.Estimate("gpt-5", 1_000_000, 100_000, 0, 0);
+        Assert.False(c.ModelKnown);
+        Assert.Equal(0m, c.Total);
+    }
+
+    [Fact]
+    public void Estimate_NullOrEmptyModel_ReturnsZeroAndModelKnownFalse()
+    {
+        Assert.False(TokenPricing.Estimate(null, 1, 1, 0, 0).ModelKnown);
+        Assert.False(TokenPricing.Estimate("", 1, 1, 0, 0).ModelKnown);
+        Assert.False(TokenPricing.Estimate("   ", 1, 1, 0, 0).ModelKnown);
+    }
+
+    [Fact]
+    public void Estimate_ModelLookupIsCaseInsensitive()
+    {
+        var lower = TokenPricing.Estimate("claude-opus-4-7", 1_000_000, 0, 0, 0);
+        var upper = TokenPricing.Estimate("CLAUDE-OPUS-4-7", 1_000_000, 0, 0, 0);
+        Assert.Equal(lower.Total, upper.Total);
+    }
+}

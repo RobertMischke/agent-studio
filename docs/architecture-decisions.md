@@ -120,3 +120,24 @@ Numbering is monotonic. Never reuse a number; never silently delete history.
 **Implementation pointers.** [docs/skills-architecture.md](skills-architecture.md); [README.md](../README.md) "Portable skills, not CLI-local silos"; [AGENTS.md](../AGENTS.md) "Portable Skills"; existing proto-skill files in [docs/cli-skills/](cli-skills/).
 
 **Status.** Accepted.
+
+---
+
+## ADR-0006 - Orchestrator runs as a separate CLI process with its own model and feed (2026-05-02)
+
+**Decision.** When the orchestrator needs to make a decision on the user's behalf (today: an agent emits `[[TASK_NEEDS_INPUT]]` while the runner is in auto mode), it spawns the configured Claude CLI in one-shot JSON mode (`--output-format json`), captures the result text plus token usage, and writes the decision to a per-project `orchestrator.jsonl` log. The orchestrator's model is a per-project setting, default `claude-opus-4-7`. It does **not** share a session with the active task agent and does **not** use Anthropic's HTTP API directly.
+
+**Context.** The orchestrator started as a passive parser of CLI output. Auto-mode workflows expose situations where it must actively decide (which follow-up to send when the agent asks a question, whether the user's queued draft is still consistent, whether to override a stale plan). The user wants those decisions to be high-quality (default to the strongest model), visible (its own feed with token counts), tunable (model is per-project), and overridable (the user can intervene on any decision and the override flows through the existing Continue path). The product also commits to "use what you already pay for" - subscriptions, not API keys - so the orchestrator must not introduce a new billing surface.
+
+**Non-goals.**
+- Calling Anthropic's HTTP API directly. The product's billing model is CLI subscriptions (Pro / Max / Team / Enterprise); a hidden API path would create real dollar cost where the user expects zero, and would require an API key the user does not need to provide today.
+- Sharing a session with the active task agent. Every orchestrator decision is a clean one-shot call so its context is exactly the situation it is asked to judge - no leakage from prior task turns, no risk of the agent seeing orchestrator reasoning as user input.
+- A long-lived orchestrator process. Each decision is a fresh CLI invocation; prompt caching at the Anthropic side handles repeated framing without us managing a daemon.
+- Treating the orchestrator's theoretical API cost as a bill. The cost number in the UI is a comparison metric only; the disclaimer in [TokenSummary](../backend/Services/Runner/TokenSummary.cs) is load-bearing copy and must stay.
+- Auto-firing orchestrator decisions on manual-mode projects. The trigger is explicitly gated on `auto-continuous` / `auto-single`. Manual mode keeps the question with the user. See [ProjectRunner.IsAutoMode](../backend/Services/Runner/ProjectRunner.cs).
+
+**Reasoning style.** Treat orchestrator activity as first-class evidence on disk. The orchestrator log (`<watchPath>/.orchestrator/orchestrator.jsonl`) is the single source of truth: decisions, watchdog actions, queued follow-ups, and user overrides all land there with kind / topic / token usage / optional reasoning. Pure functions wherever possible (`TokenPricing`, `Watchdog.DecideState`, `RunOutcomePolicy.Decide`); the runner applies the side-effects. The frontend renders the same evidence the same way for everyone (orchestrator feed, project detail, token-summary block) so the user trusts what they see.
+
+**Implementation pointers.** [backend/Services/Runner/OrchestratorRunner.cs](../backend/Services/Runner/OrchestratorRunner.cs) (the one-shot CLI invoker), [backend/Services/Runner/OrchestratorLog.cs](../backend/Services/Runner/OrchestratorLog.cs), [backend/Services/Runner/TokenPricing.cs](../backend/Services/Runner/TokenPricing.cs), [backend/Services/Runner/TokenSummary.cs](../backend/Services/Runner/TokenSummary.cs); the auto-mode hook in [ProjectRunner.OnCliFinishedAsync](../backend/Services/Runner/ProjectRunner.cs); the override endpoint in [RunnerEndpoints.cs](../backend/Endpoints/RunnerEndpoints.cs); the per-project model setting in [ProjectSettings.OrchestratorModel](../backend/Models/JobModels.cs); [frontend/src/app/components/orchestrator-feed.ts](../frontend/src/app/components/orchestrator-feed.ts), [frontend/src/app/components/project-detail.ts](../frontend/src/app/components/project-detail.ts), [frontend/src/app/components/token-summary-block.ts](../frontend/src/app/components/token-summary-block.ts).
+
+**Status.** Accepted.

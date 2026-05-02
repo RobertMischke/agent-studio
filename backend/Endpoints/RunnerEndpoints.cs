@@ -55,6 +55,18 @@ public static class RunnerEndpoints
                 return Results.Ok(new { project = projectName, entries });
             });
 
+        // Token summary: per-project rollup of orchestrator-log token
+        // amounts plus a *theoretical* API-cost estimate. The frontend
+        // renders amounts prominently, the cost smaller and behind a
+        // disclaimer (the user pays via CLI subscriptions, not API).
+        runnerGroup.MapGet("/{projectName}/token-summary",
+            (string projectName, JobScannerService scanner, TokenSummaryService tokens) =>
+            {
+                var entry = scanner.GetWatchPaths().FirstOrDefault(e => e.Name == projectName);
+                if (entry == null) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+                return Results.Ok(tokens.Summarize(projectName, entry.Path));
+            });
+
         // User override on an orchestrator decision (Phase F). Appends an
         // intervention entry to the feed and, when the named job is in a
         // continuable state, routes the new direction through the existing

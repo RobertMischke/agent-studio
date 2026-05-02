@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import { JobService } from '../services/job.service';
 import { GroupedJobs, OrchestratorLogEntry, RunnerStatus } from '../models/job.model';
 import { OrchestratorRunner_KnownModels } from './project-detail.models';
+import { TokenSummaryBlockComponent } from './token-summary-block';
 
 interface ProjectSettingsRow {
   autoCommit: boolean;
@@ -23,7 +24,7 @@ interface ProjectSettingsRow {
 @Component({
   selector: 'app-project-detail',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, TokenSummaryBlockComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <section class="proj-detail" data-testid="project-detail">
@@ -96,14 +97,13 @@ interface ProjectSettingsRow {
         </div>
       </section>
 
+      <app-token-summary-block [projectName]="projectName()" />
+
       <section class="proj-detail__group">
         <h3>Recent orchestrator activity</h3>
         @if (recentEntries().length === 0) {
           <p class="proj-detail__empty">No activity yet for this project.</p>
         } @else {
-          <p class="proj-detail__hint">
-            {{ tokenTotalLabel() }}
-          </p>
           <ul class="proj-detail__entries">
             @for (entry of recentEntries(); track entry.ts) {
               <li class="proj-detail__entry">

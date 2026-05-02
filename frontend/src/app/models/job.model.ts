@@ -245,6 +245,38 @@ export interface OrchestratorLogResponse {
   entries: OrchestratorLogEntry[];
 }
 
+/**
+ * Per-project rollup of orchestrator token amounts plus a theoretical
+ * API-cost estimate. Mirrors backend `TokenSummary`. Three independent
+ * dimensions are surfaced separately by the UI: amounts (real),
+ * theoretical API cost (estimate, must carry the disclaimer), and
+ * subscription quota (linked from `/api/cli/quota`, not folded here).
+ */
+export interface TokenSummary {
+  project: string;
+  orchestratorEntries: number;
+  orchestratorLlmCalls: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCacheReadTokens: number;
+  totalCacheCreationTokens: number;
+  estimatedApiCostUsd: number;
+  allModelsPriced: boolean;
+  byModel: TokenSummaryByModel[];
+  disclaimer: string;
+}
+
+export interface TokenSummaryByModel {
+  model: string;
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  estimatedApiCostUsd: number;
+  modelPriced: boolean;
+}
+
 export interface JobSummaryState {
   status: JobSummaryStatus;
   startedAt: string | null;

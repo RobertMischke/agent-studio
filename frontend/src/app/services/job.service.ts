@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport, QuotaReport, QuotaSnapshot, GitStatus, ClaudeSessionResponse, JobCommitDetail, SessionEventsResponse, ContinueMode, ContinueJobResponse, OrchestratorLogResponse } from '../models/job.model';
+import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport, QuotaReport, QuotaSnapshot, GitStatus, ClaudeSessionResponse, JobCommitDetail, SessionEventsResponse, ContinueMode, ContinueJobResponse, OrchestratorLogResponse, TokenSummary } from '../models/job.model';
 import { ErrorDialogService } from './error-dialog.service';
 
 @Injectable({ providedIn: 'root' })
@@ -253,6 +253,19 @@ export class JobService {
 
   setProjectOrchestratorModel(projectName: string, model: string | null) {
     return this.http.put(`${this.baseUrl}/projects/${encodeURIComponent(projectName)}/orchestrator-model`, { model });
+  }
+
+  /**
+   * Per-project token rollup. Returns total amounts, per-model
+   * breakdown, and a theoretical API-cost estimate. The cost is a
+   * comparison against Anthropic's published API rates, not the user's
+   * actual bill - CLI subscriptions are billed separately. The
+   * frontend renders the disclaimer prominently.
+   */
+  getTokenSummary(projectName: string) {
+    return this.http.get<TokenSummary>(
+      `${this.baseUrl}/runner/${encodeURIComponent(projectName)}/token-summary`
+    );
   }
 
   /**

@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject
 import { FormsModule } from '@angular/forms';
 import { OrchestratorLogEntry } from '../models/job.model';
 import { JobService } from '../services/job.service';
+import { TokenSummaryBlockComponent } from './token-summary-block';
 
 /**
  * Per-project orchestrator log feed. Reads
@@ -19,7 +20,7 @@ import { JobService } from '../services/job.service';
 @Component({
   selector: 'app-orchestrator-feed',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, TokenSummaryBlockComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <section class="orch-feed" data-testid="orchestrator-feed">
@@ -33,6 +34,9 @@ import { JobService } from '../services/job.service';
       @if (error()) {
         <div class="orch-feed__error">{{ error() }}</div>
       }
+
+      <app-token-summary-block [projectName]="projectName()" />
+
       @if (entries().length === 0 && !loading() && !error()) {
         <div class="orch-feed__empty">No orchestrator activity yet for this project.</div>
       }
