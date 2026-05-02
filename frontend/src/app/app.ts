@@ -5,6 +5,7 @@ import { JobColumnComponent } from './components/job-column';
 import { JobDetailComponent } from './components/job-detail';
 import { CliUsageSheetComponent } from './components/cli-usage-sheet';
 import { OrchestratorFeedComponent } from './components/orchestrator-feed';
+import { ProjectDetailComponent } from './components/project-detail';
 import { JobService } from './services/job.service';
 import { JobDetail, JobInfo, GroupedJobs, WatchPathEntry, CliType, CLI_TYPES, CliModelInfo } from './models/job.model';
 import { ErrorDialogService } from './services/error-dialog.service';
@@ -16,7 +17,7 @@ import { projectIdentity } from './services/project-identity.util';
 
 @Component({
   selector: 'app-root',
-  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent],
+  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, ProjectDetailComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent],
   // Keep styles global to this subtree — the App shell still owns the
   // .header*, .filter-chip*, .overlay*, .create-dialog*, .error-dialog*
   // class rules used by the extracted dialogs and project-tabs.
@@ -36,7 +37,8 @@ import { projectIdentity } from './services/project-identity.util';
           [runnerIndicator]="getRunnerIndicatorFn"
           [autoInfo]="getAutoInfoFn"
           (toggle)="toggleProject($event)"
-          (toggleAuto)="onToggleAuto($event)" />
+          (toggleAuto)="onToggleAuto($event)"
+          (openDetail)="openProjectDetail($event)" />
         <div class="header__actions">
           <button class="btn btn--sort"
                   data-testid="lane-sort-toggle"
@@ -159,6 +161,17 @@ import { projectIdentity } from './services/project-identity.util';
           <div class="overlay__panel" (click)="$event.stopPropagation()">
             <button class="overlay__close" (click)="closeOrchFeed()" title="Close">×</button>
             <app-orchestrator-feed [projectName]="proj" />
+          </div>
+        </div>
+      }
+
+      @if (projectDetailName(); as proj) {
+        <div class="overlay" (click)="closeProjectDetail()">
+          <div class="overlay__panel" (click)="$event.stopPropagation()">
+            <button class="overlay__close" (click)="closeProjectDetail()" title="Close">×</button>
+            <app-project-detail
+              [projectName]="proj"
+              (openFeed)="onOpenFeedFromDetail($event)" />
           </div>
         </div>
       }
@@ -325,6 +338,22 @@ import { projectIdentity } from './services/project-identity.util';
       display: inline-flex;
       align-items: center;
       gap: 4px;
+    }
+    .project-tab__detail {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.10);
+      color: rgba(255,255,255,0.55);
+      border-radius: 6px;
+      width: 26px;
+      height: 26px;
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      padding: 0;
+    }
+    .project-tab__detail:hover {
+      background: rgba(255,255,255,0.10);
+      color: #cdd6f4;
     }
     .auto-toggle {
       display: inline-flex;
@@ -1025,6 +1054,8 @@ export class App implements OnInit {
    * project; the overlay closes on backdrop click.
    */
   readonly orchFeedProject = signal<string | null>(null);
+  /** When non-null, names the project whose detail panel is open. */
+  readonly projectDetailName = signal<string | null>(null);
   readonly watchPaths = signal<WatchPathEntry[]>([]);
   readonly activeProjects = signal<Set<string>>(new Set(JSON.parse(localStorage.getItem('activeProjects') ?? '[]')));
   readonly sideSheetWidth = signal<number>(parseInt(localStorage.getItem('sideSheetWidth') ?? '280'));
@@ -1330,6 +1361,25 @@ export class App implements OnInit {
     if (active.length > 0) return active[0];
     const watchPaths = this.watchPaths();
     return watchPaths.length > 0 ? watchPaths[0].name : null;
+  }
+
+  /** Open the project detail panel from a click on the project tab's ⚙ button. */
+  openProjectDetail(name: string): void {
+    this.projectDetailName.set(name);
+  }
+
+  closeProjectDetail(): void {
+    this.projectDetailName.set(null);
+  }
+
+  /**
+   * "Open feed" button inside the project detail panel: close the detail
+   * panel, open the orchestrator feed for the same project. Two stacked
+   * overlays would be confusing; swap instead.
+   */
+  onOpenFeedFromDetail(name: string): void {
+    this.projectDetailName.set(null);
+    this.orchFeedProject.set(name);
   }
 
   private pickCreateWatchPath(): string {

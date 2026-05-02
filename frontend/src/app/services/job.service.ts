@@ -240,6 +240,21 @@ export class JobService {
     );
   }
 
+  /** All per-project settings (auto-commit, runner mode, orchestrator model). */
+  getAllProjectSettings() {
+    return this.http.get<{ [project: string]: { autoCommit: boolean; runnerMode: string | null; orchestratorModel: string | null } }>(
+      `${this.baseUrl}/projects/settings`
+    );
+  }
+
+  setProjectAutoCommit(projectName: string, enabled: boolean) {
+    return this.http.put(`${this.baseUrl}/projects/${encodeURIComponent(projectName)}/auto-commit`, { enabled });
+  }
+
+  setProjectOrchestratorModel(projectName: string, model: string | null) {
+    return this.http.put(`${this.baseUrl}/projects/${encodeURIComponent(projectName)}/orchestrator-model`, { model });
+  }
+
   /**
    * Override an orchestrator decision. Appends an intervention entry to
    * the feed, and (when `jobId` is provided) routes `newDirection`

@@ -29,6 +29,10 @@
           }
         </button>
       }
+      <button class="project-tab__detail"
+              [attr.data-testid]="'project-detail-' + name"
+              title="Project settings, mode, orchestrator model, recent activity"
+              (click)="openDetail.emit(name)">⚙</button>
     </div>
   }
 </div>
