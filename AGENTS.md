@@ -150,6 +150,22 @@ Worked example: the auto-loop snapshot folded onto every JobInfo in `WithRuntime
 
 Endpoints that are polled by the UI carry an extra obligation: the perf test must reflect a realistic workload (≥ 150-200 jobs for the kanban endpoints) so a future O(N²) regression cannot hide behind a small fixture. New per-job overlay logic that calls back into a scanner method is a smell; review it on the way in.
 
+#### When the symptom is in the UI, measure in the UI
+
+The user's seat is the browser. A green API timing does not prove the UI is fast — change detection, computeds, blocking renders, and stacked polls all live above the API and the user feels them as lag the moment a single one regresses. **When the report mentions the UI ("Detail-Ansicht laggt", "Create dauert lang", "scrolling stutters"), the regression test belongs in [`frontend/e2e/`](frontend/e2e/), not in [`backend.Tests/`](backend.Tests/).**
+
+Three Playwright primitives cover most cases, all CLI-friendly (no UI required), all collected as helpers in [`frontend/e2e/helpers/timing.ts`](frontend/e2e/helpers/timing.ts):
+
+- **`apiRoundtrip(page, urlGlob, trigger)`** — times an outbound HTTP call from inside the running app via `page.waitForResponse`. Matches what the app's polling actually pays (HttpClient overhead + interceptors + browser queue), not what `curl` shows. Use for "polled endpoint stays under N ms from the browser's seat".
+- **`startLongTaskRecorder(page)`** — installs a `PerformanceObserver` for `longtask` entries (browser definition: any main-thread block > 50 ms). Returns a callback that reads the running total. Use for "panel idle for 5 s does not block the main thread for more than X ms cumulatively". This is the metric that tracks scrolling smoothness.
+- **`clickToVisible(trigger, target)`** — wall time between a click and the target locator becoming visible. Use for action latency: opening the detail panel, creating a job, expanding a card.
+
+Other techniques in the toolbox when the basic three are not enough: `page.context().newCDPSession(page)` + `Performance.getMetrics` for ScriptDuration / LayoutDuration / JSHeapUsedSize; `Emulation.setCPUThrottlingRate` for worst-case CPU reproduction (do not enable in the default suite); `context.tracing.start({ snapshots, screenshots })` for the trace-viewer timeline as evidence on a failure.
+
+**Gating rule for these specs:** never `await page.waitForLoadState('networkidle')` when the regression you are testing for is "the network never goes idle". Use `domcontentloaded` plus a short `waitForTimeout` to let the first poll fire, then assert with explicit numbers. Otherwise the test fails with a 15 s infrastructure timeout and hides the real latency reading from the report.
+
+Worked example: when the user said the Detail-Ansicht laggt and Create dauert lang, the right test was [`frontend/e2e/perf-frontend.spec.ts`](frontend/e2e/perf-frontend.spec.ts). Reverting the backend fix made the grouped-jobs roundtrip test fail with `grouped jobs poll took 11521 ms from the browser` — that's the measurement, not a guess. Re-applying the fix turned it green at well under 1 s.
+
 ### Prompt-template changes: live probe required
 
 Any change to a file under `prompts/runtime/` (the runner bootstrap templates, the summary template, the commit-message template) is a behavioral change against the agent CLI, not a textual change. Unit tests on rendered string content cannot catch a regression in how the CLI reacts to the new wording or structure - that lesson is recorded in [ADR-0007](docs/architecture-decisions.md). Before claiming a prompt change is safe, run the `@billable` `claude-hello-world.spec.ts` (or the equivalent for the affected CLI) end-to-end and confirm the agent produces real output, not a fast "I'll wait for your request" exit. The structural unit-test guards in [backend.Tests/TaskRunnerPromptTests.cs](backend.Tests/TaskRunnerPromptTests.cs) (e.g. "user task header appears before run-context header") are necessary, not sufficient.
