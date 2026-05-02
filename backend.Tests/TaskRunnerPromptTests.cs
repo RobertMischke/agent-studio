@@ -57,6 +57,38 @@ public class TaskRunnerPromptTests
     }
 
     [Fact]
+    public void RunnerResumeRestartTemplate_TellsAgentPreviousRunIsDoneAndToActOnDelta()
+    {
+        var p = Prompts().Render(RuntimePromptService.RunnerResumeRestart, new Dictionary<string, string?>
+        {
+            ["prompt_path"] = @"C:\jobs\fix-bug\prompt.md",
+            ["job_folder"] = @"C:\jobs\fix-bug",
+            ["working_directory"] = @"C:\Projects\Runbook\App",
+            ["repository_path"] = @"C:\Projects\Runbook",
+            ["title"] = "Improve the layout of the taskbar.",
+            ["prompt_text"] = "(updated body)"
+        });
+
+        // The whole reason this template exists: tell Claude the previous
+        // run already finished, so re-issuing the same task body does not
+        // get the "I'll wait for your request" no-op response.
+        Assert.Contains("previous run", p, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("re-started", p, StringComparison.OrdinalIgnoreCase);
+        // Must instruct the agent to re-read prompt.md and diff against
+        // what it remembers, otherwise the delta is invisible.
+        Assert.Contains("Re-read", p, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("prompt.md", p);
+        Assert.Contains("git status", p);
+        Assert.Contains("git diff", p);
+        // Standard guardrails still apply.
+        Assert.Contains("Do not scan for other tasks", p);
+        Assert.Contains("Do not move the job folder", p);
+        // Variables are expanded.
+        Assert.Contains("Improve the layout of the taskbar.", p);
+        Assert.Contains("(updated body)", p);
+    }
+
+    [Fact]
     public void RunnerRecoveryTemplate_IncludesFollowupAndBoundedLogRead()
     {
         var p = Prompts().Render(RuntimePromptService.RunnerRecoveryContinuation, new Dictionary<string, string?>
@@ -89,6 +121,7 @@ public class TaskRunnerPromptTests
         {
             RuntimePromptService.RunnerFreshStart,
             RuntimePromptService.RunnerResumeInterrupted,
+            RuntimePromptService.RunnerResumeRestart,
             RuntimePromptService.RunnerRecoveryContinuation,
             RuntimePromptService.SummaryProtocol,
             RuntimePromptService.CommitMessage
