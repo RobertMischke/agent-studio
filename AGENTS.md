@@ -19,6 +19,20 @@ Keep the product boundary clear:
 - Job folders live in watched target projects under `.orchestrator/jobs/`.
 - The app observes external jobs; it should not store runtime job artifacts in this repository.
 
+## Architecture Decisions Archive
+
+**Repository docs are the durable archive for architecture decisions, non-goals, and reasoning styles.** Anything important that emerges from a chat conversation - especially a "do not do X" rule, a deliberate trade-off, or a reasoning style the user wants future contributors to apply - has to land in writing before the conversation ends. README, ROADMAP, AGENTS, the per-topic files in `docs/`, and the chronological log in [docs/architecture-decisions.md](docs/architecture-decisions.md) are the system. Memory in your runtime, chat scrollback, and PR descriptions are not.
+
+What this means in practice for every chat-driven change:
+
+1. **Capture the decision, not just the code.** If the conversation produced a structural rule ("we treat orchestrator-to-CLI communication as a core capability"), a non-goal ("never spawn a new job folder for an extension"), or a reasoning style ("deterministic over heuristic; pure functions with their own test matrix"), add or update an ADR in [docs/architecture-decisions.md](docs/architecture-decisions.md). One ADR per decision; the file's header explains the required shape (decision, context, non-goals, reasoning style, implementation pointers, status).
+2. **Surface non-goals explicitly.** Patterns that look attractive but were ruled out belong in the ADR's "Non-goals" section and, where relevant, in the README or ROADMAP "Hard Boundaries". Future agents must be able to find "we considered X and chose not to" without re-running the conversation.
+3. **Keep README, ROADMAP, AGENTS in sync.** When a decision changes how the product is described, what the architecture looks like, or how agents should work, update the matching narrative section in those files in the same change. The ADR captures the *why*; the README/ROADMAP/AGENTS sections explain the *current shape*. The two must not drift.
+4. **Update topic-specific docs.** CLI contracts go in [docs/agent-task-contract.md](docs/agent-task-contract.md). Filesystem layout goes in [docs/filesystem-contract.md](docs/filesystem-contract.md). Per-CLI playbooks live under [docs/cli-skills/](docs/cli-skills/). When a decision touches one of these surfaces, that file is updated alongside the ADR.
+5. **Numbering and supersession.** ADR numbers are monotonic and never reused. When a later decision overturns an earlier one, leave the original ADR in place and add a new one whose `Status` line points back. Never delete history silently.
+
+This is a recurring chore, not an optional polish step. If a chat ends without the relevant docs updated, the decision is effectively lost. Treat the documentation update as part of the task, the same way Playwright coverage is part of every visual change.
+
 ## Documentation Language
 
 All written artifacts in this repository (README, ROADMAP.md, AGENTS.md, docs/, prompts, code comments, commit messages, PR descriptions) are written in **English**. Chat conversation with the user may happen in any language, but anything you commit or write to disk in this repo stays English.
@@ -167,6 +181,6 @@ Prefer `data-testid="..."` for stable test hooks. If a feature you're touching l
 
 This repository uses an app-owned task lifecycle for dependent projects. The shared boundary is defined in [docs/agent-task-contract.md](docs/agent-task-contract.md); treat it as the single source of truth for what the application controls and what the CLI agent controls.
 
-After any CLI-executed task finishes, check whether [README.md](README.md), [ROADMAP.md](ROADMAP.md), AGENTS.md, or docs need to be updated. Update them in the same task when the change affects product direction, public behavior, architecture, CLI contracts, filesystem contracts, or agent workflow. If no documentation update is needed, say so briefly in the task report.
+After any CLI-executed task finishes, check whether [README.md](README.md), [ROADMAP.md](ROADMAP.md), AGENTS.md, [docs/architecture-decisions.md](docs/architecture-decisions.md), or other docs need to be updated. Update them in the same task when the change affects product direction, public behavior, architecture, CLI contracts, filesystem contracts, agent workflow, or established a non-goal / reasoning style worth archiving. See "Architecture Decisions Archive" above for the required shape. If no documentation update is needed, say so briefly in the task report.
 
 When onboarding or resyncing a watched target project, use [.github/prompts/sync-target-instructions.prompt.md](.github/prompts/sync-target-instructions.prompt.md). Target projects should receive an `AGENTS.md` with the agent task contract. Add a lightweight `.github/copilot-instructions.md` only as a compatibility shim when that project still needs Copilot Chat repository instructions.
