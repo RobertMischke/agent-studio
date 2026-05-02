@@ -11,6 +11,8 @@ Whenever a CLI integration is added, changed, or audited, this file is updated *
 
 > **Language:** English. See [AGENTS.md](../AGENTS.md#documentation-language).
 
+> **Operational knowledge** (frame catalogues, capture flows, known incidents, common tasks) lives in the per-CLI skills under [`docs/cli-skills/`](cli-skills/): [`cli-overview`](cli-skills/cli-overview.md), [`cli-claude`](cli-skills/cli-claude.md), [`cli-codex`](cli-skills/cli-codex.md), [`cli-copilot`](cli-skills/cli-copilot.md), [`cli-gemini`](cli-skills/cli-gemini.md). This document is the contract; the skills are the working notes. Both must stay in sync.
+
 ---
 
 ## 1. What "supported" means
