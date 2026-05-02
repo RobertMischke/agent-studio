@@ -202,10 +202,26 @@
                 }
               }
               <div class="chat-compose" data-testid="activity-chat-compose">
+                <div class="chat-mode" role="group" aria-label="How should the follow-up be interpreted?"
+                     data-testid="activity-chat-mode">
+                  <span class="chat-mode__label">Mode</span>
+                  @for (m of modeOptions; track m.id) {
+                    <button type="button"
+                            class="chat-mode__pill"
+                            [class.chat-mode__pill--active]="continueMode() === m.id"
+                            [attr.data-mode]="m.id"
+                            [attr.data-testid]="'activity-chat-mode-' + m.id"
+                            [title]="m.tooltip"
+                            (click)="continueModeChange.emit(m.id)">
+                      <span class="chat-mode__icon" aria-hidden="true">{{ m.icon }}</span>
+                      <span class="chat-mode__title">{{ m.title }}</span>
+                    </button>
+                  }
+                </div>
                 <textarea class="chat-compose__input"
                           data-testid="activity-chat-input"
                           rows="2"
-                          placeholder="Type a follow-up — Ctrl+Enter to send. Sends while running pauses the agent first."
+                          [placeholder]="composePlaceholder()"
                           [value]="followupPrompt()"
                           (input)="followupPromptChange.emit($any($event.target).value)"
                           (keydown.control.enter)="sendChat.emit()"

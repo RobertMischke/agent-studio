@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport, QuotaReport, QuotaSnapshot, GitStatus, ClaudeSessionResponse, JobCommitDetail, SessionEventsResponse } from '../models/job.model';
+import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport, QuotaReport, QuotaSnapshot, GitStatus, ClaudeSessionResponse, JobCommitDetail, SessionEventsResponse, ContinueMode } from '../models/job.model';
 import { ErrorDialogService } from './error-dialog.service';
 
 @Injectable({ providedIn: 'root' })
@@ -160,10 +160,11 @@ export class JobService {
     return this.http.post(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/stop`, {}, this.withWatchPath(watchPath));
   }
 
-  continueJob(jobId: string, prompt: string, watchPath?: string, model?: string, cliType?: CliType) {
-    const body: { prompt: string; model?: string; cliType?: CliType } = { prompt };
+  continueJob(jobId: string, prompt: string, watchPath?: string, model?: string, cliType?: CliType, mode?: ContinueMode) {
+    const body: { prompt: string; model?: string; cliType?: CliType; mode?: ContinueMode } = { prompt };
     if (model) body.model = model;
     if (cliType) body.cliType = cliType;
+    if (mode) body.mode = mode;
     return this.http.post<CliExecution>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/continue`, body, this.withWatchPath(watchPath));
   }
 

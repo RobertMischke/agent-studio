@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, computed, inject, input, output, signal } from '@angular/core';
-import { JobDetail, JobSummaryStatus } from '../../../models/job.model';
+import { ContinueMode, JobDetail, JobSummaryStatus } from '../../../models/job.model';
 import { ActivityLogViewComponent } from '../../activity-log-view';
 import { markdownToHtml, MarkdownImageOptions } from '../../markdown-utils';
 import { buildConversationTurns, parseActivityLog } from '../../activity-log.parser';
@@ -40,6 +40,7 @@ export class ProtocolPaneComponent implements OnDestroy {
 
   readonly activeInspectorTab = input<InspectorTab>('protocol');
   readonly followupPrompt = input<string>('');
+  readonly continueMode = input<ContinueMode>('continue');
   readonly canSendChat = input(false);
   readonly chatSendLabel = input<string>('Send');
 
@@ -50,6 +51,7 @@ export class ProtocolPaneComponent implements OnDestroy {
 
   readonly activeInspectorTabChange = output<InspectorTab>();
   readonly followupPromptChange = output<string>();
+  readonly continueModeChange = output<ContinueMode>();
 
   readonly openLogOverlay = output<void>();
   readonly sendChat = output<void>();
@@ -117,6 +119,32 @@ export class ProtocolPaneComponent implements OnDestroy {
   readonly summaryStatus = computed<JobSummaryStatus>(
     () => this.detail().summaryState?.status ?? 'none'
   );
+
+  /**
+   * Order + labels for the mode pills above the chat input. Each option has a
+   * short icon glyph, a one-word title for the pill, and a tooltip the user
+   * sees on hover so the meaning is discoverable without leaving the page.
+   */
+  readonly modeOptions: ReadonlyArray<{ id: ContinueMode; title: string; icon: string; tooltip: string }> = [
+    { id: 'continue', title: 'Continue', icon: '➤',
+      tooltip: 'Send as the next conversation turn (default).' },
+    { id: 'steer', title: 'Steer', icon: '↺',
+      tooltip: 'Course correction: agent overrides its current plan and adopts your direction.' },
+    { id: 'extend', title: 'Extend', icon: '＋',
+      tooltip: 'Add to the task. Backend writes a new prompt-N.md so the task description grows blog-style.' },
+    { id: 'newTask', title: 'New task', icon: '✦',
+      tooltip: 'Start a new sub-task in the same session. Prior context preserved, new request.' }
+  ];
+
+  /** Compose-area placeholder, mode-aware. */
+  composePlaceholder(): string {
+    switch (this.continueMode()) {
+      case 'steer':   return 'Course correction — what should the agent do differently? Ctrl+Enter to send.';
+      case 'extend':  return 'Extend the task — this becomes a new prompt-N.md alongside the original. Ctrl+Enter to send.';
+      case 'newTask': return 'New sub-task in this session — describe the new request. Ctrl+Enter to send.';
+      default:        return 'Type a follow-up — Ctrl+Enter to send. Sends while running pauses the agent first.';
+    }
+  }
 
   // While the job is in 3-progress, the live Aktivität feed is what the user
   // came here to see — surface it as the leftmost tab. Outside that state we

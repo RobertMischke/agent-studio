@@ -1,6 +1,6 @@
 import { Component, computed, inject, input, output, signal, effect, OnDestroy, ViewEncapsulation } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { JobDetail, WatchPathEntry, CliSettings, CliModelInfo, CliType, CLI_TYPES } from '../models/job.model';
+import { JobDetail, WatchPathEntry, CliSettings, CliModelInfo, CliType, CLI_TYPES, ContinueMode } from '../models/job.model';
 import { JobService } from '../services/job.service';
 import { ErrorDialogService } from '../services/error-dialog.service';
 import { NowTickService } from '../services/now-tick.service';
@@ -124,6 +124,7 @@ import { markdownToHtml } from './markdown-utils';
             [isRunning]="isRunning()"
             [activeInspectorTab]="activeInspectorTab()"
             [followupPrompt]="followupPrompt()"
+            [continueMode]="continueMode()"
             [canSendChat]="canSendChat()"
             [chatSendLabel]="chatSendLabel()"
             [regenerating]="regeneratingSummary()"
@@ -131,6 +132,7 @@ import { markdownToHtml } from './markdown-utils';
             (hide)="togglePane('protocol')"
             (activeInspectorTabChange)="onInspectorTabChange($event)"
             (followupPromptChange)="followupPrompt.set($event)"
+            (continueModeChange)="continueMode.set($event)"
             (openLogOverlay)="showLogOverlay.set(true)"
             (sendChat)="sendChatMessage()"
             (stopJob)="stopJob()"
@@ -225,6 +227,53 @@ import { markdownToHtml } from './markdown-utils';
       border-color: rgba(245, 194, 231, 0.35);
     }
     .chat-compose__send:disabled { opacity: 0.45; cursor: not-allowed; }
+
+    /* Mode pills above the chat input. The user told us to make this
+       visually loud, so the active pill carries a strong color and the rest
+       are muted but still clickable. Each mode also tints the surrounding
+       compose box so the user is reminded what they are about to send. */
+    .chat-mode {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+      padding-bottom: 4px;
+      border-bottom: 1px dashed rgba(255,255,255,0.08);
+    }
+    .chat-mode__label {
+      color: rgba(255,255,255,0.55);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      font-size: 0.65rem;
+      font-weight: 700;
+      margin-right: 4px;
+    }
+    .chat-mode__pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 9px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: rgba(255,255,255,0.04);
+      color: #a6adc8;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+    }
+    .chat-mode__pill:hover { color: #cdd6f4; border-color: rgba(255,255,255,0.28); }
+    .chat-mode__icon { font-size: 0.85rem; line-height: 1; }
+    .chat-mode__pill--active { color: #1e1e2e; }
+    .chat-mode__pill--active[data-mode="continue"] { background: #89b4fa; border-color: #89b4fa; }
+    .chat-mode__pill--active[data-mode="steer"]    { background: #f9e2af; border-color: #f9e2af; }
+    .chat-mode__pill--active[data-mode="extend"]   { background: #a6e3a1; border-color: #a6e3a1; }
+    .chat-mode__pill--active[data-mode="newTask"]  { background: #f5c2e7; border-color: #f5c2e7; }
+
+    .chat-compose:has(.chat-mode__pill--active[data-mode="steer"])    { border-color: rgba(249,226,175,0.35); }
+    .chat-compose:has(.chat-mode__pill--active[data-mode="extend"])   { border-color: rgba(166,227,161,0.35); }
+    .chat-compose:has(.chat-mode__pill--active[data-mode="newTask"])  { border-color: rgba(245,194,231,0.35); }
+
     .session-followup { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
     .session-followup__input {
       width: 100%;
@@ -1272,6 +1321,7 @@ export class JobDetailComponent implements OnDestroy {
   private regenPollTimer: ReturnType<typeof setInterval> | null = null;
   private regenStartedAt = 0;
   readonly followupPrompt = signal('');
+  readonly continueMode = signal<ContinueMode>('continue');
   readonly modelDraft = signal('');
   readonly availableModels = signal<CliModelInfo[]>([]);
   readonly cliTypes = CLI_TYPES;
@@ -1601,7 +1651,7 @@ export class JobDetailComponent implements OnDestroy {
     this.cliPoll.appendOptimisticUserMessage(prompt);
     this.followupPrompt.set('');
     const model = this.modelDraft().trim() || undefined;
-    this.jobService.continueJob(this.detail().info.id, prompt, this.detail().info.watchPath, model).subscribe({
+    this.jobService.continueJob(this.detail().info.id, prompt, this.detail().info.watchPath, model, undefined, this.continueMode()).subscribe({
       next: (exec) => {
         this.continuing.set(false);
         this.cliPoll.beginContinuation(new Date(exec.startedAt));

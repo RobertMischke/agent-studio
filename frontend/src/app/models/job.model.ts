@@ -164,6 +164,19 @@ export interface CliUsageReport {
 
 export type JobSummaryStatus = 'none' | 'generating' | 'ready' | 'failed';
 
+/**
+ * How a follow-up sent through the chat box should be interpreted by the
+ * runner. Mirrors backend ContinueModes.
+ *
+ * - continue: next conversation turn, default.
+ * - steer:    course correction; the agent overrides its current plan.
+ * - extend:   additive extension; backend writes prompt-N.md and the agent
+ *             treats the original task plus the new prompt as the full job.
+ * - newTask:  new sub-task in the same session; prior context preserved but
+ *             the request is new.
+ */
+export type ContinueMode = 'continue' | 'steer' | 'extend' | 'newTask';
+
 export interface JobSummaryState {
   status: JobSummaryStatus;
   startedAt: string | null;
