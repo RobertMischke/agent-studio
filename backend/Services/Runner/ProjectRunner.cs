@@ -33,6 +33,10 @@ public class ProjectRunner
     private string? _activeFollowup;
     private RunPlan? _activePlan;
     private int _activeReissueAttempt;
+    // Suppression state for repeated meta messages. When the same heuristic
+    // verdict fires twice in a row in Recovery, we skip the second meta
+    // message so the chat does not pile orchestrator notes on a stuck run.
+    private string? _lastMetaSignature;
 
     public string ProjectName { get; }
     public WatchPathEntry Entry { get; }
@@ -228,6 +232,19 @@ public class ProjectRunner
             if (plan.WriteCutMarker)
                 AppendSessionCutMarkerToCliLog(info, plan.CutMarkerReason ?? "session lost");
 
+            // Continue-routed-to-Recovery: the user clicked Send (or chose
+            // Continue / Steer / Extend / NewTask), but no resumable session
+            // is on record. The cut marker tells the activity log a chain
+            // break happened; this orchestrator note explains, in user-
+            // language, why their conversation context did not carry over.
+            if (intent == RunIntent.UserContinue
+                && string.Equals(plan.EventKind, "recovery", StringComparison.OrdinalIgnoreCase))
+            {
+                var modeLabel = ContinueModes.Normalize(mode);
+                _chatLog.Append(info, OrchestratorMessageKind.Decision,
+                    $"[fallback] You sent a follow-up in '{modeLabel}' mode, but no {cli.CliType} session id is on record for this job ({plan.EventReason ?? "no session recorded"}). Falling back to Recovery: a fresh CLI run will rebuild context from the job folder. This is one of the known capture-loss symptoms; if it keeps happening, check the Trace view for a session frame.");
+            }
+
             _sessions.AppendSessionEvent(jobId, new SessionEvent
             {
                 Ts = DateTime.UtcNow,
@@ -308,6 +325,20 @@ public class ProjectRunner
                 _sessions.AppendSessionToChain(jobId, capturedSessionId!, Entry.Path);
                 _sessions.BackfillLatestSessionEventCapturedId(jobId, capturedSessionId!, Entry.Path);
             }
+            else if (cli is ClaudeCliService
+                  || cli is CodexCliService
+                  || cli is GeminiCliService)
+            {
+                // The CLI normally emits a session UUID on every run; missing
+                // it means the next follow-up will fall back to Recovery. Tell
+                // the user explicitly so the loop is not silent.
+                var captureFailInfo = _scanner.FindJob(jobId, Entry.Path);
+                if (captureFailInfo != null)
+                {
+                    _chatLog.Append(captureFailInfo, OrchestratorMessageKind.Decision,
+                        $"[capture-fail] No {cli.CliType} session id captured from this run. The next follow-up will route to Recovery (read job folder from disk) rather than resuming the conversation. If this repeats, check the Trace view for a `system` frame and confirm the CLI is producing stream-json output.");
+                }
+            }
 
             // Snapshot the live output before we flush it to disk. The
             // outcome analyzer needs the buffer to classify the run, and the
@@ -344,21 +375,34 @@ public class ProjectRunner
                 : null;
             if (action != null && activeInfo != null)
             {
-                if (action.IsHeuristicFallback && !string.IsNullOrWhiteSpace(action.MetaMessage))
+                // Build a short signature so we can suppress the second
+                // identical heuristic message in a Recovery cascade. Two
+                // back-to-back "needsinput" warnings on a stuck loop do not
+                // help the user; one is enough.
+                var signature = $"{action.Kind}|{action.IsHeuristicFallback}|{outcome.Kind}|{string.Equals(capturedPlan!.EventKind, "recovery", StringComparison.OrdinalIgnoreCase)}";
+                var suppress = action.Kind == OutcomeActionKind.NotifyUserAndAccept
+                            && action.IsHeuristicFallback
+                            && string.Equals(_lastMetaSignature, signature, StringComparison.Ordinal);
+
+                if (!suppress)
                 {
-                    _chatLog.Append(activeInfo, OrchestratorMessageKind.HeuristicFallback,
-                        $"{action.MetaMessage} (run summary: {outcome.Summary ?? "n/a"})");
-                }
-                else if (!string.IsNullOrWhiteSpace(action.MetaMessage))
-                {
-                    var kind = action.Kind switch
+                    if (action.IsHeuristicFallback && !string.IsNullOrWhiteSpace(action.MetaMessage))
                     {
-                        OutcomeActionKind.ReissueWithStrongerFraming => OrchestratorMessageKind.Reissue,
-                        OutcomeActionKind.NotifyUserAndStop          => OrchestratorMessageKind.GiveUp,
-                        _                                            => OrchestratorMessageKind.Decision
-                    };
-                    _chatLog.Append(activeInfo, kind, action.MetaMessage);
+                        _chatLog.Append(activeInfo, OrchestratorMessageKind.HeuristicFallback,
+                            $"{action.MetaMessage} (run summary: {outcome.Summary ?? "n/a"})");
+                    }
+                    else if (!string.IsNullOrWhiteSpace(action.MetaMessage))
+                    {
+                        var kind = action.Kind switch
+                        {
+                            OutcomeActionKind.ReissueWithStrongerFraming => OrchestratorMessageKind.Reissue,
+                            OutcomeActionKind.NotifyUserAndStop          => OrchestratorMessageKind.GiveUp,
+                            _                                            => OrchestratorMessageKind.Decision
+                        };
+                        _chatLog.Append(activeInfo, kind, action.MetaMessage);
+                    }
                 }
+                _lastMetaSignature = signature;
 
                 if (action.Kind == OutcomeActionKind.ReissueWithStrongerFraming
                     && !string.IsNullOrWhiteSpace(action.FollowupRetryPrompt))

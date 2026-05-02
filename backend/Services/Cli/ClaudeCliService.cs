@@ -396,6 +396,17 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         @"●\s*Session\s+\S+\s+(?<uuid>[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})",
         RegexOptions.Compiled);
 
+    // Defensive fallback: any canonical UUID anywhere on an early stdout
+    // line is treated as the session id. The marker regex above is the
+    // intended path, but in production we have observed runs where the
+    // marker did not get captured (Claude Code's stream-json frame format
+    // varies across versions and platforms). Once we have ANY UUID for
+    // this run we stop, so this never overrides the marker if the marker
+    // already fired.
+    private static readonly Regex AnyUuidRegex = new(
+        @"\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b",
+        RegexOptions.Compiled);
+
     private static readonly Regex RateLimitMarkerRegex = new(
         @"●\s*Rate limit\b.*\[" +
         @"window=(?<win>[^\s\]]+)\s+" +
@@ -409,17 +420,28 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
     {
         if (line.Text == null) return;
 
-        // Capture session UUID from the first `system` frame's marker. The
-        // latest UUID is the one a Continue resumes — always overwrite.
-        var sessionMatch = SessionMarkerRegex.Match(line.Text);
-        if (sessionMatch.Success)
+        // Capture session UUID. Marker line is the intended path, but we
+        // also accept ANY canonical UUID on any stdout line as a defensive
+        // fallback, because the marker has been observed to be missing on
+        // some Claude Code stream-json versions / platforms. The first
+        // captured UUID wins; later UUIDs in the same run (e.g. tool
+        // result ids) are ignored so we do not overwrite the session id
+        // with an unrelated identifier.
+        if (info.CapturedSessionId == null && line.Stream == "stdout")
         {
-            var uuid = sessionMatch.Groups["uuid"].Value;
-            if (info.CapturedSessionId != uuid)
+            var sessionMatch = SessionMarkerRegex.Match(line.Text);
+            string? uuid = sessionMatch.Success ? sessionMatch.Groups["uuid"].Value : null;
+            if (uuid == null)
+            {
+                var anyUuidMatch = AnyUuidRegex.Match(line.Text);
+                if (anyUuidMatch.Success) uuid = anyUuidMatch.Value;
+            }
+            if (!string.IsNullOrWhiteSpace(uuid))
             {
                 info.CapturedSessionId = uuid;
                 info.SessionName = uuid;
-                _logger.LogInformation("Captured Claude session id {Id}", uuid);
+                _logger.LogInformation("Captured Claude session id {Id} (marker={Marker})",
+                    uuid, sessionMatch.Success);
             }
         }
 

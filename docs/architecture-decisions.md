@@ -84,6 +84,26 @@ Numbering is monotonic and never reused. When an ADR is superseded, leave the or
 
 ---
 
+## ADR-0005 - Permissive Claude session-id capture + visible capture diagnostics (2026-05-02)
+
+**Decision.** ClaudeCliService now captures the session UUID from any canonical UUID on any stdout line, not only from the `● Session init <uuid>` marker. The first UUID wins; later ones in the same run are ignored. When a CLI run finishes without capturing a UUID, the orchestrator posts a `[capture-fail]` meta message into the chat. When a follow-up routes to Recovery because no session is on record, a `[fallback]` meta message names the mode the user picked and the reason Recovery was chosen. Repeated identical heuristic verdicts inside a Recovery cascade are suppressed after the first.
+
+**Context.** Even after ADR-0003 (sessionChain fallback, Recovery never auto-re-issues), the user observed runs where every follow-up still routed to Recovery and the chat piled up identical "Heuristic verdict: needsinput" notes. Inspection of the activity log showed the agent emitting normal text but no `● Session init <uuid>` marker, so the strict marker regex never fired and the chain stayed empty. The user asked for the Continue path to actually carry the conversation forward and for the loop, when it does happen, to be diagnosable from the chat alone.
+
+**Non-goals.**
+- Letting capture failures be silent. The chat must always say so.
+- Treating a tool-result UUID later in a run as the session id. We capture only the first UUID we see, which is structurally the session frame.
+- Spamming the chat with the same heuristic verdict on every Recovery iteration. One announcement per signature is enough.
+- Fixing the root cause of Claude Code's missing marker frame in this commit; the fallback is defensive while we keep the diagnostic data needed to diagnose the underlying CLI behavior.
+
+**Reasoning style.** Defense in depth: keep the strict marker as the intended path, add a permissive UUID match as a safety net, and surface every state transition in the chat so the user can debug the loop without reading backend logs. Suppression by signature, not by time, so the orchestrator stays talkative when the situation actually changes.
+
+**Implementation pointers.** [backend/Services/Cli/ClaudeCliService.cs](../backend/Services/Cli/ClaudeCliService.cs) (`AnyUuidRegex`, hardened `OnOutputLine`); [backend/Services/Runner/ProjectRunner.cs](../backend/Services/Runner/ProjectRunner.cs) (`_lastMetaSignature` suppression, `[capture-fail]` after `OnCliFinished`, `[fallback]` before Recovery starts).
+
+**Status.** Accepted.
+
+---
+
 ## ADR-0004 - Four follow-up interaction modes; Extend writes a prompt-N.md timeline (2026-05-02)
 
 **Decision.** `ContinueJobRequest.Mode` is a typed string with four values: `continue`, `steer`, `extend`, `newTask`. Each value selects a prompt frame in `RunPlanner.BuildContinuePrompt`. Extend mode also writes a new `prompt-N.md` (1-based) into the same job folder; the original `prompt.md` is never overwritten. The Task Description pane renders the timeline blog-style.
