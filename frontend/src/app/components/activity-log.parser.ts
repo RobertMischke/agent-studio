@@ -257,23 +257,40 @@ function isToolKind(kind: ActivityLogKind): boolean {
 }
 
 /**
+ * `[taskboard]`-prefixed lines on the system stream are runtime markers
+ * (CLI started, CLI exited, duration, exit code, model). They belong in
+ * the Trace view as run-bookkeeping but they crowd out the actual agent
+ * reply in the Conversation view. The Conversation view filters them
+ * out; the metadata strip above the activity log is the right place
+ * for "duration: 65s, model: claude-opus-4-7" if we surface them at all.
+ */
+function isTaskboardRuntimeMarker(group: ActivityLogGroup): boolean {
+  if (group.lines.length === 0) return false;
+  const first = group.lines[0];
+  if (first.stream !== 'system') return false;
+  return /^\s*\[taskboard\]/i.test(first.text ?? '');
+}
+
+/**
  * Maps a sequence of {@link ActivityLogGroup}s into a sequence of conversation
  * turns. Adjacent groups of the same role are merged. Errors that aren't
  * tool errors surface as their own `system` turns so they're never buried
- * inside an agent block.
+ * inside an agent block. Runtime taskboard markers (CLI started / exited
+ * / duration) are filtered out; they live in the Trace view only.
  */
 export function buildConversationTurns(groups: ActivityLogGroup[]): ConversationTurn[] {
   const turns: ConversationTurn[] = [];
+  const filtered = groups.filter((g) => !isTaskboardRuntimeMarker(g));
   let i = 0;
-  while (i < groups.length) {
-    const group = groups[i];
+  while (i < filtered.length) {
+    const group = filtered[i];
     const role = roleFor(group);
 
     // Collect the contiguous run of same-role groups.
     const run: ActivityLogGroup[] = [group];
     i += 1;
-    while (i < groups.length && roleFor(groups[i]) === role) {
-      run.push(groups[i]);
+    while (i < filtered.length && roleFor(filtered[i]) === role) {
+      run.push(filtered[i]);
       i += 1;
     }
 

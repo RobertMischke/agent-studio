@@ -145,6 +145,22 @@ describe('buildConversationTurns', () => {
     expect(turns[2].text).toContain('Done');
   });
 
+  it('filters [taskboard] runtime markers out of the Conversation view', () => {
+    const groups = parseActivityLog([
+      line('[taskboard] Started claude CLI (PID 1234), model=claude-opus-4-7', 'system'),
+      line('Hello, working on it now.', 'stdout'),
+      line('[taskboard] claude CLI exited: status=completed, exitCode=0, duration=12,3s', 'system')
+    ]);
+    const turns = buildConversationTurns(groups);
+
+    // The two [taskboard] system markers must not produce conversation
+    // turns; only the agent reply does. They still live in the raw
+    // groups for the Trace view.
+    expect(turns).toHaveLength(1);
+    expect(turns[0].kind).toBe('agent');
+    expect(turns[0].text).toContain('Hello, working on it now.');
+  });
+
   it('treats unattached errors as system turns so they are not buried', () => {
     const groups = parseActivityLog([
       line('Build started.'),
