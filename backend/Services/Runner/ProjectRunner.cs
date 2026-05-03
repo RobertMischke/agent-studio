@@ -418,7 +418,7 @@ public class ProjectRunner
                     Summary = $"Watchdog killed \"{info.Title}\" after {silence:F0}s of silence.",
                     Reasoning = $"No streamed output from the CLI for {silence:F0}s (run age {age:F0}s). Threshold: {_watchdogConfig.HungSeconds:F0}s. Process tree terminated; the run finalizes as failed."
                 });
-                try { cli.Stop(jobKey); }
+                try { cli.Stop(jobKey, RunStopReason.Watchdog); }
                 catch (Exception ex) { _logger.LogWarning(ex, "Watchdog kill failed for {JobId}", jobId); }
                 break;
             case WatchdogState.Healthy:

@@ -209,7 +209,7 @@ public class CopilotCliService : ICliExecutionService
         return (execution, null);
     }
 
-    public bool Stop(string jobKey)
+    public bool Stop(string jobKey, OrchestratorApi.Services.Runner.RunStopReason reason = OrchestratorApi.Services.Runner.RunStopReason.UserStop)
     {
         if (!_processes.TryGetValue(jobKey, out var info)) return false;
 
@@ -217,8 +217,13 @@ public class CopilotCliService : ICliExecutionService
         {
             if (!info.Process.HasExited)
             {
+                // See CliExecutionServiceBase.Stop for why the reason is set
+                // before Kill: it lets MonitorProcessAsync classify the exit
+                // as 'stopped' instead of 'failed' even when Kill races a
+                // natural exit.
+                info.StopReason = reason;
                 info.Process.Kill(entireProcessTree: true);
-                _logger.LogInformation("Killed CLI process for job {JobId}", jobKey);
+                _logger.LogInformation("Killed CLI process for job {JobId} (reason={Reason})", jobKey, reason);
             }
             return true;
         }
@@ -441,13 +446,13 @@ public class CopilotCliService : ICliExecutionService
         }
         catch (OperationCanceledException)
         {
-            Stop(jobKey);
+            Stop(jobKey, OrchestratorApi.Services.Runner.RunStopReason.Cancelled);
         }
 
         var duration = (DateTime.UtcNow - info.Execution.StartedAt).TotalSeconds;
         int? exitCode = null;
         try { exitCode = process.ExitCode; } catch { /* reattached process may deny ExitCode access */ }
-        var status = exitCode == 0 ? "completed" : "failed";
+        var status = OrchestratorApi.Services.Runner.RunStatusClassifier.Classify(exitCode, info.StopReason);
 
         var finalExecution = info.Execution with
         {
@@ -787,6 +792,8 @@ public class CopilotCliService : ICliExecutionService
         public CliOutputLogStore OutputLog { get; init; } = null!;
         public DateTime LastStreamedAt { get; set; }
         public OrchestratorApi.Services.Runner.WatchdogState LastWatchdogState { get; set; } = OrchestratorApi.Services.Runner.WatchdogState.Healthy;
+        /// <summary>See <c>CliExecutionServiceBase.ProcInfo.StopReason</c> for the rationale.</summary>
+        public OrchestratorApi.Services.Runner.RunStopReason StopReason { get; set; } = OrchestratorApi.Services.Runner.RunStopReason.None;
 
         public CliProcessInfo(Process process, CliExecution execution, string workingDirectory)
         {

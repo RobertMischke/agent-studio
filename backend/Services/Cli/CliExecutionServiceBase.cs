@@ -311,15 +311,20 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         return (execution, null);
     }
 
-    public bool Stop(string jobKey)
+    public bool Stop(string jobKey, RunStopReason reason = RunStopReason.UserStop)
     {
         if (!_processes.TryGetValue(jobKey, out var info)) return false;
         try
         {
             if (!info.Process.HasExited)
             {
+                // Record the intent BEFORE Kill so MonitorProcessAsync's
+                // classifier can tell the deliberate kill apart from a real
+                // crash - even if Kill races the natural exit by a tick, the
+                // marker is set and the classifier does the right thing.
+                info.StopReason = reason;
                 info.Process.Kill(entireProcessTree: true);
-                _logger.LogInformation("Killed {Cli} process for job {JobId}", CliType, jobKey);
+                _logger.LogInformation("Killed {Cli} process for job {JobId} (reason={Reason})", CliType, jobKey, reason);
             }
             return true;
         }
@@ -470,7 +475,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         try
         {
             try { await process.WaitForExitAsync(ct); }
-            catch (OperationCanceledException) { Stop(jobKey); }
+            catch (OperationCanceledException) { Stop(jobKey, RunStopReason.Cancelled); }
 
             // Drop the active-job entry as soon as the process is known to be
             // gone, before any subscriber notifications. Keeps the reaper file
@@ -481,7 +486,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             var duration = (DateTime.UtcNow - info.Execution.StartedAt).TotalSeconds;
             int? exitCode = null;
             try { exitCode = process.ExitCode; } catch { }
-            var status = exitCode == 0 ? "completed" : "failed";
+            var status = RunStatusClassifier.Classify(exitCode, info.StopReason);
 
             var finalExecution = info.Execution with
             {
@@ -756,6 +761,16 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         /// states do not produce duplicate chat meta lines.
         /// </summary>
         public WatchdogState LastWatchdogState { get; set; } = WatchdogState.Healthy;
+
+        /// <summary>
+        /// Set by <see cref="Stop(string, RunStopReason)"/> immediately
+        /// before the kill so <see cref="MonitorProcessAsync"/> can
+        /// classify the resulting exit as a deliberate stop instead of a
+        /// crash. Stays at <see cref="RunStopReason.None"/> for natural
+        /// exits - that is the signal the classifier uses to fall back to
+        /// the exit-code-based completed/failed mapping.
+        /// </summary>
+        public RunStopReason StopReason { get; set; } = RunStopReason.None;
 
         public ProcInfo(Process process, CliExecution execution, string workingDirectory)
         {

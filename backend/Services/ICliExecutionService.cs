@@ -26,7 +26,15 @@ public interface ICliExecutionService
         string? model = null,
         CancellationToken ct = default);
 
-    bool Stop(string jobKey);
+    /// <summary>
+    /// Terminate the live process for <paramref name="jobKey"/>. The
+    /// <paramref name="reason"/> flows into <see cref="OrchestratorApi.Services.Runner.RunStatusClassifier"/>
+    /// so user pauses, follow-up pause-and-send, and watchdog kills are
+    /// reported as <c>status = "stopped"</c> rather than the misleading
+    /// <c>status = "failed", exitCode = -1</c> the legacy implementation
+    /// produced. Returns false when no process is tracked under that key.
+    /// </summary>
+    bool Stop(string jobKey, OrchestratorApi.Services.Runner.RunStopReason reason = OrchestratorApi.Services.Runner.RunStopReason.UserStop);
     bool SendInput(string jobKey, string input);
 
     List<CliOutputLine> GetOutput(string jobKey);

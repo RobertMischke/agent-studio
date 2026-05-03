@@ -468,10 +468,10 @@ public class TaskRunnerService : BackgroundService
         }
     }
 
-    public bool StopJob(string jobId, string? watchPath = null)
+    public bool StopJob(string jobId, string? watchPath = null, RunStopReason reason = RunStopReason.UserStop)
     {
         var info = _scanner.FindJob(jobId, watchPath);
-        return info != null && _router.Get(info.CliType).Stop(info.JobKey);
+        return info != null && _router.Get(info.CliType).Stop(info.JobKey, reason);
     }
 
     /// <summary>
