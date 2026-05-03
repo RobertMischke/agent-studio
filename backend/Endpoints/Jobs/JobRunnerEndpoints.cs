@@ -39,9 +39,21 @@ public static class JobRunnerEndpoints
             }
         });
 
-        group.MapPost("/{jobId}/stop", (string jobId, string? watchPath, TaskRunnerService runner) =>
+        group.MapPost("/{jobId}/stop", (string jobId, string? watchPath, string? reason, TaskRunnerService runner) =>
         {
-            var success = runner.StopJob(jobId, watchPath);
+            // 'reason' is a hint that travels into RunStatusClassifier so the
+            // resulting CliExecution.Status reads as 'stopped' instead of
+            // 'failed'. UI sends 'followup' for Pause & Send so the next
+            // continue does not look like a crash recovery; everything else
+            // (manual Pause button, no value) is a UserStop. Unknown values
+            // fall back to UserStop rather than rejecting the request.
+            var parsed = (reason ?? "user").Trim().ToLowerInvariant() switch
+            {
+                "followup" or "followup-pause" => OrchestratorApi.Services.Runner.RunStopReason.FollowupPause,
+                "watchdog" => OrchestratorApi.Services.Runner.RunStopReason.Watchdog,
+                _ => OrchestratorApi.Services.Runner.RunStopReason.UserStop
+            };
+            var success = runner.StopJob(jobId, watchPath, parsed);
             return success ? Results.Ok() : Results.NotFound();
         });
 
