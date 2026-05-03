@@ -81,6 +81,7 @@ If a request implies any of the out-of-scope items, surface the conflict to the 
 | Frontend | `frontend/` | Angular 21 standalone components, signals state, PWA, runs on `http://localhost:4010`. |
 | E2E tests | `frontend/e2e/` | Playwright. See [frontend/e2e/README.md](frontend/e2e/README.md). |
 | Filesystem contract | `docs/filesystem-contract.md` | Job folder layout. |
+| Design principles | `docs/design-principles.md` | UX contract for the abstraction layer over agents + software: top-level summary, always-available drill-down, run-as-unit-of-conversation. |
 | Protocol & image style | `docs/protocol-style.md` | `status.md` shape, Activity Log markers, `attachments/` vs `results/`, per-CLI image retention. |
 | Agent task contract | `docs/agent-task-contract.md` | App-owned lifecycle boundary copied into watched targets. |
 | Portable skills architecture | `docs/skills-architecture.md` | Central skill library, project README lookup contract, and future project-level checks. |
