@@ -205,10 +205,10 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         // claude-cli is a Node process; this disables Node's BOM/encoding quirks.
         psi.Environment["NODE_NO_WARNINGS"]   = "1";
 
-        var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
+        ChildHandle child;
         try
         {
-            process.Start();
+            child = await SpawnChildAsync(psi, prompt, sessionName, resumeSession, model, ct);
             // Some CLIs (notably Claude Code) read stdin even when the prompt is
             // passed via -p, and emit a 3-second "no stdin data received" warning
             // before continuing. We either pipe the prompt through stdin (the
@@ -220,8 +220,9 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             {
                 if (!string.IsNullOrEmpty(stdinPayload))
                 {
-                    await process.StandardInput.WriteAsync(stdinPayload);
-                    await process.StandardInput.FlushAsync();
+                    var bytes = System.Text.Encoding.UTF8.GetBytes(stdinPayload);
+                    await child.Stdin.WriteAsync(bytes, ct);
+                    await child.Stdin.FlushAsync(ct);
                 }
             }
             catch (Exception ex)
@@ -230,7 +231,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             }
             finally
             {
-                try { process.StandardInput.Close(); } catch { }
+                try { child.Stdin.Close(); } catch { }
             }
         }
         catch (Exception ex)
@@ -238,6 +239,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             _logger.LogError(ex, "Failed to start {Cli} CLI for job {JobId}", CliType, jobId);
             return (null, $"Failed to start {CliType} CLI: {ex.Message}");
         }
+        var process = child.Process;
 
         var execution = new CliExecution
         {
@@ -255,7 +257,8 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             OutputLogPath = logPath,
             OutputLog = new CliOutputLogStore(logPath),
             SessionName = sessionName,
-            LastStreamedAt = execution.StartedAt
+            LastStreamedAt = execution.StartedAt,
+            KillOverride = child.KillOverride
         };
         try { info.OutputLog.Reset(); }
         catch (Exception ex) { _logger.LogWarning(ex, "Failed to reset CLI output log {Path}", logPath); }
@@ -304,11 +307,35 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             _logger.LogWarning("Failed to persist 'started' line for job {JobId} to {Path}", jobId, info.OutputLogPath);
         try { OnOutput?.Invoke(jobKey, startedLine); } catch { }
 
-        _ = ReadStreamAsync(jobKey, process.StandardOutput, "stdout", info, ct);
-        _ = ReadStreamAsync(jobKey, process.StandardError,  "stderr", info, ct);
+        _ = ReadStreamAsync(jobKey, child.Stdout, "stdout", info, ct);
+        _ = ReadStreamAsync(jobKey, child.Stderr, "stderr", info, ct);
         _ = MonitorProcessAsync(jobKey, process, info, ct);
 
         return (execution, null);
+    }
+
+    /// <summary>
+    /// Subclass hook: spawn the child process. Default uses
+    /// <see cref="System.Diagnostics.Process"/> with redirected pipes.
+    /// CLIs whose stdout block-buffers when piped (Node-based ones on Windows:
+    /// Claude / Codex / Gemini) override to spawn through a pseudo-terminal so
+    /// stream-json frames flush per newline.
+    /// </summary>
+    protected virtual Task<ChildHandle> SpawnChildAsync(
+        ProcessStartInfo psi,
+        string prompt,
+        string? sessionName,
+        bool resumeSession,
+        string? model,
+        CancellationToken ct)
+    {
+        var p = new Process { StartInfo = psi, EnableRaisingEvents = true };
+        p.Start();
+        return Task.FromResult(new ChildHandle(
+            Process: p,
+            Stdin: p.StandardInput.BaseStream,
+            Stdout: p.StandardOutput,
+            Stderr: p.StandardError));
     }
 
     public bool Stop(string jobKey, RunStopReason reason = RunStopReason.UserStop)
@@ -323,7 +350,15 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
                 // crash - even if Kill races the natural exit by a tick, the
                 // marker is set and the classifier does the right thing.
                 info.StopReason = reason;
-                info.Process.Kill(entireProcessTree: true);
+                if (info.KillOverride != null)
+                {
+                    try { info.KillOverride(reason); }
+                    catch (Exception ex) { _logger.LogWarning(ex, "PTY KillOverride threw for {JobId}; falling back to Process.Kill", jobKey); }
+                }
+                else
+                {
+                    info.Process.Kill(entireProcessTree: true);
+                }
                 _logger.LogInformation("Killed {Cli} process for job {JobId} (reason={Reason})", CliType, jobKey, reason);
             }
             return true;
@@ -771,6 +806,14 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         /// the exit-code-based completed/failed mapping.
         /// </summary>
         public RunStopReason StopReason { get; set; } = RunStopReason.None;
+
+        /// <summary>
+        /// Set when the child was spawned via PTY: <see cref="Process.Kill"/>
+        /// can race the PTY teardown and leave the agent.exe orphaned. Custom
+        /// hook lets the spawner do its own teardown (PtyConnection.Kill()
+        /// plus the underlying child's process tree).
+        /// </summary>
+        public Action<RunStopReason>? KillOverride { get; init; }
 
         public ProcInfo(Process process, CliExecution execution, string workingDirectory)
         {

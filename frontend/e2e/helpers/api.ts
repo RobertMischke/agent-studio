@@ -1,10 +1,18 @@
 /**
- * Tiny REST client for the backend at http://localhost:5030.
+ * Tiny REST client for the backend.
+ * Defaults to the dev backend at http://localhost:5030. Agents driving the
+ * stable stack set `PW_TARGET=stable` (-> http://localhost:5031) or pin an
+ * explicit URL via `PW_BACKEND_URL=http://...`. Same precedence table as
+ * playwright.config.ts so a single env var flips both layers.
+ *
  * Used by Playwright specs for setup / teardown / polling so we don't have
  * to drive the UI for things the API can do directly.
  */
 
-export const BACKEND = 'http://localhost:5030';
+const apiTarget = (process.env.PW_TARGET ?? 'dev').toLowerCase();
+export const BACKEND =
+  process.env.PW_BACKEND_URL?.trim()
+  || (apiTarget === 'stable' ? 'http://localhost:5031' : 'http://localhost:5030');
 
 export async function api<T = unknown>(
   path: string,

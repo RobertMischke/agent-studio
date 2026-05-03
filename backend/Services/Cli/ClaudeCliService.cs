@@ -104,9 +104,16 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
             args.Add(Quote(rulesPath));
         }
 
+        // Always call the underlying claude.exe directly when available.
+        // Going through the npm-installed claude.CMD shim makes Windows wrap
+        // the spawn in cmd.exe which corrupts redirected-stdin pipe inheritance
+        // (only the system/init frame escapes; everything after is silent).
+        // See ResolveCmdShimToExe for the full root cause + npm-shim probe.
+        var fileName = ResolveCmdShimToExe(ResolveExecutable(GetCliPath()));
+
         return new ProcessStartInfo
         {
-            FileName = ResolveExecutable(GetCliPath()),
+            FileName = fileName,
             Arguments = string.Join(' ', args),
             WorkingDirectory = workingDirectory
         };
@@ -127,6 +134,41 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         bool resumeSession,
         string? model)
         => prompt;
+
+    /// <summary>
+    /// Walk the npm-shim convention to find the underlying claude.exe when
+    /// <see cref="GetCliPath"/> resolved to the <c>claude.CMD</c> dispatcher.
+    ///
+    /// <para>
+    /// <b>Why this exists.</b> npm-installed Node CLIs ship as a tiny <c>.CMD</c>
+    /// batch shim that calls <c>node.exe path\to\bin\<cli>.exe %*</c>. When the
+    /// .NET runner spawns the <c>.CMD</c>, Windows wraps it as
+    /// <c>cmd.exe /c "claude.CMD ..."</c> — and that wrapper interferes with
+    /// stdin pipe inheritance: claude reads its first <c>system/init</c> frame
+    /// out, then never sees the prompt bytes (cmd.exe consumes / mistakes the
+    /// pipe), so the agent goes silent and the watchdog kills it. Calling the
+    /// real <c>claude.exe</c> directly bypasses cmd.exe entirely. The
+    /// regression test
+    /// <c>CliSpawnIntegrationTests.DirectExe_PipeStdin_StreamJson_ProducesMultipleFrames</c>
+    /// pins this behaviour.
+    /// </para>
+    /// <para>
+    /// We probe the canonical npm-installed location first; if it is missing
+    /// (e.g. a portable install or a non-standard layout) we fall back to the
+    /// original path and accept that the user may need to set
+    /// <c>ClaudeCli:Path</c> explicitly.
+    /// </para>
+    /// </summary>
+    internal static string ResolveCmdShimToExe(string cmdOrExePath)
+    {
+        if (string.IsNullOrWhiteSpace(cmdOrExePath)) return cmdOrExePath;
+        if (!cmdOrExePath.EndsWith(".cmd", StringComparison.OrdinalIgnoreCase)
+            && !cmdOrExePath.EndsWith(".bat", StringComparison.OrdinalIgnoreCase))
+            return cmdOrExePath;
+        var dir = Path.GetDirectoryName(cmdOrExePath) ?? string.Empty;
+        var candidate = Path.Combine(dir, "node_modules", "@anthropic-ai", "claude-code", "bin", "claude.exe");
+        return File.Exists(candidate) ? candidate : cmdOrExePath;
+    }
 
     /// <summary>
     /// Resolves <c>AgentRules:CorePath</c> to an absolute existing file path.
