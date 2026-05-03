@@ -32,6 +32,7 @@ namespace OrchestratorApi.Tests;
 /// so default <c>dotnet test</c> does not burn quota.
 /// </para>
 /// </summary>
+[Collection("LiveCli")]
 public class CliKestrelHostingRepoTests : IClassFixture<WebApplicationFactory<Program>>
 {
     private readonly WebApplicationFactory<Program> _factory;

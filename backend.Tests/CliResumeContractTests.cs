@@ -35,6 +35,7 @@ namespace OrchestratorApi.Tests;
 /// per probe).
 /// </para>
 /// </summary>
+[Collection("LiveCli")]
 public class CliResumeContractTests : IClassFixture<WebApplicationFactory<Program>>
 {
     private readonly WebApplicationFactory<Program> _factory;
