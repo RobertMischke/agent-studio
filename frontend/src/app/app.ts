@@ -621,6 +621,7 @@ import { E2ECleanupDialogComponent } from './components/dev-tools/e2e-cleanup-di
     }
     .overlay__close:hover { background: rgba(255,255,255,0.12); }
     .create-dialog {
+      position: relative;
       background: #1e1e2e;
       border: 1px solid rgba(255,255,255,0.1);
       border-radius: 16px;
@@ -632,6 +633,24 @@ import { E2ECleanupDialogComponent } from './components/dev-tools/e2e-cleanup-di
       flex-direction: column;
       gap: 6px;
     }
+    .create-dialog__close {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      background: rgba(255,255,255,0.06);
+      color: #cdd6f4;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 6px;
+      width: 28px;
+      height: 28px;
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+      display: grid;
+      place-items: center;
+      padding: 0;
+    }
+    .create-dialog__close:hover { background: rgba(255,255,255,0.12); }
     .create-dialog__title {
       margin: 0 0 12px;
       font-size: 22px;

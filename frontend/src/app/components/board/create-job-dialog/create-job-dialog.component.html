@@ -1,10 +1,17 @@
-<div class="overlay" (click)="cancel.emit()">
+<div class="overlay">
   <div class="create-dialog"
+       role="dialog"
+       aria-modal="true"
        [class.create-dialog--drag]="isDragging()"
-       (click)="$event.stopPropagation()"
        (dragover)="onDragOver($event)"
        (dragleave)="onDragLeave($event)"
        (drop)="onDrop($event)">
+    <button type="button"
+            class="create-dialog__close"
+            data-testid="create-dialog-close"
+            aria-label="Close"
+            title="Close"
+            (click)="cancel.emit()">×</button>
     <h2 class="create-dialog__title">{{ title() }}</h2>
     <label class="field">
       <span class="field__label">Title</span>

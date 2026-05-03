@@ -6,23 +6,37 @@ import {
   ActivityLogGroup,
   ActivityLogKind,
   ConversationTurn,
+  ToolBurstBin,
   activityKindLabel,
+  binToolBurstByKind,
   buildConversationTurns,
+  formatBurstDuration,
   parseActivityLog
 } from './activity-log.parser';
 import { markdownToHtml } from './markdown-utils';
 
 type ViewMode = 'conversation' | 'trace';
 
+interface ToolChip {
+  kind: ActivityLogKind;
+  /** Display name in the chip ("Read", "Grep", "Edit"). */
+  label: string;
+  count: number;
+}
+
 interface RenderedTurn {
   turn: ConversationTurn;
   bodyHtml: SafeHtml | null;
   /**
-   * For tool bursts: a short, human label like "4 actions: 2 reads, 1 search,
-   * 1 edit". Built once per turn so the template doesn't re-stringify on
-   * every change-detection pass.
+   * For tool bursts: per-kind chips so the reader sees "Read ×12  Grep ×5"
+   * at a glance instead of a single combined sentence. Built once per turn
+   * so the template doesn't re-stringify on every change-detection pass.
    */
-  toolHeadline: string;
+  toolChips: ToolChip[];
+  /** Compact "4s" / "1m 20s" string, or empty when the burst was effectively instant. */
+  toolDuration: string;
+  /** Per-kind bins for the expanded detail (lazily consumed by the template). */
+  toolBins: ToolBurstBin[];
 }
 
 /**
@@ -146,20 +160,42 @@ interface RenderedTurn {
                     <button type="button"
                             class="convo-tools"
                             (click)="toggleTurn(item.turn.id)"
-                            [attr.aria-expanded]="isTurnExpanded(item.turn)">
+                            [attr.aria-expanded]="isTurnExpanded(item.turn)"
+                            data-testid="convo-tools-pill">
                       <span class="convo-tools__chevron">{{ isTurnExpanded(item.turn) ? 'v' : '>' }}</span>
                       <span class="convo-tools__icon" aria-hidden="true">⚙</span>
-                      <span class="convo-tools__headline">{{ item.toolHeadline }}</span>
+                      <span class="convo-tools__chips">
+                        @for (chip of item.toolChips; track chip.kind) {
+                          <span class="convo-tools__chip"
+                                [attr.data-kind]="chip.kind"
+                                [attr.data-testid]="'convo-tools-chip-' + chip.kind">
+                            <span class="convo-tools__chip-label">{{ chip.label }}</span>
+                            <span class="convo-tools__chip-count">×{{ chip.count }}</span>
+                          </span>
+                        }
+                      </span>
+                      @if (item.toolDuration) {
+                        <span class="convo-tools__duration"
+                              data-testid="convo-tools-duration"
+                              [title]="'Tool activity took ' + item.toolDuration">{{ item.toolDuration }}</span>
+                      }
                       <span class="convo-tools__time">{{ formatTime(item.turn.timestamp) }}</span>
                     </button>
                     @if (isTurnExpanded(item.turn)) {
                       <div class="convo-tools__detail">
-                        @for (group of item.turn.groups; track group.id) {
-                          <div class="convo-tools__group">
-                            <span class="convo-tools__kind">{{ kindLabel(group.kind) }}</span>
-                            <span class="convo-tools__title">{{ group.title }}</span>
-                            @if (group.subtitle) {
-                              <span class="convo-tools__sub">{{ group.subtitle }}</span>
+                        @for (bin of item.toolBins; track bin.kind) {
+                          <div class="convo-tools__bin">
+                            <div class="convo-tools__bin-head">
+                              <span class="convo-tools__kind">{{ kindLabel(bin.kind) }}</span>
+                              <span class="convo-tools__bin-count">×{{ bin.count }}</span>
+                            </div>
+                            @for (group of bin.groups; track group.id) {
+                              <div class="convo-tools__group">
+                                <span class="convo-tools__title">{{ group.title }}</span>
+                                @if (group.subtitle) {
+                                  <span class="convo-tools__sub">{{ group.subtitle }}</span>
+                                }
+                              </div>
                             }
                           </div>
                         }
@@ -455,58 +491,123 @@ interface RenderedTurn {
       white-space: pre;
     }
 
-    /* Tool burst pill */
+    /* Tool burst pill — intentionally muted: tool activity is supporting
+       evidence, the agent / user bubbles carry the conversation. Chips show
+       per-kind weight so a long run of "Read, Read, Read..." lands as a
+       single compact badge ("Read ×12") instead of stealing focus. */
     .convo-tools {
       width: 100%;
-      display: grid;
-      grid-template-columns: 14px 18px minmax(0, 1fr) auto;
-      gap: 8px;
+      display: flex;
       align-items: center;
-      padding: 6px 12px;
-      background: rgba(30,41,59,0.45);
-      border: 1px dashed rgba(148,163,184,0.22);
-      border-radius: 999px;
-      color: #cbd5e1;
+      gap: 8px;
+      padding: 4px 10px;
+      background: transparent;
+      border: 0;
+      border-top: 1px solid rgba(148,163,184,0.08);
+      border-bottom: 1px solid rgba(148,163,184,0.08);
+      border-radius: 0;
+      color: #64748b;
       font: inherit;
-      font-size: 12px;
+      font-size: 11.5px;
       cursor: pointer;
       text-align: left;
+      opacity: 0.75;
+      transition: opacity 80ms ease, color 80ms ease, background-color 80ms ease;
     }
-    .convo-tools:hover {
-      background: rgba(30,41,59,0.7);
-      border-color: rgba(148,163,184,0.4);
-      color: #e2e8f0;
+    .convo-tools:hover,
+    .convo-tools[aria-expanded='true'] {
+      opacity: 1;
+      color: #cbd5e1;
+      background: rgba(30,41,59,0.35);
     }
-    .convo-tools__chevron { color: #64748b; font-size: 11px; }
-    .convo-tools__icon { color: #7dd3fc; }
-    .convo-tools__headline {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+    .convo-tools__chevron { color: #475569; font-size: 10px; flex: 0 0 auto; }
+    .convo-tools__icon { color: #475569; flex: 0 0 auto; font-size: 11px; }
+    .convo-tools__chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 6px;
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+    .convo-tools__chip {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 3px;
+      padding: 1px 7px;
+      border-radius: 999px;
+      background: rgba(148,163,184,0.10);
+      border: 1px solid rgba(148,163,184,0.16);
+      font-size: 10.5px;
+      line-height: 1.5;
+    }
+    .convo-tools__chip[data-kind='read']    { color: #7dd3fc; border-color: rgba(125,211,252,0.28); background: rgba(125,211,252,0.08); }
+    .convo-tools__chip[data-kind='search']  { color: #c4b5fd; border-color: rgba(196,181,253,0.28); background: rgba(196,181,253,0.08); }
+    .convo-tools__chip[data-kind='command'] { color: #fcd34d; border-color: rgba(252,211,77,0.28); background: rgba(252,211,77,0.08); }
+    .convo-tools__chip[data-kind='edit']    { color: #6ee7b7; border-color: rgba(110,231,183,0.28); background: rgba(110,231,183,0.08); }
+    .convo-tools__chip[data-kind='task']    { color: #f9a8d4; border-color: rgba(249,168,212,0.28); background: rgba(249,168,212,0.08); }
+    .convo-tools__chip[data-kind='todo']    { color: #fdba74; border-color: rgba(253,186,116,0.28); background: rgba(253,186,116,0.08); }
+    .convo-tools__chip-label {
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+    .convo-tools__chip-count {
+      font-variant-numeric: tabular-nums;
+      opacity: 0.85;
+      font-size: 10px;
+    }
+    .convo-tools__duration {
+      flex: 0 0 auto;
+      color: #475569;
+      font-size: 10px;
+      font-variant-numeric: tabular-nums;
+      padding: 1px 6px;
+      border-radius: 999px;
+      background: rgba(148,163,184,0.06);
     }
     .convo-tools__time {
-      color: #64748b;
-      font-size: 10.5px;
+      flex: 0 0 auto;
+      color: #475569;
+      font-size: 10px;
       font-variant-numeric: tabular-nums;
     }
+
     .convo-tools__detail {
-      margin: 6px 0 0 14px;
+      margin: 4px 0 0 16px;
       display: flex;
       flex-direction: column;
-      gap: 3px;
+      gap: 8px;
       padding: 8px 10px;
-      background: rgba(2,6,23,0.55);
-      border: 1px solid rgba(148,163,184,0.14);
+      background: rgba(2,6,23,0.45);
+      border: 1px solid rgba(148,163,184,0.12);
       border-radius: 8px;
       font-family: 'Consolas', 'Monaco', monospace;
       font-size: 11.5px;
       color: #cbd5e1;
     }
+    .convo-tools__bin {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .convo-tools__bin-head {
+      display: flex;
+      align-items: baseline;
+      gap: 6px;
+      padding-bottom: 2px;
+      border-bottom: 1px solid rgba(148,163,184,0.10);
+      margin-bottom: 2px;
+    }
+    .convo-tools__bin-count {
+      color: #94a3b8;
+      font-size: 10px;
+      font-variant-numeric: tabular-nums;
+    }
     .convo-tools__group {
       display: grid;
-      grid-template-columns: 80px minmax(0, auto) minmax(0, 1fr);
+      grid-template-columns: minmax(0, auto) minmax(0, 1fr);
       gap: 8px;
       align-items: baseline;
+      padding-left: 8px;
     }
     .convo-tools__kind {
       color: #7dd3fc;
@@ -762,7 +863,9 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
       for (const item of this.visibleConversation()) {
         const head = `[${this.formatTime(item.turn.timestamp)}] ${roleHeading(item.turn.kind)}`;
         if (item.turn.kind === 'tools') {
-          parts.push(`${head} ${item.toolHeadline}`);
+          const chipText = item.toolChips.map((c) => `${c.label} ×${c.count}`).join(', ');
+          const dur = item.toolDuration ? ` (${item.toolDuration})` : '';
+          parts.push(`${head} ${chipText}${dur}`);
         } else {
           parts.push(`${head}\n${item.turn.text}`);
         }
@@ -848,7 +951,9 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
       return {
         turn,
         bodyHtml: null,
-        toolHeadline: buildToolHeadline(turn)
+        toolChips: buildToolChips(turn),
+        toolDuration: formatBurstDuration(turn.toolSummary?.durationMs ?? 0),
+        toolBins: binToolBurstByKind(turn.groups)
       };
     }
     const html = turn.kind === 'agent'
@@ -857,7 +962,7 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
       // template path. We escape ourselves and bypassSecurityTrustHtml so the
       // template binding doesn't double-escape.
       : this.sanitizer.bypassSecurityTrustHtml(escapeForPlain(turn.text));
-    return { turn, bodyHtml: html, toolHeadline: '' };
+    return { turn, bodyHtml: html, toolChips: [], toolDuration: '', toolBins: [] };
   }
 }
 
@@ -875,31 +980,37 @@ function isDebugNoise(group: ActivityLogGroup): boolean {
   return false;
 }
 
-function buildToolHeadline(turn: ConversationTurn): string {
+/**
+ * One chip per kind seen in the burst, in a deterministic order so the layout
+ * doesn't shuffle as new groups stream in. Counts come straight from the
+ * pre-aggregated summary (which already accounts for parser-level batches).
+ */
+function buildToolChips(turn: ConversationTurn): ToolChip[] {
   const summary = turn.toolSummary;
-  if (!summary || summary.total === 0) return '0 actions';
-  const parts: string[] = [];
-  for (const [kind, count] of Object.entries(summary.counts)) {
+  if (!summary) return [];
+  const order: ActivityLogKind[] = ['read', 'search', 'command', 'edit', 'task', 'todo', 'error', 'message', 'orchestrator', 'other'];
+  const chips: ToolChip[] = [];
+  for (const kind of order) {
+    const count = summary.counts[kind];
     if (!count) continue;
-    parts.push(`${count} ${shortKindLabel(kind as ActivityLogKind, count)}`);
+    chips.push({ kind, label: chipKindLabel(kind), count });
   }
-  const headline = `${summary.total} action${summary.total === 1 ? '' : 's'}`;
-  return parts.length ? `${headline}: ${parts.join(', ')}` : headline;
+  return chips;
 }
 
-function shortKindLabel(kind: ActivityLogKind, count: number): string {
-  const plural = count !== 1;
+/** Short, capitalised kind label for the chip face ("Read", "Grep", "Edit"). */
+function chipKindLabel(kind: ActivityLogKind): string {
   switch (kind) {
-    case 'read': return plural ? 'reads' : 'read';
-    case 'search': return plural ? 'searches' : 'search';
-    case 'command': return plural ? 'commands' : 'command';
-    case 'edit': return plural ? 'edits' : 'edit';
-    case 'task': return plural ? 'tasks' : 'task';
-    case 'todo': return plural ? 'todos' : 'todo';
-    case 'error': return plural ? 'errors' : 'error';
-    case 'message': return plural ? 'messages' : 'message';
-    case 'orchestrator': return plural ? 'orchestrator notes' : 'orchestrator note';
-    case 'other': return 'other';
+    case 'read': return 'Read';
+    case 'search': return 'Grep';
+    case 'command': return 'Run';
+    case 'edit': return 'Edit';
+    case 'task': return 'Task';
+    case 'todo': return 'Todo';
+    case 'error': return 'Error';
+    case 'message': return 'Msg';
+    case 'orchestrator': return 'Orch';
+    case 'other': return 'Other';
   }
 }
 

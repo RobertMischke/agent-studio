@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, ViewChild, computed, input, model, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, HostListener, ViewChild, computed, input, model, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CliModelInfo, CliType, CLI_TYPES, WatchPathEntry } from '../../../models/job.model';
 import { cliTypeIcon as fmtCliTypeIcon, cliTypeLabel as fmtCliTypeLabel, formatMultiplier as fmtMultiplier } from '../../../services/format.util';
@@ -59,6 +59,14 @@ export class CreateJobDialogComponent {
 
   triggerFilePicker(): void {
     this.fileInput?.nativeElement.click();
+  }
+
+  @HostListener('document:keydown', ['$event'])
+  onDocumentKeydown(event: KeyboardEvent): void {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.cancel.emit();
   }
 
   onFileInputChange(event: Event): void {

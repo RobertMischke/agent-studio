@@ -233,6 +233,14 @@ export interface ToolBurstSummary {
    * can show what was actually done without expanding the full list.
    */
   samples: Partial<Record<ActivityLogKind, string>>;
+  /**
+   * Wall-clock span from the burst's first action line to its last, in
+   * milliseconds. The Conversation view shows it as a small "· 4s" chip so
+   * the reader gets a sense of how long the tool noise took without it
+   * stealing focus from the agent reply. Zero when the burst spans a single
+   * timestamp or timestamps are missing.
+   */
+  durationMs: number;
 }
 
 export interface ConversationTurn {
@@ -381,32 +389,93 @@ export function summarizeToolBurst(groups: ActivityLogGroup[]): ToolBurstSummary
   const counts: Partial<Record<ActivityLogKind, number>> = {};
   const samples: Partial<Record<ActivityLogKind, string>> = {};
   let total = 0;
+  let firstMs = Number.POSITIVE_INFINITY;
+  let lastMs = Number.NEGATIVE_INFINITY;
   for (const group of groups) {
-    // The parser pre-compresses runs of reads/searches into a batch group with
-    // title "Reading files (3)" - so the count for a batch is its line count
-    // divided by 2 (action + continuation per item) and the sample comes from
-    // the first underlying continuation. For simple groups, count = 1.
+    // The parser pre-compresses runs of same-kind tool actions into a batch
+    // group with title "Reading files ×3"; inferBatchSize recovers the
+    // original count from that suffix. Non-batched groups count as 1.
     const batchSize = inferBatchSize(group);
     counts[group.kind] = (counts[group.kind] ?? 0) + batchSize;
     total += batchSize;
     if (!samples[group.kind]) {
       samples[group.kind] = sampleLabelFor(group);
     }
+    for (const l of group.lines) {
+      const t = Date.parse(l.timestamp);
+      if (!Number.isFinite(t)) continue;
+      if (t < firstMs) firstMs = t;
+      if (t > lastMs) lastMs = t;
+    }
   }
-  return { total, counts, samples };
+  const durationMs = Number.isFinite(firstMs) && Number.isFinite(lastMs) && lastMs > firstMs
+    ? lastMs - firstMs
+    : 0;
+  return { total, counts, samples, durationMs };
 }
 
+/**
+ * Compact human label for a tool-burst duration. Aimed at the small grey chip
+ * in the Conversation view: "<1s", "4s", "1m 20s", "12m". Anything north of
+ * an hour collapses to "Nh Mm" so the chip stays narrow.
+ */
+export function formatBurstDuration(ms: number): string {
+  if (!Number.isFinite(ms) || ms <= 0) return '';
+  if (ms < 1000) return '<1s';
+  const totalSec = Math.round(ms / 1000);
+  if (totalSec < 60) return `${totalSec}s`;
+  const totalMin = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  if (totalMin < 60) return sec === 0 ? `${totalMin}m` : `${totalMin}m ${sec}s`;
+  const hr = Math.floor(totalMin / 60);
+  const min = totalMin % 60;
+  return min === 0 ? `${hr}h` : `${hr}h ${min}m`;
+}
+
+/**
+ * Re-bins the underlying groups of a tool burst by kind so the expanded view
+ * shows one collapsed-per-kind block (e.g. "Read ×12" with the file list
+ * underneath) instead of repeating the same kind label dozens of times. Each
+ * bin keeps the source group references so the detail rows can still link
+ * back to the original action labels.
+ */
+export interface ToolBurstBin {
+  kind: ActivityLogKind;
+  count: number;
+  groups: ActivityLogGroup[];
+}
+
+export function binToolBurstByKind(groups: ActivityLogGroup[]): ToolBurstBin[] {
+  const order: ActivityLogKind[] = [];
+  const map = new Map<ActivityLogKind, ToolBurstBin>();
+  for (const group of groups) {
+    const batchSize = inferBatchSize(group);
+    let bin = map.get(group.kind);
+    if (!bin) {
+      bin = { kind: group.kind, count: 0, groups: [] };
+      map.set(group.kind, bin);
+      order.push(group.kind);
+    }
+    bin.count += batchSize;
+    bin.groups.push(group);
+  }
+  return order.map((k) => map.get(k)!);
+}
+
+// Compressed batch titles carry a trailing weight, e.g. "Reading files ×3".
+// The legacy "(3)" suffix is still accepted so a stale buffer does not lose
+// its count after the format change.
+const BATCH_COUNT_RE = /\s*(?:×(\d+)|\((\d+)\))\s*$/;
+
 function inferBatchSize(group: ActivityLogGroup): number {
-  // A compressed batch group's title looks like "Reading files (3)".
-  const m = /\((\d+)\)\s*$/.exec(group.title);
-  if (m) return Math.max(1, Number(m[1]));
+  const m = BATCH_COUNT_RE.exec(group.title);
+  if (m) return Math.max(1, Number(m[1] ?? m[2]));
   return 1;
 }
 
 function sampleLabelFor(group: ActivityLogGroup): string {
   if (group.subtitle) return group.subtitle;
-  // Strip the trailing batch count if present so the sample is a real label.
-  return group.title.replace(/\s*\(\d+\)\s*$/, '');
+  return group.title.replace(BATCH_COUNT_RE, '').trimEnd();
 }
 
 function toolAvatarFor(kind: ActivityLogKind): string {
@@ -492,7 +561,7 @@ function compressActivityGroups(groups: ActivityLogGroup[]): ActivityLogGroup[] 
     output.push({
       id: `${group.id}-batch-${batch.length}`,
       kind: group.kind,
-      title: `${activityKindLabel(group.kind)} (${batch.length})`,
+      title: `${activityKindLabel(group.kind)} ×${batch.length}`,
       subtitle: batch.map((item) => item.subtitle || item.title).filter(Boolean).slice(0, 3).join(', '),
       status: group.status,
       lines,
@@ -503,8 +572,13 @@ function compressActivityGroups(groups: ActivityLogGroup[]): ActivityLogGroup[] 
   return output;
 }
 
+// Tool kinds whose adjacent runs collapse into a single weighted batch group
+// (title "Reading files ×3"). Read and search are the noisiest, but command,
+// edit, task, and todo bursts surface the same "wall of repeated entries"
+// problem in the trace view, so they collapse too. Non-tool kinds (message,
+// error, orchestrator) keep their individual entries; their content matters.
 function isCompressible(group: ActivityLogGroup): boolean {
-  return group.kind === 'read' || group.kind === 'search';
+  return TOOL_KINDS.includes(group.kind);
 }
 
 function isContinuation(text: string): boolean {

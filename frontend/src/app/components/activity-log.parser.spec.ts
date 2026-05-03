@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  binToolBurstByKind,
   buildChatMessages,
   buildConversationTurns,
   defaultActivityLogFilters,
   filterActivityGroups,
   flattenActivityLines,
+  formatBurstDuration,
   parseActivityLog,
   summarizeToolBurst
 } from './activity-log.parser';
@@ -23,9 +25,31 @@ describe('parseActivityLog', () => {
 
     expect(groups).toHaveLength(1);
     expect(groups[0].kind).toBe('read');
-    expect(groups[0].title).toBe('Reading files (3)');
+    expect(groups[0].title).toBe('Reading files ×3');
     expect(groups[0].collapsedByDefault).toBe(true);
     expect(groups[0].lines).toHaveLength(6);
+  });
+
+  it('compresses adjacent edit and command bursts so trace view stays readable', () => {
+    // The trace view used to show every Edit / Run as its own row; long
+    // refactor sessions made it a wall of repeated entries that drowned out
+    // the substantive output. All tool kinds now collapse the same way.
+    const groups = parseActivityLog([
+      line('* Edit src/a.ts'),
+      line('  | a.ts'),
+      line('* Edit src/b.ts'),
+      line('  | b.ts'),
+      line('* Run npm test (shell)'),
+      line('  | running tests'),
+      line('* Run npm run lint (shell)'),
+      line('  | linting')
+    ]);
+
+    expect(groups.map((g) => g.kind)).toEqual(['edit', 'command']);
+    expect(groups[0].title).toBe('Edits ×2');
+    expect(groups[1].title).toBe('Commands ×2');
+    expect(groups[0].collapsedByDefault).toBe(true);
+    expect(groups[1].collapsedByDefault).toBe(true);
   });
 
   it('classifies shell output and failed tool calls', () => {
@@ -186,16 +210,59 @@ describe('summarizeToolBurst', () => {
       line('  | job.json')
     ]);
     // The parser compresses adjacent reads into one group with title
-    // "Reading files (3)"; the summary must recover the original count of 3.
+    // "Reading files ×3"; the summary must recover the original count of 3.
     const summary = summarizeToolBurst(groups);
     expect(summary.total).toBe(3);
     expect(summary.counts.read).toBe(3);
   });
+
+  it('measures the wall-clock span of the burst', () => {
+    const groups = parseActivityLog([
+      line('* Read prompt.md', 'stdout', '2026-04-26T12:00:00.000Z'),
+      line('  | prompt.md', 'stdout', '2026-04-26T12:00:00.500Z'),
+      line('* Search "foo"', 'stdout', '2026-04-26T12:00:04.500Z'),
+      line('  | foo', 'stdout', '2026-04-26T12:00:04.800Z')
+    ]);
+    const summary = summarizeToolBurst(groups);
+    // 4.8s span between first and last timestamp
+    expect(summary.durationMs).toBe(4800);
+  });
+
+  it('binToolBurstByKind groups underlying entries per kind for the expanded view', () => {
+    const groups = parseActivityLog([
+      line('* Read a.ts'),
+      line('  | a.ts'),
+      line('* Read b.ts'),
+      line('  | b.ts'),
+      line('* Search "needle"'),
+      line('  | needle'),
+      line('* Read c.ts'),
+      line('  | c.ts')
+    ]);
+    const bins = binToolBurstByKind(groups);
+    const byKind = Object.fromEntries(bins.map((b) => [b.kind, b.count]));
+    // 2 reads (compressed) + 1 search + 1 read = 3 reads, 1 search across two read bins.
+    // binToolBurstByKind merges them by kind.
+    expect(byKind['read']).toBe(3);
+    expect(byKind['search']).toBe(1);
+  });
 });
 
-function line(text: string, stream = 'stdout'): CliOutputLine {
+describe('formatBurstDuration', () => {
+  it('formats sub-second, second, and minute spans compactly', () => {
+    expect(formatBurstDuration(0)).toBe('');
+    expect(formatBurstDuration(250)).toBe('<1s');
+    expect(formatBurstDuration(4500)).toBe('5s');
+    expect(formatBurstDuration(60_000)).toBe('1m');
+    expect(formatBurstDuration(80_000)).toBe('1m 20s');
+    expect(formatBurstDuration(3_600_000)).toBe('1h');
+    expect(formatBurstDuration(3_660_000)).toBe('1h 1m');
+  });
+});
+
+function line(text: string, stream = 'stdout', timestamp = '2026-04-26T12:00:00.000Z'): CliOutputLine {
   return {
-    timestamp: '2026-04-26T12:00:00.000Z',
+    timestamp,
     stream,
     text
   };

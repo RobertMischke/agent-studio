@@ -12,7 +12,8 @@ import { api } from './helpers/api';
 
 interface WatchPath { name: string; path: string }
 
-const SCREENSHOTS = path.resolve(__dirname, '..', 'test-results', 'project-docs-section');
+// Outside outputDir so Playwright doesn't wipe these between runs.
+const SCREENSHOTS = path.resolve(__dirname, '..', 'playwright-screenshots', 'project-docs-section');
 fs.mkdirSync(SCREENSHOTS, { recursive: true });
 
 test.describe('Project detail — Security & Architecture sections', () => {
@@ -92,6 +93,9 @@ test.describe('Project detail — Security & Architecture sections', () => {
     await page.getByTestId(`project-detail-${projectName}`).click();
     await expect(page.getByTestId('project-security-meta')).toContainText(stamp, { timeout: 10_000 });
 
+    // Scroll the security section into view so the screenshot actually
+    // captures the saved meta block, not just the top of the panel.
+    await page.getByTestId('project-security-section').scrollIntoViewIfNeeded();
     await page.screenshot({
       path: `${SCREENSHOTS}/project-docs-meta-saved.png`,
       fullPage: true
