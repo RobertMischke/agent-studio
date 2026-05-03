@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport, QuotaReport, QuotaSnapshot, GitStatus, ClaudeSessionResponse, JobCommitDetail, SessionEventsResponse, ContinueMode, ContinueJobResponse, OrchestratorLogResponse, TokenSummary, OrchestratorSessionResponse, RunTimeline, RunCommitsResponse } from '../models/job.model';
+import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport, QuotaReport, QuotaSnapshot, GitStatus, ClaudeSessionResponse, JobCommitDetail, SessionEventsResponse, ContinueMode, ContinueJobResponse, OrchestratorLogResponse, TokenSummary, OrchestratorSessionResponse, RunTimeline, RunCommitsResponse, RunFilesResponse, RunDiffResponse } from '../models/job.model';
 import { ErrorDialogService } from './error-dialog.service';
 
 @Injectable({ providedIn: 'root' })
@@ -156,6 +156,21 @@ export class JobService {
   /** Commits whose author date falls inside the given run's wall-clock window. */
   getRunCommits(jobId: string, runIndex: number, watchPath?: string) {
     return this.http.get<RunCommitsResponse>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/runs/${runIndex}/commits`, this.withWatchPath(watchPath));
+  }
+
+  /** Aggregated file list for one run's SHA range - drives the run git viewer's file tree. */
+  getRunFiles(jobId: string, runIndex: number, watchPath?: string) {
+    return this.http.get<RunFilesResponse>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/runs/${runIndex}/files`, this.withWatchPath(watchPath));
+  }
+
+  /** Unified diff for one path inside a run's SHA range. */
+  getRunDiff(jobId: string, runIndex: number, path: string, watchPath?: string) {
+    const opts = this.withWatchPath(watchPath);
+    const params = (opts.params as any) ?? {};
+    return this.http.get<RunDiffResponse>(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/runs/${runIndex}/diff`,
+      { ...opts, params: { ...params, path } }
+    );
   }
 
   // CLI execution

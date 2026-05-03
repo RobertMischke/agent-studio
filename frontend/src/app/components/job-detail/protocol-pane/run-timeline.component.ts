@@ -104,12 +104,23 @@ import { JobService } from '../../../services/job.service';
                     </div>
                   }
                 </div>
-                <div class="run-card__row">
+                <div class="run-card__row run-card__row--actions">
                   <button type="button"
                           class="run-card__filter"
                           (click)="emitFilter(r); $event.stopPropagation()"
                           [disabled]="r.lineStart == null">
                     Filter activity log to this run
+                  </button>
+                  <button type="button"
+                          class="run-card__filter run-card__filter--primary"
+                          (click)="openGitViewer.emit(r); $event.stopPropagation()"
+                          [disabled]="!r.headShaBefore || !r.headShaAfter || r.headShaBefore === r.headShaAfter"
+                          [attr.title]="(!r.headShaBefore || !r.headShaAfter)
+                            ? 'No HEAD SHAs captured for this run (older run or repo unavailable).'
+                            : (r.headShaBefore === r.headShaAfter
+                              ? 'No commits made during this run.'
+                              : 'Open the file-tree + diff viewer for this run.')">
+                    Open git viewer
                   </button>
                 </div>
               </div>
@@ -163,9 +174,12 @@ import { JobService } from '../../../services/job.service';
     .run-card__commits-loading, .run-card__commits-empty, .run-card__commits-error { color: #94a3b8; font-style: italic; font-size: 11.5px; }
     .run-card__commits-error { color: #fca5a5; }
 
+    .run-card__row--actions { gap: 6px; }
     .run-card__filter { background: transparent; border: 1px solid rgba(148, 163, 184, 0.30); color: #e2e8f0; padding: 3px 8px; border-radius: 6px; font-size: 11.5px; cursor: pointer; }
     .run-card__filter:hover:not(:disabled) { background: rgba(148, 163, 184, 0.12); }
     .run-card__filter:disabled { opacity: 0.5; cursor: not-allowed; }
+    .run-card__filter--primary { border-color: rgba(125, 211, 252, 0.45); color: #e0f2fe; }
+    .run-card__filter--primary:hover:not(:disabled) { background: rgba(125, 211, 252, 0.16); }
   `]
 })
 export class RunTimelineComponent {
@@ -174,6 +188,9 @@ export class RunTimelineComponent {
 
   /** Emits when the user clicks "Filter activity log to this run". */
   readonly runFilter = output<RunRecord>();
+
+  /** Emits when the user clicks "Open git viewer" on a run card. */
+  readonly openGitViewer = output<RunRecord>();
 
   readonly expandedIndex = signal<number | null>(null);
 

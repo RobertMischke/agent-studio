@@ -18,6 +18,8 @@ import { SessionEventsPollService } from '../session-events-poll.service';
 import { RunTimelinePollService } from '../run-timeline-poll.service';
 import { NowTickService } from '../../../services/now-tick.service';
 import { RunTimelineComponent } from './run-timeline.component';
+import { RunGitViewerComponent } from './run-git-viewer.component';
+import { CommonModule } from '@angular/common';
 
 export type InspectorTab = 'protocol' | 'activity';
 
@@ -31,7 +33,7 @@ export type InspectorTab = 'protocol' | 'activity';
   selector: 'app-protocol-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ActivityLogViewComponent, RunTimelineComponent],
+  imports: [CommonModule, ActivityLogViewComponent, RunTimelineComponent, RunGitViewerComponent],
   templateUrl: './protocol-pane.component.html',
   styleUrls: ['./protocol-pane.component.scss']
 })
@@ -106,6 +108,22 @@ export class ProtocolPaneComponent implements OnDestroy {
 
   clearRunFilter(): void {
     this.runFilterRange.set(null);
+  }
+
+  // Big Git Viewer modal state. Opened from a run card via the
+  // "Open git viewer" button; closed via the modal's own close
+  // affordance or backdrop click. The selected RunRecord is held as
+  // a signal so the modal re-binds its load when the user opens a
+  // different run without closing first.
+  readonly gitViewerRun = signal<RunRecord | null>(null);
+
+  openGitViewer(r: RunRecord): void {
+    if (!r.headShaBefore || !r.headShaAfter) return;
+    this.gitViewerRun.set(r);
+  }
+
+  closeGitViewer(): void {
+    this.gitViewerRun.set(null);
   }
 
   /**

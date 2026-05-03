@@ -86,6 +86,10 @@ export interface RunRecord {
   userFollowup: string | null;
   lineStart: number | null;
   lineEnd: number | null;
+  /** HEAD SHA captured immediately before the run's CLI started, or null when the project has no repo / git was unavailable. */
+  headShaBefore: string | null;
+  /** HEAD SHA after the run finished. Equal to headShaBefore when the agent did not commit. */
+  headShaAfter: string | null;
 }
 
 export interface RunTimeline {
@@ -111,7 +115,37 @@ export interface RunCommitsResponse {
   runIndex: number;
   startedAt: string;
   endedAt: string | null;
+  headShaBefore: string | null;
+  headShaAfter: string | null;
+  /** 'sha-range' (deterministic) | 'wall-clock' (fallback for older runs without captured SHAs). */
+  source: 'sha-range' | 'wall-clock';
   commits: RunCommitInfo[];
+}
+
+/**
+ * One row in the per-run aggregated file list. `status` is the
+ * single-letter git diff filter (A/M/D/R/C). The +/- counts are the
+ * combined numstat across every commit in the run that touched this
+ * path. Used by the Run Git Viewer's file tree.
+ */
+export interface RunFileChange {
+  status: string;
+  path: string;
+  added: number;
+  removed: number;
+}
+
+export interface RunFilesResponse {
+  runIndex: number;
+  headShaBefore: string | null;
+  headShaAfter: string | null;
+  files: RunFileChange[];
+  note?: string;
+}
+
+export interface RunDiffResponse {
+  diff: string;
+  note?: string;
 }
 
 export interface GitProjectSummary {

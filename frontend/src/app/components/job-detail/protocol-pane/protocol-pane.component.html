@@ -181,7 +181,14 @@
               <app-run-timeline
                 [job]="detail().info"
                 [runs]="runTimeline()?.runs ?? []"
-                (runFilter)="onRunFilter($event)" />
+                (runFilter)="onRunFilter($event)"
+                (openGitViewer)="openGitViewer($event)" />
+
+              <app-run-git-viewer
+                [job]="detail().info"
+                [run]="gitViewerRun()"
+                [visible]="gitViewerRun() !== null"
+                (close)="closeGitViewer()" />
 
               @if (cliOutput().length > 0 || isRunning()) {
                 <app-activity-log-view [lines]="filteredCliOutput()" [bodyMaxHeight]="'none'" variant="embedded" />
