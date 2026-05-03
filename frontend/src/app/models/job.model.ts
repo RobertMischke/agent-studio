@@ -63,6 +63,57 @@ export interface SessionEventsResponse {
   currentSessionId: string | null;
 }
 
+/**
+ * One CLI invocation between two user inputs - the unit of conversation
+ * the protocol-pane run timeline renders. Backed by RunRecord on the
+ * backend (see backend/Services/Runner/RunTimeline.cs). lineStart /
+ * lineEnd are 1-based indices into cli-output.log so the drill-down
+ * activity-log filter does not have to re-derive the boundaries.
+ */
+export interface RunRecord {
+  index: number;
+  intent: string; // 'start' | 'continue' | 'recovery' | 'restart'
+  startedAt: string;
+  endedAt: string | null;
+  status: string; // 'running' | 'completed' | 'failed' | 'cancelled' | 'unknown'
+  cli: string | null;
+  exitCode: number | null;
+  durationSeconds: number | null;
+  inputSessionId: string | null;
+  capturedSessionId: string | null;
+  resumed: boolean;
+  reason: string | null;
+  userFollowup: string | null;
+  lineStart: number | null;
+  lineEnd: number | null;
+}
+
+export interface RunTimeline {
+  runCount: number;
+  firstStartedAt: string | null;
+  lastActivityAt: string | null;
+  hasActiveRun: boolean;
+  runs: RunRecord[];
+}
+
+export interface RunCommitInfo {
+  sha: string;
+  shortSha: string;
+  authorDateUtc: string;
+  author: string;
+  subject: string;
+  filesChanged: number;
+  added: number;
+  removed: number;
+}
+
+export interface RunCommitsResponse {
+  runIndex: number;
+  startedAt: string;
+  endedAt: string | null;
+  commits: RunCommitInfo[];
+}
+
 export interface GitProjectSummary {
   projectName: string;
   rootPath: string;

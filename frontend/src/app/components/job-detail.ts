@@ -18,6 +18,7 @@ import {
 import { LayoutPanesService } from './job-detail/layout-panes.service';
 import { ClaudeSessionPollService } from './job-detail/claude-session-poll.service';
 import { SessionEventsPollService } from './job-detail/session-events-poll.service';
+import { RunTimelinePollService } from './job-detail/run-timeline-poll.service';
 import { GitPaneService } from './job-detail/git-pane.service';
 import { GitPaneComponent } from './job-detail/git-pane/git-pane.component';
 import { CliOutputPollService } from './job-detail/cli-output-poll.service';
@@ -34,7 +35,7 @@ import { markdownToHtml } from './markdown-utils';
   selector: 'app-job-detail',
   standalone: true,
   imports: [FormsModule, GitPaneComponent, CommandDeckComponent, PromptPaneComponent, LogOverlayComponent, ProtocolPaneComponent, DetailHeaderComponent, CliConfigCardComponent, PaneToggleBarComponent],
-  providers: [LayoutPanesService, ClaudeSessionPollService, SessionEventsPollService, GitPaneService, CliOutputPollService],
+  providers: [LayoutPanesService, ClaudeSessionPollService, SessionEventsPollService, RunTimelinePollService, GitPaneService, CliOutputPollService],
   // Keep styles global to this subtree so the still-inline class rules
   // (.pane*, .detail*, .inspector*, .notes-panel*, .sidebar-card*, …)
   // continue to reach the now-extracted sub-components without having
@@ -1299,6 +1300,12 @@ export class JobDetailComponent implements OnDestroy {
   // because events only flip on start/continue/recovery, not per turn.
   private readonly sessionEventsPoll = inject(SessionEventsPollService);
 
+  // Per-job run timeline (CLI invocations between user inputs). Drives
+  // the run-list view in the protocol pane and the per-run commits
+  // drill-down. Polled at 5 s; the activity log poll is the source of
+  // sub-second tail updates.
+  private readonly runTimelinePoll = inject(RunTimelinePollService);
+
   // Git view state lives in GitPaneService (provided locally on this
   // component). Facades below keep the existing call sites unchanged.
   private readonly git = inject(GitPaneService);
@@ -1608,6 +1615,11 @@ export class JobDetailComponent implements OnDestroy {
   // Same bridge for the session-event poller (10 s cadence).
   private readonly sessionEventsEffect = effect(() => {
     this.sessionEventsPoll.syncTo(this.detail()?.info ?? null);
+  });
+
+  // ...and for the run-timeline poller (5 s cadence).
+  private readonly runTimelineEffect = effect(() => {
+    this.runTimelinePoll.syncTo(this.detail()?.info ?? null);
   });
 
   canStartJob(): boolean {

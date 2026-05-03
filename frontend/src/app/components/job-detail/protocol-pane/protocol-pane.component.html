@@ -178,10 +178,22 @@
                 }
               </div>
 
+              <app-run-timeline
+                [job]="detail().info"
+                [runs]="runTimeline()?.runs ?? []"
+                (runFilter)="onRunFilter($event)" />
+
               @if (cliOutput().length > 0 || isRunning()) {
-                <app-activity-log-view [lines]="cliOutput()" [bodyMaxHeight]="'none'" variant="embedded" />
+                <app-activity-log-view [lines]="filteredCliOutput()" [bodyMaxHeight]="'none'" variant="embedded" />
               } @else {
                 <div class="activity-panel__empty">Start the task to follow the agent output live.</div>
+              }
+
+              @if (runFilterRange(); as range) {
+                <div class="run-filter-banner" data-testid="run-filter-banner">
+                  Showing run #{{ range.index }} only — lines {{ range.lineStart }}–{{ range.lineEnd }} of the activity log.
+                  <button type="button" class="run-filter-banner__clear" (click)="clearRunFilter()">Clear filter</button>
+                </div>
               }
 
               @if (outcomeVisible()) {

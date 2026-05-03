@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, computed, inject, input, output, signal } from '@angular/core';
-import { ContinueMode, JobDetail, JobSummaryStatus } from '../../../models/job.model';
+import { CliOutputLine, ContinueMode, JobDetail, JobSummaryStatus, RunRecord } from '../../../models/job.model';
 import { deriveWatchdogPill } from './watchdog-state';
 import { ActivityLogViewComponent } from '../../activity-log-view';
 import { markdownToHtml, MarkdownImageOptions } from '../../markdown-utils';
@@ -15,7 +15,9 @@ import {
 import { ClaudeSessionPollService } from '../claude-session-poll.service';
 import { CliOutputPollService } from '../cli-output-poll.service';
 import { SessionEventsPollService } from '../session-events-poll.service';
+import { RunTimelinePollService } from '../run-timeline-poll.service';
 import { NowTickService } from '../../../services/now-tick.service';
+import { RunTimelineComponent } from './run-timeline.component';
 
 export type InspectorTab = 'protocol' | 'activity';
 
@@ -29,7 +31,7 @@ export type InspectorTab = 'protocol' | 'activity';
   selector: 'app-protocol-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ActivityLogViewComponent],
+  imports: [ActivityLogViewComponent, RunTimelineComponent],
   templateUrl: './protocol-pane.component.html',
   styleUrls: ['./protocol-pane.component.scss']
 })
@@ -63,11 +65,48 @@ export class ProtocolPaneComponent implements OnDestroy {
   private readonly claudePoll = inject(ClaudeSessionPollService);
   private readonly cliPoll = inject(CliOutputPollService);
   private readonly sessionEventsPoll = inject(SessionEventsPollService);
+  private readonly runTimelinePoll = inject(RunTimelinePollService);
   private readonly nowTick = inject(NowTickService).now;
 
   readonly claudeSession = this.claudePoll.session;
   readonly claudeRateLimit = this.claudePoll.rateLimit;
   readonly cliOutput = this.cliPoll.output;
+  readonly runTimeline = this.runTimelinePoll.timeline;
+
+  /**
+   * Active run filter for the activity log. Set when the user clicks
+   * "Filter activity log to this run" on a run-card; cleared via the
+   * banner. The filter is line-span-based so we can re-apply it
+   * deterministically as cliOutput grows during a live run.
+   */
+  readonly runFilterRange = signal<{ index: number; lineStart: number; lineEnd: number } | null>(null);
+
+  /**
+   * The activity-log lines visible in the embedded view. When a run
+   * filter is active, slice cliOutput to the run's [lineStart..lineEnd]
+   * (inclusive, 1-based). Otherwise return the full buffer. Open-ended
+   * runs (still streaming) keep the upper bound at the buffer length so
+   * new lines stream into the filter.
+   */
+  readonly filteredCliOutput = computed<CliOutputLine[]>(() => {
+    const all = this.cliOutput();
+    const range = this.runFilterRange();
+    if (!range) return all;
+    const start = Math.max(1, range.lineStart) - 1;
+    const end = Math.min(all.length, range.lineEnd);
+    if (end <= start) return [];
+    return all.slice(start, end);
+  });
+
+  onRunFilter(r: RunRecord): void {
+    if (r.lineStart == null) return;
+    const end = r.lineEnd ?? this.cliOutput().length;
+    this.runFilterRange.set({ index: r.index, lineStart: r.lineStart, lineEnd: end });
+  }
+
+  clearRunFilter(): void {
+    this.runFilterRange.set(null);
+  }
 
   /**
    * Drives the session-status chip in the header. Shape:
