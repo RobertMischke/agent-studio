@@ -204,6 +204,12 @@ public class CopilotCliService : ICliExecutionService
         });
 
         OnStarted?.Invoke(jobKey, execution);
+        // ADR-0013: emit RunStarted on the typed channel even though
+        // Copilot does not yet have a content-level adapter (its TUI/PTY
+        // shape needs screen-scraping heuristics; the runner falls back
+        // to the legacy silence-only watchdog for content phases).
+        try { OnRunEvent?.Invoke(jobKey, new CliRunEvent.RunStarted(process.Id, "copilot", model) { JobKey = jobKey }); }
+        catch (Exception ex) { _logger.LogWarning(ex, "OnRunEvent threw on Copilot RunStarted for {JobId}", jobKey); }
         _logger.LogInformation("Started Copilot CLI for job {JobId} (PID {Pid}) in {Cwd}", jobId, process.Id, workingDirectory);
 
         // Start reading stdout/stderr in background
@@ -485,6 +491,17 @@ public class CopilotCliService : ICliExecutionService
         WriteOutputLog(jobKey, info);
 
         OnFinished?.Invoke(jobKey, finalExecution);
+        // ADR-0013: ProcessExited / Killed on the typed channel so the
+        // runner's phase tracker observes a terminal event for Copilot
+        // runs too.
+        try
+        {
+            CliRunEvent terminal = info.StopReason != OrchestratorApi.Services.Runner.RunStopReason.None
+                ? new CliRunEvent.Killed(info.StopReason.ToString()) { JobKey = jobKey }
+                : new CliRunEvent.ProcessExited(exitCode, status, duration) { JobKey = jobKey };
+            OnRunEvent?.Invoke(jobKey, terminal);
+        }
+        catch (Exception ex) { _logger.LogWarning(ex, "OnRunEvent threw on Copilot terminal for {JobId}", jobKey); }
         _logger.LogInformation("CLI finished for job {JobId}: exit={ExitCode}, duration={Duration:F1}s", jobKey, process.ExitCode, duration);
 
         // Keep in _processes for output retrieval; cleanup after a delay
