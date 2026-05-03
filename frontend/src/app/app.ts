@@ -7,7 +7,7 @@ import { CliUsageSheetComponent } from './components/cli-usage-sheet';
 import { OrchestratorFeedComponent } from './components/orchestrator-feed';
 import { OrchestratorSideSheetComponent } from './components/orchestrator-side-sheet/orchestrator-side-sheet.component';
 import { ProjectDetailComponent } from './components/project-detail';
-import { HeaderQuotaComponent } from './components/header-quota';
+import { StatusBarComponent } from './components/status-bar';
 import { JobService } from './services/job.service';
 import { JobDetail, JobInfo, GroupedJobs, WatchPathEntry, CliType, CLI_TYPES, CliModelInfo } from './models/job.model';
 import { ErrorDialogService } from './services/error-dialog.service';
@@ -19,7 +19,7 @@ import { projectIdentity } from './services/project-identity.util';
 
 @Component({
   selector: 'app-root',
-  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, HeaderQuotaComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent],
+  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent],
   // Keep styles global to this subtree — the App shell still owns the
   // .header*, .filter-chip*, .overlay*, .create-dialog*, .error-dialog*
   // class rules used by the extracted dialogs and project-tabs.
@@ -28,7 +28,7 @@ import { projectIdentity } from './services/project-identity.util';
     <div class="app">
       <header class="header">
         <div class="header__brand">
-          <img class="header__icon" src="icons/icon.svg" alt="Agent Task Processor" width="32" height="32" />
+          <img class="header__icon" src="icons/icon.svg" alt="Agent Task Processor" width="20" height="20" />
           <h1 class="header__title">
             <span class="header__title-ai">Agent</span><span class="header__title-sep"></span><span class="header__title-name">Task Processor</span>
           </h1>
@@ -41,20 +41,7 @@ import { projectIdentity } from './services/project-identity.util';
           (toggle)="toggleProject($event)"
           (toggleAuto)="onToggleAuto($event)"
           (openDetail)="openProjectDetail($event)" />
-        <app-header-quota class="header__quota" />
         <div class="header__actions">
-          <button class="btn" (click)="usageSheet.toggle()" title="CLI sessions">
-            🪙 Usage
-          </button>
-          <button class="btn"
-                  (click)="orchSideSheet.toggle()"
-                  [title]="orchChatTooltip()"
-                  data-testid="orch-side-sheet-toggle">
-            🤖 Orchestrator
-          </button>
-          <button class="btn" (click)="toggleOrchFeed()" [title]="orchFeedTooltip()">
-            📜 Feed
-          </button>
           <button class="btn btn--create" (click)="openCreate()">
             ＋ Add Task
           </button>
@@ -168,6 +155,14 @@ import { projectIdentity } from './services/project-identity.util';
           (createTaskFromDraft)="onCreateTaskFromOrchestratorDraft($event)" />
       </div>
 
+      <app-status-bar
+        [projectNames]="projectNames()"
+        (toggleUsage)="usageSheet.toggle()"
+        (toggleOrchestrator)="orchSideSheet.toggle()"
+        (toggleFeed)="toggleOrchFeed()"
+        (defaultCliChange)="onDefaultCliChange($event)"
+        (defaultModelChange)="onDefaultModelChange($event)" />
+
       @if (orchFeedProject(); as proj) {
         <div class="overlay" (click)="closeOrchFeed()">
           <div class="overlay__panel" (click)="$event.stopPropagation()">
@@ -217,48 +212,59 @@ import { projectIdentity } from './services/project-identity.util';
   `,
   styles: [`
     .app {
-      min-height: 100vh;
+      /* Use 100% of body's content box rather than 100vh so the dev-mode
+         banner (22px padding-top on body) doesn't push the status bar
+         below the viewport. styles.scss ensures html/body fill 100% and
+         box-sizing makes padding subtract from this. */
+      height: 100%;
       background: #0f0f1a;
       color: #e2e8f0;
       font-family: 'Segoe UI', system-ui, sans-serif;
       display: flex;
       flex-direction: column;
+      overflow: hidden;
     }
     /* Body row holds the main layout and the CLI Usage sidesheet side-by-side.
        The sheet's :host width animates from 0 to its open width, so the layout
-       reflows around it instead of being covered by an overlay. */
+       reflows around it instead of being covered by an overlay.
+       Body scrolls within the fixed header + status bar shell. */
     .app__body {
       flex: 1 1 auto;
       display: flex;
       flex-direction: row;
       align-items: stretch;
       min-height: 0;
+      overflow: auto;
     }
     .app__body > .layout { flex: 1 1 auto; min-width: 0; }
     .app__sidesheet { align-self: stretch; }
     .header {
+      flex: 0 0 auto;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      padding: 16px 24px;
+      gap: 12px;
+      padding: 4px 12px;
       background: #181825;
       border-bottom: 1px solid rgba(255,255,255,0.06);
+      min-height: 36px;
     }
     .header__brand {
       display: flex;
       align-items: center;
-      gap: 10px;
+      gap: 8px;
+      flex: 0 0 auto;
     }
     .header__icon {
-      width: 32px;
-      height: 32px;
+      width: 20px;
+      height: 20px;
       display: block;
-      border-radius: 8px;
-      box-shadow: 0 2px 8px rgba(99,102,241,0.35);
+      border-radius: 5px;
+      box-shadow: 0 1px 4px rgba(99,102,241,0.30);
     }
     .header__title {
       margin: 0;
-      font-size: 22px;
+      font-size: 13px;
       font-weight: 800;
       letter-spacing: -0.01em;
       display: inline-flex;
@@ -275,14 +281,14 @@ import { projectIdentity } from './services/project-identity.util';
       -webkit-background-clip: text;
       background-clip: text;
       color: transparent;
-      text-shadow: 0 0 22px rgba(167,139,250,0.35);
-      padding-right: 4px;
+      text-shadow: 0 0 16px rgba(167,139,250,0.30);
+      padding-right: 3px;
     }
     .header__title-sep {
       width: 2px;
-      height: 20px;
+      height: 12px;
       align-self: center;
-      margin: 0 10px;
+      margin: 0 6px;
       border-radius: 2px;
       background: linear-gradient(180deg, rgba(129,140,248,0.0), rgba(129,140,248,0.85), rgba(129,140,248,0.0));
     }
@@ -291,12 +297,11 @@ import { projectIdentity } from './services/project-identity.util';
       letter-spacing: 0.02em;
       color: #e2e8f0;
       text-transform: uppercase;
-      font-size: 18px;
+      font-size: 11px;
     }
-    .header__subtitle { font-size: 13px; color: #64748b; }
-    .header__actions { display: flex; gap: 12px; }
-    .header__quota { margin-left: auto; }
-    .header__filters { display: flex; gap: 8px; align-items: center; }
+    .header__subtitle { font-size: 11px; color: #64748b; }
+    .header__actions { display: flex; gap: 6px; flex: 0 0 auto; }
+    .header__filters { display: flex; gap: 6px; align-items: center; }
     /* Filter chip carries each project's identity colour as a CSS variable
        supplied per chip; the active state pulls the chip into the project's
        hue so a five-to-ten-project header is scannable at a glance. */
@@ -437,10 +442,10 @@ import { projectIdentity } from './services/project-identity.util';
       background: rgba(255,255,255,0.10);
       border: 1px solid rgba(255,255,255,0.20);
       color: #f8fafc;
-      padding: 8px 16px;
-      border-radius: 8px;
+      padding: 6px 14px;
+      border-radius: 6px;
       cursor: pointer;
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 600;
       transition: background 0.15s, border-color 0.15s;
     }
@@ -450,7 +455,7 @@ import { projectIdentity } from './services/project-identity.util';
       background: rgba(139,92,246,0.45);
       border-color: rgba(167,139,250,0.85);
       color: #ffffff;
-      box-shadow: 0 2px 8px rgba(139,92,246,0.30);
+      box-shadow: 0 1px 4px rgba(139,92,246,0.30);
     }
     .btn--create:hover { background: rgba(139,92,246,0.6); border-color: rgba(196,181,253,0.95); }
     .btn--primary {
@@ -753,19 +758,21 @@ import { projectIdentity } from './services/project-identity.util';
     .field__input:focus { outline: none; border-color: #6366f1; }
     .field__textarea { font-family: 'Consolas', monospace; resize: vertical; }
 
+    /* Layout fills the scroll container; the app__body now provides
+       the scrollbar so the header and status bar stay pinned. */
     .layout {
-      min-height: calc(100vh - 70px);
+      min-height: 100%;
       transition: all 0.3s ease;
+      display: flex;
+      flex-direction: column;
     }
     .layout--focus {
-      padding: 24px;
-      display: flex;
-      min-height: calc(100vh - 70px);
+      padding: 12px;
     }
     .dashboard {
       display: flex;
       gap: 16px;
-      padding: 24px;
+      padding: 16px;
       overflow-x: auto;
       flex: 1;
       min-width: 0;
@@ -773,9 +780,9 @@ import { projectIdentity } from './services/project-identity.util';
     .workspace {
       display: grid;
       grid-template-columns: var(--side-sheet-width, 280px) minmax(0, 1fr);
-      gap: 24px;
+      gap: 16px;
       width: 100%;
-      height: calc(100vh - 118px);
+      flex: 1 1 auto;
       min-height: 0;
       align-items: stretch;
       animation: slideIn 0.25s ease;
@@ -1114,8 +1121,8 @@ export class App implements OnInit {
   newAgent = 'copilot';
   newPrompt = '';
   newTargetState = '1-preparation';
-  newCliType: CliType = 'copilot';
-  newModel = '';
+  newCliType: CliType = readDefaultCliPref();
+  newModel = readDefaultModelPref(readDefaultCliPref());
   newAttachments: PendingAttachment[] = [];
 
   readonly cliTypes = CLI_TYPES;
@@ -1138,8 +1145,24 @@ export class App implements OnInit {
   onCreateCliTypeChange(t: CliType) {
     if (this.newCliType === t) return;
     this.newCliType = t;
-    this.newModel = '';
+    this.newModel = readDefaultModelPref(t);
     this.loadCreateModels(t);
+  }
+
+  /**
+   * Status bar changed the default CLI for new tasks. Pre-fill the create
+   * dialog so the next ＋ Add Task lands on the user's pick without making
+   * them re-pick inside the dialog.
+   */
+  onDefaultCliChange(t: CliType): void {
+    this.newCliType = t;
+    this.newModel = readDefaultModelPref(t);
+  }
+
+  onDefaultModelChange(ev: { cliType: CliType; model: string }): void {
+    if (ev.cliType === this.newCliType) {
+      this.newModel = ev.model;
+    }
   }
 
   private loadCreateModels(cliType: CliType) {
@@ -1439,8 +1462,8 @@ export class App implements OnInit {
     this.newPrompt = '';
     this.newAgent = 'copilot';
     this.newTargetState = '1-preparation';
-    this.newCliType = 'copilot';
-    this.newModel = '';
+    this.newCliType = readDefaultCliPref();
+    this.newModel = readDefaultModelPref(this.newCliType);
     this.availableModels.set([]);
     for (const att of this.newAttachments) URL.revokeObjectURL(att.previewUrl);
     this.newAttachments = [];
@@ -1725,6 +1748,16 @@ export class App implements OnInit {
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
   }
+}
+
+function readDefaultCliPref(): CliType {
+  const stored = localStorage.getItem('defaultCliType') as CliType | null;
+  if (stored && (CLI_TYPES as string[]).includes(stored)) return stored;
+  return 'copilot';
+}
+
+function readDefaultModelPref(cliType: CliType): string {
+  return localStorage.getItem('defaultModel:' + cliType) ?? '';
 }
 
 /**
