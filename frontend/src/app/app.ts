@@ -5,6 +5,7 @@ import { JobColumnComponent } from './components/job-column';
 import { JobDetailComponent } from './components/job-detail';
 import { CliUsageSheetComponent } from './components/cli-usage-sheet';
 import { OrchestratorFeedComponent } from './components/orchestrator-feed';
+import { OrchestratorSideSheetComponent } from './components/orchestrator-side-sheet/orchestrator-side-sheet.component';
 import { ProjectDetailComponent } from './components/project-detail';
 import { HeaderQuotaComponent } from './components/header-quota';
 import { JobService } from './services/job.service';
@@ -18,7 +19,7 @@ import { projectIdentity } from './services/project-identity.util';
 
 @Component({
   selector: 'app-root',
-  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, ProjectDetailComponent, HeaderQuotaComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent],
+  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, HeaderQuotaComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent],
   // Keep styles global to this subtree — the App shell still owns the
   // .header*, .filter-chip*, .overlay*, .create-dialog*, .error-dialog*
   // class rules used by the extracted dialogs and project-tabs.
@@ -44,6 +45,12 @@ import { projectIdentity } from './services/project-identity.util';
         <div class="header__actions">
           <button class="btn" (click)="usageSheet.toggle()" title="CLI sessions">
             🪙 Usage
+          </button>
+          <button class="btn"
+                  (click)="orchSideSheet.toggle()"
+                  [title]="orchChatTooltip()"
+                  data-testid="orch-side-sheet-toggle">
+            🤖 Orchestrator
           </button>
           <button class="btn" (click)="toggleOrchFeed()" [title]="orchFeedTooltip()">
             📜 Feed
@@ -150,6 +157,11 @@ import { projectIdentity } from './services/project-identity.util';
       </div>
 
         <app-cli-usage-sheet #usageSheet class="app__sidesheet" />
+        <app-orchestrator-side-sheet
+          #orchSideSheet
+          class="app__sidesheet"
+          [projects]="projectNames()"
+          [preferredProject]="orchSideSheetPreferredProject()" />
       </div>
 
       @if (orchFeedProject(); as proj) {
@@ -1325,6 +1337,29 @@ export class App implements OnInit {
     const project = this.pickOrchFeedProject();
     return project
       ? `Open orchestrator feed for "${project}"`
+      : 'No project selected';
+  }
+
+  /**
+   * Project the orchestrator side sheet should align to. Tracks the
+   * currently open detail's project so flipping into a task and then
+   * opening the side sheet picks the right thread automatically. When
+   * no detail is open, falls back to the first active or first known
+   * project the same way the feed overlay does.
+   */
+  readonly orchSideSheetPreferredProject = computed<string | null>(() => {
+    const detail = this.selectedJob();
+    if (detail?.info?.projectName) return detail.info.projectName;
+    const active = [...this.activeProjects()];
+    if (active.length > 0) return active[0];
+    const watchPaths = this.watchPaths();
+    return watchPaths.length > 0 ? watchPaths[0].name : null;
+  });
+
+  orchChatTooltip(): string {
+    const project = this.orchSideSheetPreferredProject();
+    return project
+      ? `Toggle orchestrator chat for "${project}"`
       : 'No project selected';
   }
 
