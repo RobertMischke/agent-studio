@@ -30,6 +30,26 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
     public event Action<string, CliExecution>? OnStarted;
     public event Action<string, CliExecution>? OnFinished;
 
+    /// <summary>
+    /// Typed lifecycle events from the CLI (ADR-0013). Subclasses with an
+    /// adapter (Claude / Codex / Gemini / Copilot) raise these alongside
+    /// the legacy <see cref="OnOutput"/> stream so consumers can migrate
+    /// incrementally. Subclasses without an adapter emit nothing here -
+    /// the runner falls back to the silence-only watchdog in that case.
+    /// </summary>
+    public event Action<string, CliRunEvent>? OnRunEvent;
+
+    /// <summary>
+    /// Subclass entry point for emitting typed events. Wraps the public
+    /// invocation with a per-subscriber try/catch so a buggy listener
+    /// cannot crash the read loop.
+    /// </summary>
+    protected void RaiseRunEvent(string jobKey, CliRunEvent evt)
+    {
+        try { OnRunEvent?.Invoke(jobKey, evt); }
+        catch (Exception ex) { _logger.LogWarning(ex, "OnRunEvent subscriber threw for {JobId}", jobKey); }
+    }
+
     protected CliExecutionServiceBase(ILogger logger, IConfiguration configuration)
     {
         _logger = logger;
@@ -145,6 +165,23 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
 
     /// <summary>Subclass hook: try to extract session metadata from a fresh output line.</summary>
     protected virtual void OnOutputLine(ProcInfo info, CliOutputLine line) { }
+
+    /// <summary>
+    /// Subclass hook: map one raw stdout/stderr line to zero or more
+    /// <see cref="CliRunEvent"/> instances. Default: yield nothing (CLIs
+    /// without an adapter stay on the silence-only watchdog). Subclasses
+    /// with an adapter (Claude / Codex / Gemini) override and delegate
+    /// to the per-CLI mapping function.
+    ///
+    /// <para>
+    /// The base class fires <see cref="OnRunEvent"/> for every event
+    /// returned here, in order, on the same read-loop thread. Adapters
+    /// must be pure functions and not throw - exceptions are swallowed
+    /// so a malformed frame cannot crash the read loop.
+    /// </para>
+    /// </summary>
+    protected virtual IEnumerable<CliRunEvent> MapLineToRunEvents(string jobKey, CliOutputLine line)
+        => Array.Empty<CliRunEvent>();
 
     /// <summary>
     /// Subclass hook: translate a single raw line read from the CLI's stdout
@@ -287,6 +324,11 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         }
 
         OnStarted?.Invoke(jobKey, execution);
+        // ADR-0013: typed event channel. Subclasses with an adapter raise
+        // their own events from the read loop; the base class always
+        // raises RunStarted so the runner's phase tracker can initialize.
+        RaiseRunEvent(jobKey, new CliRunEvent.RunStarted(process.Id, CliType, model) { JobKey = jobKey });
+
         _logger.LogInformation("Started {Cli} CLI for job {JobId} (PID {Pid}) in {Cwd}",
             CliType, jobId, process.Id, workingDirectory);
 
@@ -493,6 +535,21 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
                 // reset the clock.
                 info.LastStreamedAt = DateTime.UtcNow;
 
+                // ADR-0013: typed events. Map this raw line to zero or more
+                // CliRunEvent instances and raise them on OnRunEvent. The
+                // mapping runs alongside (not instead of) TransformReadLine
+                // so the legacy activity-log marker stream stays intact.
+                IEnumerable<CliRunEvent>? runEvents = null;
+                try { runEvents = MapLineToRunEvents(jobKey, rawLine); }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "MapLineToRunEvents threw for {JobId}; skipping typed events for this line", jobKey);
+                }
+                if (runEvents != null)
+                {
+                    foreach (var evt in runEvents) RaiseRunEvent(jobKey, evt);
+                }
+
                 IEnumerable<CliOutputLine> transformed;
                 try { transformed = TransformReadLine(rawLine); }
                 catch (Exception ex)
@@ -586,6 +643,14 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             info.OutputBuffer.Add(exitLine);
             info.OutputLog.Append(exitLine);
             try { OnOutput?.Invoke(jobKey, exitLine); } catch { }
+
+            // ADR-0013 typed events: emit ProcessExited (or Killed if the
+            // exit was a deliberate Stop) so the runner's phase tracker
+            // sees the terminal state on the typed channel too.
+            if (info.StopReason != RunStopReason.None)
+                RaiseRunEvent(jobKey, new CliRunEvent.Killed(info.StopReason.ToString()) { JobKey = jobKey });
+            else
+                RaiseRunEvent(jobKey, new CliRunEvent.ProcessExited(exitCode, status, duration) { JobKey = jobKey });
 
             try { OnFinished?.Invoke(jobKey, finalExecution); }
             catch (Exception ex) { _logger.LogWarning(ex, "OnFinished subscriber threw for {JobId}", jobKey); }

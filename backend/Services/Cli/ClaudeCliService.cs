@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using OrchestratorApi.Models;
+using OrchestratorApi.Services.Cli.Adapters;
 
 namespace OrchestratorApi.Services.Cli;
 
@@ -134,6 +135,18 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         bool resumeSession,
         string? model)
         => prompt;
+
+    /// <summary>
+    /// Bridge to <see cref="ClaudeEventAdapter"/>. Each raw stdout line is
+    /// passed through and emitted on <see cref="CliExecutionServiceBase.OnRunEvent"/>
+    /// alongside the legacy marker stream. Stderr passes through unchanged
+    /// (we do not parse provider stderr today).
+    /// </summary>
+    protected override IEnumerable<CliRunEvent> MapLineToRunEvents(string jobKey, CliOutputLine line)
+    {
+        if (line.Stream != "stdout") return Array.Empty<CliRunEvent>();
+        return ClaudeEventAdapter.Map(line.Text, jobKey);
+    }
 
     /// <summary>
     /// Walk the npm-shim convention to find the underlying claude.exe when

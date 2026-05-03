@@ -161,6 +161,43 @@ setInterval(() => {}, 600000);
     }
 
     [SkippableFact]
+    public async Task FakeCli_RunStartedAndProcessExited_EventsRaisedOnOnRunEvent()
+    {
+        // ADR-0013 wiring smoke: the base class always emits a RunStarted
+        // event on spawn and a ProcessExited (or Killed) event on
+        // termination, regardless of whether a subclass adapter exists.
+        // This pins the typed-event lifecycle for any future CLI.
+        var node = NodeExePath;
+        Skip.IfNot(node != null, "node.exe not found");
+
+        const string Script = @"process.stdout.write('hello\n'); process.exit(0);";
+        var svc = new FakeNodeCliService(node!, Script);
+        var events = new List<CliRunEvent>();
+        svc.OnRunEvent += (_, e) => { lock (events) events.Add(e); };
+
+        var jobId = $"fake-{Guid.NewGuid():N}";
+        var jobKey = $"::{jobId}";
+        await svc.StartAsync(jobId, jobKey, "(unused)", Path.GetTempPath());
+
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (DateTime.UtcNow < deadline)
+        {
+            int n;
+            lock (events) n = events.Count;
+            if (events.OfType<CliRunEvent.ProcessExited>().Any()) break;
+            await Task.Delay(50);
+        }
+
+        List<CliRunEvent> snap;
+        lock (events) snap = events.ToList();
+        Assert.Contains(snap, e => e is CliRunEvent.RunStarted);
+        Assert.Contains(snap, e => e is CliRunEvent.ProcessExited);
+        // FakeNodeCliService has no MapLineToRunEvents override, so no
+        // OutputDelta / SessionStarted events are expected here - that
+        // wiring is per-CLI and tested in ClaudeEventAdapterTests.
+    }
+
+    [SkippableFact]
     public async Task FakeCli_NoNewlineButAlive_RunnerStillBuffersBytes()
     {
         // The "live but never flushes a newline" shape: claude / codex /
