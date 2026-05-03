@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.RegularExpressions;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.Cli.Adapters;
+using OrchestratorApi.Services.Runner;
 
 namespace OrchestratorApi.Services.Cli;
 
@@ -172,6 +173,75 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
     {
         if (line.Stream != "stdout") return Array.Empty<CliRunEvent>();
         return ClaudeEventAdapter.Map(line.Text, jobKey);
+    }
+
+    /// <summary>
+    /// ADR-0014 follow-up (Survey § R5): on Windows, spawn via
+    /// <see cref="Win.WindowsHandleScrubSpawner"/>. The default
+    /// <see cref="System.Diagnostics.Process"/> path on Windows sets
+    /// <c>bInheritHandles=TRUE</c> and inherits ALL inheritable parent
+    /// handles - SignalR sockets, file watchers, ETW listeners, ConPTY
+    /// consoles - which is the residual suspect for the post-init
+    /// silence hang that survived the R1 + R2 fixes. The scrub spawn
+    /// uses <c>STARTUPINFOEX + PROC_THREAD_ATTRIBUTE_HANDLE_LIST</c>
+    /// to pass exactly the stdout / stderr pipe handles and nothing
+    /// else.
+    ///
+    /// <para>
+    /// On non-Windows, falls through to the base class (default
+    /// <see cref="Process"/>) - the bInheritHandles concept has a
+    /// different (and well-behaved) shape on POSIX so the workaround
+    /// is not needed there.
+    /// </para>
+    /// </summary>
+    protected override Task<ChildHandle> SpawnChildAsync(
+        ProcessStartInfo psi,
+        string prompt,
+        string? sessionName,
+        bool resumeSession,
+        string? model,
+        CancellationToken ct)
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return base.SpawnChildAsync(psi, prompt, sessionName, resumeSession, model, ct);
+        }
+
+        // Re-collect args from psi.ArgumentList; psi.Arguments is empty
+        // when ArgumentList is populated.
+        var argList = psi.ArgumentList.ToList();
+        var envBlock = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        // Inherit the parent's env first, then layer the explicit overrides
+        // the base class set on psi.Environment.
+        foreach (System.Collections.DictionaryEntry kv in Environment.GetEnvironmentVariables())
+        {
+            if (kv.Key is string k && kv.Value is string v) envBlock[k] = v;
+        }
+        foreach (var kv in psi.Environment) envBlock[kv.Key] = kv.Value;
+
+        var result = Win.WindowsHandleScrubSpawner.Spawn(
+            exePath: psi.FileName,
+            argList: argList,
+            cwd: psi.WorkingDirectory,
+            envBlock: envBlock,
+            wantStdin: psi.RedirectStandardInput);
+
+        var stdoutReader = new StreamReader(result.Stdout, System.Text.Encoding.UTF8, leaveOpen: false);
+        var stderrReader = new StreamReader(result.Stderr, System.Text.Encoding.UTF8, leaveOpen: false);
+        Stream stdin = result.Stdin ?? Stream.Null;
+
+        Action<RunStopReason> kill = _ => result.KillTree();
+
+        _logger.LogInformation(
+            "[handle-scrub] Spawned {Cli} via STARTUPINFOEX (PID {Pid}) - inherited handles curated to stdout/stderr only",
+            CliType, result.Process.Id);
+
+        return Task.FromResult(new ChildHandle(
+            Process: result.Process,
+            Stdin: stdin,
+            Stdout: stdoutReader,
+            Stderr: stderrReader,
+            KillOverride: kill));
     }
 
     /// <summary>
