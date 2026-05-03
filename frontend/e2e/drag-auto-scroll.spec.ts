@@ -25,12 +25,6 @@ async function cleanup(watchPath: string): Promise<void> {
   await Promise.all(stale.map(j => deleteJob(j.id, j.watchPath).catch(() => {})));
 }
 
-async function clearLaneSortStorage(page: Page): Promise<void> {
-  await page.addInitScript(() => {
-    try { localStorage.removeItem('laneSortMode'); } catch { /* ignore */ }
-  });
-}
-
 test.describe('Drag auto-scroll', () => {
   test('dragging near the top edge scrolls the page up so other lanes become reachable', async ({ page }) => {
     const wp = await getFirstWatchPath();
@@ -51,12 +45,9 @@ test.describe('Drag auto-scroll', () => {
         created.push({ id: job.id, title });
       }
 
-      await clearLaneSortStorage(page);
       await page.setViewportSize({ width: 1400, height: 700 });
       await page.goto('/');
-      await expect(page.getByTestId('lane-sort-toggle')).toBeVisible({ timeout: 10_000 });
-      // Drag-reorder is only enabled in Custom mode.
-      await expect(page.getByTestId('lane-sort-toggle')).toContainText('Custom');
+      await expect(page.locator('.column__title').first()).toBeVisible({ timeout: 10_000 });
 
       // Wait for the freshly created cards to appear.
       await expect.poll(async () => {

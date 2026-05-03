@@ -42,12 +42,6 @@ import { projectIdentity } from './services/project-identity.util';
           (openDetail)="openProjectDetail($event)" />
         <app-header-quota class="header__quota" />
         <div class="header__actions">
-          <button class="btn btn--sort"
-                  data-testid="lane-sort-toggle"
-                  [title]="sortMode() === 'custom' ? 'Sorted by custom order — click to sort by creation date' : 'Sorted by creation date — click to switch to custom order'"
-                  (click)="toggleSortMode()">
-            {{ sortMode() === 'custom' ? '↕ Custom' : '🕒 Date' }}
-          </button>
           <button class="btn" (click)="usageSheet.toggle()" title="CLI sessions">
             🪙 Usage
           </button>
@@ -145,12 +139,12 @@ import { projectIdentity } from './services/project-identity.util';
           </div>
         } @else {
           <main class="dashboard">
-            <app-job-column title="In Preparation" icon="📋" state="1-preparation" [jobs]="displayGrouped().preparation" [reorderDisabled]="sortMode() !== 'custom'" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" (addTask)="openCreate($event)" />
-            <app-job-column title="Ready" icon="📦" state="2-ready" [jobs]="displayGrouped().ready" [reorderDisabled]="sortMode() !== 'custom'" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" (addTask)="openCreate($event)" />
-            <app-job-column title="In Progress" icon="🔵" state="3-progress" [jobs]="displayGrouped().progress" [reorderDisabled]="sortMode() !== 'custom'" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
-            <app-job-column title="Review" icon="🟡" state="4-review" [jobs]="displayGrouped().review" [reorderDisabled]="sortMode() !== 'custom'" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
-            <app-job-column title="Completed" icon="🟢" state="5-completed" [jobs]="displayGrouped().completed" [reorderDisabled]="sortMode() !== 'custom'" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" (archiveAll)="onArchiveAll()" />
-            <app-job-column title="Archive" icon="🗄️" state="6-archive" [jobs]="displayGrouped().archive" [reorderDisabled]="sortMode() !== 'custom'" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
+            <app-job-column title="In Preparation" icon="📋" state="1-preparation" [jobs]="displayGrouped().preparation" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" (addTask)="openCreate($event)" />
+            <app-job-column title="Ready" icon="📦" state="2-ready" [jobs]="displayGrouped().ready" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" (addTask)="openCreate($event)" />
+            <app-job-column title="In Progress" icon="🔵" state="3-progress" [jobs]="displayGrouped().progress" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
+            <app-job-column title="Review" icon="🟡" state="4-review" [jobs]="displayGrouped().review" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
+            <app-job-column title="Completed" icon="🟢" state="5-completed" [jobs]="displayGrouped().completed" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" (archiveAll)="onArchiveAll()" />
+            <app-job-column title="Archive" icon="🗄️" state="6-archive" [jobs]="displayGrouped().archive" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
           </main>
         }
       </div>
@@ -436,10 +430,6 @@ import { projectIdentity } from './services/project-identity.util';
     }
     .btn:hover { background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.30); }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-    .btn--sort {
-      font-variant-numeric: tabular-nums;
-      letter-spacing: 0.02em;
-    }
     .btn--create {
       background: rgba(139,92,246,0.45);
       border-color: rgba(167,139,250,0.85);
@@ -1064,9 +1054,6 @@ export class App implements OnInit {
   readonly sideSheetWidth = signal<number>(parseInt(localStorage.getItem('sideSheetWidth') ?? '280'));
   readonly collapsedGroups = signal<Set<string>>(new Set(JSON.parse(localStorage.getItem('collapsedGroups') ?? '[]')));
   readonly taskNavCollapsed = signal<boolean>(localStorage.getItem('taskNavCollapsed') === '1');
-  readonly sortMode = signal<'custom' | 'createdAt'>(
-    localStorage.getItem('laneSortMode') === 'createdAt' ? 'createdAt' : 'custom'
-  );
 
   readonly projectNames = computed(() => {
     return this.watchPaths().map(wp => wp.name);
@@ -1087,27 +1074,11 @@ export class App implements OnInit {
     } as GroupedJobs;
   });
 
-  readonly displayGrouped = computed(() => {
-    const grouped = this.filteredGrouped();
-    const mode = this.sortMode();
-    if (mode === 'custom') return grouped;
-    const byCreatedAsc = (a: JobInfo, b: JobInfo) => (a.createdAt ?? '').localeCompare(b.createdAt ?? '');
-    return {
-      preparation: [...grouped.preparation].sort(byCreatedAsc),
-      ready: [...grouped.ready].sort(byCreatedAsc),
-      progress: [...grouped.progress].sort(byCreatedAsc),
-      review: [...grouped.review].sort(byCreatedAsc),
-      completed: [...grouped.completed].sort(byCreatedAsc),
-      // Archive lane retains its lastActivity-based sort inside the column.
-      archive: grouped.archive,
-    } as GroupedJobs;
-  });
-
-  toggleSortMode() {
-    const next = this.sortMode() === 'custom' ? 'createdAt' : 'custom';
-    this.sortMode.set(next);
-    localStorage.setItem('laneSortMode', next);
-  }
+  // The visible lane order is the canonical Order field, which is also what
+  // ProjectRunner.GetNextReadyJob picks by. Keeping a single source of truth
+  // here means "what's at the top of Ready runs first" is structurally true,
+  // not just usually true.
+  readonly displayGrouped = computed(() => this.filteredGrouped());
 
   readonly focusGroups = computed(() => {
     const grouped = this.displayGrouped();
