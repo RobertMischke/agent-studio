@@ -28,6 +28,7 @@ public class ProjectRunner
     private readonly OrchestratorRunner _orchestratorRunner;
     private readonly OrchestratorSessionStore _orchestratorSessions;
     private readonly ProjectSettingsService _projectSettings;
+    private readonly GitService _git;
     private string _mode = "manual";
     private string? _activeJobId;
     private string? _activeCliType;
@@ -81,7 +82,8 @@ public class ProjectRunner
         OrchestratorLog orchestratorLog,
         OrchestratorRunner orchestratorRunner,
         OrchestratorSessionStore orchestratorSessions,
-        ProjectSettingsService projectSettings)
+        ProjectSettingsService projectSettings,
+        GitService git)
     {
         ProjectName = projectName;
         Entry = entry;
@@ -99,6 +101,7 @@ public class ProjectRunner
         _orchestratorRunner = orchestratorRunner;
         _orchestratorSessions = orchestratorSessions;
         _projectSettings = projectSettings;
+        _git = git;
 
         // Listen across all CLI backends for completion of the active job.
         _router.OnFinished += (cliType, jobKey, exec) => OnCliFinished(cliType, jobKey, exec);
@@ -304,6 +307,16 @@ public class ProjectRunner
                     $"[fallback] No {cli.CliType} session on record (mode: {modeLabel}); rebuilding context from job folder.");
             }
 
+            // Capture the project's HEAD SHA right before the CLI starts.
+            // Combined with the post-run capture in OnCliFinishedAsync, this
+            // gives us the deterministic SHA range the per-run commits
+            // endpoint uses ("commits made during this run" = git rev-list
+            // HeadShaBefore..HeadShaAfter). Best-effort: a missing repo or
+            // a git failure leaves the SHAs null and we fall back to the
+            // wall-clock window. See docs/design-principles.md for why we
+            // treat the software-side change set as a first-class signal.
+            var headShaBefore = SafeGetHeadSha(jobId);
+
             _sessions.AppendSessionEvent(jobId, new SessionEvent
             {
                 Ts = DateTime.UtcNow,
@@ -312,7 +325,8 @@ public class ProjectRunner
                 InputSessionId = plan.EventInputSessionId,
                 CapturedSessionId = null,
                 Resumed = plan.ResumeFlag,
-                Reason = plan.EventReason
+                Reason = plan.EventReason,
+                HeadShaBefore = headShaBefore
             }, Entry.Path);
 
             _activeCliType = cli.CliType;
@@ -833,6 +847,17 @@ public class ProjectRunner
                 GeminiCliService gemini => gemini.GetCapturedSessionId(jobKey),
                 _ => null
             };
+            // Capture the post-run HEAD SHA so the run's commit set can be
+            // derived deterministically via git rev-list HeadShaBefore..After.
+            // This must happen before any auto-commit hook fires (the hook
+            // is part of the Progress->Review transition, not the run
+            // itself, and we want the run to own the agent's own commits).
+            var headShaAfter = SafeGetHeadSha(jobId);
+            if (!string.IsNullOrWhiteSpace(headShaAfter))
+            {
+                _sessions.BackfillLatestSessionEventHeadShaAfter(jobId, headShaAfter, Entry.Path);
+            }
+
             if (!string.IsNullOrWhiteSpace(capturedSessionId))
             {
                 // Append to the chain (and update sessionName in lockstep). Forking
@@ -1178,5 +1203,21 @@ public class ProjectRunner
     private void NotifyStatus()
     {
         OnStatusChanged?.Invoke(GetStatus());
+    }
+
+    /// <summary>
+    /// HEAD-SHA capture wrapper. Swallows git failures - missing repo,
+    /// missing tool, transient errors - so a flaky environment can't
+    /// take down a run. The persisted SHA stays null on failure and the
+    /// commits endpoint falls back to the wall-clock window.
+    /// </summary>
+    private string? SafeGetHeadSha(string jobId)
+    {
+        try { return _git.GetHeadSha(jobId, Entry.Path); }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "HEAD SHA capture failed for {JobId}", jobId);
+            return null;
+        }
     }
 }

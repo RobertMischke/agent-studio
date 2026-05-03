@@ -113,6 +113,23 @@ public record SessionEvent
     public bool Resumed { get; init; }
     /// <summary>Human-readable note when <see cref="Resumed"/> is false (e.g. <c>no session recorded</c>, <c>incompatible session id</c>).</summary>
     public string? Reason { get; init; }
+    /// <summary>
+    /// HEAD SHA of the project's git working tree captured immediately
+    /// before this run's CLI started. Combined with <see cref="HeadShaAfter"/>
+    /// this gives a deterministic SHA range for "commits made during this
+    /// run" (<c>git rev-list HeadShaBefore..HeadShaAfter</c>) - the
+    /// wall-clock window we used to derive commits from is a best-effort
+    /// fallback. Null when the project has no repo configured or git was
+    /// unavailable.
+    /// </summary>
+    public string? HeadShaBefore { get; init; }
+    /// <summary>
+    /// HEAD SHA captured after the run finished (backfilled in
+    /// <c>OnCliFinishedAsync</c>, in lockstep with
+    /// <see cref="CapturedSessionId"/>). Equal to <see cref="HeadShaBefore"/>
+    /// when the agent did not commit during the run.
+    /// </summary>
+    public string? HeadShaAfter { get; init; }
 }
 
 public record JobDetail

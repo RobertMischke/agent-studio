@@ -115,6 +115,24 @@ public class JobSessionLog
     public bool BackfillLatestSessionEventCapturedId(string jobId, string capturedSessionId, string? watchPath = null)
     {
         if (string.IsNullOrWhiteSpace(capturedSessionId)) return false;
+        return MutateLatestSessionEvent(jobId, watchPath, evt => evt with { CapturedSessionId = capturedSessionId });
+    }
+
+    /// <summary>
+    /// Records the post-run HEAD SHA on the most recent session event so
+    /// downstream readers (the run timeline, the per-run commits endpoint)
+    /// can derive "commits made during this run" via the deterministic
+    /// SHA range <c>HeadShaBefore..HeadShaAfter</c> instead of falling
+    /// back to the wall-clock window.
+    /// </summary>
+    public bool BackfillLatestSessionEventHeadShaAfter(string jobId, string? sha, string? watchPath = null)
+    {
+        if (string.IsNullOrWhiteSpace(sha)) return false;
+        return MutateLatestSessionEvent(jobId, watchPath, evt => evt with { HeadShaAfter = sha });
+    }
+
+    private bool MutateLatestSessionEvent(string jobId, string? watchPath, Func<SessionEvent, SessionEvent> mutate)
+    {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return false;
         var path = JobPaths.SessionEventsLog(info.FolderPath);
@@ -122,21 +140,19 @@ public class JobSessionLog
         try
         {
             var lines = File.ReadAllLines(path).ToList();
-            // Find last non-empty line
             var idx = lines.FindLastIndex(l => !string.IsNullOrWhiteSpace(l));
             if (idx < 0) return false;
             SessionEvent? evt;
             try { evt = JsonSerializer.Deserialize<SessionEvent>(lines[idx], JobJsonFile.ReadOpts); }
             catch { return false; }
             if (evt == null) return false;
-            var updated = evt with { CapturedSessionId = capturedSessionId };
-            lines[idx] = JsonSerializer.Serialize(updated, SessionEventJsonOpts);
+            lines[idx] = JsonSerializer.Serialize(mutate(evt), SessionEventJsonOpts);
             File.WriteAllLines(path, lines, Encoding.UTF8);
             return true;
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to backfill captured session id for job {JobId}", jobId);
+            _logger.LogWarning(ex, "Failed to mutate latest session event for job {JobId}", jobId);
             return false;
         }
     }

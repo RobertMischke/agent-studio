@@ -435,6 +435,189 @@ public class GitService
     }
 
     /// <summary>
+    /// Returns the working tree's current HEAD SHA, or null when the path
+    /// is not a git repository or git is unavailable. Used by the run
+    /// timeline to capture the deterministic "before / after" SHAs that
+    /// give us a precise rev-list range for "commits made during this
+    /// run" - the wall-clock window in <see cref="GetCommitsBetween"/>
+    /// is a best-effort fallback for older runs / projects without a
+    /// repo configured.
+    /// </summary>
+    public string? GetHeadSha(string jobId, string? watchPath)
+    {
+        var configured = ResolveRepoRoot(jobId, watchPath);
+        if (configured == null) return null;
+        var root = ResolveGitToplevel(configured);
+        if (root == null) return null;
+        var (output, _, code) = RunGit(root, "rev-parse HEAD");
+        if (code != 0) return null;
+        var sha = output.Trim();
+        return string.IsNullOrWhiteSpace(sha) ? null : sha;
+    }
+
+    /// <summary>
+    /// Lists commits in the SHA range <c>before..after</c> (exclusive of
+    /// <paramref name="beforeSha"/>, inclusive of <paramref name="afterSha"/>).
+    /// This is the *deterministic* commit-attribution path: the run
+    /// timeline captures HEAD before/after each CLI run, so this
+    /// method returns exactly the commits that landed during the run -
+    /// no wall-clock heuristic, no boundary slack, no double-attribution
+    /// when two runs share the same minute.
+    ///
+    /// Returns an empty list when either SHA is missing, equal, or the
+    /// repo is not a git repo. Callers should fall back to
+    /// <see cref="GetCommitsBetween"/> in those cases.
+    /// </summary>
+    public List<GitCommitInfo> GetCommitsInShaRange(string jobId, string? watchPath, string? beforeSha, string? afterSha)
+    {
+        if (string.IsNullOrWhiteSpace(beforeSha) || string.IsNullOrWhiteSpace(afterSha)) return [];
+        if (string.Equals(beforeSha, afterSha, StringComparison.OrdinalIgnoreCase)) return [];
+
+        var configured = ResolveRepoRoot(jobId, watchPath);
+        if (configured == null) return [];
+        var root = ResolveGitToplevel(configured);
+        if (root == null) return [];
+
+        // Defensive: reject anything that looks like a flag or path so
+        // git can't be coaxed into running an unrelated command via a
+        // crafted SHA argument.
+        if (!IsLikelyShaOrRef(beforeSha!) || !IsLikelyShaOrRef(afterSha!)) return [];
+
+        const char US = '';
+        var fmt = "%H%x1f%h%x1f%aI%x1f%aN%x1f%s";
+        var args = $"log --no-merges --shortstat --pretty=format:\"{fmt}\" {beforeSha}..{afterSha}";
+        var (output, _, code) = RunGit(root, args);
+        if (code != 0 || string.IsNullOrWhiteSpace(output)) return [];
+
+        var list = new List<GitCommitInfo>();
+        var raw = output.Replace("\r\n", "\n");
+        foreach (var block in raw.Split("\n\n", StringSplitOptions.None))
+        {
+            if (string.IsNullOrWhiteSpace(block)) continue;
+            string? recordLine = null;
+            string? shortstatLine = null;
+            foreach (var l in block.Split('\n'))
+            {
+                if (string.IsNullOrWhiteSpace(l)) continue;
+                if (recordLine == null) recordLine = l;
+                else { shortstatLine = l.Trim(); break; }
+            }
+            if (recordLine == null) continue;
+            var parts = recordLine.Split(US);
+            if (parts.Length < 5) continue;
+            if (!DateTime.TryParse(parts[2], System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
+                    out var ts))
+                continue;
+            var (files, added, removed) = ParseShortstat(shortstatLine);
+            list.Add(new GitCommitInfo(
+                Sha: parts[0],
+                ShortSha: parts[1],
+                AuthorDateUtc: DateTime.SpecifyKind(ts, DateTimeKind.Utc),
+                Author: parts[3],
+                Subject: parts[4],
+                FilesChanged: files,
+                Added: added,
+                Removed: removed));
+        }
+        return list;
+    }
+
+    /// <summary>
+    /// Aggregated file list for the SHA range <c>before..after</c>.
+    /// One row per path that any commit in the range touched, with the
+    /// combined +/- counts (the largest insertion / deletion seen, not
+    /// summed - a file rewritten twice in the same run shows the net
+    /// diff, not double-counted). Drives the file-tree side of the
+    /// run's git viewer modal.
+    /// </summary>
+    public List<GitFileChange> GetFilesChangedInShaRange(string jobId, string? watchPath, string? beforeSha, string? afterSha)
+    {
+        if (string.IsNullOrWhiteSpace(beforeSha) || string.IsNullOrWhiteSpace(afterSha)) return [];
+        if (!IsLikelyShaOrRef(beforeSha!) || !IsLikelyShaOrRef(afterSha!)) return [];
+        var configured = ResolveRepoRoot(jobId, watchPath);
+        if (configured == null) return [];
+        var root = ResolveGitToplevel(configured);
+        if (root == null) return [];
+
+        // git diff --name-status + --numstat over the range: one git
+        // call each, merged by path. --diff-filter avoids type-change
+        // noise; we keep adds, deletes, modifies, renames, and copies.
+        var statusByPath = new Dictionary<string, string>(StringComparer.Ordinal);
+        var (statusOut, _, statusCode) = RunGit(root, $"diff --name-status --diff-filter=ACDMR {beforeSha}..{afterSha}");
+        if (statusCode == 0)
+        {
+            foreach (var line in statusOut.Replace("\r\n", "\n").Split('\n'))
+            {
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                var parts = line.Split('\t');
+                if (parts.Length < 2) continue;
+                statusByPath[parts[^1].Trim()] = parts[0].Trim();
+            }
+        }
+
+        var numstat = new Dictionary<string, (int Added, int Removed)>(StringComparer.Ordinal);
+        var (numOut, _, numCode) = RunGit(root, $"diff --numstat {beforeSha}..{afterSha}");
+        if (numCode == 0)
+        {
+            foreach (var line in numOut.Replace("\r\n", "\n").Split('\n'))
+            {
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                var parts = line.Split('\t');
+                if (parts.Length < 3) continue;
+                var added = int.TryParse(parts[0], out var a) ? a : 0;
+                var removed = int.TryParse(parts[1], out var r) ? r : 0;
+                numstat[parts[^1].Trim()] = (added, removed);
+            }
+        }
+
+        return statusByPath
+            .Select(kv =>
+            {
+                var (added, removed) = numstat.TryGetValue(kv.Key, out var n) ? n : (0, 0);
+                return new GitFileChange(kv.Value, kv.Key, added, removed);
+            })
+            .OrderBy(f => f.Path, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    /// <summary>
+    /// Unified diff for the SHA range, optionally scoped to one path.
+    /// Used by the run's git viewer when a file is selected. Empty
+    /// string is a valid result (no changes for that path in the
+    /// range) and should not be treated as an error.
+    /// </summary>
+    public string GetDiffInShaRange(string jobId, string? watchPath, string? beforeSha, string? afterSha, string? path)
+    {
+        if (string.IsNullOrWhiteSpace(beforeSha) || string.IsNullOrWhiteSpace(afterSha)) return "";
+        if (!IsLikelyShaOrRef(beforeSha!) || !IsLikelyShaOrRef(afterSha!)) return "";
+        var configured = ResolveRepoRoot(jobId, watchPath);
+        if (configured == null) return "";
+        var root = ResolveGitToplevel(configured);
+        if (root == null) return "";
+
+        var pathArg = string.IsNullOrWhiteSpace(path)
+            ? ""
+            : $" -- \"{path!.Replace("\"", "\\\"")}\"";
+        var (output, err, code) = RunGit(root, $"diff {beforeSha}..{afterSha}{pathArg}");
+        return code == 0 ? output : err;
+    }
+
+    private static bool IsLikelyShaOrRef(string s)
+    {
+        // Accept hex SHAs (full or short) and a small set of git refs.
+        // We never accept anything containing whitespace, slashes, or
+        // shell metacharacters - the SHA flows into a git argument list,
+        // and we want defence in depth even though RunGit doesn't shell.
+        if (string.IsNullOrEmpty(s)) return false;
+        foreach (var c in s)
+        {
+            if (!(char.IsLetterOrDigit(c) || c == '_' || c == '-' || c == '.' || c == '^')) return false;
+        }
+        return true;
+    }
+
+    /// <summary>
     /// Lists commits whose author date falls in the half-open interval
     /// <c>[fromUtc, toUtc)</c>. Used by the per-run commit lookup so the
     /// protocol-pane run timeline can show the software-side change set

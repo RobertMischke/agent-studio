@@ -147,7 +147,7 @@ public class JobsEndpointPerfTests : IDisposable
         var runners = new TaskRunnerService(
             config, NullLogger<TaskRunnerService>.Instance, scanner, states, mutations, sessions,
             copilot, router, contextUsageParser, summary, prompts, transitions, projectSettings,
-            chatLog, orchestratorLog, orchestratorRunner, orchestratorSessions, globalBoot);
+            chatLog, orchestratorLog, orchestratorRunner, orchestratorSessions, globalBoot, git);
         return (router, runners);
     }
 

@@ -105,31 +105,92 @@ public static class JobRunnerEndpoints
             return Results.Ok(timeline);
         });
 
-        // Per-run software-side change set: the commits whose author date
-        // falls inside this run's wall-clock window. Drives the
-        // "what did the agent change in my software?" question that
-        // docs/design-principles.md treats as the unit of trust.
-        // Index is 1-based to match RunRecord.Index.
+        // Per-run software-side change set: the commits authored during
+        // this run. Prefers the deterministic SHA range
+        // HeadShaBefore..HeadShaAfter captured by ProjectRunner around
+        // the CLI invocation; falls back to the wall-clock window for
+        // older runs that don't have the SHAs persisted. The
+        // wall-clock fallback is best-effort - the SHA-range path is
+        // the source of truth for new runs and is what the integration
+        // test pins. Index is 1-based to match RunRecord.Index.
         group.MapGet("/{jobId}/runs/{index:int}/commits", (
             string jobId, int index, string? watchPath,
             JobScannerService scanner, JobSessionLog sessions, GitService git) =>
         {
             var info = scanner.FindJob(jobId, watchPath);
             if (info == null) return Results.NotFound(new { error = "Job not found" });
-            var events = sessions.ReadSessionEvents(jobId, watchPath);
-            var lines = CliOutputLogParser.ParseFile(JobPaths.CliOutputLog(info.FolderPath));
-            var timeline = RunTimelineBuilder.Build(events, lines, DateTime.UtcNow);
-            if (index < 1 || index > timeline.Runs.Count)
-                return Results.NotFound(new { error = $"Run #{index} not in this job's timeline (have {timeline.Runs.Count})." });
-            var run = timeline.Runs[index - 1];
-            var commits = git.GetCommitsBetween(jobId, watchPath, run.StartedAt, run.EndedAt ?? DateTime.UtcNow);
+            var run = ResolveRun(info, sessions, jobId, watchPath, index, out var error);
+            if (run == null) return Results.NotFound(new { error });
+
+            var commits = !string.IsNullOrWhiteSpace(run.HeadShaBefore) && !string.IsNullOrWhiteSpace(run.HeadShaAfter)
+                ? git.GetCommitsInShaRange(jobId, watchPath, run.HeadShaBefore, run.HeadShaAfter)
+                : git.GetCommitsBetween(jobId, watchPath, run.StartedAt, run.EndedAt ?? DateTime.UtcNow);
+
             return Results.Ok(new
             {
                 runIndex = run.Index,
                 startedAt = run.StartedAt,
                 endedAt = run.EndedAt,
+                headShaBefore = run.HeadShaBefore,
+                headShaAfter = run.HeadShaAfter,
+                source = !string.IsNullOrWhiteSpace(run.HeadShaBefore) && !string.IsNullOrWhiteSpace(run.HeadShaAfter)
+                    ? "sha-range"
+                    : "wall-clock",
                 commits
             });
+        });
+
+        // Aggregated file list for a run: every path touched by any
+        // commit in HeadShaBefore..HeadShaAfter, with combined +/-
+        // counts. Drives the file-tree side of the run's git viewer.
+        group.MapGet("/{jobId}/runs/{index:int}/files", (
+            string jobId, int index, string? watchPath,
+            JobScannerService scanner, JobSessionLog sessions, GitService git) =>
+        {
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info == null) return Results.NotFound(new { error = "Job not found" });
+            var run = ResolveRun(info, sessions, jobId, watchPath, index, out var error);
+            if (run == null) return Results.NotFound(new { error });
+
+            if (string.IsNullOrWhiteSpace(run.HeadShaBefore) || string.IsNullOrWhiteSpace(run.HeadShaAfter))
+            {
+                return Results.Ok(new
+                {
+                    runIndex = run.Index,
+                    headShaBefore = run.HeadShaBefore,
+                    headShaAfter = run.HeadShaAfter,
+                    files = new List<GitFileChange>(),
+                    note = "Run has no captured SHAs (older run or repo unavailable). The git viewer needs the SHA range."
+                });
+            }
+
+            var files = git.GetFilesChangedInShaRange(jobId, watchPath, run.HeadShaBefore, run.HeadShaAfter);
+            return Results.Ok(new
+            {
+                runIndex = run.Index,
+                headShaBefore = run.HeadShaBefore,
+                headShaAfter = run.HeadShaAfter,
+                files
+            });
+        });
+
+        // Unified diff for one path across the run's SHA range. Returns
+        // the raw diff body so the frontend's existing diff renderer
+        // can consume it without re-parsing.
+        group.MapGet("/{jobId}/runs/{index:int}/diff", (
+            string jobId, int index, string? path, string? watchPath,
+            JobScannerService scanner, JobSessionLog sessions, GitService git) =>
+        {
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info == null) return Results.NotFound(new { error = "Job not found" });
+            var run = ResolveRun(info, sessions, jobId, watchPath, index, out var error);
+            if (run == null) return Results.NotFound(new { error });
+
+            if (string.IsNullOrWhiteSpace(run.HeadShaBefore) || string.IsNullOrWhiteSpace(run.HeadShaAfter))
+                return Results.Ok(new { diff = "", note = "Run has no captured SHAs." });
+
+            var diff = git.GetDiffInShaRange(jobId, watchPath, run.HeadShaBefore, run.HeadShaAfter, path);
+            return Results.Ok(new { diff });
         });
 
         // Manual re-trigger of the Haiku summary that the runner normally fires
@@ -158,5 +219,28 @@ public static class JobRunnerEndpoints
                 ? Results.Ok(snapshot)
                 : Results.BadRequest(new { error = error ?? "Cannot refresh context usage" });
         });
+    }
+
+    /// <summary>
+    /// Builds the run timeline for <paramref name="info"/> and returns
+    /// the run at <paramref name="index"/> (1-based), or null + a
+    /// 404-friendly error string. Lifted into a helper so the three
+    /// per-run endpoints share the same lookup path and never drift
+    /// in how they bound or pair runs.
+    /// </summary>
+    private static RunRecord? ResolveRun(
+        JobInfo info, JobSessionLog sessions,
+        string jobId, string? watchPath, int index, out string error)
+    {
+        error = "";
+        var events = sessions.ReadSessionEvents(jobId, watchPath);
+        var lines = CliOutputLogParser.ParseFile(JobPaths.CliOutputLog(info.FolderPath));
+        var timeline = RunTimelineBuilder.Build(events, lines, DateTime.UtcNow);
+        if (index < 1 || index > timeline.Runs.Count)
+        {
+            error = $"Run #{index} not in this job's timeline (have {timeline.Runs.Count}).";
+            return null;
+        }
+        return timeline.Runs[index - 1];
     }
 }

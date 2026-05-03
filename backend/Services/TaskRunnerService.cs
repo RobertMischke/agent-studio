@@ -57,7 +57,8 @@ public class TaskRunnerService : BackgroundService
         OrchestratorLog orchestratorLog,
         OrchestratorRunner orchestratorRunner,
         OrchestratorSessionStore orchestratorSessions,
-        GlobalOrchestratorBootstrap globalOrchestrator)
+        GlobalOrchestratorBootstrap globalOrchestrator,
+        GitService git)
     {
         _config = config;
         _logger = logger;
@@ -77,7 +78,10 @@ public class TaskRunnerService : BackgroundService
         _orchestratorRunner = orchestratorRunner;
         _orchestratorSessions = orchestratorSessions;
         _globalOrchestrator = globalOrchestrator;
+        _git = git;
     }
+
+    private readonly GitService _git;
 
     public SummaryGenerationService SummaryService => _summaryService;
 
@@ -109,7 +113,7 @@ public class TaskRunnerService : BackgroundService
                 continue;
             }
 
-            var runner = new ProjectRunner(entry.Name, entry, _logger, _scanner, _states, _sessions, _router, _summaryService, _prompts, _transitions, _chatLog, _mutations, _orchestratorLog, _orchestratorRunner, _orchestratorSessions, _projectSettings);
+            var runner = new ProjectRunner(entry.Name, entry, _logger, _scanner, _states, _sessions, _router, _summaryService, _prompts, _transitions, _chatLog, _mutations, _orchestratorLog, _orchestratorRunner, _orchestratorSessions, _projectSettings, _git);
             runner.ConfigureWatchdog(LoadWatchdogConfig(_config));
             _stuckLoopBudget = LoadStuckLoopBudget(_config);
             runner.ConfigureStuckLoopBudget(_stuckLoopBudget);
