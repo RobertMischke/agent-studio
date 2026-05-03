@@ -175,21 +175,73 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         return ClaudeEventAdapter.Map(line.Text, jobKey);
     }
 
-    // ADR-0014 follow-up (Survey § R5): WindowsHandleScrubSpawner is
-    // staged but not yet wired here. The first attempt (commit c5cfc63)
-    // broke init-frame delivery under live ASP.NET hosting - claude
-    // exited with code 1 at ~62s without producing any stdout - while
-    // the WebApplicationFactory hosting test passed. Likely cause: with
-    // wantStdin=false we set hStdInput=NULL while STARTF_USESTDHANDLES
-    // is on, which gives the child an INVALID_HANDLE_VALUE for stdin.
-    // The fix is to always wire a NUL-equivalent stdin (closed pipe or
-    // \\.\NUL device handle) even when no payload is needed; that work
-    // is staged behind the env-var ENABLE_HANDLE_SCRUB so a future
-    // probe can land it incrementally without regressing the R1+R2
-    // baseline that already gets the init frame through.
-    //
-    // The base class default (Process.Start) is correct for the
-    // current shipping state; ClaudeCliService runs through it.
+    /// <summary>
+    /// ADR-0014 follow-up (Survey § R5): when the
+    /// <c>ClaudeCli:UseHandleScrub</c> config flag is true, spawn via
+    /// <see cref="Win.WindowsHandleScrubSpawner"/> on Windows. The
+    /// flag is OFF by default - the first integration of this code
+    /// path (commit c5cfc63) broke init-frame delivery in live
+    /// ASP.NET hosting (hStdInput=NULL gave the child an
+    /// INVALID_HANDLE_VALUE), and even after the NUL-handle fix the
+    /// behaviour needs a deterministic regression test before it can
+    /// ship to production. Until the flag flips on, ClaudeCliService
+    /// uses the base-class <see cref="Process.Start"/> path with the
+    /// R1 (default-deny stdin) + R2 (env hardening) fixes from
+    /// ADR-0014.
+    ///
+    /// <para>
+    /// On non-Windows or when the flag is off, falls through to the
+    /// base class.
+    /// </para>
+    /// </summary>
+    protected override async Task<ChildHandle> SpawnChildAsync(
+        ProcessStartInfo psi,
+        string prompt,
+        string? sessionName,
+        bool resumeSession,
+        string? model,
+        CancellationToken ct)
+    {
+        var useScrub = string.Equals(
+            _configuration["ClaudeCli:UseHandleScrub"], "true",
+            StringComparison.OrdinalIgnoreCase);
+        if (!useScrub || !OperatingSystem.IsWindows())
+        {
+            return await base.SpawnChildAsync(psi, prompt, sessionName, resumeSession, model, ct);
+        }
+
+        var argList = psi.ArgumentList.ToList();
+        var envBlock = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        foreach (System.Collections.DictionaryEntry kv in Environment.GetEnvironmentVariables())
+        {
+            if (kv.Key is string k && kv.Value is string v) envBlock[k] = v;
+        }
+        foreach (var kv in psi.Environment) envBlock[kv.Key] = kv.Value;
+
+        var result = Win.WindowsHandleScrubSpawner.Spawn(
+            exePath: psi.FileName,
+            argList: argList,
+            cwd: psi.WorkingDirectory,
+            envBlock: envBlock,
+            wantStdin: psi.RedirectStandardInput);
+
+        var stdoutReader = new StreamReader(result.Stdout, System.Text.Encoding.UTF8, leaveOpen: false);
+        var stderrReader = new StreamReader(result.Stderr, System.Text.Encoding.UTF8, leaveOpen: false);
+        Stream stdin = result.Stdin ?? Stream.Null;
+
+        Action<RunStopReason> kill = _ => result.KillTree();
+
+        _logger.LogInformation(
+            "[handle-scrub] Spawned {Cli} via STARTUPINFOEX (PID {Pid})",
+            CliType, result.Process.Id);
+
+        return new ChildHandle(
+            Process: result.Process,
+            Stdin: stdin,
+            Stdout: stdoutReader,
+            Stderr: stderrReader,
+            KillOverride: kill);
+    }
 
     /// <summary>
     /// Walk the npm-shim convention to find the underlying claude.exe when

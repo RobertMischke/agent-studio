@@ -60,17 +60,27 @@ internal static class WindowsHandleScrubSpawner
         IReadOnlyDictionary<string, string?> envBlock,
         bool wantStdin)
     {
-        // 1. Create stdout / stderr / (optional) stdin anonymous pipes.
-        //    The PARENT keeps the read ends (stdout/stderr) and the
-        //    write end (stdin); the CHILD gets the write ends
-        //    (stdout/stderr) and read end (stdin). Only the child-side
-        //    handles are flagged inheritable; the parent-side handles
-        //    are NOT inheritable so other inadvertent fork-spawns
-        //    elsewhere in the process don't leak them.
+        // 1. Create stdout / stderr / stdin pipes / NUL handle.
+        //    The PARENT keeps the read ends (stdout/stderr) and (when a
+        //    payload is needed) the write end of stdin. The CHILD gets
+        //    the write ends of stdout/stderr and either the read end of
+        //    a stdin pipe or a handle to \\.\NUL when no payload is
+        //    needed. Only the child-side handles are flagged inheritable;
+        //    parent-side handles stay non-inheritable so unrelated
+        //    spawns elsewhere in the process don't leak them.
+        //
+        //    Why NUL when wantStdin=false: STARTF_USESTDHANDLES with
+        //    hStdInput=NULL gives the child INVALID_HANDLE_VALUE for
+        //    stdin, which Node CLIs treat as a hard error during init
+        //    (claude exits with code 1 immediately). A real handle to
+        //    \\.\NUL gives the child an immediate-EOF stdin, which is
+        //    what Python's stdin=DEVNULL and Node's stdio:'ignore'
+        //    actually wire up under the hood. See ADR-0014.
         var sa = new SECURITY_ATTRIBUTES { nLength = Marshal.SizeOf<SECURITY_ATTRIBUTES>(), bInheritHandle = 1 };
         IntPtr stdoutRead = IntPtr.Zero, stdoutWrite = IntPtr.Zero;
         IntPtr stderrRead = IntPtr.Zero, stderrWrite = IntPtr.Zero;
         IntPtr stdinRead = IntPtr.Zero, stdinWrite = IntPtr.Zero;
+        IntPtr nullHandle = IntPtr.Zero;
         if (!CreatePipe(out stdoutRead, out stdoutWrite, ref sa, 0)) ThrowLastError("CreatePipe(stdout)");
         if (!SetHandleInformation(stdoutRead, HANDLE_FLAG_INHERIT, 0)) ThrowLastError("SetHandleInformation(stdoutRead)");
         if (!CreatePipe(out stderrRead, out stderrWrite, ref sa, 0)) ThrowLastError("CreatePipe(stderr)");
@@ -79,6 +89,20 @@ internal static class WindowsHandleScrubSpawner
         {
             if (!CreatePipe(out stdinRead, out stdinWrite, ref sa, 0)) ThrowLastError("CreatePipe(stdin)");
             if (!SetHandleInformation(stdinWrite, HANDLE_FLAG_INHERIT, 0)) ThrowLastError("SetHandleInformation(stdinWrite)");
+        }
+        else
+        {
+            // Open \\.\NUL with inheritable security attributes so the
+            // child receives a real, immediately-EOF stdin handle.
+            nullHandle = CreateFileW(
+                "NUL",
+                GENERIC_READ,
+                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                ref sa,
+                OPEN_EXISTING,
+                FILE_ATTRIBUTE_NORMAL,
+                IntPtr.Zero);
+            if (nullHandle == INVALID_HANDLE_VALUE) ThrowLastError("CreateFileW(NUL)");
         }
 
         // 2. Build the PROC_THREAD_ATTRIBUTE_LIST holding ONLY our pipe
@@ -94,10 +118,12 @@ internal static class WindowsHandleScrubSpawner
             if (!InitializeProcThreadAttributeList(lpAttributeList, 1, 0, ref size))
                 ThrowLastError("InitializeProcThreadAttributeList");
 
-            // Pack the inheritable handles into a heap buffer.
-            var handles = wantStdin
-                ? new[] { stdinRead, stdoutWrite, stderrWrite }
-                : new[] { stdoutWrite, stderrWrite };
+            // Pack the inheritable handles into a heap buffer. Stdin's
+            // child-side handle is either the pipe read end (payload
+            // path) or the NUL device handle (default-deny path - per
+            // ADR-0014 and survey § P1).
+            var stdinChildHandle = wantStdin ? stdinRead : nullHandle;
+            var handles = new[] { stdinChildHandle, stdoutWrite, stderrWrite };
             var bytes = handles.Length * IntPtr.Size;
             handleListPtr = Marshal.AllocHGlobal(bytes);
             for (int i = 0; i < handles.Length; i++)
@@ -134,7 +160,7 @@ internal static class WindowsHandleScrubSpawner
                 {
                     cb = (uint)Marshal.SizeOf<STARTUPINFOEX>(),
                     dwFlags = STARTF_USESTDHANDLES,
-                    hStdInput = wantStdin ? stdinRead : IntPtr.Zero,
+                    hStdInput = wantStdin ? stdinRead : nullHandle,
                     hStdOutput = stdoutWrite,
                     hStdError = stderrWrite
                 },
@@ -171,6 +197,7 @@ internal static class WindowsHandleScrubSpawner
             CloseHandle(stdoutWrite);
             CloseHandle(stderrWrite);
             if (wantStdin) CloseHandle(stdinRead);
+            if (!wantStdin && nullHandle != IntPtr.Zero) CloseHandle(nullHandle);
 
             // Wrap the parent-side pipe ends as FileStreams.
             var stdoutStream = new FileStream(new SafeFileHandle(stdoutRead, ownsHandle: true), FileAccess.Read);
@@ -300,6 +327,12 @@ internal static class WindowsHandleScrubSpawner
     // ── Win32 P/Invoke surface ──────────────────────────────────────────
 
     private const int HANDLE_FLAG_INHERIT = 0x00000001;
+    private const uint GENERIC_READ = 0x80000000;
+    private const uint FILE_SHARE_READ = 0x00000001;
+    private const uint FILE_SHARE_WRITE = 0x00000002;
+    private const uint OPEN_EXISTING = 3;
+    private const uint FILE_ATTRIBUTE_NORMAL = 0x00000080;
+    private static readonly IntPtr INVALID_HANDLE_VALUE = new(-1);
     private const uint STARTF_USESTDHANDLES = 0x00000100;
     private const uint EXTENDED_STARTUPINFO_PRESENT = 0x00080000;
     private const uint CREATE_UNICODE_ENVIRONMENT = 0x00000400;
@@ -378,4 +411,14 @@ internal static class WindowsHandleScrubSpawner
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool CloseHandle(IntPtr hObject);
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+    private static extern IntPtr CreateFileW(
+        string lpFileName,
+        uint dwDesiredAccess,
+        uint dwShareMode,
+        ref SECURITY_ATTRIBUTES lpSecurityAttributes,
+        uint dwCreationDisposition,
+        uint dwFlagsAndAttributes,
+        IntPtr hTemplateFile);
 }

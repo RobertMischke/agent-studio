@@ -114,4 +114,77 @@ public class CliKestrelHostingRepoTests : IClassFixture<WebApplicationFactory<Pr
             "been undone. Output:\n" +
             string.Join("\n", final.Select(l => $"  [{l.Stream}] {l.Text}")));
     }
+
+    /// <summary>
+    /// Pins the R5 (Win32 handle-scrub) spawn path. With
+    /// <c>ClaudeCli:UseHandleScrub=true</c>, claude is spawned via
+    /// <see cref="OrchestratorApi.Services.Cli.Win.WindowsHandleScrubSpawner"/>
+    /// (CreateProcessW + STARTUPINFOEX + curated handle list +
+    /// \\.\NUL-as-stdin when no payload). This test exists because
+    /// commit c5cfc63's first scrub wiring broke init-frame delivery
+    /// (hStdInput=NULL gave the child INVALID_HANDLE_VALUE under
+    /// STARTF_USESTDHANDLES); the v2 path opens \\.\NUL explicitly.
+    ///
+    /// <para>
+    /// If this test goes red, the scrub path has regressed and must
+    /// not ship - flip <c>ClaudeCli:UseHandleScrub</c> off in
+    /// production until the cause is found. Today the path is OFF by
+    /// default; this test runs only under
+    /// <c>RUN_CLI_INTEGRATION=1</c>.
+    /// </para>
+    /// </summary>
+    [Xunit.SkippableFact]
+    public async Task HostedClaudeCliService_HandleScrubFlag_StreamsPastInit()
+    {
+        Skip.IfNot(!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("RUN_CLI_INTEGRATION")),
+            "Integration test, opt-in via RUN_CLI_INTEGRATION=1.");
+        var exe = ClaudeExePath;
+        Skip.IfNot(exe != null, "claude.exe not found.");
+        Skip.IfNot(OperatingSystem.IsWindows(), "Handle scrub is Windows-specific.");
+
+        using var factory = _factory.WithWebHostBuilder(b =>
+        {
+            b.ConfigureAppConfiguration((_, cfg) =>
+            {
+                cfg.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["ClaudeCli:Path"] = exe,
+                    ["ClaudeCli:UseHandleScrub"] = "true"
+                });
+            });
+        });
+        _ = factory.CreateClient();
+
+        var svc = factory.Services.GetRequiredService<ClaudeCliService>();
+        var jobId = $"hosting-scrub-{Guid.NewGuid():N}";
+        var jobKey = $"::{jobId}";
+        var (exec, err) = await svc.StartAsync(
+            jobId, jobKey,
+            prompt: "Reply with exactly four words and nothing else: scrub test ready ack",
+            workingDirectory: Path.GetTempPath(),
+            sessionName: null, resumeSession: false,
+            model: "claude-haiku-4-5");
+        Assert.Null(err);
+        Assert.NotNull(exec);
+
+        var deadline = DateTime.UtcNow.AddSeconds(60);
+        while (DateTime.UtcNow < deadline)
+        {
+            var snapshot = svc.GetOutput(jobKey);
+            var initLines = snapshot.Count(l => l.Stream == "stdout" && l.Text.Contains("Session init"));
+            var modelLines = snapshot.Count(l => l.Stream == "stdout" && !l.Text.Contains("Session init"));
+            if (initLines >= 1 && modelLines >= 1) break;
+            await Task.Delay(250);
+        }
+        svc.Stop(jobKey);
+
+        var final = svc.GetOutput(jobKey);
+        Assert.Contains(final, l => l.Stream == "stdout" && l.Text.Contains("Session init"));
+        Assert.True(
+            final.Count(l => l.Stream == "stdout") >= 2,
+            "Handle-scrub spawn (CreateProcessW + STARTUPINFOEX) failed to deliver " +
+            "post-init stdout frames within 60s. Likely cause: hStdInput / stdin " +
+            "handling regression when wantStdin=false. Output:\n" +
+            string.Join("\n", final.Select(l => $"  [{l.Stream}] {l.Text}")));
+    }
 }
