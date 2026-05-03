@@ -22,12 +22,6 @@ async function cleanup(prefix: string, watchPath: string): Promise<void> {
   await Promise.all(stale.map(j => deleteJob(j.id, j.watchPath).catch(() => {})));
 }
 
-async function clearLaneSortStorage(page: Page): Promise<void> {
-  await page.addInitScript(() => {
-    try { localStorage.removeItem('laneSortMode'); } catch { /* ignore */ }
-  });
-}
-
 async function readColumnTitles(page: Page, heading: string): Promise<string[]> {
   return page.evaluate((h) => {
     const headings = Array.from(document.querySelectorAll('.column__title')) as HTMLElement[];
@@ -113,11 +107,8 @@ test.describe('Lane drag-and-drop reorder', () => {
     });
 
     try {
-      await clearLaneSortStorage(page);
       await page.goto('/');
-      await expect(page.getByTestId('lane-sort-toggle')).toBeVisible({ timeout: 10_000 });
-      // Stay in Custom mode — that's where drag-reorder is enabled.
-      await expect(page.getByTestId('lane-sort-toggle')).toContainText('Custom');
+      await expect(page.locator('.column__title').first()).toBeVisible({ timeout: 10_000 });
 
       // Wait for our three jobs to appear in Ready in order A, B, C.
       await expect.poll(async () => {

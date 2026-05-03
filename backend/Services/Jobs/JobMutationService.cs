@@ -119,13 +119,24 @@ public class JobMutationService
 
         Directory.CreateDirectory(jobDir);
 
+        // Land new jobs at the bottom of their target lane so the visible order
+        // in the UI matches the backend pickup order (OrderBy(Order) ascending).
+        // Falling back to the request's default (999) collides every new job on
+        // the same key, so tie-break would depend on filesystem scan order and
+        // the user has no way to predict which one runs next.
+        var existingMaxOrder = _scanner.ScanAllJobs()
+            .Where(j => j.WatchPath == entry.Path && j.State == targetState)
+            .Select(j => (int?)j.Order)
+            .Max();
+        var resolvedOrder = req.Order != 999 ? req.Order : (existingMaxOrder ?? 0) + 10;
+
         var jobJson = new Dictionary<string, object?>
         {
             ["id"] = jobId,
             ["title"] = req.Title,
             ["createdAt"] = DateTime.UtcNow.ToString("o"),
             ["state"] = targetState,
-            ["order"] = req.Order,
+            ["order"] = resolvedOrder,
             ["agent"] = req.Agent
         };
         if (!string.IsNullOrWhiteSpace(req.Model))
