@@ -54,56 +54,28 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         bool resumeSession,
         string? model)
     {
-        // claude -p [--name <s>] [-r <s>] [--model <m>]
+        // claude -p <prompt-as-argv> [-r <s>] [--model <m>]
         //   --output-format stream-json --verbose --dangerously-skip-permissions
         //
-        // The user prompt is piped through STDIN (see GetPromptStdinPayload
-        // override). Embedding the rendered prompt as a quoted -p argument
-        // on Windows truncates the agent's view of the task at the first
-        // newline / over the cmd.exe length limit, so the agent sees only
-        // the heading and asks "what do you want me to do?". The base
-        // class writes our payload to stdin then closes it before any
-        // read is attempted.
+        // ADR-0014: prompt is the LAST positional argv, not piped via stdin.
+        // The previous stdin-pipe path raced claude-code#771 (Claude reads
+        // stdin during init and blocks on a connected pipe whose writer is
+        // inherited by the child due to Win32's bInheritHandles=TRUE);
+        // dropping stdin redirection AND putting the prompt in argv removes
+        // the entire pipe-inheritance surface. Calling claude.exe directly
+        // (not the .CMD shim, see ResolveCmdShimToExe) means CreateProcess
+        // parses argv via CommandLineToArgvW rather than cmd.exe rules, so
+        // the multi-line / quote-rich rendered prompt is preserved verbatim.
+        // Windows' command-line length limit is 32767 chars; our rendered
+        // prompts are well under that.
         //
         // stream-json emits one NDJSON frame per assistant chunk / tool call /
         // tool result, flushed immediately. With the default text format the
-        // CLI buffers its entire reply until the model finishes — that's why
-        // the Activity Log used to stay empty for the whole run. `--verbose`
-        // is required by the CLI when stream-json is combined with `-p`.
+        // CLI buffers its entire reply until the model finishes - that's why
+        // the Activity Log used to stay empty for the whole run. --verbose
+        // is required by the CLI when stream-json is combined with -p.
         // TransformReadLine() in this class normalises the frames into the
         // marker-line convention the frontend parser already understands.
-        var args = new List<string> { "-p" };
-
-        // Claude Code CLI does not expose a `--name` flag; sessions are
-        // identified by the UUID the CLI itself generates and emits in the
-        // first `system` stream-json frame. We only ever pass `-r <uuid>` to
-        // resume an already-captured session — never a pre-generated slug.
-        if (resumeSession && !string.IsNullOrWhiteSpace(sessionName) && IsCompatibleSessionName(sessionName))
-        {
-            args.Add("-r");
-            args.Add(Quote(sessionName));
-        }
-
-        var normalizedModel = NormalizeModelId(model);
-        if (!string.IsNullOrWhiteSpace(normalizedModel))
-        {
-            args.Add("--model"); args.Add(Quote(normalizedModel));
-        }
-
-        args.Add("--output-format"); args.Add("stream-json");
-        args.Add("--verbose");
-        args.Add("--dangerously-skip-permissions");
-
-        // Inject centrally-managed agent rules as a system-prompt overlay.
-        // Using --append-system-prompt-file (vs. --append-system-prompt) keeps
-        // the multi-line markdown out of the command-line argument string, and
-        // lets the Anthropic CLI cache the system-prompt portion across runs.
-        var rulesPath = ResolveAgentRulesPath();
-        if (rulesPath != null)
-        {
-            args.Add("--append-system-prompt-file");
-            args.Add(Quote(rulesPath));
-        }
 
         // Always call the underlying claude.exe directly when available.
         // Going through the npm-installed claude.CMD shim makes Windows wrap
@@ -112,29 +84,83 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         // See ResolveCmdShimToExe for the full root cause + npm-shim probe.
         var fileName = ResolveCmdShimToExe(ResolveExecutable(GetCliPath()));
 
-        return new ProcessStartInfo
+        var psi = new ProcessStartInfo
         {
             FileName = fileName,
-            Arguments = string.Join(' ', args),
             WorkingDirectory = workingDirectory
         };
+
+        // ArgumentList vs Arguments: ArgumentList lets .NET escape each arg
+        // per the Win32 CommandLineToArgvW rules. Mixing is not allowed
+        // (the CLR throws when both are populated). For multi-line / quoted
+        // content like the rendered prompt this is the only correct path.
+        psi.ArgumentList.Add("-p");
+
+        // Claude Code CLI does not expose a --name flag; sessions are
+        // identified by the UUID the CLI itself generates and emits in the
+        // first `system` stream-json frame. We only ever pass -r <uuid> to
+        // resume an already-captured session - never a pre-generated slug.
+        if (resumeSession && !string.IsNullOrWhiteSpace(sessionName) && IsCompatibleSessionName(sessionName))
+        {
+            psi.ArgumentList.Add("-r");
+            psi.ArgumentList.Add(sessionName);
+        }
+
+        var normalizedModel = NormalizeModelId(model);
+        if (!string.IsNullOrWhiteSpace(normalizedModel))
+        {
+            psi.ArgumentList.Add("--model");
+            psi.ArgumentList.Add(normalizedModel);
+        }
+
+        psi.ArgumentList.Add("--output-format");
+        psi.ArgumentList.Add("stream-json");
+        psi.ArgumentList.Add("--verbose");
+        psi.ArgumentList.Add("--dangerously-skip-permissions");
+
+        // Inject centrally-managed agent rules as a system-prompt overlay.
+        // Using --append-system-prompt-file (vs. --append-system-prompt) keeps
+        // the multi-line markdown out of the command-line argument string, and
+        // lets the Anthropic CLI cache the system-prompt portion across runs.
+        var rulesPath = ResolveAgentRulesPath();
+        if (rulesPath != null)
+        {
+            psi.ArgumentList.Add("--append-system-prompt-file");
+            psi.ArgumentList.Add(rulesPath);
+        }
+
+        // The prompt is the LAST positional argument. Empty/null prompt
+        // would still spawn claude (it would just have no input), so we
+        // gate on non-empty to keep the behaviour predictable.
+        if (!string.IsNullOrEmpty(prompt))
+        {
+            psi.ArgumentList.Add(prompt);
+        }
+
+        return psi;
     }
 
     /// <summary>
-    /// Pipe the rendered prompt through stdin. Sending it as a quoted -p
-    /// argument on Windows fails for any prompt with newlines, embedded
-    /// quotes, backslashes, or that exceeds cmd.exe's command-line length
-    /// limit - in production this corrupted nearly every Claude run, with
-    /// the agent only seeing the title from the runtime template and
-    /// asking "what would you like me to do?". The base class writes our
-    /// payload to stdin then closes it before the CLI reads.
+    /// ADR-0014: Claude does NOT pipe through stdin; the prompt is passed
+    /// as the last positional argv (see <see cref="BuildStartInfo"/>).
+    /// Returning null tells the base class not to redirect stdin at all,
+    /// which is the documented Anthropic workaround for claude-code#771
+    /// (Claude reads stdin during init and blocks on a connected pipe).
+    ///
+    /// <para>
+    /// The previous behaviour - return <paramref name="prompt"/> so the
+    /// base class would pipe-then-close stdin - was the documented way
+    /// to bypass cmd.exe's argv truncation, but that mitigation became
+    /// unnecessary once ADR-0011 routed us through claude.exe directly
+    /// (no cmd.exe wrapping, so multi-line argv is fine).
+    /// </para>
     /// </summary>
     protected override string? GetPromptStdinPayload(
         string prompt,
         string? sessionName,
         bool resumeSession,
         string? model)
-        => prompt;
+        => null;
 
     /// <summary>
     /// Bridge to <see cref="ClaudeEventAdapter"/>. Each raw stdout line is

@@ -333,3 +333,50 @@ The reference clones at `c:/Projects/agent-taskboard-devspace/cli-source-referen
 **Implementation pointers.** [ROADMAP.md](../ROADMAP.md) "Stale Session Reliability"; [docs/supported-clis.md](supported-clis.md) "Session model"; [docs/cli-skills/cli-overview.md](cli-skills/cli-overview.md) "Stale-session invariants"; [docs/cli-skills/cli-claude.md](cli-skills/cli-claude.md) "Stale sessions are a harness-quality risk"; [docs/cli-skills/cli-codex.md](cli-skills/cli-codex.md) "Stale Codex sessions"; existing tests in [backend.Tests/TaskRunnerPlanTests.cs](../backend.Tests/TaskRunnerPlanTests.cs), [backend.Tests/RunOutcomePolicyTests.cs](../backend.Tests/RunOutcomePolicyTests.cs), and [backend.Tests/SessionEventsTests.cs](../backend.Tests/SessionEventsTests.cs).
 
 **Status.** Accepted.
+
+---
+
+## ADR-0014 - CLI child stdin is default-deny; pipe only when a payload exists (2026-05-04)
+
+**Decision.** `CliExecutionServiceBase.StartAsync` no longer sets `RedirectStandardInput=true` unconditionally. When the per-CLI subclass returns a non-empty `GetPromptStdinPayload`, we redirect stdin, write the payload, flush, and close - same behaviour as before. When the subclass returns `null` or empty (today's NoOp / probe paths, tomorrow's resume-with-no-followup paths), stdin is **not redirected at all**: the child inherits the parent's already-non-interactive stdin from the ASP.NET host, which is closed-from-the-start, and that closed handle stops the CLI from blocking on a `read(stdin)` call during init.
+
+**Context.** Two empirical findings from research / `cli-orchestration-survey-2026-05.md` and the long-running "agent silent after `system/init`" hang:
+
+1. **claude-code#771 (upstream Anthropic).** The Claude CLI reads stdin during init and blocks on a connected stdin pipe that never delivers EOF in the order Node expects. Python's `subprocess.run(capture_output=True)` works because it sets `stdin=DEVNULL`; Node's documented workaround is `stdio: ['ignore', 'pipe', 'pipe']`. Our .NET equivalent is `RedirectStandardInput=false` (parent's stdin handle is inherited - closed under non-interactive ASP.NET hosting, equivalent to DEVNULL). The race between "child began reading stdin" and ".NET closed the writer end" was reproducible under `dotnet run` + Kestrel but not under `dotnet test`, which is why isolated tests passed while the live backend hung at exactly this seam.
+2. **Convergent OSS evidence.** ZENG3LD/gate4agent, aannoo/hcom, awslabs/cli-agent-orchestrator, JeromySt/vscode-copilot-orchestrator, hoangsonww/AI-Agents-Orchestrator, microsoft/copilot-sdk - every cross-CLI orchestrator we surveyed defaults stdin to `'ignore'` / `DEVNULL` and only opens the pipe on a turn that actually has a payload. This is the converged pattern across Rust, TypeScript, Python, and Go orchestrators; it is the contract Anthropic expects and the contract every other CLI tolerates.
+
+**Non-goals.**
+- Removing the stdin pipe path entirely. Streaming follow-ups (the bidirectional `--input-format stream-json` mode for Claude continues, App Server / ACP JSON-RPC for Codex / Gemini) need a writable stdin; this ADR pins the *default* behaviour, not the only behaviour.
+- Auto-detecting whether the OS will hand the child a NUL stdin. We do not interrogate `Console.IsInputRedirected`; the policy is "unless the subclass asked for stdin redirection, we don't redirect" and the subclass is the source of truth.
+- Forcing this on Copilot. Copilot's `CopilotCliService` predates the base class and passes prompts via argv where possible.
+- Treating WSL2 as a substitute. See ADR-0015 - claude-code#771 is platform-agnostic; WSL2 does not fix it. The stdin default-deny rule is correct on every platform.
+
+**Reasoning style.** Default-deny matches our `RunPlanner` / `RunOutcomePolicy` aesthetic: the safer behaviour is the default; the unsafe behaviour requires the subclass to opt in. The diagnostic that landed this ADR (`backend.Tests/CliKestrelHostingRepoTests.cs`) reproduces the hang inside `WebApplicationFactory<Program>` so a future regression cannot ship without a red test.
+
+**Implementation pointers.** [`backend/Services/Cli/CliExecutionServiceBase.cs`](../backend/Services/Cli/CliExecutionServiceBase.cs) (`StartAsync` stdin gate); [`backend.Tests/CliKestrelHostingRepoTests.cs`](../backend.Tests/CliKestrelHostingRepoTests.cs) (claude-code#771 hosting repro); the long-form research that grounds this decision lives in [`docs/research/cli-orchestration-survey-2026-05.md`](research/cli-orchestration-survey-2026-05.md) section "R1. Fix stdin-handling per claude-code#771" and the per-repo NOTES.md files under `c:/Projects/agent-taskboard-devspace/cli-source-references/<repo>/`.
+
+**Status.** Accepted.
+
+---
+
+## ADR-0015 - Windows-native runtime; WSL2 is a documented alternative, not a requirement (2026-05-04)
+
+**Decision.** Agent Task Processor's reference platform is Windows-native (.NET on Windows, claude / codex / gemini / copilot CLIs from their official Windows installers). WSL2 is a fully supported alternative for users who prefer it; CI runs on both Windows and Linux runners. We do **not** require WSL2 to use this product, even though some failure modes are easier to reason about under Linux semantics.
+
+**Context.** A long thread of CLI-spawn hangs raised the legitimate question: "should we just require WSL2 and stop fighting Windows?" The research deliverable [`docs/research/wsl2-vs-windows-decision-2026-05.md`](research/wsl2-vs-windows-decision-2026-05.md) (497 lines) examines this seriously. The split that emerged:
+
+- **Genuinely Windows-specific failure modes:** the npm `.CMD` shim wrapping under `cmd.exe /c "..."` (ADR-0011's mitigation), Win32's coarse parent-handle inheritance via `bInheritHandles=TRUE`, ConPTY / winpty quirks for interactive CLIs, locale defaults of CP1252 vs UTF-8. WSL2 eliminates these.
+- **Cross-platform failure modes:** Node's stdout block-buffering on pipes (still present on Linux), Anthropic / OpenAI rate limits and stream-json correctness, claude session-file lock contention in `~/.claude/projects/<encoded-cwd>/`, the prompt-trust-store dialog on first run. WSL2 does not eliminate any of these.
+- **The dominant suspect (claude-code#771)** is in the cross-platform set. WSL2 does not fix it; the stdin-default-deny rule (ADR-0014) does, on every platform.
+
+**Non-goals.**
+- Forcing WSL2. The user's stated environment is Windows-native. Required-WSL2 onboarding adds 3-6 days per new contributor and breaks IDE workflows (Rider's WSL indexing is slow, the `\\wsl$\...` file-system bridge performs poorly for git-heavy workspaces). The benefit (eliminating Windows-specific suspects) is real but small once ADR-0014 is in.
+- Pretending Windows-only is fine. We accept the platform-specific code overhead in `ClaudeCliService.ResolveCmdShimToExe`, `CliExecutionServiceBase.ResolveExecutable`, and any future Windows-only handle-curation P/Invoke. This overhead is documented and tested.
+- Splitting into separate Windows-only and Linux-only branches. One source tree, platform-conditional code where required.
+- Promising perfect feature parity on macOS. macOS works for development but is not the reference platform.
+
+**Reasoning style.** When two execution environments would solve different subsets of a problem, fix the subset they share first. ADR-0014's stdin default-deny is in the shared subset. Only after that lands and a Windows-specific residual remains do we revisit WSL2; the trigger condition is "ADR-0014 plus env hardening shipped, hang still reproduces on Windows but not on Linux / WSL2 CI". Until that condition fires, WSL2 is a documented alternative, not a required runtime.
+
+**Implementation pointers.** [`docs/research/wsl2-vs-windows-decision-2026-05.md`](research/wsl2-vs-windows-decision-2026-05.md) (the long form with empirical evidence per failure mode); [`backend/Services/Cli/ClaudeCliService.cs::ResolveCmdShimToExe`](../backend/Services/Cli/ClaudeCliService.cs) (the existing Windows-specific accommodation, ADR-0011); [`README.md`](../README.md) "Use existing coding agents" (the platform-neutral product framing).
+
+**Status.** Accepted. Re-evaluation trigger: a documented, reproducible hang that survives ADR-0014 + future env hardening on Windows but not on Linux / WSL2 CI.

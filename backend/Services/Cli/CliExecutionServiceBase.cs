@@ -225,7 +225,17 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         var psi = BuildStartInfo(prompt, workingDirectory, sessionName, resumeSession, model);
         psi.RedirectStandardOutput = true;
         psi.RedirectStandardError  = true;
-        psi.RedirectStandardInput  = true;
+        // ADR-0014: stdin is default-deny. We only redirect (and pipe a
+        // payload through) when the per-CLI subclass returns a non-empty
+        // GetPromptStdinPayload. The dominant suspect for the live
+        // "agent silent after init" hang (claude-code#771 plus convergent
+        // OSS evidence) is exactly this: a connected stdin pipe inherited
+        // by a CLI that reads stdin during init, on Windows ASP.NET
+        // hosting where the parent's writer-end close races the child's
+        // first read. When no payload is needed, the child inherits the
+        // parent's already-non-interactive stdin and the race goes away.
+        var stdinPayload = GetPromptStdinPayload(prompt, sessionName, resumeSession, model);
+        psi.RedirectStandardInput = !string.IsNullOrEmpty(stdinPayload);
         psi.UseShellExecute = false;
         psi.CreateNoWindow  = true;
         psi.WorkingDirectory = workingDirectory;
@@ -242,33 +252,51 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         // claude-cli is a Node process; this disables Node's BOM/encoding quirks.
         psi.Environment["NODE_NO_WARNINGS"]   = "1";
 
+        // ADR-0014 follow-up: env hardening derived from research/cli-orchestration-survey-2026-05.md
+        // section "P5. Pre-emptive trust-store / settings hardening". These
+        // env vars suppress interactive auto-update prompts, color escape
+        // sequences that confuse our parsers, and tip-of-day banners that
+        // would otherwise dominate the activity log. They are CLI-specific
+        // but harmless when set globally; setting them in the base class
+        // means all four CLIs benefit without per-driver duplication.
+        psi.Environment["NO_COLOR"]                       = "1";
+        psi.Environment["FORCE_COLOR"]                    = "0";
+        psi.Environment["CLAUDE_CODE_DISABLE_AUTOUPDATER"]= "1";
+        psi.Environment["GEMINI_NO_UPDATE_NOTIFIER"]      = "1";
+        psi.Environment["CODEX_DISABLE_TIP_OF_THE_DAY"]   = "1";
+        // CI=1 is the conventional non-interactive marker. Most npm CLIs
+        // respect it to skip prompts; harmless for the others.
+        psi.Environment["CI"]                             = "1";
+
         ChildHandle child;
         try
         {
             child = await SpawnChildAsync(psi, prompt, sessionName, resumeSession, model, ct);
-            // Some CLIs (notably Claude Code) read stdin even when the prompt is
-            // passed via -p, and emit a 3-second "no stdin data received" warning
-            // before continuing. We either pipe the prompt through stdin (the
-            // Claude path - see GetPromptStdinPayload comment) or signal EOF
-            // immediately so the warning never fires. Both paths close stdin
-            // before any read is attempted.
-            var stdinPayload = GetPromptStdinPayload(prompt, sessionName, resumeSession, model);
-            try
+            // ADR-0014: only write to stdin when the subclass said it has a
+            // payload (and the base class therefore set RedirectStandardInput
+            // = true above). When no payload, the child inherits the host's
+            // non-interactive stdin (or NUL on a daemon) - same effect as
+            // Python's stdin=DEVNULL or Node's stdio:'ignore', which is the
+            // documented Anthropic workaround for claude-code#771.
+            if (!string.IsNullOrEmpty(stdinPayload))
             {
-                if (!string.IsNullOrEmpty(stdinPayload))
+                try
                 {
                     var bytes = System.Text.Encoding.UTF8.GetBytes(stdinPayload);
                     await child.Stdin.WriteAsync(bytes, ct);
                     await child.Stdin.FlushAsync(ct);
                 }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to write stdin payload for {Cli} job {JobId}", CliType, jobId);
-            }
-            finally
-            {
-                try { child.Stdin.Close(); } catch { }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to write stdin payload for {Cli} job {JobId}", CliType, jobId);
+                }
+                finally
+                {
+                    // Close *only* when we actually opened it. Closing
+                    // Stream.Null is a no-op so the guard is defensive
+                    // rather than load-bearing.
+                    try { child.Stdin.Close(); } catch { }
+                }
             }
         }
         catch (Exception ex)
@@ -376,9 +404,13 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
     {
         var p = new Process { StartInfo = psi, EnableRaisingEvents = true };
         p.Start();
+        // When stdin is not redirected (ADR-0014 default-deny path),
+        // accessing Process.StandardInput throws InvalidOperationException.
+        // Hand a no-op stream upstream so the StartAsync flow stays linear.
+        var stdin = psi.RedirectStandardInput ? p.StandardInput.BaseStream : Stream.Null;
         return Task.FromResult(new ChildHandle(
             Process: p,
-            Stdin: p.StandardInput.BaseStream,
+            Stdin: stdin,
             Stdout: p.StandardOutput,
             Stderr: p.StandardError));
     }
