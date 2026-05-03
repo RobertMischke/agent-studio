@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Configuration.Memory;
 using Xunit;
+using Xunit.Sdk;
 
 namespace OrchestratorApi.Tests;
 
@@ -47,11 +48,36 @@ public class CliSpawnIntegrationTests
     private const string SkipReason =
         "Integration test, opt-in via RUN_CLI_INTEGRATION=1 (spawns real CLI, burns quota).";
 
-    private const string ClaudeExePath =
-        @"C:\Users\rmisc\AppData\Roaming\npm\node_modules\@anthropic-ai\claude-code\bin\claude.exe";
+    /// <summary>
+    /// Locate <c>claude.exe</c> (the underlying npm-bundled binary, not the
+    /// .CMD shim) without hardcoding the user-specific install root. Probes
+    /// in order: <c>CLAUDE_EXE</c> env override, then <c>%APPDATA%\npm\
+    /// node_modules\@anthropic-ai\claude-code\bin\claude.exe</c>.
+    /// </summary>
+    private static string? ClaudeExePath
+    {
+        get
+        {
+            var fromEnv = Environment.GetEnvironmentVariable("CLAUDE_EXE");
+            if (!string.IsNullOrWhiteSpace(fromEnv) && File.Exists(fromEnv)) return fromEnv;
+            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            var candidate = Path.Combine(appData, "npm", "node_modules", "@anthropic-ai", "claude-code", "bin", "claude.exe");
+            return File.Exists(candidate) ? candidate : null;
+        }
+    }
 
-    private const string ClaudeCmdPath =
-        @"C:\Users\rmisc\AppData\Roaming\npm\claude.CMD";
+    /// <summary>Locate <c>claude.CMD</c> (the npm shim) for the broken-baseline probe.</summary>
+    private static string? ClaudeCmdPath
+    {
+        get
+        {
+            var fromEnv = Environment.GetEnvironmentVariable("CLAUDE_CMD");
+            if (!string.IsNullOrWhiteSpace(fromEnv) && File.Exists(fromEnv)) return fromEnv;
+            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            var candidate = Path.Combine(appData, "npm", "claude.CMD");
+            return File.Exists(candidate) ? candidate : null;
+        }
+    }
 
     private const string TinyPrompt = "Reply with exactly four words and nothing else: ready set go now";
 
@@ -85,15 +111,16 @@ public class CliSpawnIntegrationTests
     /// or a different output format.
     /// </para>
     /// </summary>
-    [Fact]
+    [SkippableFact]
     public async Task DirectExe_PipeStdin_StreamJson_ProducesMultipleFrames()
     {
-        if (!IntegrationEnabled) return; // silent skip until opt-in
-        if (!File.Exists(ClaudeExePath)) return;
+        Skip.IfNot(IntegrationEnabled, SkipReason);
+        var exe = ClaudeExePath;
+        Skip.IfNot(exe != null, "claude.exe not found (set CLAUDE_EXE or install via npm)");
 
         var psi = new ProcessStartInfo
         {
-            FileName = ClaudeExePath,
+            FileName = exe!,
             UseShellExecute = false,
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
@@ -178,7 +205,7 @@ public class CliSpawnIntegrationTests
     /// workaround can be retired.
     /// </para>
     /// </summary>
-    [Fact]
+    [SkippableFact]
     public async Task CmdShim_PipeStdin_StreamJson_LiveScaleFatPrompt_ShouldStreamPastInit()
     {
         // Reproduction of the live-runner conditions that surfaced the
@@ -192,13 +219,14 @@ public class CliSpawnIntegrationTests
         // if it streams normally the live hang has a different root cause
         // (concurrent claude processes, watchdog timing, etc.) and this
         // test still acts as a parity probe alongside the DirectExe path.
-        if (!IntegrationEnabled) return;
-        if (!File.Exists(ClaudeCmdPath)) return;
-        if (!File.Exists(DevAgentRules)) return;
+        Skip.IfNot(IntegrationEnabled, SkipReason);
+        var cmd = ClaudeCmdPath;
+        Skip.IfNot(cmd != null, "claude.CMD not found");
+        Skip.IfNot(File.Exists(DevAgentRules), "agent-rules/core.md not at expected dev path");
 
         var psi = new ProcessStartInfo
         {
-            FileName = ClaudeCmdPath,
+            FileName = cmd!,
             UseShellExecute = false,
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
@@ -238,19 +266,20 @@ public class CliSpawnIntegrationTests
     /// runner conditions. Pins that <see cref="ClaudeCliService.ResolveCmdShimToExe"/>
     /// continues to produce streaming frames at realistic prompt sizes.
     /// </summary>
-    [Fact]
+    [SkippableFact]
     public async Task ClaudeCliService_StartAsync_FatPrompt_ProducesStreamingFrames()
     {
-        if (!IntegrationEnabled) return;
-        if (!File.Exists(ClaudeExePath)) return;
-        if (!File.Exists(DevAgentRules)) return;
+        Skip.IfNot(IntegrationEnabled, SkipReason);
+        var cmd = ClaudeCmdPath;
+        Skip.IfNot(cmd != null, "claude.CMD not found");
+        Skip.IfNot(File.Exists(DevAgentRules), "agent-rules/core.md not at expected dev path");
 
         var cfg = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
                 // Force the test to exercise the npm shim path so the fix
                 // (.CMD -> .exe rewrite in BuildStartInfo) actually runs.
-                ["ClaudeCli:Path"] = ClaudeCmdPath,
+                ["ClaudeCli:Path"] = cmd,
                 ["AgentRules:CorePath"] = DevAgentRules,
                 ["TaskRepository"] = Path.Combine(Path.GetTempPath(), $"cli-it-{Guid.NewGuid():N}")
             })
@@ -296,16 +325,17 @@ public class CliSpawnIntegrationTests
     /// <c>ReadStreamAsync</c> loop, and we assert the line buffer
     /// contains both the init marker and at least one model output frame.
     /// </summary>
-    [Fact]
+    [SkippableFact]
     public async Task ClaudeCliService_StartAsync_ProducesStreamingFrames()
     {
-        if (!IntegrationEnabled) return;
-        if (!File.Exists(ClaudeExePath)) return;
+        Skip.IfNot(IntegrationEnabled, SkipReason);
+        var exe = ClaudeExePath;
+        Skip.IfNot(exe != null, "claude.exe not found");
 
         var cfg = new Microsoft.Extensions.Configuration.ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["ClaudeCli:Path"] = ClaudeExePath,
+                ["ClaudeCli:Path"] = exe,
                 ["TaskRepository"] = Path.Combine(Path.GetTempPath(), $"cli-it-{Guid.NewGuid():N}")
             })
             .Build();
@@ -354,16 +384,17 @@ public class CliSpawnIntegrationTests
     /// state (claude session DB, .NET pipe handles, port reuse) is the
     /// culprit, this test reproduces it deterministically.
     /// </summary>
-    [Fact]
+    [SkippableFact]
     public async Task ClaudeCliService_SequentialKillRestart_StaysHealthy()
     {
-        if (!IntegrationEnabled) return;
-        if (!File.Exists(ClaudeExePath)) return;
+        Skip.IfNot(IntegrationEnabled, SkipReason);
+        var cmd = ClaudeCmdPath;
+        Skip.IfNot(cmd != null, "claude.CMD not found");
 
         var cfg = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
             {
-                ["ClaudeCli:Path"] = ClaudeCmdPath,
+                ["ClaudeCli:Path"] = cmd,
                 ["AgentRules:CorePath"] = DevAgentRules,
                 ["TaskRepository"] = Path.Combine(Path.GetTempPath(), $"cli-it-{Guid.NewGuid():N}")
             })

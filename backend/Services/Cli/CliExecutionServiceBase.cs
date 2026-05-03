@@ -258,7 +258,8 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             OutputLog = new CliOutputLogStore(logPath),
             SessionName = sessionName,
             LastStreamedAt = execution.StartedAt,
-            KillOverride = child.KillOverride
+            KillOverride = child.KillOverride,
+            ChildStdin = child.Stdin
         };
         try { info.OutputLog.Reset(); }
         catch (Exception ex) { _logger.LogWarning(ex, "Failed to reset CLI output log {Path}", logPath); }
@@ -376,7 +377,22 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         if (info.Process.HasExited) return false;
         try
         {
-            info.Process.StandardInput.WriteLine(input);
+            // Route through the ChildHandle's stdin stream when one was
+            // captured at spawn time so PTY-based subclasses don't bypass
+            // the pseudo-terminal writer. Fall back to the raw Process.
+            // StandardInput for the default pipe path (the StreamWriter
+            // wraps the same underlying Stream, so behaviour is identical
+            // for non-PTY callers).
+            var bytes = System.Text.Encoding.UTF8.GetBytes(input + "\n");
+            if (info.ChildStdin != null)
+            {
+                info.ChildStdin.Write(bytes, 0, bytes.Length);
+                info.ChildStdin.Flush();
+            }
+            else
+            {
+                info.Process.StandardInput.WriteLine(input);
+            }
             return true;
         }
         catch { return false; }
@@ -814,6 +830,16 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         /// plus the underlying child's process tree).
         /// </summary>
         public Action<RunStopReason>? KillOverride { get; init; }
+
+        /// <summary>
+        /// The stdin stream captured at spawn time (PTY writer for PTY-based
+        /// subclasses; the Process's stdin BaseStream for the default path).
+        /// <see cref="SendInput"/> writes here so PTY subclasses don't bypass
+        /// the pseudo-terminal. Null on legacy ProcInfo construction (the
+        /// constructor accepts a bare Process for backward compatibility);
+        /// callers fall back to <c>Process.StandardInput</c> in that case.
+        /// </summary>
+        public Stream? ChildStdin { get; init; }
 
         public ProcInfo(Process process, CliExecution execution, string workingDirectory)
         {

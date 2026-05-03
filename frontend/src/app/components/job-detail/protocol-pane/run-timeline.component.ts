@@ -33,10 +33,53 @@ import { JobService } from '../../../services/job.service';
       <div class="run-timeline__empty">No CLI runs yet — start the task to populate the timeline.</div>
     } @else {
       <div class="run-timeline">
-        <div class="run-timeline__header">
+        <button type="button"
+                class="run-timeline__header run-timeline__header--toggle"
+                (click)="toggleListExpanded()"
+                [attr.aria-expanded]="listExpanded()"
+                [attr.data-testid]="'runs-toggle'">
+          <span class="run-timeline__caret">{{ listExpanded() ? '▾' : '▸' }}</span>
           <span class="run-timeline__title">Runs</span>
           <span class="run-timeline__aggregate">{{ visibleRuns().length }} run{{ visibleRuns().length === 1 ? '' : 's' }}</span>
-        </div>
+          @if (statusSummary().completed > 0) {
+            <span class="run-timeline__chip run-timeline__chip--ok">{{ statusSummary().completed }} ok</span>
+          }
+          @if (statusSummary().failed > 0) {
+            <span class="run-timeline__chip run-timeline__chip--bad">{{ statusSummary().failed }} fail</span>
+          }
+          @if (statusSummary().running > 0) {
+            <span class="run-timeline__chip run-timeline__chip--live">{{ statusSummary().running }} live</span>
+          }
+          @if (statusSummary().other > 0) {
+            <span class="run-timeline__chip run-timeline__chip--other">{{ statusSummary().other }} other</span>
+          }
+          <span class="run-timeline__latest">
+            latest: <span class="run-timeline__latest-status" [attr.data-status]="latestRun()?.status">{{ latestRun()?.status || '—' }}</span>
+            @if (latestRun(); as lr) {
+              <span class="run-timeline__latest-time">{{ formatTime(lr.startedAt) }}</span>
+            }
+          </span>
+        </button>
+        @if (!listExpanded() && visibleRuns().length > 0) {
+          <!-- Always keep the most recent / running run visible even when collapsed -->
+          <div class="run-card run-card--peek"
+               [attr.data-status]="visibleRuns()[0].status">
+            <div class="run-card__head run-card__head--peek">
+              <span class="run-card__index">#{{ visibleRuns()[0].index }}</span>
+              <span class="run-card__chip run-card__chip--status" [attr.data-status]="visibleRuns()[0].status">{{ statusLabel(visibleRuns()[0]) }}</span>
+              <span class="run-card__followup" [class.run-card__followup--empty]="!visibleRuns()[0].userFollowup">
+                {{ visibleRuns()[0].userFollowup || '(no follow-up)' }}
+              </span>
+              <span class="run-card__meta">
+                @if (visibleRuns()[0].durationSeconds; as dur) {
+                  <span>{{ formatDuration(dur) }}</span>
+                }
+                <span class="run-card__time">{{ formatTime(visibleRuns()[0].startedAt) }}</span>
+              </span>
+            </div>
+          </div>
+        }
+        @if (listExpanded()) {
         @for (r of visibleRuns(); track r.index) {
           <div class="run-card"
                [attr.data-status]="r.status"
@@ -127,15 +170,34 @@ import { JobService } from '../../../services/job.service';
             }
           </div>
         }
+        }
       </div>
     }
   `,
   styles: [`
     .run-timeline { display: flex; flex-direction: column; gap: 4px; padding: 4px 0 8px; }
     .run-timeline__empty { padding: 8px 12px; font-size: 12.5px; color: #94a3b8; font-style: italic; }
-    .run-timeline__header { display: flex; align-items: baseline; gap: 8px; padding: 0 4px 4px; }
+    .run-timeline__header { display: flex; align-items: center; gap: 8px; padding: 4px 6px; flex-wrap: wrap; }
+    .run-timeline__header--toggle {
+      width: 100%; background: transparent; border: 1px solid rgba(148, 163, 184, 0.18);
+      border-radius: 6px; cursor: pointer; color: inherit; font: inherit; text-align: left;
+    }
+    .run-timeline__header--toggle:hover { background: rgba(148, 163, 184, 0.08); }
+    .run-timeline__caret { width: 12px; text-align: center; color: #94a3b8; font-size: 11px; }
     .run-timeline__title { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.06em; color: #cbd5e1; font-weight: 600; }
     .run-timeline__aggregate { font-size: 11.5px; color: #94a3b8; }
+    .run-timeline__chip { font-size: 10.5px; padding: 1px 6px; border-radius: 999px; background: rgba(148, 163, 184, 0.18); color: #e2e8f0; }
+    .run-timeline__chip--ok   { background: rgba(34, 197, 94, 0.20); color: #bbf7d0; }
+    .run-timeline__chip--bad  { background: rgba(220, 38, 38, 0.30); color: #fecaca; }
+    .run-timeline__chip--live { background: rgba(56, 189, 248, 0.25); color: #bae6fd; }
+    .run-timeline__chip--other{ background: rgba(251, 191, 36, 0.25); color: #fde68a; }
+    .run-timeline__latest { margin-left: auto; font-size: 11px; color: #94a3b8; display: flex; gap: 6px; align-items: baseline; }
+    .run-timeline__latest-status[data-status="failed"]   { color: #fca5a5; }
+    .run-timeline__latest-status[data-status="completed"]{ color: #86efac; }
+    .run-timeline__latest-status[data-status="running"]  { color: #bae6fd; }
+    .run-timeline__latest-time { color: #64748b; }
+    .run-card--peek { opacity: 0.95; }
+    .run-card__head--peek { cursor: default; }
 
     .run-card { border: 1px solid rgba(148, 163, 184, 0.20); border-radius: 8px; background: rgba(30, 41, 59, 0.40); overflow: hidden; }
     .run-card[data-status="completed"] { border-color: rgba(74, 222, 128, 0.32); }
@@ -195,6 +257,35 @@ export class RunTimelineComponent {
   readonly openGitViewer = output<RunRecord>();
 
   readonly expandedIndex = signal<number | null>(null);
+
+  /**
+   * Whether the per-run cards list is expanded. Default collapsed: a job
+   * with 12 failed runs (the original symptom) takes well over half the
+   * viewport otherwise. Collapsed view shows only the latest run's chip
+   * plus aggregate counts; clicking the header toggles full list.
+   */
+  readonly listExpanded = signal<boolean>(false);
+
+  toggleListExpanded() { this.listExpanded.update(v => !v); }
+
+  readonly latestRun = computed<RunRecord | null>(() => {
+    const v = this.visibleRuns();
+    return v.length > 0 ? v[0] : null;
+  });
+
+  readonly statusSummary = computed(() => {
+    const v = this.visibleRuns();
+    let completed = 0, failed = 0, running = 0, other = 0;
+    for (const r of v) {
+      switch (r.status) {
+        case 'completed': completed++; break;
+        case 'failed':    failed++; break;
+        case 'running':   running++; break;
+        default:          other++; break;
+      }
+    }
+    return { completed, failed, running, other };
+  });
 
   // Per-card commit state. Keyed by run.index so a re-poll of the
   // timeline doesn't wipe a card's loaded commits.
