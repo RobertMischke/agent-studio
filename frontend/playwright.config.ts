@@ -1,5 +1,4 @@
 import { defineConfig, devices } from '@playwright/test';
-import { JobArtifactReporter } from './e2e/helpers/job-artifact-reporter';
 
 /**
  * Playwright configuration for Agent Task Processor frontend E2E tests.
@@ -34,7 +33,7 @@ const resolvedBaseUrl =
 const reporters: any[] = [['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]];
 // Activate job artifact reporter only when JOB_RESULTS_DIR is set (agent task orchestrator mode).
 if (process.env.JOB_RESULTS_DIR) {
-  reporters.push([JobArtifactReporter]);
+  reporters.push(['./e2e/helpers/job-artifact-reporter.ts']);
 }
 
 export default defineConfig({
