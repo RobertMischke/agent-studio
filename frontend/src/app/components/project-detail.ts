@@ -5,6 +5,8 @@ import { GroupedJobs, OrchestratorLogEntry, OrchestratorSession, RunnerStatus } 
 import { OrchestratorRunner_KnownModels } from './project-detail.models';
 import { TokenSummaryBlockComponent } from './token-summary-block';
 import { GlobalOrchestratorCardComponent } from './global-orchestrator-card';
+import { ProjectSecuritySectionComponent } from './project-security-section';
+import { ProjectArchitectureSectionComponent } from './project-architecture-section';
 
 interface ProjectSettingsRow {
   autoCommit: boolean;
@@ -25,7 +27,13 @@ interface ProjectSettingsRow {
 @Component({
   selector: 'app-project-detail',
   standalone: true,
-  imports: [FormsModule, TokenSummaryBlockComponent, GlobalOrchestratorCardComponent],
+  imports: [
+    FormsModule,
+    TokenSummaryBlockComponent,
+    GlobalOrchestratorCardComponent,
+    ProjectSecuritySectionComponent,
+    ProjectArchitectureSectionComponent
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <section class="proj-detail" data-testid="project-detail">
@@ -130,6 +138,10 @@ interface ProjectSettingsRow {
       </section>
 
       <app-token-summary-block [projectName]="projectName()" />
+
+      <app-project-security-section [projectName]="projectName()" />
+
+      <app-project-architecture-section [projectName]="projectName()" />
 
       <section class="proj-detail__group">
         <h3>Recent orchestrator activity</h3>

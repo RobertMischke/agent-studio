@@ -138,4 +138,88 @@ public class AutoPickupCascadeTests
     {
         Assert.Equal(3, ProjectRunner.AutoFailureHaltThreshold);
     }
+
+    /// <summary>
+    /// Pinned for the same reason as <see cref="ProjectRunner.AutoFailureHaltThreshold"/>:
+    /// the capture-fail circuit-breaker is the second line of defence after
+    /// the recovery-marker write. If a structural bug feeds the same dead
+    /// UUID back into the planner, this caps the loop at 3 spawns instead
+    /// of the 31 the 2026-05-03 production trace recorded for arhciv.
+    /// </summary>
+    [Fact]
+    public void CaptureFailHaltThreshold_Is3()
+    {
+        Assert.Equal(3, ProjectRunner.CaptureFailHaltThreshold);
+    }
+
+    // ===== ShouldMarkSessionChainRecovery =====
+    //
+    // The 2026-05-03 arhciv-besser-darzustellen loop: 31 consecutive
+    // continues, all resumed against UUID dacb0f58-..., none captured a
+    // session id back, and the recovery marker was NEVER appended to the
+    // chain. Root cause: the runner read _activePlan directly instead of
+    // a field snapshot, and a concurrent path (re-issue branch /
+    // RunOrchestratorDecisionAsync / next tick re-entry) sometimes cleared
+    // the field before this read. Pulling the decision into a pure helper
+    // and feeding it the snapshot is the structural fix; these tests pin
+    // the helper's truth table.
+
+    [Fact]
+    public void ShouldMarkSessionChainRecovery_NullPlan_False()
+    {
+        Assert.False(ProjectRunner.ShouldMarkSessionChainRecovery(null));
+    }
+
+    [Fact]
+    public void ShouldMarkSessionChainRecovery_PlanWithoutResumeFlag_False()
+    {
+        var plan = MakePlan(resume: false, sessionToResume: null);
+        Assert.False(ProjectRunner.ShouldMarkSessionChainRecovery(plan));
+    }
+
+    [Fact]
+    public void ShouldMarkSessionChainRecovery_PlanWithResumeFlagButEmptySession_False()
+    {
+        var plan = MakePlan(resume: true, sessionToResume: "");
+        Assert.False(ProjectRunner.ShouldMarkSessionChainRecovery(plan));
+    }
+
+    [Fact]
+    public void ShouldMarkSessionChainRecovery_PlanResumesRealUuid_True()
+    {
+        var plan = MakePlan(resume: true, sessionToResume: ValidUuid);
+        Assert.True(ProjectRunner.ShouldMarkSessionChainRecovery(plan));
+    }
+
+    /// <summary>
+    /// The exact bug shape from the arhciv post-mortem: every continue's
+    /// plan was a resume against the same captured UUID. Each capture-fail
+    /// MUST request a recovery marker; without it the chain stays
+    /// <c>[dacb0f58]</c> forever and the next pickup resumes the same
+    /// dead id.
+    /// </summary>
+    [Fact]
+    public void ShouldMarkSessionChainRecovery_ArhcivShape_AlwaysTrue()
+    {
+        const string capturedUuid = "dacb0f58-8508-43f4-99ba-93b0f7b6775c";
+        var plan = MakePlan(resume: true, sessionToResume: capturedUuid);
+        Assert.True(ProjectRunner.ShouldMarkSessionChainRecovery(plan));
+    }
+
+    private static RunPlan MakePlan(bool resume, string? sessionToResume) =>
+        new RunPlan(
+            PromptTemplate: null,
+            PromptVariables: new Dictionary<string, string?>(),
+            PromptOverride: "test",
+            SessionToResume: sessionToResume,
+            ResumeFlag: resume,
+            EventKind: resume ? "continue" : "start",
+            EventReason: null,
+            EventInputSessionId: resume ? sessionToResume : null,
+            MoveJobToProgress: false,
+            MarkSessionChainRecovery: false,
+            WriteCutMarker: false,
+            CutMarkerReason: null,
+            PersistSessionName: null,
+            ClearStaleSessionName: false);
 }

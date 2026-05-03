@@ -64,6 +64,17 @@ public class ProjectRunner
     // the offenders without re-scanning.
     private readonly Queue<string> _recentAutoFailureJobIds = new();
 
+    // Per-job consecutive capture-fail counter. A capture-fail run is one
+    // that exited without claude/codex/gemini emitting a usable session id
+    // - the prior run's UUID is dead, can't be resumed, and we have no new
+    // UUID to chain to. The recovery-marker write that follows is the
+    // semantic fix; this counter is the secondary stop-gap so a structural
+    // failure (planner re-reads stale cache, scanner returns a snapshot
+    // taken before the recovery write completed, etc.) cannot loop forever.
+    private string? _consecutiveCaptureFailJobId;
+    private int _consecutiveCaptureFailCount;
+    internal const int CaptureFailHaltThreshold = 3;
+
     public string ProjectName { get; }
     public WatchPathEntry Entry { get; }
 
@@ -912,6 +923,17 @@ public class ProjectRunner
 
     private async Task OnCliFinishedAsync(string cliType, string jobKey, CliExecution execution, string jobId)
     {
+        // Snapshot the run-scoped fields BEFORE any path can clear them. The
+        // re-issue branch and RunOrchestratorDecisionAsync both null out
+        // _activePlan as part of releasing the active-job latch, and an
+        // upstream tick can re-enter RunCliAsync and reassign these fields
+        // before the capture-fail block reads them. Reading from a local
+        // snapshot makes the recovery decision deterministic w.r.t. THIS
+        // run, regardless of what other paths do concurrently.
+        var planSnapshot = _activePlan;
+        var intentSnapshot = _activeIntent;
+        var followupSnapshot = _activeFollowup;
+        var reissueAttemptSnapshot = _activeReissueAttempt;
         try
         {
             if (GetActiveJobKey() != jobKey || _activeJobId != jobId) return;
@@ -981,9 +1003,7 @@ public class ProjectRunner
                 var captureFailInfo = _scanner.FindJob(jobId, Entry.Path);
                 if (captureFailInfo != null)
                 {
-                    var resumeTargetWasGone =
-                        _activePlan?.ResumeFlag == true
-                        && !string.IsNullOrWhiteSpace(_activePlan.SessionToResume);
+                    var resumeTargetWasGone = ShouldMarkSessionChainRecovery(planSnapshot);
                     if (resumeTargetWasGone)
                     {
                         _sessions.SetJobSessionName(jobId, null, Entry.Path);
@@ -991,9 +1011,32 @@ public class ProjectRunner
                     }
 
                     var msg = resumeTargetWasGone
-                        ? $"[capture-fail] {cli.CliType} rejected the resume target ({_activePlan!.SessionToResume}); next follow-up will rebuild from disk via Recovery."
+                        ? $"[capture-fail] {cli.CliType} rejected the resume target ({planSnapshot!.SessionToResume}); next follow-up will rebuild from disk via Recovery."
                         : $"[capture-fail] No {cli.CliType} session id from this run; next follow-up will rebuild from disk.";
                     _chatLog.Append(captureFailInfo, OrchestratorMessageKind.Decision, msg);
+
+                    // Per-job consecutive capture-fail circuit-breaker.
+                    // The recovery marker above SHOULD prevent the next
+                    // pickup from resuming the same dead UUID, but several
+                    // failure modes (race with planner, planner reads stale
+                    // info, scanner cache) can still re-feed the same
+                    // session. Past the threshold we stop the runner so a
+                    // structural problem stops burning quota in a tight
+                    // loop. Reset on the success path above.
+                    var prior = _consecutiveCaptureFailJobId == jobId ? _consecutiveCaptureFailCount : 0;
+                    _consecutiveCaptureFailJobId = jobId;
+                    _consecutiveCaptureFailCount = prior + 1;
+                    if (_consecutiveCaptureFailCount >= CaptureFailHaltThreshold && IsAutoMode(_mode))
+                    {
+                        _logger.LogWarning(
+                            "Runner '{Project}' halting auto-mode after {N} consecutive capture-fails on {JobId}",
+                            ProjectName, _consecutiveCaptureFailCount, jobId);
+                        _chatLog.Append(captureFailInfo, OrchestratorMessageKind.Decision,
+                            $"Auto-mode paused: {_consecutiveCaptureFailCount} consecutive {cli.CliType} runs for this job ended without capturing a session id. The session is unrecoverable; rebuild from prompt.md or rephrase before re-enabling auto.");
+                        SetMode("manual");
+                        _consecutiveCaptureFailCount = 0;
+                        _consecutiveCaptureFailJobId = null;
+                    }
                 }
             }
 
@@ -1019,10 +1062,10 @@ public class ProjectRunner
             // (job folder moved between completion and lookup), in which
             // case we skip the meta channel and fall through to the
             // existing accept-path - the policy is a refinement, not a gate.
-            var capturedIntent = _activeIntent;
-            var capturedFollowup = _activeFollowup;
-            var capturedPlan = _activePlan;
-            var capturedAttempt = _activeReissueAttempt;
+            var capturedIntent = intentSnapshot;
+            var capturedFollowup = followupSnapshot;
+            var capturedPlan = planSnapshot;
+            var capturedAttempt = reissueAttemptSnapshot;
             var outcome = AgentOutcomeAnalyzer.Analyze(
                 liveOutputSnapshot,
                 execution.Status ?? "completed",
@@ -1347,6 +1390,19 @@ public class ProjectRunner
         if (info.SessionChain == null || info.SessionChain.Count == 0) return false;
         return info.SessionChain.Any(id => !string.IsNullOrWhiteSpace(id));
     }
+
+    /// <summary>
+    /// Pure decision: should the just-finished run trigger a session-chain
+    /// recovery marker? True when the run was a <c>--resume</c> attempt
+    /// (planner produced a resume plan with a real session id) AND the
+    /// CLI did not capture a usable session id back. Pulled out as a
+    /// helper so the field-snapshot pattern protecting it from
+    /// concurrency races (the prior bug class that drove the 31-run
+    /// arhciv loop) is directly testable.
+    /// </summary>
+    internal static bool ShouldMarkSessionChainRecovery(RunPlan? planSnapshot) =>
+        planSnapshot?.ResumeFlag == true
+        && !string.IsNullOrWhiteSpace(planSnapshot.SessionToResume);
 
     private List<string> GetQueuedJobIds()
     {

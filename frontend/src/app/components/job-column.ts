@@ -2,13 +2,14 @@ import { Component, computed, input, output } from '@angular/core';
 import { JobInfo, JobOrderItem } from '../models/job.model';
 import { JobCardComponent } from './job-card';
 import { projectIdentity } from '../services/project-identity.util';
+import { InstantTooltipDirective } from '../directives/instant-tooltip.directive';
 
 const ARCHIVE_VISIBLE_LIMIT = 20;
 
 @Component({
   selector: 'app-job-column',
   standalone: true,
-  imports: [JobCardComponent],
+  imports: [JobCardComponent, InstantTooltipDirective],
   template: `
     <div class="column"
          [class.column--dragover]="isDragOver"
@@ -24,7 +25,7 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
           <button type="button"
                   class="column__archive-all"
                   data-testid="archive-all-btn"
-                  title="Move all completed tasks to Archive"
+                  [appTip]="'Move all completed tasks to Archive'"
                   (click)="archiveAll.emit()">
             ⬇ Archive all
           </button>
@@ -38,12 +39,11 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
                     [attr.data-testid]="'archive-row'"
                     [style.--project-color]="identityFor(job.projectName).color"
                     [style.--project-on]="identityFor(job.projectName).onColor"
+                    [appTip]="archiveTooltip(job)"
                     (click)="jobClick.emit(job)">
               <span class="archive-row__date">{{ formatShortDate(job.lastActivity) }}</span>
-              <span class="archive-row__project">
-                <span class="archive-row__disk" aria-hidden="true">{{ identityFor(job.projectName).initial }}</span>
-                {{ job.projectName }}
-              </span>
+              <span class="archive-row__disk"
+                    [attr.aria-label]="job.projectName">{{ identityFor(job.projectName).initial }}</span>
               <span class="archive-row__title">{{ job.title || job.id }}</span>
             </button>
           }
@@ -239,24 +239,15 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
       font-size: 11px;
       font-variant-numeric: tabular-nums;
     }
-    .archive-row__project {
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      font-size: 10px;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      color: var(--project-color, #8b5cf6);
-    }
     .archive-row__disk {
       display: inline-grid;
       place-items: center;
-      width: 12px;
-      height: 12px;
+      width: 14px;
+      height: 14px;
       border-radius: 999px;
       background: var(--project-color, #8b5cf6);
       color: var(--project-on, #0b1020);
-      font-size: 8px;
+      font-size: 9px;
       font-weight: 800;
       flex: 0 0 auto;
     }
@@ -330,6 +321,43 @@ export class JobColumnComponent {
   });
 
   readonly identityFor = (name: string) => projectIdentity(name);
+
+  archiveTooltip(job: JobInfo): string {
+    const lines: string[] = [];
+    lines.push(job.title || job.id);
+    lines.push('');
+    lines.push(`Project: ${job.projectName}`);
+    if (job.agent) lines.push(`Agent: ${job.agent}${job.cliType ? ` (${job.cliType})` : ''}`);
+    else if (job.cliType) lines.push(`CLI: ${job.cliType}`);
+    if (job.model) lines.push(`Model: ${job.model}`);
+    lines.push('');
+    lines.push(`Created: ${this.formatLongDate(job.createdAt)}`);
+    lines.push(`Last activity: ${this.formatLongDate(job.lastActivity)}`);
+    if (job.commit) {
+      lines.push('');
+      lines.push(`Commit ${job.commit.shortSha}: ${this.firstLine(job.commit.message)}`);
+      lines.push(`Files changed: ${job.commit.filesChanged}`);
+    }
+    return lines.join('\n');
+  }
+
+  private firstLine(s: string | null | undefined): string {
+    if (!s) return '';
+    const idx = s.indexOf('\n');
+    return idx < 0 ? s : s.slice(0, idx);
+  }
+
+  formatLongDate(iso: string | null | undefined): string {
+    if (!iso) return 'unknown';
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return 'unknown';
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mi = String(d.getMinutes()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd} ${hh}:${mi}`;
+  }
 
   formatShortDate(iso: string | null | undefined): string {
     if (!iso) return '—';

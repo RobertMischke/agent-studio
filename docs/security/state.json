@@ -1,0 +1,5 @@
+{
+  "lastReviewDate": "2026-04-15",
+  "rating": "Baseline OK",
+  "summary": "Local-only desktop app; the threat surface is small. No incoming network traffic, all CLI work runs as the logged-in user. Re-review when remote control or shared deployment lands."
+}
