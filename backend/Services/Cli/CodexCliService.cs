@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 using OrchestratorApi.Models;
+using OrchestratorApi.Services.Cli.Adapters;
 using OrchestratorApi.Services.Pty;
 
 namespace OrchestratorApi.Services.Cli;
@@ -103,6 +104,16 @@ public sealed class CodexCliService : CliExecutionServiceBase
         bool resumeSession,
         string? model)
         => prompt;
+
+    /// <summary>
+    /// Bridge to <see cref="CodexEventAdapter"/>. Each raw stdout line is
+    /// passed through and emitted on <see cref="CliExecutionServiceBase.OnRunEvent"/>.
+    /// </summary>
+    protected override IEnumerable<CliRunEvent> MapLineToRunEvents(string jobKey, CliOutputLine line)
+    {
+        if (line.Stream != "stdout") return Array.Empty<CliRunEvent>();
+        return CodexEventAdapter.Map(line.Text, jobKey);
+    }
 
     /// <summary>
     /// Codex emits the session UUID on the very first <c>{"type":"session_meta",...}</c>
