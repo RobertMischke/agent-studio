@@ -280,3 +280,36 @@ Recent CLI-integration research reinforces this boundary. OpenAI's Codex clients
 **Implementation pointers.** [README.md](../README.md) "Use existing coding agents, not a custom agent runtime"; [ROADMAP.md](../ROADMAP.md) "Product Thesis" and "Hard Boundaries"; CLI contracts in [docs/supported-clis.md](supported-clis.md); per-CLI adapters in [backend/Services/Cli/](../backend/Services/Cli/); deterministic orchestration in [backend/Services/Runner/](../backend/Services/Runner/).
 
 **Status.** Accepted.
+
+---
+
+## ADR-0013 - Typed CliRunEvent adapter contract; phase-aware watchdog; structured channels over PTY (2026-05-03)
+
+**Decision.** The runner ingests a typed event stream from each CLI, not raw byte streams. A new internal contract `CliRunEvent` defines the lifecycle vocabulary every adapter must produce: `RunStarted`, `SessionStarted`, `TurnStarted`, `OutputDelta`, `ToolStarted`, `ToolCompleted`, `Heartbeat`, `TurnCompleted`, `TurnFailed`, `NeedsInput`, `ApprovalRequested`, `ProcessExited`, `Killed`. Each per-CLI driver (Claude / Codex / Copilot / Gemini) is responsible for mapping its native protocol onto this contract:
+
+- **Claude Code:** parse the `--output-format stream-json --verbose` NDJSON frames (system/init, rate_limit_event, assistant, tool_use, tool_result, message_stop) into `CliRunEvent`. The adapter already exists informally in `ClaudeCliService.TransformReadLine` and `OnOutputLine`; the change is to make it produce typed events instead of marker-line strings.
+- **Codex:** prefer the **App Server protocol** (JSON-RPC over stdio, schemas at `codex-rs/app-server-protocol`) for new IDE-shape integrations. The current `codex exec --json` JSONL stream is the legacy fallback we keep because it works today; the adapter exposes the same `CliRunEvent` shape from either source so the runner does not care.
+- **GitHub Copilot:** prefer the **Copilot SDK** (JSON-RPC against the Copilot CLI server, see `github/copilot-sdk`) where the subscription model permits. The PTY-driven `PtySession` interactive path stays for the human-in-the-loop slash-command probes (`/usage`, `/model`); typed events are produced from screen-scraped state.
+- **Gemini:** parse `gemini -p ... -o stream-json` NDJSON the same way as Claude.
+
+The watchdog operates on phase transitions of typed events, not on raw stdout silence. Phases: `Spawning` → `SessionInitializing` → `PromptConsumed` → `TurnInProgress` → `ToolExecuting` → `OutputDelta` → terminal. Each phase has its own silence budget; "no `SessionStarted` within 10 s of spawn" is a different failure mode than "no `OutputDelta` within 60 s of `TurnStarted`" and the orchestrator chat surfaces them differently.
+
+**Context.** A 4-commit investigation (`061b3d9` → `923632e`) made the CLI-spawn boundary safer in concrete ways - direct `claude.exe` invocation, drain-race fix in the read loops, deterministic fake-CLI regression tests, honest ADR-0011 about the unproven root cause. None of those commits found the live "agent silent after init" trigger. Two parallel external code reviews converged on the same diagnosis: the runner is treating CLI output as text-soup when it should be treating it as protocol. A typed adapter layer changes the watchdog's question from "have I seen a stdout byte recently?" to "is the agent in a phase that should be producing events right now?" - and unlike "more PTY", that abstraction has a clear closing condition.
+
+The reference clones at `c:/Projects/agent-taskboard-devspace/cli-source-references/` (cloned during the parallel research thread) confirm the direction:
+- `openai-codex/codex-rs/app-server-protocol/`: full JSON-RPC schema for Codex's IDE integration. Event vocabulary maps almost directly onto our `CliRunEvent` shape.
+- `github-copilot-sdk/`: SDK protocol with version 3 today; bindings for nodejs, python, dotnet, go, java. The SDK-vs-CLI boundary is exactly the pattern this ADR endorses.
+- `anthropics-claude-code/`, `microsoft-vscode-copilot-chat/`, `github-copilot-cli/`: peripheral references; less protocol surface to copy.
+
+**Non-goals.**
+- Implementing all four adapters in one commit. The path is incremental: Claude first (because the live hang surfaced there and stream-json is already structured), then Codex (because App Server is the most architecturally sound), then Gemini (parity with Claude), then Copilot (because PTY interaction makes typed events hardest).
+- Replacing the existing pipe path before the typed-event path is proven on at least one CLI. ADR-0011's `.CMD → .exe` fix and ADR-0011's drain race fix stay in place as defense-in-depth; this ADR is the next step, not a retroactive deprecation.
+- Building Codex's full App Server client. We adopt the protocol's event shape; the transport stays our existing `codex exec --json` for now and migrates when the adapter contract is stable.
+- Treating Claude Agent SDK as a path forward. Per ADR-0012, Anthropic's Agent SDK is API-key-based; using it would break the "subscriptions are the budget" boundary. We map the existing `claude -p --output-format stream-json` instead.
+- Publishing our `CliRunEvent` shape outside the backend. It is an internal adapter contract, not a public API; renaming events as the contract matures is fine.
+
+**Reasoning style.** Pin the contract first, migrate one CLI to it, prove the watchdog can operate on typed events, then migrate the rest. Each adapter ships with a deterministic fake-CLI regression test (extending the patterns in `CliWatchdogIntegrationTests.cs`) and a live RUN_CLI_INTEGRATION smoke (extending `CliSpawnIntegrationTests.cs`). The phase-aware watchdog tests belong in `WatchdogTests.cs` once the phase enum exists.
+
+**Implementation pointers.** New (not yet written): `backend/Services/Cli/CliRunEvent.cs` (the typed event sum type); `backend/Services/Cli/Adapters/<Cli>EventAdapter.cs` (one per CLI); `backend/Services/Runner/Watchdog.cs` extended with phase logic; `backend.Tests/CliRunEventAdapterTests.cs` (fixture-driven mapping tests, no live process). Existing entry points stay: `CliExecutionServiceBase.StartAsync` keeps its public signature; the read-loop produces typed events via the adapter instead of raw `CliOutputLine`s. Reference clones at `c:/Projects/agent-taskboard-devspace/cli-source-references/`.
+
+**Status.** Accepted as architecture direction. Implementation is staged; the existing pipe-based code path stays in use until each CLI's adapter ships and is proven by tests.
