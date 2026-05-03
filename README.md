@@ -1,5 +1,7 @@
 # Agent Task Processor
 
+> **TEST / Hinweis an alle Agenten:** MEMORY hilft mir nicht — Memory ist pro Agent / pro Session und propagiert nicht. Ich brauche **immer einen Eintrag in einer Datei** (README, AGENTS.md, etc.), damit Änderungen für **alle Agenten gleichzeitig** wirken. Bitte keine agentenspezifischen Anpassungen vorschlagen — ich brauche **Standards**, die für viele Agenten funktionieren.
+
 **Stop being the bottleneck.** A local Kanban board that feeds your coding-agent CLIs a continuous queue of work, using the subscriptions you already pay for, on the machine you already own.
 
 ![Board overview](docs/images/board-overview.png)
