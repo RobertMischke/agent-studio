@@ -179,6 +179,27 @@ export class ProtocolPaneComponent implements OnDestroy {
   );
 
   /**
+   * Progressive spinner label so a slow Haiku call doesn't look frozen.
+   * The backend caps the call at HaikuTimeoutSeconds = 90 s; we
+   * intentionally mirror that constant here. Tiers:
+   *   < 30 s         "Generating protocol..."
+   *   30 s ... 60 s  "Generating protocol... (>=30 s)"
+   *   >= 60 s        "Generating protocol... (>=60 s, will time out)"
+   * Re-evaluates on every NowTickService tick while summaryStatus is
+   * 'generating'; falls back to the base label as soon as the state
+   * flips to ready or failed.
+   */
+  readonly summarySpinnerLabel = computed<string>(() => {
+    if (this.summaryStatus() !== 'generating') return 'Generating protocol...';
+    const startedAtIso = this.detail().summaryState?.startedAt;
+    if (!startedAtIso) return 'Generating protocol...';
+    const elapsed = (this.nowTick() - new Date(startedAtIso).getTime()) / 1000;
+    if (elapsed >= 60) return 'Generating protocol... (>=60 s, will time out)';
+    if (elapsed >= 30) return 'Generating protocol... (>=30 s)';
+    return 'Generating protocol...';
+  });
+
+  /**
    * Watchdog pill state derived purely from polled output frames + the
    * NowTickService clock. Re-evaluates whenever cliOutput or the clock
    * tick changes; the chip in the header reads .visible to decide

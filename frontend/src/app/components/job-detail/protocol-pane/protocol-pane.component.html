@@ -13,7 +13,7 @@
         <span class="pane__spinner" data-testid="summary-generating"
               title="The protocol is being summarized from the CLI output.">
           <span class="spinner-ring"></span>
-          <span>Generating protocol…</span>
+          <span>{{ summarySpinnerLabel() }}</span>
         </span>
       }
       @if (summaryStatus() === 'failed') {
