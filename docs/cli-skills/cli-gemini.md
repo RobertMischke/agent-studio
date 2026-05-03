@@ -26,7 +26,7 @@ Google's Gemini CLI. Distributed as the npm package `@google/gemini-cli`. Verifi
 | Resume flag | `-r <uuid>` (also accepts numeric index or `latest`, but we persist UUIDs only) |
 | Required headless flags | `--skip-trust` (bypass folder-trust modal), `-y` / `--yolo` (auto-approve tool calls) |
 | Session storage | `~/.gemini/tmp/<project-slug>/chats/session-<timestamp>-<short>.json` (slug map in `~/.gemini/projects.json`) |
-| Quota probe | Identity-only — see § Quota |
+| Quota probe | PTY drive of `/stats model` — see § Quota |
 
 ## Invocation reference
 
@@ -128,16 +128,27 @@ The `auto-gemini-3` "Auto" tier transparently picks per request and reports per-
 
 To add a new model, append to the list in `GetModelCatalogAsync`. No version-keying like Claude's hardcoded-list-with-version pattern — Gemini's CLI has been stable enough that we can keep the list flat.
 
-## Quota probe — identity-only
+## Quota probe — `/stats model` PTY scrape
 
-[`GeminiQuotaProbe`](../../backend/Services/Quota/GeminiQuotaProbe.cs) reads `~/.gemini/google_accounts.json` + `~/.gemini/settings.json` to surface identity (email + auth type) and runs a tiny headless ping to capture the default model. **Daily limit / reset time is deferred.**
+[`GeminiQuotaProbe`](../../backend/Services/Quota/GeminiQuotaProbe.cs) drives the interactive `/stats model` panel through a PTY and parses the QuotaStatsInfo block. The block has the shape:
 
-Why identity-only:
-- Quota numbers (daily limit, remaining, reset time) are fetched dynamically via `refreshAvailableCredits()` against an authenticated Google endpoint and only rendered in the interactive `/stats model` panel. There is **no headless mode** for it.
-- PTY scraping the interactive panel is feasible but requires the workspace to be trusted *and* OAuth tokens to be hot — non-trivial in a scratch dir.
-- Deferred until user demand justifies the cost.
+```
+Auth Method:    Signed in with Google (user@example.com)
+Tier:           Gemini Code Assist in Google One AI Pro
+47% used (Limit resets in 5h 12m)
+Usage limit: 1,000
+Usage limits span all sessions and reset daily.
+```
 
-The probe currently surfaces an explanatory `Error` field so the UI doesn't claim numbers we don't have. **Keep it that way** until you have the panel-scraping working end-to-end; an empty quota panel is better than a misleading one.
+Why a PTY (and why a billable prompt):
+- Quota numbers (daily limit, remaining, reset time) are fetched dynamically via `refreshAvailableCredits()` against an authenticated Google endpoint and only rendered inside the `/stats model` panel — there is **no headless command** for them.
+- The `/stats model` panel short-circuits with `No API calls have been made in this session.` when `activeModels.length === 0`, so the probe sends a one-character prompt (`ok`) before `/stats model` to populate the active-model metrics. That single tiny prompt is the cost of every probe; the cache TTL (`Quota:TtlSeconds`, default 600) keeps the cadence bounded.
+- The QuotaStatsInfo block only renders when `isAuto(currentModel)` is true, so the probe spawns gemini with `-m auto-gemini-3` (its scratch-dir spawn doesn't affect the model the user picks for real jobs).
+- Pre-trust of the scratch folder is written directly to `~/.gemini/trustedFolders.json` (`{ "<path>": "TRUST_FOLDER" }`) — the in-CLI trust modal has no headless equivalent.
+
+Free / non-paid tiers (`refreshAvailableCredits` is a no-op there) land in the `Windows = []` path with a soft, non-error-styled message: identity is still surfaced, but no donut is rendered so the UI doesn't show a misleading "?".
+
+[`GeminiQuotaProbeTests`](../../backend.Tests/GeminiQuotaProbeTests.cs) exercises `GeminiQuotaProbe.ParseSnapshot` against three fixture panels (paid normal, limit reached, free tier). The end-to-end PTY drive is exercised live against the user's account; there is no fixture for it because the panel content depends on the real OAuth identity.
 
 ## Common tasks
 
@@ -157,12 +168,13 @@ The probe currently surfaces an explanatory `Error` field so the UI doesn't clai
 
 If you see only the `● Session init` line and the run completed cleanly, you hit the limitation in § Known limitation. There is no in-driver workaround. Workarounds at the orchestration level: run the same prompt via a PTY-spawned `gemini` (template: the quota probe path), or wrap with a small Node script that does line-buffered passthrough.
 
-### "Add quota panel scraping (close the open quota gap)"
+### "The quota panel layout changed in a new gemini-cli release"
 
-1. Stand up a trusted scratch dir under `%TEMP%/agent-taskboard-quota/gemini/<run-id>/`.
-2. Drive `gemini` over a PTY, navigate to `/stats model`, scrape the panel.
-3. Map percentages + reset times to `QuotaWindow` records.
-4. Lock with a captured PTY transcript fixture under `backend.Tests/Fixtures/quota/gemini/`.
+The QuotaStatsInfo block lives in `interactiveCli-*.js` of the bundled CLI; search for `% used` / `Usage limit:` to confirm the wording is unchanged. If gemini changes the format:
+
+1. Capture a fresh panel by running gemini interactively, sending `ok<Enter>` then `/stats model<Enter>`, and copying the box-drawing block.
+2. Extend the regexes in `GeminiQuotaProbe.cs` (`UsedPctRegex`, `LimitReachedRegex`, `UsageLimitRegex`, `TierRegex`, `AuthEmailRegex`) to cover the new wording.
+3. Add a fixture string in `GeminiQuotaProbeTests.cs` and assert against it.
 
 ## Fixtures
 
