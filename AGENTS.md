@@ -123,6 +123,8 @@ When you change a CLI driver, prompt template, or the runner's post-run path, ke
 | POST | `/api/jobs/{jobId}/stop?watchPath=...` | Cancel running execution. |
 | POST | `/api/jobs/{jobId}/continue?watchPath=...` | Resume with new prompt (same session). |
 | GET | `/api/jobs/{jobId}/output?watchPath=...` | CLI stdout/stderr buffer. |
+| GET | `/api/jobs/{jobId}/runs?watchPath=...` | Per-job run timeline: ordered CLI invocations between user inputs + aggregates (RunCount, FirstStartedAt, LastActivityAt, HasActiveRun). Drives the protocol-pane run cards. |
+| GET | `/api/jobs/{jobId}/runs/{index}/commits?watchPath=...` | Git commits whose author date falls in run #index's wall-clock window. Drives the per-run software-side change set. |
 | GET | `/api/cli/usage` | Sessions + versions for all CLIs. |
 | GET | `/api/cli/quota` | Per-CLI quota windows (used%, reset times). |
 | GET | `/api/cli/{cliType}/models` | Model catalog for one CLI. |
