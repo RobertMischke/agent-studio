@@ -41,9 +41,40 @@ public sealed class SummaryGenerationService
     public JobSummaryState? GetState(string jobKey)
         => _states.TryGetValue(jobKey, out var s) ? s : null;
 
+    /// <summary>
+    /// Pure inflight check used by <see cref="GenerateAsync"/> and exposed
+    /// for tests. A job is considered "still generating" when its previous
+    /// state is <see cref="JobSummaryStatus.Generating"/> AND the
+    /// <see cref="JobSummaryState.StartedAt"/> is younger than the Haiku
+    /// timeout. Older Generating entries are treated as stuck and
+    /// overwritten so the user can recover via the regenerate button.
+    /// </summary>
+    public static bool IsInflight(JobSummaryState? prev, DateTime nowUtc, int timeoutSeconds)
+    {
+        if (prev is null) return false;
+        if (prev.Status != JobSummaryStatus.Generating) return false;
+        if (prev.StartedAt is null) return false;
+        return (nowUtc - prev.StartedAt.Value).TotalSeconds < timeoutSeconds;
+    }
+
     public async Task GenerateAsync(JobInfo info, CancellationToken ct = default)
     {
         var key = info.JobKey;
+
+        // Inflight guard: if a previous GenerateAsync for the same job is
+        // still inside its Haiku window, dropping this duplicate avoids
+        // racing two subprocesses against the same status.md (manual
+        // Regenerate clicked while the post-run auto-call is still in
+        // flight, or the runner re-fires after a missed completion). The
+        // outstanding call will publish either Ready or Failed when it
+        // returns; the user-visible spinner stays where it was.
+        if (_states.TryGetValue(key, out var prev) && IsInflight(prev, DateTime.UtcNow, HaikuTimeoutSeconds))
+        {
+            _logger.LogDebug("Skipping summary generation for {JobId}: prior call still in flight (started {StartedAt:o})",
+                info.Id, prev.StartedAt);
+            return;
+        }
+
         _states[key] = new JobSummaryState
         {
             Status = JobSummaryStatus.Generating,
