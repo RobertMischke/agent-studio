@@ -105,6 +105,11 @@ public class ProjectRunner
 
         // Listen across all CLI backends for completion of the active job.
         _router.OnFinished += (cliType, jobKey, exec) => OnCliFinished(cliType, jobKey, exec);
+        // ADR-0013: typed events drive the phase-aware watchdog. Each
+        // adapter advances the phase as its native protocol moves; the
+        // runner stores per-job phase + last-event timestamp and uses
+        // PhaseAwareWatchdog.DecideState below.
+        _router.OnRunEvent += (_, jobKey, evt) => OnRunEventReceived(jobKey, evt);
     }
 
     public void SetMode(string mode)
@@ -383,11 +388,30 @@ public class ProjectRunner
 
         var lastStreamed = cli.GetLastStreamedAt(jobKey) ?? exec.StartedAt;
         var now = DateTime.UtcNow;
-        var silence = (now - lastStreamed).TotalSeconds;
-        var age     = (now - exec.StartedAt).TotalSeconds;
+        var age = (now - exec.StartedAt).TotalSeconds;
+
+        // ADR-0013: prefer the typed-event phase tracker when available.
+        // It advances on actual protocol events, so silence here means
+        // "no protocol activity in this phase", not "no stdout byte" -
+        // a stronger signal that surfaces via the per-phase budgets.
+        // Fall back to the legacy silence-only signal for CLIs that do
+        // not yet emit run events.
+        WatchdogState next;
+        double silence;
+        RunPhase? phase = null;
+        if (_phaseByJob.TryGetValue(jobKey, out var phaseSnap))
+        {
+            phase = phaseSnap.Phase;
+            silence = (now - phaseSnap.LastActivityAt).TotalSeconds;
+            next = PhaseAwareWatchdog.DecideState(silence, age, phaseSnap.Phase, _watchdogConfig);
+        }
+        else
+        {
+            silence = (now - lastStreamed).TotalSeconds;
+            next = Watchdog.DecideState(silence, age, _watchdogConfig);
+        }
 
         var prev = cli.GetWatchdogState(jobKey);
-        var next = Watchdog.DecideState(silence, age, _watchdogConfig);
         if (!Watchdog.ShouldAnnounce(prev, next)) return;
 
         cli.SetWatchdogState(jobKey, next);
@@ -395,28 +419,29 @@ public class ProjectRunner
         var info = _scanner.FindJob(jobId, Entry.Path);
         if (info == null) return;
 
+        var phaseTag = phase is null ? "" : $" [{PhaseAwareWatchdog.FormatBudgetReason(phase.Value, silence)}]";
         switch (next)
         {
             case WatchdogState.Quiet:
                 // Yellow, informational only. Single-line chat note so the
                 // user sees that the watchdog is paying attention.
                 _chatLog.Append(info, OrchestratorMessageKind.Decision,
-                    $"[watchdog] Agent has been quiet {silence:F0}s. Watching; will warn at {_watchdogConfig.SuspiciousSeconds:F0}s.");
+                    $"[watchdog] Agent has been quiet {silence:F0}s.{phaseTag}");
                 break;
             case WatchdogState.Suspicious:
                 _chatLog.Append(info, OrchestratorMessageKind.Decision,
-                    $"[watchdog] Still silent at {silence:F0}s. Will kill at {_watchdogConfig.HungSeconds:F0}s if no signal arrives.");
+                    $"[watchdog] Still silent at {silence:F0}s.{phaseTag} Will kill if the budget is exceeded.");
                 break;
             case WatchdogState.Hung:
                 _chatLog.Append(info, OrchestratorMessageKind.GiveUp,
-                    $"[watchdog] Killed after {silence:F0}s of silence. Process tree terminated; the run will finalize as failed.");
+                    $"[watchdog] Killed after {silence:F0}s of silence.{phaseTag} Process tree terminated; the run will finalize as failed.");
                 _orchestratorLog.Append(info.WatchPath, new OrchestratorLogEntry
                 {
                     Kind = OrchestratorLogKinds.Action,
                     Topic = OrchestratorLogTopics.Watchdog,
                     JobId = jobId,
                     Summary = $"Watchdog killed \"{info.Title}\" after {silence:F0}s of silence.",
-                    Reasoning = $"No streamed output from the CLI for {silence:F0}s (run age {age:F0}s). Threshold: {_watchdogConfig.HungSeconds:F0}s. Process tree terminated; the run finalizes as failed."
+                    Reasoning = $"No streamed activity for {silence:F0}s (run age {age:F0}s){phaseTag}. Process tree terminated; the run finalizes as failed."
                 });
                 try { cli.Stop(jobKey, RunStopReason.Watchdog); }
                 catch (Exception ex) { _logger.LogWarning(ex, "Watchdog kill failed for {JobId}", jobId); }
@@ -437,6 +462,32 @@ public class ProjectRunner
     /// when nothing is configured.
     /// </summary>
     private WatchdogConfig _watchdogConfig = WatchdogConfig.Default;
+
+    /// <summary>
+    /// Per-jobKey phase tracker. Populated as adapters emit
+    /// <see cref="CliRunEvent"/> via the router. Cleared on
+    /// <see cref="CliRunEvent.ProcessExited"/> / <see cref="CliRunEvent.Killed"/>.
+    /// When a jobKey is missing from this map, the runner falls back to
+    /// the silence-only watchdog (<see cref="Watchdog.DecideState"/>).
+    /// </summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, RunPhaseSnapshot> _phaseByJob = new();
+
+    /// <summary>Last seen phase + UTC of last activity-classified event.</summary>
+    private sealed record RunPhaseSnapshot(RunPhase Phase, DateTime LastActivityAt);
+
+    /// <summary>Updates per-job phase + activity clock from a typed event.</summary>
+    private void OnRunEventReceived(string jobKey, CliRunEvent evt)
+    {
+        var prev = _phaseByJob.TryGetValue(jobKey, out var existing) ? existing : new RunPhaseSnapshot(RunPhase.Spawning, DateTime.UtcNow);
+        var nextPhase = RunPhaseTransitions.Apply(prev.Phase, evt);
+        var lastActivity = RunPhaseTransitions.IsActivitySignal(evt) ? DateTime.UtcNow : prev.LastActivityAt;
+        _phaseByJob[jobKey] = new RunPhaseSnapshot(nextPhase, lastActivity);
+
+        // Clean up on terminal events so a later run with the same key
+        // does not inherit stale phase state.
+        if (evt is CliRunEvent.ProcessExited or CliRunEvent.Killed)
+            _phaseByJob.TryRemove(jobKey, out _);
+    }
 
     /// <summary>Set by <see cref="TaskRunnerService"/> on construction.</summary>
     public void ConfigureWatchdog(WatchdogConfig config) => _watchdogConfig = config;

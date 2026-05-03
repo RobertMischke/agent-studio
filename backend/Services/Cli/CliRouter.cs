@@ -14,6 +14,7 @@ public sealed class CliRouter
     public event Action<string, string, CliOutputLine>? OnOutput;          // (cliType, jobKey, line)
     public event Action<string, string, CliExecution>?  OnStarted;
     public event Action<string, string, CliExecution>?  OnFinished;
+    public event Action<string, string, CliRunEvent>?   OnRunEvent;        // (cliType, jobKey, event)
 
     public CliRouter(
         CopilotCliService copilot,
@@ -34,6 +35,7 @@ public sealed class CliRouter
             svc.OnOutput   += (jobKey, line) => OnOutput?.Invoke(type, jobKey, line);
             svc.OnStarted  += (jobKey, exec) => OnStarted?.Invoke(type, jobKey, exec);
             svc.OnFinished += (jobKey, exec) => OnFinished?.Invoke(type, jobKey, exec);
+            svc.OnRunEvent += (jobKey, evt)  => OnRunEvent?.Invoke(type, jobKey, evt);
         }
     }
 

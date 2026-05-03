@@ -47,6 +47,13 @@ public class CopilotCliService : ICliExecutionService
     public event Action<string, CliOutputLine>? OnOutput;
     public event Action<string, CliExecution>? OnStarted;
     public event Action<string, CliExecution>? OnFinished;
+    /// <summary>
+    /// Typed lifecycle events (ADR-0013). Copilot does not yet have a
+    /// CliRunEvent adapter (its TUI/PTY shape needs screen-scraping
+    /// heuristics, planned for bang 8); this stays unwired until then,
+    /// satisfying the interface without misleading consumers.
+    /// </summary>
+    public event Action<string, CliRunEvent>? OnRunEvent;
 
     public CopilotCliService(
         ILogger<CopilotCliService> logger,
