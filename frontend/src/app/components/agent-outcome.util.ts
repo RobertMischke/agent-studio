@@ -22,6 +22,10 @@ export type OutcomeKind =
   | 'question'
   | 'needs_input'
   | 'progress'
+  // Latest run ended with a system-level error (e.g. CLI rejected the
+  // resume target, exit_during_execution). Not produced by classifyOutcome
+  // - the protocol pane sets this directly from the activity-log tail.
+  | 'failed'
   | 'unknown';
 
 export interface OutcomeAssessment {

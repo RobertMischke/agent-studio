@@ -212,11 +212,20 @@ export class ProtocolPaneComponent implements OnDestroy {
       }
     }
     if (sawErrorAfterAgent) {
+      // Surface the failed-run state explicitly so the user gets a
+      // verbindliches Signal that something went wrong on this turn,
+      // rather than a silent or misleading "mid-task" banner. The chips
+      // pre-fill the chat input; the backend's capture-fail handling
+      // already cleared the dead session id, so a normal "Continue"
+      // follow-up routes through Recovery on the next run.
       return {
-        kind: 'unknown',
-        summary: 'Last run ended with a system error — see the messages above.',
+        kind: 'failed',
+        summary: 'Last run ended with an error — agent did not produce a reply.',
         question: null,
-        suggestions: []
+        suggestions: [
+          { label: 'Continue (rebuild)', prompt: 'Continue from where the previous run left off — rebuild context from the job folder.' },
+          { label: 'Retry as new task', prompt: 'Treat this as a fresh request and start over: ' }
+        ]
       };
     }
     return classifyOutcome(lastAgent ?? '');
@@ -235,6 +244,7 @@ export class ProtocolPaneComponent implements OnDestroy {
     switch (kind) {
       case 'done': return '✓';
       case 'blocked': return '⚠';
+      case 'failed': return '✗';
       case 'question': return '?';
       case 'needs_input': return '?';
       case 'progress': return '⏳';

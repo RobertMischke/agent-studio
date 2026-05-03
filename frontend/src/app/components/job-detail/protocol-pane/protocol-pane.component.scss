@@ -428,6 +428,7 @@
 
   &[data-kind="done"]    { border-color: rgba(74, 222, 128, 0.45); background: rgba(34, 197, 94, 0.10); }
   &[data-kind="blocked"] { border-color: rgba(251, 113, 133, 0.45); background: rgba(190, 18, 60, 0.12); }
+  &[data-kind="failed"]  { border-color: rgba(248, 113, 113, 0.55); background: rgba(220, 38, 38, 0.16); }
   &[data-kind="question"], &[data-kind="needs_input"] {
     border-color: rgba(196, 181, 253, 0.45); background: rgba(124, 58, 237, 0.12);
   }
@@ -457,6 +458,7 @@
 
   &[data-kind="done"]    { background: rgba(34, 197, 94, 0.30); color: #bbf7d0; }
   &[data-kind="blocked"] { background: rgba(251, 113, 133, 0.30); color: #fecaca; }
+  &[data-kind="failed"]  { background: rgba(220, 38, 38, 0.40); color: #fecaca; }
   &[data-kind="question"], &[data-kind="needs_input"] {
     background: rgba(196, 181, 253, 0.30); color: #ede9fe;
   }
