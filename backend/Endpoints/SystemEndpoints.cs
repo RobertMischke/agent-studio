@@ -25,7 +25,12 @@ public static class SystemEndpoints
         app.MapGet("/api/environment", (IConfiguration config) =>
         {
             var isDev = config.GetValue<bool>("Environment:IsDev");
-            return Results.Ok(new { isDev });
+            var devTools = new
+            {
+                updateStableEnabled = config.GetValue<bool>("DevTools:UpdateStableEnabled"),
+                deleteE2EJobsEnabled = config.GetValue<bool>("DevTools:DeleteE2EJobsEnabled")
+            };
+            return Results.Ok(new { isDev, devTools });
         });
 
         // Lists the centrally-managed agent-rule files that are appended as a

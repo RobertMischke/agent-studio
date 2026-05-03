@@ -26,5 +26,6 @@ public static class EndpointMapping
         app.MapProjectSettingsEndpoints();
         app.MapSystemEndpoints();
         app.MapCliEndpoints();
+        app.MapDevToolsEndpoints();
     }
 }

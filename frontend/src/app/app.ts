@@ -16,10 +16,13 @@ import { CreateJobDialogComponent, PendingAttachment } from './components/board/
 import { ErrorDialogComponent } from './components/board/error-dialog/error-dialog.component';
 import { ProjectAutoInfo, ProjectTabsComponent } from './components/board/project-tabs/project-tabs.component';
 import { projectIdentity } from './services/project-identity.util';
+import { DevToolsService } from './services/dev-tools.service';
+import { UpdateStableConsoleComponent } from './components/dev-tools/update-stable-console.component';
+import { E2ECleanupDialogComponent } from './components/dev-tools/e2e-cleanup-dialog.component';
 
 @Component({
   selector: 'app-root',
-  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent],
+  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent],
   // Keep styles global to this subtree — the App shell still owns the
   // .header*, .filter-chip*, .overlay*, .create-dialog*, .error-dialog*
   // class rules used by the extracted dialogs and project-tabs.
@@ -42,6 +45,22 @@ import { projectIdentity } from './services/project-identity.util';
           (toggleAuto)="onToggleAuto($event)"
           (openDetail)="openProjectDetail($event)" />
         <div class="header__actions">
+          @if (devToolsFlags().updateStableEnabled) {
+            <button class="btn btn--devtool"
+                    data-testid="devtool-update-stable"
+                    title="Pull origin/main into stable and restart it (dev tool)"
+                    (click)="showUpdateStable.set(true)">
+              ⟳ Update Stable
+            </button>
+          }
+          @if (devToolsFlags().deleteE2EJobsEnabled) {
+            <button class="btn btn--devtool btn--devtool-danger"
+                    data-testid="devtool-delete-e2e"
+                    title="Delete jobs whose name contains E2E across every project (dev tool)"
+                    (click)="showE2ECleanup.set(true)">
+              🧹 E2E Jobs
+            </button>
+          }
           <button class="btn btn--create" (click)="openCreate()">
             ＋ Add Task
           </button>
@@ -197,6 +216,16 @@ import { projectIdentity } from './services/project-identity.util';
           (cliTypeChange)="onCreateCliTypeChange($event)"
           (cancel)="cancelCreate()"
           (submit)="submitCreate()" />
+      }
+
+      @if (showUpdateStable()) {
+        <app-update-stable-console (closed)="showUpdateStable.set(false)" />
+      }
+
+      @if (showE2ECleanup()) {
+        <app-e2e-cleanup-dialog
+          (closed)="showE2ECleanup.set(false)"
+          (didDelete)="onE2EDidDelete()" />
       }
 
       @if (errorDialog.activeError(); as error) {
@@ -458,6 +487,18 @@ import { projectIdentity } from './services/project-identity.util';
       box-shadow: 0 1px 4px rgba(139,92,246,0.30);
     }
     .btn--create:hover { background: rgba(139,92,246,0.6); border-color: rgba(196,181,253,0.95); }
+    .btn--devtool {
+      background: rgba(245,158,11,0.20);
+      border-color: rgba(252,211,77,0.55);
+      color: #fde68a;
+    }
+    .btn--devtool:hover { background: rgba(245,158,11,0.32); border-color: rgba(252,211,77,0.75); color: #fef3c7; }
+    .btn--devtool-danger {
+      background: rgba(244,63,94,0.18);
+      border-color: rgba(248,113,113,0.55);
+      color: #fecaca;
+    }
+    .btn--devtool-danger:hover { background: rgba(244,63,94,0.30); border-color: rgba(248,113,113,0.75); color: #fee2e2; }
     .btn--primary {
       background: #6366f1;
       border-color: #818cf8;
@@ -1077,6 +1118,8 @@ export class App implements OnInit {
   readonly sideSheetWidth = signal<number>(parseInt(localStorage.getItem('sideSheetWidth') ?? '280'));
   readonly collapsedGroups = signal<Set<string>>(new Set(JSON.parse(localStorage.getItem('collapsedGroups') ?? '[]')));
   readonly taskNavCollapsed = signal<boolean>(localStorage.getItem('taskNavCollapsed') === '1');
+  readonly showUpdateStable = signal(false);
+  readonly showE2ECleanup = signal(false);
 
   readonly projectNames = computed(() => {
     return this.watchPaths().map(wp => wp.name);
@@ -1183,7 +1226,13 @@ export class App implements OnInit {
     return state === '1-preparation' || state === '2-ready';
   }
 
-  constructor(readonly jobService: JobService, readonly errorDialog: ErrorDialogService) {
+  readonly devToolsFlags = computed(() => this.devTools.flags());
+
+  constructor(
+    readonly jobService: JobService,
+    readonly errorDialog: ErrorDialogService,
+    readonly devTools: DevToolsService,
+  ) {
     effect(() => {
       const selected = this.selectedJob();
       const jobs = this.jobService.jobs();
@@ -1234,7 +1283,12 @@ export class App implements OnInit {
       },
     });
     this.jobService.refreshRunnerStatus();
+    this.devTools.loadFlags();
     this.restoreDetailFromUrl();
+  }
+
+  onE2EDidDelete(): void {
+    this.jobService.refresh(true);
   }
 
   private restoreDetailFromUrl() {
