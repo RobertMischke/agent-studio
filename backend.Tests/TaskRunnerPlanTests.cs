@@ -98,6 +98,47 @@ public class TaskRunnerPlanTests
         Assert.False(p.ResumeFlag);
     }
 
+    /// <summary>
+    /// Bug class (capture-fail loop): when claude rejects a --resume target,
+    /// ProjectRunner clears sessionName and appends "(recovery)" to the
+    /// chain, leaving the rejected UUID as the chain's last UUID entry. The
+    /// next Continue must NOT resurrect that dead UUID via the chain
+    /// fallback - the recovery sentinel is a tombstone meaning "every id
+    /// before this one is older than the failure". Without this guard, the
+    /// planner re-issues --resume against the same dead UUID and claude
+    /// returns "No conversation found with session ID:" identically forever.
+    /// </summary>
+    [Fact]
+    public void Continue_ChainHasUuidThenRecoveryTombstone_RoutesToRecovery()
+    {
+        const string deadUuid = "3e80651e-57fa-438a-94d0-7078a7112167";
+        var p = Plan(RunIntent.UserContinue, JobStates.Progress, sessionName: null,
+                     followup: "Continue from where the previous run left off.",
+                     sessionChain: new[] { deadUuid, "(recovery)" });
+
+        Assert.Equal("recovery", p.EventKind);
+        Assert.False(p.ResumeFlag);
+        Assert.Null(p.SessionToResume);
+    }
+
+    /// <summary>
+    /// A new UUID captured AFTER a recovery marker is the chain's authoritative
+    /// resume target; the marker only invalidates entries that came before it.
+    /// </summary>
+    [Fact]
+    public void Continue_ChainHasUuidAfterRecoveryMarker_ResumesViaThatUuid()
+    {
+        const string oldUuid = "11111111-2222-4333-8444-555555555555";
+        const string newUuid = "99999999-8888-4777-a666-555555555555";
+        var p = Plan(RunIntent.UserContinue, JobStates.Progress, sessionName: null,
+                     followup: "keep going",
+                     sessionChain: new[] { oldUuid, "(recovery)", newUuid });
+
+        Assert.Equal("continue", p.EventKind);
+        Assert.True(p.ResumeFlag);
+        Assert.Equal(newUuid, p.SessionToResume);
+    }
+
     // ===== Continue modes =====
 
     /// <summary>

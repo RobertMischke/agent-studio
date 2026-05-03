@@ -45,6 +45,9 @@ import { E2ECleanupDialogComponent } from './components/dev-tools/e2e-cleanup-di
           (toggleAuto)="onToggleAuto($event)"
           (openDetail)="openProjectDetail($event)" />
         <div class="header__actions">
+          <button class="btn btn--create" (click)="openCreate()">
+            ＋ Add Task
+          </button>
           @if (anyDevTool()) {
             <div class="devtools-menu">
               <button class="devtools-menu__trigger"
@@ -78,9 +81,6 @@ import { E2ECleanupDialogComponent } from './components/dev-tools/e2e-cleanup-di
               }
             </div>
           }
-          <button class="btn btn--create" (click)="openCreate()">
-            ＋ Add Task
-          </button>
         </div>
       </header>
 

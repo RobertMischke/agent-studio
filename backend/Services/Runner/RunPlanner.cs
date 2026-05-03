@@ -305,11 +305,24 @@ public static class RunPlanner
            && PlaceholderSessionSlugRegex.IsMatch(sessionName!);
 
     /// <summary>
-    /// Returns the latest non-recovery, non-placeholder entry in
-    /// <paramref name="chain"/>, or null when no such entry exists. Used by
-    /// <see cref="PlanRun"/> as the fallback resume candidate when
-    /// <c>sessionName</c> is empty but the chain still records a real
-    /// captured id from an earlier run.
+    /// Returns the latest resumable entry in <paramref name="chain"/>, or
+    /// null when none exists. Used by <see cref="PlanRun"/> as the fallback
+    /// resume candidate when <c>sessionName</c> is empty but the chain
+    /// still records a real captured id from an earlier run.
+    ///
+    /// <para>
+    /// A <c>"(recovery)"</c> sentinel is the chain's tombstone for "the
+    /// previous attempt to use the prior id failed; do not retry it". When
+    /// the most recent non-empty entry is that sentinel, every UUID before
+    /// it is older than the failure and equally untrustworthy, so we return
+    /// null (force a Recovery) rather than pick the rejected id back up.
+    /// We only return a UUID that was captured AFTER the most recent
+    /// recovery marker. Without this guard, a capture-fail clears
+    /// SessionName and appends "(recovery)" but the dead UUID remains the
+    /// latest non-sentinel entry in the chain - the next Continue then
+    /// plans Resume against it, claude rejects it identically, and the
+    /// loop never breaks.
+    /// </para>
     /// </summary>
     public static string? LatestRealSessionId(IReadOnlyList<string>? chain)
     {
@@ -318,7 +331,7 @@ public static class RunPlanner
         {
             var entry = chain[i];
             if (string.IsNullOrWhiteSpace(entry)) continue;
-            if (string.Equals(entry, "(recovery)", StringComparison.Ordinal)) continue;
+            if (string.Equals(entry, "(recovery)", StringComparison.Ordinal)) return null;
             if (IsPlaceholderSessionSlug(entry)) continue;
             return entry;
         }

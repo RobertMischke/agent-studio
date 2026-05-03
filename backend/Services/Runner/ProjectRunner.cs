@@ -633,8 +633,9 @@ public class ProjectRunner
             var promptPath = Path.Combine(info.FolderPath, "prompt.md");
             var promptText = ReadPromptText(promptPath);
             var lastAgentText = outcome.Summary ?? "(no agent summary captured)";
+            var attachmentsList = BuildAttachmentsList(info.FolderPath);
 
-            var orchestratorPrompt = BuildOrchestratorPrompt(info, promptText, lastAgentText);
+            var orchestratorPrompt = BuildOrchestratorPrompt(info, promptText, lastAgentText, attachmentsList);
             var modelOverride = _projectSettings.Get(info.ProjectName).OrchestratorModel;
 
             // Resume the long-lived session if one is on disk; the
@@ -651,7 +652,7 @@ public class ProjectRunner
             OrchestratorDecisionResult result;
             if (session != null && !string.IsNullOrWhiteSpace(session.SessionId))
             {
-                var resumePrompt = BuildOrchestratorResumePrompt(info, lastAgentText);
+                var resumePrompt = BuildOrchestratorResumePrompt(info, lastAgentText, attachmentsList);
                 result = await _orchestratorRunner.ResumeAsync(
                     session.SessionId, resumePrompt, modelToUse,
                     Entry.RootPath, CancellationToken.None);
@@ -761,12 +762,23 @@ public class ProjectRunner
     /// Tighter prompt for an orchestrator session that already has the
     /// project's boot context loaded. We only re-send the current
     /// situation; everything else is in the session memory.
+    /// <para>
+    /// Attachments: when the user attached files to the task (typically a
+    /// screenshot that the agent's question hinges on), we list the
+    /// absolute paths so the orchestrator can read them with its Read tool.
+    /// Without this, the orchestrator decides blind on tasks whose entire
+    /// context lives in an image.
+    /// </para>
     /// </summary>
-    private static string BuildOrchestratorResumePrompt(JobInfo info, string lastAgentText)
+    internal static string BuildOrchestratorResumePrompt(JobInfo info, string lastAgentText, string attachmentsList)
     {
+        var attachmentsBlock = AttachmentsHasFiles(attachmentsList)
+            ? $"\n\nAttachments on this task (read with your Read tool if relevant - the agent's question often hinges on these):\n{attachmentsList}"
+            : string.Empty;
         return
-            $"NEEDS_INPUT decision request for task \"{info.Title}\" (id: {info.Id}).\n\n" +
-            "The agent's last message you need to answer:\n" +
+            $"NEEDS_INPUT decision request for task \"{info.Title}\" (id: {info.Id})." +
+            attachmentsBlock +
+            "\n\nThe agent's last message you need to answer:\n" +
             lastAgentText +
             "\n\nReply with the user-style follow-up to send back to the agent. " +
             "Reply with exactly BLOCK if you cannot decide without user knowledge you do not have. " +
@@ -779,9 +791,19 @@ public class ProjectRunner
     /// load-bearing for the decision contract: the orchestrator must know
     /// it can return BLOCK to defer, and must reply in the user's voice
     /// not the orchestrator's.
+    /// <para>
+    /// Attachments: when the user attached files to the task (typically a
+    /// screenshot that the agent's question hinges on), we list the
+    /// absolute paths so the orchestrator can read them with its Read tool.
+    /// Without this, the orchestrator decides blind on tasks whose entire
+    /// context lives in an image.
+    /// </para>
     /// </summary>
-    private static string BuildOrchestratorPrompt(JobInfo info, string promptText, string lastAgentText)
+    internal static string BuildOrchestratorPrompt(JobInfo info, string promptText, string lastAgentText, string attachmentsList)
     {
+        var attachmentsBlock = AttachmentsHasFiles(attachmentsList)
+            ? $"\n\nAttachments on this task (read with your Read tool if the agent's question hinges on them - e.g. a screenshot the agent referenced):\n{attachmentsList}"
+            : string.Empty;
         return
             "You are the project orchestrator for Agent Task Processor. " +
             "The user has set this project to auto mode and stepped away. " +
@@ -792,14 +814,20 @@ public class ProjectRunner
             $"Task: {info.Title}\n\n" +
             "Original task description:\n" +
             (string.IsNullOrWhiteSpace(promptText) ? "(empty)" : promptText) +
+            attachmentsBlock +
             "\n\nThe agent's last message you need to answer:\n" +
             lastAgentText +
             "\n\nReasoning style:\n" +
             "- If the agent's question has an obvious right answer in context, give it directly.\n" +
             "- If the question is ambiguous and multiple paths are reasonable, pick the simpler path and say why in one short sentence.\n" +
+            "- Before answering BLOCK, check whether reading an attached file (e.g. a screenshot) would resolve the ambiguity; if yes, read it and decide.\n" +
             "- If you genuinely cannot decide without user knowledge that you do not have, reply with exactly: BLOCK\n\n" +
             "Reply now with the user-style follow-up directly. Do not preface with \"I would say\" or similar. Plain text, no markdown headings.";
     }
+
+    private static bool AttachmentsHasFiles(string attachmentsList)
+        => !string.IsNullOrWhiteSpace(attachmentsList)
+           && !string.Equals(attachmentsList.Trim(), "(none)", StringComparison.Ordinal);
 
     private static string Truncate(string s, int max)
     {
@@ -1167,7 +1195,7 @@ public class ProjectRunner
         }
     }
 
-    private static string BuildAttachmentsList(string jobFolder)
+    internal static string BuildAttachmentsList(string jobFolder)
     {
         try
         {
