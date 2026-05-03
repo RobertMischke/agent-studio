@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { JobArtifactReporter } from './e2e/helpers/job-artifact-reporter';
 
 /**
  * Playwright configuration for Agent Task Processor frontend E2E tests.
@@ -21,11 +22,20 @@ import { defineConfig, devices } from '@playwright/test';
  *   Never select by CSS class — they change with styling work.
  * - Tests must clean up any state they create (jobs, sessions). See
  *   `e2e/helpers/jobs.ts` for the API-level cleanup helpers.
+ * - JobArtifactReporter activates when JOB_RESULTS_DIR env var is set (agent task orchestrator).
+ *   It harvests test artifacts into <JOB_RESULTS_DIR>/playwright/ with summary index.json.
+ *   Not used during local development.
  */
 const pwTarget = (process.env.PW_TARGET ?? 'dev').toLowerCase();
 const resolvedBaseUrl =
   process.env.PW_BASE_URL?.trim()
   || (pwTarget === 'stable' ? 'http://localhost:4011' : 'http://localhost:4010');
+
+const reporters: any[] = [['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]];
+// Activate job artifact reporter only when JOB_RESULTS_DIR is set (agent task orchestrator mode).
+if (process.env.JOB_RESULTS_DIR) {
+  reporters.push([JobArtifactReporter]);
+}
 
 export default defineConfig({
   testDir: './e2e',
@@ -35,7 +45,7 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: 0,
   workers: 1,
-  reporter: [['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]],
+  reporter: reporters,
   use: {
     baseURL: resolvedBaseUrl,
     trace: 'retain-on-failure',

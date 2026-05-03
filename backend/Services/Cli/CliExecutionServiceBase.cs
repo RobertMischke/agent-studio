@@ -213,6 +213,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         string? sessionName = null,
         bool resumeSession = false,
         string? model = null,
+        string? jobFolderPath = null,
         CancellationToken ct = default)
     {
         if (_processes.TryGetValue(jobKey, out var existing))
@@ -267,6 +268,14 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         // CI=1 is the conventional non-interactive marker. Most npm CLIs
         // respect it to skip prompts; harmless for the others.
         psi.Environment["CI"]                             = "1";
+
+        // When running under the agent task orchestrator, set JOB_RESULTS_DIR
+        // so tools like Playwright can harvest artifacts into the job folder.
+        // Cleaned up in the task orchestrator's result directories.
+        if (!string.IsNullOrEmpty(jobFolderPath))
+        {
+            psi.Environment["JOB_RESULTS_DIR"]            = Path.Combine(jobFolderPath, "results");
+        }
 
         ChildHandle child;
         try

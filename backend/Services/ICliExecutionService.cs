@@ -24,6 +24,7 @@ public interface ICliExecutionService
         string? sessionName = null,
         bool resumeSession = false,
         string? model = null,
+        string? jobFolderPath = null,
         CancellationToken ct = default);
 
     /// <summary>

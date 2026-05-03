@@ -337,7 +337,7 @@ public class ProjectRunner
             _activeCliType = cli.CliType;
             var (execution, cliError) = await cli.StartAsync(
                 jobId, GetJobKey(jobId), prompt, Entry.RootPath,
-                plan.SessionToResume, plan.ResumeFlag, info.Model, ct);
+                plan.SessionToResume, plan.ResumeFlag, info.Model, info.FolderPath, ct);
 
             if (execution == null)
             {

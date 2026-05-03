@@ -131,7 +131,7 @@ public class CopilotCliService : ICliExecutionService
         return available;
     }
 
-    public async Task<(CliExecution? Execution, string? Error)> StartAsync(string jobId, string jobKey, string prompt, string workingDirectory, string? sessionName = null, bool resumeSession = false, string? model = null, CancellationToken ct = default)
+    public async Task<(CliExecution? Execution, string? Error)> StartAsync(string jobId, string jobKey, string prompt, string workingDirectory, string? sessionName = null, bool resumeSession = false, string? model = null, string? jobFolderPath = null, CancellationToken ct = default)
     {
         if (_processes.TryGetValue(jobKey, out var existing))
         {
@@ -157,7 +157,7 @@ public class CopilotCliService : ICliExecutionService
             sessionArg += $" --model=\"{EscapeArg(model)}\"";
         }
 
-        var psi = CreateCliStartInfo(prompt, workingDirectory, sessionArg, redirectInput: true);
+        var psi = CreateCliStartInfo(prompt, workingDirectory, sessionArg, redirectInput: true, jobFolderPath);
 
         var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
 
@@ -577,7 +577,7 @@ public class CopilotCliService : ICliExecutionService
 
     private static string EscapeArg(string arg) => arg.Replace("\"", "\\\"");
 
-    private ProcessStartInfo CreateCliStartInfo(string prompt, string workingDirectory, string sessionArg, bool redirectInput)
+    private ProcessStartInfo CreateCliStartInfo(string prompt, string workingDirectory, string sessionArg, bool redirectInput, string? jobFolderPath = null)
     {
         var psi = new ProcessStartInfo
         {
@@ -595,6 +595,13 @@ public class CopilotCliService : ICliExecutionService
         if (!string.IsNullOrWhiteSpace(token))
         {
             psi.Environment["GITHUB_TOKEN"] = token;
+        }
+
+        // When running under the agent task orchestrator, set JOB_RESULTS_DIR
+        // so tools like Playwright can harvest artifacts into the job folder.
+        if (!string.IsNullOrEmpty(jobFolderPath))
+        {
+            psi.Environment["JOB_RESULTS_DIR"] = Path.Combine(jobFolderPath, "results");
         }
 
         return psi;

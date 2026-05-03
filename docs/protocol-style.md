@@ -118,9 +118,9 @@ Bare filenames in `status.md` (e.g. `![](foo.png)` with no folder prefix) are re
 | **Codex CLI** | Same as Claude. No native screenshot capability. | Tool-driven. | Same. Copy into `<job>/results/`. |
 | **GitHub Copilot CLI** | Same. No native screenshot capability. | Tool-driven. | Same. Copy into `<job>/results/`. |
 | **Gemini CLI** | Same. No native screenshot capability. | Tool-driven. | Same. Copy into `<job>/results/`. |
-| **Playwright** (driven by any CLI above) | `page.screenshot()` writes wherever the spec says. Project-wide default `outputDir: 'test-results'`. | `frontend/e2e/test-results/<spec>/<artifact>.png`, **always overwritten** on the next run. | **Ephemeral.** Anything worth keeping must be copied into `<job>/results/` in the same task. The `test-results/` folder is `.gitignore`d and treated as scratch. |
+| **Playwright** (driven by any CLI above) | Test artifacts (screenshots, videos, traces) via `page.screenshot()`, etc. Project-wide default `outputDir: 'test-results'`. **Auto-harvested by `JobArtifactReporter` when `JOB_RESULTS_DIR` env var is set.** | When running under the agent task orchestrator: `<job>/results/playwright/<spec-name>/...` with `index.json` summary. Local dev (no env var): `frontend/e2e/test-results/<spec>/...` (ephemeral). | **Under orchestrator:** persistent, auto-copied with summary index. Protocol pane renders these images inline. **Local dev:** ephemeral scratch, manually copy if needed for review. Never reference `test-results/<...>.png` from durable `status.md`; use `results/` paths. |
 
-**The retention rule, restated:** if the screenshot matters for the protocol, it must end up under `<job>/results/`. Anywhere else is treated as scratch and may disappear on the next test run, the next CI cleanup, or a `git clean`. Do not reference `test-results/<...>.png` from `status.md`; it works locally for ten minutes and breaks for the reviewer.
+**The retention rule, restated:** If a screenshot matters for the protocol, it must end up under `<job>/results/`. When running under the orchestrator, `JobArtifactReporter` copies Playwright artifacts automatically; otherwise manually `cp`/`mv`. Anywhere else is treated as scratch and may disappear on the next test run, the next CI cleanup, or a `git clean`. Do not reference `test-results/<...>.png` from `status.md`; it works locally for ten minutes and breaks for the reviewer.
 
 ### 4.2 Local rendering
 
@@ -134,6 +134,15 @@ The protocol pane renders `status.md` through [`markdownToHtml`](../frontend/src
 | Absolute `http(s)://…` | passed through unchanged |
 
 The backend endpoints serve only files whose names contain no path separators and live directly under `attachments/` or `results/`. They reject `..`, `/`, and `\`; see [`JobScannerService.ResolveAttachment`](../backend/Services/Jobs/JobScannerService.cs) and the `results/` mirror.
+
+### 4.2.5 Playwright artifact harvesting
+
+When the agent task orchestrator runs a CLI (Claude Code, Codex, Copilot, Gemini), it sets the `JOB_RESULTS_DIR` environment variable to `<job>/results`. The `JobArtifactReporter` custom Playwright reporter (wired in `frontend/playwright.config.ts`) monitors this env var:
+
+- **If set (orchestrator mode):** copies all test artifacts (screenshots, videos, traces) from `frontend/e2e/test-results/<spec>/...` into `<job>/results/playwright/<spec>/...`, preserving the subfolder structure. Writes `<job>/results/playwright/index.json` with a summary listing test status and artifact paths.
+- **If unset (local dev):** reporter is silent; Playwright artifacts stay in the ephemeral `test-results/` folder as usual.
+
+The frontend's markdown renderer and protocol pane already handle `results/playwright/<spec>/<name>` paths just like any other `results/` image. Haiku's summary (`status.md`) extracts image references from the CLI output; if the run produced screenshots and the CLI mentioned them, Haiku includes them in the `## Images` section of the protocol.
 
 ### 4.3 Git policy
 
