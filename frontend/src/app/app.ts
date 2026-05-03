@@ -45,21 +45,38 @@ import { E2ECleanupDialogComponent } from './components/dev-tools/e2e-cleanup-di
           (toggleAuto)="onToggleAuto($event)"
           (openDetail)="openProjectDetail($event)" />
         <div class="header__actions">
-          @if (devToolsFlags().updateStableEnabled) {
-            <button class="btn btn--devtool"
-                    data-testid="devtool-update-stable"
-                    title="Pull origin/main into stable and restart it (dev tool)"
-                    (click)="showUpdateStable.set(true)">
-              ⟳ Update Stable
-            </button>
-          }
-          @if (devToolsFlags().deleteE2EJobsEnabled) {
-            <button class="btn btn--devtool btn--devtool-danger"
-                    data-testid="devtool-delete-e2e"
-                    title="Delete jobs whose name contains E2E across every project (dev tool)"
-                    (click)="showE2ECleanup.set(true)">
-              🧹 E2E Jobs
-            </button>
+          @if (anyDevTool()) {
+            <div class="devtools-menu">
+              <button class="devtools-menu__trigger"
+                      data-testid="devtools-menu-trigger"
+                      title="Dev tools"
+                      [class.devtools-menu__trigger--open]="devToolsMenuOpen()"
+                      (click)="devToolsMenuOpen.set(!devToolsMenuOpen()); $event.stopPropagation()">⋮</button>
+              @if (devToolsMenuOpen()) {
+                <div class="devtools-menu__backdrop" (click)="devToolsMenuOpen.set(false)"></div>
+                <div class="devtools-menu__panel" (click)="$event.stopPropagation()">
+                  <div class="devtools-menu__header">Dev tools</div>
+                  @if (devToolsFlags().updateStableEnabled) {
+                    <button class="devtools-menu__item"
+                            data-testid="devtool-update-stable"
+                            (click)="onPickUpdateStable()">
+                      <span class="devtools-menu__icon">⟳</span>
+                      <span class="devtools-menu__label">Update Stable</span>
+                      <span class="devtools-menu__hint">pull main, restart instance</span>
+                    </button>
+                  }
+                  @if (devToolsFlags().deleteE2EJobsEnabled) {
+                    <button class="devtools-menu__item devtools-menu__item--danger"
+                            data-testid="devtool-delete-e2e"
+                            (click)="onPickDeleteE2E()">
+                      <span class="devtools-menu__icon">🧹</span>
+                      <span class="devtools-menu__label">Delete E2E Jobs</span>
+                      <span class="devtools-menu__hint">across all projects</span>
+                    </button>
+                  }
+                </div>
+              }
+            </div>
           }
           <button class="btn btn--create" (click)="openCreate()">
             ＋ Add Task
@@ -487,18 +504,81 @@ import { E2ECleanupDialogComponent } from './components/dev-tools/e2e-cleanup-di
       box-shadow: 0 1px 4px rgba(139,92,246,0.30);
     }
     .btn--create:hover { background: rgba(139,92,246,0.6); border-color: rgba(196,181,253,0.95); }
-    .btn--devtool {
-      background: rgba(245,158,11,0.20);
-      border-color: rgba(252,211,77,0.55);
-      color: #fde68a;
+    .devtools-menu { position: relative; display: inline-flex; }
+    .devtools-menu__trigger {
+      background: transparent;
+      border: 1px solid rgba(255,255,255,0.10);
+      color: #94a3b8;
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+      padding: 0;
+      display: grid;
+      place-items: center;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
     }
-    .btn--devtool:hover { background: rgba(245,158,11,0.32); border-color: rgba(252,211,77,0.75); color: #fef3c7; }
-    .btn--devtool-danger {
-      background: rgba(244,63,94,0.18);
-      border-color: rgba(248,113,113,0.55);
-      color: #fecaca;
+    .devtools-menu__trigger:hover {
+      background: rgba(255,255,255,0.08);
+      border-color: rgba(255,255,255,0.18);
+      color: #e2e8f0;
     }
-    .btn--devtool-danger:hover { background: rgba(244,63,94,0.30); border-color: rgba(248,113,113,0.75); color: #fee2e2; }
+    .devtools-menu__trigger--open {
+      background: rgba(255,255,255,0.10);
+      border-color: rgba(255,255,255,0.22);
+      color: #f8fafc;
+    }
+    .devtools-menu__backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: 90;
+      background: transparent;
+    }
+    .devtools-menu__panel {
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      z-index: 100;
+      min-width: 240px;
+      background: #181825;
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 10px;
+      box-shadow: 0 12px 40px rgba(0,0,0,0.45);
+      padding: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .devtools-menu__header {
+      padding: 6px 10px 4px;
+      font-size: 10px;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #64748b;
+    }
+    .devtools-menu__item {
+      display: grid;
+      grid-template-columns: 18px 1fr;
+      grid-template-rows: auto auto;
+      column-gap: 10px;
+      align-items: center;
+      background: transparent;
+      border: 0;
+      color: #e2e8f0;
+      padding: 8px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      text-align: left;
+      font-family: inherit;
+    }
+    .devtools-menu__item:hover { background: rgba(255,255,255,0.06); }
+    .devtools-menu__icon { grid-row: 1 / span 2; font-size: 14px; }
+    .devtools-menu__label { font-size: 13px; font-weight: 600; }
+    .devtools-menu__hint { font-size: 11px; color: #64748b; grid-column: 2; }
+    .devtools-menu__item--danger .devtools-menu__label { color: #fecaca; }
+    .devtools-menu__item--danger:hover { background: rgba(244,63,94,0.14); }
     .btn--primary {
       background: #6366f1;
       border-color: #818cf8;
@@ -1120,6 +1200,7 @@ export class App implements OnInit {
   readonly taskNavCollapsed = signal<boolean>(localStorage.getItem('taskNavCollapsed') === '1');
   readonly showUpdateStable = signal(false);
   readonly showE2ECleanup = signal(false);
+  readonly devToolsMenuOpen = signal(false);
 
   readonly projectNames = computed(() => {
     return this.watchPaths().map(wp => wp.name);
@@ -1227,6 +1308,30 @@ export class App implements OnInit {
   }
 
   readonly devToolsFlags = computed(() => this.devTools.flags());
+  readonly anyDevTool = computed(() => {
+    const f = this.devTools.flags();
+    return f.updateStableEnabled || f.deleteE2EJobsEnabled;
+  });
+
+  onPickUpdateStable(): void {
+    this.devToolsMenuOpen.set(false);
+    const ok = window.confirm(
+      'Update Stable will:\n\n' +
+      '  • stop the stable backend and frontend\n' +
+      '  • git pull origin/main\n' +
+      '  • npm install if needed\n' +
+      '  • start stable again\n\n' +
+      'If you trigger this from the stable instance itself, this page will ' +
+      'lose the live console mid-run and you must reload after ~30 seconds.\n\n' +
+      'Continue?'
+    );
+    if (ok) this.showUpdateStable.set(true);
+  }
+
+  onPickDeleteE2E(): void {
+    this.devToolsMenuOpen.set(false);
+    this.showE2ECleanup.set(true);
+  }
 
   constructor(
     readonly jobService: JobService,

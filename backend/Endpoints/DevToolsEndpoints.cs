@@ -196,8 +196,11 @@ public static class DevToolsEndpoints
         }
         catch (OperationCanceledException)
         {
-            try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); } catch { /* best-effort */ }
-            await WriteSseAsync(http, "error", "Cancelled", ct);
+            // Do NOT kill the child. The most common cancellation cause here is
+            // the script restarting THIS backend (when run from the same
+            // checkout that the script targets). Killing the tree would kill
+            // the in-flight stop/start chain and leave the instance down.
+            // Best to let it run to completion; the user reloads the page.
         }
     }
 
