@@ -13,7 +13,7 @@ import {
 import { JobService } from '../../services/job.service';
 import { OrchestratorChatTurn } from '../../models/job.model';
 import { ChatComponent } from '../chat/chat.component';
-import { ChatDraftAttachment, ChatMessage, ChatSubmitEvent } from '../chat/chat-types';
+import { ChatMessage, ChatSubmitEvent } from '../chat/chat-types';
 
 /**
  * Right-hand side sheet that hosts the orchestrator chat. Shell follows
@@ -212,9 +212,22 @@ import { ChatDraftAttachment, ChatMessage, ChatSubmitEvent } from '../chat/chat-
       color: #cbd5e1;
     }
     .sheet__tab--active {
-      background: rgba(124,58,237,0.28);
-      color: #ede9fe;
-      border-color: rgba(196,181,253,0.55);
+      background: linear-gradient(135deg, rgba(124,58,237,0.55), rgba(99,102,241,0.55));
+      color: #ffffff;
+      border-color: rgba(196,181,253,0.95);
+      font-weight: 600;
+      box-shadow: 0 0 0 1px rgba(196,181,253,0.35), 0 1px 4px rgba(99,102,241,0.35);
+    }
+    .sheet__tab--task {
+      background: rgba(20,184,166,0.10);
+      border-color: rgba(94,234,212,0.30);
+      color: #a7f3d0;
+    }
+    .sheet__tab--task.sheet__tab--active {
+      background: linear-gradient(135deg, rgba(20,184,166,0.55), rgba(13,148,136,0.55));
+      border-color: rgba(94,234,212,0.95);
+      color: #ffffff;
+      box-shadow: 0 0 0 1px rgba(94,234,212,0.35), 0 1px 4px rgba(13,148,136,0.35);
     }
     .sheet__only-project {
       padding: 6px 14px;
@@ -337,6 +350,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
    * of dropping the (typically empty) reply silently.
    */
   readonly messages = computed<ChatMessage[]>(() => {
+    const proj = this.activeProject();
     const merged = [...this.turns(), ...this.localTurns()];
     return merged.map<ChatMessage>((t) => ({
       id: t.id,
@@ -344,9 +358,23 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       text: t.text,
       timestamp: t.ts,
       pending: !!(t as { pending?: boolean }).pending,
-      error: t.errorMessage ?? undefined
+      error: t.errorMessage ?? undefined,
+      attachments: (t.attachments ?? []).map((a) => ({
+        alt: a.alt,
+        // Server returns "chat-attachments/<file>"; resolve through the
+        // GET endpoint so the <img> in the bubble actually loads.
+        url: this.resolveAttachmentUrl(proj, a.relativePath)
+      }))
     }));
   });
+
+  private resolveAttachmentUrl(projectName: string | null, relativePath: string): string {
+    if (!projectName || !relativePath) return relativePath;
+    const fileName = relativePath.startsWith('chat-attachments/')
+      ? relativePath.substring('chat-attachments/'.length)
+      : relativePath;
+    return `/api/runner/${encodeURIComponent(projectName)}/orchestrator-chat/attachments/${encodeURIComponent(fileName)}`;
+  }
 
   readonly emptyStateText = computed(() => {
     if (this.loading()) return 'Loading…';
@@ -509,7 +537,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     });
   }
 
-  onSubmit(event: ChatSubmitEvent): void {
+  async onSubmit(event: ChatSubmitEvent): Promise<void> {
     const proj = this.activeProject();
     if (!proj) return;
     const text = event.text.trim();
@@ -528,25 +556,31 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     this.localTurns.update((curr) => [...curr, localTurn]);
     this.sending.set(true);
 
-    // Phase 4 attachments-on-the-wire are best-effort: drafts are not
-    // uploaded yet (the side sheet does not own a job folder to attach
-    // them to). When the user attaches files we surface them in the
-    // prompt body so the orchestrator at least knows they exist; real
-    // upload comes when this is wired into a job context (Phase 6).
-    const attachmentsAsRefs = event.attachments.map((a) => ({
-      alt: a.alt,
-      relativePath: `chat-pending/${a.id}-${a.file.name}`
-    }));
-    const promptText = this.buildPromptText(text, event.attachments);
+    // Upload each pasted/dropped image first so the chat message can
+    // reference real files. We do this sequentially to keep error
+    // surfaces simple and the frontend code small; orchestrator chats
+    // rarely carry more than 1-2 images per turn.
+    let uploaded: { alt: string; relativePath: string }[] = [];
+    try {
+      for (const att of event.attachments) {
+        const resp = await this.uploadOne(proj, att.file);
+        uploaded.push({ alt: att.alt, relativePath: resp.relativePath });
+      }
+    } catch (err) {
+      this.sending.set(false);
+      const message = (err as { message?: string })?.message ?? 'Attachment upload failed';
+      this.localTurns.update((curr) =>
+        curr.map((t) => (t.id === localId ? { ...t, pending: false, errorMessage: message } : t))
+      );
+      return;
+    }
 
     this.jobService.sendOrchestratorChat(proj, {
-      text: promptText,
-      attachments: attachmentsAsRefs.length > 0 ? attachmentsAsRefs : undefined
+      text,
+      attachments: uploaded.length > 0 ? uploaded : undefined
     }).subscribe({
       next: () => {
         this.sending.set(false);
-        // Drop the local copy and replace with whatever the server has —
-        // both turns are now persisted there.
         this.localTurns.set([]);
         this.refresh(true);
         for (const att of event.attachments) URL.revokeObjectURL(att.previewUrl);
@@ -558,6 +592,15 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
           curr.map((t) => (t.id === localId ? { ...t, pending: false, errorMessage: message } : t))
         );
       }
+    });
+  }
+
+  private uploadOne(projectName: string, file: File): Promise<{ relativePath: string; url: string }> {
+    return new Promise((resolve, reject) => {
+      this.jobService.uploadOrchestratorChatAttachment(projectName, file).subscribe({
+        next: (resp) => resolve({ relativePath: resp.relativePath, url: resp.url }),
+        error: (err) => reject(new Error(err?.error?.error || err?.message || 'Upload failed'))
+      });
     });
   }
 
@@ -575,14 +618,4 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     this.createTaskFromDraft.emit({ projectName: proj, promptText: last.text });
   }
 
-  private buildPromptText(text: string, attachments: ChatDraftAttachment[]): string {
-    if (attachments.length === 0) return text;
-    const lines = [text];
-    lines.push('');
-    lines.push(`(${attachments.length} pasted image${attachments.length === 1 ? '' : 's'} from the chat composer:)`);
-    for (const a of attachments) {
-      lines.push(`- ${a.alt}`);
-    }
-    return lines.join('\n');
-  }
 }

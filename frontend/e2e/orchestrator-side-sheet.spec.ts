@@ -76,6 +76,25 @@ test.describe('Orchestrator side sheet', () => {
     const makeTaskBtn = page.getByTestId('orch-side-sheet-make-task');
     await expect(makeTaskBtn).toBeVisible();
 
+    // Compact-bubble polish demo: type into the composer so the layout
+    // captures show the active state with text in the input.
+    await composer.fill('Wo stehst du gerade auf diesem Projekt?');
+    await page.waitForTimeout(150);
+    await expect(page.getByTestId('chat-send')).toBeEnabled();
+    await page.mouse.move(0, 0);
+    const sheetBoxComposer = await sheet.boundingBox();
+    if (sheetBoxComposer) {
+      await page.screenshot({
+        path: `${SHOTS}/03b-composer-with-text.png`,
+        clip: {
+          x: Math.max(0, sheetBoxComposer.x - 4),
+          y: Math.max(0, sheetBoxComposer.y - 4),
+          width: Math.min(page.viewportSize()!.width - sheetBoxComposer.x + 4, sheetBoxComposer.width + 8),
+          height: sheetBoxComposer.height + 8
+        }
+      });
+    }
+
     // Verify the project switcher tabs render when more than one project is
     // watched, and clicking the other tab swaps the active thread.
     const tabs = page.getByTestId('orch-side-sheet-tabs');

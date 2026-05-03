@@ -356,6 +356,20 @@ export class JobService {
   }
 
   /**
+   * Upload one image to the project's chat-attachments folder so the
+   * subsequent `sendOrchestratorChat` call can reference it by its
+   * relative path. Multipart/form-data with `file` field.
+   */
+  uploadOrchestratorChatAttachment(projectName: string, file: File) {
+    const form = new FormData();
+    form.append('file', file, file.name || 'image.png');
+    return this.http.post<{ fileName: string; relativePath: string; url: string }>(
+      `${this.baseUrl}/runner/${encodeURIComponent(projectName)}/orchestrator-chat/attachments`,
+      form
+    );
+  }
+
+  /**
    * Override an orchestrator decision. Appends an intervention entry to
    * the feed, and (when `jobId` is provided) routes `newDirection`
    * through the Continue path as a Steer-mode follow-up.

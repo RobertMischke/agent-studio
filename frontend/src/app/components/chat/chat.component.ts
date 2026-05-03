@@ -193,14 +193,14 @@ interface RenderedMessage {
     .chat__body {
       flex: 1 1 auto;
       overflow-y: auto;
-      padding: 14px;
+      padding: 10px 12px;
       min-height: 160px;
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 8px;
       font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
-      font-size: 13.5px;
-      line-height: 1.55;
+      font-size: 13px;
+      line-height: 1.5;
       scroll-behavior: smooth;
       position: relative;
     }
@@ -228,11 +228,21 @@ interface RenderedMessage {
     .chat__msg {
       display: flex;
       flex-direction: column;
-      gap: 6px;
-      padding: 10px 14px 12px;
-      border-radius: 12px;
-      border: 1px solid rgba(148,163,184,0.16);
+      gap: 4px;
+      padding: 8px 12px 10px;
+      border-radius: 10px;
+      border: 1px solid rgba(148,163,184,0.14);
       background: rgba(15,23,42,0.55);
+    }
+    /* User bubbles align right + cap width to read like a chat, not a log. */
+    .chat__msg--user {
+      align-self: flex-end;
+      max-width: 88%;
+    }
+    .chat__msg--agent,
+    .chat__msg--orchestrator,
+    .chat__msg--system {
+      align-self: stretch;
     }
     .chat__msg--agent {
       background: rgba(76,29,149,0.16);
@@ -257,11 +267,12 @@ interface RenderedMessage {
       display: flex;
       align-items: baseline;
       gap: 8px;
-      font-size: 11px;
-      letter-spacing: 0.04em;
+      font-size: 10px;
+      letter-spacing: 0.05em;
       text-transform: uppercase;
       font-weight: 700;
       color: #94a3b8;
+      opacity: 0.85;
     }
     .chat__msg--agent .chat__msg-head { color: #ddd6fe; }
     .chat__msg--user .chat__msg-head { color: #99f6e4; }
@@ -279,8 +290,8 @@ interface RenderedMessage {
 
     .chat__msg-body {
       color: #e2e8f0;
-      font-size: 13.5px;
-      line-height: 1.6;
+      font-size: 13px;
+      line-height: 1.55;
       word-break: break-word;
     }
     .chat__msg--user .chat__msg-body { color: #ccfbf1; white-space: pre-wrap; }

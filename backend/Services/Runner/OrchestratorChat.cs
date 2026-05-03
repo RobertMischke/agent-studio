@@ -86,6 +86,83 @@ public class OrchestratorChat
 
     private static string ResolvePath(string watchPath) =>
         Path.Combine(watchPath, ".orchestrator", "orchestrator-chat.jsonl");
+
+    /// <summary>
+    /// Persist a chat-composer image under
+    /// <c>&lt;watchPath&gt;/.orchestrator/chat-attachments/&lt;id&gt;.&lt;ext&gt;</c>.
+    /// Mirrors the per-job <c>attachments/</c> conventions (10 MB cap,
+    /// PNG / JPG / GIF / WEBP only) so the user's chat drafts and task
+    /// drafts behave the same way.
+    /// </summary>
+    public (string? FileName, string? RelativePath, string? Error) SaveAttachment(
+        string watchPath,
+        byte[] content,
+        string? originalFileName,
+        string? contentType)
+    {
+        if (string.IsNullOrWhiteSpace(watchPath)) return (null, null, "Missing watch path");
+        if (content.Length == 0) return (null, null, "Empty file");
+        if (content.Length > 10 * 1024 * 1024) return (null, null, "File too large (max 10 MB)");
+
+        var ext = ResolveImageExtension(originalFileName, contentType);
+        if (ext == null) return (null, null, "Unsupported file type - only png, jpg, gif, webp allowed");
+
+        var dir = Path.Combine(watchPath, ".orchestrator", "chat-attachments");
+        Directory.CreateDirectory(dir);
+
+        string fileName;
+        string fullPath;
+        do
+        {
+            fileName = $"{Guid.NewGuid():N}"[..8] + ext;
+            fullPath = Path.Combine(dir, fileName);
+        } while (File.Exists(fullPath));
+
+        File.WriteAllBytes(fullPath, content);
+        return (fileName, $"chat-attachments/{fileName}", null);
+    }
+
+    /// <summary>
+    /// Resolve a previously-saved chat attachment for serving back to the
+    /// frontend. Returns null if the file is gone or escapes the chat
+    /// attachments directory.
+    /// </summary>
+    public (string? Path, string? ContentType) ResolveAttachment(string watchPath, string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(watchPath) || string.IsNullOrWhiteSpace(fileName)) return (null, null);
+        if (fileName.Contains("..") || fileName.Contains('/') || fileName.Contains('\\')) return (null, null);
+
+        var dir = Path.Combine(watchPath, ".orchestrator", "chat-attachments");
+        var full = Path.Combine(dir, fileName);
+        if (!File.Exists(full)) return (null, null);
+        var ct = Path.GetExtension(fileName).ToLowerInvariant() switch
+        {
+            ".png" => "image/png",
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".gif" => "image/gif",
+            ".webp" => "image/webp",
+            _ => "application/octet-stream"
+        };
+        return (full, ct);
+    }
+
+    private static string? ResolveImageExtension(string? originalFileName, string? contentType)
+    {
+        var ext = string.IsNullOrWhiteSpace(originalFileName)
+            ? null
+            : Path.GetExtension(originalFileName).ToLowerInvariant();
+
+        if (ext is ".png" or ".jpg" or ".jpeg" or ".gif" or ".webp") return ext == ".jpeg" ? ".jpg" : ext;
+
+        return contentType?.ToLowerInvariant() switch
+        {
+            "image/png" => ".png",
+            "image/jpeg" or "image/jpg" => ".jpg",
+            "image/gif" => ".gif",
+            "image/webp" => ".webp",
+            _ => null
+        };
+    }
 }
 
 /// <summary>
