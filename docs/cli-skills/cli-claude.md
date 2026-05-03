@@ -201,6 +201,35 @@ When you observe a job in `3-progress` with only `● Session init <uuid>` in th
 4. **Run the integration matrix.** `RUN_CLI_INTEGRATION=1 dotnet test --filter CliSpawnIntegrationTests`. Each probe maps to a diagnostic question (see ADR-0011's reasoning style). A failure narrows the search; all-green means the hang is environmental, not structural.
 5. **Inspect the persisted log.** `<job-folder>/logs/cli-output.log` carries the full stream-json + watchdog timeline. Look for the gap between `Session init` and the next non-system line; that gap's duration tells you whether claude was producing tokens that never reached the runner (Node-side buffering, addressed by ADR-0011's `.exe` rule) versus genuinely waiting on the API (rate-limit, network).
 
+## API-test-level harness (the contract)
+
+Live-backend testing is flaky - the real ASP.NET host accumulates state, concurrent claude processes (e.g. the engineer's own Claude Code in the same cwd) contend on the per-cwd session DB, and timing differences mask root causes. The reliable harness is the **API-test level**: opt into `RUN_CLI_INTEGRATION=1` and run the integration matrix. It boots the actual host via `WebApplicationFactory<Program>` and drives the real CLI through DI, so passing here is the contract for "this change is safe to deploy".
+
+Three integration test classes pin three contract layers:
+
+| Test class | Pins |
+|---|---|
+| [`CliSpawnIntegrationTests`](../../backend.Tests/CliSpawnIntegrationTests.cs) | Spawn-path correctness for Claude / Codex / Gemini / Copilot direct invocation, `.CMD` shim shape, sequential kill+restart |
+| [`CliKestrelHostingRepoTests`](../../backend.Tests/CliKestrelHostingRepoTests.cs) | Spawn produces frames past `Session init` under the real Kestrel-hosted DI graph (closes the dotnet-run-vs-dotnet-test gap that previously masked claude-code#771) — both the default `Process.Start` path and the flag-gated `WindowsHandleScrubSpawner` path |
+| [`CliResumeContractTests`](../../backend.Tests/CliResumeContractTests.cs) | Resume / continuation contract: fresh-then-resume produces init frames on both runs, dead-session-UUID fails cleanly within 30 s instead of hanging |
+
+The two `WebApplicationFactory<Program>`-using classes are tagged `[Collection("LiveCli")]` (defined in [`LiveCliCollection.cs`](../../backend.Tests/LiveCliCollection.cs)) which serializes them - xUnit's default parallelism would otherwise let two tests spawn the same CLI in the same per-cwd `~/.claude/projects/...` session DB simultaneously and re-create the lock contention the ADR-0011 / ADR-0014 investigation kept tripping over. Default-suite tests stay parallel.
+
+Standard sweep:
+
+```sh
+# fast unit / integration (no live CLI):
+dotnet test backend.Tests/OrchestratorApi.Tests.csproj
+# expected: 342 passed, 12 skipped (the live ones), 0 failed
+
+# full live-CLI sweep:
+RUN_CLI_INTEGRATION=1 dotnet test backend.Tests/OrchestratorApi.Tests.csproj \
+  --filter "FullyQualifiedName~CliSpawnIntegrationTests|FullyQualifiedName~CliKestrelHostingRepoTests|FullyQualifiedName~CliResumeContractTests"
+# expected: 12 passed, 0 failed, ~90 s
+```
+
+Live-backend retriggers (`api.sh start` → `POST /jobs/{id}/start`) are diagnostic only and not part of the deploy contract — if the API-test sweep is green and the live backend hangs anyway, the gap is environmental (concurrent claude processes, accumulated runtime state) and should be addressed via the operator playbook above, not by code changes.
+
 ## Quota probe
 
 [`ClaudeQuotaProbe`](../../backend/Services/Quota/ClaudeQuotaProbe.cs) drives the `/usage` slash command via PTY in a scratch dir. It returns two windows: the 5-hour bucket (current session) and a weekly bucket. The probe runs in `%TEMP%/agent-taskboard-quota/claude/` so it doesn't pollute the user's `~/.claude/projects/` listing.
