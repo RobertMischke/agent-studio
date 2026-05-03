@@ -247,4 +247,50 @@ public class RunOutcomePolicyTests
 
         Assert.Equal(OutcomeActionKind.Accept, action.Kind);
     }
+
+    /// <summary>
+    /// Run produced *some* agent text but the heuristic could not classify
+    /// it. The "[heuristic] Could not classify" warning is the right signal
+    /// here - the user has text to read and the orchestrator is admitting
+    /// it cannot tell whether the agent finished, blocked, or kept working.
+    /// </summary>
+    [Fact]
+    public void RealRun_UnknownWithText_AcceptedWithWarning()
+    {
+        var action = RunOutcomePolicy.Decide(
+            RunIntent.UserContinue,
+            ContinuePlan(),
+            Outcome(AgentOutcomeKind.Unknown, sentinel: false, duration: 30.0, agentChars: 250),
+            followupPrompt: null,
+            reissueAttempt: 0);
+
+        Assert.Equal(OutcomeActionKind.NotifyUserAndAccept, action.Kind);
+        Assert.True(action.IsHeuristicFallback);
+        Assert.Contains("Could not classify", action.MetaMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Run produced no agent text (e.g. claude rejected the resume target
+    /// and exited with error_during_execution). The user already sees the
+    /// system-error block in the chat and a [capture-fail] decision
+    /// message right next to it - the frontend's protocol-pane banner also
+    /// surfaces the failed-run state explicitly. Adding "[heuristic] Could
+    /// not classify the agent's reply." on top is just noise. Policy
+    /// stays silent so the meta channel does not pile redundant warnings
+    /// on a single failed turn.
+    /// </summary>
+    [Fact]
+    public void FailedRun_UnknownWithoutText_AcceptedSilently()
+    {
+        var action = RunOutcomePolicy.Decide(
+            RunIntent.UserContinue,
+            ContinuePlan(),
+            Outcome(AgentOutcomeKind.Unknown, sentinel: false, duration: 2.0, agentChars: 0),
+            followupPrompt: null,
+            reissueAttempt: 0);
+
+        Assert.Equal(OutcomeActionKind.Accept, action.Kind);
+        Assert.False(action.IsHeuristicFallback);
+        Assert.Equal(string.Empty, action.MetaMessage);
+    }
 }

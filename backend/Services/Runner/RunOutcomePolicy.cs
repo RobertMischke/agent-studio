@@ -133,6 +133,20 @@ public static class RunOutcomePolicy
 
         if (outcome.Kind == AgentOutcomeKind.Unknown)
         {
+            // When the run produced no agent text at all, the user is
+            // already seeing the cause (a CLI-side system error block,
+            // and likely a [capture-fail] decision message right next to
+            // it). Adding "[heuristic] Could not classify the agent's
+            // reply." on top is redundant noise - there is no reply to
+            // classify. The frontend's protocol-pane banner surfaces the
+            // failed-run state explicitly. Skip the meta message.
+            if (outcome.AgentTextChars == 0)
+            {
+                return new OutcomeAction(
+                    Kind: OutcomeActionKind.Accept,
+                    MetaMessage: string.Empty,
+                    IsHeuristicFallback: false);
+            }
             return new OutcomeAction(
                 Kind: OutcomeActionKind.NotifyUserAndAccept,
                 MetaMessage: "[heuristic] Could not classify the agent's reply.",
