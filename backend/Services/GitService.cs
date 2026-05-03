@@ -19,6 +19,22 @@ public record GitStatusResult(
 
 public record GitCommitResult(bool Success, string? Sha, string? Error);
 
+/// <summary>
+/// One commit in a per-run commit lookup. The numbers are derived from
+/// <c>git log --shortstat</c> so we never have to re-run a diff to render
+/// "12 files, +200 / -50". Returned by
+/// <see cref="GitService.GetCommitsBetween"/>.
+/// </summary>
+public record GitCommitInfo(
+    string Sha,
+    string ShortSha,
+    DateTime AuthorDateUtc,
+    string Author,
+    string Subject,
+    int FilesChanged,
+    int Added,
+    int Removed);
+
 public record GenerateMessageResult(string? Message, string? Error);
 
 public record GitProjectSummary(
@@ -416,6 +432,105 @@ public class GitService
         }
         var result = Commit(jobId, watchPath, message);
         return (result, message);
+    }
+
+    /// <summary>
+    /// Lists commits whose author date falls in the half-open interval
+    /// <c>[fromUtc, toUtc)</c>. Used by the per-run commit lookup so the
+    /// protocol-pane run timeline can show the software-side change set
+    /// for each run. Returns an empty list when the path is not a repo
+    /// or git is missing - callers should treat empty as "no commits in
+    /// this window", not a hard failure.
+    ///
+    /// <para>
+    /// The matching window is the run's wall-clock duration, not its
+    /// commit count: the agent may have authored a commit a few seconds
+    /// before <c>StartedAt</c> if the runner spawned the CLI before the
+    /// session-event line landed. We add a small buffer on each side
+    /// (<paramref name="paddingSeconds"/>) so a normal sequential run
+    /// captures its commits even when the wall-clock boundary slipped.
+    /// </para>
+    /// </summary>
+    public List<GitCommitInfo> GetCommitsBetween(
+        string jobId,
+        string? watchPath,
+        DateTime fromUtc,
+        DateTime toUtc,
+        int paddingSeconds = 5)
+    {
+        var configured = ResolveRepoRoot(jobId, watchPath);
+        if (configured == null) return [];
+        var root = ResolveGitToplevel(configured);
+        if (root == null) return [];
+
+        if (toUtc < fromUtc) (fromUtc, toUtc) = (toUtc, fromUtc);
+        var fromIso = fromUtc.AddSeconds(-paddingSeconds).ToString("yyyy-MM-ddTHH:mm:ssZ");
+        var toIso   = toUtc.AddSeconds(paddingSeconds).ToString("yyyy-MM-ddTHH:mm:ssZ");
+
+        // Single git invocation, machine-parseable. Records are separated
+        // by ASCII Record Separator (0x1E); fields by Unit Separator (0x1F).
+        // --shortstat is appended on its own line after the format string.
+        const char US = '';
+        var fmt = "%H%x1f%h%x1f%aI%x1f%aN%x1f%s";
+        var args = $"log --no-merges --since=\"{fromIso}\" --until=\"{toIso}\" --shortstat --pretty=format:\"{fmt}\"";
+        var (output, _, code) = RunGit(root, args);
+        if (code != 0 || string.IsNullOrWhiteSpace(output)) return [];
+
+        var list = new List<GitCommitInfo>();
+        // Records emitted by --pretty=format: are separated by newlines;
+        // when --shortstat is on, each record ends with a blank line then
+        // " N files changed, +X insertions(+), -Y deletions(-)".
+        var raw = output.Replace("\r\n", "\n");
+        var blocks = raw.Split("\n\n", StringSplitOptions.None);
+        foreach (var block in blocks)
+        {
+            if (string.IsNullOrWhiteSpace(block)) continue;
+            var blockLines = block.Split('\n');
+            // First non-empty line is the format record; subsequent lines
+            // (if any) are the shortstat. Some commits with no file
+            // changes (rare with --no-merges) won't have a shortstat line.
+            string? recordLine = null;
+            string? shortstatLine = null;
+            foreach (var l in blockLines)
+            {
+                if (string.IsNullOrWhiteSpace(l)) continue;
+                if (recordLine == null) recordLine = l;
+                else { shortstatLine = l.Trim(); break; }
+            }
+            if (recordLine == null) continue;
+            var parts = recordLine.Split(US);
+            if (parts.Length < 5) continue;
+            if (!DateTime.TryParse(parts[2], System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal, out var ts))
+                continue;
+            var (files, added, removed) = ParseShortstat(shortstatLine);
+            list.Add(new GitCommitInfo(
+                Sha: parts[0],
+                ShortSha: parts[1],
+                AuthorDateUtc: DateTime.SpecifyKind(ts, DateTimeKind.Utc),
+                Author: parts[3],
+                Subject: parts[4],
+                FilesChanged: files,
+                Added: added,
+                Removed: removed));
+        }
+        return list;
+    }
+
+    private static (int Files, int Added, int Removed) ParseShortstat(string? line)
+    {
+        if (string.IsNullOrWhiteSpace(line)) return (0, 0, 0);
+        // Examples:
+        //   1 file changed, 4 insertions(+)
+        //   2 files changed, 12 insertions(+), 3 deletions(-)
+        //   1 file changed, 1 deletion(-)
+        int files = 0, added = 0, removed = 0;
+        var m1 = System.Text.RegularExpressions.Regex.Match(line, @"(\d+)\s+files?\s+changed");
+        if (m1.Success) int.TryParse(m1.Groups[1].Value, out files);
+        var m2 = System.Text.RegularExpressions.Regex.Match(line, @"(\d+)\s+insertions?\(\+\)");
+        if (m2.Success) int.TryParse(m2.Groups[1].Value, out added);
+        var m3 = System.Text.RegularExpressions.Regex.Match(line, @"(\d+)\s+deletions?\(-\)");
+        if (m3.Success) int.TryParse(m3.Groups[1].Value, out removed);
+        return (files, added, removed);
     }
 
     public bool OpenInVsCode(string jobId, string? watchPath, out string? error)

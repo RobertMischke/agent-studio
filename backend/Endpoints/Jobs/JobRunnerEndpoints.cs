@@ -89,6 +89,49 @@ public static class JobRunnerEndpoints
             });
         });
 
+        // The condensed run timeline that drives the protocol-pane redesign.
+        // One record per CLI invocation between user inputs, paired with the
+        // [taskboard] Started/exited markers in cli-output.log so the frontend
+        // can render line-spans for drill-down. See docs/design-principles.md
+        // for the contract this surface has to honour: top-level summary +
+        // always-available drill-down.
+        group.MapGet("/{jobId}/runs", (string jobId, string? watchPath, JobScannerService scanner, JobSessionLog sessions) =>
+        {
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info == null) return Results.NotFound(new { error = "Job not found" });
+            var events = sessions.ReadSessionEvents(jobId, watchPath);
+            var lines = CliOutputLogParser.ParseFile(JobPaths.CliOutputLog(info.FolderPath));
+            var timeline = RunTimelineBuilder.Build(events, lines, DateTime.UtcNow);
+            return Results.Ok(timeline);
+        });
+
+        // Per-run software-side change set: the commits whose author date
+        // falls inside this run's wall-clock window. Drives the
+        // "what did the agent change in my software?" question that
+        // docs/design-principles.md treats as the unit of trust.
+        // Index is 1-based to match RunRecord.Index.
+        group.MapGet("/{jobId}/runs/{index:int}/commits", (
+            string jobId, int index, string? watchPath,
+            JobScannerService scanner, JobSessionLog sessions, GitService git) =>
+        {
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info == null) return Results.NotFound(new { error = "Job not found" });
+            var events = sessions.ReadSessionEvents(jobId, watchPath);
+            var lines = CliOutputLogParser.ParseFile(JobPaths.CliOutputLog(info.FolderPath));
+            var timeline = RunTimelineBuilder.Build(events, lines, DateTime.UtcNow);
+            if (index < 1 || index > timeline.Runs.Count)
+                return Results.NotFound(new { error = $"Run #{index} not in this job's timeline (have {timeline.Runs.Count})." });
+            var run = timeline.Runs[index - 1];
+            var commits = git.GetCommitsBetween(jobId, watchPath, run.StartedAt, run.EndedAt ?? DateTime.UtcNow);
+            return Results.Ok(new
+            {
+                runIndex = run.Index,
+                startedAt = run.StartedAt,
+                endedAt = run.EndedAt,
+                commits
+            });
+        });
+
         // Manual re-trigger of the Haiku summary that the runner normally fires
         // post-execution. Surfaced behind a button while we iterate on the prompt
         // and observe failure modes — overwrites status.md when Haiku succeeds.
