@@ -181,8 +181,21 @@ export class JobService {
     return this.http.post<ContinueJobResponse>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/start`, body, this.withWatchPath(watchPath));
   }
 
-  stopJob(jobId: string, watchPath?: string) {
-    return this.http.post(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/stop`, {}, this.withWatchPath(watchPath));
+  /**
+   * Pause the running CLI for this job. The optional `reason` flows into
+   * the backend's RunStatusClassifier:
+   *   - 'user'     (default) - explicit Pause button. Resulting status is
+   *                  'stopped'; the UI may show a small toast.
+   *   - 'followup' - Pause-and-Send: the UI will immediately call
+   *                  continueJob afterwards, so applyExecutionState should
+   *                  not pop a modal for the in-flight 'stopped' frame.
+   * The string is forwarded as ?reason=...; the backend coerces unknown
+   * values to 'user'.
+   */
+  stopJob(jobId: string, watchPath?: string, reason: 'user' | 'followup' = 'user') {
+    const base = this.withWatchPath(watchPath);
+    const params = (base.params ?? new HttpParams()).set('reason', reason);
+    return this.http.post(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/stop`, {}, { ...base, params });
   }
 
   continueJob(jobId: string, prompt: string, watchPath?: string, model?: string, cliType?: CliType, mode?: ContinueMode) {

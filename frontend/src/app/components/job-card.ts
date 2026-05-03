@@ -430,7 +430,11 @@ export class JobCardComponent implements OnInit, OnDestroy {
       return { label: execution.exitCode === null ? 'Failed' : `Failed (${execution.exitCode})`, tone: 'failed' };
     }
 
-    if (execution.status === 'cancelled') {
+    // 'stopped' is the new deliberate-kill status from the backend
+    // (user pause, Pause-&-Send, watchdog kill). Render as a calm
+    // "Stopped" pill, not a failure. Legacy 'cancelled' value stays
+    // supported so older in-memory CliExecution records keep rendering.
+    if (execution.status === 'stopped' || execution.status === 'cancelled') {
       return { label: 'Stopped', tone: 'cancelled' };
     }
 

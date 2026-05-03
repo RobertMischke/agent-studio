@@ -140,6 +140,7 @@ import { JobService } from '../../../services/job.service';
     .run-card { border: 1px solid rgba(148, 163, 184, 0.20); border-radius: 8px; background: rgba(30, 41, 59, 0.40); overflow: hidden; }
     .run-card[data-status="completed"] { border-color: rgba(74, 222, 128, 0.32); }
     .run-card[data-status="failed"]    { border-color: rgba(248, 113, 113, 0.45); background: rgba(220, 38, 38, 0.08); }
+    .run-card[data-status="stopped"]   { border-color: rgba(251, 191, 36, 0.40); }
     .run-card[data-status="cancelled"] { border-color: rgba(251, 191, 36, 0.40); }
     .run-card[data-status="running"]   { border-color: rgba(125, 211, 252, 0.45); background: rgba(56, 189, 248, 0.08); }
 
@@ -152,6 +153,7 @@ import { JobService } from '../../../services/job.service';
     .run-card__chip--intent[data-intent="restart"]  { background: rgba(196, 181, 253, 0.30); color: #ede9fe; }
     .run-card__chip--status[data-status="completed"] { background: rgba(34, 197, 94, 0.28); color: #bbf7d0; }
     .run-card__chip--status[data-status="failed"]    { background: rgba(220, 38, 38, 0.40); color: #fecaca; }
+    .run-card__chip--status[data-status="stopped"]   { background: rgba(251, 191, 36, 0.30); color: #fde68a; }
     .run-card__chip--status[data-status="cancelled"] { background: rgba(251, 191, 36, 0.30); color: #fde68a; }
     .run-card__chip--status[data-status="running"]   { background: rgba(56, 189, 248, 0.30); color: #bae6fd; }
 
@@ -242,7 +244,9 @@ export class RunTimelineComponent {
     if (r.status === 'running') return 'running';
     if (r.status === 'completed') return 'completed';
     if (r.status === 'failed') return 'failed';
-    if (r.status === 'cancelled') return 'cancelled';
+    // 'stopped' is the deliberate-kill status (user pause, Pause-&-Send,
+    // watchdog). Legacy run records may still carry 'cancelled'.
+    if (r.status === 'stopped' || r.status === 'cancelled') return 'stopped';
     return r.status || 'unknown';
   }
 

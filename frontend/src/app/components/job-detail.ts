@@ -1714,10 +1714,13 @@ export class JobDetailComponent implements OnDestroy {
     }
 
     // Pause-and-send: stop the running CLI first, then continue with the
-    // user's intervention as a follow-up prompt.
+    // user's intervention as a follow-up prompt. Reason 'followup' tells
+    // the backend to mark the resulting CliExecution as 'stopped' (not
+    // 'failed', exitCode -1) so applyExecutionState below does not pop a
+    // crash modal between the kill and the follow-up start.
     this.errorMsg.set(null);
     this.continuing.set(true);
-    this.jobService.stopJob(this.detail().info.id, this.detail().info.watchPath).subscribe({
+    this.jobService.stopJob(this.detail().info.id, this.detail().info.watchPath, 'followup').subscribe({
       next: () => {
         this.isRunning.set(false);
         this.continuing.set(false);
@@ -1762,6 +1765,15 @@ export class JobDetailComponent implements OnDestroy {
   private applyExecutionState(execution: import('../models/job.model').CliExecution | null): void {
     if (!execution) return;
     this.cliPoll.applyExecution(execution);
+    // 'stopped' is the deliberate-kill status (user pause, Pause-&-Send,
+    // watchdog kill, host shutdown). It is not a crash and must NOT open
+    // the failure modal; otherwise every Pause-&-Send produces a false
+    // alarm. Clear any stale error banner left over from a real prior
+    // failure on the same job so the UI does not look broken.
+    if (execution.status === 'stopped') {
+      this.errorMsg.set(null);
+      return;
+    }
     if (execution.status === 'failed') {
       const message = execution.exitCode === null
         ? 'Task execution failed.'
