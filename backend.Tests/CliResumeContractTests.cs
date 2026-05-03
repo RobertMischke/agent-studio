@@ -75,32 +75,50 @@ public class CliResumeContractTests : IClassFixture<WebApplicationFactory<Progra
         _ = factory.CreateClient();
         var svc = factory.Services.GetRequiredService<ClaudeCliService>();
 
+        // Isolated per-test cwd so the per-cwd ~/.claude/projects/<encoded>/
+        // session DB is empty and not contended by parallel claude
+        // processes that may also be running in shared temp paths
+        // (the engineer's own Claude Code sessions, prior test runs, etc.).
+        // This is the same isolation strategy ADR-0014's stdin default-deny
+        // plus the LiveCli collection landed for class-level concurrency;
+        // here we extend it to within-test sequencing.
+        var isolatedCwd = Path.Combine(Path.GetTempPath(), $"cli-resume-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(isolatedCwd);
+
         // First run: tiny prompt, capture the UUID.
         var firstId = $"resume-fresh-{Guid.NewGuid():N}";
         var firstKey = $"::{firstId}";
         var (firstExec, firstErr) = await svc.StartAsync(
             firstId, firstKey,
             prompt: "Reply with exactly four words and nothing else: fresh run ack now",
-            workingDirectory: Path.GetTempPath(),
+            workingDirectory: isolatedCwd,
             sessionName: null, resumeSession: false,
             model: "claude-haiku-4-5");
         Assert.Null(firstErr); Assert.NotNull(firstExec);
-        var firstUuid = await WaitForSessionId(svc, firstKey, TimeSpan.FromSeconds(60));
+        // 90s budget: first-spawn cold-cache on Opus/Sonnet can run up to
+        // 30-40s; even Haiku can take 20-30s when other claude processes
+        // are warming. 90s leaves headroom without masking real hangs.
+        var firstUuid = await WaitForSessionId(svc, firstKey, TimeSpan.FromSeconds(90));
         Assert.NotNull(firstUuid);
         svc.Stop(firstKey);
+        // Give the first run's MonitorProcessAsync a beat to drain its
+        // pipes and clear active-process state before we spawn the next.
+        await Task.Delay(500);
 
-        // Second run: resume against that UUID.
+        // Second run: resume against that UUID, same isolated cwd so
+        // claude finds the session file from the first run.
         var secondId = $"resume-followup-{Guid.NewGuid():N}";
         var secondKey = $"::{secondId}";
         var (secondExec, secondErr) = await svc.StartAsync(
             secondId, secondKey,
             prompt: "Just reply with: continued",
-            workingDirectory: Path.GetTempPath(),
+            workingDirectory: isolatedCwd,
             sessionName: firstUuid, resumeSession: true,
             model: "claude-haiku-4-5");
         Assert.Null(secondErr); Assert.NotNull(secondExec);
-        var secondUuid = await WaitForSessionId(svc, secondKey, TimeSpan.FromSeconds(60));
+        var secondUuid = await WaitForSessionId(svc, secondKey, TimeSpan.FromSeconds(90));
         svc.Stop(secondKey);
+        try { Directory.Delete(isolatedCwd, recursive: true); } catch { /* best-effort */ }
 
         Assert.NotNull(secondUuid);
         // Claude's --resume captures a NEW UUID per turn (forking session
@@ -137,10 +155,13 @@ public class CliResumeContractTests : IClassFixture<WebApplicationFactory<Progra
         var deadUuid = "00000000-0000-4000-8000-000000000000";
         var jobId = $"resume-dead-{Guid.NewGuid():N}";
         var jobKey = $"::{jobId}";
+        // Same isolated-cwd discipline as the resume-fresh test.
+        var isolatedCwd = Path.Combine(Path.GetTempPath(), $"cli-resume-dead-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(isolatedCwd);
         var (exec, err) = await svc.StartAsync(
             jobId, jobKey,
             prompt: "should fail",
-            workingDirectory: Path.GetTempPath(),
+            workingDirectory: isolatedCwd,
             sessionName: deadUuid, resumeSession: true,
             model: "claude-haiku-4-5");
         Assert.Null(err); // process spawn itself succeeded
@@ -162,6 +183,7 @@ public class CliResumeContractTests : IClassFixture<WebApplicationFactory<Progra
 
         var final = svc.GetOutput(jobKey);
         Assert.Contains(final, l => l.Stream == "system" && l.Text.Contains("CLI exited"));
+        try { Directory.Delete(isolatedCwd, recursive: true); } catch { /* best-effort */ }
     }
 
     private static async Task<string?> WaitForSessionId(
