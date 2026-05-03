@@ -79,6 +79,32 @@ public class CliSpawnIntegrationTests
         }
     }
 
+    /// <summary>Locate <c>codex.cmd</c> (the npm shim - Codex has no single .exe).</summary>
+    private static string? CodexCmdPath
+    {
+        get
+        {
+            var fromEnv = Environment.GetEnvironmentVariable("CODEX_CMD");
+            if (!string.IsNullOrWhiteSpace(fromEnv) && File.Exists(fromEnv)) return fromEnv;
+            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            var candidate = Path.Combine(appData, "npm", "codex.cmd");
+            return File.Exists(candidate) ? candidate : null;
+        }
+    }
+
+    /// <summary>Locate <c>gemini.cmd</c> (the npm shim - Gemini has no single .exe).</summary>
+    private static string? GeminiCmdPath
+    {
+        get
+        {
+            var fromEnv = Environment.GetEnvironmentVariable("GEMINI_CMD");
+            if (!string.IsNullOrWhiteSpace(fromEnv) && File.Exists(fromEnv)) return fromEnv;
+            var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+            var candidate = Path.Combine(appData, "npm", "gemini.cmd");
+            return File.Exists(candidate) ? candidate : null;
+        }
+    }
+
     private const string TinyPrompt = "Reply with exactly four words and nothing else: ready set go now";
 
     /// <summary>
@@ -454,6 +480,164 @@ public class CliSpawnIntegrationTests
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// Codex parity probe: drives <see cref="OrchestratorApi.Services.Cli.CodexCliService.StartAsync"/>
+    /// against the live <c>codex exec --json</c> CLI with a tiny prompt. Codex
+    /// has no bundled .exe (it ships as <c>node.exe + codex.js</c> via the
+    /// <c>codex.cmd</c> npm shim), so unlike Claude there is no underlying
+    /// .exe to redirect to. The shim path is the production path. We assert
+    /// the runner buffers at least one Codex JSONL frame past the synthetic
+    /// "Started" line.
+    /// </summary>
+    [SkippableFact]
+    public async Task CodexCliService_StartAsync_ProducesStreamingFrames()
+    {
+        Skip.IfNot(IntegrationEnabled, SkipReason);
+        var cmd = CodexCmdPath;
+        Skip.IfNot(cmd != null, "codex.cmd not found");
+
+        var cfg = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["CodexCli:Path"] = cmd,
+                ["TaskRepository"] = Path.Combine(Path.GetTempPath(), $"cli-it-{Guid.NewGuid():N}")
+            })
+            .Build();
+
+        var svc = new OrchestratorApi.Services.Cli.CodexCliService(
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<OrchestratorApi.Services.Cli.CodexCliService>.Instance,
+            cfg,
+            new OrchestratorApi.Services.Pty.CodexModelDiscovery(
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<OrchestratorApi.Services.Pty.CodexModelDiscovery>.Instance,
+                cfg));
+
+        var jobId = $"it-{Guid.NewGuid():N}";
+        var jobKey = $"::{jobId}";
+        // Codex requires a git repository (or --skip-git-repo-check, which the
+        // production driver does not pass) - use the dev checkout because it
+        // is a git repo. Skip if not present.
+        Skip.IfNot(Directory.Exists(Path.Combine(DevRoot, ".git")), "DevRoot is not a git repo");
+        var (exec, err) = await svc.StartAsync(
+            jobId, jobKey,
+            prompt: "Reply with exactly four words and nothing else: codex test ready ack",
+            workingDirectory: DevRoot,
+            sessionName: null, resumeSession: false,
+            model: "gpt-5.5");
+        Assert.Null(err);
+        Assert.NotNull(exec);
+
+        var deadline = DateTime.UtcNow.AddSeconds(60);
+        while (DateTime.UtcNow < deadline)
+        {
+            var snapshot = svc.GetOutput(jobKey);
+            // Look for ANY codex JSONL frame past the synthetic "Started" line.
+            var frameLines = snapshot.Count(l => l.Stream == "stdout" && (
+                l.Text.Contains("\"thread") ||
+                l.Text.Contains("\"turn") ||
+                l.Text.Contains("\"item") ||
+                l.Text.Contains("\"session_meta")));
+            if (frameLines >= 1) break;
+            await Task.Delay(250);
+        }
+        svc.Stop(jobKey);
+
+        var final = svc.GetOutput(jobKey);
+        var stdoutLines = final.Where(l => l.Stream == "stdout").ToList();
+        Assert.True(
+            stdoutLines.Count >= 1,
+            $"Expected at least one stdout frame from codex. Got:\n" +
+            string.Join("\n", final.Select(l => $"  [{l.Stream}] {l.Text[..Math.Min(l.Text.Length, 200)]}")));
+    }
+
+    /// <summary>
+    /// Gemini parity probe: drives <see cref="OrchestratorApi.Services.Cli.GeminiCliService.StartAsync"/>
+    /// against the live <c>gemini -p ...</c> CLI. Gemini also ships as
+    /// <c>node.exe + bundle/gemini.js</c> via <c>gemini.cmd</c>; same shim
+    /// path as Codex.
+    /// </summary>
+    [SkippableFact]
+    public async Task GeminiCliService_StartAsync_ProducesStreamingFrames()
+    {
+        Skip.IfNot(IntegrationEnabled, SkipReason);
+        var cmd = GeminiCmdPath;
+        Skip.IfNot(cmd != null, "gemini.cmd not found");
+
+        var cfg = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["GeminiCli:Path"] = cmd,
+                ["TaskRepository"] = Path.Combine(Path.GetTempPath(), $"cli-it-{Guid.NewGuid():N}")
+            })
+            .Build();
+
+        var svc = new OrchestratorApi.Services.Cli.GeminiCliService(
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<OrchestratorApi.Services.Cli.GeminiCliService>.Instance,
+            cfg);
+
+        var jobId = $"it-{Guid.NewGuid():N}";
+        var jobKey = $"::{jobId}";
+        var (exec, err) = await svc.StartAsync(
+            jobId, jobKey,
+            prompt: "Reply with exactly four words and nothing else: gemini test ready ack",
+            workingDirectory: Path.GetTempPath(),
+            sessionName: null, resumeSession: false,
+            model: null);
+        Assert.Null(err);
+        Assert.NotNull(exec);
+
+        var deadline = DateTime.UtcNow.AddSeconds(60);
+        while (DateTime.UtcNow < deadline)
+        {
+            var snapshot = svc.GetOutput(jobKey);
+            var frameLines = snapshot.Count(l => l.Stream == "stdout" && l.Text.Length > 0 && l.Text.Contains('{'));
+            if (frameLines >= 1) break;
+            await Task.Delay(250);
+        }
+        svc.Stop(jobKey);
+
+        var final = svc.GetOutput(jobKey);
+        var stdoutLines = final.Where(l => l.Stream == "stdout").ToList();
+        Assert.True(
+            stdoutLines.Count >= 1,
+            $"Expected at least one stdout frame from gemini. Got:\n" +
+            string.Join("\n", final.Select(l => $"  [{l.Stream}] {l.Text[..Math.Min(l.Text.Length, 200)]}")));
+    }
+
+    /// <summary>
+    /// Copilot smoke probe: Copilot is the odd CLI out - it is TUI-based
+    /// and the production driver spawns it via PtySession (NOT the pipe-
+    /// redirected CliExecutionServiceBase path that Claude / Codex /
+    /// Gemini share). The full StartAsync flow needs a valid GitHub token
+    /// and an interactive auth dance - too invasive for a default
+    /// integration probe. We instead verify the binary is invokable with
+    /// --version via plain Process redirection.
+    /// </summary>
+    [SkippableFact]
+    public void CopilotCli_VersionProbe_Succeeds()
+    {
+        Skip.IfNot(IntegrationEnabled, SkipReason);
+        var fromEnv = Environment.GetEnvironmentVariable("COPILOT_CMD");
+        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        var candidate = !string.IsNullOrWhiteSpace(fromEnv) ? fromEnv : Path.Combine(appData, "npm", "copilot.cmd");
+        Skip.IfNot(File.Exists(candidate), $"copilot.cmd not at {candidate}");
+
+        var psi = new ProcessStartInfo
+        {
+            FileName = candidate,
+            Arguments = "--version",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        using var p = new Process { StartInfo = psi };
+        p.Start();
+        var stdout = p.StandardOutput.ReadToEnd();
+        Assert.True(p.WaitForExit(15_000), "copilot --version did not exit within 15s");
+        Assert.Equal(0, p.ExitCode);
+        Assert.False(string.IsNullOrWhiteSpace(stdout), "copilot --version produced empty stdout");
     }
 
     /// <summary>
