@@ -203,3 +203,22 @@ Numbering is monotonic. Never reuse a number; never silently delete history.
 **Implementation pointers.** [backend/Services/Runner/GlobalOrchestratorSession.cs](../backend/Services/Runner/GlobalOrchestratorSession.cs) (record + store + AccumulateUsage); [backend/Services/Runner/GlobalOrchestratorBootstrap.cs](../backend/Services/Runner/GlobalOrchestratorBootstrap.cs) (boot prompt builder + boot flow); kicked off in [TaskRunnerService.ExecuteAsync](../backend/Services/TaskRunnerService.cs) right after the per-project boots; read endpoint in [RunnerEndpoints.cs](../backend/Endpoints/RunnerEndpoints.cs); UI in [frontend/src/app/components/global-orchestrator-card.ts](../frontend/src/app/components/global-orchestrator-card.ts), mounted at the top of [project-detail.ts](../frontend/src/app/components/project-detail.ts) and [orchestrator-feed.ts](../frontend/src/app/components/orchestrator-feed.ts).
 
 **Status.** Accepted.
+
+---
+
+## ADR-0010 - Deliberate kills surface as 'stopped', not 'failed' (2026-05-03)
+
+**Decision.** Every place that calls `Process.Kill` on a CLI subprocess records a `RunStopReason` (UserStop / FollowupPause / Watchdog / Cancelled) before issuing the kill. `MonitorProcessAsync` feeds `(exitCode, reason)` through the pure `RunStatusClassifier`, which maps any non-`None` reason to the new `status = "stopped"` regardless of exit code. Only natural exits keep the legacy `completed` / `failed` mapping. The frontend treats `stopped` as a calm pill and skips the failure modal.
+
+**Context.** On Windows, `Process.Kill(entireProcessTree:true)` deterministically returns `exitCode = -1`. The legacy classifier was a single inline `exitCode == 0 ? "completed" : "failed"`, so user pauses, the Pause-&-Send choreography (UI calls `/stop` then `/continue`), and the silence watchdog all surfaced in the UI as `"Task execution failed with exit code -1"` modals. The user reported this directly, both for an explicit pause and for the in-flight Pause-&-Send case. The reason field is the only honest signal of "we killed this on purpose"; without it the backend cannot tell its own kill apart from a real CLI crash.
+
+**Non-goals.**
+- Letting the watchdog or the host-shutdown cancellation path produce `failed`. Both are deliberate kills and must read as `stopped` so users do not chase phantom crashes.
+- Encoding the stop reason in the persisted `RunRecord`. The reason is in-memory state used purely for classification at exit time; what survives on disk is the resulting `status`.
+- A separate `cancelled` status alongside `stopped`. Older in-memory `CliExecution` snapshots may still carry the legacy `cancelled` value, and the frontend renders both with the same calm pill, but new code only emits `stopped`.
+
+**Reasoning style.** Same shape as `Watchdog.DecideState` and `RunCompletionPolicy`: extract the rule into a pure helper with its own test matrix so the next contributor cannot quietly re-inline `exitCode == 0 ? completed : failed`. Reason metadata sits next to the kill, never derived afterwards from heuristics on log lines.
+
+**Implementation pointers.** [backend/Services/Runner/RunStatusClassifier.cs](../backend/Services/Runner/RunStatusClassifier.cs) (enum + statuses + pure classifier); [backend.Tests/RunStatusClassifierTests.cs](../backend.Tests/RunStatusClassifierTests.cs) (matrix); [backend/Services/Cli/CliExecutionServiceBase.cs](../backend/Services/Cli/CliExecutionServiceBase.cs) `Stop` + `MonitorProcessAsync`; matching changes in [backend/Services/CopilotCliService.cs](../backend/Services/CopilotCliService.cs); watchdog kill in [backend/Services/Runner/ProjectRunner.cs](../backend/Services/Runner/ProjectRunner.cs); API hint in [backend/Endpoints/Jobs/JobRunnerEndpoints.cs](../backend/Endpoints/Jobs/JobRunnerEndpoints.cs); frontend skip-modal in [frontend/src/app/components/job-detail.ts](../frontend/src/app/components/job-detail.ts) `applyExecutionState`; Pause-&-Send sends `reason=followup` in the same file; E2E in [frontend/e2e/stop-no-error-modal.spec.ts](../frontend/e2e/stop-no-error-modal.spec.ts).
+
+**Status.** Accepted.
