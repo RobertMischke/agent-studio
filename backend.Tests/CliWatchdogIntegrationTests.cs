@@ -161,6 +161,116 @@ setInterval(() => {}, 600000);
     }
 
     [SkippableFact]
+    public async Task FakeCli_NoNewlineButAlive_RunnerStillBuffersBytes()
+    {
+        // The "live but never flushes a newline" shape: claude / codex /
+        // gemini are line-oriented but a misbehaving CLI could write
+        // partial bytes without ever terminating the line. The base
+        // class's ReadStreamAsync uses ReadLineAsync which only emits
+        // when a newline arrives - so this shape must NOT confuse the
+        // runner's exit detection. We assert: the process exits cleanly
+        // when we Stop it, the synthetic "Started" + "CLI exited" lines
+        // are present, and the partial bytes stay only in the on-disk
+        // log (where they are debuggable) - never in OutputBuffer (which
+        // is line-keyed).
+        var node = NodeExePath;
+        Skip.IfNot(node != null, "node.exe not found");
+
+        const string Script = @"
+process.stdout.write('partial-line-without-newline');
+setInterval(() => {}, 600000);
+";
+        var svc = new FakeNodeCliService(node!, Script);
+        var jobId = $"fake-{Guid.NewGuid():N}";
+        var jobKey = $"::{jobId}";
+        await svc.StartAsync(jobId, jobKey, "(unused)", Path.GetTempPath());
+        await Task.Delay(500); // give Node a beat to write
+        var stopped = svc.Stop(jobKey, RunStopReason.Watchdog);
+        Assert.True(stopped);
+
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (DateTime.UtcNow < deadline)
+        {
+            var snap = svc.GetOutput(jobKey);
+            if (snap.Any(l => l.Stream == "system" && l.Text.Contains("CLI exited"))) break;
+            await Task.Delay(100);
+        }
+        var final = svc.GetOutput(jobKey);
+        Assert.Contains(final, l => l.Stream == "system" && l.Text.Contains("Started"));
+        Assert.Contains(final, l => l.Stream == "system" && l.Text.Contains("CLI exited"));
+    }
+
+    [SkippableFact]
+    public async Task FakeCli_StderrWritesWhileStdoutSilent_StderrLandsInBuffer()
+    {
+        // Codex writes diagnostics to stderr (e.g. "Not inside a trusted
+        // directory ..."). If a CLI's only output is on stderr, the
+        // runner must still capture it. Pin the parity: stderr lines
+        // arrive in OutputBuffer with Stream == "stderr".
+        var node = NodeExePath;
+        Skip.IfNot(node != null, "node.exe not found");
+
+        const string Script = @"
+process.stderr.write('error-line-1\nerror-line-2\n');
+setTimeout(() => process.exit(0), 200);
+";
+        var svc = new FakeNodeCliService(node!, Script);
+        var jobId = $"fake-{Guid.NewGuid():N}";
+        var jobKey = $"::{jobId}";
+        await svc.StartAsync(jobId, jobKey, "(unused)", Path.GetTempPath());
+
+        var deadline = DateTime.UtcNow.AddSeconds(8);
+        while (DateTime.UtcNow < deadline)
+        {
+            var snap = svc.GetOutput(jobKey);
+            if (snap.Any(l => l.Stream == "system" && l.Text.Contains("CLI exited"))) break;
+            await Task.Delay(100);
+        }
+        var final = svc.GetOutput(jobKey);
+        var stderrLines = final.Where(l => l.Stream == "stderr").ToList();
+        Assert.True(
+            stderrLines.Count >= 2,
+            $"Expected 2 stderr lines, got {stderrLines.Count}. All:\n" +
+            string.Join("\n", final.Select(l => $"  [{l.Stream}] {l.Text}")));
+    }
+
+    [SkippableFact]
+    public async Task FakeCli_FastOutput_NoneDropped()
+    {
+        // Backpressure shape: the CLI fires a burst of frames faster
+        // than the consumer might drain. Codex's app-server ships a
+        // Lagged-marker pattern for this; our runner uses an unbounded
+        // buffer + per-line dispatch. Pin that no frames are dropped.
+        var node = NodeExePath;
+        Skip.IfNot(node != null, "node.exe not found");
+
+        const string Script = @"
+for (let i = 0; i < 500; i++) {
+  process.stdout.write('{""seq"":' + i + '}\n');
+}
+process.exit(0);
+";
+        var svc = new FakeNodeCliService(node!, Script);
+        var jobId = $"fake-{Guid.NewGuid():N}";
+        var jobKey = $"::{jobId}";
+        await svc.StartAsync(jobId, jobKey, "(unused)", Path.GetTempPath());
+
+        var deadline = DateTime.UtcNow.AddSeconds(15);
+        while (DateTime.UtcNow < deadline)
+        {
+            var snap = svc.GetOutput(jobKey);
+            if (snap.Any(l => l.Stream == "system" && l.Text.Contains("CLI exited"))) break;
+            await Task.Delay(100);
+        }
+        var final = svc.GetOutput(jobKey);
+        var seqLines = final.Where(l => l.Stream == "stdout" && l.Text.Contains("\"seq\"")).ToList();
+        Assert.True(
+            seqLines.Count == 500,
+            $"Expected 500 sequenced frames captured, got {seqLines.Count}. " +
+            (seqLines.Count > 0 ? $"First: {seqLines[0].Text}, last: {seqLines[^1].Text}" : ""));
+    }
+
+    [SkippableFact]
     public async Task FakeCli_StreamsManyFrames_RunnerCapturesAll()
     {
         // Counter test: a fake CLI that ACTUALLY produces output should be

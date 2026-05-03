@@ -308,8 +308,10 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             _logger.LogWarning("Failed to persist 'started' line for job {JobId} to {Path}", jobId, info.OutputLogPath);
         try { OnOutput?.Invoke(jobKey, startedLine); } catch { }
 
-        _ = ReadStreamAsync(jobKey, child.Stdout, "stdout", info, ct);
-        _ = ReadStreamAsync(jobKey, child.Stderr, "stderr", info, ct);
+        var stdoutTask = ReadStreamAsync(jobKey, child.Stdout, "stdout", info, ct);
+        var stderrTask = ReadStreamAsync(jobKey, child.Stderr, "stderr", info, ct);
+        info.StdoutReadTask = stdoutTask;
+        info.StderrReadTask = stderrTask;
         _ = MonitorProcessAsync(jobKey, process, info, ct);
 
         return (execution, null);
@@ -527,6 +529,31 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         {
             try { await process.WaitForExitAsync(ct); }
             catch (OperationCanceledException) { Stop(jobKey, RunStopReason.Cancelled); }
+
+            // Drain the read loops before we write the synthetic "exited"
+            // marker. Process.WaitForExitAsync returns as soon as the OS
+            // notices the child is gone; the OS pipe still holds bytes the
+            // CLI wrote just before exit. Without this wait, a Node child
+            // that bursts 500 lines and exits leaves the runner with ~70
+            // captured plus a misleading "CLI exited" marker on top - the
+            // remaining 430 lines arrive after the marker (or get lost on
+            // backend shutdown). 5s is the cap so a stuck read does not
+            // pin exit; in practice the drain finishes in &lt; 100 ms.
+            try
+            {
+                var drains = Task.WhenAll(
+                    info.StdoutReadTask ?? Task.CompletedTask,
+                    info.StderrReadTask ?? Task.CompletedTask);
+                await drains.WaitAsync(TimeSpan.FromSeconds(5), CancellationToken.None);
+            }
+            catch (TimeoutException)
+            {
+                _logger.LogWarning("ReadStream drain timed out for {JobId}; some output may be missing", jobKey);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "ReadStream drain threw for {JobId}", jobKey);
+            }
 
             // Drop the active-job entry as soon as the process is known to be
             // gone, before any subscriber notifications. Keeps the reaper file
@@ -840,6 +867,16 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         /// callers fall back to <c>Process.StandardInput</c> in that case.
         /// </summary>
         public Stream? ChildStdin { get; init; }
+
+        /// <summary>
+        /// Read-loop tasks captured at spawn time. <see cref="MonitorProcessAsync"/>
+        /// awaits them (with a short timeout) before writing the synthetic
+        /// "CLI exited" line, so bursts of stdout that finish just before
+        /// process exit reach <see cref="OutputBuffer"/> in their natural
+        /// order rather than after the exit marker.
+        /// </summary>
+        public Task? StdoutReadTask { get; set; }
+        public Task? StderrReadTask { get; set; }
 
         public ProcInfo(Process process, CliExecution execution, string workingDirectory)
         {
