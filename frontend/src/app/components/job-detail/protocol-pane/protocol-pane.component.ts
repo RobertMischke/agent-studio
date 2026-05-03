@@ -190,16 +190,36 @@ export class ProtocolPaneComponent implements OnDestroy {
     if (lines.length === 0) return null;
     const groups = parseActivityLog(lines);
     const turns = buildConversationTurns(groups);
-    // Find the last agent turn; ignore trailing tool bursts so a final
-    // "ran tests" tool group does not eclipse the agent's text.
-    let lastAgent = '';
+    // Walk from the end. We are looking for the agent's most recent reply,
+    // but we must not jump past a *newer* failed-run signal: a system-error
+    // turn (e.g. claude's "No conversation found with session ID ..." +
+    // error_during_execution) means the latest run never produced a real
+    // agent reply, even though earlier runs did. Returning the stale agent
+    // text from a previous run would make the chip banner claim "Agent is
+    // mid-task" for a run that actually errored. The orchestrator already
+    // posted a [capture-fail] decision in that case; keep the banner
+    // honest by surfacing the failed-run state instead of the old reply.
+    let lastAgent: string | null = null;
+    let sawErrorAfterAgent = false;
     for (let i = turns.length - 1; i >= 0; i--) {
-      if (turns[i].kind === 'agent') {
-        lastAgent = turns[i].text;
+      const t = turns[i];
+      if (t.kind === 'agent') {
+        lastAgent = t.text;
         break;
       }
+      if (t.kind === 'system' && t.status === 'error') {
+        sawErrorAfterAgent = true;
+      }
     }
-    return classifyOutcome(lastAgent);
+    if (sawErrorAfterAgent) {
+      return {
+        kind: 'unknown',
+        summary: 'Last run ended with a system error — see the messages above.',
+        question: null,
+        suggestions: []
+      };
+    }
+    return classifyOutcome(lastAgent ?? '');
   });
 
   /** True when the auto-eval banner should be visible. */
