@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using OrchestratorApi.Models;
+using OrchestratorApi.Services.Cli.Adapters;
 
 namespace OrchestratorApi.Services.Cli;
 
@@ -103,6 +104,17 @@ public sealed class GeminiCliService : CliExecutionServiceBase
         bool resumeSession,
         string? model)
         => prompt;
+
+    /// <summary>
+    /// Bridge to <see cref="GeminiEventAdapter"/>. Each raw stdout line
+    /// is passed through and emitted on
+    /// <see cref="CliExecutionServiceBase.OnRunEvent"/>.
+    /// </summary>
+    protected override IEnumerable<CliRunEvent> MapLineToRunEvents(string jobKey, CliOutputLine line)
+    {
+        if (line.Stream != "stdout") return Array.Empty<CliRunEvent>();
+        return GeminiEventAdapter.Map(line.Text, jobKey);
+    }
 
     // The init frame's UUID is rendered by TransformReadLine into a marker line
     //   "● Session init <uuid> (<model>)"
