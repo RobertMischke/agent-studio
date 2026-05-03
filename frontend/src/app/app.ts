@@ -161,7 +161,11 @@ import { projectIdentity } from './services/project-identity.util';
           #orchSideSheet
           class="app__sidesheet"
           [projects]="projectNames()"
-          [preferredProject]="orchSideSheetPreferredProject()" />
+          [preferredProject]="orchSideSheetPreferredProject()"
+          [activeJobId]="selectedJob()?.info?.id ?? null"
+          [activeJobTitle]="selectedJob()?.info?.title ?? null"
+          [activeWatchPath]="selectedJob()?.info?.watchPath ?? null"
+          (createTaskFromDraft)="onCreateTaskFromOrchestratorDraft($event)" />
       </div>
 
       @if (orchFeedProject(); as proj) {
@@ -1363,6 +1367,24 @@ export class App implements OnInit {
       : 'No project selected';
   }
 
+  /**
+   * Phase 5: orchestrator side sheet emitted "make a task from this".
+   * Picks the watch path that matches the named project, opens the
+   * existing create-task dialog with the orchestrator reply seeded into
+   * the prompt, and lets a short heuristic title fall out of the first
+   * non-empty line.
+   */
+  onCreateTaskFromOrchestratorDraft(event: { projectName: string; promptText: string }): void {
+    const watchEntry = this.watchPaths().find((wp) => wp.name === event.projectName);
+    if (!watchEntry) return;
+    this.newTargetState = '1-preparation';
+    this.newWatchPath = watchEntry.path;
+    this.newPrompt = event.promptText;
+    this.newTitle = deriveDraftTitle(event.promptText);
+    this.loadCreateModels(this.newCliType);
+    this.showCreate.set(true);
+  }
+
   private pickOrchFeedProject(): string | null {
     const detail = this.selectedJob();
     if (detail?.info?.projectName) return detail.info.projectName;
@@ -1703,4 +1725,20 @@ export class App implements OnInit {
     document.addEventListener('mousemove', onMouseMove);
     document.addEventListener('mouseup', onMouseUp);
   }
+}
+
+/**
+ * Best-effort task title from a Markdown reply: take the first non-empty
+ * line, strip Markdown decoration, cap at 80 chars. Used by
+ * `onCreateTaskFromOrchestratorDraft` so the user lands in the create
+ * dialog with a placeholder title instead of an empty field.
+ */
+function deriveDraftTitle(text: string): string {
+  if (!text) return '';
+  for (const raw of text.split('\n')) {
+    const line = raw.replace(/^#+\s*/, '').replace(/[*_`]/g, '').trim();
+    if (line.length === 0) continue;
+    return line.length > 80 ? line.slice(0, 77).trim() + '...' : line;
+  }
+  return '';
 }

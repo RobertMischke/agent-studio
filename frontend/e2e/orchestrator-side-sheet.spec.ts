@@ -16,6 +16,12 @@ test.describe('Orchestrator side sheet', () => {
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
 
+    // Move the mouse out of the way so quota tooltips don't pop up while
+    // we screenshot. The previous run had a Codex tooltip floating over
+    // the side sheet header, which made the layout look broken in the
+    // captures even though the UI itself was fine.
+    await page.mouse.move(0, 0);
+
     // Board screenshot before opening — establishes the baseline width.
     await page.waitForTimeout(800);
     await page.screenshot({ path: `${SHOTS}/01-board-closed.png`, fullPage: false });
@@ -54,16 +60,21 @@ test.describe('Orchestrator side sheet', () => {
       });
     }
 
-    // Phase 2 wires sending to the existing orchestrator-override endpoint,
-    // which needs an "anchor" decision to steer. When the active project has
-    // no decisions yet, the composer stays disabled and the placeholder
-    // explains why. Phase 3 (real conversation endpoint) lifts that.
-    await expect(composer).toBeDisabled();
-    await expect(sendBtn).toBeDisabled();
+    // Phase 3: real conversation endpoint. Composer is enabled the moment
+    // a project is selected — sending kicks the GlobalOrchestrator session
+    // and persists both turns. We don't actually send here (that would
+    // burn quota in the e2e suite); we just assert the composer is wired
+    // and the placeholder describes the new flow.
+    await expect(composer).toBeEnabled();
     await expect(composer).toHaveAttribute(
       'placeholder',
-      /No anchor decision yet/
+      /Ask the orchestrator/
     );
+
+    // Phase 5: "Make a task from this reply" button is rendered but
+    // disabled until at least one orchestrator reply with text exists.
+    const makeTaskBtn = page.getByTestId('orch-side-sheet-make-task');
+    await expect(makeTaskBtn).toBeVisible();
 
     // Verify the project switcher tabs render when more than one project is
     // watched, and clicking the other tab swaps the active thread.
@@ -78,9 +89,41 @@ test.describe('Orchestrator side sheet', () => {
       }
     }
 
-    // Close.
+    // Phase 6: when a task detail is open, the side sheet shows a third
+    // tab "🎯 <task title>" that switches the chat to a Continue (Steer)
+    // surface for that specific task. Open a task and verify the tab
+    // appears + clicking it swaps the chat.
     await page.getByTestId('orch-side-sheet-close').click();
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(300);
+
+    const firstCard = page.locator('[data-testid="job-card"]').first();
+    if (await firstCard.isVisible()) {
+      await firstCard.click();
+      await page.waitForTimeout(600);
+      // Reopen the side sheet now that a task is active.
+      await toggle.click();
+      await page.waitForTimeout(800);
+
+      const taskTab = page.getByTestId('orch-side-sheet-tab-task');
+      if (await taskTab.isVisible()) {
+        await page.mouse.move(0, 0);
+        await page.screenshot({ path: `${SHOTS}/06-task-tab-visible.png`, fullPage: false });
+        await taskTab.click();
+        await page.waitForTimeout(400);
+        await page.screenshot({ path: `${SHOTS}/07-task-chat-active.png`, fullPage: false });
+        const composer2 = page.getByTestId('chat-input');
+        await expect(composer2).toBeEnabled();
+        await expect(composer2).toHaveAttribute('placeholder', /Steer/);
+      }
+    }
+
+    // Final close.
+    const closeBtn = page.getByTestId('orch-side-sheet-close');
+    if (await closeBtn.isVisible()) {
+      await closeBtn.click();
+      await page.waitForTimeout(500);
+    }
+    await page.mouse.move(0, 0);
     await page.screenshot({ path: `${SHOTS}/05-side-sheet-closed.png`, fullPage: false });
   });
 });

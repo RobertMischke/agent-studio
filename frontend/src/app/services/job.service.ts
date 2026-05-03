@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport, QuotaReport, QuotaSnapshot, GitStatus, ClaudeSessionResponse, JobCommitDetail, SessionEventsResponse, ContinueMode, ContinueJobResponse, OrchestratorLogResponse, TokenSummary, OrchestratorSessionResponse, RunTimeline, RunCommitsResponse, RunFilesResponse, RunDiffResponse } from '../models/job.model';
+import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport, QuotaReport, QuotaSnapshot, GitStatus, ClaudeSessionResponse, JobCommitDetail, SessionEventsResponse, ContinueMode, ContinueJobResponse, OrchestratorLogResponse, TokenSummary, OrchestratorSessionResponse, OrchestratorChatResponse, OrchestratorChatTurn, RunTimeline, RunCommitsResponse, RunFilesResponse, RunDiffResponse } from '../models/job.model';
 import { ErrorDialogService } from './error-dialog.service';
 
 @Injectable({ providedIn: 'root' })
@@ -326,6 +326,32 @@ export class JobService {
   getTokenSummary(projectName: string) {
     return this.http.get<TokenSummary>(
       `${this.baseUrl}/runner/${encodeURIComponent(projectName)}/token-summary`
+    );
+  }
+
+  /**
+   * Read the per-project orchestrator chat log: turns between the user
+   * and the global orchestrator session, scoped to one project tab.
+   * Backed by `<watchPath>/.orchestrator/orchestrator-chat.jsonl`.
+   */
+  getOrchestratorChat(projectName: string) {
+    return this.http.get<OrchestratorChatResponse>(
+      `${this.baseUrl}/runner/${encodeURIComponent(projectName)}/orchestrator-chat`
+    );
+  }
+
+  /**
+   * Send a user message to the project's orchestrator chat. The backend
+   * resumes the global orchestrator session, persists both user and
+   * orchestrator turns, and returns the orchestrator's reply turn.
+   */
+  sendOrchestratorChat(
+    projectName: string,
+    body: { text: string; attachments?: { alt: string; relativePath: string }[] }
+  ) {
+    return this.http.post<{ project: string; reply: OrchestratorChatTurn }>(
+      `${this.baseUrl}/runner/${encodeURIComponent(projectName)}/orchestrator-chat`,
+      body
     );
   }
 

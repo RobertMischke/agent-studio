@@ -149,6 +149,34 @@ public static class RunnerEndpoints
                 return Results.Ok(new { applied = false, note = "Override recorded in the feed; no jobId was given to route to." });
             });
 
+        // Orchestrator chat (Phase 3): the side-sheet conversation surface.
+        // Different from the orchestrator log: the log records what the
+        // runner / orchestrator did on its own; the chat is a real
+        // bidirectional dialogue between the user and the global orchestrator
+        // session, scoped to one project tab. Persisted under
+        // <watchPath>/.orchestrator/orchestrator-chat.jsonl.
+        runnerGroup.MapGet("/{projectName}/orchestrator-chat",
+            (string projectName, JobScannerService scanner, OrchestratorChatService chatService) =>
+            {
+                var entry = scanner.GetWatchPaths().FirstOrDefault(e => e.Name == projectName);
+                if (entry == null) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+                var turns = chatService.Read(entry.Path);
+                return Results.Ok(new { project = projectName, turns });
+            });
+
+        runnerGroup.MapPost("/{projectName}/orchestrator-chat",
+            async (string projectName, SendOrchestratorChatRequest req, JobScannerService scanner, OrchestratorChatService chatService, CancellationToken ct) =>
+            {
+                if (req == null || string.IsNullOrWhiteSpace(req.Text))
+                    return Results.BadRequest(new { error = "text is required" });
+
+                var entry = scanner.GetWatchPaths().FirstOrDefault(e => e.Name == projectName);
+                if (entry == null) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+
+                var reply = await chatService.SendAsync(projectName, entry.Path, req, ct);
+                return Results.Ok(new { project = projectName, reply });
+            });
+
         static string Truncate(string s, int max)
         {
             if (string.IsNullOrEmpty(s) || s.Length <= max) return s;

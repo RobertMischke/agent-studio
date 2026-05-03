@@ -7,24 +7,29 @@ import {
   effect,
   inject,
   input,
+  output,
   signal
 } from '@angular/core';
 import { JobService } from '../../services/job.service';
-import { OrchestratorLogEntry } from '../../models/job.model';
+import { OrchestratorChatTurn } from '../../models/job.model';
 import { ChatComponent } from '../chat/chat.component';
-import { ChatMessage, ChatSubmitEvent } from '../chat/chat-types';
+import { ChatDraftAttachment, ChatMessage, ChatSubmitEvent } from '../chat/chat-types';
 
 /**
- * Right-hand side sheet that hosts the orchestrator chat. The shell follows
+ * Right-hand side sheet that hosts the orchestrator chat. Shell follows
  * the same flex-collapse pattern as `cli-usage-sheet` (host width animates
  * to 0 when closed so the board reflows instead of being overlaid).
  *
- * Phase 2 wires the existing read-only orchestrator log into a chat-style
- * timeline backed by `<app-chat>`. Project switching at the top mirrors the
- * board's project-tabs metaphor: the user can flip between per-project
- * orchestrator threads without losing context. Sending a message is wired
- * to the existing `overrideOrchestratorEntry` endpoint as a best-effort
- * "steer" path until Phase 3 adds a proper conversation endpoint.
+ * Phase 3 wires this to a real bidirectional conversation endpoint
+ * (`/api/runner/{project}/orchestrator-chat`): the backend resumes the
+ * singleton global Claude session, persists both user and orchestrator
+ * turns under `<watchPath>/.orchestrator/orchestrator-chat.jsonl`, and
+ * returns the reply turn. Project switching at the top mirrors the
+ * board's project-tabs metaphor; threads are independent per project.
+ *
+ * The composer also emits a `createTaskFromDraft` event (Phase 5) so the
+ * host can pre-fill the create-task dialog with the user's draft text and
+ * pasted screenshots without reaching back into the chat component.
  */
 @Component({
   selector: 'app-orchestrator-side-sheet',
@@ -42,7 +47,7 @@ import { ChatMessage, ChatSubmitEvent } from '../chat/chat-types';
           <button class="sheet__btn"
                   (click)="refresh()"
                   [disabled]="loading()"
-                  title="Reload entries"
+                  title="Reload chat history"
                   data-testid="orch-side-sheet-refresh">
             {{ loading() ? '⏳' : '↻' }}
           </button>
@@ -54,37 +59,59 @@ import { ChatMessage, ChatSubmitEvent } from '../chat/chat-types';
         </div>
       </header>
 
-      @if (projects().length > 1) {
-        <nav class="sheet__tabs" data-testid="orch-side-sheet-tabs">
-          @for (proj of projects(); track proj) {
-            <button class="sheet__tab"
-                    [class.sheet__tab--active]="proj === activeProject()"
-                    [attr.data-testid]="'orch-side-sheet-tab-' + proj"
-                    (click)="setActiveProject(proj)">
-              {{ proj }}
-            </button>
-          }
-        </nav>
-      } @else if (projects().length === 1) {
-        <div class="sheet__only-project" data-testid="orch-side-sheet-single-project">
-          {{ activeProject() }}
-        </div>
-      }
+      <nav class="sheet__tabs" data-testid="orch-side-sheet-tabs">
+        @for (proj of projects(); track proj) {
+          <button class="sheet__tab"
+                  [class.sheet__tab--active]="mode() === 'project' && proj === activeProject()"
+                  [attr.data-testid]="'orch-side-sheet-tab-' + proj"
+                  (click)="selectProjectTab(proj)">
+            {{ proj }}
+          </button>
+        }
+        @if (activeJobId() && activeJobTitle()) {
+          <button class="sheet__tab sheet__tab--task"
+                  [class.sheet__tab--active]="mode() === 'task'"
+                  data-testid="orch-side-sheet-tab-task"
+                  (click)="selectTaskTab()">
+            🎯 {{ activeJobTitle() }}
+          </button>
+        }
+      </nav>
 
       @if (errorMsg(); as err) {
         <div class="sheet__error">{{ err }}</div>
       }
 
       <div class="sheet__chat">
-        @if (activeProject(); as proj) {
+        @if (mode() === 'task' && activeJobId()) {
+          <app-chat
+            variant="embedded"
+            [messages]="taskMessages()"
+            [pending]="taskSending()"
+            [disabled]="taskSending()"
+            [placeholder]="'Send a follow-up to this task (Continue mode: Steer)…'"
+            [emptyState]="'No follow-ups sent from here yet. The full activity log lives in the protocol pane.'"
+            (submitMessage)="onTaskSubmit($event)" />
+        } @else if (activeProject()) {
           <app-chat
             variant="embedded"
             [messages]="messages()"
             [pending]="sending()"
-            [disabled]="sending() || !activeJobId()"
-            [placeholder]="composerPlaceholder()"
+            [disabled]="sending()"
+            [placeholder]="'Ask the orchestrator about this project…'"
             [emptyState]="emptyStateText()"
             (submitMessage)="onSubmit($event)" />
+
+          <div class="sheet__draft-actions" data-testid="orch-side-sheet-draft-actions">
+            <button class="sheet__draft-btn"
+                    type="button"
+                    (click)="onCreateTaskFromLastReply()"
+                    [disabled]="!canCreateTaskFromReply()"
+                    title="Open Add Task pre-filled with the last orchestrator reply"
+                    data-testid="orch-side-sheet-make-task">
+              ✨ Make a task from this reply
+            </button>
+          </div>
         } @else {
           <div class="sheet__no-project">No watched projects yet.</div>
         }
@@ -117,7 +144,7 @@ import { ChatMessage, ChatSubmitEvent } from '../chat/chat-types';
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      padding: 14px 16px 12px;
+      padding: 12px 14px 10px;
       border-bottom: 1px solid rgba(255,255,255,0.06);
       background:
         radial-gradient(circle at top left, rgba(139, 92, 246, 0.16), transparent 60%),
@@ -125,7 +152,7 @@ import { ChatMessage, ChatSubmitEvent } from '../chat/chat-types';
     }
     .sheet__title-block { display: flex; flex-direction: column; gap: 2px; }
     .sheet__eyebrow {
-      font-size: 11px;
+      font-size: 10px;
       letter-spacing: 0.08em;
       text-transform: uppercase;
       color: #c4b5fd;
@@ -133,8 +160,9 @@ import { ChatMessage, ChatSubmitEvent } from '../chat/chat-types';
     }
     .sheet__title {
       margin: 0;
-      font-size: 16px;
+      font-size: 15px;
       color: #f8fafc;
+      font-weight: 600;
     }
     .sheet__header-actions { display: flex; gap: 6px; align-items: center; }
     .sheet__btn {
@@ -152,16 +180,17 @@ import { ChatMessage, ChatSubmitEvent } from '../chat/chat-types';
       background: rgba(255,255,255,0.06);
       border: 0;
       color: #cbd5e1;
-      width: 28px; height: 28px;
+      width: 26px; height: 26px;
       border-radius: 999px;
       cursor: pointer;
+      font-size: 13px;
     }
     .sheet__close:hover { background: rgba(255,255,255,0.12); }
 
     .sheet__tabs {
       display: flex;
       gap: 4px;
-      padding: 8px 10px;
+      padding: 6px 10px;
       border-bottom: 1px solid rgba(255,255,255,0.06);
       overflow-x: auto;
       scrollbar-width: thin;
@@ -171,7 +200,7 @@ import { ChatMessage, ChatSubmitEvent } from '../chat/chat-types';
       background: rgba(255,255,255,0.04);
       border: 1px solid rgba(255,255,255,0.08);
       color: #94a3b8;
-      padding: 4px 12px;
+      padding: 3px 11px;
       border-radius: 999px;
       font-size: 12px;
       cursor: pointer;
@@ -188,17 +217,17 @@ import { ChatMessage, ChatSubmitEvent } from '../chat/chat-types';
       border-color: rgba(196,181,253,0.55);
     }
     .sheet__only-project {
-      padding: 8px 14px;
+      padding: 6px 14px;
       border-bottom: 1px solid rgba(255,255,255,0.06);
-      font-size: 12px;
+      font-size: 11px;
       color: #94a3b8;
       letter-spacing: 0.04em;
       text-transform: uppercase;
     }
 
     .sheet__error {
-      margin: 10px 14px 0;
-      padding: 8px 12px;
+      margin: 8px 12px 0;
+      padding: 6px 10px;
       background: rgba(244,63,94,0.1);
       border: 1px solid rgba(244,63,94,0.18);
       color: #fda4af;
@@ -212,6 +241,7 @@ import { ChatMessage, ChatSubmitEvent } from '../chat/chat-types';
       display: flex;
       flex-direction: column;
       padding: 10px 12px 12px;
+      gap: 8px;
     }
     .sheet__no-project {
       padding: 28px 12px;
@@ -219,119 +249,127 @@ import { ChatMessage, ChatSubmitEvent } from '../chat/chat-types';
       text-align: center;
       font-style: italic;
     }
+    .sheet__draft-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 6px;
+    }
+    .sheet__draft-btn {
+      background: rgba(139,92,246,0.16);
+      border: 1px solid rgba(167,139,250,0.45);
+      color: #ddd6fe;
+      padding: 5px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .sheet__draft-btn:hover:not(:disabled) {
+      background: rgba(139,92,246,0.28);
+      color: #f5f3ff;
+      border-color: rgba(196,181,253,0.7);
+    }
+    .sheet__draft-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
   `],
   host: {
     '[class.is-open]': 'open()'
   }
 })
 export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
-  /**
-   * Names of all watched projects. The side sheet uses these for the
-   * project switcher and falls back to the first one when nothing else
-   * is selected.
-   */
   readonly projects = input<string[]>([]);
-  /**
-   * Optional preferred project (typically the project of the currently
-   * open task detail or the user's last toggled project). When this
-   * changes externally the sheet aligns itself, so opening a task and
-   * then opening the orchestrator picks the right thread without an
-   * extra click.
-   */
   readonly preferredProject = input<string | null>(null);
+
+  /**
+   * Phase 6 inputs: when a task detail is open, the host passes the
+   * job id, title, and watch path so the side sheet can offer an
+   * "Active task" tab whose chat sends Continue (mode: Steer)
+   * follow-ups to that specific task. All three are required together;
+   * the tab only shows when both id and title are non-empty.
+   */
+  readonly activeJobId = input<string | null>(null);
+  readonly activeJobTitle = input<string | null>(null);
+  readonly activeWatchPath = input<string | null>(null);
+
+  /**
+   * Phase 5: when the user clicks "Make a task from this reply", the
+   * host opens the create-task dialog pre-filled with the orchestrator's
+   * latest reply text. The host wires the dialog; this component just
+   * names what to seed it with.
+   */
+  readonly createTaskFromDraft = output<{ projectName: string; promptText: string }>();
 
   readonly open = signal(false);
   readonly activeProject = signal<string | null>(null);
-  readonly entries = signal<OrchestratorLogEntry[]>([]);
+  readonly turns = signal<OrchestratorChatTurn[]>([]);
   readonly loading = signal(false);
   readonly sending = signal(false);
   readonly errorMsg = signal<string | null>(null);
+
   /**
-   * Last "decision" entry that referenced a job. New user messages are
-   * wired to the existing override endpoint, which needs an originalTs +
-   * jobId pair to anchor the steer. Phase 3 will replace this with a
-   * proper conversation endpoint.
+   * Which conversation surface is in front: the project orchestrator
+   * thread, or the active task's Continue-mode follow-up chat.
    */
-  readonly anchorEntry = signal<OrchestratorLogEntry | null>(null);
+  readonly mode = signal<'project' | 'task'>('project');
+
   /**
-   * Locally-buffered turns the user has sent in this session. They are
-   * appended to the rendered chat so the user sees their own message
-   * immediately, before the next refresh pulls the orchestrator's
-   * intervention entry.
+   * Per-task Continue-mode chat state. The history here is local-only
+   * (the activity-log-view in the protocol pane is the durable record
+   * of the run); this signal just holds the user's follow-ups and the
+   * acknowledgements so the side sheet stays a real chat surface even
+   * when the user is steering a task.
    */
-  private readonly userTurns = signal<ChatMessage[]>([]);
+  readonly taskMessages = signal<ChatMessage[]>([]);
+  readonly taskSending = signal(false);
+
+  /** Locally-buffered user turns shown immediately (server is source of truth on next refresh). */
+  private readonly localTurns = signal<OrchestratorChatTurn[]>([]);
 
   private readonly jobService = inject(JobService);
   private pollTimer: ReturnType<typeof setInterval> | null = null;
 
-  readonly activeJobId = computed<string | null>(() => this.anchorEntry()?.jobId ?? null);
-
   /**
-   * Convert the orchestrator log into chat messages. Decisions and
-   * interventions render as orchestrator turns; observations and actions
-   * render as system turns (they are background events the orchestrator
-   * narrated about itself, not direct messages to the user). User
-   * overrides become user turns inserted just before their target entry.
+   * Convert chat turns into the chat-component's message shape. Failed
+   * orchestrator turns surface the error in the bubble's footer instead
+   * of dropping the (typically empty) reply silently.
    */
   readonly messages = computed<ChatMessage[]>(() => {
-    const entries = this.entries();
-    const out: ChatMessage[] = [];
-    for (const entry of entries) {
-      if (entry.userOverride) {
-        out.push({
-          id: `override:${entry.ts}`,
-          role: 'user',
-          text: entry.userOverride.newDirection,
-          timestamp: entry.userOverride.at
-        });
-      }
-      // Every log entry is the orchestrator's voice (decisions,
-      // observations, actions, interventions) — keep them on the
-      // 'orchestrator' role so the chat reads as one speaker. Kind shows
-      // up in the bold headline at the top of the bubble.
-      out.push({
-        id: `entry:${entry.ts}:${entry.kind}`,
-        role: 'orchestrator',
-        text: this.formatEntry(entry),
-        timestamp: entry.ts
-      });
-    }
-    for (const turn of this.userTurns()) out.push(turn);
-    return out;
-  });
-
-  readonly composerPlaceholder = computed(() => {
-    const anchor = this.anchorEntry();
-    if (anchor?.jobId) {
-      return `Steer ${anchor.jobId}: tell the orchestrator what to do differently…`;
-    }
-    return 'No anchor decision yet — sending will be enabled after the next orchestrator decision.';
+    const merged = [...this.turns(), ...this.localTurns()];
+    return merged.map<ChatMessage>((t) => ({
+      id: t.id,
+      role: t.role,
+      text: t.text,
+      timestamp: t.ts,
+      pending: !!(t as { pending?: boolean }).pending,
+      error: t.errorMessage ?? undefined
+    }));
   });
 
   readonly emptyStateText = computed(() => {
     if (this.loading()) return 'Loading…';
-    return 'No orchestrator activity yet for this project.';
+    return 'No conversation yet. Ask the orchestrator about this project.';
+  });
+
+  readonly canCreateTaskFromReply = computed(() => {
+    const last = [...this.turns()].reverse().find(
+      (t) => t.role === 'orchestrator' && !!t.text && !t.errorMessage
+    );
+    return !!last;
   });
 
   constructor() {
-    /**
-     * When the active project changes (or the sheet opens), refetch and
-     * reset the locally-buffered user turns so we don't carry chatter
-     * from one project's thread into another.
-     */
     effect(() => {
       this.activeProject();
       this.open();
       if (this.open() && this.activeProject()) {
-        this.userTurns.set([]);
+        this.localTurns.set([]);
         this.refresh(false);
       }
     });
 
-    /**
-     * Track the host's preferred project. If the user opens a different
-     * task, the sheet realigns automatically.
-     */
     effect(() => {
       const preferred = this.preferredProject();
       const projects = this.projects();
@@ -345,14 +383,32 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
         this.activeProject.set(preferred);
       }
     });
+
+    /**
+     * If the host closes the task detail, fall back to the project
+     * thread so the side sheet doesn't sit on a now-invalid task tab.
+     * Switching tasks also clears the per-task local chat — we don't
+     * want one task's follow-ups bleeding into the next.
+     */
+    effect(() => {
+      const id = this.activeJobId();
+      if (!id) {
+        if (this.mode() === 'task') this.mode.set('project');
+        if (this.taskMessages().length > 0) this.taskMessages.set([]);
+        return;
+      }
+    });
   }
 
   ngOnInit(): void {
+    // Slow poll: the chat history only changes when the user sends a
+    // message (which we already refresh after) or when something else
+    // appends a turn. 30s keeps the UI honest without burning quota.
     this.pollTimer = setInterval(() => {
-      if (this.open() && this.activeProject() && !this.loading()) {
+      if (this.open() && this.activeProject() && !this.loading() && !this.sending()) {
         this.refresh(true);
       }
-    }, 10_000);
+    }, 30_000);
   }
 
   ngOnDestroy(): void {
@@ -360,40 +416,93 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     this.pollTimer = null;
   }
 
-  show(): void {
-    this.open.set(true);
-  }
-
-  hide(): void {
-    this.open.set(false);
-  }
-
-  toggle(): void {
-    this.open() ? this.hide() : this.show();
-  }
+  show(): void { this.open.set(true); }
+  hide(): void { this.open.set(false); }
+  toggle(): void { this.open() ? this.hide() : this.show(); }
 
   setActiveProject(proj: string): void {
     if (proj === this.activeProject()) return;
     this.activeProject.set(proj);
   }
 
+  selectProjectTab(proj: string): void {
+    this.mode.set('project');
+    this.setActiveProject(proj);
+  }
+
+  selectTaskTab(): void {
+    if (!this.activeJobId()) return;
+    this.mode.set('task');
+  }
+
+  /**
+   * Phase 6: send a follow-up to the currently open task via the
+   * existing Continue endpoint (Steer mode). The reply does not stream
+   * back here — it lands in the protocol pane's activity log — so we
+   * append a synthetic system acknowledgement that points the user to
+   * the right surface.
+   */
+  onTaskSubmit(event: ChatSubmitEvent): void {
+    const jobId = this.activeJobId();
+    const watchPath = this.activeWatchPath();
+    if (!jobId || !watchPath) return;
+    const text = event.text.trim();
+    if (!text) return;
+
+    const userId = `task-user:${Date.now()}`;
+    this.taskMessages.update((curr) => [
+      ...curr,
+      {
+        id: userId,
+        role: 'user',
+        text,
+        timestamp: new Date().toISOString(),
+        pending: true
+      }
+    ]);
+    this.taskSending.set(true);
+
+    this.jobService.continueJob(jobId, text, watchPath, undefined, undefined, 'steer').subscribe({
+      next: () => {
+        this.taskSending.set(false);
+        this.taskMessages.update((curr) =>
+          curr.map((m) => (m.id === userId ? { ...m, pending: false } : m))
+        );
+        this.taskMessages.update((curr) => [
+          ...curr,
+          {
+            id: `task-ack:${Date.now()}`,
+            role: 'system',
+            text: 'Follow-up queued in **Steer** mode. The agent\'s reply streams into the protocol pane\'s activity log.',
+            timestamp: new Date().toISOString()
+          }
+        ]);
+        for (const att of event.attachments) URL.revokeObjectURL(att.previewUrl);
+      },
+      error: (err) => {
+        this.taskSending.set(false);
+        const message = err?.error?.error || err?.message || 'Failed to send follow-up';
+        this.taskMessages.update((curr) =>
+          curr.map((m) =>
+            m.id === userId ? { ...m, pending: false, error: message } : m
+          )
+        );
+      }
+    });
+  }
+
   refresh(silent = false): void {
     const proj = this.activeProject();
     if (!proj) return;
     if (!silent) this.loading.set(true);
-    this.jobService.getOrchestratorLog(proj).subscribe({
+    this.jobService.getOrchestratorChat(proj).subscribe({
       next: (resp) => {
-        const entries = resp.entries ?? [];
-        this.entries.set(entries);
+        this.turns.set(resp.turns ?? []);
         this.errorMsg.set(null);
-        const lastDecision = [...entries].reverse().find(
-          (e) => e.kind === 'decision' && !!e.jobId
-        );
-        this.anchorEntry.set(lastDecision ?? null);
         if (!silent) this.loading.set(false);
       },
       error: (err) => {
-        const message = err?.error?.error || err?.message || 'Failed to load orchestrator log';
+        const message = err?.error?.error || err?.message || 'Failed to load orchestrator chat';
         this.errorMsg.set(message);
         if (!silent) this.loading.set(false);
       }
@@ -402,54 +511,78 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
 
   onSubmit(event: ChatSubmitEvent): void {
     const proj = this.activeProject();
-    const anchor = this.anchorEntry();
-    if (!proj || !anchor?.jobId) return;
+    if (!proj) return;
     const text = event.text.trim();
-    if (!text) return;
+    if (!text && event.attachments.length === 0) return;
 
+    // Render the user's turn immediately so the chat doesn't sit silent
+    // while the orchestrator thinks (Opus replies often take 30-60s).
     const localId = `local:${Date.now()}`;
-    this.userTurns.update((curr) => [
-      ...curr,
-      {
-        id: localId,
-        role: 'user',
-        text,
-        timestamp: new Date().toISOString(),
-        pending: true
-      }
-    ]);
+    const localTurn: OrchestratorChatTurn & { pending?: boolean } = {
+      id: localId,
+      ts: new Date().toISOString(),
+      role: 'user',
+      text: text || (event.attachments.length > 0 ? '(attachments)' : ''),
+      pending: true
+    };
+    this.localTurns.update((curr) => [...curr, localTurn]);
     this.sending.set(true);
 
-    this.jobService.overrideOrchestratorEntry(proj, {
-      originalTs: anchor.ts,
-      jobId: anchor.jobId,
-      newDirection: text
+    // Phase 4 attachments-on-the-wire are best-effort: drafts are not
+    // uploaded yet (the side sheet does not own a job folder to attach
+    // them to). When the user attaches files we surface them in the
+    // prompt body so the orchestrator at least knows they exist; real
+    // upload comes when this is wired into a job context (Phase 6).
+    const attachmentsAsRefs = event.attachments.map((a) => ({
+      alt: a.alt,
+      relativePath: `chat-pending/${a.id}-${a.file.name}`
+    }));
+    const promptText = this.buildPromptText(text, event.attachments);
+
+    this.jobService.sendOrchestratorChat(proj, {
+      text: promptText,
+      attachments: attachmentsAsRefs.length > 0 ? attachmentsAsRefs : undefined
     }).subscribe({
       next: () => {
         this.sending.set(false);
-        this.userTurns.update((curr) =>
-          curr.map((t) => (t.id === localId ? { ...t, pending: false } : t))
-        );
+        // Drop the local copy and replace with whatever the server has —
+        // both turns are now persisted there.
+        this.localTurns.set([]);
         this.refresh(true);
+        for (const att of event.attachments) URL.revokeObjectURL(att.previewUrl);
       },
       error: (err) => {
         this.sending.set(false);
         const message = err?.error?.error || err?.message || 'Failed to send';
-        this.userTurns.update((curr) =>
-          curr.map((t) => (t.id === localId ? { ...t, pending: false, error: message } : t))
+        this.localTurns.update((curr) =>
+          curr.map((t) => (t.id === localId ? { ...t, pending: false, errorMessage: message } : t))
         );
       }
     });
   }
 
-  private formatEntry(entry: OrchestratorLogEntry): string {
-    const head = `**${capitalize(entry.kind)} · ${entry.topic}**`;
-    const body = entry.summary || '';
-    const reasoning = entry.reasoning ? `\n\n_${entry.reasoning}_` : '';
-    return `${head}\n\n${body}${reasoning}`.trim();
+  /**
+   * Phase 5: hand the latest orchestrator reply back to the host so it
+   * can open the create-task dialog pre-filled with that text.
+   */
+  onCreateTaskFromLastReply(): void {
+    const proj = this.activeProject();
+    if (!proj) return;
+    const last = [...this.turns()].reverse().find(
+      (t) => t.role === 'orchestrator' && !!t.text && !t.errorMessage
+    );
+    if (!last) return;
+    this.createTaskFromDraft.emit({ projectName: proj, promptText: last.text });
   }
-}
 
-function capitalize(s: string): string {
-  return s.charAt(0).toUpperCase() + s.slice(1);
+  private buildPromptText(text: string, attachments: ChatDraftAttachment[]): string {
+    if (attachments.length === 0) return text;
+    const lines = [text];
+    lines.push('');
+    lines.push(`(${attachments.length} pasted image${attachments.length === 1 ? '' : 's'} from the chat composer:)`);
+    for (const a of attachments) {
+      lines.push(`- ${a.alt}`);
+    }
+    return lines.join('\n');
+  }
 }

@@ -36,6 +36,8 @@ builder.Services.AddSingleton<JobMutationService>();
 builder.Services.AddSingleton<JobSessionLog>();
 builder.Services.AddSingleton<OrchestratorChatLog>();
 builder.Services.AddSingleton<OrchestratorLog>();
+builder.Services.AddSingleton<OrchestratorChat>();
+builder.Services.AddSingleton<OrchestratorChatService>();
 builder.Services.AddSingleton<OrchestratorRunner>();
 builder.Services.AddSingleton<OrchestratorSessionStore>();
 builder.Services.AddSingleton<GlobalOrchestratorSessionStore>();

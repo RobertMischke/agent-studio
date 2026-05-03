@@ -405,6 +405,34 @@ export interface OrchestratorSessionResponse {
   session: OrchestratorSession | null;
 }
 
+/**
+ * One turn in the per-project orchestrator chat. Mirrors backend
+ * `OrchestratorChatTurn`. Roles: 'user' for the human's messages,
+ * 'orchestrator' for the model's replies. `errorMessage` is set on a
+ * failed orchestrator turn so the UI can surface what went wrong without
+ * losing the user's text.
+ */
+export interface OrchestratorChatTurn {
+  id: string;
+  ts: string;
+  role: 'user' | 'orchestrator';
+  text: string;
+  model?: string | null;
+  tokenUsage?: OrchestratorTokenUsage | null;
+  errorMessage?: string | null;
+  attachments?: OrchestratorChatAttachment[] | null;
+}
+
+export interface OrchestratorChatAttachment {
+  alt: string;
+  relativePath: string;
+}
+
+export interface OrchestratorChatResponse {
+  project: string;
+  turns: OrchestratorChatTurn[];
+}
+
 export interface TokenSummaryByModel {
   model: string;
   calls: number;
