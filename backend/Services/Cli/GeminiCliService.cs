@@ -54,56 +54,64 @@ public sealed class GeminiCliService : CliExecutionServiceBase
         bool resumeSession,
         string? model)
     {
-        // Order matters less for gemini than for codex, but keep it stable so
-        // logs / arg parsers see the same shape every run.
-        //   gemini -p " " -o stream-json --skip-trust -y [-m <id>] [-r <uuid>]
+        // gemini -p "<prompt>" -o stream-json --skip-trust -y [-m <id>] [-r <uuid>]
         //
-        // -p with a single-space placeholder forces non-interactive mode; per
-        // gemini's --help "Appended to input on stdin (if any)", the actual
-        // multi-line prompt is piped via stdin (see GetPromptStdinPayload).
-        // The placeholder space is appended after our stdin content; trailing
-        // whitespace is meaningless to the model. Embedding the rendered
-        // prompt as a quoted -p value broke Claude runs on Windows
-        // (ADR-0008) and the same cmd.exe quoting/length limit applies here.
+        // ADR-0014 default-deny stdin: the rendered prompt rides as the
+        // -p value via ProcessStartInfo.ArgumentList, which escapes per
+        // Win32 CommandLineToArgvW rules. The previous code used a
+        // " " placeholder + stdin pipe to dodge cmd.exe argv quoting,
+        // but that introduced the same pipe-inheritance race
+        // claude-code#771 documents and the OSS-orchestration survey
+        // sees across every CLI. Argv-via-ArgumentList preserves
+        // multi-line content verbatim; Windows' command-line cap is
+        // 32767 chars and our rendered prompts are well under that.
+        //
         // -y / --yolo: auto-approve tool calls (analogous to Claude's
-        //              --dangerously-skip-permissions). Required for unattended
-        //              runs because the default tool-approval prompt is interactive.
-        // --skip-trust: bypass the "Do you trust this folder?" dialog. Without it
-        //              the CLI blocks on a modal dialog and never reaches the prompt.
-        var args = new List<string> { "-p", "\" \"", "-o", "stream-json", "--skip-trust", "-y" };
+        //              --dangerously-skip-permissions). Required for
+        //              unattended runs because the default tool-approval
+        //              prompt is interactive.
+        // --skip-trust: bypass the "Do you trust this folder?" dialog.
+        //               Without it the CLI blocks on a modal dialog and
+        //               never reaches the prompt.
+        var psi = new ProcessStartInfo
+        {
+            FileName = ResolveExecutable(GetCliPath()),
+            WorkingDirectory = workingDirectory
+        };
+        psi.ArgumentList.Add("-p");
+        psi.ArgumentList.Add(string.IsNullOrEmpty(prompt) ? " " : prompt);
+        psi.ArgumentList.Add("-o");
+        psi.ArgumentList.Add("stream-json");
+        psi.ArgumentList.Add("--skip-trust");
+        psi.ArgumentList.Add("-y");
 
         if (!string.IsNullOrWhiteSpace(model))
         {
-            args.Add("-m");
-            args.Add(Quote(model));
+            psi.ArgumentList.Add("-m");
+            psi.ArgumentList.Add(model);
         }
 
         if (resumeSession && !string.IsNullOrWhiteSpace(sessionName))
         {
-            args.Add("-r");
-            args.Add(Quote(sessionName));
+            psi.ArgumentList.Add("-r");
+            psi.ArgumentList.Add(sessionName);
         }
 
-        return new ProcessStartInfo
-        {
-            FileName = ResolveExecutable(GetCliPath()),
-            Arguments = string.Join(' ', args),
-            WorkingDirectory = workingDirectory
-        };
+        return psi;
     }
 
     /// <summary>
-    /// Pipe the rendered prompt through stdin. -p still gets a one-character
-    /// placeholder to keep the CLI in non-interactive mode; gemini's --help
-    /// guarantees stdin is concatenated with -p, so the real task body
-    /// arrives via stdin without any quoting/length surface in argv.
+    /// ADR-0014: Gemini receives the prompt as the -p value via argv
+    /// (see <see cref="BuildStartInfo"/>); returning null tells the
+    /// base class not to redirect stdin and prevents the pipe-
+    /// inheritance race that motivated the ADR.
     /// </summary>
     protected override string? GetPromptStdinPayload(
         string prompt,
         string? sessionName,
         bool resumeSession,
         string? model)
-        => prompt;
+        => null;
 
     /// <summary>
     /// Bridge to <see cref="GeminiEventAdapter"/>. Each raw stdout line

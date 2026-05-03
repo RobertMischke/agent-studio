@@ -58,52 +58,60 @@ public sealed class CodexCliService : CliExecutionServiceBase
         string? model)
     {
         // For Codex, sessionName is the session UUID (or null for a fresh session).
-        // codex exec [resume <uuid>] [--json] [-m <model>] -
-        // The trailing "-" tells codex exec to read instructions from stdin
-        // (per its --help: "If `-` is used, instructions are read from
-        // stdin"). We pipe the rendered prompt via stdin instead of embedding
-        // it in argv because cmd.exe truncates multi-line quoted arguments
-        // on Windows; the same root cause was breaking Claude runs before
-        // ADR-0008's fix and almost certainly affects Codex the same way.
-        var args = new List<string> { "exec" };
+        // codex exec [resume <uuid>] [--json] [-m <model>] [PROMPT]
+        //
+        // ADR-0014 default-deny stdin: prompt is the LAST positional argv,
+        // not piped via stdin. Codex's "-" arg ("read instructions from
+        // stdin") is the alternative path; we use the positional path
+        // because it removes the inherited-pipe-handle race that Anthropic
+        // documented in claude-code#771 and that the OSS-orchestration
+        // survey identified across all four CLIs. ProcessStartInfo
+        // .ArgumentList lets .NET escape per Win32 CommandLineToArgvW
+        // rules, which preserves multi-line / quoted prompt content
+        // verbatim - Windows' command-line cap is 32767 chars; rendered
+        // prompts are well under that.
+        var psi = new ProcessStartInfo
+        {
+            FileName = ResolveExecutable(GetCliPath()),
+            WorkingDirectory = workingDirectory
+        };
+        psi.ArgumentList.Add("exec");
 
         if (resumeSession && !string.IsNullOrWhiteSpace(sessionName))
         {
-            args.Add("resume");
-            args.Add(Quote(sessionName));
+            psi.ArgumentList.Add("resume");
+            psi.ArgumentList.Add(sessionName);
         }
 
         // --json keeps stdout machine-readable so we can extract the session_meta UUID.
-        args.Add("--json");
+        psi.ArgumentList.Add("--json");
 
         if (!string.IsNullOrWhiteSpace(model))
         {
-            args.Add("-m");
-            args.Add(Quote(model));
+            psi.ArgumentList.Add("-m");
+            psi.ArgumentList.Add(model);
         }
 
-        args.Add("-");
-
-        return new ProcessStartInfo
+        if (!string.IsNullOrEmpty(prompt))
         {
-            FileName = ResolveExecutable(GetCliPath()),
-            Arguments = string.Join(' ', args),
-            WorkingDirectory = workingDirectory
-        };
+            psi.ArgumentList.Add(prompt);
+        }
+
+        return psi;
     }
 
     /// <summary>
-    /// Pipe the rendered prompt through stdin instead of embedding it in argv.
-    /// See the BuildStartInfo comment and ClaudeCliService for the diagnosis;
-    /// the same Windows quoting / length truncation hits any CLI that takes
-    /// prompt content as a quoted positional argument.
+    /// ADR-0014: Codex receives the prompt as a positional argv (see
+    /// <see cref="BuildStartInfo"/>). Returning null tells the base class
+    /// not to redirect stdin, preventing the pipe-inheritance race that
+    /// motivated ADR-0014.
     /// </summary>
     protected override string? GetPromptStdinPayload(
         string prompt,
         string? sessionName,
         bool resumeSession,
         string? model)
-        => prompt;
+        => null;
 
     /// <summary>
     /// Bridge to <see cref="CodexEventAdapter"/>. Each raw stdout line is
