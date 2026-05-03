@@ -128,6 +128,29 @@ What this means for code that touches the resume path:
 
 The same shape applies to Codex and Gemini in this codebase (their session ids can also vanish), so the hand-off lives in `ProjectRunner` rather than per-CLI service code.
 
+## Stale sessions are a harness-quality risk
+
+Claude can accept a resume target and still behave badly if the session's useful context has degraded. Treat this as a first-class failure class, distinct from "No conversation found".
+
+Reference incident: Anthropic's [April 23, 2026 postmortem](https://www.anthropic.com/engineering/april-23-postmortem) ("An update on recent Claude Code quality reports") traced a real Claude Code quality regression to three harness changes, not to model degradation. The stale-session lesson is the March 26 change: sessions idle for over one hour were supposed to clear older thinking once to reduce resume latency, but a bug kept clearing older thinking on every later turn. The result was forgetfulness, repetition, odd tool choices, and higher usage. Anthropic also noted that internal evals, unit tests, end-to-end tests, automated verification, and dogfooding missed it because it sat at the intersection of context management, the API, extended thinking, and stale sessions.
+
+Operational consequences for Agent Task Processor:
+
+- A healthy Claude continuation is not "process exited zero" and not "resume id accepted". It must act on the latest user follow-up and reconcile against `prompt.md`, `prompt-N.md`, `status.md`, and `logs/cli-output.log`.
+- Stale-session probes need idle-age variation. Test fresh resume, short-idle resume, backend-restart resume, and an intentionally rejected resume target. The rejected target proves Recovery; the accepted stale target proves useful continuation.
+- Prompt-template or system-prompt changes that touch recovery, continuation, verbosity, or model-specific behavior need live probes. Anthropic's postmortem shows that prompt changes can trade off against intelligence even when normal tests pass.
+- If Claude resumes but no-ops, repeats old context, or ignores the latest follow-up, debug the runner/recovery evidence path before blaming the model.
+
+### Operator playbook: stale Claude continuation
+
+When a Claude job resumes after being idle for more than an hour or a day and then behaves forgetful, repetitive, or strangely shallow:
+
+1. Read `logs/session-events.jsonl` and confirm whether the run was `continue` or `recovery`, which session id was used, and whether a new id was captured.
+2. Read `logs/cli-output.log` and confirm the latest user follow-up appears as the primary turn, not as a footer behind stale framing.
+3. Check `job.json.sessionChain`. A `(recovery)` marker means old ids before that marker are tombstoned and must not be reused.
+4. Compare the agent's first meaningful action after resume with the user's latest follow-up. If it ignores the follow-up, add or update a `RunOutcomePolicy` regression before changing driver flags.
+5. For live validation, run a Claude stale-session probe that creates a tiny session, waits past the chosen idle threshold, resumes with a concrete edit request, and asserts an observable file or protocol change.
+
 ## Rate-limit pill
 
 Anthropic streams a `rate_limit_event` frame **per turn**. We render it to a single marker line with two halves:
@@ -161,6 +184,7 @@ To add a new model, append it to the list in `GetModelCatalogAsync` and add a te
 - **Restart of finished tasks: "I'll wait for your request":** when a job in `4-review` was re-started with the same session, the runner re-issued the `RunnerFreshStart` bootstrap as a new user turn. Claude saw a duplicate of turn 1, decided the task was already done, and replied with the generic English fallback. Fix: new `runner-resume-restart.md` template + planner branch for `ManualStart + resume + initialState ∈ {Review, Completed}`. Tests in `TaskRunnerPlanTests.Start_FromReviewOrCompletedWithSession_UsesRestartPrompt`.
 - **Activity log blank for 30+ s at start:** Claude's `-p` mode emits no output until the model produces its first text in the default text format. Switching to `stream-json` made every frame stream live; the synthetic `[taskboard] Started claude CLI ...` line additionally fills the gap between spawn and first frame.
 - **"Agent goes silent after `system/init` frame, watchdog kills at 124 s" (ADR-0011):** the runner spawned `claude.CMD` (the npm shim) instead of the underlying `claude.exe`. Windows wraps a `.CMD` invocation in `cmd.exe /c "..."` which adds a layer that has correlated with intermittent agent silence. Direct shell invocation with the same args reproduces fine. Fix: [`ClaudeCliService.ResolveCmdShimToExe`](../../backend/Services/Cli/ClaudeCliService.cs) walks the npm-shim convention and rewrites `<prefix>\claude.CMD` → `<prefix>\node_modules\@anthropic-ai\claude-code\bin\claude.exe` inside `BuildStartInfo`. The integration matrix at [`backend.Tests/CliSpawnIntegrationTests.cs`](../../backend.Tests/CliSpawnIntegrationTests.cs) pins both the working `.exe` path and the realistic-prompt `ClaudeCliService.StartAsync` path; isolated tests do NOT reproduce the original hang shape, suggesting the live-only trigger is interaction with concurrent claude processes / watchdog timing - the `.exe` direct path removes one structural variable regardless. Run the matrix with `RUN_CLI_INTEGRATION=1 dotnet test --filter CliSpawnIntegrationTests`.
+- **Claude Code quality regression after stale resumes (external, Anthropic April 23 2026):** an upstream Claude Code harness bug pruned older thinking repeatedly after a session crossed a one-hour idle threshold. Lesson for this project: do not equate accepted resume ids with healthy continuations; stale-session behavior needs its own probes and recovery tests.
 
 ### Operator playbook: claude run hangs after init
 

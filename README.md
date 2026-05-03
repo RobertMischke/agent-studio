@@ -16,6 +16,8 @@ Agent Task Processor makes security work repeatable instead of heroic. A human r
 
 That is the product bet: **with enough inference budget, the right process, and documented evidence, AI-assisted review can become more thorough than ordinary human-only security review.** The goal is not to trust a model blindly. The goal is to put frontier cyber capability inside a controlled workflow: clear task scope, project conventions, repeatable skills, logs, screenshots, summaries, and review gates.
 
+This also makes a second pattern more realistic: for small, well-scoped internal libraries, it can be safer to regenerate or modernize the library behind a strong review process than to carry stale, under-tested legacy code forever. That is not a blanket rule. Highly sensitive primitives such as PKI, TLS, cryptography, authentication boundaries, and certificate handling need stronger human review, specialist skills, and often conservative patching rather than casual generation.
+
 The external signal is getting hard to ignore. UK AISI's April 30, 2026 evaluation of OpenAI GPT-5.5 found it to be one of the strongest models they had tested on cyber tasks, with a 71.4% average pass rate on Expert-level advanced cyber tasks at a 50M-token budget, and the second model to complete one of their multi-step cyber-attack simulations end-to-end. AISI also notes that performance on the 32-step range continued to scale with inference compute. That supports the central premise here: security quality depends on model capability, sufficient token budget, and a process that captures what happened.
 
 Source: [UK AISI evaluation of OpenAI GPT-5.5 cyber capabilities](https://www.aisi.gov.uk/blog/our-evaluation-of-openais-gpt-5-5-cyber-capabilities).

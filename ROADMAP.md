@@ -32,6 +32,7 @@ Today the application provides:
 - CLI execution for Claude Code, Codex, GitHub Copilot, and Gemini.
 - Live task output, protocol summaries, screenshots, and review evidence.
 - CLI quota and session visibility where the underlying tools expose enough data.
+- Recovery after session loss via job-folder evidence and deterministic continuation planning.
 - Early project-level planning tasks for Security and Architecture dimensions.
 
 ## Roadmap Themes
@@ -48,6 +49,7 @@ Make security a first-class project dimension, not a one-off task:
 - Project-specific security skills for domain assumptions, threat model, sensitive data, authentication, deployment, and known risks.
 - A "security readiness" project action that can create a normal task to run or refresh a security review.
 - Roadmap linkage from the existing "Projekt Dimensionen Security und Architektur" task into the project view work.
+- A cautious modernization story for small internal libraries: regenerate or rewrite when the scope is bounded and review evidence is strong; avoid this default in highly sensitive areas such as PKI, TLS, cryptography, certificate handling, and authentication boundaries.
 
 Security quality depends on model capability, sufficient token budget, the right process, and durable documentation. The app should optimize that loop instead of treating security as a vague label. A security claim without the model, spend, process, evidence, and reviewer decision is not enough.
 
@@ -88,6 +90,16 @@ Make agent work easier to judge while it is still running:
 - Mid-run status requests where a CLI supports safe intervention.
 - Stronger Activity Log parsing across all supported CLIs.
 - Better usage, quota, and model feedback, including edge cases such as model-specific limits.
+
+### Stale Session Reliability
+
+Make continuation after idle, stale, lost, or partially-corrupted sessions a first-class reliability target, especially for Claude Code and Codex:
+
+- Treat stale-session continuation as a product-critical path, not a nice-to-have resume feature.
+- Prefer structured session evidence on disk (`session-events.jsonl`, `sessionChain`, `cli-output.log`, `status.md`, `prompt-N.md`) over trusting a provider chat to remain semantically intact forever.
+- Add a deterministic daily-session probe suite for Claude and Codex: fresh run, resume within minutes, resume after an idle threshold, resume after backend restart, rejected resume target, recovery run with user follow-up, and no-op-after-recovery reissue.
+- Track the age of the resumed session and expose it in logs/UI so stale-resume behavior can be diagnosed from evidence.
+- Keep Codex and Claude as the reference implementations. Other CLIs inherit the contract only after the two primary paths are stable.
 
 ### Deterministic Orchestration
 

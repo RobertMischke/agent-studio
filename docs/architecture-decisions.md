@@ -313,3 +313,23 @@ The reference clones at `c:/Projects/agent-taskboard-devspace/cli-source-referen
 **Implementation pointers.** New (not yet written): `backend/Services/Cli/CliRunEvent.cs` (the typed event sum type); `backend/Services/Cli/Adapters/<Cli>EventAdapter.cs` (one per CLI); `backend/Services/Runner/Watchdog.cs` extended with phase logic; `backend.Tests/CliRunEventAdapterTests.cs` (fixture-driven mapping tests, no live process). Existing entry points stay: `CliExecutionServiceBase.StartAsync` keeps its public signature; the read-loop produces typed events via the adapter instead of raw `CliOutputLine`s. Reference clones at `c:/Projects/agent-taskboard-devspace/cli-source-references/`.
 
 **Status.** Accepted as architecture direction. Implementation is staged; the existing pipe-based code path stays in use until each CLI's adapter ships and is proven by tests.
+
+---
+
+## ADR-0014 - Stale-session continuation is a first-class reliability target (2026-05-03)
+
+**Decision.** Continuation after idle, stale, lost, or partially degraded sessions is a product-critical reliability target. Claude Code and Codex are the reference implementations. A resume command accepting a session id is not enough; the resumed run must act on the latest user follow-up, reconcile with job-folder evidence, and produce useful new output, a clear blocker, or a deterministic Recovery hand-off.
+
+**Context.** The user's workflow depends heavily on daily and stale sessions: leave a coding agent alone for an hour or a day, return with a follow-up, and expect the system to continue reliably. Anthropic's [April 23, 2026 Claude Code postmortem](https://www.anthropic.com/engineering/april-23-postmortem) is the canonical external incident. Anthropic traced user-visible quality complaints to harness issues, not model degradation. One issue was specifically stale-session related: a change meant to clear older thinking once after a session had been idle for over an hour kept clearing it on every later turn, making Claude forgetful and repetitive. Their unit tests, end-to-end tests, automated verification, and dogfooding did not catch it because the bug sat at the intersection of context management, prompt caching, extended thinking, and stale sessions.
+
+**Non-goals.**
+- Trusting provider session state as the only source of truth. Job-folder evidence remains the recovery substrate: `prompt.md`, `prompt-N.md`, `status.md`, `logs/cli-output.log`, `logs/session-events.jsonl`, and `job.json.sessionChain`.
+- Treating all CLIs equally in the next iteration. Claude and Codex define the standard first; Gemini and Copilot follow after the two primary paths are stable.
+- Solving stale sessions by always starting fresh. Fresh recovery is the fallback, not the default, because preserving useful provider context is still valuable when it works.
+- Building our own API-backed agent loop to avoid provider session bugs. ADR-0012 still stands.
+
+**Reasoning style.** Separate "accepted resume" from "useful continuation". The runner should measure and test both. Accepted resume is a CLI-adapter concern; useful continuation is an orchestrator concern backed by disk evidence and `RunOutcomePolicy`. Live probes are required for provider behavior, but deterministic tests must pin the fallback contract so the same stale id is not retried forever and the user's latest follow-up remains primary during Recovery.
+
+**Implementation pointers.** [ROADMAP.md](../ROADMAP.md) "Stale Session Reliability"; [docs/supported-clis.md](supported-clis.md) "Session model"; [docs/cli-skills/cli-overview.md](cli-skills/cli-overview.md) "Stale-session invariants"; [docs/cli-skills/cli-claude.md](cli-skills/cli-claude.md) "Stale sessions are a harness-quality risk"; [docs/cli-skills/cli-codex.md](cli-skills/cli-codex.md) "Stale Codex sessions"; existing tests in [backend.Tests/TaskRunnerPlanTests.cs](../backend.Tests/TaskRunnerPlanTests.cs), [backend.Tests/RunOutcomePolicyTests.cs](../backend.Tests/RunOutcomePolicyTests.cs), and [backend.Tests/SessionEventsTests.cs](../backend.Tests/SessionEventsTests.cs).
+
+**Status.** Accepted.

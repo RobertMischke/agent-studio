@@ -90,6 +90,18 @@ protected override void OnOutputLine(ProcInfo info, CliOutputLine line)
 
 Note Codex captures from the **raw** JSON line because `TransformReadLine` is identity. If you ever introduce a transform that drops or rewrites `session_meta`, capture breaks.
 
+## Stale Codex sessions
+
+Codex is the second reference path for stale-session reliability after Claude. The same product invariant applies: a successful `codex exec resume <uuid>` is necessary, but not sufficient. The resumed turn must act on the latest user follow-up and reconcile against current job-folder evidence.
+
+Codex has a stronger structured-protocol story than Claude: the cloned `openai-codex` reference contains an App Server protocol over JSON-RPC, and ADR-0013 points the future adapter in that direction. Until that migration exists, the current `codex exec --json` path must still prove three things:
+
+1. `session_meta.payload.id` is captured and persisted into `sessionChain`.
+2. `exec resume <uuid> --json "<prompt>"` continues the intended conversation rather than starting fresh.
+3. If a resume target is rejected or produces no useful work, the runner routes through Recovery and re-issues the user follow-up once with stronger framing.
+
+Next stale-session probes for Codex should mirror Claude's: fresh run, short resume, backend-restart resume, deliberately missing session id, and accepted stale resume with an observable edit or protocol update.
+
 ## Model handling — live discovery
 
 [`CodexModelDiscovery`](../../backend/Services/Cli/CodexModelDiscovery.cs) queries the CLI for its current model list and caches the result. `GetModelCatalogAsync` is a thin wrapper.

@@ -80,6 +80,16 @@ Each CLI has its own session id format. The two big classes are **UUID** (Claude
 
 **Why Gemini captures via the marker line, not raw JSON:** the base class invokes `OnOutputLine` *after* `TransformReadLine`, so by the time it fires, the JSON has already been turned into the marker line. Claude works the same way for the same reason. Codex is the odd one out: its `--json` frames are pass-through (no `TransformReadLine` translation), so `OnOutputLine` sees the raw JSON and can `JsonDocument.Parse` it directly. If you change a driver's `TransformReadLine` to emit an extra line that *also* looks like the session marker, you will double-capture. Keep capture regexes narrow.
 
+### Stale-session invariants
+
+A stale session is not the same thing as a missing session. Missing sessions reject the resume target and route through Recovery. Stale sessions still resume, but the agent may have lost useful context, older reasoning, cached prompt state, or alignment with the job's current disk evidence.
+
+The [April 23, 2026 Anthropic Claude Code postmortem](https://www.anthropic.com/engineering/april-23-postmortem) is the cautionary example: a product-layer optimization for sessions idle over one hour accidentally kept pruning older thinking on every later turn. The symptom looked like worse model quality, but the root cause was harness/session management.
+
+For this project, the invariant is: **a successful resume is not proof of a successful continuation.** A continuation is healthy only if the agent acts on the latest user follow-up, reconciles with the job folder, and produces useful new evidence or a clear blocker. Pin that behavior in `RunPlanner`, `RunOutcomePolicy`, and session-event tests before touching per-CLI drivers.
+
+Claude and Codex are the reference paths for stale-session work. Gemini and Copilot inherit the general recovery contract, but do not drive the next iteration until Claude and Codex are solid.
+
 ## Marker-line vocabulary
 
 The frontend's [`activity-log.parser`](../../frontend/src/app/components/activity-log.parser.ts) classifies output lines based on a leading-marker convention. Drivers' `TransformReadLine` must emit lines that match this vocabulary, or they fall into the `message` / `other` bucket.
