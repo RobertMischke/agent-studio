@@ -105,6 +105,29 @@ The runner picks the captured UUID up in `ProjectRunner.OnCliFinishedAsync` and 
 
 **Anti-pattern:** capturing in `TransformReadLine` directly. The transform must stay a pure function over a single line; capture is a side effect on `ProcInfo` and belongs in `OnOutputLine`.
 
+## Session loss is an expected state, not an error
+
+A session UUID we previously captured can disappear between runs. Claude's CLI keeps session JSONL under `~/.claude/projects/<project-slug>/<uuid>.jsonl`; the user can prune the folder, switch machines, hit a CLI upgrade that rotates the slug format, or simply exhaust whatever retention the CLI applies. When that happens, `claude -r <uuid> -p ...` prints
+
+> `No conversation found with session ID: <uuid>`
+
+on **stdout** (not stderr), then exits with a non-zero code and emits a `result` frame with `subtype: "error_during_execution"`. There is no separate "session expired" exit code — the user-visible string is the contract.
+
+The product treats this as part of normal operation, not a failure mode (ADR-0002 / ADR-0006). The hand-off is:
+
+1. The run completes without capturing a new UUID. `OnCliFinishedAsync` notices the gap.
+2. If the just-finished plan was a `--resume` attempt, the orchestrator clears `info.SessionName`, calls `MarkSessionChainRecovery`, and writes a `[capture-fail]` decision message into the chat log naming the rejected resume target. This is what makes the orchestrator's promise ("next follow-up will rebuild from disk") true.
+3. The next user follow-up enters `RunPlanner.PlanRun` with no resumable session, so the planner returns a Recovery plan (`EventKind: "recovery"`, `RunnerRecoveryContinuation` template). The agent rebuilds context from `prompt.md`, `status.md`, and the cli-output log.
+4. `RunOutcomePolicy` re-issues the user's follow-up once if the recovery run no-ops, with a sharper "history is gone, the user request is the only context" framing.
+
+What this means for code that touches the resume path:
+
+- **Don't** treat "No conversation found" as a hard error worth surfacing to the user as a failure — the orchestrator already announces it once via `[capture-fail]`, and the next turn auto-rebuilds. Two error pills for one expected event is just noise.
+- **Don't** keep a dead resume target in `info.SessionName`. The first follow-up after a session loss will then re-issue `--resume <dead-uuid>` and fail identically. `ProjectRunner.OnCliFinishedAsync` clears it on capture-fail; preserve that.
+- **Do** keep the `[capture-fail]` chat log message — it's the single visible signal in the conversation that the chain broke. Without it the user sees a generic "errored" run and no explanation.
+
+The same shape applies to Codex and Gemini in this codebase (their session ids can also vanish), so the hand-off lives in `ProjectRunner` rather than per-CLI service code.
+
 ## Rate-limit pill
 
 Anthropic streams a `rate_limit_event` frame **per turn**. We render it to a single marker line with two halves:

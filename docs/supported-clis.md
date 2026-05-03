@@ -54,6 +54,8 @@ If the CLI has no usable session concept, `IsCompatibleSessionName` returns `fal
 
 **Session storage discovery.** [`SessionRegistry`](../backend/Services/Cli/SessionRegistry.cs) reads each CLI's on-disk session store to populate the Sessions side-sheet. New CLIs add their own `BuildXxxProjects()` method here. Disk reads are best-effort — missing files mean "no sessions", not an error.
 
+**Session loss is an expected state.** A previously-captured session id can disappear between runs (user pruned the store, CLI upgrade rotated the slug format, retention expired, machine switch). The product handles this via graceful Recovery, not as a hard failure (ADR-0002 / ADR-0006). The driver's job is therefore minimal: when the CLI rejects the resume target, just don't capture a new session id. [`ProjectRunner.OnCliFinishedAsync`](../backend/Services/Runner/ProjectRunner.cs) detects "resume attempted, no new id captured", clears `info.SessionName`, marks the chain as recovery, and writes a single `[capture-fail]` decision message into the chat. The next user follow-up routes through Recovery automatically. **Don't** keep a known-dead session id in `SessionName`; the next follow-up will then re-issue the same dead resume and produce an identical error. **Don't** map the CLI's session-not-found message to a hard failure status — the orchestrator already explains it once and the auto-rebuild is the design.
+
 ### 2.3 Model selection
 
 **Contract.** `GetModelCatalogAsync` returns a list of models the user can pick from. Acceptable sources, in preference order:

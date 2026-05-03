@@ -848,11 +848,33 @@ public class ProjectRunner
                 // The CLI normally emits a session UUID on every run; missing
                 // it means the next follow-up will fall back to Recovery. Tell
                 // the user explicitly so the loop is not silent.
+                //
+                // When the just-finished run was a --resume attempt, the
+                // resume target is the most likely cause: the CLI rejected
+                // the id (e.g. claude prints "No conversation found with
+                // session ID: <uuid>" on stdout, exits non-zero, and never
+                // emits a new init frame). Leaving the dead id in
+                // SessionName would make the next follow-up try the same
+                // resume and fail identically. Clear it now and mark the
+                // chain as recovery so the planner routes the next user
+                // turn to Recovery instead of Continue. ADR-0002 / ADR-0006
+                // make Recovery the expected hand-off for session loss.
                 var captureFailInfo = _scanner.FindJob(jobId, Entry.Path);
                 if (captureFailInfo != null)
                 {
-                    _chatLog.Append(captureFailInfo, OrchestratorMessageKind.Decision,
-                        $"[capture-fail] No {cli.CliType} session id from this run; next follow-up will rebuild from disk.");
+                    var resumeTargetWasGone =
+                        _activePlan?.ResumeFlag == true
+                        && !string.IsNullOrWhiteSpace(_activePlan.SessionToResume);
+                    if (resumeTargetWasGone)
+                    {
+                        _sessions.SetJobSessionName(jobId, null, Entry.Path);
+                        _sessions.MarkSessionChainRecovery(jobId, Entry.Path);
+                    }
+
+                    var msg = resumeTargetWasGone
+                        ? $"[capture-fail] {cli.CliType} rejected the resume target ({_activePlan!.SessionToResume}); next follow-up will rebuild from disk via Recovery."
+                        : $"[capture-fail] No {cli.CliType} session id from this run; next follow-up will rebuild from disk.";
+                    _chatLog.Append(captureFailInfo, OrchestratorMessageKind.Decision, msg);
                 }
             }
 
