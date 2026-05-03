@@ -12,7 +12,7 @@ export interface JobExecution {
   jobKey: string;
   processId: number;
   startedAt: string;
-  status: 'running' | 'completed' | 'failed' | 'cancelled' | string;
+  status: 'running' | 'completed' | 'failed' | 'stopped' | 'cancelled' | string;
   exitCode: number | null;
   durationSeconds: number | null;
   model?: string | null;
