@@ -54,6 +54,16 @@ public class ProjectRunner
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, StuckLoopState> _stuckLoops = new();
     private StuckLoopBudget _stuckLoopBudget = StuckLoopBudget.Default;
 
+    // Consecutive auto-pickup failures. Auto-mode flips back to manual when
+    // this hits the threshold so a single bad event (mid-flight kill, rotated
+    // session id, watchdog regression) cannot cascade through every queued
+    // job. Reset on any auto-issued run that reaches Review.
+    private int _consecutiveAutoFailureCount;
+    internal const int AutoFailureHaltThreshold = 3;
+    // Job ids of the recent auto-failures, kept so the halt message can name
+    // the offenders without re-scanning.
+    private readonly Queue<string> _recentAutoFailureJobIds = new();
+
     public string ProjectName { get; }
     public WatchPathEntry Entry { get; }
 
@@ -164,7 +174,12 @@ public class ProjectRunner
         // Check if there's a running process for this project on any CLI
         if (_router.All.Any(c => c.IsRunningForProject(Entry.RootPath))) return;
 
-        var nextJob = GetNextReadyJob();
+        // Progress-first pickup: an interrupted run that captured a session
+        // id is the most valuable thing to resume - the agent already has
+        // context, and leaving it idle while we pull a brand-new ready job
+        // is wasted work. Falls through to the ready queue when no
+        // resumable progress job is available.
+        var nextJob = GetNextResumableProgressJob() ?? GetNextReadyJob();
         if (nextJob == null)
         {
             if (_mode == "auto-single")
@@ -1095,7 +1110,8 @@ public class ProjectRunner
             // job starts a fresh loop with a fresh budget.
             _stuckLoops.TryRemove(jobId, out _);
 
-            if (RunCompletionPolicy.ShouldMoveToReview(execution.Status))
+            var movedToReview = RunCompletionPolicy.ShouldMoveToReview(execution.Status);
+            if (movedToReview)
             {
                 var moveOutcome = await _transitions.MoveAsync(jobId, JobStates.Review, Entry.Path, CancellationToken.None);
                 if (moveOutcome.Status == MoveJobStatus.Success)
@@ -1126,6 +1142,42 @@ public class ProjectRunner
                 _logger.LogInformation(
                     "Job {JobId} finished with status {Status}. Leaving it in progress for review or recovery.",
                     jobId, execution.Status);
+            }
+
+            // Auto-pickup cascade containment. Only auto-issued runs feed
+            // the counter; manual starts and user-driven continues do not.
+            // Reaching the threshold flips the runner to manual so a single
+            // bad event (mid-flight kill, dead session id, watchdog
+            // regression) cannot burn through the entire ready queue.
+            if (capturedIntent == RunIntent.AutoPickup)
+            {
+                if (movedToReview)
+                {
+                    _consecutiveAutoFailureCount = 0;
+                    _recentAutoFailureJobIds.Clear();
+                }
+                else
+                {
+                    _consecutiveAutoFailureCount++;
+                    _recentAutoFailureJobIds.Enqueue(jobId);
+                    while (_recentAutoFailureJobIds.Count > AutoFailureHaltThreshold)
+                        _recentAutoFailureJobIds.Dequeue();
+                    if (_consecutiveAutoFailureCount >= AutoFailureHaltThreshold && IsAutoMode(_mode))
+                    {
+                        var offenders = string.Join(", ", _recentAutoFailureJobIds);
+                        _logger.LogWarning(
+                            "Runner '{Project}' halting auto-mode after {N} consecutive failures: {Offenders}",
+                            ProjectName, _consecutiveAutoFailureCount, offenders);
+                        if (activeInfo != null)
+                        {
+                            _chatLog.Append(activeInfo, OrchestratorMessageKind.Decision,
+                                $"Auto-mode paused: {AutoFailureHaltThreshold} consecutive auto-pickup runs did not reach review ({offenders}). Investigate before re-enabling.");
+                        }
+                        SetMode("manual");
+                        _consecutiveAutoFailureCount = 0;
+                        _recentAutoFailureJobIds.Clear();
+                    }
+                }
             }
         }
         catch (Exception ex)
@@ -1268,6 +1320,32 @@ public class ProjectRunner
             .Where(j => j.ProjectName == ProjectName && j.State == JobStates.Ready)
             .OrderBy(j => j.Order)
             .FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Returns the oldest 3-progress job for this project that carries a
+    /// captured session id we can resume against. The auto-pickup tick
+    /// prefers these over jobs in 2-ready so an interrupted in-flight run
+    /// continues where it left off instead of being skipped while a fresh
+    /// job is started. A job has resumable state when either
+    /// <see cref="JobInfo.SessionName"/> or any non-recovery-marker entry
+    /// in <see cref="JobInfo.SessionChain"/> is non-empty.
+    /// </summary>
+    private JobInfo? GetNextResumableProgressJob()
+    {
+        return _scanner.ScanAllJobs()
+            .Where(j => j.ProjectName == ProjectName
+                        && j.State == JobStates.Progress
+                        && HasResumableSession(j))
+            .OrderBy(j => j.CreatedAt)
+            .FirstOrDefault();
+    }
+
+    internal static bool HasResumableSession(JobInfo info)
+    {
+        if (!string.IsNullOrWhiteSpace(info.SessionName)) return true;
+        if (info.SessionChain == null || info.SessionChain.Count == 0) return false;
+        return info.SessionChain.Any(id => !string.IsNullOrWhiteSpace(id));
     }
 
     private List<string> GetQueuedJobIds()
