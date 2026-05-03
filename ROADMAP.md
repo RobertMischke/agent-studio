@@ -13,6 +13,10 @@ Modern coding agents are useful for long-running implementation work, but they s
 - The runner starts the next ready task automatically.
 - The agent writes evidence back into the task folder.
 
+The thesis is not to invent another coding agent. The app assumes that productized agents such as Codex and Claude Code are already excellent, economically attractive through subscriptions, and available as direct fallback tools in terminals and IDEs. Agent Task Processor adds the layer those agents do not try to own: ordered local queues, lifecycle boundaries, durable evidence, review handoff, and cross-CLI fallback.
+
+An API-native agent runtime may become attractive later if model pricing, provider features, or subscription limits change enough to make it clearly better. Until then, building a custom coding agent loop is intentionally out of scope.
+
 The product should feel like a workbench, not a command center. It should make one project easier to move through a sequence of tasks, then scale that same pattern across several projects.
 
 Security is part of that thesis. Frontier models are becoming strong enough at cyber tasks that the limiting factor shifts toward process: enough token budget, clear scope, repeatable specialist skills, captured evidence, and a review surface that shows what was checked. UK AISI's April 30, 2026 GPT-5.5 cyber evaluation is the reference point for this roadmap direction: models like GPT-5.5 and Mythos-class systems can outperform casual manual review on hard cyber tasks when given sufficient inference budget and tooling, but the result only becomes useful inside a documented workflow. Documentation is the killer feature: a security review should record which model ran, how much token budget was spent, which process or skill was followed, which evidence was produced, and what conclusion a reviewer accepted.
@@ -111,6 +115,7 @@ The core execution model stays intentionally narrow:
 - Parallelism is allowed across projects, not inside one project.
 - The app does not create branches, switch branches, merge branches, or manage worktrees.
 - The app does not become a workflow engine.
+- The app does not implement its own API-backed coding-agent runtime while subscription CLI agents remain the primary value path.
 - Runtime job artifacts belong in watched task folders, not in this source repository.
 
 Planning and research tasks may eventually have a different concurrency model because they do not change source code. That distinction must stay explicit. Coding tasks keep the one-at-a-time rule.
@@ -125,6 +130,7 @@ When changing this product, prefer work that:
 - Makes the current task state easier to see.
 - Preserves the sequential per-project execution model.
 - Uses local files and existing subscriptions instead of new hosted infrastructure.
+- Treats Codex, Claude Code, and other provider-owned agents as the primary execution engines.
 - Keeps the UI compact, legible, and calm.
 
 Be cautious with work that:
@@ -132,6 +138,7 @@ Be cautious with work that:
 - Adds bookkeeping before it removes friction.
 - Turns a simple queue into a workflow system.
 - Encourages multiple coding agents to edit one project at the same time.
+- Rebuilds the provider-owned agent loop before the existing subscription agents have been exhausted.
 - Hides important evidence from the reviewer.
 
 ## Documentation Drift

@@ -258,3 +258,25 @@ The investigation also surfaced a parallel question from the user: "is this a WS
 **Implementation pointers.** [`backend/Services/Cli/ClaudeCliService.cs::ResolveCmdShimToExe`](../backend/Services/Cli/ClaudeCliService.cs) (the npm-shim → `.exe` resolver, called from `BuildStartInfo`); [`backend/Services/Cli/ChildHandle.cs`](../backend/Services/Cli/ChildHandle.cs) + [`CliExecutionServiceBase.SpawnChildAsync`](../backend/Services/Cli/CliExecutionServiceBase.cs) (virtual hook for future PTY needs); [`backend.Tests/CliSpawnIntegrationTests.cs`](../backend.Tests/CliSpawnIntegrationTests.cs) (live matrix, `RUN_CLI_INTEGRATION=1` gate); [`backend.Tests/CliWatchdogIntegrationTests.cs`](../backend.Tests/CliWatchdogIntegrationTests.cs) (deterministic fake-CLI tests); [`docs/cli-skills/cli-claude.md`](cli-skills/cli-claude.md) (operator-level "what to check when claude hangs" playbook).
 
 **Status.** Accepted as **mitigation + diagnostics**, not as proven root-cause fix. Open follow-ups: (1) re-run the live matrix on a clean dev backend after a `~/.claude/projects/...` cleanup to test the concurrent-process-contention hypothesis; (2) Codex / Gemini / Copilot smoke probes for parity coverage; (3) extend `CliWatchdogIntegrationTests` to drive `ProjectRunner.TickWatchdog` directly so the state-machine ticks are pinned end-to-end.
+
+---
+
+## ADR-0012 - Existing coding agents are the execution engines, not raw model APIs (2026-05-03)
+
+**Decision.** Agent Task Processor orchestrates existing coding-agent products, primarily CLI or SDK-backed local agents such as Codex, Claude Code, GitHub Copilot, and Gemini, instead of implementing its own API-backed coding-agent runtime. The app owns queues, lifecycle, state movement, protocol generation, review evidence, and cross-CLI fallback. The provider-owned agent owns planning, model/tool loop, editing mechanics, approvals, authentication, model routing, and native IDE or terminal fallback where available.
+
+**Context.** The user wants to keep high-quality coding agents busy and make review easier while using the subscriptions already paid for. Codex and Claude Code are the clearest focus today because they are strong coding agents and have attractive subscription economics. Copilot and Gemini remain supported fallback paths where their CLIs expose enough control. The value of this product is not "another agent loop"; it is the local workbench around existing agents: ordered task queues, deterministic lifecycle boundaries, durable logs, screenshots, protocol summaries, and review handoff.
+
+Recent CLI-integration research reinforces this boundary. OpenAI's Codex clients use a structured App Server protocol over JSON-RPC rather than treating a terminal PTY as the agent API. GitHub's Copilot SDK similarly talks to a Copilot CLI server over JSON-RPC and manages lifecycle from the SDK. VS Code terminal integration is useful for observation and human fallback, but it is not a reliable substitute for a typed agent protocol when the application must classify state, approvals, input requests, and shutdowns.
+
+**Non-goals.**
+- Building a custom API-key-billed coding agent loop while the subscription agents remain the primary value path.
+- Hiding direct fallback. The user should still be able to drop into Codex, Claude Code, Copilot, Gemini, or a VS Code integration when that is the fastest way to recover or inspect a session.
+- Treating PTY automation as the preferred integration layer when a structured protocol, JSONL mode, SDK, or provider session file is available.
+- Making one provider permanent. If model economics or provider capabilities shift, the execution-engine boundary can be revisited.
+
+**Reasoning style.** Build the missing workbench, not the agent. Existing coding agents already package a large amount of product engineering: tool approval UX, file editing, prompt/tool policies, auth, session history, model routing, and IDE affordances. Agent Task Processor should spend its complexity budget on the layer those tools do not share: queue utilization, deterministic orchestration, protocol/evidence capture, review ergonomics, and fallback across providers.
+
+**Implementation pointers.** [README.md](../README.md) "Use existing coding agents, not a custom agent runtime"; [ROADMAP.md](../ROADMAP.md) "Product Thesis" and "Hard Boundaries"; CLI contracts in [docs/supported-clis.md](supported-clis.md); per-CLI adapters in [backend/Services/Cli/](../backend/Services/Cli/); deterministic orchestration in [backend/Services/Runner/](../backend/Services/Runner/).
+
+**Status.** Accepted.

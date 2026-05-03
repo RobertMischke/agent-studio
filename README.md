@@ -58,6 +58,10 @@ The board exists to make the queue the only thing you maintain. Tasks land in `2
 
 **Use what you already pay for.** The runner drives **your** Claude Code, Codex, Copilot, and Gemini CLIs through their existing subscriptions. **No API keys. No per-token billing.** Your Pro/Max plan is the budget; the board's job is to use as much of it as productively as possible.
 
+**Use existing coding agents, not a custom agent runtime.** Agent Task Processor deliberately sits above productized coding agents instead of rebuilding their agent loop against raw model APIs. Claude Code, Codex, Copilot, and Gemini already bundle planning, editing, tool use, approvals, authentication, model routing, and subscription economics. The app's job is queueing, lifecycle control, evidence capture, review handoff, and cross-CLI fallback. If a run gets awkward, the user can still drop into the native CLI or VS Code integration with the same subscription and provider-owned session artifacts where the provider exposes them.
+
+Building a custom coding agent is not a forbidden idea. Many projects do it. It is out of scope for this product while the best price/performance sits in polished subscription coding agents, especially Codex and Claude Code. This boundary can be revisited if model economics or provider capabilities make API-native execution clearly better.
+
 **Maximize token utilization, minimize bookkeeping.** Skip the things that burn time and tokens for marginal benefit:
 
 | What it skips | Why |
@@ -66,6 +70,7 @@ The board exists to make the queue the only thing you maintain. Tasks land in `2
 | Virtualization / sandboxes | Adds startup latency and forces the agent to re-discover the workspace every run. |
 | Cross-task orchestration | Workflow engines, branch coordination, merge bots. The sequential model removes this overhead by construction. |
 | API-key-based execution | Subscriptions already cover this. Paying twice is silly. |
+| Custom API-backed coding agent loop | Existing agents already package the hard product work: tools, approvals, session history, auth, model routing, and IDE fallback. |
 
 The product is small on purpose. Any feature that pulls toward "let's run two agents on one project" is out of scope. That's where complexity (and bills) explode.
 
