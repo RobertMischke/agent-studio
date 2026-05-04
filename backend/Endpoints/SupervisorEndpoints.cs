@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
 using OrchestratorApi.Services.Supervisor;
 
@@ -71,6 +72,42 @@ public static class SupervisorEndpoints
             await svc.ResumeAsync(project, body.Reason!, SupervisorSource.User, ct);
             return Results.Ok(new { ok = true });
         });
+
+        group.MapGet("/{project}/recent-events", (
+            string project,
+            IConfiguration config,
+            int? max) =>
+        {
+            if (string.IsNullOrWhiteSpace(project)) return Results.BadRequest(new { error = "project required" });
+            var workspace = config["TaskRepository"];
+            if (string.IsNullOrWhiteSpace(workspace)) return Results.Ok(new { advisories = Array.Empty<SupervisorAdvisory>(), interventions = Array.Empty<SupervisorIntervention>() });
+            var cap = Math.Clamp(max ?? 50, 1, 500);
+            var advisories = ReadJsonl<SupervisorAdvisory>(SupervisorLogPaths.ObservationsFile(workspace!, project), cap);
+            var interventions = ReadJsonl<SupervisorIntervention>(SupervisorLogPaths.InterventionsFile(workspace!, project), cap);
+            return Results.Ok(new { advisories, interventions });
+        });
+    }
+
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
+    private static List<T> ReadJsonl<T>(string path, int max)
+    {
+        if (!File.Exists(path)) return new List<T>();
+        var lines = File.ReadAllLines(path);
+        var start = Math.Max(0, lines.Length - max);
+        var list = new List<T>(lines.Length - start);
+        for (int i = start; i < lines.Length; i++)
+        {
+            var raw = lines[i];
+            if (string.IsNullOrWhiteSpace(raw)) continue;
+            try
+            {
+                var item = JsonSerializer.Deserialize<T>(raw, JsonOptions);
+                if (item != null) list.Add(item);
+            }
+            catch { /* skip malformed line */ }
+        }
+        return list;
     }
 }
 

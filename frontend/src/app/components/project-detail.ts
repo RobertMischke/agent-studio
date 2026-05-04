@@ -7,6 +7,7 @@ import { TokenSummaryBlockComponent } from './token-summary-block';
 import { GlobalOrchestratorCardComponent } from './global-orchestrator-card';
 import { ProjectSecuritySectionComponent } from './project-security-section';
 import { ProjectArchitectureSectionComponent } from './project-architecture-section';
+import { ProjectSupervisorSectionComponent } from './project-supervisor-section';
 
 interface ProjectSettingsRow {
   autoCommit: boolean;
@@ -32,7 +33,8 @@ interface ProjectSettingsRow {
     TokenSummaryBlockComponent,
     GlobalOrchestratorCardComponent,
     ProjectSecuritySectionComponent,
-    ProjectArchitectureSectionComponent
+    ProjectArchitectureSectionComponent,
+    ProjectSupervisorSectionComponent
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -138,6 +140,8 @@ interface ProjectSettingsRow {
       </section>
 
       <app-token-summary-block [projectName]="projectName()" />
+
+      <app-project-supervisor-section [projectName]="projectName()" />
 
       <app-project-security-section [projectName]="projectName()" />
 
