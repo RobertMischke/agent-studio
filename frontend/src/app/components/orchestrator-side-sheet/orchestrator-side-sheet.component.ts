@@ -8,7 +8,8 @@ import {
   inject,
   input,
   output,
-  signal
+  signal,
+  untracked
 } from '@angular/core';
 import { JobService } from '../../services/job.service';
 import { OrchestratorChatTurn } from '../../models/job.model';
@@ -60,20 +61,40 @@ import { ChatMessage, ChatSubmitEvent } from '../chat/chat-types';
       </header>
 
       <nav class="sheet__tabs" data-testid="orch-side-sheet-tabs">
-        <label class="sheet__select-wrap"
-               [class.sheet__select-wrap--active]="mode() === 'project'"
-               data-testid="orch-side-sheet-project-select-wrap">
+        <div class="sheet__combo-wrap"
+             [class.sheet__combo-wrap--active]="mode() === 'project'"
+             [class.sheet__combo-wrap--open]="comboOpen()"
+             data-testid="orch-side-sheet-project-combo-wrap">
           <span class="sheet__select-icon">💬</span>
-          <select class="sheet__select"
-                  data-testid="orch-side-sheet-project-select"
-                  [value]="activeProject() ?? ''"
-                  (change)="onProjectSelectChange($event)">
-            @for (proj of projects(); track proj) {
-              <option [value]="proj">{{ proj }}</option>
-            }
-          </select>
+          <input #comboInput
+                 type="text"
+                 class="sheet__combo-input"
+                 data-testid="orch-side-sheet-project-combo"
+                 [value]="comboQuery()"
+                 [placeholder]="activeProject() ?? 'Pick a project…'"
+                 (input)="onComboInput($event)"
+                 (focus)="onComboFocus()"
+                 (blur)="onComboBlur()"
+                 (keydown)="onComboKeydown($event)" />
           <span class="sheet__select-caret">▾</span>
-        </label>
+          @if (comboOpen() && filteredProjects().length > 0) {
+            <ul class="sheet__combo-list"
+                role="listbox"
+                data-testid="orch-side-sheet-project-combo-list">
+              @for (proj of filteredProjects(); track proj; let i = $index) {
+                <li class="sheet__combo-option"
+                    role="option"
+                    [class.sheet__combo-option--active]="i === comboHighlight()"
+                    [class.sheet__combo-option--current]="proj === activeProject()"
+                    [attr.data-testid]="'orch-side-sheet-project-combo-option-' + proj"
+                    (mousedown)="onComboOptionMousedown($event)"
+                    (click)="selectComboOption(proj, $event)">
+                  {{ proj }}
+                </li>
+              }
+            </ul>
+          }
+        </div>
         @if (activeJobId() && activeJobTitle()) {
           <button class="sheet__tab sheet__tab--task"
                   [class.sheet__tab--active]="mode() === 'task'"
@@ -84,6 +105,14 @@ import { ChatMessage, ChatSubmitEvent } from '../chat/chat-types';
           </button>
         }
       </nav>
+      <select hidden
+              data-testid="orch-side-sheet-project-select"
+              [value]="activeProject() ?? ''"
+              (change)="onProjectSelectChange($event)">
+        @for (proj of projects(); track proj) {
+          <option [value]="proj">{{ proj }}</option>
+        }
+      </select>
 
       @if (errorMsg(); as err) {
         <div class="sheet__error">{{ err }}</div>
@@ -252,6 +281,96 @@ import { ChatMessage, ChatSubmitEvent } from '../chat/chat-types';
       background: #f8fafc;
     }
     .sheet__select-caret { flex: 0 0 auto; opacity: 0.85; font-size: 10px; }
+
+    /* Searchable combobox: pill chrome around an editable input plus a
+       floating list. Lets the user filter ~10+ projects by typing instead
+       of scanning a flat dropdown. The native <select> stays in the DOM
+       (hidden) for accessibility/test continuity. */
+    .sheet__combo-wrap {
+      position: relative;
+      flex: 1 1 auto;
+      min-width: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 10px 3px 11px;
+      background: linear-gradient(135deg, rgba(124,58,237,0.55), rgba(99,102,241,0.55));
+      border: 1px solid rgba(196,181,253,0.95);
+      border-radius: 999px;
+      color: #ffffff;
+      font-weight: 600;
+      font-size: 12px;
+      box-shadow: 0 0 0 1px rgba(196,181,253,0.35), 0 1px 4px rgba(99,102,241,0.35);
+      transition: opacity 0.15s, border-color 0.15s;
+    }
+    .sheet__combo-wrap:not(.sheet__combo-wrap--active) {
+      background: rgba(255,255,255,0.04);
+      border-color: rgba(255,255,255,0.08);
+      box-shadow: none;
+      color: #cbd5e1;
+      font-weight: 500;
+    }
+    .sheet__combo-wrap--open {
+      border-color: rgba(196,181,253,1);
+      box-shadow: 0 0 0 1px rgba(196,181,253,0.5), 0 4px 14px rgba(15,23,42,0.55);
+    }
+    .sheet__combo-input {
+      flex: 1 1 auto;
+      min-width: 0;
+      background: transparent;
+      border: 0;
+      color: inherit;
+      font: inherit;
+      padding: 0;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    .sheet__combo-input::placeholder {
+      color: inherit;
+      opacity: 0.85;
+    }
+    .sheet__combo-input:focus { outline: none; }
+    .sheet__combo-list {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      right: 0;
+      max-height: 280px;
+      overflow-y: auto;
+      margin: 0;
+      padding: 4px;
+      list-style: none;
+      background: #0f172a;
+      border: 1px solid rgba(196,181,253,0.35);
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(2,6,23,0.55);
+      z-index: 30;
+    }
+    .sheet__combo-option {
+      padding: 6px 10px;
+      border-radius: 8px;
+      color: #cbd5e1;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: background 0.1s, color 0.1s;
+    }
+    .sheet__combo-option:hover,
+    .sheet__combo-option--active {
+      background: rgba(124,58,237,0.35);
+      color: #ffffff;
+    }
+    .sheet__combo-option--current {
+      color: #c4b5fd;
+      font-weight: 600;
+    }
+    .sheet__combo-option--current::before {
+      content: '✓ ';
+      opacity: 0.8;
+    }
     .sheet__tab {
       flex: 0 0 auto;
       max-width: 60%;
@@ -398,6 +517,23 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly taskMessages = signal<ChatMessage[]>([]);
   readonly taskSending = signal(false);
 
+  /**
+   * Searchable project combobox state. The plain list-style picker did
+   * not scale well past a handful of projects; with ~10 watched
+   * workspaces the user wants to filter by typing. The native <select>
+   * remains in the DOM (hidden) for accessibility and existing tests.
+   */
+  readonly comboOpen = signal(false);
+  readonly comboQuery = signal('');
+  readonly comboHighlight = signal(0);
+
+  readonly filteredProjects = computed<string[]>(() => {
+    const q = this.comboQuery().trim().toLowerCase();
+    const all = this.projects();
+    if (!q) return all;
+    return all.filter((p) => p.toLowerCase().includes(q));
+  });
+
   /** Locally-buffered user turns shown immediately (server is source of truth on next refresh). */
   private readonly localTurns = signal<OrchestratorChatTurn[]>([]);
 
@@ -458,18 +594,27 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       }
     });
 
+    /**
+     * Sync activeProject from the host's preferred project. We `untracked`
+     * the read of activeProject so this effect only fires when preferred
+     * or the project list changes — otherwise picking a project in the
+     * combobox would re-trigger the effect and snap the selection back
+     * to the host's preferred project on every user pick.
+     */
     effect(() => {
       const preferred = this.preferredProject();
       const projects = this.projects();
-      if (!preferred) {
-        if (this.activeProject() == null && projects.length > 0) {
-          this.activeProject.set(projects[0]);
+      untracked(() => {
+        if (!preferred) {
+          if (this.activeProject() == null && projects.length > 0) {
+            this.activeProject.set(projects[0]);
+          }
+          return;
         }
-        return;
-      }
-      if (projects.includes(preferred) && preferred !== this.activeProject()) {
-        this.activeProject.set(preferred);
-      }
+        if (projects.includes(preferred) && preferred !== this.activeProject()) {
+          this.activeProject.set(preferred);
+        }
+      });
     });
 
     /**
@@ -522,6 +667,71 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     const value = (event.target as HTMLSelectElement | null)?.value ?? '';
     if (!value) return;
     this.selectProjectTab(value);
+  }
+
+  onComboFocus(): void {
+    this.comboOpen.set(true);
+    this.comboHighlight.set(0);
+  }
+
+  onComboBlur(): void {
+    // Defer so a click on a list option (mousedown -> mouseup -> blur) still
+    // registers before we tear the list down.
+    setTimeout(() => {
+      this.comboOpen.set(false);
+      this.comboQuery.set('');
+    }, 120);
+  }
+
+  onComboInput(event: Event): void {
+    const value = (event.target as HTMLInputElement | null)?.value ?? '';
+    this.comboQuery.set(value);
+    this.comboOpen.set(true);
+    this.comboHighlight.set(0);
+  }
+
+  onComboKeydown(event: KeyboardEvent): void {
+    const list = this.filteredProjects();
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      if (list.length === 0) return;
+      this.comboOpen.set(true);
+      this.comboHighlight.update((i) => (i + 1) % list.length);
+    } else if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (list.length === 0) return;
+      this.comboOpen.set(true);
+      this.comboHighlight.update((i) => (i - 1 + list.length) % list.length);
+    } else if (event.key === 'Enter') {
+      event.preventDefault();
+      const pick = list[this.comboHighlight()] ?? list[0];
+      if (pick) this.commitComboSelection(pick);
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      this.comboOpen.set(false);
+      this.comboQuery.set('');
+      (event.target as HTMLInputElement | null)?.blur();
+    }
+  }
+
+  /**
+   * Block the input's blur on mousedown so the click handler still has
+   * a live list to bind to. Without this the blur fires between
+   * mousedown and click and the option is gone before the click lands.
+   */
+  onComboOptionMousedown(event: MouseEvent): void {
+    event.preventDefault();
+  }
+
+  selectComboOption(proj: string, event: MouseEvent): void {
+    event.preventDefault();
+    this.commitComboSelection(proj);
+  }
+
+  private commitComboSelection(proj: string): void {
+    this.selectProjectTab(proj);
+    this.comboOpen.set(false);
+    this.comboQuery.set('');
   }
 
   selectTaskTab(): void {

@@ -54,10 +54,12 @@ public class TokenSummaryService
         "not a bill.";
 
     private readonly OrchestratorLog _log;
+    private readonly TokenSummaryCacheStore? _cache;
 
-    public TokenSummaryService(OrchestratorLog log)
+    public TokenSummaryService(OrchestratorLog log, TokenSummaryCacheStore? cache = null)
     {
         _log = log;
+        _cache = cache;
     }
 
     public TokenSummary Summarize(string projectName, string watchPath)
@@ -65,6 +67,108 @@ public class TokenSummaryService
         var entries = _log.Read(watchPath);
         return Summarize(projectName, entries);
     }
+
+    /// <summary>
+    /// Workspace-wide aggregate: walks every watched project, runs the
+    /// per-project summarizer, and folds amounts + per-model buckets into
+    /// a single rollup. Persists the result to disk via
+    /// <see cref="TokenSummaryCacheStore"/> so the status-bar usage modal
+    /// can render last-known totals immediately on app start.
+    /// </summary>
+    public TokenSummaryAggregate Aggregate(IEnumerable<(string Name, string WatchPath)> projects)
+    {
+        var perProject = new List<TokenSummaryByProject>();
+        var perModel = new Dictionary<string, ModelBucket>(StringComparer.OrdinalIgnoreCase);
+        long totalInput = 0, totalOutput = 0, totalCacheRead = 0, totalCacheCreate = 0;
+        int totalEntries = 0, totalCalls = 0, projectCount = 0;
+        decimal grandTotal = 0;
+        bool allPriced = true;
+        bool anyPricedAtAll = false;
+
+        foreach (var (name, watchPath) in projects)
+        {
+            projectCount++;
+            var summary = Summarize(name, watchPath);
+            totalEntries += summary.OrchestratorEntries;
+            totalCalls += summary.OrchestratorLlmCalls;
+            totalInput += summary.TotalInputTokens;
+            totalOutput += summary.TotalOutputTokens;
+            totalCacheRead += summary.TotalCacheReadTokens;
+            totalCacheCreate += summary.TotalCacheCreationTokens;
+            grandTotal += summary.EstimatedApiCostUsd;
+            if (summary.OrchestratorLlmCalls > 0 && !summary.AllModelsPriced) allPriced = false;
+            if (summary.OrchestratorLlmCalls > 0) anyPricedAtAll = anyPricedAtAll || summary.AllModelsPriced;
+
+            perProject.Add(new TokenSummaryByProject(
+                Project: name,
+                OrchestratorLlmCalls: summary.OrchestratorLlmCalls,
+                InputTokens: summary.TotalInputTokens,
+                OutputTokens: summary.TotalOutputTokens,
+                CacheReadTokens: summary.TotalCacheReadTokens,
+                CacheCreationTokens: summary.TotalCacheCreationTokens,
+                EstimatedApiCostUsd: summary.EstimatedApiCostUsd));
+
+            foreach (var m in summary.ByModel)
+            {
+                if (!perModel.TryGetValue(m.Model, out var bucket))
+                {
+                    bucket = new ModelBucket(m.Model);
+                    perModel[m.Model] = bucket;
+                }
+                bucket.Calls += m.Calls;
+                bucket.Input += m.InputTokens;
+                bucket.Output += m.OutputTokens;
+                bucket.CacheRead += m.CacheReadTokens;
+                bucket.CacheCreate += m.CacheCreationTokens;
+                bucket.Cost += m.EstimatedApiCostUsd;
+                if (!m.ModelPriced) bucket.AnyUnpriced = true;
+            }
+        }
+
+        var byModel = perModel.Values
+            .OrderByDescending(b => b.Input + b.Output)
+            .Select(b => new TokenSummaryByModel(
+                Model: b.Model,
+                Calls: b.Calls,
+                InputTokens: b.Input,
+                OutputTokens: b.Output,
+                CacheReadTokens: b.CacheRead,
+                CacheCreationTokens: b.CacheCreate,
+                EstimatedApiCostUsd: b.Cost,
+                ModelPriced: !b.AnyUnpriced))
+            .ToList();
+
+        // If we recorded zero LLM calls anywhere, "all priced" is meaningless.
+        if (totalCalls == 0) allPriced = false;
+
+        var aggregate = new TokenSummaryAggregate(
+            Projects: projectCount,
+            OrchestratorEntries: totalEntries,
+            OrchestratorLlmCalls: totalCalls,
+            TotalInputTokens: totalInput,
+            TotalOutputTokens: totalOutput,
+            TotalCacheReadTokens: totalCacheRead,
+            TotalCacheCreationTokens: totalCacheCreate,
+            EstimatedApiCostUsd: grandTotal,
+            AllModelsPriced: allPriced,
+            ByModel: byModel,
+            ByProject: perProject
+                .OrderByDescending(p => p.InputTokens + p.OutputTokens)
+                .ToList(),
+            FetchedAt: DateTime.UtcNow.ToString("o"),
+            Disclaimer: DefaultDisclaimer);
+
+        // Persist for next-app-start display. Best-effort.
+        try { _cache?.Write(aggregate); } catch { /* swallow; tolerant by design */ }
+
+        return aggregate;
+    }
+
+    /// <summary>
+    /// Read the persisted aggregate (no fresh probe). Returns null when
+    /// the cache file does not exist or fails to parse.
+    /// </summary>
+    public TokenSummaryAggregate? ReadCachedAggregate() => _cache?.Read();
 
     /// <summary>
     /// Pure overload: takes the entries directly. Used by the unit tests
@@ -140,6 +244,8 @@ public class TokenSummaryService
         public long Output;
         public long CacheRead;
         public long CacheCreate;
+        public decimal Cost;
+        public bool AnyUnpriced;
         public ModelBucket(string model) { Model = model; }
     }
 }

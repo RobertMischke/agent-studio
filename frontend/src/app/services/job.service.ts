@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport, QuotaReport, QuotaSnapshot, GitStatus, ClaudeSessionResponse, JobCommitDetail, SessionEventsResponse, ContinueMode, ContinueJobResponse, OrchestratorLogResponse, TokenSummary, OrchestratorSessionResponse, OrchestratorChatResponse, OrchestratorChatTurn, RunTimeline, RunCommitsResponse, RunFilesResponse, RunDiffResponse } from '../models/job.model';
+import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport, QuotaReport, QuotaSnapshot, GitStatus, ClaudeSessionResponse, JobCommitDetail, SessionEventsResponse, ContinueMode, ContinueJobResponse, OrchestratorLogResponse, TokenSummary, TokenSummaryAggregate, OrchestratorSessionResponse, OrchestratorChatResponse, OrchestratorChatTurn, RunTimeline, RunCommitsResponse, RunFilesResponse, RunDiffResponse } from '../models/job.model';
 import { ErrorDialogService } from './error-dialog.service';
 
 type LaneKey = keyof GroupedJobs;
@@ -462,6 +462,32 @@ export class JobService {
   getTokenSummary(projectName: string) {
     return this.http.get<TokenSummary>(
       `${this.baseUrl}/runner/${encodeURIComponent(projectName)}/token-summary`
+    );
+  }
+
+  /**
+   * Workspace-wide token aggregate. Forces a fresh scan across all
+   * watched projects and writes the result to the on-disk cache, so the
+   * next call to {@link getTokenSummaryAggregateCached} can return it
+   * instantly. Cheap (reads JSONL files only); safe to poll.
+   */
+  getTokenSummaryAggregate() {
+    return this.http.get<TokenSummaryAggregate>(
+      `${this.baseUrl}/runner/token-summary-aggregate`
+    );
+  }
+
+  /**
+   * Cache-only read of the workspace-wide aggregate. Returns immediately
+   * with the on-disk snapshot without re-scanning the orchestrator logs.
+   * The status-bar usage modal calls this on first paint so the user
+   * sees real numbers before the live aggregator finishes; 204 No Content
+   * means there is no cached snapshot yet.
+   */
+  getTokenSummaryAggregateCached() {
+    return this.http.get<TokenSummaryAggregate>(
+      `${this.baseUrl}/runner/token-summary-aggregate/cached`,
+      { observe: 'response' }
     );
   }
 

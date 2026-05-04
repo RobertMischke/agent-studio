@@ -14,7 +14,7 @@ import {
 import { JobService } from '../services/job.service';
 import { CliType, CLI_TYPES, CliModelInfo } from '../models/job.model';
 import { cliTypeIcon, cliTypeLabel } from '../services/format.util';
-import { HeaderQuotaComponent } from './header-quota';
+import { UsageHoverPanelComponent } from './usage-hover-panel';
 
 const STORAGE_DEFAULT_CLI = 'defaultCliType';
 const STORAGE_DEFAULT_MODEL_PREFIX = 'defaultModel:';
@@ -38,7 +38,7 @@ const STORAGE_DEFAULT_MODEL_PREFIX = 'defaultModel:';
   // Selectors stay scoped via the .statusbar__quota class so we don't
   // leak globally to other usages of header-quota.
   encapsulation: ViewEncapsulation.None,
-  imports: [HeaderQuotaComponent],
+  imports: [UsageHoverPanelComponent],
   template: `
     <div class="statusbar" data-testid="status-bar">
       <div class="statusbar__group statusbar__group--left">
@@ -53,9 +53,11 @@ const STORAGE_DEFAULT_MODEL_PREFIX = 'defaultModel:';
       </div>
 
       <!-- The embedded quota cards are tall by default; the
-           statusbar__quota overrides shrink them to fit the bar. -->
+           statusbar__quota overrides shrink them to fit the bar.
+           Hovering anywhere in this group surfaces a large usage modal
+           with full quota detail and a workspace-wide token rollup. -->
       <div class="statusbar__group statusbar__group--center statusbar__quota">
-        <app-header-quota />
+        <app-usage-hover-panel />
       </div>
 
       <div class="statusbar__group statusbar__group--right">
@@ -65,6 +67,7 @@ const STORAGE_DEFAULT_MODEL_PREFIX = 'defaultModel:';
           <span class="statusbar__icon">🪙</span><span>Usage</span>
         </button>
         <button class="statusbar__item statusbar__item--btn"
+                data-testid="orch-side-sheet-toggle"
                 title="Orchestrator chat"
                 (click)="toggleOrchestrator.emit()">
           <span class="statusbar__icon">🤖</span><span>Orchestrator</span>
@@ -207,10 +210,11 @@ const STORAGE_DEFAULT_MODEL_PREFIX = 'defaultModel:';
       display: none;
     }
     .statusbar .statusbar__quota .hquota__donuts { gap: 4px; }
-    .statusbar .statusbar__quota .hquota__pop {
-      bottom: calc(100% + 6px);
-      top: auto;
-    }
+    /* The new usage-hover-panel owns the big hover modal. Suppress the
+       per-card popover that <app-header-quota> would otherwise render so
+       the two don't fight for the same airspace. */
+    .statusbar .statusbar__quota .hquota__pop { display: none !important; }
+    .statusbar .statusbar__quota .hquota__card { cursor: pointer; }
     .statusbar__item {
       display: inline-flex;
       align-items: center;

@@ -95,19 +95,35 @@ test.describe('Orchestrator side sheet', () => {
       });
     }
 
-    // Verify the project switcher renders as a dropdown so it scales past
-    // a handful of projects without overflow, and changing the selection
-    // swaps the active thread.
+    // Verify the project switcher renders as a searchable typeahead
+    // combobox so it scales past a handful of projects (typing filters
+    // the list), and picking an option swaps the active thread. The
+    // hidden <select> stays in the DOM as an a11y / scripting fallback.
+    const combo = page.getByTestId('orch-side-sheet-project-combo');
+    await expect(combo).toBeVisible();
     const projectSelect = page.getByTestId('orch-side-sheet-project-select');
-    await expect(projectSelect).toBeVisible();
     const optionValues = await projectSelect.locator('option').evaluateAll((opts) =>
       (opts as HTMLOptionElement[]).map((o) => o.value)
     );
     if (optionValues.length >= 2) {
       const current = await projectSelect.inputValue();
       const next = optionValues.find((v) => v && v !== current) ?? optionValues[1];
-      await projectSelect.selectOption(next);
+      await combo.click();
+      await combo.fill(next.slice(0, 2));
+      await page.waitForTimeout(150);
+      await page.screenshot({ path: `${SHOTS}/04a-combo-filtering.png`, fullPage: false });
+      // Pressing Enter commits the highlighted match. We avoid clicking
+      // the floating <li> directly because Playwright's click sequence
+      // (mousemove -> mousedown -> mouseup -> click) interleaves with
+      // input-blur in ways that make tests flaky on the first run.
+      await combo.press('Enter');
       await page.waitForTimeout(400);
+      // The combo input is cleared after selection; the placeholder shows
+      // the new active project so the user sees what is in front. The
+      // hidden <select> mirrors the same signal and is also asserted as
+      // a redundant guard against placeholder-binding races.
+      await expect(combo).toHaveAttribute('placeholder', next);
+      await expect(projectSelect).toHaveValue(next);
       await page.screenshot({ path: `${SHOTS}/04-side-sheet-other-project.png`, fullPage: false });
     }
 

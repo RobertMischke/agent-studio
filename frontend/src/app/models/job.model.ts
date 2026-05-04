@@ -379,6 +379,38 @@ export interface TokenSummary {
 }
 
 /**
+ * Workspace-wide rollup of orchestrator tokens + theoretical API cost.
+ * Mirrors backend `TokenSummaryAggregate`. Used by the status-bar usage
+ * modal to render a single "tokens consumed" number on hover, without
+ * forcing the user to pick a project first.
+ */
+export interface TokenSummaryAggregate {
+  projects: number;
+  orchestratorEntries: number;
+  orchestratorLlmCalls: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCacheReadTokens: number;
+  totalCacheCreationTokens: number;
+  estimatedApiCostUsd: number;
+  allModelsPriced: boolean;
+  byModel: TokenSummaryByModel[];
+  byProject: TokenSummaryByProject[];
+  fetchedAt: string;
+  disclaimer: string;
+}
+
+export interface TokenSummaryByProject {
+  project: string;
+  orchestratorLlmCalls: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  estimatedApiCostUsd: number;
+}
+
+/**
  * Long-lived orchestrator session record. The orchestrator boots one of
  * these per project at app start; subsequent decisions resume the same
  * Claude session via `-r <sessionId>`, so the orchestrator carries

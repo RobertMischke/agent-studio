@@ -44,6 +44,7 @@ builder.Services.AddSingleton<OrchestratorRunner>();
 builder.Services.AddSingleton<OrchestratorSessionStore>();
 builder.Services.AddSingleton<GlobalOrchestratorSessionStore>();
 builder.Services.AddSingleton<GlobalOrchestratorBootstrap>();
+builder.Services.AddSingleton<TokenSummaryCacheStore>();
 builder.Services.AddSingleton<TokenSummaryService>();
 builder.Services.AddSingleton<JobTransitionService>();
 builder.Services.AddSingleton<JobWatcherService>();

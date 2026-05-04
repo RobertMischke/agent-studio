@@ -52,6 +52,7 @@ interface QuotaCardModel {
     <div class="hquota">
       @for (card of cards(); track card.cliType) {
         <div class="hquota__card"
+             [attr.data-testid]="'hquota-card-' + card.cliType"
              [class.hquota__card--error]="!!card.error"
              [class.hquota__card--stale]="card.stale">
           <div class="hquota__head">

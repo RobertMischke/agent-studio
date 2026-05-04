@@ -94,6 +94,32 @@ public static class RunnerEndpoints
                 return Results.Ok(tokens.Summarize(projectName, entry.Path));
             });
 
+        // Workspace-wide token aggregate: same shape as TokenSummary but
+        // folded across every watched project. Used by the status-bar
+        // usage modal so the user sees a single "tokens consumed across
+        // the whole workspace" number on hover. Persisted to disk so
+        // the modal renders last-known totals immediately on app start.
+        runnerGroup.MapGet("/token-summary-aggregate",
+            (JobScannerService scanner, TokenSummaryService tokens) =>
+            {
+                var projects = scanner.GetWatchPaths()
+                    .Select(e => (e.Name, e.Path))
+                    .ToList();
+                var agg = tokens.Aggregate(projects);
+                return Results.Ok(agg);
+            });
+
+        // Cache-only aggregate: returns the on-disk snapshot without
+        // touching the orchestrator logs. The status-bar modal calls
+        // this on first paint so the cached value appears even before
+        // the live aggregator finishes scanning the JSONL files.
+        runnerGroup.MapGet("/token-summary-aggregate/cached",
+            (TokenSummaryService tokens) =>
+            {
+                var snap = tokens.ReadCachedAggregate();
+                return snap == null ? Results.NoContent() : Results.Ok(snap);
+            });
+
         // User override on an orchestrator decision (Phase F). Appends an
         // intervention entry to the feed and, when the named job is in a
         // continuable state, routes the new direction through the existing
