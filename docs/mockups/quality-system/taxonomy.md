@@ -136,7 +136,49 @@ check-instructions: |
 ---
 ```
 
-## 7. Open questions
+## 7. New dimension: Execution Mode (Task Checks only)
+
+A Task Check can be wired into the run in two fundamentally different ways. This is a real engineering decision per check, not a global setting, so it lives on the definition.
+
+### Mode A &mdash; **Spawn** (separate CLI step)
+
+After the main task finishes, a fresh CLI invocation runs the check with its own prompt and its own context window.
+
+- **Pro**: clean, focused context. The check sees only what it needs (the diff, the task, the rule). Higher signal-to-noise; the check cannot be overshadowed by a long primary prompt. Easier to attribute failures to the check itself.
+- **Pro**: independent retry, independent tokens, independent quota accounting.
+- **Con**: extra CLI invocation per check &mdash; tokens, latency, quota cost.
+- **Con**: the check has to re-load enough project context to do its job.
+
+### Mode B &mdash; **Inject** (prompt addition)
+
+The check's instructions are prepended/appended to the main task prompt. The same CLI run produces both the work and the self-check.
+
+- **Pro**: zero extra CLI invocations. Nearly free.
+- **Pro**: the agent is already loaded with full task context; no re-loading needed.
+- **Con**: less reliable. The check competes with the main task for attention and context. Easy to forget to report, easy to drown in a long primary prompt.
+- **Con**: harder to make the result structured. A spawned check can be required to emit `[[CHECK_RESULT: ...]]`; an injected one often can't.
+- **Con**: less safe for high-severity checks (security on diff). A separate run is worth the cost when "the agent might have skipped this" is unacceptable.
+
+### Recommendation per kind
+
+- **Audits** (project-scope) &mdash; always Spawn. The whole point is a focused, reportable examination.
+- **Probes** (runtime) &mdash; not applicable; probes execute the app, not the agent.
+- **Task Checks** &mdash; mode is a per-definition decision. Default to **Spawn** for high-severity and security-relevant checks, **Inject** for cheap stylistic ones. The UI shows the mode on each card and on the definition detail so it's never surprising.
+
+### Storage shape addition
+
+```yaml
+---
+id: TRACEABILITY-DIFF
+kind: check
+executionMode: spawn   # spawn | inject
+...
+---
+```
+
+Project- and task-level override of the execution mode is a future extension; not in the first cut.
+
+## 8. Open questions
 
 1. Top-level navigation label for the section: "Quality" / "Quality System" / "Project Quality" / something else?
 2. Should the library UI be one screen with kind-filter chips, or three separate screens (Audits / Checks / Probes)?

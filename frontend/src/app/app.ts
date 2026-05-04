@@ -1468,11 +1468,15 @@ export class App implements OnInit {
 
   onJobDrop(event: { jobId: string; watchPath: string; targetState: string }) {
     // Optimistic move: paint the new lane immediately, let the backend
-    // catch up. On failure, revert the local snapshot and surface the
-    // error so the user knows the persisted state didn't take.
+    // catch up. While the POST is in flight, silent polls are suppressed
+    // so a stale /api/jobs/grouped response can't repaint the old lane.
+    // On failure, revert the local snapshot and surface the error.
     const snapshot = this.jobService.applyOptimisticMove(event.jobId, event.watchPath, event.targetState);
+    this.jobService.beginOptimisticPersist();
     this.jobService.moveJob(event.jobId, event.targetState, event.watchPath).subscribe({
+      next: () => this.jobService.endOptimisticPersist(),
       error: (err) => {
+        this.jobService.endOptimisticPersist();
         if (snapshot) this.jobService.revertOptimisticMove(snapshot);
         this.jobService.error.set(err.message || 'Failed to move job');
         this.errorDialog.show(err, {
@@ -1485,12 +1489,15 @@ export class App implements OnInit {
   }
 
   onJobReorder(event: { state: string; jobs: { jobId: string; watchPath: string }[] }) {
-    // Optimistic reorder. The lane updates synchronously; the next silent
-    // poll is suppressed for a short grace window so the on-disk
-    // job.json rewrites can settle without flickering the new order back.
+    // Optimistic reorder. The lane updates synchronously; in-flight
+    // POST tracking + a short grace window after the response keep the
+    // user-visible order stable while the backend rewrites job.json.
     const before = this.jobService.applyOptimisticReorder(event.state, event.jobs);
+    this.jobService.beginOptimisticPersist();
     this.jobService.reorderJobs(event.jobs).subscribe({
+      next: () => this.jobService.endOptimisticPersist(),
       error: (err) => {
+        this.jobService.endOptimisticPersist();
         if (before) this.jobService.revertOptimisticReorder(event.state, before);
         this.jobService.error.set(err.message || 'Failed to reorder');
         this.errorDialog.show(err, {

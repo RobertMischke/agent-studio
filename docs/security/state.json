@@ -1,5 +1,5 @@
 {
-  "LastReviewDate": "2026-05-03",
+  "LastReviewDate": "2026-04-15",
   "Rating": "Baseline OK",
-  "Summary": "e2e probe 1777835213104"
+  "Summary": "Local-only desktop app; threat surface is small."
 }

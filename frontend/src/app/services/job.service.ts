@@ -21,15 +21,31 @@ export class JobService {
   // Eventual-consistency layer for drag/drop. The user-visible reorder
   // happens locally before the backend confirms (the previous round-trip
   // wait felt laggy and made consecutive drags clobber each other when a
-  // silent poll resolved between drops). We bump `mutationVersion` on
-  // every optimistic edit; silent polls capture the version at request
-  // start and discard their response if a mutation has happened since.
-  // `pendingGroupedSuppressUntil` keeps that guard alive for a short
-  // grace window after the latest optimistic edit so the on-disk
-  // rewrite has time to settle before we accept server data again.
+  // silent poll resolved between drops). Three guards work together:
+  //
+  // - `mutationVersion` bumps on every optimistic edit. Silent polls
+  //   captured the version at request start; if it has changed by the
+  //   time the response arrives, we discard the response.
+  // - `pendingPersistCount` counts in-flight POSTs (reorder/move). While
+  //   non-zero, silent polls are rejected unconditionally — the backend
+  //   has not yet seen the user's last action, so anything it returns is
+  //   stale relative to the optimistic UI.
+  // - `pendingGroupedSuppressUntil` extends the rejection window past the
+  //   last POST response so the on-disk rewrite (`job.json` files) has
+  //   time to materialise into the next /api/jobs/grouped snapshot.
   private mutationVersion = 0;
+  private pendingPersistCount = 0;
   private pendingGroupedSuppressUntil = 0;
   private static readonly OPTIMISTIC_GRACE_MS = 1500;
+
+  /** Caller invokes when sending a reorder/move POST, then again when the POST resolves. */
+  beginOptimisticPersist(): void {
+    this.pendingPersistCount++;
+  }
+  endOptimisticPersist(): void {
+    if (this.pendingPersistCount > 0) this.pendingPersistCount--;
+    this.pendingGroupedSuppressUntil = Date.now() + JobService.OPTIMISTIC_GRACE_MS;
+  }
 
   readonly jobs = signal<JobInfo[]>([]);
   readonly grouped = signal<GroupedJobs>({ preparation: [], ready: [], progress: [], review: [], completed: [], archive: [] });
@@ -48,6 +64,7 @@ export class JobService {
     const acceptOptimisticTarget = () => {
       if (!silent) return true;
       if (this.mutationVersion !== versionAtStart) return false;
+      if (this.pendingPersistCount > 0) return false;
       if (Date.now() < this.pendingGroupedSuppressUntil) return false;
       return true;
     };
