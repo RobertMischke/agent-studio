@@ -17,6 +17,7 @@ import { ErrorDialogComponent } from './components/board/error-dialog/error-dial
 import { ProjectAutoInfo, ProjectTabsComponent } from './components/board/project-tabs/project-tabs.component';
 import { projectIdentity } from './services/project-identity.util';
 import { DevToolsService } from './services/dev-tools.service';
+import { JobCompletionSoundService } from './services/job-completion-sound.service';
 import { UpdateStableConsoleComponent } from './components/dev-tools/update-stable-console.component';
 import { E2ECleanupDialogComponent } from './components/dev-tools/e2e-cleanup-dialog.component';
 
@@ -1356,6 +1357,7 @@ export class App implements OnInit {
     readonly jobService: JobService,
     readonly errorDialog: ErrorDialogService,
     readonly devTools: DevToolsService,
+    private readonly _completionSound: JobCompletionSoundService,
   ) {
     effect(() => {
       const selected = this.selectedJob();
