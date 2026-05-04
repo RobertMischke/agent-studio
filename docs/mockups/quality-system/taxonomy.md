@@ -178,7 +178,53 @@ executionMode: spawn   # spawn | inject
 
 Project- and task-level override of the execution mode is a future extension; not in the first cut.
 
-## 8. Open questions
+## 8. Security gets promoted on the project page
+
+Security is a Quality dimension by category, but on the project page it earns a different visual weight. The user wants to push engagement: a project without a security baseline should feel actively unfinished, not just "one of many checks not configured".
+
+Treatment in the prototype:
+
+- **Featured panel** at the top of the project detail (right after the paths block), with lock icon, rating pill, last-review line, summary, and a row of strong CTAs (run audit, edit assessment, view files).
+- **Empty-state alert variant** when no review exists yet: red-tinted gradient, "Not yet reviewed" badge, single primary CTA "Run first security audit". Pushes the user to act.
+- **Project list** shows a compact security-rating badge per row so the at-risk projects are visible at a glance.
+- The Quality library still lists `SEC-OVERVIEW`, `SEC-DIFF` etc. as ordinary definitions; the featured panel is a different *view* of the same data, not a duplicate.
+
+Architecture decisions get a similar but less prominent file-list section right below Security; it's important but doesn't carry the same "do this now" pressure.
+
+## 9. Skill Repository
+
+Skills are not part of Quality, but the prototype shows the full Skills section because the user wants a curated, browsable repository.
+
+### Two surfaces
+
+- **Installed** &mdash; what's active in this installation. Built-in skills (ship with the app) cannot be uninstalled; community skills can.
+- **Repository** &mdash; curated catalog. Search bar, dimension filter chips, a "Featured" row at the top, then the full grid. Each entry shows: name, author/id, description, install count, version, license tag, install button.
+
+### Licenses live on each skill
+
+License metadata is shown where it matters: on the skill itself.
+
+- License SPDX tag on every card (Installed and Repository) and on the skill detail page.
+- Copyleft licenses (GPL family) get a `&#9888; copyleft` warning tag.
+- The install dialog states the license, a one-line description of what it allows, and asks the user to confirm compatibility.
+- No separate "License notices" page &mdash; it became another silo to scroll past. The information lives where you look at the skill.
+
+### Storage shape (proposed)
+
+```
+docs/skills/
+  <skill-id>.md            # one markdown file per installed skill, with frontmatter
+  licenses.md              # generated attributions index
+  installed.json           # canonical list (name, version, license, source)
+```
+
+### What we *don't* do
+
+- No direct internet fetch from the UI; install is a recorded intent that the orchestrator executes via a controlled installer (so a malicious skill cannot reach into the project unannounced).
+- No hidden auto-update; updates are explicit.
+- No copy-paste-from-anywhere; skills installed from outside the curated repository must be added manually with a documented license, just like adding a vendored dependency.
+
+## 10. Open questions
 
 1. Top-level navigation label for the section: "Quality" / "Quality System" / "Project Quality" / something else?
 2. Should the library UI be one screen with kind-filter chips, or three separate screens (Audits / Checks / Probes)?

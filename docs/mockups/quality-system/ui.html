@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Quality System &mdash; Clickable Prototype</title>
+<title>Quality + Skills + Project &mdash; Clickable Prototype</title>
 <style>
   :root {
     --base: #1e1e2e;
@@ -32,7 +32,6 @@
   a:hover { text-decoration: underline; }
   code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5px; background: var(--surface0); padding: 1px 5px; border-radius: 3px; }
 
-  /* Top bar */
   header.topbar { display: flex; align-items: center; padding: 0 18px; height: 48px; background: var(--base); border-bottom: 1px solid var(--surface0); position: sticky; top: 0; z-index: 50; }
   .brand { color: var(--mauve); font-weight: 700; margin-right: 28px; letter-spacing: 0.02em; }
   .topnav { display: flex; gap: 4px; }
@@ -43,10 +42,9 @@
   .topbar .spacer { flex: 1; }
   .pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--peach); color: var(--crust); font-weight: 600; letter-spacing: 0.05em; }
 
-  /* Layout */
-  main { padding: 24px 32px 80px; max-width: 1280px; margin: 0 auto; }
+  main { padding: 24px 32px 80px; max-width: 1320px; margin: 0 auto; }
   .crumbs { font-size: 12px; color: var(--overlay1); margin-bottom: 14px; }
-  .crumbs a { color: var(--overlay1); }
+  .crumbs a { color: var(--overlay1); cursor: pointer; }
   .crumbs a:hover { color: var(--subtext0); }
   .crumbs .sep { margin: 0 6px; color: var(--surface2); }
   h1 { font-size: 22px; margin: 0 0 4px; }
@@ -54,8 +52,10 @@
   h3 { font-size: 15px; margin: 0 0 8px; }
   .lede { color: var(--subtext0); margin: 0 0 22px; max-width: 820px; }
   .note { color: var(--overlay1); font-size: 12px; }
+  .empty { padding: 36px; text-align: center; color: var(--overlay1); }
+  hr { border: none; border-top: 1px solid var(--surface0); margin: 18px 0; }
 
-  /* Sidebar layout */
+  /* Sidebar */
   .with-sidebar { display: grid; grid-template-columns: 220px 1fr; gap: 22px; }
   .sidebar { background: var(--base); border: 1px solid var(--surface0); border-radius: 8px; padding: 12px; height: fit-content; position: sticky; top: 70px; }
   .sidebar .group { color: var(--overlay0); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; margin: 8px 8px 4px; }
@@ -64,14 +64,11 @@
   .sidebar a.active { background: var(--surface0); color: var(--text); }
   .sidebar a .count { color: var(--overlay0); font-size: 11px; }
 
-  /* Filter chips */
+  /* Chips */
   .chips { display: flex; gap: 6px; flex-wrap: wrap; }
   .chip { padding: 4px 12px; border-radius: 999px; font-size: 12px; background: var(--surface0); color: var(--subtext0); cursor: pointer; user-select: none; border: 1px solid transparent; }
   .chip:hover { color: var(--text); }
   .chip.active { background: var(--surface1); color: var(--text); border-color: var(--surface2); }
-  .chip.kind-audit.active { color: var(--mauve); border-color: var(--mauve); background: rgba(203,166,247,0.10); }
-  .chip.kind-check.active { color: var(--green); border-color: var(--green); background: rgba(166,227,161,0.10); }
-  .chip.kind-probe.active { color: var(--sky); border-color: var(--sky); background: rgba(137,220,235,0.10); }
 
   /* Cards */
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; }
@@ -96,18 +93,20 @@
   .tag.sev-info { color: var(--subtext0); background: rgba(186,194,222,0.10); }
   .tag.mode-spawn { color: var(--teal); background: rgba(148,226,213,0.12); }
   .tag.mode-inject { color: var(--pink); background: rgba(245,194,231,0.12); }
+  .tag.installed { color: var(--green); background: rgba(166,227,161,0.14); }
+  .tag.license { color: var(--sky); background: rgba(137,220,235,0.10); font-family: ui-monospace, monospace; }
 
-  /* Buttons */
   .btn { background: var(--surface0); color: var(--text); border: 1px solid var(--surface1); padding: 6px 12px; border-radius: 6px; font-size: 13px; cursor: pointer; font-family: inherit; }
   .btn:hover { background: var(--surface1); }
   .btn.primary { background: var(--mauve); color: var(--crust); border-color: var(--mauve); font-weight: 600; }
   .btn.primary:hover { background: var(--pink); border-color: var(--pink); }
+  .btn.warn { background: var(--yellow); color: var(--crust); border-color: var(--yellow); font-weight: 600; }
   .btn.ghost { background: transparent; }
   .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-  .row { display: flex; gap: 8px; align-items: center; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .row .spacer { flex: 1; }
 
-  /* Toggles */
+  /* Toggle rows */
   .check-row { display: grid; grid-template-columns: 36px 1fr auto; gap: 12px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--surface0); }
   .check-row:last-child { border-bottom: none; }
   .check-row.disabled { opacity: 0.55; }
@@ -120,7 +119,6 @@
   .check-row .label .sub { color: var(--overlay1); font-size: 11.5px; margin-top: 3px; }
   .inherit { font-size: 10px; color: var(--overlay0); padding: 1px 6px; border: 1px dashed var(--surface1); border-radius: 3px; }
 
-  /* Boxes */
   .box { background: var(--base); border: 1px solid var(--surface0); border-radius: 8px; }
   .box.padded { padding: 16px; }
 
@@ -134,7 +132,6 @@
   .finding p { margin: 4px 0; font-size: 13px; color: var(--subtext1); }
   .finding .actions { margin-top: 8px; }
 
-  /* Result chips */
   .result-strip { display: flex; gap: 6px; margin: 10px 0; flex-wrap: wrap; }
   .result-chip { font-size: 12px; padding: 3px 10px; border-radius: 999px; display: flex; align-items: center; gap: 6px; }
   .result-chip.pass { background: rgba(166,227,161,0.14); color: var(--green); }
@@ -142,7 +139,6 @@
   .result-chip.fail { background: rgba(243,139,168,0.14); color: var(--red); }
   .result-chip .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 
-  /* Probe bars */
   .bar-row { display: grid; grid-template-columns: 160px 1fr 90px; gap: 10px; align-items: center; padding: 5px 0; font-size: 13px; }
   .bar-track { height: 8px; background: var(--surface0); border-radius: 4px; overflow: hidden; }
   .bar-fill { height: 100%; background: var(--green); }
@@ -150,13 +146,12 @@
   .bar-fill.fail { background: var(--red); }
   .num { font-family: ui-monospace, monospace; color: var(--subtext1); text-align: right; }
 
-  /* Detail layout */
   .two-pane { display: grid; grid-template-columns: 2fr 1fr; gap: 22px; }
-  .kv { display: grid; grid-template-columns: 110px 1fr; gap: 8px 12px; font-size: 13px; }
+  .kv { display: grid; grid-template-columns: 130px 1fr; gap: 8px 12px; font-size: 13px; }
   .kv dt { color: var(--overlay1); }
-  .kv dd { margin: 0; color: var(--text); }
+  .kv dd { margin: 0; color: var(--text); word-break: break-all; }
 
-  /* Radio cards (execution mode) */
+  /* Radio cards */
   .radio-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .radio-card { background: var(--mantle); border: 1px solid var(--surface0); border-radius: 8px; padding: 12px; cursor: pointer; transition: border-color 0.12s; }
   .radio-card:hover { border-color: var(--surface2); }
@@ -170,29 +165,164 @@
   .radio-card .pros li { color: var(--green); }
   .radio-card .cons li { color: var(--peach); }
 
-  /* Markdown-ish block */
   .md-block { background: var(--mantle); border: 1px solid var(--surface0); border-radius: 6px; padding: 12px; font-family: ui-monospace, monospace; font-size: 12.5px; white-space: pre-wrap; color: var(--subtext1); }
 
-  /* Project list rows */
+  /* Project page sections */
+  .proj-section { margin-bottom: 28px; }
+  .proj-section > h3 { margin: 0 0 12px; padding-bottom: 6px; font-size: 14px; font-weight: 600; color: var(--subtext1); border-bottom: 1px solid var(--surface0); }
+  .paths { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; font-size: 13px; }
+  .paths dt { color: var(--overlay1); }
+  .paths dd { margin: 0; font-family: ui-monospace, monospace; color: var(--text); word-break: break-all; }
+  .modes { display: flex; gap: 6px; }
+  .mode-btn { padding: 6px 12px; background: var(--surface0); border: 1px solid var(--surface1); border-radius: 6px; color: var(--subtext0); cursor: pointer; font-size: 13px; }
+  .mode-btn.active { background: var(--mauve); border-color: var(--mauve); color: var(--crust); font-weight: 600; }
+  .lane-counts { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+  .lane-count { background: var(--base); border: 1px solid var(--surface0); border-radius: 6px; padding: 10px; text-align: center; }
+  .lane-count .num { font-size: 18px; color: var(--text); font-family: inherit; }
+  .lane-count .lbl { font-size: 11px; color: var(--overlay1); margin-top: 2px; }
+
+  /* Featured Security Panel */
+  .security-panel {
+    background: linear-gradient(135deg, rgba(243,139,168,0.06), rgba(203,166,247,0.06));
+    border: 1px solid rgba(243,139,168,0.30);
+    border-radius: 10px;
+    padding: 18px 20px;
+    margin-bottom: 28px;
+  }
+  .security-panel.alert { border-color: rgba(243,139,168,0.55); background: linear-gradient(135deg, rgba(243,139,168,0.10), rgba(250,179,135,0.06)); }
+  .security-panel.good { border-color: rgba(166,227,161,0.30); background: linear-gradient(135deg, rgba(166,227,161,0.08), rgba(148,226,213,0.05)); }
+  .security-panel .head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; flex-wrap: wrap; }
+  .security-panel .head .icon { font-size: 18px; }
+  .security-panel .head h3 { margin: 0; font-size: 16px; color: var(--text); }
+  .security-panel .head .rating { font-size: 11px; padding: 2px 10px; border-radius: 999px; font-weight: 600; }
+  .security-panel .head .rating.good { background: var(--green); color: var(--crust); }
+  .security-panel .head .rating.warn { background: var(--yellow); color: var(--crust); }
+  .security-panel .head .rating.bad { background: var(--red); color: var(--crust); }
+  .security-panel .summary { color: var(--subtext1); font-size: 13px; margin: 8px 0 14px; }
+  .security-panel .meta-line { color: var(--overlay1); font-size: 12px; margin-bottom: 14px; }
+  .security-panel .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+  .security-panel .files { margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--surface1); }
+  .security-panel .files .file-line { display: flex; gap: 8px; align-items: center; padding: 4px 0; font-size: 13px; }
+  .security-panel .files .file-line code { font-size: 12px; }
+
+  /* Skill repository */
+  .skill-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--surface0); margin-bottom: 18px; }
+  .skill-tabs a { padding: 8px 16px; color: var(--subtext0); cursor: pointer; border-bottom: 2px solid transparent; font-size: 13px; font-weight: 500; }
+  .skill-tabs a:hover { color: var(--text); text-decoration: none; }
+  .skill-tabs a.active { color: var(--text); border-bottom-color: var(--mauve); }
+  .skill-tabs .badge { font-size: 11px; padding: 1px 7px; border-radius: 999px; background: var(--surface0); color: var(--subtext0); margin-left: 6px; }
+
+  .search-bar { background: var(--base); border: 1px solid var(--surface0); border-radius: 8px; padding: 8px 12px; display: flex; gap: 8px; align-items: center; margin-bottom: 14px; }
+  .search-bar input { background: transparent; border: none; color: var(--text); font: inherit; flex: 1; outline: none; }
+  .search-bar .icon { color: var(--overlay1); }
+
+  .skill-card { background: var(--base); border: 1px solid var(--surface0); border-radius: 8px; padding: 14px; transition: border-color 0.12s; cursor: pointer; }
+  .skill-card:hover { border-color: var(--surface2); }
+  .skill-card.featured { border-color: var(--mauve); background: linear-gradient(135deg, var(--base), rgba(203,166,247,0.04)); }
+  .skill-card .name { font-weight: 600; font-size: 14px; }
+  .skill-card .id { font-family: ui-monospace, monospace; font-size: 11px; color: var(--overlay0); margin-top: 2px; }
+  .skill-card p { margin: 8px 0 10px; color: var(--subtext0); font-size: 13px; min-height: 38px; }
+  .skill-card .stats { display: flex; gap: 12px; font-size: 11.5px; color: var(--overlay1); margin-bottom: 10px; }
+  .skill-card .stats span { display: flex; align-items: center; gap: 4px; }
+  .skill-card .actions { display: flex; gap: 6px; }
+  .featured-banner { display: inline-block; font-size: 10px; background: var(--mauve); color: var(--crust); padding: 1px 7px; border-radius: 3px; font-weight: 700; letter-spacing: 0.05em; margin-bottom: 6px; }
+
+  /* License notices table */
+  .lic-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .lic-table th, .lic-table td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--surface0); }
+  .lic-table th { color: var(--overlay1); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .lic-table tr:last-child td { border-bottom: none; }
+  .lic-table .src { font-family: ui-monospace, monospace; font-size: 11.5px; color: var(--blue); }
+
+  /* Project rows */
   .project-row { padding: 14px; border-bottom: 1px solid var(--surface0); cursor: pointer; display: grid; grid-template-columns: 1fr auto auto; gap: 16px; align-items: center; }
   .project-row:hover { background: var(--surface0); }
   .project-row .name { font-weight: 600; }
   .project-row .path { font-family: ui-monospace, monospace; font-size: 12px; color: var(--overlay1); margin-top: 2px; }
   .project-row .summary { font-size: 12px; color: var(--subtext0); }
+  .project-row .sec-mini { font-size: 11px; padding: 1px 8px; border-radius: 3px; font-weight: 600; }
+  .project-row .sec-mini.good { background: var(--green); color: var(--crust); }
+  .project-row .sec-mini.warn { background: var(--yellow); color: var(--crust); }
+  .project-row .sec-mini.bad { background: var(--red); color: var(--crust); }
+  .project-row .sec-mini.none { background: var(--overlay0); color: var(--crust); }
 
-  /* Skill row */
-  .skill-row { display: grid; grid-template-columns: 1fr auto; padding: 14px; border-bottom: 1px solid var(--surface0); cursor: pointer; gap: 14px; align-items: center; }
-  .skill-row:hover { background: var(--surface0); }
-  .skill-row .desc { color: var(--subtext0); font-size: 13px; margin-top: 4px; }
+  /* File list (architecture / security) */
+  .file-list { padding: 0; list-style: none; margin: 0; }
+  .file-list li { padding: 8px 12px; border-bottom: 1px solid var(--surface0); display: flex; gap: 8px; align-items: center; cursor: pointer; }
+  .file-list li:last-child { border-bottom: none; }
+  .file-list li:hover { background: var(--surface0); }
+  .file-list code { font-size: 12.5px; }
 
-  hr { border: none; border-top: 1px solid var(--surface0); margin: 18px 0; }
+  /* === VS Code-style project shell ============================== */
+  .project-shell { display: grid; grid-template-columns: 220px 1fr; border: 1px solid var(--surface0); border-radius: 8px; overflow: hidden; background: var(--base); min-height: 70vh; }
+  .proj-nav { background: var(--mantle); border-right: 1px solid var(--surface0); padding: 10px 6px; }
+  .proj-nav .group { color: var(--overlay0); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.06em; margin: 8px 12px 4px; }
+  .proj-nav a { display: flex; align-items: center; gap: 10px; padding: 7px 12px; border-radius: 4px; font-size: 13px; color: var(--subtext1); cursor: pointer; border-left: 2px solid transparent; user-select: none; }
+  .proj-nav a:hover { background: var(--surface0); color: var(--text); text-decoration: none; }
+  .proj-nav a.active { background: var(--surface0); color: var(--text); border-left-color: var(--mauve); }
+  .proj-nav a .icon { width: 14px; text-align: center; }
+  .proj-nav a .badge { margin-left: auto; font-size: 10.5px; color: var(--overlay0); padding: 1px 7px; border-radius: 999px; background: var(--surface0); }
+  .proj-nav a.active .badge { background: var(--surface1); color: var(--subtext1); }
+  .proj-nav a .badge.warn { background: var(--yellow); color: var(--crust); }
+  .proj-nav a .badge.bad { background: var(--red); color: var(--crust); }
+  .proj-nav a .badge.good { background: var(--green); color: var(--crust); }
+
+  .proj-content { padding: 14px 22px 26px; overflow-y: auto; min-width: 0; }
+  .proj-content > .section-head { display: flex; align-items: center; gap: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--surface0); margin-bottom: 10px; }
+  .proj-content > .section-head h2 { margin: 0; font-size: 16px; font-weight: 600; color: var(--text); text-transform: none; letter-spacing: 0; }
+  .proj-content > .section-head .desc { color: var(--overlay1); font-size: 12.5px; }
+
+  /* Accordion panel */
+  .panel { border-bottom: 1px solid var(--surface0); }
+  .panel:last-child { border-bottom: none; }
+  .panel-head { display: flex; align-items: center; gap: 8px; padding: 10px 4px; cursor: pointer; user-select: none; color: var(--subtext1); }
+  .panel-head:hover { color: var(--text); }
+  .panel-head .chevron { font-size: 11px; color: var(--overlay1); transition: transform 0.15s; width: 10px; display: inline-block; }
+  .panel.collapsed .panel-head .chevron { transform: rotate(-90deg); }
+  .panel-head .title { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--subtext0); }
+  .panel-head .meta { color: var(--overlay1); font-size: 12px; margin-left: 4px; }
+  .panel-head .actions { margin-left: auto; display: flex; gap: 6px; }
+  .panel-head .actions .btn { padding: 3px 9px; font-size: 11.5px; }
+  .panel-body { padding: 4px 4px 14px; }
+  .panel.collapsed .panel-body { display: none; }
+  .panel.collapsed .panel-head { padding-bottom: 10px; }
+
+  /* Dashboard cards (Overview) */
+  .dash-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin-bottom: 14px; }
+  .dash-card { background: var(--mantle); border: 1px solid var(--surface0); border-radius: 6px; padding: 12px; cursor: pointer; transition: border-color 0.12s; }
+  .dash-card:hover { border-color: var(--surface2); }
+  .dash-card .lbl { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--overlay1); }
+  .dash-card .val { font-size: 17px; margin: 6px 0 4px; color: var(--text); font-weight: 600; }
+  .dash-card .sub { font-size: 12px; color: var(--subtext0); }
+  .dash-card.alert { border-color: rgba(243,139,168,0.40); background: rgba(243,139,168,0.05); }
+  .dash-card.good { border-color: rgba(166,227,161,0.30); }
+
+  .activity-feed { font-size: 12.5px; }
+  .activity-feed .entry { padding: 7px 10px; border-left: 2px solid var(--surface1); margin-bottom: 6px; background: var(--mantle); border-radius: 0 4px 4px 0; }
+  .activity-feed .entry.decision { border-left-color: var(--mauve); }
+  .activity-feed .entry.action { border-left-color: var(--blue); }
+  .activity-feed .entry.observation { border-left-color: var(--teal); }
+  .activity-feed .entry .top { display: flex; gap: 8px; align-items: center; font-size: 10.5px; color: var(--overlay1); margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .activity-feed .entry p { margin: 0; color: var(--subtext1); }
+
+  /* Compact KV inside panels */
+  .compact-kv { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; font-size: 12.5px; align-items: center; }
+  .compact-kv dt { color: var(--overlay1); }
+  .compact-kv dd { margin: 0; color: var(--text); font-family: ui-monospace, monospace; word-break: break-all; }
+
+  /* Section action bar (sticky-ish below head) */
+  .section-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .section-actions .btn { padding: 4px 10px; font-size: 12px; }
 
   /* Toast */
-  #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--surface1); color: var(--text); padding: 10px 18px; border-radius: 8px; border: 1px solid var(--surface2); font-size: 13px; opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 100; }
+  #toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: var(--surface1); color: var(--text); padding: 10px 18px; border-radius: 8px; border: 1px solid var(--surface2); font-size: 13px; opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 100; max-width: 80vw; text-align: center; }
   #toast.show { opacity: 1; }
 
-  /* Empty state */
-  .empty { padding: 40px; text-align: center; color: var(--overlay1); }
+  /* Dialog */
+  .dialog-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 200; }
+  .dialog { background: var(--base); border: 1px solid var(--surface1); border-radius: 10px; max-width: 560px; width: 92vw; padding: 22px; max-height: 80vh; overflow-y: auto; }
+  .dialog h2 { margin: 0 0 8px; font-size: 16px; color: var(--text); text-transform: none; letter-spacing: 0; }
+  .dialog .actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 18px; }
 </style>
 </head>
 <body>
@@ -200,17 +330,18 @@
 <header class="topbar">
   <span class="brand">Agent Task Processor</span>
   <nav class="topnav" id="topnav">
-    <a data-route="#/board">Board</a>
-    <a data-route="#/projects">Projects</a>
-    <a data-route="#/skills">Skills</a>
-    <a data-route="#/quality" class="new">Quality</a>
+    <a data-nav="#/board">Board</a>
+    <a data-nav="#/projects">Projects</a>
+    <a data-nav="#/skills" class="new">Skills</a>
   </nav>
   <span class="spacer"></span>
+  <a data-nav="#/settings" class="topnav-gear" title="Settings (master data)" style="color: var(--subtext0); font-size: 16px; padding: 6px 10px; cursor: pointer; margin-right: 6px;">⚙</a>
   <span class="pill">DEV</span>
 </header>
 
 <main id="app"></main>
 <div id="toast"></div>
+<div id="dialog-root"></div>
 
 <script>
 //
@@ -221,36 +352,36 @@ const DIMENSIONS = ['security', 'traceability', 'performance', 'code-quality', '
 const definitions = [
   { id:'SEC-OVERVIEW', kind:'audit', dimension:'security', scope:'project', severity:'high',
     title:'Security overview audit',
-    description:'Re-checks the project security overview against the current code. Holistic, manual, long-running.',
-    instructions:'Compare docs/security/overview.md and docs/security/requirements.md against the current backend and frontend code. Flag any drift, missing controls, undocumented attack surfaces.' },
+    description:'Re-checks the project security overview against the current code. Holistic, manual.',
+    instructions:'Compare docs/security/overview.md and docs/security/requirements.md against the current backend and frontend code. Flag drift, missing controls, undocumented attack surfaces.' },
   { id:'ARCH-DRIFT', kind:'audit', dimension:'architecture', scope:'project', severity:'warn',
     title:'Architecture drift',
     description:'Compares current architecture against the ADR archive. Flags decisions that have silently eroded.',
-    instructions:'Walk through every ADR in docs/architecture-decisions.md. For each, check if the codebase still matches its intent. Report drifts.' },
+    instructions:'Walk through every ADR in docs/architecture-decisions.md. For each, check if the codebase still matches its intent.' },
   { id:'TRACEABILITY-COVERAGE', kind:'audit', dimension:'traceability', scope:'project', severity:'warn',
     title:'Traceability coverage',
     description:'Verifies error and slow-op instrumentation across the whole codebase.',
-    instructions:'Survey the frontend and backend for global error handlers, structured logging, request timing, and long-task observability. Flag gaps.' },
+    instructions:'Survey for global error handlers, structured logging, request timing, and long-task observability.' },
   { id:'CODE-CHECK', kind:'check', dimension:'code-quality', scope:'task', severity:'warn', executionMode:'spawn',
     title:'Code review on diff',
     description:'Reviews the diff this task produced. Style, naming, dead code, missing tests.',
-    instructions:'Read the diff produced by this task. Review for code quality, naming, dead code, and missing tests. Emit findings as [[CHECK_RESULT: ...]].' },
+    instructions:'Read the diff. Review for code quality, naming, dead code, missing tests. Emit findings.' },
   { id:'TRACEABILITY-DIFF', kind:'check', dimension:'traceability', scope:'task', severity:'warn', executionMode:'spawn',
     title:'Traceability on diff',
     description:'Checks the diff adds error handling and timing where it touches new paths.',
-    instructions:'Read the diff. For every new code path, verify: errors are caught and reported, slow operations are timed. Emit findings.' },
+    instructions:'Read the diff. For every new code path: errors are caught and reported, slow ops are timed.' },
   { id:'SEC-DIFF', kind:'check', dimension:'security', scope:'task', severity:'high', executionMode:'spawn',
     title:'Security check on diff',
     description:'Pattern check on changed files: input validation, secret leakage, eval, path traversal.',
-    instructions:'Scan the diff for security smells: input validation gaps, secret literals, eval, shell injection, path traversal.' },
+    instructions:'Scan the diff for security smells: input validation gaps, secret literals, eval, shell injection.' },
   { id:'TEST-COVERAGE-DELTA', kind:'check', dimension:'code-quality', scope:'task', severity:'info', executionMode:'inject',
     title:'Test coverage delta',
     description:'Warns if new code paths land without test coverage.',
-    instructions:'Before reporting [[TASK_DONE]], confirm new code paths are covered by at least one test. If not, list which.' },
+    instructions:'Before reporting [[TASK_DONE]], confirm new code paths are covered by at least one test.' },
   { id:'STYLE-LINT', kind:'check', dimension:'code-quality', scope:'task', severity:'info', executionMode:'inject',
     title:'Style and lint',
     description:'Cheap stylistic self-check appended to the prompt.',
-    instructions:'Before finishing, re-read your own changes and ensure naming, formatting, and import order match the surrounding file.' },
+    instructions:'Re-read your changes and ensure naming, formatting, and import order match surrounding files.' },
   { id:'STARTUP-LATENCY', kind:'probe', dimension:'performance', scope:'runtime', severity:'warn',
     title:'App startup latency',
     description:'Cold-starts the frontend, measures time-to-interactive.',
@@ -262,23 +393,68 @@ const definitions = [
 ];
 
 const projects = [
-  { id:'agent-taskboard-dev', name:'Agent Task Processor', path:'c:\\Projects\\agent-taskboard-devspace\\agent-taskboard-dev',
+  {
+    id:'agent-taskboard-dev',
+    name:'Agent Task Processor',
+    path:'c:\\Projects\\agent-taskboard-devspace\\agent-taskboard-dev',
+    rootPath:'c:\\Projects\\agent-taskboard-devspace\\agent-taskboard-dev',
+    repositoryPath:'c:\\Projects\\agent-taskboard-devspace\\agent-taskboard-dev',
+    runnerMode: 'auto',
+    orchestratorModel: 'claude-opus-4-7',
+    autoCommit: true,
+    laneCounts: [
+      { state:'1-preparation', count: 3 }, { state:'2-ready', count: 7 }, { state:'3-progress', count: 1 },
+      { state:'4-review', count: 4 }, { state:'5-completed', count: 38 }, { state:'6-archive', count: 142 },
+    ],
+    orchSession: { live: true, model:'claude-opus-4-7', sessionId:'01HGZW...A93C', bootedAt:'2026-05-04T08:14:22Z', calls: 17 },
     audits: ['SEC-OVERVIEW','ARCH-DRIFT','TRACEABILITY-COVERAGE'],
     taskCheckDefaults: { 'CODE-CHECK': true, 'TRACEABILITY-DIFF': true, 'SEC-DIFF': true, 'TEST-COVERAGE-DELTA': false, 'STYLE-LINT': true },
     probes: ['STARTUP-LATENCY','BOARD-POLL-ROUNDTRIP'],
-    lastAudit: '2026-05-02' },
-  { id:'orchestrator-target-x', name:'Orchestrator Target X', path:'c:\\Projects\\orchestrator-target-x',
+    security: {
+      rating: 'Baseline OK', // 'Baseline OK' | 'Needs review' | 'At risk' | null
+      lastReview: '2026-04-15',
+      reviewer: 'claude',
+      summary: 'Watch-path validation has been audited; SignalR hub surface is documented. No critical drift since the last review.',
+      files: [
+        { path:'docs/security/overview.md', size:'4.2 KB' },
+        { path:'docs/security/requirements.md', size:'2.1 KB' },
+        { path:'docs/security/reviews/2026-04-15-baseline.md', size:'7.8 KB' },
+        { path:'docs/security/reviews/2026-03-02-initial.md', size:'5.4 KB' },
+      ],
+    },
+    architecture: {
+      files: [
+        { path:'docs/architecture-decisions.md', size:'18.7 KB' },
+      ],
+      lastUpdate: '2026-04-28',
+      adrCount: 8,
+    },
+  },
+  {
+    id:'orchestrator-target-x',
+    name:'Orchestrator Target X',
+    path:'c:\\Projects\\orchestrator-target-x',
+    rootPath:'c:\\Projects\\orchestrator-target-x',
+    repositoryPath:'c:\\Projects\\orchestrator-target-x',
+    runnerMode: 'manual',
+    orchestratorModel: 'claude-sonnet-4-6',
+    autoCommit: false,
+    laneCounts: [
+      { state:'1-preparation', count: 1 }, { state:'2-ready', count: 0 }, { state:'3-progress', count: 0 },
+      { state:'4-review', count: 0 }, { state:'5-completed', count: 4 }, { state:'6-archive', count: 12 },
+    ],
+    orchSession: null,
     audits: ['SEC-OVERVIEW'],
     taskCheckDefaults: { 'CODE-CHECK': true, 'TRACEABILITY-DIFF': false, 'SEC-DIFF': true, 'TEST-COVERAGE-DELTA': false, 'STYLE-LINT': false },
     probes: [],
-    lastAudit: 'never' },
+    security: { rating: null, lastReview: null, reviewer: null, summary: null, files: [] },
+    architecture: { files: [], lastUpdate: null, adrCount: 0 },
+  },
 ];
 
 const jobs = [
   { id:'refactor-job-service', title:'Refactor JobService.fetchAll polling', state:'3-progress', cli:'claude', runs:2, project:'agent-taskboard-dev',
-    inheritDefaults: true,
-    enabledOverrides: {},
-    extra: [],
+    inheritDefaults: true, enabledOverrides: {}, extra: [],
     findings: [
       { id:'f1', severity:'high', checkId:'SEC-DIFF', file:'backend/Services/JobService.cs:142', message:'User-supplied watchPath reaches Path.Combine without validation. Possible path traversal.', acked:false },
       { id:'f2', severity:'warn', checkId:'TRACEABILITY-DIFF', file:'frontend/src/app/services/job.service.ts:88', message:'New polling loop has no error-handler around the HTTP call; failures are swallowed silently.', acked:false },
@@ -289,55 +465,76 @@ const jobs = [
   { id:'add-best-practices-section', title:'Add best-practices section to project detail', state:'2-ready', cli:'codex', runs:0, project:'agent-taskboard-dev', inheritDefaults: true, enabledOverrides:{}, extra:[], findings:[], results:{} },
 ];
 
-const skills = [
-  { id:'GENERATE-TASKS-FROM-FINDINGS', name:'Turn findings into tasks', when:'After an audit or task-check run', dimension:'workflow',
-    description:'Reads a Quality findings list and creates a queued task per finding, scoped to the relevant file.' },
+const installedSkills = [
+  { id:'GENERATE-TASKS-FROM-FINDINGS', name:'Turn findings into tasks', when:'After audit / check run', dimension:'workflow',
+    description:'Reads a Quality findings list and creates a queued task per finding, scoped to the relevant file.',
+    license:'MIT', source:'built-in', version:'1.0.0', installed:true },
   { id:'FIND-PROJECT-WORK', name:'Project work discovery', when:'Manually from the project detail', dimension:'workflow',
-    description:'Surveys repo state (open issues, recent regressions, drift) and proposes high-value tasks for the queue.' },
+    description:'Surveys repo state (open issues, recent regressions, drift) and proposes high-value tasks for the queue.',
+    license:'MIT', source:'built-in', version:'1.0.0', installed:true },
   { id:'REWRITE-PROMPT', name:'Rewrite task prompt', when:'On user request from a queued task', dimension:'authoring',
-    description:'Improves the clarity, scope, and acceptance criteria of a queued prompt before pickup.' },
+    description:'Improves the clarity, scope, and acceptance criteria of a queued prompt before pickup.',
+    license:'MIT', source:'built-in', version:'1.0.0', installed:true },
   { id:'SUMMARIZE-RUN', name:'Summarize run output', when:'After CLI run completes', dimension:'reporting',
-    description:'Compresses long CLI output into a structured status digest for the protocol view.' },
+    description:'Compresses long CLI output into a structured status digest for the protocol view.',
+    license:'MIT', source:'built-in', version:'1.0.0', installed:true },
   { id:'TARGET-INSTRUCTION-SYNC', name:'Sync target project instructions', when:'When onboarding a watched project', dimension:'onboarding',
-    description:'Renders AGENTS.md and the agent task contract into a watched target project.' },
+    description:'Renders AGENTS.md and the agent task contract into a watched target project.',
+    license:'MIT', source:'built-in', version:'1.0.0', installed:true },
+];
+
+// Curated repository (mock catalog: presented as community / first-party offerings).
+// Each entry carries license info and source; install must record an attribution.
+const skillRepository = [
+  { id:'adr-writer', type:'workflow', name:'ADR Writer', dimension:'authoring', featured:true, description:'Generate Architecture Decision Records from chat decisions or PR descriptions.', license:'MIT', source:'github.com/atp-skills/adr-writer', author:'atp-skills', version:'2.1.0', installs:'12.4k' },
+  { id:'commit-message-pro', type:'workflow', name:'Commit Message Pro', dimension:'workflow', featured:true, description:'Conventional Commits assistant; reads diff, drafts message, supports breaking-change footers.', license:'Apache-2.0', source:'github.com/atp-skills/commit-message-pro', author:'atp-skills', version:'3.0.4', installs:'38.1k' },
+  { id:'pr-description-builder', type:'workflow', name:'PR Description Builder', dimension:'workflow', featured:false, description:'Auto-generate pull-request descriptions from the diff plus the linked task.', license:'MIT', source:'github.com/atp-skills/pr-description-builder', author:'atp-skills', version:'1.4.2', installs:'22.7k' },
+  { id:'stack-trace-explainer', type:'workflow', name:'Stack Trace Explainer', dimension:'debugging', featured:false, description:'Decode stack traces, walk back to the most likely root cause, suggest a minimal repro.', license:'MIT', source:'github.com/atp-skills/stack-trace-explainer', author:'atp-skills', version:'1.2.0', installs:'9.3k' },
+  { id:'test-generator', type:'workflow', name:'Test Generator', dimension:'testing', featured:true, description:'Generate xUnit / Jest / Playwright tests from a function signature and example call.', license:'BSD-3-Clause', source:'github.com/community/test-generator', author:'community', version:'0.9.1', installs:'15.0k' },
+  { id:'a11y-auditor', type:'audit', name:'Accessibility Auditor', dimension:'audit', featured:true, description:'WCAG 2.2 audit on rendered pages, with prioritised, fix-ready findings.', license:'Apache-2.0', source:'github.com/community/a11y-auditor', author:'community', version:'2.5.0', installs:'6.2k' },
+  { id:'dep-analyzer', type:'audit', name:'Dependency Analyzer', dimension:'audit', featured:false, description:'Find unused, outdated, or duplicated dependencies; flag CVE-affected versions.', license:'MIT', source:'github.com/community/dep-analyzer', author:'community', version:'4.0.0', installs:'28.5k' },
+  { id:'threat-modeler', type:'audit', name:'Threat Modeler (STRIDE)', dimension:'security', featured:true, description:'STRIDE-based threat model from architecture docs and an entry-point inventory.', license:'GPL-3.0', source:'github.com/community/threat-modeler', author:'community', version:'1.0.0', installs:'4.1k', licenseWarn:true },
+  { id:'i18n-extractor', type:'workflow', name:'i18n Extractor', dimension:'workflow', featured:false, description:'Extract user-facing strings for translation; produces a JSON message catalogue.', license:'ISC', source:'github.com/community/i18n-extractor', author:'community', version:'1.6.0', installs:'7.3k' },
+  { id:'release-notes-curator', type:'workflow', name:'Release Notes Curator', dimension:'reporting', featured:false, description:'Build release notes from commits + PRs since the last tag, grouped by theme.', license:'MIT', source:'github.com/atp-skills/release-notes-curator', author:'atp-skills', version:'2.0.1', installs:'18.6k' },
+  { id:'flaky-test-hunter', type:'check', name:'Flaky Test Hunter', dimension:'testing', featured:false, description:'Re-runs suspect specs after each task and quarantines unstable ones. Runs as a per-task check.', license:'MIT', source:'github.com/community/flaky-test-hunter', author:'community', version:'1.1.0', installs:'11.4k' },
+  { id:'db-migration-buddy', type:'check', name:'DB Migration Buddy', dimension:'safety', featured:false, description:'Per-task: when a task touches migrations, plan dry-run, check online safety, draft rollback.', license:'BSD-3-Clause', source:'github.com/community/db-migration-buddy', author:'community', version:'1.3.2', installs:'5.0k' },
 ];
 
 const ui = {
   libraryFilterKind: 'all',
   libraryFilterDimension: 'all',
-  expandedProject: null,
+  skillsTab: 'installed', // installed | repository
+  skillsSearch: '',
+  skillsRepoDimension: 'all',
+  skillsTypeFilter: 'all', // all | workflow | audit | check
+  projectSection: 'overview', // overview | security | architecture | quality | jobs | settings | orchestrator | activity
+  collapsedPanels: {}, // key -> true
 };
 
 //
 // === ROUTER ==========================================================
 //
-function navigate(hash) {
-  if (location.hash !== hash) location.hash = hash;
-  else render();
-}
+function navigate(hash) { if (location.hash !== hash) location.hash = hash; else render(); }
 window.addEventListener('hashchange', render);
-
-function getRoute() {
-  const hash = location.hash || '#/quality';
-  const parts = hash.replace(/^#\//, '').split('/');
-  return { hash, parts };
-}
+function getRoute() { const hash = location.hash || '#/projects/agent-taskboard-dev'; const parts = hash.replace(/^#\//, '').split('/'); return { hash, parts }; }
 
 //
 // === HELPERS =========================================================
 //
 const $ = (id) => document.getElementById(id);
 function el(html) { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; }
-function esc(s) { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
-function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast._h); toast._h = setTimeout(()=>t.classList.remove('show'), 1800); }
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toast._h); toast._h = setTimeout(()=>t.classList.remove('show'), 1900); }
 function defById(id) { return definitions.find(d => d.id === id); }
 function projectById(id) { return projects.find(p => p.id === id); }
 function jobById(id) { return jobs.find(j => j.id === id); }
-function skillById(id) { return skills.find(s => s.id === id); }
+function allSkills() { return [...installedSkills, ...skillRepository.filter(r => !installedSkills.find(i => i.id === r.id))]; }
+function skillById(id) { return allSkills().find(s => s.id === id); }
+function isInstalled(id) { return !!installedSkills.find(s => s.id === id); }
+function ratingClass(r) { if (!r) return 'none'; if (r === 'Baseline OK') return 'good'; if (r === 'Needs review') return 'warn'; return 'bad'; }
 
 function tagsForDef(d) {
-  const kindCls = d.kind;
-  const t = [`<span class="tag ${kindCls}">${esc(d.kind === 'check' ? 'Task Check' : d.kind === 'audit' ? 'Audit' : 'Probe')}</span>`];
+  const t = [`<span class="tag ${d.kind}">${esc(d.kind === 'check' ? 'Task Check' : d.kind === 'audit' ? 'Audit' : 'Probe')}</span>`];
   t.push(`<span class="tag scope">${esc(d.scope)}</span>`);
   t.push(`<span class="tag dim">${esc(d.dimension)}</span>`);
   t.push(`<span class="tag sev-${d.severity}">${esc(d.severity)}</span>`);
@@ -351,20 +548,26 @@ function effectiveChecksForJob(job) {
   for (const def of definitions.filter(d => d.kind === 'check')) {
     const inheritedOn = !!project.taskCheckDefaults[def.id];
     let on = inheritedOn;
-    if (job.inheritDefaults && def.id in job.enabledOverrides) on = job.enabledOverrides[def.id];
+    if (def.id in job.enabledOverrides) on = job.enabledOverrides[def.id];
     if (job.extra.includes(def.id)) on = true;
-    out.push({ def, on, inherited: inheritedOn, overridden: def.id in job.enabledOverrides });
+    out.push({ def, on, inherited: inheritedOn });
   }
   return out;
 }
 
 function setActiveNav() {
   const { hash } = getRoute();
-  document.querySelectorAll('#topnav a').forEach(a => {
-    const r = a.dataset.route;
-    a.classList.toggle('active', hash.startsWith(r));
-  });
+  document.querySelectorAll('#topnav a').forEach(a => a.classList.toggle('active', hash.startsWith(a.dataset.nav)));
 }
+
+function showDialog(html) {
+  const root = $('dialog-root');
+  root.innerHTML = '';
+  const bg = el(`<div class="dialog-bg"><div class="dialog">${html}</div></div>`);
+  bg.addEventListener('click', (e) => { if (e.target === bg) closeDialog(); });
+  root.appendChild(bg);
+}
+function closeDialog() { $('dialog-root').innerHTML = ''; }
 
 //
 // === ROUTES ==========================================================
@@ -372,14 +575,15 @@ function setActiveNav() {
 function render() {
   setActiveNav();
   const { parts } = getRoute();
-  const root = parts[0] || 'quality';
+  const root = parts[0] || 'projects';
   const app = $('app');
   app.innerHTML = '';
-  if (root === '' || root === 'quality') return renderQuality(app, parts);
+  if (root === 'quality') return renderQuality(app, parts);
   if (root === 'projects') return renderProjects(app, parts);
   if (root === 'skills') return renderSkills(app, parts);
   if (root === 'jobs') return renderJob(app, parts);
   if (root === 'board') return renderBoard(app);
+  if (root === 'settings') return renderSettings(app, parts);
   app.appendChild(el(`<div class="empty">Unknown route: ${esc(parts.join('/'))}</div>`));
 }
 
@@ -408,83 +612,267 @@ function renderBoard(app) {
 // --- Projects list + detail ---
 //
 function renderProjects(app, parts) {
-  if (parts.length === 1) {
-    const list = el(`<div>
-      <h1>Projects</h1>
-      <p class="lede">Watched workspaces. Click a project to manage its Quality configuration.</p>
-      <div class="box" id="project-list"></div>
-    </div>`);
-    app.appendChild(list);
-    const listBox = list.querySelector('#project-list');
-    for (const p of projects) {
-      const enabledDefaults = Object.values(p.taskCheckDefaults).filter(Boolean).length;
-      const row = el(`
-        <div class="project-row" data-nav="#/projects/${p.id}">
-          <div>
-            <div class="name">${esc(p.name)}</div>
-            <div class="path">${esc(p.path)}</div>
-          </div>
-          <div class="summary">
-            <div>${p.audits.length} audits &middot; ${enabledDefaults} task-check defaults &middot; ${p.probes.length} probes</div>
-            <div>Last audit: ${esc(p.lastAudit)}</div>
-          </div>
-          <div><span class="tag">${p.id === 'agent-taskboard-dev' ? 'this repo' : 'watched'}</span></div>
-        </div>
-      `);
-      listBox.appendChild(row);
-    }
-    return;
-  }
+  if (parts.length === 1) return renderProjectsList(app);
+  return renderProjectDetail(app, parts[1]);
+}
 
-  const project = projectById(parts[1]);
+function renderProjectsList(app) {
+  const wrap = el(`<div>
+    <h1>Projects</h1>
+    <p class="lede">Watched workspaces. Click a project to manage everything: settings, security, architecture, and Quality.</p>
+    <div class="box" id="project-list"></div>
+  </div>`);
+  app.appendChild(wrap);
+  const listBox = wrap.querySelector('#project-list');
+  for (const p of projects) {
+    const enabledDefaults = Object.values(p.taskCheckDefaults).filter(Boolean).length;
+    const cls = ratingClass(p.security.rating);
+    const ratingText = p.security.rating || 'No baseline';
+    listBox.appendChild(el(`
+      <div class="project-row" data-nav="#/projects/${p.id}">
+        <div>
+          <div class="name">${esc(p.name)}</div>
+          <div class="path">${esc(p.path)}</div>
+        </div>
+        <div class="summary">
+          <div>${p.audits.length} audits &middot; ${enabledDefaults} task-check defaults &middot; ${p.probes.length} probes</div>
+          <div>Last security review: ${esc(p.security.lastReview || 'never')}</div>
+        </div>
+        <div><span class="sec-mini ${cls}">🔒 ${esc(ratingText)}</span></div>
+      </div>
+    `));
+  }
+}
+
+function renderProjectDetail(app, id) {
+  const project = projectById(id);
   if (!project) return app.appendChild(el(`<div class="empty">Project not found</div>`));
 
-  const wrap = el(`
-    <div>
-      <div class="crumbs"><a data-nav="#/projects">Projects</a><span class="sep">/</span>${esc(project.name)}</div>
-      <h1>${esc(project.name)}</h1>
-      <p class="lede"><code>${esc(project.path)}</code></p>
+  const projectJobs = jobs.filter(j => j.project === project.id);
+  const findingsCount = projectJobs.reduce((n, j) => n + j.findings.filter(f => !f.acked).length, 0);
+  const enabledChecks = Object.values(project.taskCheckDefaults).filter(Boolean).length;
+  const secCls = ratingClass(project.security.rating);
 
-      <h2>Project Audits</h2>
-      <p class="note">Holistic, manual examinations. Run on demand. Findings can be turned into tasks.</p>
-      <div class="box" id="audit-list"></div>
-
-      <h2>Task Check defaults</h2>
-      <p class="note">Applied to every task in this project. Toggle here for the whole project; toggle on the task to override individually.</p>
-      <div class="box" id="check-list"></div>
-
-      <h2>Performance Probes</h2>
-      <p class="note">Live runtime measurements.</p>
-      <div class="box" id="probe-list"></div>
-
-      <h2>Project jobs</h2>
-      <div class="box" id="job-list"></div>
+  const wrap = el(`<div>
+    <div class="crumbs"><a data-nav="#/projects">Projects</a><span class="sep">/</span>${esc(project.name)}</div>
+    <div class="row" style="margin-bottom: 14px">
+      <h1 style="margin:0">${esc(project.name)}</h1>
+      <span class="tag">${project.id === 'agent-taskboard-dev' ? 'this repo' : 'watched'}</span>
+      <div class="spacer"></div>
+      <button class="btn ghost" data-action="open-feed">📜 Open feed</button>
     </div>
-  `);
+
+    <div class="project-shell">
+      <aside class="proj-nav" id="proj-nav">
+        <div class="group">Project</div>
+        <a data-action="proj-section" data-value="overview" class="${ui.projectSection==='overview'?'active':''}"><span class="icon">📊</span>Overview</a>
+        <a data-action="proj-section" data-value="security" class="${ui.projectSection==='security'?'active':''}"><span class="icon">🔒</span>Security ${secCls!=='none'?`<span class="badge ${secCls}">${esc(project.security.rating || '')}</span>`:`<span class="badge bad">!</span>`}</a>
+        <a data-action="proj-section" data-value="architecture" class="${ui.projectSection==='architecture'?'active':''}"><span class="icon">📐</span>Architecture <span class="badge">${project.architecture.adrCount}</span></a>
+        <a data-action="proj-section" data-value="quality" class="${ui.projectSection==='quality'?'active':''}"><span class="icon">✅</span>Quality <span class="badge">${project.audits.length + enabledChecks + project.probes.length}</span></a>
+        <a data-action="proj-section" data-value="jobs" class="${ui.projectSection==='jobs'?'active':''}"><span class="icon">📋</span>Jobs <span class="badge ${findingsCount?'warn':''}">${projectJobs.length}</span></a>
+        <div class="group">Configuration</div>
+        <a data-action="proj-section" data-value="settings" class="${ui.projectSection==='settings'?'active':''}"><span class="icon">⚙</span>Settings</a>
+        <a data-action="proj-section" data-value="orchestrator" class="${ui.projectSection==='orchestrator'?'active':''}"><span class="icon">🤖</span>Orchestrator ${project.orchSession?'<span class="badge good">●</span>':''}</a>
+        <a data-action="proj-section" data-value="activity" class="${ui.projectSection==='activity'?'active':''}"><span class="icon">📜</span>Activity</a>
+      </aside>
+      <div class="proj-content" id="proj-content"></div>
+    </div>
+  </div>`);
   app.appendChild(wrap);
 
-  const auditBox = wrap.querySelector('#audit-list');
-  for (const id of project.audits) {
-    const d = defById(id);
-    auditBox.appendChild(el(`
-      <div class="check-row">
-        <div></div>
-        <div class="label" data-nav="#/quality/${d.id}" style="cursor:pointer">
-          <div class="top"><strong>${d.id}</strong> ${tagsForDef(d)}</div>
-          <div class="sub">${esc(d.title)} &middot; last run: ${id === 'SEC-OVERVIEW' ? '2026-04-15 (2 high, 4 warn)' : 'never'}</div>
+  const content = wrap.querySelector('#proj-content');
+  const renderers = {
+    overview: renderProjOverview,
+    security: renderProjSecurity,
+    architecture: renderProjArchitecture,
+    quality: renderProjQuality,
+    jobs: renderProjJobs,
+    settings: renderProjSettings,
+    orchestrator: renderProjOrchestrator,
+    activity: renderProjActivity,
+  };
+  (renderers[ui.projectSection] || renderProjOverview)(content, project, projectJobs);
+}
+
+// ---- helper for collapsible panels ----
+function panel(key, title, opts = {}) {
+  const collapsed = !!ui.collapsedPanels[key];
+  const meta = opts.meta ? `<span class="meta">${opts.meta}</span>` : '';
+  const actions = opts.actions ? `<div class="actions" data-stop>${opts.actions}</div>` : '';
+  const wrap = el(`
+    <section class="panel ${collapsed?'collapsed':''}" data-panel="${esc(key)}">
+      <header class="panel-head" data-action="toggle-panel" data-key="${esc(key)}">
+        <span class="chevron">▾</span><span class="title">${title}</span>${meta}${actions}
+      </header>
+      <div class="panel-body"></div>
+    </section>
+  `);
+  return wrap;
+}
+function pBody(p) { return p.querySelector('.panel-body'); }
+
+// ---- Overview (dashboard) ----
+function renderProjOverview(content, project, projectJobs) {
+  const sec = project.security;
+  const secCls = ratingClass(sec.rating);
+  const findingsCount = projectJobs.reduce((n, j) => n + j.findings.filter(f => !f.acked).length, 0);
+  content.appendChild(el(`<div class="section-head"><h2>Overview</h2><span class="desc">Snapshot of project health and quick actions</span></div>`));
+
+  const dash = el(`<div class="dash-grid"></div>`);
+  dash.appendChild(el(`
+    <div class="dash-card ${secCls === 'bad' || secCls === 'none' ? 'alert' : secCls === 'good' ? 'good' : ''}" data-action="proj-section" data-value="security">
+      <div class="lbl">🔒 Security</div>
+      <div class="val">${esc(sec.rating || 'No baseline')}</div>
+      <div class="sub">${sec.lastReview ? 'Last review ' + esc(sec.lastReview) : 'Run audit to establish baseline'}</div>
+    </div>
+  `));
+  dash.appendChild(el(`
+    <div class="dash-card" data-action="proj-section" data-value="quality">
+      <div class="lbl">✅ Quality</div>
+      <div class="val">${project.audits.length + Object.values(project.taskCheckDefaults).filter(Boolean).length} active</div>
+      <div class="sub">${project.audits.length} audits · ${Object.values(project.taskCheckDefaults).filter(Boolean).length} task checks · ${project.probes.length} probes</div>
+    </div>
+  `));
+  dash.appendChild(el(`
+    <div class="dash-card ${findingsCount?'alert':''}" data-action="proj-section" data-value="jobs">
+      <div class="lbl">📋 Jobs</div>
+      <div class="val">${projectJobs.length}</div>
+      <div class="sub">${findingsCount} open finding${findingsCount===1?'':'s'}</div>
+    </div>
+  `));
+  dash.appendChild(el(`
+    <div class="dash-card ${project.orchSession?'good':''}" data-action="proj-section" data-value="orchestrator">
+      <div class="lbl">🤖 Orchestrator</div>
+      <div class="val">${project.orchSession ? '● Live' : 'Idle'}</div>
+      <div class="sub">${project.orchSession ? esc(project.orchSession.model) + ' · ' + project.orchSession.calls + ' calls' : 'No session booted'}</div>
+    </div>
+  `));
+  content.appendChild(dash);
+
+  const p1 = panel('ov-quick', 'Quick actions', {});
+  pBody(p1).appendChild(el(`<div class="section-actions">
+    <button class="btn primary" data-action="run-audit" data-id="SEC-OVERVIEW">Run security audit</button>
+    <button class="btn" data-action="run-audit" data-id="ARCH-DRIFT">Check architecture drift</button>
+    <button class="btn" data-action="run-audit" data-id="TRACEABILITY-COVERAGE">Run traceability audit</button>
+    <button class="btn ghost" data-nav="#/quality">Open Quality library</button>
+    <button class="btn ghost" data-action="open-feed">Open orchestrator feed</button>
+  </div>`));
+  content.appendChild(p1);
+
+  const p2 = panel('ov-paths', 'Paths', { meta: '3 entries' });
+  pBody(p2).appendChild(el(`<dl class="compact-kv">
+    <dt>Watch path</dt><dd>${esc(project.path)}</dd>
+    <dt>Working directory</dt><dd>${esc(project.rootPath || '(same as watch path)')}</dd>
+    <dt>Repository</dt><dd>${esc(project.repositoryPath || '(none)')}</dd>
+  </dl>`));
+  content.appendChild(p2);
+
+  const p3 = panel('ov-lanes', 'Lane counts', { meta: projectJobs.length + ' total' });
+  pBody(p3).appendChild(el(`<div class="lane-counts">${project.laneCounts.map(l => `<div class="lane-count"><div class="num">${l.count}</div><div class="lbl">${l.state}</div></div>`).join('')}</div>`));
+  content.appendChild(p3);
+}
+
+// ---- Security ----
+function renderProjSecurity(content, project) {
+  const sec = project.security;
+  const cls = ratingClass(sec.rating);
+  content.appendChild(el(`<div class="section-head"><h2>🔒 Security</h2><span class="desc">Baseline, reviews, and active findings for this project</span></div>`));
+
+  const featured = el(`<div></div>`);
+  if (!sec.rating) {
+    featured.appendChild(el(`
+      <div class="security-panel alert">
+        <div class="head"><span class="icon">🔒</span><h3>Not yet reviewed</h3><span class="rating bad">⚠ baseline missing</span></div>
+        <p class="summary">This project has no security baseline yet. Running the Security Audit creates the initial overview, requirements, and findings under <code>docs/security/</code>.</p>
+        <div class="actions">
+          <button class="btn warn" data-action="run-audit" data-id="SEC-OVERVIEW">Run first security audit</button>
+          <button class="btn ghost" data-nav="#/quality/SEC-OVERVIEW">What does this audit do?</button>
         </div>
-        <div class="row">
-          ${id === 'SEC-OVERVIEW' ? '<button class="btn ghost" data-nav="#/quality/runs/SEC-OVERVIEW">View report</button>' : ''}
-          <button class="btn" data-action="run-audit" data-id="${d.id}">Run now</button>
+      </div>
+    `));
+  } else {
+    featured.appendChild(el(`
+      <div class="security-panel ${cls === 'good' ? 'good' : ''} ${cls === 'bad' ? 'alert' : ''}">
+        <div class="head"><span class="icon">🔒</span><h3>${esc(project.name)}</h3><span class="rating ${cls}">${esc(sec.rating)}</span></div>
+        <p class="meta-line">Last review: ${esc(sec.lastReview)} by ${esc(sec.reviewer)} &middot; <a data-nav="#/quality/runs/SEC-OVERVIEW">View report</a></p>
+        <p class="summary">${esc(sec.summary)}</p>
+        <div class="actions">
+          <button class="btn primary" data-action="run-audit" data-id="SEC-OVERVIEW">Run security audit now</button>
+          <button class="btn">Edit assessment</button>
         </div>
       </div>
     `));
   }
+  content.appendChild(featured);
 
-  const checkBox = wrap.querySelector('#check-list');
-  for (const def of definitions.filter(d => d.kind === 'check')) {
+  const p1 = panel('sec-files', 'Documents', { meta: sec.files.length + ' file(s)', actions: '<button class="btn" data-action="new-doc">+ New</button>' });
+  if (!sec.files.length) pBody(p1).appendChild(el(`<p class="note" style="padding:8px 4px">No documents yet. Files live under <code>docs/security/</code>.</p>`));
+  else pBody(p1).appendChild(el(`<ul class="file-list">${sec.files.map(f => `<li>📄 <code>${esc(f.path)}</code> <span class="note">${esc(f.size)}</span></li>`).join('')}</ul>`));
+  content.appendChild(p1);
+
+  const p2 = panel('sec-reviews', 'Review history', { meta: sec.files.filter(f => f.path.includes('reviews/')).length + ' review(s)' });
+  pBody(p2).appendChild(el(sec.files.filter(f => f.path.includes('reviews/')).length
+    ? `<ul class="file-list">${sec.files.filter(f => f.path.includes('reviews/')).map(f => `<li>📋 <code>${esc(f.path)}</code></li>`).join('')}</ul>`
+    : `<p class="note" style="padding:8px 4px">No reviews recorded.</p>`));
+  content.appendChild(p2);
+
+  const p3 = panel('sec-related', 'Related Quality definitions', { meta: 'security dimension' });
+  const secDefs = definitions.filter(d => d.dimension === 'security');
+  pBody(p3).appendChild(el(`<div class="box">${secDefs.map(d => `
+    <div class="check-row">
+      <div></div>
+      <div class="label" data-nav="#/quality/${d.id}" style="cursor:pointer">
+        <div class="top"><strong>${d.id}</strong> ${tagsForDef(d)}</div>
+        <div class="sub">${esc(d.title)}</div>
+      </div>
+      <div class="row"><button class="btn" data-action="run-audit" data-id="${d.id}">${d.kind==='check'?'Test on diff':'Run'}</button></div>
+    </div>
+  `).join('')}</div>`));
+  content.appendChild(p3);
+}
+
+// ---- Architecture ----
+function renderProjArchitecture(content, project) {
+  const arch = project.architecture;
+  content.appendChild(el(`<div class="section-head"><h2>📐 Architecture</h2><span class="desc">Architectural decisions and drift status</span></div>`));
+
+  const p1 = panel('arch-files', 'ADR files', { meta: arch.adrCount + ' decision(s)', actions: '<button class="btn" data-action="new-adr">+ New ADR</button>' });
+  if (!arch.adrCount) pBody(p1).appendChild(el(`<p class="note" style="padding:8px 4px">No ADRs recorded yet.</p>`));
+  else pBody(p1).appendChild(el(`<div><p class="note" style="margin-bottom:8px">Last update ${esc(arch.lastUpdate)}</p><ul class="file-list">${arch.files.map(f => `<li>📄 <code>${esc(f.path)}</code> <span class="note">${esc(f.size)}</span></li>`).join('')}</ul></div>`));
+  content.appendChild(p1);
+
+  const p2 = panel('arch-drift', 'Drift status', { meta: 'never run' });
+  pBody(p2).appendChild(el(`<div>
+    <p class="note" style="margin-bottom:10px">Compares the current codebase against decisions in <code>docs/architecture-decisions.md</code>.</p>
+    <button class="btn" data-action="run-audit" data-id="ARCH-DRIFT">Check for drift</button>
+  </div>`));
+  content.appendChild(p2);
+}
+
+// ---- Quality ----
+function renderProjQuality(content, project) {
+  content.appendChild(el(`<div class="section-head"><h2>✅ Quality</h2><span class="desc">Audits, per-task checks, and runtime probes for this project</span></div>`));
+
+  const nonSecAudits = project.audits.filter(id => defById(id) && defById(id).dimension !== 'security');
+  const p1 = panel('qual-audits', 'Project audits', { meta: nonSecAudits.length + ' configured', actions: '<button class="btn ghost" data-nav="#/quality">+ Add</button>' });
+  if (!nonSecAudits.length) pBody(p1).appendChild(el(`<p class="note" style="padding:8px 4px">No additional project audits configured. Security audits live under the Security section.</p>`));
+  else pBody(p1).appendChild(el(`<div class="box">${nonSecAudits.map(aid => { const d = defById(aid); return `
+    <div class="check-row">
+      <div></div>
+      <div class="label" data-nav="#/quality/${d.id}" style="cursor:pointer">
+        <div class="top"><strong>${d.id}</strong> ${tagsForDef(d)}</div>
+        <div class="sub">${esc(d.title)}</div>
+      </div>
+      <div class="row"><button class="btn" data-action="run-audit" data-id="${d.id}">Run now</button></div>
+    </div>`; }).join('')}</div>`));
+  content.appendChild(p1);
+
+  const checks = definitions.filter(d => d.kind === 'check');
+  const enabled = checks.filter(d => project.taskCheckDefaults[d.id]).length;
+  const p2 = panel('qual-checks', 'Task Check defaults', { meta: enabled + ' / ' + checks.length + ' enabled' });
+  pBody(p2).appendChild(el(`<div><p class="note" style="margin-bottom:10px">Applied to every task in this project. Toggle here for the whole project; toggle on the task to override individually.</p><div class="box">${checks.map(def => {
     const on = !!project.taskCheckDefaults[def.id];
-    checkBox.appendChild(el(`
+    return `
       <div class="check-row">
         <div class="toggle ${on ? 'on' : ''}" data-action="toggle-default" data-project="${project.id}" data-id="${def.id}"></div>
         <div class="label" data-nav="#/quality/${def.id}" style="cursor:pointer">
@@ -492,104 +880,418 @@ function renderProjects(app, parts) {
           <div class="sub">${esc(def.title)}</div>
         </div>
         <div></div>
-      </div>
-    `));
-  }
+      </div>`;
+  }).join('')}</div></div>`));
+  content.appendChild(p2);
 
-  const probeBox = wrap.querySelector('#probe-list');
-  if (!project.probes.length) {
-    probeBox.appendChild(el(`<div class="empty">No probes configured.</div>`));
-  } else {
-    for (const id of project.probes) {
-      const d = defById(id);
-      probeBox.appendChild(el(`
-        <div class="check-row">
+  const p3 = panel('qual-probes', 'Performance Probes', { meta: project.probes.length + ' configured' });
+  if (!project.probes.length) pBody(p3).appendChild(el(`<p class="note" style="padding:8px 4px">No probes configured.</p>`));
+  else pBody(p3).appendChild(el(`<div class="box">${project.probes.map(id => { const d = defById(id); return `
+    <div class="check-row">
+      <div></div>
+      <div class="label" data-nav="#/quality/${d.id}" style="cursor:pointer">
+        <div class="top"><strong>${d.id}</strong> ${tagsForDef(d)}</div>
+        <div class="sub">${esc(d.title)} &middot; threshold ${esc(d.threshold || '-')}</div>
+      </div>
+      <div class="row"><button class="btn" data-action="run-probe" data-id="${d.id}">Run</button></div>
+    </div>`; }).join('')}</div>`));
+  content.appendChild(p3);
+}
+
+// ---- Jobs ----
+function renderProjJobs(content, project, projectJobs) {
+  content.appendChild(el(`<div class="section-head"><h2>📋 Jobs</h2><span class="desc">Tasks queued, in progress, and recently completed</span></div>`));
+  const byState = {};
+  for (const j of projectJobs) (byState[j.state] = byState[j.state] || []).push(j);
+  const order = ['1-preparation','2-ready','3-progress','4-review','5-completed','6-archive'];
+  for (const st of order) {
+    if (!byState[st] || !byState[st].length) continue;
+    const p = panel('jobs-'+st, st, { meta: byState[st].length + ' task(s)' });
+    const box = el(`<div class="box"></div>`);
+    for (const j of byState[st]) {
+      box.appendChild(el(`
+        <div class="check-row" data-nav="#/jobs/${j.id}" style="cursor:pointer">
           <div></div>
-          <div class="label" data-nav="#/quality/${d.id}" style="cursor:pointer">
-            <div class="top"><strong>${d.id}</strong> ${tagsForDef(d)}</div>
-            <div class="sub">${esc(d.title)} &middot; threshold ${esc(d.threshold || '-')}</div>
+          <div class="label">
+            <div class="top"><strong>${esc(j.title)}</strong> <span class="tag">${j.cli}</span></div>
+            <div class="sub">${j.runs} run(s) &middot; ${j.findings.filter(f=>!f.acked).length} open finding(s)</div>
           </div>
-          <div class="row">
-            <button class="btn ghost" data-nav="#/quality/${d.id}">History</button>
-            <button class="btn" data-action="run-probe" data-id="${d.id}">Run probe</button>
-          </div>
+          <div></div>
         </div>
       `));
     }
+    pBody(p).appendChild(box);
+    content.appendChild(p);
   }
+  if (!projectJobs.length) content.appendChild(el(`<p class="note" style="padding:14px 4px">No jobs.</p>`));
+}
 
-  const jobBox = wrap.querySelector('#job-list');
-  const projectJobs = jobs.filter(j => j.project === project.id);
-  if (!projectJobs.length) jobBox.appendChild(el(`<div class="empty">No jobs.</div>`));
-  for (const j of projectJobs) {
-    jobBox.appendChild(el(`
-      <div class="check-row" data-nav="#/jobs/${j.id}" style="cursor:pointer">
-        <div></div>
-        <div class="label">
-          <div class="top"><strong>${esc(j.title)}</strong> <span class="tag">${j.state}</span> <span class="tag">${j.cli}</span></div>
-          <div class="sub">${j.runs} run(s) &middot; ${j.findings.length} finding(s)</div>
+// ---- Settings ----
+function renderProjSettings(content, project) {
+  content.appendChild(el(`<div class="section-head"><h2>⚙ Settings</h2><span class="desc">How the orchestrator behaves on this project</span></div>`));
+
+  const p1 = panel('set-paths', 'Paths', {});
+  pBody(p1).appendChild(el(`<dl class="compact-kv">
+    <dt>Watch path</dt><dd>${esc(project.path)}</dd>
+    <dt>Working directory</dt><dd>${esc(project.rootPath || '(same as watch path)')}</dd>
+    <dt>Repository</dt><dd>${esc(project.repositoryPath || '(none)')}</dd>
+  </dl>`));
+  content.appendChild(p1);
+
+  const p2 = panel('set-mode', 'Runner mode', { meta: project.runnerMode });
+  pBody(p2).appendChild(el(`<div>
+    <div class="modes">${['auto','assist','manual'].map(m => `<button class="mode-btn ${project.runnerMode===m?'active':''}" data-action="set-runner-mode" data-id="${project.id}" data-mode="${m}">${m}</button>`).join('')}</div>
+    <p class="note" style="margin-top:8px">Auto: orchestrator picks tasks and acts. Assist: orchestrator suggests, you approve. Manual: you drive.</p>
+  </div>`));
+  content.appendChild(p2);
+
+  const p3 = panel('set-model', 'Orchestrator model', { meta: project.orchestratorModel });
+  pBody(p3).appendChild(el(`<div class="row">
+    <select class="btn" data-action="set-model" data-id="${project.id}">
+      ${['claude-opus-4-7','claude-sonnet-4-6','claude-haiku-4-5'].map(m => `<option ${project.orchestratorModel===m?'selected':''}>${m}</option>`).join('')}
+    </select>
+    <span class="note">Used when the orchestrator decides on your behalf in auto mode.</span>
+  </div>`));
+  content.appendChild(p3);
+
+  const p4 = panel('set-commit', 'Auto-commit', { meta: project.autoCommit ? 'on' : 'off' });
+  pBody(p4).appendChild(el(`<div class="row">
+    <div class="toggle ${project.autoCommit?'on':''}" data-action="toggle-auto-commit" data-id="${project.id}"></div>
+    <span>Auto-commit on transition <code>3-progress &rarr; 4-review</code></span>
+  </div>`));
+  content.appendChild(p4);
+}
+
+// ---- Orchestrator ----
+function renderProjOrchestrator(content, project) {
+  content.appendChild(el(`<div class="section-head"><h2>🤖 Orchestrator</h2><span class="desc">Live session, recent decisions and observations</span></div>`));
+
+  const p1 = panel('orch-session', 'Session', { meta: project.orchSession ? '● Live' : 'Idle' });
+  if (!project.orchSession) pBody(p1).appendChild(el(`<p class="note" style="padding:8px 4px">No session booted yet.</p>`));
+  else pBody(p1).appendChild(el(`<dl class="compact-kv">
+    <dt>Status</dt><dd>● Live · model ${esc(project.orchSession.model)}</dd>
+    <dt>Session id</dt><dd><code>${esc(project.orchSession.sessionId)}</code></dd>
+    <dt>Booted</dt><dd>${esc(project.orchSession.bootedAt)}</dd>
+    <dt>Calls</dt><dd>${project.orchSession.calls}</dd>
+  </dl>`));
+  content.appendChild(p1);
+
+  const p2 = panel('orch-boot', 'Boot prompt preview', {});
+  pBody(p2).appendChild(el(`<div class="md-block">You are the orchestrator for project &quot;${esc(project.name)}&quot;.\nWatch path: ${esc(project.path)}\n...</div>`));
+  ui.collapsedPanels['orch-boot'] = ui.collapsedPanels['orch-boot'] !== false;
+  if (ui.collapsedPanels['orch-boot']) p2.classList.add('collapsed');
+  content.appendChild(p2);
+
+  const p3 = panel('orch-reply', 'Boot reply', {});
+  pBody(p3).appendChild(el(`<div class="md-block">I am ready. I see ${project.audits.length} audits configured and ${Object.values(project.taskCheckDefaults).filter(Boolean).length} task-check defaults active.</div>`));
+  ui.collapsedPanels['orch-reply'] = ui.collapsedPanels['orch-reply'] !== false;
+  if (ui.collapsedPanels['orch-reply']) p3.classList.add('collapsed');
+  content.appendChild(p3);
+}
+
+// ---- Activity ----
+function renderProjActivity(content, project) {
+  content.appendChild(el(`<div class="section-head"><h2>📜 Recent activity</h2><span class="desc">Decisions, actions, and observations recorded by the orchestrator</span></div>`));
+  const sample = [
+    { kind:'decision', topic:'job-pickup', ts:'12:14:08', summary:'Picked up "Refactor JobService.fetchAll polling" from queue.' },
+    { kind:'action', topic:'cli.start', ts:'12:14:09', summary:'Started Claude session for job refactor-job-service.' },
+    { kind:'observation', topic:'finding', ts:'12:18:42', summary:'SEC-DIFF flagged 1 high finding in JobService.cs:142.' },
+    { kind:'decision', topic:'review', ts:'12:18:50', summary:'Held the task at 3-progress until findings are acknowledged.' },
+  ];
+  const feed = el(`<div class="activity-feed"></div>`);
+  for (const e of sample) feed.appendChild(el(`<div class="entry ${e.kind}"><div class="top"><span>${esc(e.kind)}</span><span>${esc(e.topic)}</span><span>${esc(e.ts)}</span></div><p>${esc(e.summary)}</p></div>`));
+  content.appendChild(feed);
+}
+
+//
+// --- Skills (installed / repository / licenses + detail) ---
+//
+function renderSkills(app, parts) {
+  if (parts.length > 1) return renderSkillDetail(app, parts[1]);
+
+  const installedCount = installedSkills.length + definitions.filter(d => d.kind==='audit' || d.kind==='check').length;
+  const wrap = el(`<div>
+    <h1>Skills</h1>
+    <p class="lede">Reusable agent prompts. <strong>Skills</strong> is the umbrella concept &mdash; covers invocable Workflows, project-scope Audits, and per-task Checks. Probes are runtime measurements (code, not prompts) and live under <a data-nav="#/settings">Settings</a>.</p>
+    <div class="skill-tabs" id="skill-tabs">
+      <a data-action="skills-tab" data-value="installed" class="${ui.skillsTab==='installed'?'active':''}">Installed <span class="badge">${installedCount}</span></a>
+      <a data-action="skills-tab" data-value="repository" class="${ui.skillsTab==='repository'?'active':''}">Repository <span class="badge">${skillRepository.length}</span></a>
+    </div>
+    <div id="tab-body"></div>
+  </div>`);
+  app.appendChild(wrap);
+
+  const body = wrap.querySelector('#tab-body');
+  if (ui.skillsTab === 'installed') return renderSkillsInstalled(body);
+  if (ui.skillsTab === 'repository') return renderSkillsRepository(body);
+}
+
+function unifiedInstalled() {
+  const wf = installedSkills.map(s => ({ ...s, type: 'workflow', target: `#/skills/${s.id}` }));
+  const au = definitions.filter(d => d.kind === 'audit').map(d => ({
+    id: d.id, name: d.title, description: d.description, dimension: d.dimension,
+    type: 'audit', license: 'MIT', source: 'built-in', version: '1.0.0', installed: true,
+    severity: d.severity, scope: d.scope, target: `#/quality/${d.id}`,
+  }));
+  const ch = definitions.filter(d => d.kind === 'check').map(d => ({
+    id: d.id, name: d.title, description: d.description, dimension: d.dimension,
+    type: 'check', license: 'MIT', source: 'built-in', version: '1.0.0', installed: true,
+    severity: d.severity, scope: d.scope, executionMode: d.executionMode, target: `#/quality/${d.id}`,
+  }));
+  return [...wf, ...au, ...ch];
+}
+
+function renderSkillsInstalled(body) {
+  body.appendChild(el(`<p class="note" style="margin-bottom:10px">All Skills active in this installation: invocable workflows, project audits, and per-task checks. Built-in skills cannot be uninstalled.</p>`));
+
+  body.appendChild(el(`<div class="chips" style="margin-bottom:14px">
+    <span class="chip ${ui.skillsTypeFilter==='all'?'active':''}" data-action="skills-type" data-value="all">All</span>
+    <span class="chip ${ui.skillsTypeFilter==='workflow'?'active':''}" data-action="skills-type" data-value="workflow">Workflows</span>
+    <span class="chip ${ui.skillsTypeFilter==='audit'?'active':''}" data-action="skills-type" data-value="audit">Audits</span>
+    <span class="chip ${ui.skillsTypeFilter==='check'?'active':''}" data-action="skills-type" data-value="check">Task Checks</span>
+  </div>`));
+
+  const list = el(`<div class="grid"></div>`);
+  body.appendChild(list);
+
+  const all = unifiedInstalled();
+  const filtered = ui.skillsTypeFilter === 'all' ? all : all.filter(s => s.type === ui.skillsTypeFilter);
+  if (!filtered.length) list.appendChild(el(`<div class="empty">No skills of this type.</div>`));
+
+  for (const s of filtered) {
+    const typeTag = s.type === 'workflow'
+      ? '<span class="tag" style="color:var(--mauve); background: rgba(203,166,247,0.14)">Workflow</span>'
+      : s.type === 'audit'
+        ? '<span class="tag audit">Audit</span>'
+        : '<span class="tag check">Task Check</span>';
+    list.appendChild(el(`
+      <div class="skill-card" data-nav="${s.target}">
+        <div class="row">
+          <div style="flex:1">
+            <div class="name">${esc(s.name)}</div>
+            <div class="id">${esc(s.id)}</div>
+          </div>
+          ${typeTag}
         </div>
-        <div></div>
+        <p>${esc(s.description)}</p>
+        <div class="stats">
+          <span>📦 ${esc(s.source)}</span>
+          <span>v${esc(s.version)}</span>
+          <span class="tag license">${esc(s.license)}</span>
+          ${s.severity ? `<span class="tag sev-${s.severity}">${s.severity}</span>` : ''}
+        </div>
+        <div class="actions">
+          <button class="btn ghost" data-nav="${s.target}">Open</button>
+        </div>
       </div>
     `));
   }
 }
 
-//
-// --- Skills ---
-//
-function renderSkills(app, parts) {
-  if (parts.length === 1) {
-    const wrap = el(`
-      <div>
-        <h1>Skills</h1>
-        <p class="lede">Reusable agent workflows. Skills <em>produce</em> work; the Quality system <em>grades</em> work. Different concept, different section.</p>
-        <div class="box" id="skill-list"></div>
-      </div>
-    `);
-    app.appendChild(wrap);
-    const list = wrap.querySelector('#skill-list');
-    for (const s of skills) {
-      list.appendChild(el(`
-        <div class="skill-row" data-nav="#/skills/${s.id}">
-          <div>
-            <div class="row"><strong>${esc(s.name)}</strong> <span class="tag">${esc(s.dimension)}</span> <span class="id" style="color:var(--overlay0); font-family:ui-monospace,monospace; font-size:11px">${s.id}</span></div>
-            <div class="desc">${esc(s.description)}</div>
-            <div class="note" style="margin-top:6px">When: ${esc(s.when)}</div>
-          </div>
-          <button class="btn ghost">Open</button>
-        </div>
-      `));
-    }
-    return;
+function renderSkillsRepository(body) {
+  const dims = ['all', ...new Set(skillRepository.map(s => s.dimension))];
+  const filterRow = el(`<div>
+    <div class="search-bar">
+      <span class="icon">🔎</span>
+      <input id="skill-search" placeholder="Search skills (name, dimension, description)..." value="${esc(ui.skillsSearch)}">
+      <span class="note">${skillRepository.length} skills available</span>
+    </div>
+    <div class="chips" style="margin-bottom:8px">
+      <span class="chip ${ui.skillsTypeFilter==='all'?'active':''}" data-action="skills-type" data-value="all">All</span>
+      <span class="chip ${ui.skillsTypeFilter==='workflow'?'active':''}" data-action="skills-type" data-value="workflow">Workflows</span>
+      <span class="chip ${ui.skillsTypeFilter==='audit'?'active':''}" data-action="skills-type" data-value="audit">Audits</span>
+      <span class="chip ${ui.skillsTypeFilter==='check'?'active':''}" data-action="skills-type" data-value="check">Task Checks</span>
+    </div>
+    <div class="chips" style="margin-bottom:14px">
+      ${dims.map(d => `<span class="chip ${ui.skillsRepoDimension===d?'active':''}" data-action="repo-dim" data-value="${d}">${d}</span>`).join('')}
+    </div>
+  </div>`);
+  body.appendChild(filterRow);
+
+  filterRow.querySelector('#skill-search').addEventListener('input', (e) => { ui.skillsSearch = e.target.value; render(); });
+
+  const featuredEntries = skillRepository.filter(s => s.featured);
+  if (featuredEntries.length && ui.skillsSearch === '' && ui.skillsRepoDimension === 'all' && ui.skillsTypeFilter === 'all') {
+    body.appendChild(el(`<h2>Featured</h2>`));
+    const fGrid = el(`<div class="grid"></div>`);
+    body.appendChild(fGrid);
+    for (const s of featuredEntries) fGrid.appendChild(skillRepoCard(s, true));
+    body.appendChild(el(`<h2 style="margin-top:28px">All skills</h2>`));
   }
 
-  const skill = skillById(parts[1]);
-  if (!skill) return app.appendChild(el(`<div class="empty">Skill not found</div>`));
-  const wrap = el(`
-    <div>
-      <div class="crumbs"><a data-nav="#/skills">Skills</a><span class="sep">/</span>${esc(skill.id)}</div>
-      <h1>${esc(skill.name)}</h1>
-      <p class="lede">${esc(skill.description)}</p>
-      <div class="two-pane">
-        <div>
-          <h2>Skill instructions</h2>
-          <div class="md-block">(Skill markdown body would render here. Skills are stored under docs/cli-skills/. They produce work; they are not graded by Quality.)</div>
+  const filtered = skillRepository.filter(s => {
+    if (ui.skillsRepoDimension !== 'all' && s.dimension !== ui.skillsRepoDimension) return false;
+    if (ui.skillsTypeFilter !== 'all' && s.type !== ui.skillsTypeFilter) return false;
+    if (ui.skillsSearch) {
+      const q = ui.skillsSearch.toLowerCase();
+      if (!s.name.toLowerCase().includes(q) && !s.description.toLowerCase().includes(q) && !s.dimension.toLowerCase().includes(q)) return false;
+    }
+    return true;
+  });
+  const grid = el(`<div class="grid"></div>`);
+  body.appendChild(grid);
+  if (!filtered.length) grid.appendChild(el(`<div class="empty">No skills match.</div>`));
+  for (const s of filtered) grid.appendChild(skillRepoCard(s, false));
+
+  body.appendChild(el(`<p class="note" style="margin-top:24px">Curated catalog. License is shown on every card and on the install dialog; copyleft licenses (GPL family) are flagged with a &#9888; tag.</p>`));
+}
+
+function skillRepoCard(s, featuredBlock) {
+  const installed = isInstalled(s.id);
+  const typeTag = s.type === 'workflow'
+    ? '<span class="tag" style="color:var(--mauve); background: rgba(203,166,247,0.14)">Workflow</span>'
+    : s.type === 'audit'
+      ? '<span class="tag audit">Audit</span>'
+      : '<span class="tag check">Task Check</span>';
+  return el(`
+    <div class="skill-card ${featuredBlock ? 'featured' : ''}" data-nav="#/skills/${s.id}">
+      ${featuredBlock ? '<div class="featured-banner">FEATURED</div>' : ''}
+      <div class="row">
+        <div style="flex:1">
+          <div class="name">${esc(s.name)}</div>
+          <div class="id">${esc(s.author)}/${esc(s.id)}</div>
         </div>
-        <div>
-          <h2>Metadata</h2>
-          <dl class="kv">
-            <dt>id</dt><dd><code>${skill.id}</code></dd>
-            <dt>dimension</dt><dd>${esc(skill.dimension)}</dd>
-            <dt>when</dt><dd>${esc(skill.when)}</dd>
-          </dl>
-          <h2>Where invoked</h2>
-          <p class="note">CLI sessions, slash commands, and agent prompt templates can reference this skill.</p>
-        </div>
+        ${typeTag}
+        ${installed ? '<span class="tag installed">installed</span>' : ''}
+      </div>
+      <p>${esc(s.description)}</p>
+      <div class="stats">
+        <span>⬇ ${esc(s.installs)}</span>
+        <span>v${esc(s.version)}</span>
+        <span class="tag license">${esc(s.license)}</span>
+        ${s.licenseWarn ? `<span class="tag sev-warn" title="Copyleft license; review before use in proprietary projects">⚠ copyleft</span>` : ''}
+      </div>
+      <div class="actions">
+        ${installed
+          ? `<button class="btn ghost" data-nav="#/skills/${s.id}">Open</button>`
+          : `<button class="btn primary" data-action="install-skill" data-id="${s.id}">Install</button><button class="btn ghost" data-nav="#/skills/${s.id}">Details</button>`}
       </div>
     </div>
   `);
+}
+
+function renderSkillDetail(app, id) {
+  const skill = skillById(id);
+  if (!skill) return app.appendChild(el(`<div class="empty">Skill not found</div>`));
+  const installed = isInstalled(skill.id);
+  const fromRepo = skillRepository.find(r => r.id === skill.id);
+
+  const wrap = el(`<div>
+    <div class="crumbs"><a data-nav="#/skills">Skills</a><span class="sep">/</span>${esc(skill.id)}</div>
+    <div class="row">
+      <h1 style="margin:0">${esc(skill.name)}</h1>
+      ${installed ? '<span class="tag installed">installed</span>' : '<span class="tag">repository</span>'}
+      <div class="spacer"></div>
+      ${installed
+        ? (skill.source === 'built-in'
+            ? '<button class="btn ghost" disabled>Built-in</button>'
+            : '<button class="btn ghost" data-action="uninstall-skill" data-id="' + skill.id + '">Uninstall</button>')
+        : '<button class="btn primary" data-action="install-skill" data-id="' + skill.id + '">Install</button>'}
+    </div>
+    <p class="lede">${esc(skill.description)}</p>
+
+    <div class="two-pane">
+      <div>
+        <h2>Skill instructions</h2>
+        <div class="md-block"># ${esc(skill.name)}\n\n${esc(skill.description)}\n\n## When to invoke\n${esc(skill.when || 'On user request from the contextual menu where it applies.')}\n\n## Steps\n1. Read context (project, current task, recent diff).\n2. Apply the skill's specialised workflow.\n3. Emit a structured result the orchestrator can act on.\n\n(Full skill body would render here.)</div>
+
+        <h2>Permissions and safety</h2>
+        <ul class="note" style="line-height: 1.7">
+          <li>Read-only access to project files within the watch path</li>
+          <li>${skill.dimension === 'security' ? 'Network access (CVE database lookup)' : 'No network access required'}</li>
+          <li>Cannot modify git state without explicit user confirmation</li>
+        </ul>
+      </div>
+      <div>
+        <h2>Metadata</h2>
+        <dl class="kv">
+          <dt>id</dt><dd><code>${esc(skill.id)}</code></dd>
+          <dt>dimension</dt><dd>${esc(skill.dimension)}</dd>
+          ${skill.when ? `<dt>when</dt><dd>${esc(skill.when)}</dd>` : ''}
+          <dt>version</dt><dd>v${esc(skill.version)}</dd>
+          ${fromRepo ? `<dt>author</dt><dd>${esc(fromRepo.author)}</dd>` : ''}
+          ${fromRepo ? `<dt>installs</dt><dd>${esc(fromRepo.installs)}</dd>` : ''}
+        </dl>
+
+        <h2>License</h2>
+        <p><span class="tag license">${esc(skill.license)}</span> ${skill.licenseWarn ? '<span class="tag sev-warn">⚠ copyleft</span>' : ''}</p>
+        <p class="note">${licenseDesc(skill.license)}</p>
+        ${skill.source && skill.source !== 'built-in' ? `<p class="note">Source: <a href="https://${esc(skill.source)}" target="_blank">${esc(skill.source)}</a></p>` : '<p class="note">Built-in: ships with the app.</p>'}
+
+        <h2>Storage</h2>
+        <div class="md-block">docs/skills/${esc(skill.id.toLowerCase())}.md</div>
+      </div>
+    </div>
+  </div>`);
   app.appendChild(wrap);
+}
+
+function licenseDesc(lic) {
+  const map = {
+    'MIT':'Permissive. Commercial use OK. Attribution required.',
+    'Apache-2.0':'Permissive with patent grant. Commercial use OK. Attribution + NOTICE file.',
+    'BSD-3-Clause':'Permissive. Commercial use OK. Attribution + no-endorsement clause.',
+    'ISC':'Permissive, simpler than MIT. Commercial use OK. Attribution required.',
+    'GPL-3.0':'Copyleft. Derivative works must also be GPL. Review before use in proprietary projects.',
+  };
+  return map[lic] || 'Custom license; review before use.';
+}
+
+//
+// --- Settings (master data home) ---
+//
+function renderSettings(app, parts) {
+  app.appendChild(el(`<div>
+    <h1>⚙ Settings</h1>
+    <p class="lede">Master data and configuration. Anything that defines <em>how the app behaves</em> lives here, separate from the work data on Board / Projects / Skills.</p>
+
+    <h2>Skill definitions library</h2>
+    <p class="note" style="margin-bottom:14px">All audits, task checks, and workflows that can be invoked. Edit, create, and configure their behaviour. The Skills top-nav surface is the user-facing browse/invoke catalog; this is the authoring tool.</p>
+    <div class="grid">
+      <div class="card" data-nav="#/quality">
+        <div class="head"><span class="tag audit">Audits</span><span class="tag check">Checks</span><span class="tag" style="color:var(--mauve); background: rgba(203,166,247,0.14)">Workflows</span></div>
+        <div class="title">Open Skill library</div>
+        <p>The full list of skill definitions, filterable by type, dimension, severity. Lives at <code>docs/quality/</code>. Probes are the only thing not in here &mdash; they're code, not prompts (see below).</p>
+        <div class="meta"><span class="tag">${definitions.length + installedSkills.length} definitions</span></div>
+      </div>
+    </div>
+
+    <h2>Probes (runtime measurements)</h2>
+    <p class="note" style="margin-bottom:14px">Live performance probes run code (Playwright primitives) against the running app and measure. They're not prompts and don't unify with Skills.</p>
+    <div class="grid">
+      ${definitions.filter(d => d.kind === 'probe').map(d => `
+        <div class="card" data-nav="#/quality/${d.id}">
+          <div class="head"><span class="id">${d.id}</span><span class="tag probe">Probe</span></div>
+          <div class="title">${esc(d.title)}</div>
+          <p>${esc(d.description)}</p>
+          <div class="meta"><span class="tag dim">${d.dimension}</span><span class="tag">threshold ${esc(d.threshold)}</span></div>
+        </div>
+      `).join('')}
+    </div>
+
+    <h2>Project defaults</h2>
+    <p class="note" style="margin-bottom:14px">Which audits, checks, and probes apply to which project. Configurable per project; surfaced on each project page in its Quality section.</p>
+    <div class="box">
+      ${projects.map(p => `
+        <div class="check-row" data-nav="#/projects/${p.id}" style="cursor:pointer">
+          <div></div>
+          <div class="label">
+            <div class="top"><strong>${esc(p.name)}</strong></div>
+            <div class="sub">${p.audits.length} audits &middot; ${Object.values(p.taskCheckDefaults).filter(Boolean).length} task-check defaults &middot; ${p.probes.length} probes</div>
+          </div>
+          <button class="btn ghost">Configure on project page</button>
+        </div>
+      `).join('')}
+    </div>
+
+    <h2>CLI configuration</h2>
+    <p class="note">Per-CLI runtime configuration (Claude / Codex / Copilot / Gemini). Slot reserved &mdash; settled in a later iteration.</p>
+    <div class="box padded note">CLI configuration UI lives here. Out of scope for this mockup.</div>
+
+    <h2>Runner defaults</h2>
+    <p class="note">Default runner mode, orchestrator model, and auto-commit policy applied to new projects. Slot reserved.</p>
+    <div class="box padded note">Runner defaults UI lives here. Out of scope for this mockup.</div>
+  </div>`));
 }
 
 //
@@ -602,32 +1304,31 @@ function renderQuality(app, parts) {
 }
 
 function renderQualityLibrary(app) {
-  const wrap = el(`
-    <div>
-      <h1>Quality</h1>
-      <p class="lede">Library of Audits, Task Checks, and Performance Probes. <a data-nav="#/projects">Configure per project</a>; Skills are <a data-nav="#/skills">over here</a>.</p>
-      <div class="with-sidebar">
-        <aside class="sidebar">
-          <div class="group">Kinds</div>
-          <a data-action="filter-kind" data-value="all" class="${ui.libraryFilterKind==='all'?'active':''}">All <span class="count">${definitions.length}</span></a>
-          <a data-action="filter-kind" data-value="audit" class="${ui.libraryFilterKind==='audit'?'active':''}">Audits <span class="count">${definitions.filter(d=>d.kind==='audit').length}</span></a>
-          <a data-action="filter-kind" data-value="check" class="${ui.libraryFilterKind==='check'?'active':''}">Task Checks <span class="count">${definitions.filter(d=>d.kind==='check').length}</span></a>
-          <a data-action="filter-kind" data-value="probe" class="${ui.libraryFilterKind==='probe'?'active':''}">Probes <span class="count">${definitions.filter(d=>d.kind==='probe').length}</span></a>
-          <div class="group">Dimensions</div>
-          <a data-action="filter-dim" data-value="all" class="${ui.libraryFilterDimension==='all'?'active':''}">All</a>
-          ${DIMENSIONS.map(dim => `<a data-action="filter-dim" data-value="${dim}" class="${ui.libraryFilterDimension===dim?'active':''}">${dim} <span class="count">${definitions.filter(d=>d.dimension===dim).length}</span></a>`).join('')}
-        </aside>
-        <div>
-          <div class="row" style="margin-bottom:14px">
-            <h2 style="margin:0">Library</h2>
-            <div class="spacer"></div>
-            <button class="btn" data-action="new-def">+ New definition</button>
-          </div>
-          <div id="lib-grid" class="grid"></div>
+  const wrap = el(`<div>
+    <div class="crumbs"><a data-nav="#/settings">Settings</a><span class="sep">/</span>Skill definitions library</div>
+    <h1>Skill definitions library</h1>
+    <p class="lede">Authoring view of every Audit, Task Check, and Probe definition. The user-facing <a data-nav="#/skills">Skills</a> page browses and invokes; this is where they're created and edited. Probes are listed too because they live in the same library on disk.</p>
+    <div class="with-sidebar">
+      <aside class="sidebar">
+        <div class="group">Kinds</div>
+        <a data-action="filter-kind" data-value="all" class="${ui.libraryFilterKind==='all'?'active':''}">All <span class="count">${definitions.length}</span></a>
+        <a data-action="filter-kind" data-value="audit" class="${ui.libraryFilterKind==='audit'?'active':''}">Audits <span class="count">${definitions.filter(d=>d.kind==='audit').length}</span></a>
+        <a data-action="filter-kind" data-value="check" class="${ui.libraryFilterKind==='check'?'active':''}">Task Checks <span class="count">${definitions.filter(d=>d.kind==='check').length}</span></a>
+        <a data-action="filter-kind" data-value="probe" class="${ui.libraryFilterKind==='probe'?'active':''}">Probes <span class="count">${definitions.filter(d=>d.kind==='probe').length}</span></a>
+        <div class="group">Dimensions</div>
+        <a data-action="filter-dim" data-value="all" class="${ui.libraryFilterDimension==='all'?'active':''}">All</a>
+        ${DIMENSIONS.map(dim => `<a data-action="filter-dim" data-value="${dim}" class="${ui.libraryFilterDimension===dim?'active':''}">${dim} <span class="count">${definitions.filter(d=>d.dimension===dim).length}</span></a>`).join('')}
+      </aside>
+      <div>
+        <div class="row" style="margin-bottom:14px">
+          <h2 style="margin:0">Library</h2>
+          <div class="spacer"></div>
+          <button class="btn" data-action="new-def">+ New definition</button>
         </div>
+        <div id="lib-grid" class="grid"></div>
       </div>
     </div>
-  `);
+  </div>`);
   app.appendChild(wrap);
 
   const grid = wrap.querySelector('#lib-grid');
@@ -658,103 +1359,77 @@ function renderQualityLibrary(app) {
 function renderDefinitionDetail(app, id) {
   const d = defById(id);
   if (!d) return app.appendChild(el(`<div class="empty">Definition not found</div>`));
-
-  const usedBy = projects.filter(p =>
-    p.audits.includes(d.id) ||
-    (d.kind === 'check' && p.taskCheckDefaults[d.id]) ||
-    p.probes.includes(d.id)
-  );
-
+  const usedBy = projects.filter(p => p.audits.includes(d.id) || (d.kind === 'check' && p.taskCheckDefaults[d.id]) || p.probes.includes(d.id));
   const isCheck = d.kind === 'check';
 
-  const wrap = el(`
-    <div>
-      <div class="crumbs"><a data-nav="#/quality">Quality</a><span class="sep">/</span>${esc(d.id)}</div>
-      <div class="row">
-        <h1 style="margin:0">${esc(d.title)}</h1>
-        <span class="tag ${d.kind}">${d.kind === 'check' ? 'Task Check' : d.kind === 'audit' ? 'Audit' : 'Probe'}</span>
-      </div>
-      <p class="lede">${esc(d.description)}</p>
+  const wrap = el(`<div>
+    <div class="crumbs"><a data-nav="#/quality">Quality</a><span class="sep">/</span>${esc(d.id)}</div>
+    <div class="row"><h1 style="margin:0">${esc(d.title)}</h1><span class="tag ${d.kind}">${d.kind === 'check' ? 'Task Check' : d.kind === 'audit' ? 'Audit' : 'Probe'}</span></div>
+    <p class="lede">${esc(d.description)}</p>
 
-      <div class="two-pane">
-        <div>
-          ${isCheck ? `
-          <h2>Execution mode</h2>
-          <p class="note">How is this Task Check actually wired into the run? This is a real engineering decision per check.</p>
-          <div class="radio-cards" id="mode-cards">
-            <div class="radio-card ${d.executionMode==='spawn'?'selected':''}" data-action="set-mode" data-id="${d.id}" data-mode="spawn">
-              <div class="top"><span class="dot"></span><h4>Spawn</h4><span class="tag mode-spawn">separate CLI step</span></div>
-              <p>After the main task finishes, a fresh CLI invocation runs this check with its own prompt and its own context window.</p>
-              <ul class="pros"><li>Clean focused context, no competition with the main task</li><li>Result can be required as <code>[[CHECK_RESULT: ...]]</code></li><li>Independent retry / quota</li></ul>
-              <ul class="cons"><li>Extra tokens, latency, quota cost</li><li>Re-loads its own project context</li></ul>
-            </div>
-            <div class="radio-card ${d.executionMode==='inject'?'selected':''}" data-action="set-mode" data-id="${d.id}" data-mode="inject">
-              <div class="top"><span class="dot"></span><h4>Inject</h4><span class="tag mode-inject">prompt addition</span></div>
-              <p>Check instructions are appended to the main task prompt. Same CLI run produces both the work and the self-check.</p>
-              <ul class="pros"><li>Nearly free, no extra invocations</li><li>Agent is already loaded with full context</li></ul>
-              <ul class="cons"><li>Less reliable; can be drowned by long primary prompt</li><li>Harder to make output structured</li><li>Less safe for high-severity / security checks</li></ul>
-            </div>
+    <div class="two-pane">
+      <div>
+        ${isCheck ? `
+        <h2>Execution mode</h2>
+        <p class="note">How is this Task Check actually wired into the run?</p>
+        <div class="radio-cards">
+          <div class="radio-card ${d.executionMode==='spawn'?'selected':''}" data-action="set-mode" data-id="${d.id}" data-mode="spawn">
+            <div class="top"><span class="dot"></span><h4>Spawn</h4><span class="tag mode-spawn">separate CLI step</span></div>
+            <p>After the main task finishes, a fresh CLI invocation runs this check with its own prompt and its own context window.</p>
+            <ul class="pros"><li>Clean focused context</li><li>Result can be required as <code>[[CHECK_RESULT: ...]]</code></li><li>Independent retry / quota</li></ul>
+            <ul class="cons"><li>Extra tokens, latency, quota cost</li><li>Re-loads its own project context</li></ul>
           </div>
-          <p class="note" style="margin-top:8px">Default per kind: spawn for high-severity and security-relevant checks, inject for cheap stylistic ones.</p>
-          ` : ''}
-
-          <h2>Check instructions</h2>
-          <div class="md-block">${esc(d.instructions || '(no instructions yet)')}</div>
-
-          <h2>History</h2>
-          <p class="note">Runs across all projects. ${d.id === 'SEC-OVERVIEW' ? 'Most recent run produced 2 high and 4 warn findings.' : 'No runs yet.'}</p>
-          ${d.id === 'SEC-OVERVIEW' ? `<button class="btn" data-nav="#/quality/runs/SEC-OVERVIEW">Open last report</button>` : ''}
+          <div class="radio-card ${d.executionMode==='inject'?'selected':''}" data-action="set-mode" data-id="${d.id}" data-mode="inject">
+            <div class="top"><span class="dot"></span><h4>Inject</h4><span class="tag mode-inject">prompt addition</span></div>
+            <p>Check instructions are appended to the main task prompt. Same CLI run produces both the work and the self-check.</p>
+            <ul class="pros"><li>Nearly free, no extra invocations</li><li>Agent already loaded with full context</li></ul>
+            <ul class="cons"><li>Less reliable; can be drowned by long primary prompt</li><li>Harder to make output structured</li><li>Less safe for high-severity / security checks</li></ul>
+          </div>
         </div>
-        <div>
-          <h2>Metadata</h2>
-          <dl class="kv">
-            <dt>id</dt><dd><code>${d.id}</code></dd>
-            <dt>kind</dt><dd>${d.kind}</dd>
-            <dt>scope</dt><dd>${d.scope}</dd>
-            <dt>dimension</dt><dd>${d.dimension}</dd>
-            <dt>severity</dt><dd>${d.severity} <span class="note">(informational, never blocks)</span></dd>
-            ${d.executionMode ? `<dt>mode</dt><dd>${d.executionMode}</dd>` : ''}
-            ${d.threshold ? `<dt>threshold</dt><dd>${d.threshold}</dd>` : ''}
-          </dl>
+        <p class="note" style="margin-top:8px">Default: spawn for high-severity and security-relevant checks, inject for cheap stylistic ones.</p>
+        ` : ''}
 
-          <h2>Used by</h2>
-          ${usedBy.length ? usedBy.map(p => `<div><a data-nav="#/projects/${p.id}">${esc(p.name)}</a></div>`).join('') : '<div class="note">No projects use this yet.</div>'}
+        <h2>Check instructions</h2>
+        <div class="md-block">${esc(d.instructions || '(no instructions yet)')}</div>
 
-          <h2>Storage</h2>
-          <div class="md-block">docs/quality/${d.kind === 'check' ? 'checks' : d.kind === 'audit' ? 'audits' : 'probes'}/${d.id}.md</div>
-        </div>
+        <h2>History</h2>
+        <p class="note">${d.id === 'SEC-OVERVIEW' ? 'Most recent run produced 2 high and 4 warn findings.' : 'No runs yet.'}</p>
+        ${d.id === 'SEC-OVERVIEW' ? `<button class="btn" data-nav="#/quality/runs/SEC-OVERVIEW">Open last report</button>` : ''}
+      </div>
+      <div>
+        <h2>Metadata</h2>
+        <dl class="kv">
+          <dt>id</dt><dd><code>${d.id}</code></dd>
+          <dt>kind</dt><dd>${d.kind}</dd>
+          <dt>scope</dt><dd>${d.scope}</dd>
+          <dt>dimension</dt><dd>${d.dimension}</dd>
+          <dt>severity</dt><dd>${d.severity} <span class="note">(informational)</span></dd>
+          ${d.executionMode ? `<dt>mode</dt><dd>${d.executionMode}</dd>` : ''}
+          ${d.threshold ? `<dt>threshold</dt><dd>${d.threshold}</dd>` : ''}
+        </dl>
+        <h2>Used by</h2>
+        ${usedBy.length ? usedBy.map(p => `<div><a data-nav="#/projects/${p.id}">${esc(p.name)}</a></div>`).join('') : '<div class="note">No projects use this yet.</div>'}
+        <h2>Storage</h2>
+        <div class="md-block">docs/quality/${d.kind === 'check' ? 'checks' : d.kind === 'audit' ? 'audits' : 'probes'}/${d.id}.md</div>
       </div>
     </div>
-  `);
+  </div>`);
   app.appendChild(wrap);
 }
 
 function renderAuditRun(app, id) {
   if (id !== 'SEC-OVERVIEW') return app.appendChild(el(`<div class="empty">Run not found</div>`));
-  const wrap = el(`
-    <div>
-      <div class="crumbs"><a data-nav="#/quality">Quality</a><span class="sep">/</span><a data-nav="#/quality/SEC-OVERVIEW">SEC-OVERVIEW</a><span class="sep">/</span>2026-04-15</div>
-      <div class="row">
-        <h1 style="margin:0">SEC-OVERVIEW &middot; 2026-04-15</h1>
-        <span class="tag audit">Audit</span>
-        <div class="spacer"></div>
-        <button class="btn ghost" data-action="run-audit" data-id="SEC-OVERVIEW">Re-run</button>
-        <button class="btn" data-action="export">Export markdown</button>
-      </div>
-      <p class="note">Run by claude &middot; 4m12s &middot; 6 findings</p>
-      <div class="result-strip">
-        <span class="result-chip fail"><span class="dot"></span>2 high</span>
-        <span class="result-chip warn"><span class="dot"></span>4 warn</span>
-        <span class="result-chip pass"><span class="dot"></span>0 info</span>
-      </div>
-      <h2>Findings</h2>
-      <div class="finding high"><div class="head"><span class="tag sev-high">high</span><span class="file">backend/Endpoints/JobEndpoints.cs:312</span></div><p>POST /api/jobs accepts watchPath without normalisation; bypasses watch-path allowlist.</p><div class="actions row"><button class="btn primary" data-action="create-task">Create task</button><button class="btn ghost" data-action="ack">Acknowledge</button></div></div>
-      <div class="finding high"><div class="head"><span class="tag sev-high">high</span><span class="file">backend/Services/Cli/CliRouter.cs:74</span></div><p>CLI process arguments built via string concatenation; no shell-injection guard for jobId slug.</p><div class="actions row"><button class="btn primary" data-action="create-task">Create task</button><button class="btn ghost" data-action="ack">Acknowledge</button></div></div>
-      <div class="finding"><div class="head"><span class="tag sev-warn">warn</span><span class="file">docs/security/overview.md</span></div><p>Threat model section out of date: SignalR hub introduced after last review, not covered.</p><div class="actions row"><button class="btn primary" data-action="create-task">Create task</button><button class="btn ghost" data-action="ack">Acknowledge</button></div></div>
-      <p class="note">3 more findings collapsed.</p>
-    </div>
-  `);
-  app.appendChild(wrap);
+  app.appendChild(el(`<div>
+    <div class="crumbs"><a data-nav="#/quality">Quality</a><span class="sep">/</span><a data-nav="#/quality/SEC-OVERVIEW">SEC-OVERVIEW</a><span class="sep">/</span>2026-04-15</div>
+    <div class="row"><h1 style="margin:0">SEC-OVERVIEW &middot; 2026-04-15</h1><span class="tag audit">Audit</span><div class="spacer"></div><button class="btn ghost" data-action="run-audit" data-id="SEC-OVERVIEW">Re-run</button><button class="btn" data-action="export">Export markdown</button></div>
+    <p class="note">Run by claude &middot; 4m12s &middot; 6 findings</p>
+    <div class="result-strip"><span class="result-chip fail"><span class="dot"></span>2 high</span><span class="result-chip warn"><span class="dot"></span>4 warn</span><span class="result-chip pass"><span class="dot"></span>0 info</span></div>
+    <h2>Findings</h2>
+    <div class="finding high"><div class="head"><span class="tag sev-high">high</span><span class="file">backend/Endpoints/JobEndpoints.cs:312</span></div><p>POST /api/jobs accepts watchPath without normalisation; bypasses watch-path allowlist.</p><div class="actions row"><button class="btn primary" data-action="create-task">Create task</button><button class="btn ghost" data-action="ack">Acknowledge</button></div></div>
+    <div class="finding high"><div class="head"><span class="tag sev-high">high</span><span class="file">backend/Services/Cli/CliRouter.cs:74</span></div><p>CLI process arguments built via string concatenation; no shell-injection guard for jobId slug.</p><div class="actions row"><button class="btn primary" data-action="create-task">Create task</button><button class="btn ghost" data-action="ack">Acknowledge</button></div></div>
+    <div class="finding"><div class="head"><span class="tag sev-warn">warn</span><span class="file">docs/security/overview.md</span></div><p>Threat model section out of date: SignalR hub introduced after last review, not covered.</p><div class="actions row"><button class="btn primary" data-action="create-task">Create task</button><button class="btn ghost" data-action="ack">Acknowledge</button></div></div>
+    <p class="note">3 more findings collapsed.</p>
+  </div>`));
 }
 
 //
@@ -766,45 +1441,31 @@ function renderJob(app, parts) {
   const project = projectById(job.project);
   const eff = effectiveChecksForJob(job);
   const findings = job.findings;
-
   const counts = { pass: 0, warn: 0, fail: 0 };
   for (const id in job.results) counts[job.results[id] === 'pass' ? 'pass' : job.results[id] === 'warn' ? 'warn' : 'fail']++;
 
-  const wrap = el(`
-    <div>
-      <div class="crumbs"><a data-nav="#/projects">Projects</a><span class="sep">/</span><a data-nav="#/projects/${project.id}">${esc(project.name)}</a><span class="sep">/</span>${esc(job.id)}</div>
-      <div class="row">
-        <h1 style="margin:0">${esc(job.title)}</h1>
-        <span class="tag">${job.state}</span>
-        <span class="tag">${job.cli}</span>
-        <span class="tag">${job.runs} runs</span>
-      </div>
-      <div class="result-strip">
-        ${counts.pass ? `<span class="result-chip pass"><span class="dot"></span>${counts.pass} pass</span>` : ''}
-        ${counts.warn ? `<span class="result-chip warn"><span class="dot"></span>${counts.warn} warn</span>` : ''}
-        ${counts.fail ? `<span class="result-chip fail"><span class="dot"></span>${counts.fail} fail</span>` : ''}
-        ${(!counts.pass && !counts.warn && !counts.fail) ? `<span class="note">Checks have not run yet.</span>` : ''}
-      </div>
-
-      <h2>Task Checks <span class="note" style="text-transform:none; letter-spacing:0">&mdash; ran automatically when this task moved to <code>4-review</code></span></h2>
-      <div class="box" id="check-list"></div>
-
-      <h2>Findings</h2>
-      <p class="note">Severity is informational. Nothing is blocked. You decide what to do with each finding.</p>
-      <div id="finding-list"></div>
-
-      <div class="row" style="margin-top:14px">
-        <div class="spacer"></div>
-        <button class="btn" data-action="rerun-checks" data-id="${job.id}">Re-run all checks</button>
-      </div>
+  const wrap = el(`<div>
+    <div class="crumbs"><a data-nav="#/projects">Projects</a><span class="sep">/</span><a data-nav="#/projects/${project.id}">${esc(project.name)}</a><span class="sep">/</span>${esc(job.id)}</div>
+    <div class="row"><h1 style="margin:0">${esc(job.title)}</h1><span class="tag">${job.state}</span><span class="tag">${job.cli}</span><span class="tag">${job.runs} runs</span></div>
+    <div class="result-strip">
+      ${counts.pass ? `<span class="result-chip pass"><span class="dot"></span>${counts.pass} pass</span>` : ''}
+      ${counts.warn ? `<span class="result-chip warn"><span class="dot"></span>${counts.warn} warn</span>` : ''}
+      ${counts.fail ? `<span class="result-chip fail"><span class="dot"></span>${counts.fail} fail</span>` : ''}
+      ${(!counts.pass && !counts.warn && !counts.fail) ? `<span class="note">Checks have not run yet.</span>` : ''}
     </div>
-  `);
+    <h2>Task Checks <span class="note" style="text-transform:none; letter-spacing:0">&mdash; ran automatically when this task moved to <code>4-review</code></span></h2>
+    <div class="box" id="check-list"></div>
+    <h2>Findings</h2>
+    <p class="note">Severity is informational. Nothing is blocked. You decide what to do.</p>
+    <div id="finding-list"></div>
+    <div class="row" style="margin-top:14px"><div class="spacer"></div><button class="btn" data-action="rerun-checks" data-id="${job.id}">Re-run all checks</button></div>
+  </div>`);
   app.appendChild(wrap);
 
   const checkList = wrap.querySelector('#check-list');
   for (const { def, on, inherited } of eff) {
     const result = job.results[def.id];
-    const sub = result ? `Last run: ${result}` : on ? 'Will run on next review transition' : (inherited ? 'Default off in this project' : 'Not enabled');
+    const sub = result ? `Last run: ${result}` : on ? 'Will run on next review transition' : (inherited ? 'Default off in project' : 'Not enabled');
     checkList.appendChild(el(`
       <div class="check-row ${on ? '' : 'disabled'}">
         <div class="toggle ${on ? 'on' : ''}" data-action="toggle-job-check" data-job="${job.id}" data-id="${def.id}"></div>
@@ -822,34 +1483,16 @@ function renderJob(app, parts) {
       </div>
     `));
   }
-  checkList.appendChild(el(`
-    <div class="check-row" style="border-top: 1px dashed var(--surface0)">
-      <div></div>
-      <div class="label" style="color:var(--overlay1)">+ Attach another check from the library</div>
-      <button class="btn ghost" data-nav="#/quality">Browse library</button>
-    </div>
-  `));
+  checkList.appendChild(el(`<div class="check-row" style="border-top: 1px dashed var(--surface0)"><div></div><div class="label" style="color:var(--overlay1)">+ Attach another check from the library</div><button class="btn ghost" data-nav="#/quality">Browse library</button></div>`));
 
   const fbox = wrap.querySelector('#finding-list');
   if (!findings.length) fbox.appendChild(el(`<div class="empty">No findings.</div>`));
   for (const f of findings) {
-    const def = defById(f.checkId);
     fbox.appendChild(el(`
-      <div class="finding ${f.severity === 'high' ? 'high' : f.severity === 'info' ? 'info' : ''} ${f.acked ? 'acked' : ''}" id="finding-${f.id}">
-        <div class="head">
-          <span class="tag sev-${f.severity}">${f.severity}</span>
-          <span class="tag check">${f.checkId}</span>
-          <span class="file">${esc(f.file)}</span>
-          ${f.acked ? '<span class="tag">acknowledged</span>' : ''}
-        </div>
+      <div class="finding ${f.severity === 'high' ? 'high' : f.severity === 'info' ? 'info' : ''} ${f.acked ? 'acked' : ''}">
+        <div class="head"><span class="tag sev-${f.severity}">${f.severity}</span><span class="tag check">${f.checkId}</span><span class="file">${esc(f.file)}</span>${f.acked ? '<span class="tag">acknowledged</span>' : ''}</div>
         <p>${esc(f.message)}</p>
-        ${f.acked ? '' : `
-          <div class="actions row">
-            <button class="btn">Open file</button>
-            <button class="btn primary" data-action="create-task" data-finding="${f.id}">Create follow-up task</button>
-            <button class="btn ghost" data-action="ack-finding" data-job="${job.id}" data-finding="${f.id}">Mark acknowledged</button>
-          </div>
-        `}
+        ${f.acked ? '' : `<div class="actions row"><button class="btn">Open file</button><button class="btn primary" data-action="create-task" data-finding="${f.id}">Create follow-up task</button><button class="btn ghost" data-action="ack-finding" data-job="${job.id}" data-finding="${f.id}">Mark acknowledged</button></div>`}
       </div>
     `));
   }
@@ -860,11 +1503,7 @@ function renderJob(app, parts) {
 //
 document.addEventListener('click', (ev) => {
   const navTarget = ev.target.closest('[data-nav]');
-  if (navTarget && !ev.target.closest('[data-action]')) {
-    ev.preventDefault();
-    navigate(navTarget.dataset.nav);
-    return;
-  }
+  if (navTarget && !ev.target.closest('[data-action]')) { ev.preventDefault(); navigate(navTarget.dataset.nav); return; }
   const actionEl = ev.target.closest('[data-action]');
   if (!actionEl) return;
   ev.preventDefault();
@@ -872,42 +1511,85 @@ document.addEventListener('click', (ev) => {
 
   if (a === 'filter-kind') { ui.libraryFilterKind = actionEl.dataset.value; render(); }
   else if (a === 'filter-dim') { ui.libraryFilterDimension = actionEl.dataset.value; render(); }
-  else if (a === 'set-mode') {
-    const d = defById(actionEl.dataset.id);
-    if (d) { d.executionMode = actionEl.dataset.mode; toast(`${d.id}: execution mode = ${d.executionMode}`); render(); }
+  else if (a === 'set-mode' && actionEl.dataset.id && actionEl.dataset.mode && defById(actionEl.dataset.id)) {
+    const d = defById(actionEl.dataset.id); d.executionMode = actionEl.dataset.mode; toast(`${d.id}: execution mode = ${d.executionMode}`); render();
   }
   else if (a === 'toggle-default') {
-    const p = projectById(actionEl.dataset.project);
-    p.taskCheckDefaults[actionEl.dataset.id] = !p.taskCheckDefaults[actionEl.dataset.id];
-    toast(`${actionEl.dataset.id}: ${p.taskCheckDefaults[actionEl.dataset.id] ? 'on' : 'off'} for ${p.name}`);
-    render();
+    const p = projectById(actionEl.dataset.project); p.taskCheckDefaults[actionEl.dataset.id] = !p.taskCheckDefaults[actionEl.dataset.id];
+    toast(`${actionEl.dataset.id}: ${p.taskCheckDefaults[actionEl.dataset.id] ? 'on' : 'off'} for ${p.name}`); render();
   }
   else if (a === 'toggle-job-check') {
-    const job = jobById(actionEl.dataset.job);
-    const id = actionEl.dataset.id;
-    const project = projectById(job.project);
-    const inherited = !!project.taskCheckDefaults[id];
+    const job = jobById(actionEl.dataset.job); const id = actionEl.dataset.id;
+    const project = projectById(job.project); const inherited = !!project.taskCheckDefaults[id];
     const currentlyOn = id in job.enabledOverrides ? job.enabledOverrides[id] : inherited;
-    job.enabledOverrides[id] = !currentlyOn;
-    toast(`${id}: ${job.enabledOverrides[id] ? 'on' : 'off'} for this task`);
-    render();
+    job.enabledOverrides[id] = !currentlyOn; toast(`${id}: ${job.enabledOverrides[id] ? 'on' : 'off'} for this task`); render();
   }
+  else if (a === 'set-runner-mode') {
+    const p = projectById(actionEl.dataset.id); p.runnerMode = actionEl.dataset.mode; toast(`Runner mode: ${p.runnerMode}`); render();
+  }
+  else if (a === 'proj-section') { ui.projectSection = actionEl.dataset.value; render(); }
+  else if (a === 'toggle-panel') {
+    const key = actionEl.dataset.key;
+    ui.collapsedPanels[key] = !ui.collapsedPanels[key];
+    const p = actionEl.closest('.panel');
+    if (p) p.classList.toggle('collapsed', ui.collapsedPanels[key]);
+  }
+  else if (a === 'set-model') { /* select handled separately */ }
+  else if (a === 'toggle-auto-commit') { const p = projectById(actionEl.dataset.id); p.autoCommit = !p.autoCommit; toast(`Auto-commit: ${p.autoCommit ? 'on' : 'off'}`); render(); }
+  else if (a === 'open-feed') { toast('Open feed (mock)'); }
+  else if (a === 'security-files') { toast('Open security file browser (mock)'); }
   else if (a === 'run-audit') { toast(`Audit ${actionEl.dataset.id} queued (mock)`); }
   else if (a === 'run-probe') { toast(`Probe ${actionEl.dataset.id} running (mock)`); }
-  else if (a === 'rerun-checks') { toast(`Re-running all checks for this task (mock)`); }
+  else if (a === 'rerun-checks') { toast(`Re-running checks (mock)`); }
   else if (a === 'view-result') { toast(`View result for ${actionEl.dataset.id} (mock)`); }
   else if (a === 'create-task') { toast(`Created follow-up task (mock)`); }
   else if (a === 'ack-finding') {
-    const job = jobById(actionEl.dataset.job);
-    const f = job.findings.find(x => x.id === actionEl.dataset.finding);
-    if (f) { f.acked = true; toast(`Finding acknowledged`); render(); }
+    const job = jobById(actionEl.dataset.job); const f = job.findings.find(x => x.id === actionEl.dataset.finding);
+    if (f) { f.acked = true; toast('Finding acknowledged'); render(); }
   }
-  else if (a === 'ack') { toast(`Acknowledged (mock)`); }
-  else if (a === 'export') { toast(`Markdown export (mock)`); }
-  else if (a === 'new-def') { toast(`New definition wizard (mock)`); }
+  else if (a === 'ack') { toast('Acknowledged (mock)'); }
+  else if (a === 'export') { toast('Markdown export (mock)'); }
+  else if (a === 'new-def') { toast('New definition wizard (mock)'); }
+  else if (a === 'skills-tab') { ui.skillsTab = actionEl.dataset.value; render(); }
+  else if (a === 'repo-dim') { ui.skillsRepoDimension = actionEl.dataset.value; render(); }
+  else if (a === 'skills-type') { ui.skillsTypeFilter = actionEl.dataset.value; render(); }
+  else if (a === 'install-skill') {
+    const s = skillRepository.find(r => r.id === actionEl.dataset.id);
+    if (!s) return;
+    const html = `
+      <h2>Install ${esc(s.name)}?</h2>
+      <p class="note" style="margin: 8px 0">Source: <code>${esc(s.source)}</code> &middot; Version: v${esc(s.version)} &middot; Author: ${esc(s.author)}</p>
+      <p style="margin: 12px 0">License: <span class="tag license">${esc(s.license)}</span> ${s.licenseWarn ? '<span class="tag sev-warn">⚠ copyleft</span>' : ''}</p>
+      <p class="note">${licenseDesc(s.license)}</p>
+      <p class="note" style="margin-top:10px">Installing this skill records an attribution under <code>docs/skills/licenses.md</code>. By installing, you confirm the license is compatible with this project.</p>
+      <div class="actions">
+        <button class="btn ghost" data-action="close-dialog">Cancel</button>
+        <button class="btn primary" data-action="confirm-install" data-id="${esc(s.id)}">Install &amp; record attribution</button>
+      </div>
+    `;
+    showDialog(html);
+  }
+  else if (a === 'confirm-install') {
+    const s = skillRepository.find(r => r.id === actionEl.dataset.id);
+    if (s && !isInstalled(s.id)) {
+      installedSkills.push({ id:s.id, name:s.name, when:'(per skill body)', dimension:s.dimension, description:s.description, license:s.license, source:s.source, version:s.version, installed:true });
+      toast(`${s.name} installed &middot; license recorded`);
+    }
+    closeDialog(); render();
+  }
+  else if (a === 'uninstall-skill') {
+    const idx = installedSkills.findIndex(s => s.id === actionEl.dataset.id);
+    if (idx >= 0 && installedSkills[idx].source !== 'built-in') { installedSkills.splice(idx, 1); toast('Skill uninstalled &middot; attribution kept in licenses.md per policy'); render(); }
+  }
+  else if (a === 'close-dialog') { closeDialog(); }
 });
 
-if (!location.hash) location.hash = '#/quality';
+document.addEventListener('change', (ev) => {
+  const select = ev.target.closest('select[data-action="set-model"]');
+  if (select) { const p = projectById(select.dataset.id); p.orchestratorModel = select.value; toast(`Model: ${p.orchestratorModel}`); }
+});
+
+if (!location.hash) location.hash = '#/projects/agent-taskboard-dev';
 render();
 </script>
 
