@@ -2,6 +2,7 @@ using OrchestratorApi.Endpoints;
 using OrchestratorApi.Hubs;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.Cli;
+using OrchestratorApi.Services.Companion;
 using OrchestratorApi.Services.Jobs;
 using OrchestratorApi.Services.Pty;
 using OrchestratorApi.Services.Quota;
@@ -77,6 +78,12 @@ builder.Services.AddSingleton<QuotaCacheStore>();
 builder.Services.AddSingleton<QuotaService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<JobWatcherService>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<TaskRunnerService>());
+// Companion app sync (ADR-0018). Default-off; the HostedService loop exits
+// immediately when Companion:Enabled is false. Bound from appsettings*.json.
+builder.Services.Configure<CompanionSyncOptions>(builder.Configuration.GetSection(CompanionSyncOptions.SectionName));
+builder.Services.AddSingleton<CompanionCommandDispatcher>();
+builder.Services.AddHttpClient("companion-relay");
+builder.Services.AddHostedService<CompanionSyncService>();
 // Serialise enums as camelCase strings so the frontend can use string-literal
 // unions (e.g. JobSummaryStatus = 'none' | 'generating' | 'ready' | 'failed')
 // instead of numeric values.

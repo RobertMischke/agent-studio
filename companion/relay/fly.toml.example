@@ -1,0 +1,27 @@
+# Copy to fly.toml, edit app name, then `fly launch --no-deploy` once and
+# `fly deploy` thereafter. Set the bearer token with:
+#   fly secrets set COMPANION_TOKEN=$(openssl rand -hex 32)
+app = "agent-taskboard-companion-relay"
+primary_region = "fra"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  ASPNETCORE_URLS = "http://0.0.0.0:8080"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 50
+    hard_limit = 100
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

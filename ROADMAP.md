@@ -170,6 +170,19 @@ Hard boundary: supervision is advice-first, force-rare. The deterministic post-r
 
 The full conceptual analysis - loop-to-loop control options, communication contract sketch, execution-model tradeoffs (in-process vs sidecar vs CLI-driven), open conceptual problems, and recommended task spinout - lives in [docs/research/orchestrator-meta-loop-analysis-2026-05-04.md](docs/research/orchestrator-meta-loop-analysis-2026-05-04.md). The recommended first slice is the system review monitor (Layer 3) because it ships value immediately on stable without touching the runtime.
 
+### Companion App
+
+Make the running task board reachable from a phone without exposing the local processor to the internet:
+
+- A small public relay service holds the latest snapshot and a small command queue. The local processor pushes snapshots and pulls commands on a single outbound HTTPS tick (default 10 s). The phone PWA reads the snapshot and posts commands.
+- Pull-pull on the processor side is non-negotiable. The local box never accepts inbound connections; the relay is the only public surface.
+- V1 surface: pipeline overview per project, current task, token-spend summary, quota windows, open NEEDS_INPUT decisions, decision-answer command, new-task command, start-job command. No live log stream, no diff viewer, no push notifications.
+- V1 secrecy is shared bearer token over TLS. End-to-end encryption with a phone-paired symmetric key is V2; the relay sees plaintext until then.
+- The companion shipped on Fly.io. Railway is a documented fallback. The PWA is a separate Angular build, deployed as static assets.
+- Default-off in the local processor. Enabling it is a `Companion:Enabled=true` flip in `appsettings.Local.json`, so a fresh checkout never tries to phone home.
+
+The full V1 contract (endpoints, snapshot shape, command shape, sync cadence, file map) lives in [docs/companion-app-design.md](docs/companion-app-design.md). [ADR-0018](docs/architecture-decisions.md) captures the architectural decision.
+
 ### Focused UX
 
 Keep the app dense, fast, and pleasant to use:

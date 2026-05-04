@@ -400,3 +400,25 @@ The reference clones at `c:/Projects/agent-taskboard-devspace/cli-source-referen
 **Implementation pointers.** [`backend/Services/Supervisor/SupervisorContract.cs`](../backend/Services/Supervisor/SupervisorContract.cs) (typed records and ISupervisor surface); [`backend/Services/Supervisor/ProjectObservationService.cs`](../backend/Services/Supervisor/ProjectObservationService.cs) (read-only Observe); [`backend/Services/Supervisor/SupervisorInterventionService.cs`](../backend/Services/Supervisor/SupervisorInterventionService.cs) (the four primitives); [`backend/Services/Supervisor/HardHealthCheckHostedService.cs`](../backend/Services/Supervisor/HardHealthCheckHostedService.cs) (in-process every 10s, advisory-only); [`backend/Services/Supervisor/SoftReasoningHostedService.cs`](../backend/Services/Supervisor/SoftReasoningHostedService.cs) (CLI-driven every 5-10 min, off by default); [`backend/Services/Supervisor/AutoInterventionHostedService.cs`](../backend/Services/Supervisor/AutoInterventionHostedService.cs) (gated, off by default); [`scripts/supervisor/system-review.md`](../scripts/supervisor/system-review.md) (Layer 3 stand-alone monitor).
 
 **Status.** Accepted.
+
+---
+
+## ADR-0018 - Companion App via outbound-only relay (2026-05-04)
+
+**Decision.** The mobile companion surface is reachable from a phone over a public relay that the local processor talks to with outbound-only HTTPS. The processor runs a HostedService that ticks every 10 s, pushing a full snapshot and pulling any queued commands in the same call. The phone is a separate Angular PWA that reads the relay's last snapshot and posts commands. Auth is a shared bearer token over TLS in V1; end-to-end encryption with a paired symmetric key is V2. The HostedService is default-off so a fresh checkout never phones home.
+
+**Context.** The user wants a phone surface for pipeline visibility and for answering NEEDS_INPUT decisions while the local processor sits on a private machine without an inbound port. The constraint is hard: nothing on the local box may listen for inbound connections from the public internet. The chosen shape mirrors how every other phone-to-home tool that respects this constraint works (push-pull through a tiny relay), but it had not been built into this project yet.
+
+**Non-goals.**
+- A second SignalR hub on the local box, or any other inbound port. The processor's existing `JobHub` stays a localhost-only socket for the desktop UI.
+- Persistent state on the relay. The relay is in-memory; a restart drops the snapshot and the next sync repopulates it within one tick. Lossy is fine for a status mirror.
+- Live log streaming from the agent CLI through the relay. Only summarised pipeline + token + quota state goes over the wire. Full log evidence stays in the watched task folders where it already lives.
+- Multi-user / multi-tenant. One processor, one shared token, one PWA install.
+- End-to-end encryption in V1. The relay sees plaintext until the V2 pairing flow lands; the design doc and roadmap call this out so it cannot be forgotten.
+- Mid-task push notifications. The PWA polls while open. VAPID-backed Web Push is V2.
+
+**Reasoning style.** Match the existing supervisor model: optional layer, default-off, single-writer through existing services. The companion command dispatcher must not invent a new path into job state; every command kind translates into an existing in-process service call (`TaskRunnerService.ContinueJob`, `JobMutationService.CreateJob`, `TaskRunnerService.StartJob`). The snapshot builder is a pure function over already-served read surfaces (jobs, runner status, token summary, quota report) so it can be unit-tested without I/O. Outbound-only is the architectural property; everything else is replaceable later.
+
+**Implementation pointers.** [`docs/companion-app-design.md`](companion-app-design.md) (V1 contract with endpoints and DTO shapes); [`backend/Services/Companion/CompanionSyncService.cs`](../backend/Services/Companion/CompanionSyncService.cs) (HostedService tick loop); [`backend/Services/Companion/CompanionSnapshotBuilder.cs`](../backend/Services/Companion/CompanionSnapshotBuilder.cs) (pure snapshot folding); [`backend/Services/Companion/CompanionCommandDispatcher.cs`](../backend/Services/Companion/CompanionCommandDispatcher.cs) (queued command -> existing service); [`companion/relay/Program.cs`](../companion/relay/Program.cs) (relay minimal API).
+
+**Status.** Accepted.
