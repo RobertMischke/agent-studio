@@ -28,6 +28,7 @@ Today the application provides:
 - CLI execution for Claude Code, Codex, GitHub Copilot, and Gemini.
 - Live task output, protocol summaries, screenshots, and review evidence.
 - CLI quota and session visibility where the underlying tools expose enough data.
+- Persisted per-project and global orchestrator sessions that can be resumed and inspected.
 - Early project-level planning tasks for Security and Architecture dimensions.
 
 ## Roadmap Themes
@@ -94,6 +95,27 @@ Treat orchestrator-to-CLI communication as a core capability instead of a side-e
 - An `Orchestrator` participant in the activity log so the user sees the system's decisions next to the agent's replies. Heuristic fallback always surfaces a warning.
 - Recovery after a session loss carries the user follow-up as the primary instruction, not a footer the agent can ignore.
 
+### Persistent Orchestrator Chat
+
+Make the orchestrator a durable conversation partner, not only a backend decision service. The user should be able to keep contact with the global board orchestrator or the current project's orchestrator across reloads, restarts, and days.
+
+Research direction:
+
+- Claude Code, Cursor, and Codex all treat continuity as an explicit session problem: saved conversations, resume commands, follow-ups, history, and in some cases fork semantics.
+- The useful product feeling is "the session is still open", but the implementation can be a resumable session id plus durable log and compact memory. A permanent model process is not required.
+- Cursor's background-agent surface is the closest UX analogue: list agents, view status, send follow-ups, and take over. Agent Task Processor should adapt that pattern locally and transparently.
+
+Planned capabilities:
+
+- Optional pinned or collapsible Orchestrator Chat window.
+- Scope selector for Global vs current Project orchestrator.
+- Chat log loaded from the orchestrator event log so reloads preserve the conversation.
+- Context view showing model, CLI, session id, boot source, last activity, memory snapshot, and recent summarized job evidence.
+- Project memory snapshots built from README, ROADMAP, AGENTS, architecture decisions, job results, open tasks, recent decisions, and review outcomes.
+- Manual "Refresh memory" action before automatic memory maintenance.
+- Typed app actions from chat, starting with safe actions such as create task draft, open job detail, refresh memory, and summarize recent results.
+- Explicit fork semantics for research or speculative planning. The canonical project orchestrator remains the default chat partner.
+
 ### Focused UX
 
 Keep the app dense, fast, and pleasant to use:
@@ -123,6 +145,7 @@ When changing this product, prefer work that:
 - Makes security review more repeatable, evidence-backed, and frequent.
 - Improves review quality.
 - Makes the current task state easier to see.
+- Makes the orchestrator's context inspectable instead of magical.
 - Preserves the sequential per-project execution model.
 - Uses local files and existing subscriptions instead of new hosted infrastructure.
 - Keeps the UI compact, legible, and calm.

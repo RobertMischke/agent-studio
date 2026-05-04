@@ -20,7 +20,6 @@ Die Pfade teilen sich in zwei Bereiche:
 - `.github/copilot-instructions.md` — schlanker Copilot-Kompatibilitätsverweis
 - `.github/prompts/` — Reusable Prompts (z.B. Sync abhängiger Projekte)
 - `docs/filesystem-contract.md` — Job-Ordner-Kontrakt + Template
-- `NEW-I.md` — Initiative & Mission
 - `api.sh` — Backend start/stop/restart/status (sh, kanonisch für Agenten)
 - `api.ps1` — gleiche Funktionalität für manuelle PowerShell-Nutzung; **Agenten dürfen das nicht aufrufen**
 

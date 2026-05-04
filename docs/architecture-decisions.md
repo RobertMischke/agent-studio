@@ -222,3 +222,25 @@ Numbering is monotonic. Never reuse a number; never silently delete history.
 **Implementation pointers.** [backend/Services/Runner/RunStatusClassifier.cs](../backend/Services/Runner/RunStatusClassifier.cs) (enum + statuses + pure classifier); [backend.Tests/RunStatusClassifierTests.cs](../backend.Tests/RunStatusClassifierTests.cs) (matrix); [backend/Services/Cli/CliExecutionServiceBase.cs](../backend/Services/Cli/CliExecutionServiceBase.cs) `Stop` + `MonitorProcessAsync`; matching changes in [backend/Services/CopilotCliService.cs](../backend/Services/CopilotCliService.cs); watchdog kill in [backend/Services/Runner/ProjectRunner.cs](../backend/Services/Runner/ProjectRunner.cs); API hint in [backend/Endpoints/Jobs/JobRunnerEndpoints.cs](../backend/Endpoints/Jobs/JobRunnerEndpoints.cs); frontend skip-modal in [frontend/src/app/components/job-detail.ts](../frontend/src/app/components/job-detail.ts) `applyExecutionState`; Pause-&-Send sends `reason=followup` in the same file; E2E in [frontend/e2e/stop-no-error-modal.spec.ts](../frontend/e2e/stop-no-error-modal.spec.ts).
 
 **Status.** Accepted.
+
+---
+
+## ADR-0011 - Orchestrator chat uses canonical scope sessions with visible memory (2026-05-03)
+
+**Decision.** The persistent Orchestrator Chat is the user-facing surface for the existing canonical orchestrator session of its scope: the global orchestrator for board-level chat and the project orchestrator for project-level chat. It is backed by a durable event log and an inspectable memory snapshot. Forks are explicit, short-lived research or recovery branches that report back to the canonical session; they do not become peer orchestrators.
+
+**Context.** The user wants an optional always-available orchestrator chat that feels alive across days, can explain what happened in the software, understands the application it controls, and can eventually steer the app. The central ambiguity was whether the chat should be a separate instance, whether each app needs two orchestrators, and whether "keeping it alive" means pinging a model. Existing ADRs already established per-project long-lived sessions (ADR-0007) and a global orchestrator above them (ADR-0009). This decision connects those sessions to the chat surface and adds the missing memory contract.
+
+**Non-goals.**
+- A second peer project orchestrator just for chat. The chat talks to the canonical project orchestrator so there is one owner of project memory and decisions.
+- A permanently running model process. Continuity comes from session id, event log, and memory snapshot; the CLI process may start and exit per interaction.
+- Blind keep-alive pings. Local freshness checks are fine; LLM calls should happen for user questions, auto-mode decisions, or meaningful memory refreshes.
+- Hidden memory. The memory snapshot must be visible, refreshable, and rebuildable from local evidence.
+- Free-form UI automation. The orchestrator can control the app only through typed actions validated by normal backend policy.
+- Forks that silently replace the canonical session. Forks produce evidence or proposals that the canonical orchestrator may absorb.
+
+**Reasoning style.** Treat user trust as a context observability problem. The user does not need a model process that never sleeps; they need to know which orchestrator they are talking to, what it remembers, where that memory came from, what it decided, and which app action it is proposing. Use deterministic memory assembly first, then model judgment only where compression or reconciliation adds value.
+
+**Implementation pointers.** [docs/orchestrator-chat.md](orchestrator-chat.md) for product shape, memory model, first slice, and open questions; [README.md](../README.md) "Persistent orchestrator chat"; [ROADMAP.md](../ROADMAP.md) "Persistent Orchestrator Chat"; [docs/design-principles.md](design-principles.md) "The orchestrator has visible memory"; existing session primitives in [backend/Services/Runner/OrchestratorSession.cs](../backend/Services/Runner/OrchestratorSession.cs), [backend/Services/Runner/GlobalOrchestratorSession.cs](../backend/Services/Runner/GlobalOrchestratorSession.cs), and [backend/Services/Runner/OrchestratorLog.cs](../backend/Services/Runner/OrchestratorLog.cs).
+
+**Status.** Accepted.

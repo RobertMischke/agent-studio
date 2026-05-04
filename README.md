@@ -50,6 +50,8 @@ The board exists to make the queue the only thing you maintain. Tasks land in `2
 
 **A layer on top of agents and software.** The product surfaces what the agents did and what changed in your software in one place. The top level is condensed (run summaries, commit counts, status badges); drill-down is always one click away (full activity log, diffs, tool calls). The full UX contract is in [docs/design-principles.md](docs/design-principles.md) and is the bar every protocol-layer change has to clear.
 
+**A living orchestrator, not a hidden daemon.** The orchestrator should be someone the user can talk to, not just code that moves folders. Each project has a canonical orchestrator session with inspectable memory: what it was booted with, which jobs and decisions it has seen, what the project does, what the roadmap says, and what should happen next. The long-term concept is documented in [docs/orchestrator-chat.md](docs/orchestrator-chat.md).
+
 **Sequential within a project, never parallel.** One task at a time per project. No worktrees. No branch-per-task. No intra-project fan-out. Parallelism only exists *across* projects (different watch paths run independently).
 
 **Security is a first-class workstream.** Security review is not a side quest at the end of a feature. It is a repeatable project-level activity with its own skills, evidence, history, and review surface. The board should make it normal to ask "when was this last reviewed, what was checked, what changed since then, and what evidence supports the conclusion?"
@@ -110,6 +112,22 @@ This matters because prompt-based steering ("treat this as a continuation", "don
 3. **An orchestrator voice in the chat.** The orchestrator is a first-class participant in the activity log (alongside `You` and the agent). When it re-issues a follow-up, accepts a heuristic verdict, or gives up after a retry, it says so in the chat so the user can see what the system decided and why. Heuristic fallback always surfaces a warning, so the user notices when the deterministic contract did not match.
 
 Prompt wording remains the easiest way to steer behavior, but it is not the load-bearing layer anymore. The product treats orchestrator-to-CLI communication as a core capability.
+
+---
+
+## Persistent orchestrator chat
+
+The next orchestration surface is an optional chat window with the orchestrator. The chat should be durable across reloads and days, backed by the same persisted global and per-project orchestrator sessions described in the ADRs.
+
+The goal is not to keep a process alive forever. The goal is to keep **context** alive:
+
+- stable global and project orchestrator session ids,
+- append-only orchestrator logs with decisions, user chat, follow-ups, and overrides,
+- compact memory snapshots built from roadmap, README, job results, recent decisions, and open tasks,
+- a visible Context view that shows what the orchestrator knows and where that knowledge came from,
+- explicit scope selection between the global board orchestrator and the current project orchestrator.
+
+The orchestrator chat may later control the app through typed actions such as creating task drafts, refreshing memory, opening a job, or continuing a task. State-changing or quota-spending actions should stay visible and auditable. Forks are allowed for research or speculative planning, but the default project chat talks to the canonical project orchestrator so the user has one stable counterpart per watched project.
 
 ---
 
@@ -223,6 +241,7 @@ When the agent task contract or folder schema changes, run the `/sync-target-ins
 - [docs/supported-clis.md](docs/supported-clis.md) - CLI integration contract
 - [docs/filesystem-contract.md](docs/filesystem-contract.md) - job folder contract
 - [docs/agent-task-contract.md](docs/agent-task-contract.md) - application and agent ownership boundary
+- [docs/orchestrator-chat.md](docs/orchestrator-chat.md) - persistent orchestrator chat, memory, scope, and control surface
 - [docs/skills-architecture.md](docs/skills-architecture.md) - portable skills and project lookup contract
 - [prompts/runtime/](prompts/runtime/) - editable backend runtime prompt templates
 - [PATHS.md](PATHS.md) - path conventions

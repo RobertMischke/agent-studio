@@ -52,6 +52,21 @@ The agent runs continuously; so does our view of it. We summarize as we go, not 
 - Software-side aggregations (commits made, files touched, tests run) update at run end and refresh on the next read; they are not gated behind a separate user action.
 - The session-level overview ("3 runs, 12 commits, last activity 5 min ago") follows from the run-level data and is never edited by hand.
 
+## The orchestrator has visible memory
+
+The orchestrator should feel present because it can explain what it knows, not because the UI pretends a hidden model is always awake.
+
+The user must be able to answer:
+
+- Which orchestrator am I talking to: global or project?
+- Which session id, model, and CLI back this conversation?
+- What was loaded when the orchestrator booted?
+- Which job results, decisions, roadmap items, and open tasks are currently in memory?
+- When was that memory refreshed?
+- Which app action is the orchestrator proposing or taking?
+
+Durable memory is a product surface. It should be visible, refreshable, and rebuildable from local evidence. The memory snapshot may be compact, but it must not be mysterious.
+
 ## A run is the unit of conversation
 
 A *run* is one CLI invocation between two user inputs. A *session* is the ordered list of runs that make up a task's work. Inside a run there are turns, tool calls, and orchestrator decisions; across runs there is a story.
@@ -72,6 +87,7 @@ When you propose a UI change or a backend service that touches the protocol, the
 
 1. Does the top level still answer "what did the agent change in my software?"
 2. Is the underlying detail one click away?
-3. Are we adding a new signal that duplicates an existing one?
+3. If the orchestrator speaks, can the user see what context it used?
+4. Are we adding a new signal that duplicates an existing one?
 
-If the answer to (1) or (2) is no, redesign. If (3) is yes, suppress the new signal or replace the existing one — never stack them.
+If the answer to (1), (2), or (3) is no, redesign. If (4) is yes, suppress the new signal or replace the existing one - never stack them.
