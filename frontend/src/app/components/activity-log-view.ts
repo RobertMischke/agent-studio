@@ -1157,6 +1157,7 @@ function chipKindLabel(kind: ActivityLogKind): string {
     case 'error': return 'Error';
     case 'message': return 'Msg';
     case 'orchestrator': return 'Orch';
+    case 'supervisor': return 'Sup';
     case 'other': return 'Other';
   }
 }
@@ -1168,6 +1169,7 @@ function roleHeading(kind: ConversationTurn['kind']): string {
     case 'system': return 'System';
     case 'tools': return 'Tools';
     case 'orchestrator': return 'Orchestrator';
+    case 'supervisor': return 'Supervisor';
   }
 }
 

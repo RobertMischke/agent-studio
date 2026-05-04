@@ -1,6 +1,6 @@
 import { CliOutputLine } from '../models/job.model';
 
-export type ActivityLogKind = 'read' | 'search' | 'command' | 'edit' | 'task' | 'todo' | 'error' | 'message' | 'orchestrator' | 'other';
+export type ActivityLogKind = 'read' | 'search' | 'command' | 'edit' | 'task' | 'todo' | 'error' | 'message' | 'orchestrator' | 'supervisor' | 'other';
 export type ActivityLogFilters = Record<ActivityLogKind, boolean>;
 
 export interface ActivityLogGroup {
@@ -15,7 +15,7 @@ export interface ActivityLogGroup {
 
 const actionStartRegex = /^(?<marker>[^\w\s]+|x|X|\*)\s+(?<label>.+)$/i;
 
-export const activityLogKinds: ActivityLogKind[] = ['read', 'search', 'command', 'edit', 'task', 'todo', 'error', 'message', 'orchestrator', 'other'];
+export const activityLogKinds: ActivityLogKind[] = ['read', 'search', 'command', 'edit', 'task', 'todo', 'error', 'message', 'orchestrator', 'supervisor', 'other'];
 
 export const defaultActivityLogFilters: ActivityLogFilters = {
   read: true,
@@ -27,6 +27,7 @@ export const defaultActivityLogFilters: ActivityLogFilters = {
   error: true,
   message: true,
   orchestrator: true,
+  supervisor: true,
   other: true
 };
 
@@ -72,6 +73,22 @@ export function parseActivityLog(lines: CliOutputLine[]): ActivityLogGroup[] {
         collapsedByDefault: false
       };
       groups.push(current);
+      current = null;
+      continue;
+    }
+
+    if (line.stream === 'supervisor') {
+      const isHigh = /\bhigh\b/i.test(line.text) || /^\[force-fail\]/i.test(line.text);
+      const supervisorGroup: ActivityLogGroup = {
+        id: `${groups.length}-${line.timestamp}-supervisor`,
+        kind: 'supervisor',
+        title: line.text,
+        subtitle: '',
+        status: isHigh ? 'error' : 'neutral',
+        lines: [line],
+        collapsedByDefault: false
+      };
+      groups.push(supervisorGroup);
       current = null;
       continue;
     }
@@ -133,7 +150,7 @@ export function flattenActivityLines(groups: ActivityLogGroup[]): CliOutputLine[
   return groups.flatMap((group) => group.lines);
 }
 
-export type ChatRole = 'agent' | 'tool' | 'system' | 'user' | 'orchestrator';
+export type ChatRole = 'agent' | 'tool' | 'system' | 'user' | 'orchestrator' | 'supervisor';
 
 export interface ChatMessage {
   id: string;
@@ -161,7 +178,10 @@ function groupToChatMessage(group: ActivityLogGroup, index: number): ChatMessage
   const isUser = group.lines.length > 0 && group.lines[0].stream === 'user';
   const isOrchestrator = group.kind === 'orchestrator'
     || (group.lines.length > 0 && group.lines[0].stream === 'orchestrator');
-  const role: ChatRole = isOrchestrator ? 'orchestrator'
+  const isSupervisor = group.kind === 'supervisor'
+    || (group.lines.length > 0 && group.lines[0].stream === 'supervisor');
+  const role: ChatRole = isSupervisor ? 'supervisor'
+    : isOrchestrator ? 'orchestrator'
     : isUser ? 'user'
     : isError && !isTool ? 'system'
     : isTool ? 'tool'
@@ -170,7 +190,9 @@ function groupToChatMessage(group: ActivityLogGroup, index: number): ChatMessage
   const firstLine = group.lines[0];
   const timestamp = firstLine ? firstLine.timestamp : new Date().toISOString();
 
-  const author = isOrchestrator
+  const author = isSupervisor
+    ? 'Supervisor'
+    : isOrchestrator
     ? 'Orchestrator'
     : isUser
       ? 'You'
@@ -223,7 +245,7 @@ function groupToChatMessage(group: ActivityLogGroup, index: number): ChatMessage
 // user explicitly asked for: hide tool noise, keep responses prominent and
 // legible.
 
-export type ConversationTurnKind = 'agent' | 'user' | 'tools' | 'system' | 'orchestrator';
+export type ConversationTurnKind = 'agent' | 'user' | 'tools' | 'system' | 'orchestrator' | 'supervisor';
 
 export interface ToolBurstSummary {
   total: number;
@@ -323,6 +345,8 @@ export function buildConversationTurns(groups: ActivityLogGroup[]): Conversation
 function roleFor(group: ActivityLogGroup): ConversationTurnKind {
   const isUser = group.lines.length > 0 && group.lines[0].stream === 'user';
   if (isUser) return 'user';
+  if (group.kind === 'supervisor'
+    || (group.lines.length > 0 && group.lines[0].stream === 'supervisor')) return 'supervisor';
   if (group.kind === 'orchestrator'
     || (group.lines.length > 0 && group.lines[0].stream === 'orchestrator')) return 'orchestrator';
   if (isToolKind(group.kind)) return 'tools';
@@ -671,6 +695,7 @@ export function activityKindLabel(kind: ActivityLogKind): string {
     case 'error': return 'Errors';
     case 'message': return 'Messages';
     case 'orchestrator': return 'Orchestrator';
+    case 'supervisor': return 'Supervisor';
     case 'other': return 'Other';
   }
 }

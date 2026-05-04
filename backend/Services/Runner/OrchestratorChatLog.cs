@@ -43,15 +43,31 @@ public class OrchestratorChatLog
     /// </summary>
     public bool Append(JobInfo info, OrchestratorMessageKind kind, string text, ICollection<CliOutputLine>? liveBuffer = null)
     {
+        return AppendWithStream(info, "orchestrator", $"[{kind.ToTag()}] {text}", liveBuffer);
+    }
+
+    /// <summary>
+    /// Append a meta message attributed to the supervisor participant. Same
+    /// persistence shape as the orchestrator stream, but with the
+    /// <c>[supervisor]</c> stream tag so the activity-log parser renders it
+    /// as a separate participant alongside <c>You</c>, the agent, and
+    /// <c>Orchestrator</c>.
+    /// </summary>
+    public bool AppendSupervisor(JobInfo info, string tag, string text, ICollection<CliOutputLine>? liveBuffer = null)
+    {
+        return AppendWithStream(info, "supervisor", $"[{tag}] {text}", liveBuffer);
+    }
+
+    private bool AppendWithStream(JobInfo info, string streamTag, string body, ICollection<CliOutputLine>? liveBuffer)
+    {
         if (info == null) return false;
         try
         {
             Directory.CreateDirectory(JobPaths.LogsDir(info.FolderPath));
             var logPath = JobPaths.CliOutputLog(info.FolderPath);
             var ts = DateTime.UtcNow;
-            var oneLine = (text ?? string.Empty).Replace("\r", " ").Replace("\n", " ").TrimEnd();
-            var bodyText = $"[{kind.ToTag()}] {oneLine}";
-            var persistLine = $"[{ts:HH:mm:ss.fff}] [orchestrator] {bodyText}";
+            var oneLine = (body ?? string.Empty).Replace("\r", " ").Replace("\n", " ").TrimEnd();
+            var persistLine = $"[{ts:HH:mm:ss.fff}] [{streamTag}] {oneLine}";
             var prefix = File.Exists(logPath) && new FileInfo(logPath).Length > 0
                 ? Environment.NewLine
                 : string.Empty;
@@ -62,15 +78,15 @@ public class OrchestratorChatLog
                 liveBuffer.Add(new CliOutputLine
                 {
                     Timestamp = ts,
-                    Stream = "orchestrator",
-                    Text = bodyText
+                    Stream = streamTag,
+                    Text = oneLine
                 });
             }
             return true;
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Failed to append orchestrator message for {JobId}", info.Id);
+            _logger.LogWarning(ex, "Failed to append {Stream} message for {JobId}", streamTag, info.Id);
             return false;
         }
     }

@@ -78,8 +78,7 @@ public sealed class SupervisorInterventionService
             try
             {
                 _taskRunner.StopJob(jobId, info.WatchPath, RunStopReason.UserStop);
-                _chatLog.Append(info, OrchestratorMessageKind.Decision,
-                    $"supervisor:cancel-run reason={reason} source={source}");
+                _chatLog.AppendSupervisor(info, "cancel-run", $"reason={reason} source={source}");
             }
             catch (Exception ex)
             {
@@ -142,8 +141,7 @@ public sealed class SupervisorInterventionService
             try
             {
                 _taskRunner.StopJob(jobId, info.WatchPath, RunStopReason.UserStop);
-                _chatLog.Append(info, OrchestratorMessageKind.GiveUp,
-                    $"supervisor:force-fail reason={reason} source={source}");
+                _chatLog.AppendSupervisor(info, "force-fail", $"reason={reason} source={source}");
             }
             catch (Exception ex)
             {
