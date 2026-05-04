@@ -297,6 +297,39 @@
   .dash-card.alert { border-color: rgba(243,139,168,0.40); background: rgba(243,139,168,0.05); }
   .dash-card.good { border-color: rgba(166,227,161,0.30); }
 
+  .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 12px; }
+  .metric-card { background: var(--mantle); border: 1px solid var(--surface0); border-radius: 6px; padding: 11px; }
+  .metric-card .lbl { font-size: 10.5px; color: var(--overlay1); text-transform: uppercase; letter-spacing: 0.05em; }
+  .metric-card .val { font-size: 18px; color: var(--text); font-weight: 700; margin: 4px 0; }
+  .metric-card .sub { color: var(--subtext0); font-size: 12px; }
+  .mini-card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px; }
+  .mini-card { background: var(--mantle); border: 1px solid var(--surface0); border-radius: 6px; padding: 11px; min-height: 86px; }
+  .mini-card strong { display: block; margin-bottom: 5px; color: var(--text); }
+  .mini-card p { margin: 0; color: var(--subtext0); font-size: 12.5px; }
+  .qa-run { display: grid; grid-template-columns: 120px 1fr 100px; gap: 10px; align-items: center; padding: 9px 12px; border-bottom: 1px solid var(--surface0); }
+  .qa-run:last-child { border-bottom: none; }
+  .bar-mini { height: 7px; background: var(--surface0); border-radius: 999px; overflow: hidden; margin-top: 6px; }
+  .bar-mini span { display: block; height: 100%; background: var(--green); }
+  .bar-mini span.warn { background: var(--yellow); }
+  .source-map { display: grid; grid-template-columns: repeat(12, 1fr); gap: 4px; min-height: 120px; }
+  .source-block { border-radius: 4px; background: rgba(137,180,250,0.18); border: 1px solid rgba(137,180,250,0.25); min-height: 28px; }
+  .source-block.hot { background: rgba(243,139,168,0.20); border-color: rgba(243,139,168,0.35); }
+  .source-block.test { background: rgba(166,227,161,0.17); border-color: rgba(166,227,161,0.30); }
+  .source-block.docs { background: rgba(249,226,175,0.16); border-color: rgba(249,226,175,0.30); }
+  .token-heatmap { display: grid; grid-template-columns: repeat(24, 1fr); gap: 3px; padding: 10px; background: var(--mantle); border: 1px solid var(--surface0); border-radius: 6px; }
+  .token-cell { aspect-ratio: 1; border-radius: 3px; background: var(--surface0); cursor: pointer; }
+  .token-cell.low { background: rgba(137,180,250,0.20); }
+  .token-cell.mid { background: rgba(148,226,213,0.34); }
+  .token-cell.high { background: rgba(249,226,175,0.55); }
+  .token-cell.peak { background: rgba(243,139,168,0.75); }
+  .token-row { display: grid; grid-template-columns: 170px 1fr 90px; gap: 10px; align-items: center; padding: 8px 0; font-size: 12.5px; }
+  .token-track { height: 8px; background: var(--surface0); border-radius: 999px; overflow: hidden; }
+  .token-fill { height: 100%; background: var(--blue); }
+  .token-fill.supporting { background: var(--teal); }
+  .token-fill.orchestrator { background: var(--mauve); }
+  .timeline { display: grid; grid-template-columns: repeat(8, 1fr); gap: 5px; align-items: end; height: 100px; padding: 8px 4px; }
+  .timeline span { display: block; border-radius: 4px 4px 0 0; background: linear-gradient(180deg, var(--peach), var(--red)); min-height: 12px; }
+
   .activity-feed { font-size: 12.5px; }
   .activity-feed .entry { padding: 7px 10px; border-left: 2px solid var(--surface1); margin-bottom: 6px; background: var(--mantle); border-radius: 0 4px 4px 0; }
   .activity-feed .entry.decision { border-left-color: var(--mauve); }
@@ -429,6 +462,28 @@ const projects = [
       lastUpdate: '2026-04-28',
       adrCount: 8,
     },
+    uxui: {
+      rating: 'Iteration active',
+      references: 8,
+      screenshots: 14,
+      councilItems: 5,
+      lastReview: '2026-05-04',
+    },
+    testQuality: {
+      backend: { passed: 142, failed: 0 },
+      e2e: { passed: 18, failed: 2 },
+      coverage: 78,
+      tuning: '112 ms',
+      sourceFiles: 284,
+      lines: '31.8k',
+    },
+    tokenUsage: {
+      total: '12.8M',
+      job: '8.1M',
+      supporting: '3.4M',
+      orchestrator: '1.3M',
+      peakJob: 'quality-system-mockup',
+    },
   },
   {
     id:'orchestrator-target-x',
@@ -449,6 +504,9 @@ const projects = [
     probes: [],
     security: { rating: null, lastReview: null, reviewer: null, summary: null, files: [] },
     architecture: { files: [], lastUpdate: null, adrCount: 0 },
+    uxui: { rating: 'No design memory', references: 0, screenshots: 0, councilItems: 0, lastReview: null },
+    testQuality: { backend: { passed: 0, failed: 0 }, e2e: { passed: 0, failed: 0 }, coverage: 0, tuning: '-', sourceFiles: 0, lines: '0' },
+    tokenUsage: { total: '0', job: '0', supporting: '0', orchestrator: '0', peakJob: '-' },
   },
 ];
 
@@ -481,6 +539,18 @@ const installedSkills = [
   { id:'TARGET-INSTRUCTION-SYNC', name:'Sync target project instructions', when:'When onboarding a watched project', dimension:'onboarding',
     description:'Renders AGENTS.md and the agent task contract into a watched target project.',
     license:'MIT', source:'built-in', version:'1.0.0', installed:true },
+  { id:'SCREENSHOT-CRITIQUE', name:'Screenshot critique', when:'From UX/UI on a project or task', dimension:'design',
+    description:'Reads screenshots and design references, then writes structured visual critique.',
+    license:'MIT', source:'built-in', version:'1.0.0', installed:true },
+  { id:'COUNCIL-REVIEW', name:'Council review', when:'From UX/UI after a design iteration', dimension:'design',
+    description:'Runs role-separated product, visual, interaction, accessibility, and positioning critique.',
+    license:'MIT', source:'built-in', version:'1.0.0', installed:true },
+  { id:'QA-RUNNER', name:'QA runner', when:'From Test Quality on demand', dimension:'testing',
+    description:'Runs backend, end-to-end, and tuning checks, then stores a parseable report.',
+    license:'MIT', source:'built-in', version:'1.0.0', installed:true },
+  { id:'SOURCE-MAP', name:'Source map', when:'From Test Quality on demand', dimension:'testing',
+    description:'Builds a code perspective with lines, modules, coverage, dependencies, and hotspots.',
+    license:'MIT', source:'built-in', version:'1.0.0', installed:true },
 ];
 
 // Curated repository (mock catalog: presented as community / first-party offerings).
@@ -507,7 +577,7 @@ const ui = {
   skillsSearch: '',
   skillsRepoDimension: 'all',
   skillsTypeFilter: 'all', // all | workflow | audit | check
-  projectSection: 'overview', // overview | security | architecture | quality | jobs | settings | orchestrator | activity
+  projectSection: 'overview', // overview | security | architecture | uxui | testquality | tokenusage | quality | jobs | settings | orchestrator | activity
   collapsedPanels: {}, // key -> true
 };
 
@@ -668,6 +738,9 @@ function renderProjectDetail(app, id) {
         <a data-action="proj-section" data-value="overview" class="${ui.projectSection==='overview'?'active':''}"><span class="icon">📊</span>Overview</a>
         <a data-action="proj-section" data-value="security" class="${ui.projectSection==='security'?'active':''}"><span class="icon">🔒</span>Security ${secCls!=='none'?`<span class="badge ${secCls}">${esc(project.security.rating || '')}</span>`:`<span class="badge bad">!</span>`}</a>
         <a data-action="proj-section" data-value="architecture" class="${ui.projectSection==='architecture'?'active':''}"><span class="icon">📐</span>Architecture <span class="badge">${project.architecture.adrCount}</span></a>
+        <a data-action="proj-section" data-value="uxui" class="${ui.projectSection==='uxui'?'active':''}"><span class="icon">🎨</span>UX/UI <span class="badge">${project.uxui.screenshots}</span></a>
+        <a data-action="proj-section" data-value="testquality" class="${ui.projectSection==='testquality'?'active':''}"><span class="icon">🧪</span>Test Quality <span class="badge ${project.testQuality.e2e.failed?'warn':'good'}">${project.testQuality.coverage}%</span></a>
+        <a data-action="proj-section" data-value="tokenusage" class="${ui.projectSection==='tokenusage'?'active':''}"><span class="icon">▦</span>Token Usage <span class="badge warn">${esc(project.tokenUsage.total)}</span></a>
         <a data-action="proj-section" data-value="quality" class="${ui.projectSection==='quality'?'active':''}"><span class="icon">✅</span>Audits &amp; Checks <span class="badge">${project.audits.length + enabledChecks + project.probes.length}</span></a>
         <a data-action="proj-section" data-value="jobs" class="${ui.projectSection==='jobs'?'active':''}"><span class="icon">📋</span>Jobs <span class="badge ${findingsCount?'warn':''}">${projectJobs.length}</span></a>
         <div class="group">Configuration</div>
@@ -685,6 +758,9 @@ function renderProjectDetail(app, id) {
     overview: renderProjOverview,
     security: renderProjSecurity,
     architecture: renderProjArchitecture,
+    uxui: renderProjUxUi,
+    testquality: renderProjTestQuality,
+    tokenusage: renderProjTokenUsage,
     quality: renderProjQuality,
     jobs: renderProjJobs,
     settings: renderProjSettings,
@@ -734,6 +810,27 @@ function renderProjOverview(content, project, projectJobs) {
     </div>
   `));
   dash.appendChild(el(`
+    <div class="dash-card" data-action="proj-section" data-value="uxui">
+      <div class="lbl">🎨 UX/UI</div>
+      <div class="val">${esc(project.uxui.rating)}</div>
+      <div class="sub">${project.uxui.references} refs · ${project.uxui.screenshots} screenshots · ${project.uxui.councilItems} council notes</div>
+    </div>
+  `));
+  dash.appendChild(el(`
+    <div class="dash-card ${project.testQuality.e2e.failed ? 'alert' : 'good'}" data-action="proj-section" data-value="testquality">
+      <div class="lbl">🧪 Test Quality</div>
+      <div class="val">${project.testQuality.coverage}% coverage</div>
+      <div class="sub">${project.testQuality.backend.passed} backend pass · ${project.testQuality.e2e.failed} E2E failing · ${project.testQuality.lines} LOC</div>
+    </div>
+  `));
+  dash.appendChild(el(`
+    <div class="dash-card alert" data-action="proj-section" data-value="tokenusage">
+      <div class="lbl">▦ Token Usage</div>
+      <div class="val">${esc(project.tokenUsage.total)}</div>
+      <div class="sub">Peak: ${esc(project.tokenUsage.peakJob)} · split by job, supporting, orchestrator</div>
+    </div>
+  `));
+  dash.appendChild(el(`
     <div class="dash-card ${findingsCount?'alert':''}" data-action="proj-section" data-value="jobs">
       <div class="lbl">📋 Jobs</div>
       <div class="val">${projectJobs.length}</div>
@@ -754,6 +851,9 @@ function renderProjOverview(content, project, projectJobs) {
     <button class="btn primary" data-action="run-audit" data-id="SEC-OVERVIEW">Run security audit</button>
     <button class="btn" data-action="run-audit" data-id="ARCH-DRIFT">Check architecture drift</button>
     <button class="btn" data-action="run-audit" data-id="TRACEABILITY-COVERAGE">Run traceability audit</button>
+    <button class="btn" data-action="run-design">Run council review</button>
+    <button class="btn" data-action="run-qa">Run QA suite</button>
+    <button class="btn" data-action="token-drilldown">Open token heatmap</button>
     <button class="btn ghost" data-nav="#/quality">Open review definitions</button>
     <button class="btn ghost" data-action="open-feed">Open orchestrator feed</button>
   </div>`));
@@ -847,6 +947,136 @@ function renderProjArchitecture(content, project) {
     <button class="btn" data-action="run-audit" data-id="ARCH-DRIFT">Check for drift</button>
   </div>`));
   content.appendChild(p2);
+}
+
+// ---- UX/UI ----
+function renderProjUxUi(content, project) {
+  const ux = project.uxui;
+  content.appendChild(el(`<div class="section-head"><h2>🎨 UX/UI</h2><span class="desc">Design references, screenshots, council critique, and next-version actions</span></div>`));
+
+  content.appendChild(el(`<div class="metric-grid">
+    <div class="metric-card"><div class="lbl">Design status</div><div class="val">${esc(ux.rating)}</div><div class="sub">${ux.lastReview ? 'Last council ' + esc(ux.lastReview) : 'No council run yet'}</div></div>
+    <div class="metric-card"><div class="lbl">References</div><div class="val">${ux.references}</div><div class="sub">screens, markdown briefs, images</div></div>
+    <div class="metric-card"><div class="lbl">Screenshots</div><div class="val">${ux.screenshots}</div><div class="sub">accepted and rejected variants</div></div>
+    <div class="metric-card"><div class="lbl">Council notes</div><div class="val">${ux.councilItems}</div><div class="sub">product, visual, interaction, a11y</div></div>
+  </div>`));
+
+  const p1 = panel('ux-references', 'Design references', { meta: ux.references + ' artifacts', actions: '<button class="btn" data-action="add-reference">+ Add reference</button>' });
+  pBody(p1).appendChild(el(`<div class="mini-card-grid">
+    <div class="mini-card"><strong>Markdown brief</strong><p>Product intent, workflow pressure, tone, and visual constraints for the project.</p></div>
+    <div class="mini-card"><strong>Accepted screenshots</strong><p>Known-good screens the agent can reuse as design memory.</p></div>
+    <div class="mini-card"><strong>External inspiration</strong><p>Images or references used as evidence, never hidden dependencies.</p></div>
+    <div class="mini-card"><strong>Rejected alternatives</strong><p>Variants that were explored and intentionally declined.</p></div>
+  </div>`));
+  content.appendChild(p1);
+
+  const p2 = panel('ux-loop', 'Current design loop', { meta: 'action-driven' });
+  pBody(p2).appendChild(el(`<div>
+    <p class="note" style="margin-bottom:10px">The user chooses when to run each step. Skills can produce Markdown plus structured JSON; failed parsing still leaves the raw report visible.</p>
+    <div class="section-actions">
+      <button class="btn primary" data-action="run-design">Run screenshot critique</button>
+      <button class="btn" data-action="run-design">Run council review</button>
+      <button class="btn" data-action="next-version">Request next version</button>
+      <button class="btn ghost" data-action="create-task">Create follow-up task</button>
+    </div>
+  </div>`));
+  content.appendChild(p2);
+
+  const p3 = panel('ux-council', 'Council critique', { meta: '5 open notes' });
+  pBody(p3).appendChild(el(`<div class="box">
+    <div class="check-row"><div></div><div class="label"><div class="top"><strong>Product</strong><span class="tag dim">workflow</span></div><div class="sub">The first viewport now shows project state, but the QA and token paths need clearer intent.</div></div><button class="btn ghost" data-action="create-task">Task</button></div>
+    <div class="check-row"><div></div><div class="label"><div class="top"><strong>Visual Design</strong><span class="tag dim">polish</span></div><div class="sub">Keep the dense workbench feel; avoid making UX/UI look like a marketing page.</div></div><button class="btn ghost" data-action="ack">Accept</button></div>
+    <div class="check-row"><div></div><div class="label"><div class="top"><strong>Accessibility</strong><span class="tag dim">a11y</span></div><div class="sub">Heatmap cells need keyboard drill-down and a readable table alternative.</div></div><button class="btn ghost" data-action="create-task">Task</button></div>
+  </div>`));
+  content.appendChild(p3);
+}
+
+// ---- Test Quality ----
+function renderProjTestQuality(content, project) {
+  const q = project.testQuality;
+  content.appendChild(el(`<div class="section-head"><h2>🧪 Test Quality</h2><span class="desc">Backend tests, end-to-end tests, tuning runs, coverage, and source-code perspective</span></div>`));
+
+  content.appendChild(el(`<div class="metric-grid">
+    <div class="metric-card"><div class="lbl">Backend</div><div class="val">${q.backend.passed}/${q.backend.passed + q.backend.failed}</div><div class="sub">${q.backend.failed} failing</div></div>
+    <div class="metric-card"><div class="lbl">End-to-end</div><div class="val">${q.e2e.passed}/${q.e2e.passed + q.e2e.failed}</div><div class="sub">${q.e2e.failed} failing specs</div></div>
+    <div class="metric-card"><div class="lbl">Coverage</div><div class="val">${q.coverage}%</div><div class="sub">LLM evaluates the structured report</div></div>
+    <div class="metric-card"><div class="lbl">Tuning</div><div class="val">${esc(q.tuning)}</div><div class="sub">latest board poll roundtrip</div></div>
+    <div class="metric-card"><div class="lbl">Source files</div><div class="val">${q.sourceFiles}</div><div class="sub">${esc(q.lines)} lines of code</div></div>
+  </div>`));
+
+  const p1 = panel('qa-runs', 'Latest QA runs', { meta: 'manual actions', actions: '<button class="btn" data-action="run-qa">Run QA suite</button>' });
+  pBody(p1).appendChild(el(`<div class="box">
+    <div class="qa-run"><strong>Backend tests</strong><div>xUnit suite green<div class="bar-mini"><span style="width:100%"></span></div></div><span class="tag check">pass</span></div>
+    <div class="qa-run"><strong>E2E tests</strong><div>Playwright surfaced two visual failures<div class="bar-mini"><span class="warn" style="width:86%"></span></div></div><span class="tag sev-warn">warn</span></div>
+    <div class="qa-run"><strong>Tuning tests</strong><div>Board poll roundtrip below threshold<div class="bar-mini"><span style="width:74%"></span></div></div><span class="tag check">pass</span></div>
+  </div>`));
+  content.appendChild(p1);
+
+  const p2 = panel('qa-source', 'Source-code perspective', { meta: 'modules, LOC, coverage', actions: '<button class="btn" data-action="source-map">Generate source map</button>' });
+  pBody(p2).appendChild(el(`<div>
+    <p class="note" style="margin-bottom:10px">A script or Skill can render the repo as modules, ownership areas, coverage, hotspots, and organization risks. This is a perspective for review, not a score that replaces judgment.</p>
+    <div class="source-map" title="Source-code map mock">
+      ${Array.from({length: 72}, (_, i) => `<span class="source-block ${i % 13 === 0 ? 'hot' : i % 7 === 0 ? 'test' : i % 11 === 0 ? 'docs' : ''}" data-action="source-map"></span>`).join('')}
+    </div>
+  </div>`));
+  content.appendChild(p2);
+
+  const p3 = panel('qa-contract', 'Report contract', { meta: 'Markdown plus JSON' });
+  pBody(p3).appendChild(el(`<div class="md-block">{
+  "kind": "test-run",
+  "schemaVersion": 1,
+  "status": "warn",
+  "metrics": { "backendPassed": 142, "e2eFailed": 2, "coverage": 78 },
+  "artifacts": ["results/qa/playwright-2026-05-04.md"]
+}</div>`));
+  content.appendChild(p3);
+}
+
+// ---- Token Usage ----
+function renderProjTokenUsage(content, project) {
+  const t = project.tokenUsage;
+  content.appendChild(el(`<div class="section-head"><h2>▦ Token Usage</h2><span class="desc">Inference spend by job, supporting runs, orchestrator turns, and time window</span></div>`));
+
+  content.appendChild(el(`<div class="metric-grid">
+    <div class="metric-card"><div class="lbl">Project total</div><div class="val">${esc(t.total)}</div><div class="sub">all recorded runs</div></div>
+    <div class="metric-card"><div class="lbl">Job Tokens</div><div class="val">${esc(t.job)}</div><div class="sub">primary implementation and review runs</div></div>
+    <div class="metric-card"><div class="lbl">Supporting Jobs Tokens</div><div class="val">${esc(t.supporting)}</div><div class="sub">analysis, QA, design, audit runs</div></div>
+    <div class="metric-card"><div class="lbl">Orchestrator Tokens</div><div class="val">${esc(t.orchestrator)}</div><div class="sub">steering, reissue, summaries</div></div>
+  </div>`));
+
+  const p1 = panel('tok-split', 'Category split', { meta: 'drill-down ready' });
+  pBody(p1).appendChild(el(`<div>
+    <div class="token-row"><strong>Job Tokens</strong><div class="token-track"><div class="token-fill" style="width:63%"></div></div><span class="num">${esc(t.job)}</span></div>
+    <div class="token-row"><strong>Supporting Jobs Tokens</strong><div class="token-track"><div class="token-fill supporting" style="width:27%"></div></div><span class="num">${esc(t.supporting)}</span></div>
+    <div class="token-row"><strong>Orchestrator Tokens</strong><div class="token-track"><div class="token-fill orchestrator" style="width:10%"></div></div><span class="num">${esc(t.orchestrator)}</span></div>
+  </div>`));
+  content.appendChild(p1);
+
+  const p2 = panel('tok-heatmap', 'Job heatmap', { meta: 'one cell per job', actions: '<button class="btn" data-action="token-drilldown">Open drill-down</button>' });
+  pBody(p2).appendChild(el(`<div>
+    <p class="note" style="margin-bottom:10px">Each square is a job. Intensity indicates total tokens including primary, supporting, and orchestrator usage.</p>
+    <div class="token-heatmap">
+      ${Array.from({length: 168}, (_, i) => {
+        const cls = i % 41 === 0 ? 'peak' : i % 13 === 0 || i % 17 === 0 ? 'high' : i % 5 === 0 ? 'mid' : i % 3 === 0 ? 'low' : '';
+        return `<span class="token-cell ${cls}" data-action="token-drilldown" title="Job token cell"></span>`;
+      }).join('')}
+    </div>
+  </div>`));
+  content.appendChild(p2);
+
+  const p3 = panel('tok-timeline', 'Timeline and expensive jobs', { meta: 'last 8 windows' });
+  pBody(p3).appendChild(el(`<div class="two-pane">
+    <div>
+      <div class="timeline">${[38,62,41,80,52,97,46,70].map(v => `<span style="height:${v}%"></span>`).join('')}</div>
+      <p class="note">Timeline shows token spend by time window. Click a bar to filter the heatmap.</p>
+    </div>
+    <div class="box">
+      <div class="check-row"><div></div><div class="label"><div class="top"><strong>quality-system-mockup</strong></div><div class="sub">1.7M total · 820k supporting</div></div><button class="btn ghost" data-action="token-drilldown">Open</button></div>
+      <div class="check-row"><div></div><div class="label"><div class="top"><strong>security-baseline</strong></div><div class="sub">1.1M total · 210k orchestrator</div></div><button class="btn ghost" data-action="token-drilldown">Open</button></div>
+      <div class="check-row"><div></div><div class="label"><div class="top"><strong>frontend-perf-review</strong></div><div class="sub">740k total · 330k supporting</div></div><button class="btn ghost" data-action="token-drilldown">Open</button></div>
+    </div>
+  </div>`));
+  content.appendChild(p3);
 }
 
 // ---- Audits and Checks ----
@@ -1531,6 +1761,12 @@ document.addEventListener('click', (ev) => {
   else if (a === 'security-files') { toast('Open security file browser (mock)'); }
   else if (a === 'run-audit') { toast(`Audit ${actionEl.dataset.id} queued (mock)`); }
   else if (a === 'run-probe') { toast(`Probe ${actionEl.dataset.id} running (mock)`); }
+  else if (a === 'run-design') { toast('Design Skill queued (mock)'); }
+  else if (a === 'next-version') { toast('Next design version task drafted (mock)'); }
+  else if (a === 'add-reference') { toast('Design reference picker (mock)'); }
+  else if (a === 'run-qa') { toast('QA Skill queued (mock)'); }
+  else if (a === 'source-map') { toast('Source-code map opened (mock)'); }
+  else if (a === 'token-drilldown') { toast('Token usage drill-down opened (mock)'); }
   else if (a === 'rerun-checks') { toast(`Re-running checks (mock)`); }
   else if (a === 'view-result') { toast(`View result for ${actionEl.dataset.id} (mock)`); }
   else if (a === 'create-task') { toast(`Created follow-up task (mock)`); }

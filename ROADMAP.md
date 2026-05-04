@@ -34,8 +34,7 @@ Today the application provides:
 - CLI quota and session visibility where the underlying tools expose enough data.
 - Recovery after session loss via job-folder evidence and deterministic continuation planning.
 - Early project-level planning tasks for Security and Architecture dimensions.
-- A design mockup for a broader quality system under `docs/mockups/quality-system/`. This is exploratory, not product behavior yet.
-- A design mockup for creative design loops and council-style critique under `docs/mockups/creative-design-system/`. This is exploratory, not product behavior yet.
+- An integrated design mockup for project-level Security, Architecture, UX/UI, Test Quality, Token Usage, Audits and Checks, and Skills under `docs/mockups/quality-system/`. This is exploratory, not product behavior yet.
 
 ## Roadmap Themes
 
@@ -111,6 +110,8 @@ First implementation order:
 9. Council review prompt that produces role-separated critique and a final orchestrator recommendation.
 10. "Next version" action that creates a follow-up design iteration task from the current screenshots and council notes.
 11. Project-level design memory: chosen visual direction, brand notes, UI principles, and examples of accepted screens.
+
+The design-loop, QA, source-metric, and token-usage concepts live in the single integrated mockup under [docs/mockups/quality-system/](docs/mockups/quality-system/). Do not maintain a second sibling mockup for this product direction.
 
 ### Project Control
 
