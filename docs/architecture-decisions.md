@@ -380,3 +380,23 @@ The reference clones at `c:/Projects/agent-taskboard-devspace/cli-source-referen
 **Implementation pointers.** [`docs/research/wsl2-vs-windows-decision-2026-05.md`](research/wsl2-vs-windows-decision-2026-05.md) (the long form with empirical evidence per failure mode); [`backend/Services/Cli/ClaudeCliService.cs::ResolveCmdShimToExe`](../backend/Services/Cli/ClaudeCliService.cs) (the existing Windows-specific accommodation, ADR-0011); [`README.md`](../README.md) "Use existing coding agents" (the platform-neutral product framing).
 
 **Status.** Accepted. Re-evaluation trigger: a documented, reproducible hang that survives ADR-0014 + future env hardening on Windows but not on Linux / WSL2 CI.
+
+---
+
+## ADR-0017 - Supervisor as advisory layer above the deterministic orchestrator (2026-05-04)
+
+**Decision.** The supervisor is an *advisory* layer above the orchestrator. It writes typed advisories to a shared per-project log, exposes four pre-emptive primitives (`cancelRun`, `pausePickup`, `forceFail`, `resume`) for the rare emergency, and consults a separate opt-in policy before any action becomes automatic. The orchestrator's deterministic post-run policy (ADR-0002) remains authoritative for routine outcomes.
+
+**Context.** The user identified a missing layer: while the orchestrator decides per-run outcomes after the fact, no continuous external watcher asks "is this run on track right now? is anything stuck? should we intervene?" Building such a layer raises the question of how a higher loop can control a lower one without becoming a parallel orchestrator. The full analysis is in [`docs/research/orchestrator-meta-loop-analysis-2026-05-04.md`](research/orchestrator-meta-loop-analysis-2026-05-04.md).
+
+**Non-goals.**
+- A second deterministic orchestrator. The supervisor must not duplicate `RunOutcomePolicy`'s post-run decisions.
+- Pre-emptive primitives as the default control path. Cooperative signalling (advisory + the orchestrator's existing tick points) is the default; emergency primitives are reserved for clearly broken behaviour.
+- Auto-intervention enabled by default. The auto-intervention policy ships off and stays off until the user explicitly turns it on per instance.
+- Inside-the-app guarantees about the supervisor itself surviving every backend failure. That role belongs to Layer 3 (the external system review monitor).
+
+**Reasoning style.** Each layer owns its own state. The orchestrator state machine is single-writer; the supervisor records intent and the runner applies the side effect through existing paths (StopJob, SetMode). Feedback loops are blocked by source-tagging every event and filtering supervisor-sourced events out of supervisor input.
+
+**Implementation pointers.** [`backend/Services/Supervisor/SupervisorContract.cs`](../backend/Services/Supervisor/SupervisorContract.cs) (typed records and ISupervisor surface); [`backend/Services/Supervisor/ProjectObservationService.cs`](../backend/Services/Supervisor/ProjectObservationService.cs) (read-only Observe); [`backend/Services/Supervisor/SupervisorInterventionService.cs`](../backend/Services/Supervisor/SupervisorInterventionService.cs) (the four primitives); [`backend/Services/Supervisor/HardHealthCheckHostedService.cs`](../backend/Services/Supervisor/HardHealthCheckHostedService.cs) (in-process every 10s, advisory-only); [`backend/Services/Supervisor/SoftReasoningHostedService.cs`](../backend/Services/Supervisor/SoftReasoningHostedService.cs) (CLI-driven every 5-10 min, off by default); [`backend/Services/Supervisor/AutoInterventionHostedService.cs`](../backend/Services/Supervisor/AutoInterventionHostedService.cs) (gated, off by default); [`scripts/supervisor/system-review.md`](../scripts/supervisor/system-review.md) (Layer 3 stand-alone monitor).
+
+**Status.** Accepted.
