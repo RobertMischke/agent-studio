@@ -1,93 +1,101 @@
-# Quality System &mdash; Mockup
+# Quality System - Mockup
 
-Design exploration. **A click-dummy.** Goal: serve as the template for the next iteration of the actual app. Not committed to any naming or implementation. Things change here without ceremony.
+Design exploration. **A click-dummy.** Goal: give the next implementation cycle a concrete reference without pretending the whole thing is ready to build.
+
+The current direction is deliberately narrower than the first visual draft:
+
+- Security is the first product surface, not generic "Quality".
+- Audits, Task Checks, Performance Probes, and Skills stay distinct.
+- Findings are evidence for human review. They do not block task state transitions in the first cut.
+- Skills remain reusable workflows that produce work. Audits and Task Checks may use skill-like prompt bodies, but they are review definitions, not the same product concept.
+- Repository-style skill discovery is a later layer. Local installed skills, licenses, and project lookup must work first.
 
 ## Files
 
-- [taxonomy.md](taxonomy.md) &mdash; concept inventory, the two axes that separate the items, wording options with tradeoffs, recommendation. Earlier iterations of the wording debate live here.
-- [ui.html](ui.html) &mdash; clickable dummy UI. Open in a browser. Catppuccin-ish dark to match the real frontend.
+- [taxonomy.md](taxonomy.md) - concept inventory, vocabulary, storage shape, and implementation order.
+- [ui.html](ui.html) - clickable dummy UI. Open in a browser. Catppuccin-ish dark to match the real frontend.
 
----
+## Current Recommendation
 
-## Open conceptual questions (user-driven, captured for later editing)
+Use concrete surfaces instead of a vague top-level Quality product:
 
-The mockup currently chooses defensible defaults to keep moving, but several decisions are explicitly *not* final. Each section below records the user's competing ideas verbatim-style so the threads can be picked up separately.
+- **Security** on the project page, visually promoted.
+- **Audits and Checks** on the project page for configured review definitions.
+- **Task Checks** on the task detail/review surface.
+- **Performance Probes** under diagnostics/settings and surfaced on projects once implemented.
+- **Skills** as the local reusable workflow catalog.
 
-### 1. What is "Quality"? Is it the right word?
+The mockup still has an internal `#/quality` route for the definitions library because it is a dummy. Product UI should call that surface "Review definitions" or "Audits and Checks" until the word "Quality" proves useful in real use.
 
-> "Was ist Quality-Ding? Ist es ja eigentlich Promptmanagement."
+## Critical Boundaries
 
-Quality as a *top-nav* concept conflated work data with master data. This iteration drops Quality from the top nav and treats it as a function of work surfaces (Security panel on Project, Findings on Task) plus a Settings sub-area. The label "Quality" still appears as a project section header, where it's coherent ("things that grade this project's work").
+This design must not turn the app into a workflow engine.
 
-Open:
-- Should the project section be renamed too? Candidates: "Audits & Checks", "Skills applied", "Reviews".
-- Does "Quality" stay anywhere, or fully retire?
+- A Task Check can create findings, chips, and follow-up task suggestions.
+- A Task Check must not silently hold a task in `3-progress` in the first version.
+- A spawned check is a separate CLI invocation and must still respect one active coding task per project.
+- Check results are review evidence, not automatic permission to modify code.
+- Follow-up work becomes a normal queued task.
 
-### 2. Skills vs Prompts vs Audits/Checks &mdash; naming
+## First Implementation Slice
 
-The user threw out four overlapping ideas in quick succession:
+1. Project Security panel with baseline state and review history.
+2. Review definition model for Audits and Task Checks, stored as Markdown with frontmatter.
+3. Per-project Task Check defaults.
+4. One spawned Task Check after a main task finishes, writing structured findings into the job folder.
+5. Findings visible on the task review surface with a "create follow-up task" action.
+6. Local Skills catalog for installed workflow skills.
+7. Performance Probe slots after the audit/check loop is stable.
 
-1. "Wir nennen das Ding Prompts. Skill-Bibliothek + Prompt-Bibliothek." &mdash; two separate libraries.
-2. "Prompts werden Subtasks von Skills." &mdash; Prompts as building blocks inside Skills.
-3. "Wir sollten nur mit Skills arbeiten, und dann gibt es halt Skills." &mdash; single concept "Skill" covering everything.
-4. "Importierte Prompts werden allein eingef&uuml;llt; Skills haben ein bisschen mehr." &mdash; Prompts and Skills as different richness levels.
+## Open Questions
 
-**Picked for this iteration**: option 3. Everything reusable is a **Skill**, distinguished by `type`:
-- `workflow` &mdash; agent invocation that produces work (the original Skills)
-- `audit` &mdash; project-scope examination, read-only (was Audits)
-- `check` &mdash; task-diff examination, read-only, runs at `progress &rarr; review` (was Task Checks)
+### 1. Does the word "Quality" survive?
 
-Probes are *not* Skills (see &sect; 4).
+Probably not as top navigation. It is too broad and too easy to confuse with prompt/skill management. Keep the word only where it describes a category, not a destination.
 
-Provisional. Worth revisiting if "Skill" feels too generic for what an Audit does, or if "Prompt" wants its own place.
+Candidate labels:
 
-### 3. Top-level work vs master data
+- Audits and Checks
+- Review definitions
+- Project checks
+- Evidence rules
 
-> "Die Hauptpunkte sind Board, Projects und Skills ... Stammdaten ... auf einer anderen Ebene ... vielleicht im Drei-Punkte-Men&uuml;."
+### 2. Are Audits and Task Checks Skills?
 
-Resolved this iteration:
-- Top nav = work plane: **Board &middot; Projects &middot; Skills &middot; &#9881; Settings**
-- Settings = master plane: project defaults, probes, CLI config, anything configuration-shaped
-- Skills top-nav surface holds *both* browse/invoke (work) and authoring/edit (master) for the dummy. In production these may split: top-nav Skills = catalog and invocation; deeper authoring under Settings.
+No, not as product concepts.
 
-Open: keep Skills as one combined surface, or split it?
+They may reuse the same storage mechanics as skills, and they may render prompt bodies for agent runs, but they answer a different question:
 
-### 4. Probes &mdash; first-class or buried?
+- Skills produce or transform work.
+- Audits and Task Checks examine work.
+- Probes exercise a running system and measure it.
 
-Probes (live runtime measurements: startup latency, poll roundtrip, longtask budget) are *code*, not prompts. They don't unify with Skills.
+That separation keeps the skill system portable and keeps review policy deterministic.
 
-This iteration: separate concept under Settings, surfaced on Project pages as a sub-panel inside the Quality section.
+### 3. When do checks run?
 
-Open: promote Probes to their own top-nav entry? Or keep buried?
+First cut: after the main task run completes and before or during review handoff, but without blocking state movement. The output is visible evidence for the reviewer.
 
-### 5. Skill repository discovery
+Later versions can add stricter policy, but only after the non-blocking evidence loop is boring and trustworthy.
 
-> "Eine Google Suche ... vorgefertigtes Skill-Repository ziemlich geil ... zieh mal die bekanntesten coolsten Skills."
+### 4. What about a skill repository?
 
-Currently a curated catalog with twelve plausible entries (mock names like ADR Writer, Threat Modeler, Test Generator). License shown on every card. No actual fetch.
+Keep it as a future preview in the mockup. Do not ship internet discovery, install, update, or third-party execution until local skills have:
 
-Open:
-- Real catalog vs. permanent mock?
-- Curation source: GitHub trending? User submissions? Editor-curated only?
-- Update mechanism: manual, periodic, never?
+- A canonical installed list.
+- License metadata.
+- Explicit source and version records.
+- Project README lookup.
+- A controlled installer path.
 
-### 6. Licenses
+## What This Mockup Is For
 
-Originally had a third tab "License notices" listing all installed skills with their licenses in a table. User found it strange and asked it removed.
+When the next implementation cycle starts, this folder should answer:
 
-Now: license tag on every skill card and on the install dialog with a one-line description; copyleft (GPL family) flagged with a &#9888; warning before install. No central license-notices page.
+- Which concepts are separate.
+- Which surface gets built first.
+- What not to build yet.
+- Which terminology is safe enough for the UI.
+- Where the roadmap intentionally narrows the design.
 
-Open: do we still need a per-installation summary anywhere (legal review, audit export), or is per-skill display enough?
-
----
-
-## What this mockup is *for*
-
-Template for the next iteration of the app. The aim is that when the next implementation cycle begins, this folder is the source for:
-
-- The page structure (top nav, project page sections, dashboards, dialogs)
-- The conceptual model (work vs master data, Skill types, Probes as separate)
-- Provisional wording (what to call what in UI labels)
-- The open questions list above &mdash; so they get answered deliberately, not by accident
-
-It is not the final design. It is a defensible draft that lets the user critique concrete artefacts instead of abstract proposals.
+It is not the final design. It is a stricter draft that turns a broad visual exploration into an implementable sequence.

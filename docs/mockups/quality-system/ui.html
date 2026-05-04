@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Quality + Skills + Project &mdash; Clickable Prototype</title>
+<title>Audits + Checks + Skills - Clickable Prototype</title>
 <style>
   :root {
     --base: #1e1e2e;
@@ -467,7 +467,7 @@ const jobs = [
 
 const installedSkills = [
   { id:'GENERATE-TASKS-FROM-FINDINGS', name:'Turn findings into tasks', when:'After audit / check run', dimension:'workflow',
-    description:'Reads a Quality findings list and creates a queued task per finding, scoped to the relevant file.',
+    description:'Reads review findings and creates a queued task per finding, scoped to the relevant file.',
     license:'MIT', source:'built-in', version:'1.0.0', installed:true },
   { id:'FIND-PROJECT-WORK', name:'Project work discovery', when:'Manually from the project detail', dimension:'workflow',
     description:'Surveys repo state (open issues, recent regressions, drift) and proposes high-value tasks for the queue.',
@@ -484,7 +484,7 @@ const installedSkills = [
 ];
 
 // Curated repository (mock catalog: presented as community / first-party offerings).
-// Each entry carries license info and source; install must record an attribution.
+// Preview entries carry license info and source; a future installer would record attribution.
 const skillRepository = [
   { id:'adr-writer', type:'workflow', name:'ADR Writer', dimension:'authoring', featured:true, description:'Generate Architecture Decision Records from chat decisions or PR descriptions.', license:'MIT', source:'github.com/atp-skills/adr-writer', author:'atp-skills', version:'2.1.0', installs:'12.4k' },
   { id:'commit-message-pro', type:'workflow', name:'Commit Message Pro', dimension:'workflow', featured:true, description:'Conventional Commits assistant; reads diff, drafts message, supports breaking-change footers.', license:'Apache-2.0', source:'github.com/atp-skills/commit-message-pro', author:'atp-skills', version:'3.0.4', installs:'38.1k' },
@@ -594,7 +594,7 @@ function renderBoard(app) {
   app.appendChild(el(`
     <div>
       <h1>Board</h1>
-      <p class="lede">The kanban view of all jobs across projects. Out of scope for this prototype &mdash; jump to a sample task to see Quality wired in:</p>
+      <p class="lede">The kanban view of all jobs across projects. Out of scope for this prototype - jump to a sample task to see review evidence wired in:</p>
       <div class="grid">
         ${jobs.map(j => `
           <div class="card" data-nav="#/jobs/${j.id}">
@@ -619,7 +619,7 @@ function renderProjects(app, parts) {
 function renderProjectsList(app) {
   const wrap = el(`<div>
     <h1>Projects</h1>
-    <p class="lede">Watched workspaces. Click a project to manage everything: settings, security, architecture, and Quality.</p>
+    <p class="lede">Watched workspaces. Click a project to manage settings, security, architecture, audits, checks, and diagnostics.</p>
     <div class="box" id="project-list"></div>
   </div>`);
   app.appendChild(wrap);
@@ -668,7 +668,7 @@ function renderProjectDetail(app, id) {
         <a data-action="proj-section" data-value="overview" class="${ui.projectSection==='overview'?'active':''}"><span class="icon">📊</span>Overview</a>
         <a data-action="proj-section" data-value="security" class="${ui.projectSection==='security'?'active':''}"><span class="icon">🔒</span>Security ${secCls!=='none'?`<span class="badge ${secCls}">${esc(project.security.rating || '')}</span>`:`<span class="badge bad">!</span>`}</a>
         <a data-action="proj-section" data-value="architecture" class="${ui.projectSection==='architecture'?'active':''}"><span class="icon">📐</span>Architecture <span class="badge">${project.architecture.adrCount}</span></a>
-        <a data-action="proj-section" data-value="quality" class="${ui.projectSection==='quality'?'active':''}"><span class="icon">✅</span>Quality <span class="badge">${project.audits.length + enabledChecks + project.probes.length}</span></a>
+        <a data-action="proj-section" data-value="quality" class="${ui.projectSection==='quality'?'active':''}"><span class="icon">✅</span>Audits &amp; Checks <span class="badge">${project.audits.length + enabledChecks + project.probes.length}</span></a>
         <a data-action="proj-section" data-value="jobs" class="${ui.projectSection==='jobs'?'active':''}"><span class="icon">📋</span>Jobs <span class="badge ${findingsCount?'warn':''}">${projectJobs.length}</span></a>
         <div class="group">Configuration</div>
         <a data-action="proj-section" data-value="settings" class="${ui.projectSection==='settings'?'active':''}"><span class="icon">⚙</span>Settings</a>
@@ -728,7 +728,7 @@ function renderProjOverview(content, project, projectJobs) {
   `));
   dash.appendChild(el(`
     <div class="dash-card" data-action="proj-section" data-value="quality">
-      <div class="lbl">✅ Quality</div>
+      <div class="lbl">✅ Audits &amp; Checks</div>
       <div class="val">${project.audits.length + Object.values(project.taskCheckDefaults).filter(Boolean).length} active</div>
       <div class="sub">${project.audits.length} audits · ${Object.values(project.taskCheckDefaults).filter(Boolean).length} task checks · ${project.probes.length} probes</div>
     </div>
@@ -754,7 +754,7 @@ function renderProjOverview(content, project, projectJobs) {
     <button class="btn primary" data-action="run-audit" data-id="SEC-OVERVIEW">Run security audit</button>
     <button class="btn" data-action="run-audit" data-id="ARCH-DRIFT">Check architecture drift</button>
     <button class="btn" data-action="run-audit" data-id="TRACEABILITY-COVERAGE">Run traceability audit</button>
-    <button class="btn ghost" data-nav="#/quality">Open Quality library</button>
+    <button class="btn ghost" data-nav="#/quality">Open review definitions</button>
     <button class="btn ghost" data-action="open-feed">Open orchestrator feed</button>
   </div>`));
   content.appendChild(p1);
@@ -816,7 +816,7 @@ function renderProjSecurity(content, project) {
     : `<p class="note" style="padding:8px 4px">No reviews recorded.</p>`));
   content.appendChild(p2);
 
-  const p3 = panel('sec-related', 'Related Quality definitions', { meta: 'security dimension' });
+  const p3 = panel('sec-related', 'Related review definitions', { meta: 'security dimension' });
   const secDefs = definitions.filter(d => d.dimension === 'security');
   pBody(p3).appendChild(el(`<div class="box">${secDefs.map(d => `
     <div class="check-row">
@@ -849,9 +849,9 @@ function renderProjArchitecture(content, project) {
   content.appendChild(p2);
 }
 
-// ---- Quality ----
+// ---- Audits and Checks ----
 function renderProjQuality(content, project) {
-  content.appendChild(el(`<div class="section-head"><h2>✅ Quality</h2><span class="desc">Audits, per-task checks, and runtime probes for this project</span></div>`));
+  content.appendChild(el(`<div class="section-head"><h2>✅ Audits &amp; Checks</h2><span class="desc">Review definitions, per-task checks, and runtime probe slots for this project</span></div>`));
 
   const nonSecAudits = project.audits.filter(id => defById(id) && defById(id).dimension !== 'security');
   const p1 = panel('qual-audits', 'Project audits', { meta: nonSecAudits.length + ' configured', actions: '<button class="btn ghost" data-nav="#/quality">+ Add</button>' });
@@ -957,7 +957,7 @@ function renderProjSettings(content, project) {
   const p4 = panel('set-commit', 'Auto-commit', { meta: project.autoCommit ? 'on' : 'off' });
   pBody(p4).appendChild(el(`<div class="row">
     <div class="toggle ${project.autoCommit?'on':''}" data-action="toggle-auto-commit" data-id="${project.id}"></div>
-    <span>Auto-commit on transition <code>3-progress &rarr; 4-review</code></span>
+    <span>Auto-commit on transition <code>3-progress -> 4-review</code></span>
   </div>`));
   content.appendChild(p4);
 }
@@ -996,7 +996,7 @@ function renderProjActivity(content, project) {
     { kind:'decision', topic:'job-pickup', ts:'12:14:08', summary:'Picked up "Refactor JobService.fetchAll polling" from queue.' },
     { kind:'action', topic:'cli.start', ts:'12:14:09', summary:'Started Claude session for job refactor-job-service.' },
     { kind:'observation', topic:'finding', ts:'12:18:42', summary:'SEC-DIFF flagged 1 high finding in JobService.cs:142.' },
-    { kind:'decision', topic:'review', ts:'12:18:50', summary:'Held the task at 3-progress until findings are acknowledged.' },
+    { kind:'decision', topic:'review', ts:'12:18:50', summary:'Moved the task to review with findings visible for the human reviewer.' },
   ];
   const feed = el(`<div class="activity-feed"></div>`);
   for (const e of sample) feed.appendChild(el(`<div class="entry ${e.kind}"><div class="top"><span>${esc(e.kind)}</span><span>${esc(e.topic)}</span><span>${esc(e.ts)}</span></div><p>${esc(e.summary)}</p></div>`));
@@ -1009,13 +1009,13 @@ function renderProjActivity(content, project) {
 function renderSkills(app, parts) {
   if (parts.length > 1) return renderSkillDetail(app, parts[1]);
 
-  const installedCount = installedSkills.length + definitions.filter(d => d.kind==='audit' || d.kind==='check').length;
+  const installedCount = installedSkills.length;
   const wrap = el(`<div>
     <h1>Skills</h1>
-    <p class="lede">Reusable agent prompts. <strong>Skills</strong> is the umbrella concept &mdash; covers invocable Workflows, project-scope Audits, and per-task Checks. Probes are runtime measurements (code, not prompts) and live under <a data-nav="#/settings">Settings</a>.</p>
+    <p class="lede">Reusable workflows that produce or transform work. Audits and Task Checks are review definitions, not Skills; they appear under <a data-nav="#/quality">Review definitions</a>. Repository discovery is shown as a future preview only.</p>
     <div class="skill-tabs" id="skill-tabs">
-      <a data-action="skills-tab" data-value="installed" class="${ui.skillsTab==='installed'?'active':''}">Installed <span class="badge">${installedCount}</span></a>
-      <a data-action="skills-tab" data-value="repository" class="${ui.skillsTab==='repository'?'active':''}">Repository <span class="badge">${skillRepository.length}</span></a>
+      <a data-action="skills-tab" data-value="installed" class="${ui.skillsTab==='installed'?'active':''}">Installed workflows <span class="badge">${installedCount}</span></a>
+      <a data-action="skills-tab" data-value="repository" class="${ui.skillsTab==='repository'?'active':''}">Repository preview <span class="badge">${skillRepository.length}</span></a>
     </div>
     <div id="tab-body"></div>
   </div>`);
@@ -1027,28 +1027,15 @@ function renderSkills(app, parts) {
 }
 
 function unifiedInstalled() {
-  const wf = installedSkills.map(s => ({ ...s, type: 'workflow', target: `#/skills/${s.id}` }));
-  const au = definitions.filter(d => d.kind === 'audit').map(d => ({
-    id: d.id, name: d.title, description: d.description, dimension: d.dimension,
-    type: 'audit', license: 'MIT', source: 'built-in', version: '1.0.0', installed: true,
-    severity: d.severity, scope: d.scope, target: `#/quality/${d.id}`,
-  }));
-  const ch = definitions.filter(d => d.kind === 'check').map(d => ({
-    id: d.id, name: d.title, description: d.description, dimension: d.dimension,
-    type: 'check', license: 'MIT', source: 'built-in', version: '1.0.0', installed: true,
-    severity: d.severity, scope: d.scope, executionMode: d.executionMode, target: `#/quality/${d.id}`,
-  }));
-  return [...wf, ...au, ...ch];
+  return installedSkills.map(s => ({ ...s, type: 'workflow', target: `#/skills/${s.id}` }));
 }
 
 function renderSkillsInstalled(body) {
-  body.appendChild(el(`<p class="note" style="margin-bottom:10px">All Skills active in this installation: invocable workflows, project audits, and per-task checks. Built-in skills cannot be uninstalled.</p>`));
+  body.appendChild(el(`<p class="note" style="margin-bottom:10px">Local workflow Skills active in this installation. Built-in skills cannot be uninstalled. Audits and Task Checks are managed separately as review definitions.</p>`));
 
   body.appendChild(el(`<div class="chips" style="margin-bottom:14px">
     <span class="chip ${ui.skillsTypeFilter==='all'?'active':''}" data-action="skills-type" data-value="all">All</span>
     <span class="chip ${ui.skillsTypeFilter==='workflow'?'active':''}" data-action="skills-type" data-value="workflow">Workflows</span>
-    <span class="chip ${ui.skillsTypeFilter==='audit'?'active':''}" data-action="skills-type" data-value="audit">Audits</span>
-    <span class="chip ${ui.skillsTypeFilter==='check'?'active':''}" data-action="skills-type" data-value="check">Task Checks</span>
   </div>`));
 
   const list = el(`<div class="grid"></div>`);
@@ -1091,10 +1078,14 @@ function renderSkillsInstalled(body) {
 function renderSkillsRepository(body) {
   const dims = ['all', ...new Set(skillRepository.map(s => s.dimension))];
   const filterRow = el(`<div>
+    <div class="box padded" style="margin-bottom:14px; border-color: rgba(249,226,175,0.28)">
+      <strong>Future preview.</strong>
+      <p class="note" style="margin:6px 0 0">Repository discovery is intentionally not first-cut product work. Local installed skills, license records, project lookup, and a controlled installer must exist before internet-sourced skills can be installed.</p>
+    </div>
     <div class="search-bar">
       <span class="icon">🔎</span>
-      <input id="skill-search" placeholder="Search skills (name, dimension, description)..." value="${esc(ui.skillsSearch)}">
-      <span class="note">${skillRepository.length} skills available</span>
+      <input id="skill-search" placeholder="Search preview entries (name, dimension, description)..." value="${esc(ui.skillsSearch)}">
+      <span class="note">${skillRepository.length} preview entries</span>
     </div>
     <div class="chips" style="margin-bottom:8px">
       <span class="chip ${ui.skillsTypeFilter==='all'?'active':''}" data-action="skills-type" data-value="all">All</span>
@@ -1116,7 +1107,7 @@ function renderSkillsRepository(body) {
     const fGrid = el(`<div class="grid"></div>`);
     body.appendChild(fGrid);
     for (const s of featuredEntries) fGrid.appendChild(skillRepoCard(s, true));
-    body.appendChild(el(`<h2 style="margin-top:28px">All skills</h2>`));
+    body.appendChild(el(`<h2 style="margin-top:28px">All preview entries</h2>`));
   }
 
   const filtered = skillRepository.filter(s => {
@@ -1130,10 +1121,10 @@ function renderSkillsRepository(body) {
   });
   const grid = el(`<div class="grid"></div>`);
   body.appendChild(grid);
-  if (!filtered.length) grid.appendChild(el(`<div class="empty">No skills match.</div>`));
+  if (!filtered.length) grid.appendChild(el(`<div class="empty">No preview entries match.</div>`));
   for (const s of filtered) grid.appendChild(skillRepoCard(s, false));
 
-  body.appendChild(el(`<p class="note" style="margin-top:24px">Curated catalog. License is shown on every card and on the install dialog; copyleft licenses (GPL family) are flagged with a &#9888; tag.</p>`));
+  body.appendChild(el(`<p class="note" style="margin-top:24px">Curated catalog preview. License is shown on every card; actual installation stays disabled until local skill mechanics are stable.</p>`));
 }
 
 function skillRepoCard(s, featuredBlock) {
@@ -1164,7 +1155,7 @@ function skillRepoCard(s, featuredBlock) {
       <div class="actions">
         ${installed
           ? `<button class="btn ghost" data-nav="#/skills/${s.id}">Open</button>`
-          : `<button class="btn primary" data-action="install-skill" data-id="${s.id}">Install</button><button class="btn ghost" data-nav="#/skills/${s.id}">Details</button>`}
+          : `<button class="btn ghost" data-nav="#/skills/${s.id}">Details</button><button class="btn ghost" disabled>Install later</button>`}
       </div>
     </div>
   `);
@@ -1186,7 +1177,7 @@ function renderSkillDetail(app, id) {
         ? (skill.source === 'built-in'
             ? '<button class="btn ghost" disabled>Built-in</button>'
             : '<button class="btn ghost" data-action="uninstall-skill" data-id="' + skill.id + '">Uninstall</button>')
-        : '<button class="btn primary" data-action="install-skill" data-id="' + skill.id + '">Install</button>'}
+        : '<button class="btn ghost" disabled>Install later</button>'}
     </div>
     <p class="lede">${esc(skill.description)}</p>
 
@@ -1245,14 +1236,14 @@ function renderSettings(app, parts) {
     <h1>⚙ Settings</h1>
     <p class="lede">Master data and configuration. Anything that defines <em>how the app behaves</em> lives here, separate from the work data on Board / Projects / Skills.</p>
 
-    <h2>Skill definitions library</h2>
-    <p class="note" style="margin-bottom:14px">All audits, task checks, and workflows that can be invoked. Edit, create, and configure their behaviour. The Skills top-nav surface is the user-facing browse/invoke catalog; this is the authoring tool.</p>
+    <h2>Review definitions</h2>
+    <p class="note" style="margin-bottom:14px">Audits and Task Checks that examine work. Skills are separate reusable workflows; probes are code-backed diagnostics.</p>
     <div class="grid">
       <div class="card" data-nav="#/quality">
-        <div class="head"><span class="tag audit">Audits</span><span class="tag check">Checks</span><span class="tag" style="color:var(--mauve); background: rgba(203,166,247,0.14)">Workflows</span></div>
-        <div class="title">Open Skill library</div>
-        <p>The full list of skill definitions, filterable by type, dimension, severity. Lives at <code>docs/quality/</code>. Probes are the only thing not in here &mdash; they're code, not prompts (see below).</p>
-        <div class="meta"><span class="tag">${definitions.length + installedSkills.length} definitions</span></div>
+        <div class="head"><span class="tag audit">Audits</span><span class="tag check">Checks</span><span class="tag probe">Probes</span></div>
+        <div class="title">Open review definitions</div>
+        <p>The full list of audit, check, and probe definitions, filterable by type, dimension, severity. Lives at <code>docs/quality/</code>. Workflow Skills live under the Skills surface.</p>
+        <div class="meta"><span class="tag">${definitions.length} definitions</span></div>
       </div>
     </div>
 
@@ -1270,7 +1261,7 @@ function renderSettings(app, parts) {
     </div>
 
     <h2>Project defaults</h2>
-    <p class="note" style="margin-bottom:14px">Which audits, checks, and probes apply to which project. Configurable per project; surfaced on each project page in its Quality section.</p>
+    <p class="note" style="margin-bottom:14px">Which audits, checks, and probes apply to which project. Configurable per project; surfaced on each project page under Audits and Checks.</p>
     <div class="box">
       ${projects.map(p => `
         <div class="check-row" data-nav="#/projects/${p.id}" style="cursor:pointer">
@@ -1285,7 +1276,7 @@ function renderSettings(app, parts) {
     </div>
 
     <h2>CLI configuration</h2>
-    <p class="note">Per-CLI runtime configuration (Claude / Codex / Copilot / Gemini). Slot reserved &mdash; settled in a later iteration.</p>
+    <p class="note">Per-CLI runtime configuration (Claude / Codex / Copilot / Gemini). Slot reserved - settled in a later iteration.</p>
     <div class="box padded note">CLI configuration UI lives here. Out of scope for this mockup.</div>
 
     <h2>Runner defaults</h2>
@@ -1295,7 +1286,7 @@ function renderSettings(app, parts) {
 }
 
 //
-// --- Quality library + detail ---
+// --- Review definitions library + detail ---
 //
 function renderQuality(app, parts) {
   if (parts.length <= 1) return renderQualityLibrary(app);
@@ -1305,9 +1296,9 @@ function renderQuality(app, parts) {
 
 function renderQualityLibrary(app) {
   const wrap = el(`<div>
-    <div class="crumbs"><a data-nav="#/settings">Settings</a><span class="sep">/</span>Skill definitions library</div>
-    <h1>Skill definitions library</h1>
-    <p class="lede">Authoring view of every Audit, Task Check, and Probe definition. The user-facing <a data-nav="#/skills">Skills</a> page browses and invokes; this is where they're created and edited. Probes are listed too because they live in the same library on disk.</p>
+    <div class="crumbs"><a data-nav="#/settings">Settings</a><span class="sep">/</span>Review definitions</div>
+    <h1>Review definitions</h1>
+    <p class="lede">Authoring view of every Audit, Task Check, and Probe definition. Skills are separate workflows; this surface defines how work is examined and measured.</p>
     <div class="with-sidebar">
       <aside class="sidebar">
         <div class="group">Kinds</div>
@@ -1363,7 +1354,7 @@ function renderDefinitionDetail(app, id) {
   const isCheck = d.kind === 'check';
 
   const wrap = el(`<div>
-    <div class="crumbs"><a data-nav="#/quality">Quality</a><span class="sep">/</span>${esc(d.id)}</div>
+    <div class="crumbs"><a data-nav="#/quality">Review definitions</a><span class="sep">/</span>${esc(d.id)}</div>
     <div class="row"><h1 style="margin:0">${esc(d.title)}</h1><span class="tag ${d.kind}">${d.kind === 'check' ? 'Task Check' : d.kind === 'audit' ? 'Audit' : 'Probe'}</span></div>
     <p class="lede">${esc(d.description)}</p>
 
@@ -1420,7 +1411,7 @@ function renderDefinitionDetail(app, id) {
 function renderAuditRun(app, id) {
   if (id !== 'SEC-OVERVIEW') return app.appendChild(el(`<div class="empty">Run not found</div>`));
   app.appendChild(el(`<div>
-    <div class="crumbs"><a data-nav="#/quality">Quality</a><span class="sep">/</span><a data-nav="#/quality/SEC-OVERVIEW">SEC-OVERVIEW</a><span class="sep">/</span>2026-04-15</div>
+    <div class="crumbs"><a data-nav="#/quality">Review definitions</a><span class="sep">/</span><a data-nav="#/quality/SEC-OVERVIEW">SEC-OVERVIEW</a><span class="sep">/</span>2026-04-15</div>
     <div class="row"><h1 style="margin:0">SEC-OVERVIEW &middot; 2026-04-15</h1><span class="tag audit">Audit</span><div class="spacer"></div><button class="btn ghost" data-action="run-audit" data-id="SEC-OVERVIEW">Re-run</button><button class="btn" data-action="export">Export markdown</button></div>
     <p class="note">Run by claude &middot; 4m12s &middot; 6 findings</p>
     <div class="result-strip"><span class="result-chip fail"><span class="dot"></span>2 high</span><span class="result-chip warn"><span class="dot"></span>4 warn</span><span class="result-chip pass"><span class="dot"></span>0 info</span></div>
@@ -1453,7 +1444,7 @@ function renderJob(app, parts) {
       ${counts.fail ? `<span class="result-chip fail"><span class="dot"></span>${counts.fail} fail</span>` : ''}
       ${(!counts.pass && !counts.warn && !counts.fail) ? `<span class="note">Checks have not run yet.</span>` : ''}
     </div>
-    <h2>Task Checks <span class="note" style="text-transform:none; letter-spacing:0">&mdash; ran automatically when this task moved to <code>4-review</code></span></h2>
+    <h2>Task Checks <span class="note" style="text-transform:none; letter-spacing:0">- review evidence attached to this task</span></h2>
     <div class="box" id="check-list"></div>
     <h2>Findings</h2>
     <p class="note">Severity is informational. Nothing is blocked. You decide what to do.</p>
@@ -1556,26 +1547,7 @@ document.addEventListener('click', (ev) => {
   else if (a === 'install-skill') {
     const s = skillRepository.find(r => r.id === actionEl.dataset.id);
     if (!s) return;
-    const html = `
-      <h2>Install ${esc(s.name)}?</h2>
-      <p class="note" style="margin: 8px 0">Source: <code>${esc(s.source)}</code> &middot; Version: v${esc(s.version)} &middot; Author: ${esc(s.author)}</p>
-      <p style="margin: 12px 0">License: <span class="tag license">${esc(s.license)}</span> ${s.licenseWarn ? '<span class="tag sev-warn">⚠ copyleft</span>' : ''}</p>
-      <p class="note">${licenseDesc(s.license)}</p>
-      <p class="note" style="margin-top:10px">Installing this skill records an attribution under <code>docs/skills/licenses.md</code>. By installing, you confirm the license is compatible with this project.</p>
-      <div class="actions">
-        <button class="btn ghost" data-action="close-dialog">Cancel</button>
-        <button class="btn primary" data-action="confirm-install" data-id="${esc(s.id)}">Install &amp; record attribution</button>
-      </div>
-    `;
-    showDialog(html);
-  }
-  else if (a === 'confirm-install') {
-    const s = skillRepository.find(r => r.id === actionEl.dataset.id);
-    if (s && !isInstalled(s.id)) {
-      installedSkills.push({ id:s.id, name:s.name, when:'(per skill body)', dimension:s.dimension, description:s.description, license:s.license, source:s.source, version:s.version, installed:true });
-      toast(`${s.name} installed &middot; license recorded`);
-    }
-    closeDialog(); render();
+    toast(`Repository install is deferred in this mock: ${s.name}`);
   }
   else if (a === 'uninstall-skill') {
     const idx = installedSkills.findIndex(s => s.id === actionEl.dataset.id);

@@ -1,108 +1,104 @@
-# Quality System — Concept Inventory & Wording
+# Quality System - Concept Inventory and Wording
 
 Status: design exploration. No naming committed.
 
-## 1. What's been collected so far
+This document is intentionally stricter than the first mockup iteration. The mockup is useful because it made the concepts visible, but the product should implement a narrow evidence loop first.
 
-Everything mentioned in the conversation that examines, measures, or reacts to the project or a task:
+## 1. What Was Collected
+
+Everything mentioned in the conversation that examines, measures, or reacts to a project or a task:
 
 | # | Mentioned as | Scope | Trigger | Output | Read-only? |
 |---|---|---|---|---|---|
-| 1 | Security Audit | Project | Manual | Findings report | Yes (examines) |
-| 2 | Quality Gate | unclear | unclear | Pass/Warn | Yes |
-| 3 | Code Review | Task | After task | Comments per file/line | Yes |
-| 4 | Performance Review | Runtime | Manual ("start, click through") | Numbers vs threshold | **No — exercises the app** |
-| 5 | Traceability Check | Project + Task | Both | Findings | Yes |
-| 6 | Skill (e.g. "generate tasks") | n/a | When invoked | New work | **No — produces work** |
+| 1 | Security Audit | Project | Manual | Findings report | Yes |
+| 2 | Quality Gate | unclear | unclear | Pass or warning | Yes |
+| 3 | Code Review | Task | After task | Comments per file or line | Yes |
+| 4 | Performance Review | Runtime | Manual, "start, click through" | Numbers vs threshold | No, exercises the app |
+| 5 | Traceability Check | Project and Task | Both | Findings | Yes |
+| 6 | Skill, for example "generate tasks" | n/a | When invoked | New work | No, produces work |
 
-The list mixes three genuinely different kinds of things. That's the source of the wording fog.
+The list mixes four genuinely different things. Keeping them separate is the main design job.
 
-## 2. Two clean axes
+## 2. Clean Axes
 
-| | Examines artefacts (read-only) | Exercises running system (live) | Produces work |
+| | Examines artifacts | Exercises running system | Produces work |
 |---|---|---|---|
-| **Task scope** | Code Review, Traceability Check on diff | (rare) | Task-finder skill |
-| **Project scope** | Security Audit, Architecture Review, Traceability Audit | Performance Probe (start app, click through) | Project-finder skill |
+| Task scope | Code Check, Traceability Check on diff, Security Check on diff | Rare | Task-finder skill |
+| Project scope | Security Audit, Architecture Audit, Traceability Audit | Performance Probe | Project-finder skill |
 
-Skills don't grade work, they generate it. They sit outside the quality axes.
+Skills do not grade work. They generate or transform work. They sit outside the review axes.
 
-## 3. Wording options
+## 3. Recommended Vocabulary
 
-### Option A — "Reviews" umbrella
+Use the natural word for each different thing:
 
-- **Reviews** (umbrella)
-  - Project Reviews — big, manual, holistic
-  - Task Reviews — small, auto on task completion
-- **Probes** — live runtime measurements
-- **Skills** — capabilities (separate)
+- **Project Audits** - project-scope, read-only, holistic. Examples: Security Audit, Architecture Drift Audit, Traceability Audit.
+- **Task Checks** - task-scope, read-only, diff-focused. Examples: Code Check, Security Check on diff, Test Coverage Delta.
+- **Performance Probes** - runtime measurements that exercise the app or backend. Examples: Startup Latency, Board Poll Roundtrip, Longtask Budget.
+- **Skills** - reusable workflows that produce or transform work. Examples: Rewrite Task Prompt, Generate Follow-up Tasks, ADR Writer.
 
-**Pro**: "Review" is the gentlest word.
-**Con**: clashes hard with the existing `4-review` task state. Confusing.
+Avoid "Quality" as a primary UI destination for now. It is acceptable as an internal shorthand, but the product surface should use concrete labels.
 
-### Option B — "Audits" everywhere
+## 4. Product Stance
 
-- **Audits** — Project Audits + Task Audits
-- **Probes** — runtime
-- **Skills** — separate
+The first version is evidence-first, not enforcement-first.
 
-**Pro**: user validated "Security Audit". Consistent.
-**Con**: user explicitly flagged "Audit" can feel heavy for small per-task checks.
+- Task Checks produce findings and review chips.
+- Task Checks do not block `3-progress -> 4-review` in the first cut.
+- Findings can be acknowledged by the reviewer or turned into normal queued tasks.
+- Security findings should be visually prominent, but still review evidence.
+- No automatic fixing from a finding.
 
-### Option C — "Checks" flat with attributes
+This keeps the app aligned with the sequential queue. The user reviews and decides. The board does not become a hidden workflow engine.
 
-Single concept "Check" with `scope: task | project | runtime` and `kind: security | quality | performance | traceability`.
+## 5. Per-concept Summary
 
-**Pro**: minimal vocabulary.
-**Con**: "Check" is bland. Loses the strong "Security Audit" framing the user liked. Forces UI filters to do the categorising work that words could do for free.
+### Project Audits
 
-### Option D — Mixed, follow the natural words *(recommended)*
-
-Three different words for three genuinely different things:
-
-- **Audits** — project-scope, read-only, holistic. "Security Audit", "Architecture Audit", "Traceability Audit". Long-running, manual, weighty.
-- **Task Checks** — task-scope, read-only, light. "Code Check", "Traceability Check on diff", "Test Coverage Delta". Run automatically at `3-progress -> 4-review`, also manual. Toggleable per task.
-- **Performance Probes** — runtime, exercises the app. "Startup Latency", "Board Poll Roundtrip", "Longtask Budget". Manual.
-- **Skills** — separate top-level concept. Reusable agent workflows that produce work.
-
-**Pro**: matches the language the user already uses ("Security Audit, ja, ist geil!"). Each word does one job. UI labels read naturally.
-**Con**: three concepts to learn instead of one.
-
-## 4. Recommendation: Option D
-
-The vocabulary follows what the user already says. "Audit" carries weight, "Check" is light, "Probe" implies live execution. Different words for different things. Skills stay unbundled because they generate work, not grades.
-
-## 5. Per-concept summary (under Option D)
-
-### Audits (project-scope)
 - Big read-only examinations.
-- Manual trigger from the project view. Long runs are fine.
-- Output: report file (markdown) under `docs/audits/reviews/<date>-<audit-id>.md`. Findings can be turned into tasks via button.
+- Manual trigger from the project view.
+- Long runs are acceptable.
+- Output is a Markdown report plus structured findings.
+- Findings can become normal queued tasks.
 - Examples: `SEC-OVERVIEW`, `ARCH-DRIFT`, `TRACEABILITY-COVERAGE`.
 
-### Task Checks (task-scope)
-- Small per-task verifications.
-- Configured in three layers: library -> project default -> per-task toggle.
-- Run automatically at `3-progress -> 4-review`, manual re-run any time.
-- Output: warning chips on the task. Severity is informational; never blocks state transition.
-- Examples: `CODE-CHECK`, `TRACEABILITY-DIFF`, `TEST-COVERAGE-DELTA`.
+### Task Checks
 
-### Performance Probes (runtime)
-- Exercise the running app (or backend) and measure.
-- Manual trigger; later possibly scheduled.
-- Output: numbers + threshold comparison. History over time.
-- Built on the existing primitives in [frontend/e2e/helpers/timing.ts](../../../frontend/e2e/helpers/timing.ts).
+- Small per-task reviews.
+- Configured in three layers: library, project default, per-task override.
+- Run after the main task run finishes, or manually from review.
+- Output warning chips and structured findings.
+- Severity is informational in the first version.
+- Examples: `CODE-CHECK`, `TRACEABILITY-DIFF`, `SEC-DIFF`, `TEST-COVERAGE-DELTA`.
+
+### Performance Probes
+
+- Exercise the running app or backend and measure.
+- Manual trigger first, possible scheduling later.
+- Output numbers, thresholds, history, and evidence.
+- Built on existing primitives in [frontend/e2e/helpers/timing.ts](../../../frontend/e2e/helpers/timing.ts).
 - Examples: `STARTUP-LATENCY`, `BOARD-POLL-ROUNDTRIP`, `LONGTASK-BUDGET`.
 
-### Skills (separate)
-- Reusable agent workflows that produce work.
-- Already partially defined under [docs/cli-skills/](../../cli-skills/) and [docs/skills-architecture.md](../../skills-architecture.md).
-- Out of scope for this design — listed here only to make clear they are not the same thing.
+### Skills
 
-## 6. Storage shape
+- Reusable workflows that produce work.
+- Portable across managed taskboard runs and direct CLI sessions.
+- Already defined conceptually in [docs/skills-architecture.md](../../skills-architecture.md).
+- Not the same thing as Audits, Task Checks, or Probes.
 
-One library directory, three subfolders by kind. Every definition is a markdown file with frontmatter.
+## 6. Storage Shape
 
-```
+Definitions live in the app library as versioned Markdown with frontmatter.
+
+Runtime results live where the evidence belongs:
+
+- Project Audit reports belong in the watched project, under project docs or project evidence.
+- Task Check results belong in the job folder.
+- Probe results belong with project diagnostics or a project evidence history.
+
+Proposed definition library:
+
+```text
 docs/quality/
   audits/
     SEC-OVERVIEW.md
@@ -111,122 +107,123 @@ docs/quality/
   checks/
     CODE-CHECK.md
     TRACEABILITY-DIFF.md
+    SEC-DIFF.md
   probes/
     STARTUP-LATENCY.md
     BOARD-POLL-ROUNDTRIP.md
-  reviews/                 # all run outputs land here, dated
-    2026-05-04-SEC-OVERVIEW.md
-    2026-05-04-job-abc123-CODE-CHECK.md
 ```
 
-Frontmatter shape (same for all kinds):
-
-```yaml
----
-id: TRACEABILITY-DIFF
-kind: check          # audit | check | probe
-title: Traceability on the task diff
-dimension: traceability
-severity: warn       # info | warn | high — informational, never blocks
-description: |
-  Checks the diff produced by this task adds error-handling and
-  timing instrumentation where it touches new code paths.
-check-instructions: |
-  (prompt rendered for the agent)
----
-```
-
-## 7. New dimension: Execution Mode (Task Checks only)
-
-A Task Check can be wired into the run in two fundamentally different ways. This is a real engineering decision per check, not a global setting, so it lives on the definition.
-
-### Mode A &mdash; **Spawn** (separate CLI step)
-
-After the main task finishes, a fresh CLI invocation runs the check with its own prompt and its own context window.
-
-- **Pro**: clean, focused context. The check sees only what it needs (the diff, the task, the rule). Higher signal-to-noise; the check cannot be overshadowed by a long primary prompt. Easier to attribute failures to the check itself.
-- **Pro**: independent retry, independent tokens, independent quota accounting.
-- **Con**: extra CLI invocation per check &mdash; tokens, latency, quota cost.
-- **Con**: the check has to re-load enough project context to do its job.
-
-### Mode B &mdash; **Inject** (prompt addition)
-
-The check's instructions are prepended/appended to the main task prompt. The same CLI run produces both the work and the self-check.
-
-- **Pro**: zero extra CLI invocations. Nearly free.
-- **Pro**: the agent is already loaded with full task context; no re-loading needed.
-- **Con**: less reliable. The check competes with the main task for attention and context. Easy to forget to report, easy to drown in a long primary prompt.
-- **Con**: harder to make the result structured. A spawned check can be required to emit `[[CHECK_RESULT: ...]]`; an injected one often can't.
-- **Con**: less safe for high-severity checks (security on diff). A separate run is worth the cost when "the agent might have skipped this" is unacceptable.
-
-### Recommendation per kind
-
-- **Audits** (project-scope) &mdash; always Spawn. The whole point is a focused, reportable examination.
-- **Probes** (runtime) &mdash; not applicable; probes execute the app, not the agent.
-- **Task Checks** &mdash; mode is a per-definition decision. Default to **Spawn** for high-severity and security-relevant checks, **Inject** for cheap stylistic ones. The UI shows the mode on each card and on the definition detail so it's never surprising.
-
-### Storage shape addition
+Example frontmatter:
 
 ```yaml
 ---
 id: TRACEABILITY-DIFF
 kind: check
-executionMode: spawn   # spawn | inject
-...
+title: Traceability on the task diff
+dimension: traceability
+severity: warn
+executionMode: spawn
+description: |
+  Checks whether the diff adds error handling and timing where it touches
+  new code paths.
+instructions: |
+  Read the task prompt, status, and changed files. Emit structured findings.
 ---
 ```
 
-Project- and task-level override of the execution mode is a future extension; not in the first cut.
+## 7. Execution Mode for Task Checks
 
-## 8. Security gets promoted on the project page
+A Task Check can be wired into a run in two fundamentally different ways.
 
-Security is a Quality dimension by category, but on the project page it earns a different visual weight. The user wants to push engagement: a project without a security baseline should feel actively unfinished, not just "one of many checks not configured".
+### Mode A - Spawn
 
-Treatment in the prototype:
+After the main task finishes, a fresh CLI invocation runs the check with its own prompt and context window.
 
-- **Featured panel** at the top of the project detail (right after the paths block), with lock icon, rating pill, last-review line, summary, and a row of strong CTAs (run audit, edit assessment, view files).
-- **Empty-state alert variant** when no review exists yet: red-tinted gradient, "Not yet reviewed" badge, single primary CTA "Run first security audit". Pushes the user to act.
-- **Project list** shows a compact security-rating badge per row so the at-risk projects are visible at a glance.
-- The Quality library still lists `SEC-OVERVIEW`, `SEC-DIFF` etc. as ordinary definitions; the featured panel is a different *view* of the same data, not a duplicate.
+Pros:
 
-Architecture decisions get a similar but less prominent file-list section right below Security; it's important but doesn't carry the same "do this now" pressure.
+- Clean focused context.
+- Higher signal-to-noise.
+- Easier structured output.
+- Independent retry and quota accounting.
+
+Cons:
+
+- Extra CLI invocation.
+- Extra latency and token cost.
+- Needs to reload enough context to review the diff.
+
+### Mode B - Inject
+
+The check instructions are added to the main task prompt. The same CLI run produces both the work and the self-check.
+
+Pros:
+
+- Nearly free.
+- No extra invocation.
+- The agent already has task context.
+
+Cons:
+
+- Less reliable.
+- Output structure is weaker.
+- Easy for long prompts to drown the check.
+- Wrong default for security-sensitive checks.
+
+Recommendation:
+
+- Project Audits always spawn.
+- Performance Probes are not agent checks.
+- Security-sensitive Task Checks default to spawn.
+- Cheap style or coverage reminders may inject.
+
+## 8. Security Promotion
+
+Security is a review dimension, but the project page should treat it as special.
+
+The prototype should keep:
+
+- A featured Security panel near the top of project detail.
+- Empty-state pressure when no security baseline exists.
+- A compact security badge on project rows.
+- Review history and evidence links.
+
+This is not a duplicate of the definitions library. It is a project-state view over the same Security Audit evidence.
 
 ## 9. Skill Repository
 
-Skills are not part of Quality, but the prototype shows the full Skills section because the user wants a curated, browsable repository.
+Repository-style discovery is attractive but not first-cut work.
 
-### Two surfaces
+First build:
 
-- **Installed** &mdash; what's active in this installation. Built-in skills (ship with the app) cannot be uninstalled; community skills can.
-- **Repository** &mdash; curated catalog. Search bar, dimension filter chips, a "Featured" row at the top, then the full grid. Each entry shows: name, author/id, description, install count, version, license tag, install button.
+- Local installed skills.
+- Built-in workflow skills.
+- License and source metadata.
+- Project README lookup.
+- Controlled installation path.
 
-### Licenses live on each skill
+Later:
 
-License metadata is shown where it matters: on the skill itself.
+- Curated repository.
+- Search and filtering.
+- Explicit install with license confirmation.
+- No hidden auto-update.
+- No direct internet fetch from the UI.
 
-- License SPDX tag on every card (Installed and Repository) and on the skill detail page.
-- Copyleft licenses (GPL family) get a `&#9888; copyleft` warning tag.
-- The install dialog states the license, a one-line description of what it allows, and asks the user to confirm compatibility.
-- No separate "License notices" page &mdash; it became another silo to scroll past. The information lives where you look at the skill.
+The mockup may show repository entries as a future preview, but installation should be visually framed as "later" until local skill mechanics are stable.
 
-### Storage shape (proposed)
+## 10. Implementation Order
 
-```
-docs/skills/
-  <skill-id>.md            # one markdown file per installed skill, with frontmatter
-  licenses.md              # generated attributions index
-  installed.json           # canonical list (name, version, license, source)
-```
+1. Security baseline panel and review history.
+2. Review definition model for Project Audits and Task Checks.
+3. Per-project Task Check defaults.
+4. One spawned Task Check after task completion, writing findings into the job folder.
+5. Findings on the review surface plus follow-up-task creation.
+6. Local Skills catalog for installed workflows.
+7. Probe slots and later actual Performance Probes.
 
-### What we *don't* do
+## 11. Open Questions
 
-- No direct internet fetch from the UI; install is a recorded intent that the orchestrator executes via a controlled installer (so a malicious skill cannot reach into the project unannounced).
-- No hidden auto-update; updates are explicit.
-- No copy-paste-from-anywhere; skills installed from outside the curated repository must be added manually with a documented license, just like adding a vendored dependency.
-
-## 10. Open questions
-
-1. Top-level navigation label for the section: "Quality" / "Quality System" / "Project Quality" / something else?
-2. Should the library UI be one screen with kind-filter chips, or three separate screens (Audits / Checks / Probes)?
-3. Do project-level audit results live in `docs/quality/reviews/` (versioned in git, PR-fähig) or in a per-project state file? Recommendation: versioned markdown.
-4. Performance Probes — phase them in later or include in the first cut? Recommendation: define the slot in the UI, ship Audits + Checks first, leave Probes as "coming soon" tile.
+1. Final UI label for the definitions library: "Review definitions", "Audits and Checks", or "Project checks"?
+2. Exact storage for project audit reports: under `docs/security/reviews/`, under `docs/quality/reviews/`, or under a project evidence folder?
+3. Whether spawned Task Checks run before the folder move to `4-review` or immediately after it. Either way, first version should not block the transition.
+4. Whether injected checks are worth shipping at all in the first version.

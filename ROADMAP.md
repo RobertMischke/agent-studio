@@ -34,6 +34,7 @@ Today the application provides:
 - CLI quota and session visibility where the underlying tools expose enough data.
 - Recovery after session loss via job-folder evidence and deterministic continuation planning.
 - Early project-level planning tasks for Security and Architecture dimensions.
+- A design mockup for a broader quality system under `docs/mockups/quality-system/`. This is exploratory, not product behavior yet.
 
 ## Roadmap Themes
 
@@ -52,6 +53,29 @@ Make security a first-class project dimension, not a one-off task:
 - A cautious modernization story for small internal libraries: regenerate or rewrite when the scope is bounded and review evidence is strong; avoid this default in highly sensitive areas such as PKI, TLS, cryptography, certificate handling, and authentication boundaries.
 
 Security quality depends on model capability, sufficient token budget, the right process, and durable documentation. The app should optimize that loop instead of treating security as a vague label. A security claim without the model, spend, process, evidence, and reviewer decision is not enough.
+
+### Quality System
+
+Turn the quality-system mockup into product behavior carefully, without letting it become a workflow engine:
+
+- Keep the conceptual split from the mockup: Project Audits are project-scope read-only reviews, Task Checks are task-diff read-only reviews, Performance Probes are runtime measurements, and Skills are reusable workflows.
+- Do not use "Quality" as a vague top-level bucket until the vocabulary proves itself in the real app. Prefer concrete surfaces: Security on the project page, Task Checks on task review, Probes under project or settings diagnostics, Skills as the reusable workflow catalog.
+- Build the first slice around evidence, not enforcement. Task Checks should produce findings and review chips, but should not block the `3-progress -> 4-review` transition in the first version.
+- Default high-severity and security-sensitive Task Checks to separate spawned CLI runs. Allow injected checks only for cheap, low-risk self-checks where structured output is not critical.
+- Store audit and check definitions as versioned Markdown with frontmatter, but keep runtime outputs in watched project/task folders. Definitions belong to the app library; findings and reports belong next to the project evidence they describe.
+- Treat findings as review artifacts that can become normal queued tasks. A "create follow-up task" action is safer than hidden automatic fixing.
+- Keep Performance Probes separate from Skills. Probes execute code and measure the running app; Skills are prompt/workflow definitions.
+- Promote Security visually ahead of generic Quality. A project with no security baseline should feel unfinished, not merely unconfigured.
+- Delay repository-style skill discovery until local installed skills, licenses, and project lookup are boring and reliable. No hidden internet install, no hidden auto-update, no skill execution without an explicit local record.
+
+First implementation order:
+
+1. Security baseline panel and review history on the project page.
+2. Task Check definition model plus per-project defaults.
+3. Spawned Task Check run after a main task completes, writing structured findings into the job folder.
+4. Finding chips in task review and a follow-up-task action.
+5. Skills catalog for installed local skills and built-in audit/check definitions.
+6. Performance Probe slots after the audit/check loop is stable.
 
 ### Project Control
 
