@@ -3,10 +3,33 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport, QuotaReport, QuotaSnapshot, GitStatus, ClaudeSessionResponse, JobCommitDetail, SessionEventsResponse, ContinueMode, ContinueJobResponse, OrchestratorLogResponse, TokenSummary, OrchestratorSessionResponse, OrchestratorChatResponse, OrchestratorChatTurn, RunTimeline, RunCommitsResponse, RunFilesResponse, RunDiffResponse } from '../models/job.model';
 import { ErrorDialogService } from './error-dialog.service';
 
+type LaneKey = keyof GroupedJobs;
+const STATE_TO_LANE: Record<string, LaneKey> = {
+  '1-preparation': 'preparation',
+  '2-ready': 'ready',
+  '3-progress': 'progress',
+  '4-review': 'review',
+  '5-completed': 'completed',
+  '6-archive': 'archive'
+};
+
 @Injectable({ providedIn: 'root' })
 export class JobService {
   private readonly baseUrl = '/api';
   private liveUpdateTimer: ReturnType<typeof setInterval> | null = null;
+
+  // Eventual-consistency layer for drag/drop. The user-visible reorder
+  // happens locally before the backend confirms (the previous round-trip
+  // wait felt laggy and made consecutive drags clobber each other when a
+  // silent poll resolved between drops). We bump `mutationVersion` on
+  // every optimistic edit; silent polls capture the version at request
+  // start and discard their response if a mutation has happened since.
+  // `pendingGroupedSuppressUntil` keeps that guard alive for a short
+  // grace window after the latest optimistic edit so the on-disk
+  // rewrite has time to settle before we accept server data again.
+  private mutationVersion = 0;
+  private pendingGroupedSuppressUntil = 0;
+  private static readonly OPTIMISTIC_GRACE_MS = 1500;
 
   readonly jobs = signal<JobInfo[]>([]);
   readonly grouped = signal<GroupedJobs>({ preparation: [], ready: [], progress: [], review: [], completed: [], archive: [] });
@@ -21,9 +44,19 @@ export class JobService {
       this.error.set(null);
     }
 
+    const versionAtStart = this.mutationVersion;
+    const acceptOptimisticTarget = () => {
+      if (!silent) return true;
+      if (this.mutationVersion !== versionAtStart) return false;
+      if (Date.now() < this.pendingGroupedSuppressUntil) return false;
+      return true;
+    };
+
     this.http.get<JobInfo[]>(`${this.baseUrl}/jobs`).subscribe({
       next: (jobs) => {
-        this.jobs.set(jobs);
+        if (acceptOptimisticTarget()) {
+          this.jobs.set(jobs);
+        }
         if (silent) {
           this.error.set(null);
         }
@@ -48,7 +81,9 @@ export class JobService {
 
     this.http.get<GroupedJobs>(`${this.baseUrl}/jobs/grouped`).subscribe({
       next: (grouped) => {
-        this.grouped.set(grouped);
+        if (acceptOptimisticTarget()) {
+          this.grouped.set(grouped);
+        }
       },
       error: (err) => {
         if (!silent) {
@@ -62,6 +97,90 @@ export class JobService {
     });
 
     this.refreshRunnerStatus(silent);
+  }
+
+  /**
+   * Apply a within-lane reorder to the local `grouped` signal immediately,
+   * before the backend confirms. Idempotent: missing keys are dropped and
+   * the existing lane order is preserved for any job not present in the
+   * supplied list. Returns the previous lane snapshot so callers can roll
+   * back on a failed POST.
+   */
+  applyOptimisticReorder(state: string, orderedKeys: { jobId: string; watchPath: string }[]): JobInfo[] | null {
+    const lane = STATE_TO_LANE[state];
+    if (!lane) return null;
+    const current = this.grouped();
+    const before = current[lane] ?? [];
+    const byKey = new Map(before.map(j => [`${j.watchPath}::${j.id}`, j]));
+    const reordered: JobInfo[] = [];
+    const seen = new Set<string>();
+    for (const k of orderedKeys) {
+      const key = `${k.watchPath}::${k.jobId}`;
+      const job = byKey.get(key);
+      if (job && !seen.has(key)) {
+        reordered.push(job);
+        seen.add(key);
+      }
+    }
+    // Preserve any lane members the caller didn't mention (defensive — e2e
+    // happens in narrow trios, but production lanes can drift).
+    for (const j of before) {
+      const key = `${j.watchPath}::${j.id}`;
+      if (!seen.has(key)) reordered.push(j);
+    }
+    this.grouped.set({ ...current, [lane]: reordered });
+    this.mutationVersion++;
+    this.pendingGroupedSuppressUntil = Date.now() + JobService.OPTIMISTIC_GRACE_MS;
+    return before;
+  }
+
+  /**
+   * Apply a cross-lane move to the local `grouped` signal immediately.
+   * The card lands at the bottom of the target lane (matches the backend
+   * convention that newly assigned `order` values are appended).
+   */
+  applyOptimisticMove(jobId: string, watchPath: string, targetState: string): { fromLane: LaneKey; before: JobInfo[]; toLane: LaneKey; toBefore: JobInfo[] } | null {
+    const toLane = STATE_TO_LANE[targetState];
+    if (!toLane) return null;
+    const current = this.grouped();
+    const key = `${watchPath}::${jobId}`;
+    let fromLane: LaneKey | null = null;
+    let moving: JobInfo | null = null;
+    for (const k of Object.keys(current) as LaneKey[]) {
+      const found = (current[k] ?? []).find(j => `${j.watchPath}::${j.id}` === key);
+      if (found) { fromLane = k; moving = found; break; }
+    }
+    if (!fromLane || !moving) return null;
+    const fromBefore = current[fromLane] ?? [];
+    const toBefore = current[toLane] ?? [];
+    const next: GroupedJobs = { ...current };
+    next[fromLane] = fromBefore.filter(j => `${j.watchPath}::${j.id}` !== key);
+    next[toLane] = fromLane === toLane ? next[toLane] : [...toBefore, { ...moving, state: targetState }];
+    this.grouped.set(next);
+    this.mutationVersion++;
+    this.pendingGroupedSuppressUntil = Date.now() + JobService.OPTIMISTIC_GRACE_MS;
+    return { fromLane, before: fromBefore, toLane, toBefore };
+  }
+
+  /** Roll back a failed optimistic reorder to the captured snapshot. */
+  revertOptimisticReorder(state: string, before: JobInfo[]): void {
+    const lane = STATE_TO_LANE[state];
+    if (!lane) return;
+    const current = this.grouped();
+    this.grouped.set({ ...current, [lane]: before });
+    this.mutationVersion++;
+    this.pendingGroupedSuppressUntil = 0;
+  }
+
+  /** Roll back a failed optimistic cross-lane move. */
+  revertOptimisticMove(snapshot: { fromLane: LaneKey; before: JobInfo[]; toLane: LaneKey; toBefore: JobInfo[] }): void {
+    const current = this.grouped();
+    const next: GroupedJobs = { ...current };
+    next[snapshot.fromLane] = snapshot.before;
+    if (snapshot.toLane !== snapshot.fromLane) next[snapshot.toLane] = snapshot.toBefore;
+    this.grouped.set(next);
+    this.mutationVersion++;
+    this.pendingGroupedSuppressUntil = 0;
   }
 
   private withWatchPath(watchPath?: string): { params?: HttpParams } {

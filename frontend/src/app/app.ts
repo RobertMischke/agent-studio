@@ -1467,9 +1467,13 @@ export class App implements OnInit {
   }
 
   onJobDrop(event: { jobId: string; watchPath: string; targetState: string }) {
+    // Optimistic move: paint the new lane immediately, let the backend
+    // catch up. On failure, revert the local snapshot and surface the
+    // error so the user knows the persisted state didn't take.
+    const snapshot = this.jobService.applyOptimisticMove(event.jobId, event.watchPath, event.targetState);
     this.jobService.moveJob(event.jobId, event.targetState, event.watchPath).subscribe({
-      next: () => this.refresh(),
       error: (err) => {
+        if (snapshot) this.jobService.revertOptimisticMove(snapshot);
         this.jobService.error.set(err.message || 'Failed to move job');
         this.errorDialog.show(err, {
           title: 'Failed to move task',
@@ -1481,9 +1485,13 @@ export class App implements OnInit {
   }
 
   onJobReorder(event: { state: string; jobs: { jobId: string; watchPath: string }[] }) {
+    // Optimistic reorder. The lane updates synchronously; the next silent
+    // poll is suppressed for a short grace window so the on-disk
+    // job.json rewrites can settle without flickering the new order back.
+    const before = this.jobService.applyOptimisticReorder(event.state, event.jobs);
     this.jobService.reorderJobs(event.jobs).subscribe({
-      next: () => this.refresh(),
       error: (err) => {
+        if (before) this.jobService.revertOptimisticReorder(event.state, before);
         this.jobService.error.set(err.message || 'Failed to reorder');
         this.errorDialog.show(err, {
           title: 'Failed to reorder tasks',
