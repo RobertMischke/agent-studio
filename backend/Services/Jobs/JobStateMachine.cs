@@ -234,12 +234,39 @@ public class JobStateMachine
 
     public bool ReorderJobs(List<JobOrderItem> jobs)
     {
+        if (jobs.Count == 0) return true;
+
+        // One scan, then dict lookup per item. The previous shape called
+        // _scanner.FindJob(jobId, watchPath) inside the loop, and FindJob
+        // re-runs ScanAllJobs (full disk walk) every time — O(N x M) for an
+        // N-card reorder on an M-job board, which made consecutive drags
+        // and the click-after-drop interaction lag visibly. Lookup key is
+        // (watchPath, jobId) so the same id in two workspaces still resolves
+        // to the right folder. Case-insensitive watchPath match mirrors
+        // FindJob's own comparison.
+        var byKey = new Dictionary<(string watchPath, string jobId), string>();
+        foreach (var info in _scanner.ScanAllJobs())
+        {
+            byKey[(info.WatchPath.ToLowerInvariant(), info.Id)] = info.FolderPath;
+        }
+
         for (int i = 0; i < jobs.Count; i++)
         {
             var job = jobs[i];
-            var info = _scanner.FindJob(job.JobId, job.WatchPath);
-            if (info == null) continue;
-            JobJsonFile.UpdateOrder(info.FolderPath, i + 1, _logger);
+            var watchKey = (job.WatchPath ?? string.Empty).ToLowerInvariant();
+            string? folder;
+            if (!byKey.TryGetValue((watchKey, job.JobId), out folder))
+            {
+                // Fall back to id-only lookup when the caller omits watchPath
+                // (legacy clients) — pick the first match in a deterministic
+                // order so the operation is still useful.
+                folder = byKey
+                    .Where(kv => kv.Key.jobId == job.JobId)
+                    .Select(kv => kv.Value)
+                    .FirstOrDefault();
+                if (folder == null) continue;
+            }
+            JobJsonFile.UpdateOrder(folder, i + 1, _logger);
         }
         return true;
     }

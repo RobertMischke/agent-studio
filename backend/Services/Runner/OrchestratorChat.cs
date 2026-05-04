@@ -342,23 +342,36 @@ public class OrchestratorChatService
     private string BuildPrompt(string projectName, string watchPath, SendOrchestratorChatRequest req)
     {
         var sb = new StringBuilder();
-        sb.AppendLine($"User message in the chat for project \"{projectName}\":");
-        sb.AppendLine();
-        sb.AppendLine(req.Text);
+        sb.AppendLine("=== ACTIVE PROJECT CONTEXT ===");
+        sb.AppendLine($"The user is currently looking at project: \"{projectName}\"");
+        sb.AppendLine("This may be a different project than the one discussed earlier in this session.");
+        sb.AppendLine("Answer ONLY about \"" + projectName + "\". Do not refer to other projects unless the user asks.");
         sb.AppendLine();
 
         // Project-state snapshot so the orchestrator answers "where do you
         // stand on this project?" against current reality, not stale memory.
+        // The global session is shared across projects, so prior turns may
+        // have cached counts for a different project; mark this snapshot
+        // authoritative so the model uses it instead of recalling stale data.
         try
         {
-            var jobs = _scanner.ScanAllJobs()
+            var tasks = _scanner.ScanAllJobs()
                 .Where(j => string.Equals(j.ProjectName, projectName, StringComparison.OrdinalIgnoreCase))
                 .ToList();
-            sb.AppendLine($"Current state of \"{projectName}\" ({jobs.Count} jobs):");
-            foreach (var sg in jobs.GroupBy(j => j.State).OrderBy(g => g.Key))
+            sb.AppendLine($"AUTHORITATIVE current state of \"{projectName}\" ({tasks.Count} tasks total):");
+            if (tasks.Count == 0)
             {
-                sb.AppendLine($"  {sg.Key}: {sg.Count()}");
+                sb.AppendLine("  (no tasks)");
             }
+            else
+            {
+                foreach (var sg in tasks.GroupBy(j => j.State).OrderBy(g => g.Key))
+                {
+                    sb.AppendLine($"  {sg.Key}: {sg.Count()}");
+                }
+            }
+            sb.AppendLine("Use these exact numbers. Any counts you remember from earlier in this session are stale and must be ignored.");
+            sb.AppendLine("These items are called \"tasks\" (not \"jobs\") in the user-facing vocabulary.");
             sb.AppendLine();
         }
         catch
@@ -366,6 +379,10 @@ public class OrchestratorChatService
             // Best-effort: missing snapshot is fine; the orchestrator can
             // still answer general questions from session memory.
         }
+
+        sb.AppendLine("=== USER MESSAGE ===");
+        sb.AppendLine(req.Text);
+        sb.AppendLine();
 
         if (req.Attachments != null && req.Attachments.Count > 0)
         {
@@ -377,7 +394,8 @@ public class OrchestratorChatService
             sb.AppendLine();
         }
 
-        sb.AppendLine("Reply directly to the user. Be concrete and specific about the named project.");
+        sb.AppendLine("Reply directly to the user about \"" + projectName + "\". Be concrete and specific.");
+        sb.AppendLine("Use the word \"tasks\", not \"jobs\".");
         sb.AppendLine("Use Markdown for structure when helpful (lists, bold, code).");
         sb.AppendLine("Keep it short unless the user asked for depth.");
         return sb.ToString();

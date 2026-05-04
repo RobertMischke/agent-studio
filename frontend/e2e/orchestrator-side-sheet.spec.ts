@@ -95,17 +95,20 @@ test.describe('Orchestrator side sheet', () => {
       });
     }
 
-    // Verify the project switcher tabs render when more than one project is
-    // watched, and clicking the other tab swaps the active thread.
-    const tabs = page.getByTestId('orch-side-sheet-tabs');
-    if (await tabs.isVisible()) {
-      const tabButtons = tabs.locator('button');
-      const count = await tabButtons.count();
-      if (count >= 2) {
-        await tabButtons.nth(1).click();
-        await page.waitForTimeout(400);
-        await page.screenshot({ path: `${SHOTS}/04-side-sheet-other-project.png`, fullPage: false });
-      }
+    // Verify the project switcher renders as a dropdown so it scales past
+    // a handful of projects without overflow, and changing the selection
+    // swaps the active thread.
+    const projectSelect = page.getByTestId('orch-side-sheet-project-select');
+    await expect(projectSelect).toBeVisible();
+    const optionValues = await projectSelect.locator('option').evaluateAll((opts) =>
+      (opts as HTMLOptionElement[]).map((o) => o.value)
+    );
+    if (optionValues.length >= 2) {
+      const current = await projectSelect.inputValue();
+      const next = optionValues.find((v) => v && v !== current) ?? optionValues[1];
+      await projectSelect.selectOption(next);
+      await page.waitForTimeout(400);
+      await page.screenshot({ path: `${SHOTS}/04-side-sheet-other-project.png`, fullPage: false });
     }
 
     // Phase 6: when a task detail is open, the side sheet shows a third

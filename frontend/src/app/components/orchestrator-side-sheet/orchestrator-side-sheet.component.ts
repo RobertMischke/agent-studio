@@ -60,19 +60,26 @@ import { ChatMessage, ChatSubmitEvent } from '../chat/chat-types';
       </header>
 
       <nav class="sheet__tabs" data-testid="orch-side-sheet-tabs">
-        @for (proj of projects(); track proj) {
-          <button class="sheet__tab"
-                  [class.sheet__tab--active]="mode() === 'project' && proj === activeProject()"
-                  [attr.data-testid]="'orch-side-sheet-tab-' + proj"
-                  (click)="selectProjectTab(proj)">
-            {{ proj }}
-          </button>
-        }
+        <label class="sheet__select-wrap"
+               [class.sheet__select-wrap--active]="mode() === 'project'"
+               data-testid="orch-side-sheet-project-select-wrap">
+          <span class="sheet__select-icon">💬</span>
+          <select class="sheet__select"
+                  data-testid="orch-side-sheet-project-select"
+                  [value]="activeProject() ?? ''"
+                  (change)="onProjectSelectChange($event)">
+            @for (proj of projects(); track proj) {
+              <option [value]="proj">{{ proj }}</option>
+            }
+          </select>
+          <span class="sheet__select-caret">▾</span>
+        </label>
         @if (activeJobId() && activeJobTitle()) {
           <button class="sheet__tab sheet__tab--task"
                   [class.sheet__tab--active]="mode() === 'task'"
                   data-testid="orch-side-sheet-tab-task"
-                  (click)="selectTaskTab()">
+                  (click)="selectTaskTab()"
+                  [title]="activeJobTitle() ?? ''">
             🎯 {{ activeJobTitle() }}
           </button>
         }
@@ -189,14 +196,65 @@ import { ChatMessage, ChatSubmitEvent } from '../chat/chat-types';
 
     .sheet__tabs {
       display: flex;
-      gap: 4px;
+      gap: 6px;
       padding: 6px 10px;
       border-bottom: 1px solid rgba(255,255,255,0.06);
-      overflow-x: auto;
-      scrollbar-width: thin;
+      align-items: center;
+      flex-wrap: nowrap;
+      min-width: 0;
     }
+    /* Project picker is a real <select> so it scales past pills/tabs to
+       ~10+ projects without overflow. The wrap renders our pill chrome
+       around the native control; the active tab indicator still glows. */
+    .sheet__select-wrap {
+      flex: 1 1 auto;
+      min-width: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 10px 3px 11px;
+      background: linear-gradient(135deg, rgba(124,58,237,0.55), rgba(99,102,241,0.55));
+      border: 1px solid rgba(196,181,253,0.95);
+      border-radius: 999px;
+      color: #ffffff;
+      font-weight: 600;
+      font-size: 12px;
+      cursor: pointer;
+      box-shadow: 0 0 0 1px rgba(196,181,253,0.35), 0 1px 4px rgba(99,102,241,0.35);
+      transition: opacity 0.15s;
+    }
+    .sheet__select-wrap:not(.sheet__select-wrap--active) {
+      background: rgba(255,255,255,0.04);
+      border-color: rgba(255,255,255,0.08);
+      box-shadow: none;
+      color: #cbd5e1;
+      font-weight: 500;
+    }
+    .sheet__select-icon { flex: 0 0 auto; opacity: 0.85; }
+    .sheet__select {
+      flex: 1 1 auto;
+      min-width: 0;
+      background: transparent;
+      border: 0;
+      color: inherit;
+      font: inherit;
+      cursor: pointer;
+      padding: 0;
+      appearance: none;
+      -webkit-appearance: none;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    .sheet__select:focus { outline: none; }
+    .sheet__select option {
+      color: #0f172a;
+      background: #f8fafc;
+    }
+    .sheet__select-caret { flex: 0 0 auto; opacity: 0.85; font-size: 10px; }
     .sheet__tab {
       flex: 0 0 auto;
+      max-width: 60%;
       background: rgba(255,255,255,0.04);
       border: 1px solid rgba(255,255,255,0.08);
       color: #94a3b8;
@@ -205,6 +263,8 @@ import { ChatMessage, ChatSubmitEvent } from '../chat/chat-types';
       font-size: 12px;
       cursor: pointer;
       white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
       transition: background 0.15s, color 0.15s, border-color 0.15s;
     }
     .sheet__tab:hover {
@@ -456,6 +516,12 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   selectProjectTab(proj: string): void {
     this.mode.set('project');
     this.setActiveProject(proj);
+  }
+
+  onProjectSelectChange(event: Event): void {
+    const value = (event.target as HTMLSelectElement | null)?.value ?? '';
+    if (!value) return;
+    this.selectProjectTab(value);
   }
 
   selectTaskTab(): void {

@@ -104,7 +104,8 @@ public sealed class GlobalOrchestratorBootstrap
         try
         {
             var jobs = _scanner.ScanAllJobs();
-            sb.AppendLine($"Current jobs across all projects ({jobs.Count} total):");
+            sb.AppendLine($"Current tasks across all projects ({jobs.Count} total):");
+            sb.AppendLine("(These items are called \"tasks\" in user-facing vocabulary; never use \"jobs\".)");
             foreach (var grp in jobs.GroupBy(j => j.ProjectName))
             {
                 sb.AppendLine($"  {grp.Key}:");
