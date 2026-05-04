@@ -36,7 +36,21 @@ Every condensed view has a path to the underlying detail:
 
 You should never see a high-level claim that you cannot interrogate. If we hide something at the top level for legibility, the path to the underlying evidence has to be one click away.
 
-## Verbindlich sehen, was passiert ist
+## Skills are action-driven report producers
+
+Specialist Skills and script-backed loops are explicit actions. The user presses a button or the orchestrator asks for a named action: run a security audit, critique screenshots, run backend tests, run end-to-end tests, generate a source map, analyze module organization, or request the next design version. Broad creative, QA, and source-analysis work does not quietly happen everywhere by default.
+
+Each action produces evidence. Human-readable Markdown is allowed and useful, but the app should also ask for a small structured report block with a schema version, status, summary, metrics, findings, and artifact paths. The structured block is an interface, not a wish. If the model or script fails to produce valid JSON, the UI keeps the raw Markdown visible, labels the report as unstructured, and lets the user inspect or turn it into a follow-up task manually.
+
+The button is the contract boundary:
+
+- The user can see what action is being triggered.
+- The generated report lands beside the relevant task or project evidence.
+- The app parses structured fields only when the contract is satisfied.
+- The raw report stays available when parsing fails.
+- Follow-up work becomes a normal queued task.
+
+## See What Happened With Confidence
 
 The user must always have a confident, current picture of what the agents and the software did. Three rules follow:
 
@@ -74,4 +88,4 @@ When you propose a UI change or a backend service that touches the protocol, the
 2. Is the underlying detail one click away?
 3. Are we adding a new signal that duplicates an existing one?
 
-If the answer to (1) or (2) is no, redesign. If (3) is yes, suppress the new signal or replace the existing one — never stack them.
+If the answer to (1) or (2) is no, redesign. If (3) is yes, suppress the new signal or replace the existing one. Never stack them.

@@ -1,16 +1,17 @@
 # Creative Design System - Mockup
 
-Design exploration. Goal: describe how Agent Task Processor can help produce beautiful software through design loops, screenshots, and structured critique.
+Design exploration. Goal: describe how Agent Task Processor can help produce beautiful software through design loops, references, screenshots, structured critique, tests, and source-code metrics.
 
 This is a sibling to the quality-system mockup, not a replacement for it:
 
 - Quality asks whether the work is correct, safe, and reviewable.
 - Creativity and Design asks whether the work is coherent, expressive, usable, and worth shipping as product.
+- Testing and QA asks whether the work keeps behaving correctly over time, with visible evidence from backend tests, end-to-end tests, tuning tests, coverage, and source-code metrics.
 
 ## Files
 
-- [taxonomy.md](taxonomy.md) - concepts, loop types, council roles, storage shape, and implementation order.
-- [ui.html](ui.html) - clickable dummy for a design loop, screenshot variants, and council critique.
+- [taxonomy.md](taxonomy.md) - concepts, loop types, council roles, testing/QA surfaces, report contracts, storage shape, and implementation order.
+- [ui.html](ui.html) - clickable dummy for a design loop, references, screenshot variants, council critique, tests, and source metrics.
 
 ## Current Direction
 
@@ -19,13 +20,19 @@ Beautiful software needs a loop, not a single pass.
 The app should support a design iteration cycle:
 
 1. Define design intent.
-2. Implement or mock a version.
-3. Capture screenshots.
-4. Run council-style critique.
-5. Let the orchestrator decide: accept, request another version, or create follow-up tasks.
-6. Preserve the chosen direction and rejected alternatives as evidence.
+2. Collect references: screenshots, markdown briefs, images, accepted examples, rejected examples.
+3. Implement or mock a version.
+4. Capture screenshots.
+5. Run council-style critique.
+6. Run targeted testing and QA actions when the user asks for them.
+7. Let the orchestrator decide: accept, request another version, or create follow-up tasks.
+8. Preserve the chosen direction and rejected alternatives as evidence.
 
 This matters because a coding agent can produce a working UI that is still visually weak. The product should make it normal to ask for the next version, compare screenshots, and apply critical feedback before the task is accepted.
+
+Design evidence is broader than screenshots. A project can carry reference images, product screenshots, markdown design briefs, UI principles, moodboards, and examples from earlier accepted tasks. These references should be visible and reusable from project and task surfaces, but they remain evidence and context, not hidden automatic instructions.
+
+Testing and QA evidence belongs beside design evidence. Backend tests, end-to-end tests, tuning/performance tests, coverage, lines of code, module organization, dependency shape, and source-code maps should be visible as run history. The LLM can evaluate those reports, but it evaluates structured evidence. It should not invent pass/fail state from prose.
 
 ## Council Concept
 
@@ -42,6 +49,43 @@ Recommended first roles:
 
 The orchestrator reads the council notes and chooses the next step. The council gives opinions; the orchestrator owns the decision.
 
+## Action-Driven Skills
+
+Creative design, testing, QA, and source analysis actions are button-driven. They do not happen everywhere automatically.
+
+Examples:
+
+- Run screenshot critique.
+- Add design reference.
+- Run council review.
+- Run backend tests.
+- Run end-to-end tests.
+- Run tuning tests.
+- Generate source map.
+- Analyze module organization.
+- Request next design version.
+
+Each action invokes a Skill, prompt trigger, or script-backed workflow. The action writes structured evidence back to the task or project. The user sees the button, chooses the action, and can inspect the resulting report.
+
+## Report Contracts
+
+The first implementation should define report interfaces explicitly. A Skill may write Markdown for humans, but it should also emit a small structured block the app can parse.
+
+Recommended shape:
+
+```json
+{
+  "kind": "test-run",
+  "schemaVersion": 1,
+  "status": "pass",
+  "summary": "Backend tests passed; two Playwright specs still skipped.",
+  "metrics": { "passed": 142, "failed": 0, "coverage": 78.4 },
+  "artifacts": ["results/qa/backend-tests-2026-05-04.md"]
+}
+```
+
+If parsing fails, the UI must show the raw Markdown report with an "unstructured report" warning. The contract is an interface with graceful degradation, not a reason to hide evidence.
+
 ## Critical Boundaries
 
 - Design loops may create screenshots, critique, design briefs, and follow-up tasks.
@@ -49,15 +93,21 @@ The orchestrator reads the council notes and chooses the next step. The council 
 - Council output is evidence, not an automatic mandate.
 - The first implementation should not build a full design tool.
 - Generated or searched visual references are allowed only as task evidence or design inspiration, not as hidden product dependencies.
+- Testing and QA actions are explicit. The app may suggest them, but the user triggers them unless a project later opts into a specific safe automation.
+- Report parsing must be defensive. Broken JSON or missing fields produce visible warnings and raw report access.
+- Source-code metrics are a perspective for understanding software, not a replacement for review.
 
 ## First Implementation Slice
 
 1. Design evidence format for screenshot variants and council notes.
-2. Screenshot comparison panel in task detail.
-3. Local design Skills for screenshot critique, UI polish, copy tone, and accessibility design review.
-4. Council review prompt with role-separated critique.
-5. "Next version" action that creates a follow-up task from council feedback.
-6. Project-level design memory for accepted visual direction and examples.
+2. Design reference library for screenshots, markdown briefs, images, accepted examples, and rejected alternatives.
+3. Screenshot comparison panel in task detail.
+4. Local design Skills for screenshot critique, UI polish, copy tone, and accessibility design review.
+5. Testing and QA run history for backend tests, end-to-end tests, tuning tests, coverage, and code metrics.
+6. Source-code map action that visualizes modules, lines of code, ownership areas, and organization concerns.
+7. Council review prompt with role-separated critique.
+8. "Next version" action that creates a follow-up task from council feedback.
+9. Project-level design memory for accepted visual direction and examples.
 
 ## What This Mockup Is For
 
@@ -65,6 +115,10 @@ This mockup should help future implementation tasks answer:
 
 - What does a design loop produce?
 - What does the council critique?
+- What references should a design loop read?
+- Which testing and QA actions are available?
+- Which source-code metrics should be visualized?
+- What does a parseable report contract look like?
 - Which artifacts stay with the task?
 - How does the orchestrator choose "next version"?
 - How does the product stay sequential while still getting richer critique?

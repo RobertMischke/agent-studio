@@ -84,21 +84,28 @@ Make "beautiful software" a first-class product outcome, not a lucky side effect
 
 - Treat software as product. Features should be useful, but also visually coherent, pleasant to operate, and able to carry a brand or product idea.
 - Add creative design loops that can generate, compare, and iterate UI variants before or during implementation. A loop can ask for "the next version" instead of treating the first usable screen as done.
+- Maintain design references: screenshots, markdown briefs, images, accepted examples, rejected alternatives, and product/brand notes that can guide later design loops.
 - Use screenshots as the core design evidence. Every visual iteration should capture the current state, the proposed variant, and the critique that led to the next step.
 - Add council-style critique as a structured review mode: product, visual design, interaction design, frontend engineering, accessibility, and marketing/positioning can each provide a focused opinion before the orchestrator chooses the next move.
 - Keep design councils advisory. They may create findings, design briefs, and follow-up tasks, but they must not create parallel coding work inside one project.
 - Model design Skills separately from read-only checks: Visual Direction, UI Polish Pass, Screenshot Critique, Copy Tone Pass, Brand Fit Review, Accessibility Design Review, and Product Story Review are reusable workflows that help produce better design decisions.
+- Add explicit Testing and QA actions for backend tests, end-to-end tests, tuning tests, coverage, and run history. The user triggers the action; the app stores structured evidence.
+- Add source-code perspectives that an LLM or script-backed Skill can generate: lines of code, modules, dependencies, ownership areas, coverage, hotspots, and organization risks.
+- Treat Skill output as a report contract: Markdown for humans plus structured JSON for the app. If parsing fails, show the raw report with an unstructured-output warning.
 - Let the orchestrator steer a design loop explicitly: accept a version, request another version, ask for a harsher critique, or turn council feedback into normal queued implementation tasks.
 - Preserve design history in task evidence: screenshot sets, variant notes, council verdicts, chosen direction, rejected alternatives, and follow-up tasks.
 
 First implementation order:
 
-1. Design Loop concept and task-evidence shape for screenshot variants and council notes.
-2. Screenshot comparison panel on the task detail surface.
-3. Local design Skill definitions for screenshot critique, UI polish, copy tone, and accessibility design review.
-4. Council review prompt that produces role-separated critique and a final orchestrator recommendation.
-5. "Next version" action that creates a follow-up design iteration task from the current screenshots and council notes.
-6. Project-level design memory: chosen visual direction, brand notes, UI principles, and examples of accepted screens.
+1. Design Loop concept and task-evidence shape for screenshot variants, references, QA runs, source maps, and council notes.
+2. Design reference library for screenshots, markdown briefs, images, accepted examples, and rejected alternatives.
+3. Screenshot comparison panel on the task detail surface.
+4. Local design Skill definitions for screenshot critique, UI polish, copy tone, and accessibility design review.
+5. Testing and QA run history for backend tests, end-to-end tests, tuning tests, coverage, and code metrics.
+6. Source-code map action that visualizes modules, lines of code, ownership areas, and organization concerns.
+7. Council review prompt that produces role-separated critique and a final orchestrator recommendation.
+8. "Next version" action that creates a follow-up design iteration task from the current screenshots and council notes.
+9. Project-level design memory: chosen visual direction, brand notes, UI principles, and examples of accepted screens.
 
 ### Project Control
 
