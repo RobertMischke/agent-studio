@@ -1,17 +1,18 @@
 # Creative Design System - Mockup
 
-Design exploration. Goal: describe how Agent Task Processor can help produce beautiful software through design loops, references, screenshots, structured critique, tests, and source-code metrics.
+Design exploration. Goal: describe how Agent Task Processor can help produce beautiful software through design loops, references, screenshots, structured critique, tests, source-code metrics, and visible token usage.
 
 This is a sibling to the quality-system mockup, not a replacement for it:
 
 - Quality asks whether the work is correct, safe, and reviewable.
 - Creativity and Design asks whether the work is coherent, expressive, usable, and worth shipping as product.
 - Testing and QA asks whether the work keeps behaving correctly over time, with visible evidence from backend tests, end-to-end tests, tuning tests, coverage, and source-code metrics.
+- Token Usage asks how much inference budget the project has spent, where it went, and which jobs deserve scrutiny.
 
 ## Files
 
 - [taxonomy.md](taxonomy.md) - concepts, loop types, council roles, testing/QA surfaces, report contracts, storage shape, and implementation order.
-- [ui.html](ui.html) - clickable dummy for a design loop, references, screenshot variants, council critique, tests, and source metrics.
+- [ui.html](ui.html) - clickable dummy for project-level UX/UI, Test Quality, and Token Usage surfaces.
 
 ## Current Direction
 
@@ -36,12 +37,15 @@ Testing and QA evidence belongs beside design evidence. Backend tests, end-to-en
 
 ## Project-Level Menus
 
-The project page should expose two dedicated surfaces:
+The project page should expose three dedicated surfaces:
 
 - **UX/UI** - the place for design references, screenshots, markdown briefs, visual direction, council critique, design memory, and "next version" actions.
 - **Test Quality** - the place for backend test runs, end-to-end test runs, tuning tests, coverage, source-code metrics, module organization, source maps, and QA report history.
+- **Token Usage** - the place for total token spend, job-token heatmaps, timelines, and drill-down into which jobs, supporting jobs, and orchestrator turns consumed budget.
 
 These are peer project dimensions beside Security and Architecture. They should not be buried under a generic Skills or Quality menu. Skills power the actions, but the user finds the results on the project surface.
+
+Token Usage is especially important at scale. A board that has processed thousands of jobs needs more than a number in a corner. It needs a visual feeling for spend: small job squares, heat intensity, time windows, expensive outliers, and drill-down from project total to one job and its related supporting work.
 
 ## Council Concept
 
@@ -95,6 +99,16 @@ Recommended shape:
 
 If parsing fails, the UI must show the raw Markdown report with an "unstructured report" warning. The contract is an interface with graceful degradation, not a reason to hide evidence.
 
+## Token Categories
+
+Token Usage should split spend into at least three categories:
+
+- **Job Tokens** - tokens used by the primary CLI run that implements or reviews the job.
+- **Supporting Jobs Tokens** - tokens used by analysis, council, QA, design, security, or source-map runs attached to the job.
+- **Orchestrator Tokens** - tokens used by the orchestrator or supervisor logic related to the job: steering, reissue, summaries, and decisions.
+
+The project view should aggregate all three while preserving drill-down to each job, run, and category.
+
 ## Critical Boundaries
 
 - Design loops may create screenshots, critique, design briefs, and follow-up tasks.
@@ -105,19 +119,21 @@ If parsing fails, the UI must show the raw Markdown report with an "unstructured
 - Testing and QA actions are explicit. The app may suggest them, but the user triggers them unless a project later opts into a specific safe automation.
 - Report parsing must be defensive. Broken JSON or missing fields produce visible warnings and raw report access.
 - Source-code metrics are a perspective for understanding software, not a replacement for review.
+- Token usage must be visible enough to change behavior. Expensive jobs, supporting loops, and orchestrator overhead should be obvious without opening a terminal.
 
 ## First Implementation Slice
 
-1. Add UX/UI and Test Quality as project-level menu surfaces.
+1. Add UX/UI, Test Quality, and Token Usage as project-level menu surfaces.
 2. Design evidence format for screenshot variants and council notes.
 3. Design reference library for screenshots, markdown briefs, images, accepted examples, and rejected alternatives.
 4. Screenshot comparison panel in task detail.
 5. Local design Skills for screenshot critique, UI polish, copy tone, and accessibility design review.
 6. Testing and QA run history for backend tests, end-to-end tests, tuning tests, coverage, and code metrics.
 7. Source-code map action that visualizes modules, lines of code, ownership areas, and organization concerns.
-8. Council review prompt with role-separated critique.
-9. "Next version" action that creates a follow-up task from council feedback.
-10. Project-level design memory for accepted visual direction and examples.
+8. Token Usage project surface with category totals, heatmap, timeline, and job drill-down.
+9. Council review prompt with role-separated critique.
+10. "Next version" action that creates a follow-up task from council feedback.
+11. Project-level design memory for accepted visual direction and examples.
 
 ## What This Mockup Is For
 
@@ -128,8 +144,10 @@ This mockup should help future implementation tasks answer:
 - What references should a design loop read?
 - What belongs under UX/UI on a project?
 - What belongs under Test Quality on a project?
+- What belongs under Token Usage on a project?
 - Which testing and QA actions are available?
 - Which source-code metrics should be visualized?
+- How should token spend be split between job, supporting jobs, and orchestrator categories?
 - What does a parseable report contract look like?
 - Which artifacts stay with the task?
 - How does the orchestrator choose "next version"?

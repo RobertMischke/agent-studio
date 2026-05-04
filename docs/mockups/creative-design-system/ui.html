@@ -214,6 +214,67 @@ p { color: var(--muted); line-height: 1.48; margin: 0; }
   gap: 10px;
   align-items: stretch;
 }
+.token-heatmap {
+  display: grid;
+  grid-template-columns: repeat(24, minmax(10px, 1fr));
+  gap: 4px;
+}
+.token-cell {
+  aspect-ratio: 1;
+  border-radius: 3px;
+  border: 1px solid rgba(205, 214, 244, 0.08);
+  background: rgba(205, 214, 244, 0.08);
+  min-width: 10px;
+}
+.token-cell.low { background: rgba(148, 226, 213, 0.22); }
+.token-cell.mid { background: rgba(249, 226, 175, 0.34); }
+.token-cell.high { background: rgba(243, 139, 168, 0.48); }
+.token-cell.peak { background: #f38ba8; }
+.usage-bars {
+  display: grid;
+  gap: 10px;
+}
+.usage-row {
+  display: grid;
+  grid-template-columns: 160px 1fr 92px;
+  gap: 10px;
+  align-items: center;
+}
+.mini-timeline {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 6px;
+  align-items: end;
+  min-height: 120px;
+}
+.timebar {
+  border-radius: 4px 4px 2px 2px;
+  background: linear-gradient(180deg, var(--coral), rgba(243, 139, 168, 0.2));
+  min-height: 16px;
+}
+.job-table {
+  display: grid;
+  gap: 8px;
+}
+.job-token-row {
+  display: grid;
+  grid-template-columns: 1fr 94px 94px 94px 78px;
+  gap: 8px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 8px;
+  background: rgba(24, 24, 37, 0.72);
+  font-size: 13px;
+}
+.job-token-row.header {
+  color: var(--muted);
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  background: transparent;
+  border-color: transparent;
+}
 .subnav {
   display: flex;
   flex-wrap: wrap;
@@ -263,6 +324,8 @@ p { color: var(--muted); line-height: 1.48; margin: 0; }
   aside { border-right: 0; border-bottom: 1px solid var(--line); }
   .span-4, .span-5, .span-7, .span-8 { grid-column: span 12; }
   .reference-grid, .metric-grid, .source-map { grid-template-columns: 1fr; }
+  .usage-row, .job-token-row { grid-template-columns: 1fr; }
+  .token-heatmap { grid-template-columns: repeat(12, minmax(10px, 1fr)); }
 }
 </style>
 </head>
@@ -282,6 +345,7 @@ p { color: var(--muted); line-height: 1.48; margin: 0; }
       <button data-view="architecture">Architecture</button>
       <button class="active" data-view="uxui">UX/UI</button>
       <button data-view="testquality">Test Quality</button>
+      <button data-view="tokenusage">Token Usage</button>
       <button data-view="jobs">Jobs</button>
       <div class="section-label">Configuration</div>
       <button data-view="settings">Settings</button>
@@ -294,6 +358,7 @@ p { color: var(--muted); line-height: 1.48; margin: 0; }
         <div class="card span-4"><h2>Architecture</h2><p>ADR history, drift checks, and module boundaries.</p><span class="pill good">documented</span></div>
         <div class="card span-4"><h2>UX/UI</h2><p>Design references, screenshot variants, council critique, and visual direction.</p><span class="pill good">loop active</span></div>
         <div class="card span-4"><h2>Test Quality</h2><p>Backend tests, e2e tests, tuning runs, coverage, source metrics.</p><span class="pill warn">2 skipped</span></div>
+        <div class="card span-4"><h2>Token Usage</h2><p>Job, supporting job, and orchestrator token spend across the project.</p><span class="pill hot">12.8M total</span></div>
         <div class="card span-8"><h2>Project Evidence</h2><p>Each project dimension has its own surface. Task evidence stays beside jobs; project memory stays readable for direct CLI agents.</p></div>
       </div>
     </div>
@@ -490,6 +555,87 @@ p { color: var(--muted); line-height: 1.48; margin: 0; }
         </div>
       </div>
     </div>
+    <div id="tokenusage" class="hidden">
+      <div class="subnav">
+        <span class="pill hot">Project menu: Token Usage</span>
+        <span class="pill">Job tokens</span>
+        <span class="pill">Supporting jobs</span>
+        <span class="pill">Orchestrator</span>
+        <span class="pill">Heatmap</span>
+        <span class="pill">Timeline</span>
+      </div>
+      <div class="grid">
+        <div class="card span-4">
+          <h2>Total Token Spend</h2>
+          <span class="metric"><span class="pill hot">all categories</span><span class="value">12.8M</span><p>across 1,248 jobs</p></span>
+        </div>
+        <div class="card span-8">
+          <h2>Token Categories</h2>
+          <div class="usage-bars">
+            <div class="usage-row"><span>Job Tokens</span><div class="bar"><span style="width:68%"></span></div><strong>8.7M</strong></div>
+            <div class="usage-row"><span>Supporting Jobs Tokens</span><div class="bar"><span style="width:21%; background: var(--yellow)"></span></div><strong>2.7M</strong></div>
+            <div class="usage-row"><span>Orchestrator Tokens</span><div class="bar"><span style="width:11%; background: var(--mauve)"></span></div><strong>1.4M</strong></div>
+          </div>
+        </div>
+        <div class="card span-12">
+          <h2>Job Token Heatmap</h2>
+          <p>Each square is a job. Color intensity shows total tokens from job work, supporting analysis jobs, and related orchestrator messages.</p>
+          <div class="token-heatmap" style="margin-top:14px">
+            <span class="token-cell low"></span><span class="token-cell low"></span><span class="token-cell mid"></span><span class="token-cell low"></span><span class="token-cell high"></span><span class="token-cell low"></span><span class="token-cell mid"></span><span class="token-cell peak"></span><span class="token-cell low"></span><span class="token-cell low"></span><span class="token-cell high"></span><span class="token-cell mid"></span>
+            <span class="token-cell low"></span><span class="token-cell mid"></span><span class="token-cell high"></span><span class="token-cell low"></span><span class="token-cell low"></span><span class="token-cell mid"></span><span class="token-cell peak"></span><span class="token-cell high"></span><span class="token-cell low"></span><span class="token-cell mid"></span><span class="token-cell low"></span><span class="token-cell low"></span>
+            <span class="token-cell mid"></span><span class="token-cell low"></span><span class="token-cell low"></span><span class="token-cell high"></span><span class="token-cell mid"></span><span class="token-cell peak"></span><span class="token-cell low"></span><span class="token-cell low"></span><span class="token-cell mid"></span><span class="token-cell high"></span><span class="token-cell low"></span><span class="token-cell mid"></span>
+            <span class="token-cell low"></span><span class="token-cell high"></span><span class="token-cell low"></span><span class="token-cell mid"></span><span class="token-cell low"></span><span class="token-cell low"></span><span class="token-cell peak"></span><span class="token-cell mid"></span><span class="token-cell low"></span><span class="token-cell high"></span><span class="token-cell mid"></span><span class="token-cell low"></span>
+          </div>
+          <div style="margin-top:12px">
+            <span class="pill good">low</span><span class="pill warn">medium</span><span class="pill hot">expensive</span><span class="pill">click a square for job drill-down</span>
+          </div>
+        </div>
+        <div class="card span-7">
+          <h2>Timeline</h2>
+          <p>Token spend over time. Peaks show expensive review loops, council runs, and long implementation sessions.</p>
+          <div class="mini-timeline" style="margin-top:14px">
+            <div class="timebar" style="height:28px"></div>
+            <div class="timebar" style="height:44px"></div>
+            <div class="timebar" style="height:22px"></div>
+            <div class="timebar" style="height:70px"></div>
+            <div class="timebar" style="height:38px"></div>
+            <div class="timebar" style="height:96px"></div>
+            <div class="timebar" style="height:52px"></div>
+            <div class="timebar" style="height:118px"></div>
+            <div class="timebar" style="height:34px"></div>
+            <div class="timebar" style="height:76px"></div>
+            <div class="timebar" style="height:48px"></div>
+            <div class="timebar" style="height:86px"></div>
+          </div>
+        </div>
+        <div class="card span-5">
+          <h2>Drill-Down Contract</h2>
+          <div class="contract">{
+  "jobId": "review-panel-polish",
+  "tokenUsage": {
+    "jobTokens": 184200,
+    "supportingJobTokens": 72100,
+    "orchestratorTokens": 18400,
+    "total": 274700
+  },
+  "runs": [
+    { "kind": "main", "tokens": 91200 },
+    { "kind": "council", "tokens": 38100 }
+  ]
+}</div>
+        </div>
+        <div class="card span-12">
+          <h2>Most Expensive Jobs</h2>
+          <div class="job-table">
+            <div class="job-token-row header"><span>Job</span><span>Primary</span><span>Supporting</span><span>Orchestrator</span><span>Total</span></div>
+            <div class="job-token-row"><span>review-panel-polish</span><span>184k</span><span>72k</span><span>18k</span><span>275k</span></div>
+            <div class="job-token-row"><span>security-baseline-refresh</span><span>146k</span><span>104k</span><span>21k</span><span>271k</span></div>
+            <div class="job-token-row"><span>source-map-and-module-review</span><span>91k</span><span>132k</span><span>16k</span><span>239k</span></div>
+            <div class="job-token-row"><span>design-council-v3</span><span>64k</span><span>118k</span><span>13k</span><span>195k</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
     <div id="jobs" class="hidden">
       <div class="card span-12"><h2>Jobs</h2><p>Placeholder for project task list. UX/UI and Test Quality outputs can create normal follow-up jobs.</p></div>
     </div>
@@ -500,7 +646,7 @@ p { color: var(--muted); line-height: 1.48; margin: 0; }
 </main>
 <script>
 const buttons = document.querySelectorAll('[data-view]');
-const views = ['overview', 'security', 'architecture', 'uxui', 'testquality', 'jobs', 'settings'].map(id => document.getElementById(id));
+const views = ['overview', 'security', 'architecture', 'uxui', 'testquality', 'tokenusage', 'jobs', 'settings'].map(id => document.getElementById(id));
 buttons.forEach(button => {
   button.addEventListener('click', () => {
     buttons.forEach(b => b.classList.remove('active'));

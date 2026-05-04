@@ -92,22 +92,25 @@ Make "beautiful software" a first-class product outcome, not a lucky side effect
 - Add explicit Testing and QA actions for backend tests, end-to-end tests, tuning tests, coverage, and run history. The user triggers the action; the app stores structured evidence.
 - Add source-code perspectives that an LLM or script-backed Skill can generate: lines of code, modules, dependencies, ownership areas, coverage, hotspots, and organization risks.
 - Treat Skill output as a report contract: Markdown for humans plus structured JSON for the app. If parsing fails, show the raw report with an unstructured-output warning.
-- Put UX/UI and Test Quality directly on the project page as first-class menu entries. UX/UI collects design references and iteration evidence; Test Quality collects test runs, coverage, tuning results, source maps, and code metrics.
+- Put UX/UI, Test Quality, and Token Usage directly on the project page as first-class menu entries. UX/UI collects design references and iteration evidence; Test Quality collects test runs, coverage, tuning results, source maps, and code metrics; Token Usage shows inference spend across jobs and supporting loops.
+- Track token spend as a major project signal. Split usage into Job Tokens, Supporting Jobs Tokens, and Orchestrator Tokens, then aggregate by project, job, run, and time window.
+- Add token-usage heatmaps for large boards. Each job can be a square; intensity shows token spend, with drill-down into the exact job, supporting runs, orchestrator turns, and timeline position.
 - Let the orchestrator steer a design loop explicitly: accept a version, request another version, ask for a harsher critique, or turn council feedback into normal queued implementation tasks.
 - Preserve design history in task evidence: screenshot sets, variant notes, council verdicts, chosen direction, rejected alternatives, and follow-up tasks.
 
 First implementation order:
 
-1. UX/UI and Test Quality project menu surfaces beside Security and Architecture.
+1. UX/UI, Test Quality, and Token Usage project menu surfaces beside Security and Architecture.
 2. Design Loop concept and task-evidence shape for screenshot variants, references, QA runs, source maps, and council notes.
 3. Design reference library for screenshots, markdown briefs, images, accepted examples, and rejected alternatives.
 4. Screenshot comparison panel on the task detail surface.
 5. Local design Skill definitions for screenshot critique, UI polish, copy tone, and accessibility design review.
 6. Testing and QA run history for backend tests, end-to-end tests, tuning tests, coverage, and code metrics.
 7. Source-code map action that visualizes modules, lines of code, ownership areas, and organization concerns.
-8. Council review prompt that produces role-separated critique and a final orchestrator recommendation.
-9. "Next version" action that creates a follow-up design iteration task from the current screenshots and council notes.
-10. Project-level design memory: chosen visual direction, brand notes, UI principles, and examples of accepted screens.
+8. Token Usage surface with totals, category split, heatmap, timeline, expensive-job list, and drill-down.
+9. Council review prompt that produces role-separated critique and a final orchestrator recommendation.
+10. "Next version" action that creates a follow-up design iteration task from the current screenshots and council notes.
+11. Project-level design memory: chosen visual direction, brand notes, UI principles, and examples of accepted screens.
 
 ### Project Control
 
