@@ -35,6 +35,7 @@ Today the application provides:
 - Recovery after session loss via job-folder evidence and deterministic continuation planning.
 - Early project-level planning tasks for Security and Architecture dimensions.
 - A design mockup for a broader quality system under `docs/mockups/quality-system/`. This is exploratory, not product behavior yet.
+- A design mockup for creative design loops and council-style critique under `docs/mockups/creative-design-system/`. This is exploratory, not product behavior yet.
 
 ## Roadmap Themes
 
@@ -76,6 +77,28 @@ First implementation order:
 4. Finding chips in task review and a follow-up-task action.
 5. Skills catalog for installed local skills and built-in audit/check definitions.
 6. Performance Probe slots after the audit/check loop is stable.
+
+### Creativity And Design
+
+Make "beautiful software" a first-class product outcome, not a lucky side effect of implementation:
+
+- Treat software as product. Features should be useful, but also visually coherent, pleasant to operate, and able to carry a brand or product idea.
+- Add creative design loops that can generate, compare, and iterate UI variants before or during implementation. A loop can ask for "the next version" instead of treating the first usable screen as done.
+- Use screenshots as the core design evidence. Every visual iteration should capture the current state, the proposed variant, and the critique that led to the next step.
+- Add council-style critique as a structured review mode: product, visual design, interaction design, frontend engineering, accessibility, and marketing/positioning can each provide a focused opinion before the orchestrator chooses the next move.
+- Keep design councils advisory. They may create findings, design briefs, and follow-up tasks, but they must not create parallel coding work inside one project.
+- Model design Skills separately from read-only checks: Visual Direction, UI Polish Pass, Screenshot Critique, Copy Tone Pass, Brand Fit Review, Accessibility Design Review, and Product Story Review are reusable workflows that help produce better design decisions.
+- Let the orchestrator steer a design loop explicitly: accept a version, request another version, ask for a harsher critique, or turn council feedback into normal queued implementation tasks.
+- Preserve design history in task evidence: screenshot sets, variant notes, council verdicts, chosen direction, rejected alternatives, and follow-up tasks.
+
+First implementation order:
+
+1. Design Loop concept and task-evidence shape for screenshot variants and council notes.
+2. Screenshot comparison panel on the task detail surface.
+3. Local design Skill definitions for screenshot critique, UI polish, copy tone, and accessibility design review.
+4. Council review prompt that produces role-separated critique and a final orchestrator recommendation.
+5. "Next version" action that creates a follow-up design iteration task from the current screenshots and council notes.
+6. Project-level design memory: chosen visual direction, brand notes, UI principles, and examples of accepted screens.
 
 ### Project Control
 
