@@ -86,6 +86,7 @@ Make each watched project easier to inspect and operate:
 - Clearer manual start vs. auto-pickup behavior.
 - Safer locking once a task has started, so completed or running work does not drift to another project by accident.
 - Better visibility into active CLI sessions that may already be working in the same project.
+- Repository hygiene for accepted tasks: surface dirty and unpushed work, support prompt commits of accepted task changes and task evidence, and prevent completed work from quietly piling up on disk.
 
 ### Task Finding And Shape
 
@@ -133,6 +134,18 @@ Treat orchestrator-to-CLI communication as a core capability instead of a side-e
 - A post-run policy that re-issues a follow-up the agent did not honor, instead of accepting the inconsistency. Bounded retry budget; meta message into the chat on every action.
 - An `Orchestrator` participant in the activity log so the user sees the system's decisions next to the agent's replies. Heuristic fallback always surfaces a warning.
 - Recovery after a session loss carries the user follow-up as the primary instruction, not a footer the agent can ignore.
+
+### Multi-Loop Supervision
+
+Add a meta-orchestrator loop above the per-project job-pickup loop, plus an external system review monitor. Today the app runs two loops (the CLI agent's internal loop and the orchestrator's job-pickup loop). Both decide things the user only sees afterwards. The supervision layer is the watcher above:
+
+- A **per-project supervisor** that observes the orchestrator's runner in real time and asks fixed questions every tick: is the run progressing, is quota close to exhausted, is the agent's current activity aligned with the prompt scope, are findings accumulating that should pause the queue. Cooperative-signal model by default, with a small set of emergency primitives (cancel run, pause pickup, force fail, resume) for clearly broken behaviour. Each intervention is typed, logged, and visible in the activity feed as a separate participant.
+- A **continuous protocol** per project: append-only structured logs the user can replay to see what the supervisor saw and decided. A panel on the project page shows the live state.
+- A **system review monitor**, run from outside on a multi-hour cadence, that produces structured "after ten hours, this is what the system did and this is what looks off" reports. Stand-alone, not part of the app's runtime, so it survives any app failure mode.
+
+Hard boundary: supervision is advice-first, force-rare. The deterministic post-run policy in `RunOutcomePolicy.cs` stays the authoritative path for routine outcomes; the supervisor adds an outer kill-switch and a soft-reasoning second opinion, not a parallel orchestrator.
+
+The full conceptual analysis - loop-to-loop control options, communication contract sketch, execution-model tradeoffs (in-process vs sidecar vs CLI-driven), open conceptual problems, and recommended task spinout - lives in [docs/research/orchestrator-meta-loop-analysis-2026-05-04.md](docs/research/orchestrator-meta-loop-analysis-2026-05-04.md). The recommended first slice is the system review monitor (Layer 3) because it ships value immediately on stable without touching the runtime.
 
 ### Focused UX
 

@@ -120,6 +120,18 @@ This matters because prompt-based steering ("treat this as a continuation", "don
 
 Prompt wording remains the easiest way to steer behavior, but it is not the load-bearing layer anymore. The product treats orchestrator-to-CLI communication as a core capability.
 
+The next layer of this thinking is *supervision*: a meta-loop that watches the orchestrator's own job-pickup loop in real time, asks "is the agent on track, is anything stuck, should we intervene?", and writes its own continuous protocol. The conceptual analysis (loop-to-loop control, communication contract, traceability, recommended task spinout) lives in [docs/research/orchestrator-meta-loop-analysis-2026-05-04.md](docs/research/orchestrator-meta-loop-analysis-2026-05-04.md). Implementation is queued, not built yet.
+
+---
+
+## Meta documentation, task evidence, and commits
+
+Meta-level work is allowed to run as small, parallel CLI interactions when it is truly independent from the active coding task. Examples: analyze the orchestration model, update README or ROADMAP, write a research note under `docs/`, then commit that documentation immediately. These commits are normal product-memory commits. They do not violate the one-active-task rule because they do not execute task work inside a watched target project.
+
+Task-level feedback is different. Security audits, code-review findings, task checks, screenshots, run protocols, and reviewer notes belong with the task evidence, usually in the watched project's `.orchestrator/jobs/<state>/<job>/` folder. If that evidence reveals new product work, create a normal queued task instead of burying the work inside the report.
+
+Repositories should not stay dirty after a task is accepted. When a task reaches review or completion and its changes are accepted, the changed software and the task evidence should be committed promptly in the target repository. Pushing is a deliberate project operation, but the product should make uncommitted and unpushed task work visible so finished work does not quietly pile up on disk.
+
 ---
 
 ## Portable skills, not CLI-local silos
