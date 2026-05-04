@@ -1,0 +1,582 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Quality System — UI Mockup (Option D)</title>
+<style>
+  :root {
+    --base: #1e1e2e;
+    --mantle: #181825;
+    --crust: #11111b;
+    --surface0: #313244;
+    --surface1: #45475a;
+    --surface2: #585b70;
+    --text: #cdd6f4;
+    --subtext1: #bac2de;
+    --subtext0: #a6adc8;
+    --overlay0: #6c7086;
+    --mauve: #cba6f7;
+    --blue: #89b4fa;
+    --sky: #89dceb;
+    --green: #a6e3a1;
+    --yellow: #f9e2af;
+    --peach: #fab387;
+    --red: #f38ba8;
+  }
+  html, body { background: var(--mantle); color: var(--text); margin: 0; font: 14px/1.45 -apple-system, "Segoe UI", system-ui, sans-serif; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 32px 24px 96px; }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  h2 { font-size: 16px; margin: 32px 0 12px; color: var(--subtext1); font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase; }
+  h3 { font-size: 15px; margin: 0 0 10px; }
+  .lede { color: var(--subtext0); margin: 0 0 28px; max-width: 780px; }
+  .screen { background: var(--base); border: 1px solid var(--surface0); border-radius: 10px; margin-bottom: 28px; overflow: hidden; }
+  .screen-label { background: var(--crust); color: var(--subtext0); font-size: 12px; padding: 8px 14px; border-bottom: 1px solid var(--surface0); display: flex; justify-content: space-between; }
+  .screen-label b { color: var(--mauve); }
+  .screen-body { padding: 18px 20px 22px; }
+
+  /* Top nav */
+  .topnav { display: flex; gap: 4px; align-items: center; padding: 10px 14px; background: var(--base); border-bottom: 1px solid var(--surface0); }
+  .topnav .brand { color: var(--mauve); font-weight: 600; margin-right: 22px; }
+  .topnav a { color: var(--subtext0); text-decoration: none; padding: 6px 12px; border-radius: 6px; font-size: 13px; }
+  .topnav a.active { color: var(--text); background: var(--surface0); }
+  .topnav a.new { color: var(--mauve); }
+  .topnav a.new::after { content: "•"; color: var(--peach); margin-left: 6px; }
+  .spacer { flex: 1; }
+  .pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--surface0); color: var(--subtext0); }
+
+  /* Two-column layouts */
+  .two-col { display: grid; grid-template-columns: 220px 1fr; gap: 18px; }
+  .sidebar { background: var(--mantle); border: 1px solid var(--surface0); border-radius: 8px; padding: 12px; }
+  .sidebar .group { color: var(--overlay0); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; margin: 6px 8px 4px; }
+  .sidebar a { display: flex; justify-content: space-between; padding: 6px 8px; border-radius: 5px; color: var(--subtext1); text-decoration: none; font-size: 13px; }
+  .sidebar a.active { background: var(--surface0); color: var(--text); }
+  .sidebar a .count { color: var(--overlay0); font-size: 11px; }
+
+  /* Filter chips */
+  .chips { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+  .chip { padding: 4px 12px; border-radius: 999px; font-size: 12px; background: var(--surface0); color: var(--subtext0); cursor: pointer; user-select: none; border: 1px solid transparent; }
+  .chip.active { background: var(--surface1); color: var(--text); border-color: var(--surface2); }
+  .chip.kind-audit.active { color: var(--mauve); border-color: var(--mauve); }
+  .chip.kind-check.active { color: var(--green); border-color: var(--green); }
+  .chip.kind-probe.active { color: var(--sky); border-color: var(--sky); }
+
+  /* Library cards */
+  .grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  .card { background: var(--mantle); border: 1px solid var(--surface0); border-radius: 8px; padding: 14px; }
+  .card .head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .card .id { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 11px; color: var(--overlay0); }
+  .card .title { font-weight: 600; flex: 1; }
+  .card p { margin: 6px 0 10px; color: var(--subtext0); font-size: 13px; }
+  .card .meta { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tag { font-size: 11px; padding: 2px 8px; border-radius: 4px; background: var(--surface0); color: var(--subtext0); }
+  .tag.audit { color: var(--mauve); background: rgba(203,166,247,0.12); }
+  .tag.check { color: var(--green); background: rgba(166,227,161,0.12); }
+  .tag.probe { color: var(--sky); background: rgba(137,220,235,0.12); }
+  .tag.scope { color: var(--blue); background: rgba(137,180,250,0.12); }
+  .tag.dim { color: var(--peach); background: rgba(250,179,135,0.12); }
+  .tag.sev-warn { color: var(--yellow); background: rgba(249,226,175,0.12); }
+  .tag.sev-high { color: var(--red); background: rgba(243,139,168,0.12); }
+  .tag.sev-info { color: var(--subtext0); background: rgba(186,194,222,0.10); }
+
+  /* Buttons */
+  .btn { background: var(--surface0); color: var(--text); border: 1px solid var(--surface1); padding: 6px 12px; border-radius: 6px; font-size: 13px; cursor: pointer; }
+  .btn.primary { background: var(--mauve); color: var(--crust); border-color: var(--mauve); font-weight: 600; }
+  .btn.ghost { background: transparent; }
+  .row { display: flex; gap: 8px; align-items: center; }
+  .row .spacer { flex: 1; }
+
+  /* Toggles */
+  .check-row { display: grid; grid-template-columns: 28px 1fr auto; gap: 10px; align-items: center; padding: 10px 12px; border-bottom: 1px solid var(--surface0); }
+  .check-row:last-child { border-bottom: none; }
+  .toggle { width: 32px; height: 18px; background: var(--surface1); border-radius: 999px; position: relative; cursor: pointer; }
+  .toggle::after { content: ""; position: absolute; width: 14px; height: 14px; border-radius: 50%; background: var(--overlay0); top: 2px; left: 2px; transition: 0.15s; }
+  .toggle.on { background: var(--green); }
+  .toggle.on::after { left: 16px; background: var(--crust); }
+  .check-row .label { font-size: 13px; }
+  .check-row .label .sub { color: var(--overlay0); font-size: 11px; margin-top: 2px; }
+  .inherit { font-size: 10px; color: var(--overlay0); margin-left: 6px; padding: 1px 6px; border: 1px dashed var(--surface1); border-radius: 3px; }
+
+  /* Findings */
+  .finding { padding: 10px 12px; border-left: 3px solid var(--yellow); background: rgba(249,226,175,0.05); margin: 8px 0; border-radius: 0 6px 6px 0; }
+  .finding.high { border-left-color: var(--red); background: rgba(243,139,168,0.06); }
+  .finding.info { border-left-color: var(--blue); background: rgba(137,180,250,0.05); }
+  .finding .head { display: flex; gap: 8px; align-items: center; margin-bottom: 4px; }
+  .finding .file { font-family: ui-monospace, monospace; font-size: 12px; color: var(--blue); }
+  .finding p { margin: 2px 0; font-size: 13px; color: var(--subtext1); }
+  .finding .actions { margin-top: 6px; }
+
+  /* Result panel on task */
+  .result-strip { display: flex; gap: 6px; margin: 8px 0 14px; flex-wrap: wrap; }
+  .result-chip { font-size: 12px; padding: 3px 10px; border-radius: 999px; display: flex; align-items: center; gap: 6px; }
+  .result-chip.pass { background: rgba(166,227,161,0.12); color: var(--green); }
+  .result-chip.warn { background: rgba(249,226,175,0.12); color: var(--yellow); }
+  .result-chip.fail { background: rgba(243,139,168,0.12); color: var(--red); }
+  .result-chip .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+  /* Probe history */
+  .bar-row { display: grid; grid-template-columns: 160px 1fr 80px; gap: 10px; align-items: center; padding: 4px 0; font-size: 13px; }
+  .bar-track { height: 8px; background: var(--surface0); border-radius: 4px; overflow: hidden; }
+  .bar-fill { height: 100%; background: var(--green); }
+  .bar-fill.warn { background: var(--yellow); }
+  .bar-fill.fail { background: var(--red); }
+  .num { font-family: ui-monospace, monospace; color: var(--subtext1); text-align: right; }
+
+  .note { color: var(--overlay0); font-size: 12px; font-style: italic; margin: 8px 0 0; }
+  hr { border: none; border-top: 1px solid var(--surface0); margin: 18px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Quality System &mdash; UI Mockup</h1>
+  <p class="lede">Dummy UI for the proposed Quality System (Option D wording: <b style="color:var(--mauve)">Audits</b>, <b style="color:var(--green)">Task Checks</b>, <b style="color:var(--sky)">Performance Probes</b>; Skills stay separate). All data is hardcoded; nothing here is wired.</p>
+
+  <!-- ============ Screen 1: Top nav ============ -->
+  <div class="screen">
+    <div class="screen-label"><span>Screen 1 &middot; <b>Top navigation</b> &mdash; where the new section lives</span><span>(global)</span></div>
+    <div class="topnav">
+      <span class="brand">Agent Task Processor</span>
+      <a>Board</a>
+      <a>Projects</a>
+      <a>CLIs</a>
+      <a>Skills</a>
+      <a class="active new">Quality</a>
+      <span class="spacer"></span>
+      <span class="pill">DEV</span>
+    </div>
+    <div class="screen-body">
+      <p class="note">Quality is a new top-level section, parallel to Skills. Skills generate work; Quality grades work. Different concepts, different sections.</p>
+    </div>
+  </div>
+
+  <!-- ============ Screen 2: Quality library ============ -->
+  <div class="screen">
+    <div class="screen-label"><span>Screen 2 &middot; <b>Quality library</b> &mdash; manage all definitions</span><span>/quality</span></div>
+    <div class="screen-body">
+      <div class="two-col">
+        <div class="sidebar">
+          <div class="group">Library</div>
+          <a class="active">All <span class="count">14</span></a>
+          <a>Audits <span class="count">5</span></a>
+          <a>Task Checks <span class="count">7</span></a>
+          <a>Probes <span class="count">2</span></a>
+          <div class="group" style="margin-top:14px">By dimension</div>
+          <a>Security <span class="count">4</span></a>
+          <a>Traceability <span class="count">3</span></a>
+          <a>Performance <span class="count">2</span></a>
+          <a>Code Quality <span class="count">3</span></a>
+          <a>Architecture <span class="count">2</span></a>
+        </div>
+        <div>
+          <div class="row" style="margin-bottom:14px">
+            <div class="chips">
+              <span class="chip active">All kinds</span>
+              <span class="chip kind-audit active">Audits</span>
+              <span class="chip kind-check active">Task Checks</span>
+              <span class="chip kind-probe active">Probes</span>
+            </div>
+            <div class="spacer"></div>
+            <button class="btn">+ New definition</button>
+          </div>
+
+          <div class="grid">
+
+            <div class="card">
+              <div class="head">
+                <span class="id">SEC-OVERVIEW</span>
+                <span class="tag audit">Audit</span>
+              </div>
+              <h3 class="title">Security overview audit</h3>
+              <p>Re-checks the project's security overview against the current code. Holistic, manual.</p>
+              <div class="meta">
+                <span class="tag scope">project</span>
+                <span class="tag dim">security</span>
+                <span class="tag sev-high">severity: high</span>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="head">
+                <span class="id">ARCH-DRIFT</span>
+                <span class="tag audit">Audit</span>
+              </div>
+              <h3 class="title">Architecture drift</h3>
+              <p>Compares current architecture against ADRs. Flags decisions that have silently eroded.</p>
+              <div class="meta">
+                <span class="tag scope">project</span>
+                <span class="tag dim">architecture</span>
+                <span class="tag sev-warn">severity: warn</span>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="head">
+                <span class="id">TRACEABILITY-COVERAGE</span>
+                <span class="tag audit">Audit</span>
+              </div>
+              <h3 class="title">Traceability coverage</h3>
+              <p>Verifies that errors and slow ops are instrumented across the whole codebase.</p>
+              <div class="meta">
+                <span class="tag scope">project</span>
+                <span class="tag dim">traceability</span>
+                <span class="tag sev-warn">severity: warn</span>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="head">
+                <span class="id">CODE-CHECK</span>
+                <span class="tag check">Task Check</span>
+              </div>
+              <h3 class="title">Code review on diff</h3>
+              <p>Reviews the diff this task produced. Flags style, naming, dead code, missing tests.</p>
+              <div class="meta">
+                <span class="tag scope">task</span>
+                <span class="tag dim">code-quality</span>
+                <span class="tag sev-warn">severity: warn</span>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="head">
+                <span class="id">TRACEABILITY-DIFF</span>
+                <span class="tag check">Task Check</span>
+              </div>
+              <h3 class="title">Traceability on diff</h3>
+              <p>Checks the diff adds error-handling and timing where it touches new paths.</p>
+              <div class="meta">
+                <span class="tag scope">task</span>
+                <span class="tag dim">traceability</span>
+                <span class="tag sev-warn">severity: warn</span>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="head">
+                <span class="id">TEST-COVERAGE-DELTA</span>
+                <span class="tag check">Task Check</span>
+              </div>
+              <h3 class="title">Test coverage delta</h3>
+              <p>Warns if new code paths land without test coverage.</p>
+              <div class="meta">
+                <span class="tag scope">task</span>
+                <span class="tag dim">code-quality</span>
+                <span class="tag sev-info">severity: info</span>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="head">
+                <span class="id">SEC-DIFF</span>
+                <span class="tag check">Task Check</span>
+              </div>
+              <h3 class="title">Security check on diff</h3>
+              <p>Lightweight pattern check on changed files (input validation, secret leakage, eval).</p>
+              <div class="meta">
+                <span class="tag scope">task</span>
+                <span class="tag dim">security</span>
+                <span class="tag sev-high">severity: high</span>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="head">
+                <span class="id">STARTUP-LATENCY</span>
+                <span class="tag probe">Probe</span>
+              </div>
+              <h3 class="title">App startup latency</h3>
+              <p>Cold-starts the frontend, measures time-to-interactive. Compared against threshold.</p>
+              <div class="meta">
+                <span class="tag scope">runtime</span>
+                <span class="tag dim">performance</span>
+                <span class="tag sev-warn">severity: warn</span>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="head">
+                <span class="id">BOARD-POLL-ROUNDTRIP</span>
+                <span class="tag probe">Probe</span>
+              </div>
+              <h3 class="title">Grouped-jobs poll roundtrip</h3>
+              <p>Times the polled endpoint from inside the running app over 200 jobs. Threshold 1s.</p>
+              <div class="meta">
+                <span class="tag scope">runtime</span>
+                <span class="tag dim">performance</span>
+                <span class="tag sev-warn">severity: warn</span>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ Screen 3: Project detail ============ -->
+  <div class="screen">
+    <div class="screen-label"><span>Screen 3 &middot; <b>Project detail</b> &mdash; Quality panel</span><span>/projects/agent-taskboard-dev</span></div>
+    <div class="screen-body">
+      <h2 style="margin-top:0">Quality &middot; agent-taskboard-dev</h2>
+
+      <h3>Project Audits</h3>
+      <p class="note" style="margin-top:0">Project-wide examinations. Manual trigger. Findings can be turned into tasks.</p>
+      <div style="background:var(--mantle); border:1px solid var(--surface0); border-radius:8px;">
+        <div class="check-row">
+          <div class="toggle on"></div>
+          <div class="label">SEC-OVERVIEW <span class="tag audit">Audit</span><div class="sub">Last run: 2026-04-15 &middot; 2 high, 4 warn findings</div></div>
+          <div class="row"><button class="btn ghost">View report</button><button class="btn">Run now</button></div>
+        </div>
+        <div class="check-row">
+          <div class="toggle on"></div>
+          <div class="label">ARCH-DRIFT <span class="tag audit">Audit</span><div class="sub">Last run: never</div></div>
+          <div class="row"><button class="btn ghost" disabled style="opacity:0.4">View report</button><button class="btn">Run now</button></div>
+        </div>
+        <div class="check-row">
+          <div class="toggle on"></div>
+          <div class="label">TRACEABILITY-COVERAGE <span class="tag audit">Audit</span><div class="sub">Last run: 2026-05-02 &middot; 7 warn findings</div></div>
+          <div class="row"><button class="btn ghost">View report</button><button class="btn">Run now</button></div>
+        </div>
+      </div>
+
+      <hr>
+
+      <h3>Task Check defaults <span class="note" style="font-style:normal">&mdash; applied to every task in this project unless toggled off on the task</span></h3>
+      <div style="background:var(--mantle); border:1px solid var(--surface0); border-radius:8px;">
+        <div class="check-row">
+          <div class="toggle on"></div>
+          <div class="label">CODE-CHECK <span class="tag check">Check</span><div class="sub">Code review on diff &middot; warn</div></div>
+          <div></div>
+        </div>
+        <div class="check-row">
+          <div class="toggle on"></div>
+          <div class="label">TRACEABILITY-DIFF <span class="tag check">Check</span><div class="sub">Traceability on diff &middot; warn</div></div>
+          <div></div>
+        </div>
+        <div class="check-row">
+          <div class="toggle on"></div>
+          <div class="label">SEC-DIFF <span class="tag check">Check</span><div class="sub">Security check on diff &middot; high</div></div>
+          <div></div>
+        </div>
+        <div class="check-row">
+          <div class="toggle"></div>
+          <div class="label">TEST-COVERAGE-DELTA <span class="tag check">Check</span><div class="sub">Test coverage delta &middot; info</div></div>
+          <div></div>
+        </div>
+      </div>
+
+      <hr>
+
+      <h3>Performance Probes</h3>
+      <p class="note" style="margin-top:0">Coming soon &mdash; slot reserved.</p>
+      <div style="background:var(--mantle); border:1px solid var(--surface0); border-radius:8px; padding: 18px; color: var(--overlay0); text-align:center;">
+        Performance Probes will live here. Phase 2.
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ Screen 4: Task detail ============ -->
+  <div class="screen">
+    <div class="screen-label"><span>Screen 4 &middot; <b>Task detail</b> &mdash; Checks panel with toggles</span><span>/jobs/refactor-job-service</span></div>
+    <div class="screen-body">
+
+      <div class="row">
+        <div>
+          <h3 style="margin-bottom:4px">Refactor JobService.fetchAll polling</h3>
+          <span class="tag">3-progress</span> <span class="tag">claude</span> <span class="tag">2 runs</span>
+        </div>
+      </div>
+
+      <div class="result-strip" style="margin-top:14px">
+        <span class="result-chip pass"><span class="dot"></span>CODE-CHECK pass</span>
+        <span class="result-chip warn"><span class="dot"></span>TRACEABILITY-DIFF 2 findings</span>
+        <span class="result-chip fail"><span class="dot"></span>SEC-DIFF 1 high finding</span>
+      </div>
+
+      <hr>
+
+      <h3>Task Checks <span class="note" style="font-style:normal">&mdash; ran automatically when this task moved to <code>4-review</code></span></h3>
+      <div style="background:var(--mantle); border:1px solid var(--surface0); border-radius:8px;">
+
+        <div class="check-row">
+          <div class="toggle on"></div>
+          <div class="label">CODE-CHECK <span class="tag check">Check</span> <span class="inherit">inherited</span><div class="sub">Last run: pass</div></div>
+          <button class="btn ghost">View result</button>
+        </div>
+        <div class="check-row">
+          <div class="toggle on"></div>
+          <div class="label">TRACEABILITY-DIFF <span class="tag check">Check</span> <span class="inherit">inherited</span><div class="sub">Last run: 2 warn findings</div></div>
+          <button class="btn ghost">View result</button>
+        </div>
+        <div class="check-row">
+          <div class="toggle on"></div>
+          <div class="label">SEC-DIFF <span class="tag check">Check</span> <span class="inherit">inherited</span><div class="sub">Last run: 1 high finding</div></div>
+          <button class="btn ghost">View result</button>
+        </div>
+        <div class="check-row">
+          <div class="toggle"></div>
+          <div class="label">TEST-COVERAGE-DELTA <span class="tag check">Check</span> <span class="inherit">inherited</span><div class="sub">Off &mdash; not configured as default in this project</div></div>
+          <button class="btn ghost" disabled style="opacity:0.4">View result</button>
+        </div>
+        <div class="check-row" style="border-top: 1px dashed var(--surface0)">
+          <div></div>
+          <div class="label" style="color:var(--overlay0)">+ Attach another check from the library</div>
+          <button class="btn ghost">Browse library</button>
+        </div>
+
+      </div>
+
+      <hr>
+
+      <h3>Findings &mdash; review and decide</h3>
+      <p class="note" style="margin-top:0; margin-bottom:10px">Severity is informational. Nothing is blocked. You decide what to do with each finding.</p>
+
+      <div class="finding high">
+        <div class="head">
+          <span class="tag sev-high">high</span>
+          <span class="tag check">SEC-DIFF</span>
+          <span class="file">backend/Services/JobService.cs:142</span>
+        </div>
+        <p>User-supplied <code>watchPath</code> reaches <code>Path.Combine</code> without validation. Possible path traversal.</p>
+        <div class="actions row">
+          <button class="btn">Open file</button>
+          <button class="btn primary">Create follow-up task</button>
+          <button class="btn ghost">Mark acknowledged</button>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="head">
+          <span class="tag sev-warn">warn</span>
+          <span class="tag check">TRACEABILITY-DIFF</span>
+          <span class="file">frontend/src/app/services/job.service.ts:88</span>
+        </div>
+        <p>New polling loop has no error-handler around the HTTP call; failures are swallowed silently.</p>
+        <div class="actions row">
+          <button class="btn">Open file</button>
+          <button class="btn primary">Create follow-up task</button>
+          <button class="btn ghost">Mark acknowledged</button>
+        </div>
+      </div>
+
+      <div class="finding">
+        <div class="head">
+          <span class="tag sev-warn">warn</span>
+          <span class="tag check">TRACEABILITY-DIFF</span>
+          <span class="file">frontend/src/app/services/job.service.ts:104</span>
+        </div>
+        <p>Long-running operation (poll cycle) does not measure duration. Add timing instrumentation if this can exceed 1s.</p>
+        <div class="actions row">
+          <button class="btn">Open file</button>
+          <button class="btn primary">Create follow-up task</button>
+          <button class="btn ghost">Mark acknowledged</button>
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:14px">
+        <div class="spacer"></div>
+        <button class="btn">Re-run all checks</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ============ Screen 5: Audit run report ============ -->
+  <div class="screen">
+    <div class="screen-label"><span>Screen 5 &middot; <b>Audit run report</b> &mdash; project-scope, full report</span><span>/quality/audits/SEC-OVERVIEW/2026-04-15</span></div>
+    <div class="screen-body">
+      <div class="row">
+        <h3 style="margin:0">SEC-OVERVIEW &middot; 2026-04-15</h3>
+        <span class="tag audit">Audit</span>
+        <div class="spacer"></div>
+        <button class="btn ghost">Re-run</button>
+        <button class="btn">Export markdown</button>
+      </div>
+      <p class="note">Run by claude &middot; 4m12s &middot; 6 findings</p>
+
+      <div class="result-strip">
+        <span class="result-chip fail"><span class="dot"></span>2 high</span>
+        <span class="result-chip warn"><span class="dot"></span>4 warn</span>
+        <span class="result-chip pass"><span class="dot"></span>0 info</span>
+      </div>
+
+      <h3 style="margin-top:18px">Findings</h3>
+
+      <div class="finding high">
+        <div class="head">
+          <span class="tag sev-high">high</span>
+          <span class="file">backend/Endpoints/JobEndpoints.cs:312</span>
+        </div>
+        <p>POST /api/jobs accepts watchPath without normalisation; bypasses watch-path allowlist.</p>
+        <div class="actions row"><button class="btn primary">Create task</button><button class="btn ghost">Acknowledge</button></div>
+      </div>
+
+      <div class="finding high">
+        <div class="head">
+          <span class="tag sev-high">high</span>
+          <span class="file">backend/Services/Cli/CliRouter.cs:74</span>
+        </div>
+        <p>CLI process arguments built via string concatenation; no shell-injection guard for jobId slug.</p>
+        <div class="actions row"><button class="btn primary">Create task</button><button class="btn ghost">Acknowledge</button></div>
+      </div>
+
+      <div class="finding">
+        <div class="head">
+          <span class="tag sev-warn">warn</span>
+          <span class="file">docs/security/overview.md</span>
+        </div>
+        <p>Threat model section out of date: SignalR hub introduced after last review, not covered.</p>
+        <div class="actions row"><button class="btn primary">Create task</button><button class="btn ghost">Acknowledge</button></div>
+      </div>
+
+      <p class="note">3 more findings collapsed.</p>
+    </div>
+  </div>
+
+  <!-- ============ Screen 6: Probe screen ============ -->
+  <div class="screen">
+    <div class="screen-label"><span>Screen 6 &middot; <b>Performance Probe</b> &mdash; runtime measurement (later phase)</span><span>/quality/probes/BOARD-POLL-ROUNDTRIP</span></div>
+    <div class="screen-body">
+      <div class="row">
+        <h3 style="margin:0">BOARD-POLL-ROUNDTRIP</h3>
+        <span class="tag probe">Probe</span>
+        <div class="spacer"></div>
+        <button class="btn primary">Run probe</button>
+      </div>
+      <p class="note">Threshold: 1000 ms &middot; Last 5 runs:</p>
+
+      <div class="bar-row">
+        <div>2026-05-04 12:14</div>
+        <div class="bar-track"><div class="bar-fill" style="width:42%"></div></div>
+        <div class="num">418 ms</div>
+      </div>
+      <div class="bar-row">
+        <div>2026-05-03 18:02</div>
+        <div class="bar-track"><div class="bar-fill" style="width:38%"></div></div>
+        <div class="num">381 ms</div>
+      </div>
+      <div class="bar-row">
+        <div>2026-05-02 09:47</div>
+        <div class="bar-track"><div class="bar-fill warn" style="width:78%"></div></div>
+        <div class="num">782 ms</div>
+      </div>
+      <div class="bar-row">
+        <div>2026-04-30 21:11</div>
+        <div class="bar-track"><div class="bar-fill fail" style="width:100%"></div></div>
+        <div class="num">11521 ms</div>
+      </div>
+      <div class="bar-row">
+        <div>2026-04-30 11:03</div>
+        <div class="bar-track"><div class="bar-fill" style="width:5%"></div></div>
+        <div class="num">48 ms</div>
+      </div>
+
+      <p class="note" style="margin-top:14px">The 11521 ms run captured the regression mentioned in <code>AGENTS.md</code> &mdash; recorded here as evidence, not just in a passing test.</p>
+    </div>
+  </div>
+
+  <p class="note" style="margin-top:32px">End of mockup. See <code>taxonomy.md</code> for the wording rationale.</p>
+
+</div>
+</body>
+</html>

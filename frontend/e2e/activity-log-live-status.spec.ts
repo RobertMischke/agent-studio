@@ -136,9 +136,16 @@ test.describe('Activity log - live status indicator', () => {
     // is wired so future colour changes do not silently regress.
     await expect(live).toHaveAttribute('data-kind', 'tool');
 
-    // Capture a screenshot so the reviewer can see the indicator inline.
-    const body = page.getByTestId('activity-log-body');
-    await body.screenshot({ path: 'activity-log-live-status.png' });
+    // Capture a screenshot so the reviewer can see the indicator in
+    // context. The activity-log-body is a scroll container; scroll the
+    // live row into view, then screenshot the protocol pane so the
+    // indicator lands in the frame together with the last conversation
+    // turn rather than just the row itself in isolation.
+    await page.setViewportSize({ width: 1400, height: 1000 });
+    await live.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(150);
+    const pane = page.getByTestId('pane-protocol');
+    await pane.screenshot({ path: 'activity-log-live-status.png' });
   });
 
   test('falls back to "Thinking" when the latest activity is free-form agent text', async ({ page }) => {
