@@ -6,11 +6,14 @@ import {
   ActivityLogGroup,
   ActivityLogKind,
   ConversationTurn,
+  LiveStatus,
   ToolBurstBin,
   activityKindLabel,
   binToolBurstByKind,
   buildConversationTurns,
+  deriveLiveStatus,
   formatBurstDuration,
+  formatLiveSince,
   parseActivityLog
 } from './activity-log.parser';
 import { markdownToHtml } from './markdown-utils';
@@ -246,6 +249,27 @@ interface RenderedTurn {
               <div class="activity-log__empty">
                 {{ lines().length === 0 ? 'No activity output yet.' : 'Nothing matches - try toggling Show debug noise.' }}
               </div>
+            }
+          </div>
+        }
+
+        @if (liveStatus(); as ls) {
+          <div class="live-status"
+               [attr.data-kind]="ls.kind"
+               data-testid="activity-log-live-status"
+               role="status"
+               aria-live="polite">
+            <span class="live-status__pulse" aria-hidden="true">
+              <span></span><span></span><span></span>
+            </span>
+            <span class="live-status__verb" data-testid="activity-log-live-verb">{{ ls.verb }}</span>
+            @if (ls.detail) {
+              <span class="live-status__detail" data-testid="activity-log-live-detail">{{ ls.detail }}</span>
+            }
+            @if (formatSince(ls.sinceMs); as since) {
+              <span class="live-status__since"
+                    data-testid="activity-log-live-since"
+                    [title]="'Time since the last activity-log line'">{{ since }}</span>
             }
           </div>
         }
@@ -731,6 +755,88 @@ interface RenderedTurn {
       word-break: break-word;
     }
 
+    /* ===== Live status (the "agent is alive" row) ===== */
+    /* The row sits at the bottom of the body in both Conversation and
+       Trace modes. It is intentionally subtle - the conversation /
+       trace content carries the message, the live row only signals
+       "still going". Three pulsing dots + a verb + an optional target
+       + an optional "since last line" chip. */
+    .live-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 12px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(124,58,237,0.10);
+      border: 1px solid rgba(196,181,253,0.22);
+      color: #ddd6fe;
+      font-size: 12.5px;
+      line-height: 1.4;
+      align-self: flex-start;
+      max-width: 100%;
+      animation: live-status-fade-in 220ms ease-out both;
+    }
+    @keyframes live-status-fade-in {
+      from { opacity: 0; transform: translateY(4px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    .live-status[data-kind='tool']        { border-color: rgba(125,211,252,0.32); background: rgba(56,189,248,0.10); color: #bae6fd; }
+    .live-status[data-kind='agent']       { border-color: rgba(196,181,253,0.32); background: rgba(124,58,237,0.12); color: #ddd6fe; }
+    .live-status[data-kind='user']        { border-color: rgba(94,234,212,0.32);  background: rgba(13,148,136,0.12);  color: #ccfbf1; }
+    .live-status[data-kind='orchestrator'] { border-color: rgba(252,211,77,0.36); background: rgba(217,119,6,0.10);   color: #fde68a; }
+    .live-status[data-kind='recovering']  { border-color: rgba(251,113,133,0.45); background: rgba(127,29,29,0.18);   color: #fecaca; }
+    .live-status[data-kind='starting']    { border-color: rgba(148,163,184,0.32); background: rgba(148,163,184,0.10); color: #cbd5e1; }
+
+    .live-status__pulse {
+      display: inline-flex;
+      gap: 3px;
+      align-items: center;
+      flex: 0 0 auto;
+    }
+    .live-status__pulse span {
+      width: 5px;
+      height: 5px;
+      border-radius: 999px;
+      background: currentColor;
+      opacity: 0.55;
+      animation: live-pulse 1.2s ease-in-out infinite;
+    }
+    .live-status__pulse span:nth-child(2) { animation-delay: 0.18s; }
+    .live-status__pulse span:nth-child(3) { animation-delay: 0.36s; }
+    @keyframes live-pulse {
+      0%, 80%, 100% { opacity: 0.35; transform: translateY(0); }
+      40%           { opacity: 1;    transform: translateY(-2px); }
+    }
+
+    .live-status__verb {
+      font-weight: 700;
+      letter-spacing: 0.01em;
+      flex: 0 0 auto;
+    }
+    .live-status__detail {
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 12px;
+      color: inherit;
+      opacity: 0.95;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+      flex: 0 1 auto;
+    }
+    .live-status__since {
+      margin-left: auto;
+      flex: 0 0 auto;
+      padding: 1px 7px;
+      border-radius: 999px;
+      background: rgba(15,23,42,0.45);
+      color: rgba(255,255,255,0.7);
+      font-size: 10.5px;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.02em;
+    }
+
     @media (max-width: 720px) {
       .activity-log__toolbar {
         align-items: flex-start;
@@ -745,6 +851,13 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
   readonly lines = input<CliOutputLine[]>([]);
   readonly bodyMaxHeight = input('400px');
   readonly variant = input<'framed' | 'embedded'>('framed');
+  /**
+   * When true the live-status row renders at the bottom of the body
+   * (in both Conversation and Trace mode). The row pulses, names what
+   * the agent is doing right now, and counts seconds since the last
+   * line so the user always sees that the run is alive.
+   */
+  readonly isRunning = input(false);
 
   readonly mode = signal<ViewMode>('conversation');
   readonly showTools = signal(false);
@@ -792,6 +905,35 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
   private suppressScrollEvent = false;
   private readonly sanitizer = inject(DomSanitizer);
 
+  /**
+   * 1 s wall-clock ticker that drives the "since last line" counter on
+   * the live-status row. Only ticks while {@link isRunning} is true so
+   * idle detail panels do not pay for a setInterval. NowTickService
+   * exists but it ticks at 15 s, which is far too coarse for the
+   * "agent is alive" feel the user asked for.
+   */
+  private readonly nowMs = signal(Date.now());
+  private liveTicker: ReturnType<typeof setInterval> | null = null;
+  private readonly liveTickerEffect = effect(() => {
+    if (this.isRunning()) {
+      if (!this.liveTicker) {
+        this.nowMs.set(Date.now());
+        this.liveTicker = setInterval(() => this.nowMs.set(Date.now()), 1000);
+      }
+    } else if (this.liveTicker) {
+      clearInterval(this.liveTicker);
+      this.liveTicker = null;
+    }
+  });
+
+  readonly liveStatus = computed<LiveStatus | null>(() =>
+    deriveLiveStatus(this.lines(), this.isRunning(), this.nowMs())
+  );
+
+  formatSince(ms: number): string {
+    return formatLiveSince(ms);
+  }
+
   private readonly autoScrollEffect = effect(() => {
     this.lines();
     this.mode();
@@ -815,7 +957,12 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
       clearTimeout(this.copyResetTimer);
       this.copyResetTimer = null;
     }
+    if (this.liveTicker !== null) {
+      clearInterval(this.liveTicker);
+      this.liveTicker = null;
+    }
     this.autoScrollEffect.destroy();
+    this.liveTickerEffect.destroy();
   }
 
   testIdFor(turn: ConversationTurn): string | null {

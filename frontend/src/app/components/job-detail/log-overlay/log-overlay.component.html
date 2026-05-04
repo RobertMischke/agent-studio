@@ -12,7 +12,10 @@
         <div class="sidebar-card__header">
           <h3 class="section__title">Activity log</h3>
         </div>
-        <app-activity-log-view [lines]="cliOutput()" [bodyMaxHeight]="'calc(100vh - 320px)'" variant="embedded" />
+        <app-activity-log-view [lines]="cliOutput()"
+                               [bodyMaxHeight]="'calc(100vh - 320px)'"
+                               [isRunning]="isRunning()"
+                               variant="embedded" />
       </section>
 
       <section class="sidebar-card">

@@ -164,6 +164,7 @@ import { markdownToHtml } from './markdown-utils';
         <app-log-overlay
           [cliOutput]="cliOutput()"
           [log]="detail().log"
+          [isRunning]="isRunning()"
           (close)="showLogOverlay.set(false)" />
       }
     </div>

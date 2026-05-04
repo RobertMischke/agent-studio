@@ -414,6 +414,176 @@ export function summarizeToolBurst(groups: ActivityLogGroup[]): ToolBurstSummary
   return { total, counts, samples, durationMs };
 }
 
+// =================================================================
+// Live status (the "agent is working" indicator at the bottom of the chat)
+// =================================================================
+//
+// While the run is active the user wants a constant signal of life: a
+// pulsing indicator with a short label that says what the agent is
+// doing right now ("Reading prompt.md", "Searching for foo",
+// "Thinking..."). The label is derived from the most recent meaningful
+// activity-log group; the elapsed-since-last-line lets the user see
+// that something is still ticking even when the agent stalls between
+// tool calls.
+
+export type LiveStatusKind =
+  | 'starting'
+  | 'tool'
+  | 'agent'
+  | 'user'
+  | 'orchestrator'
+  | 'recovering';
+
+export interface LiveStatus {
+  kind: LiveStatusKind;
+  /** Short verb phrase ("Reading", "Searching", "Thinking"). */
+  verb: string;
+  /** Optional target/detail ("prompt.md", "needle", "src/foo.ts"); empty when not applicable. */
+  detail: string;
+  /**
+   * Milliseconds since the last log line. Drives the "· 4s" chip and
+   * gives the user a sense of "it's still going" when the agent has
+   * been silent for a while.
+   */
+  sinceMs: number;
+}
+
+/**
+ * Derive a live-status indicator from the rolling output buffer. Returns
+ * `null` when the run is not active (the indicator should not render).
+ *
+ * The function is intentionally synchronous and pure so it can be unit
+ * tested without a component harness; the caller is responsible for
+ * supplying `nowMs` (the wall clock) and for re-evaluating the result
+ * on whatever cadence is appropriate (the activity-log view ticks once
+ * per second so the elapsed counter feels alive).
+ */
+export function deriveLiveStatus(
+  lines: CliOutputLine[],
+  isRunning: boolean,
+  nowMs: number
+): LiveStatus | null {
+  if (!isRunning) return null;
+  if (lines.length === 0) {
+    return { kind: 'starting', verb: 'Starting agent', detail: '', sinceMs: 0 };
+  }
+
+  // Walk back to the last non-blank line so a trailing newline does not
+  // freeze the status at "0s" forever.
+  let lastIdx = lines.length - 1;
+  while (lastIdx >= 0 && (!lines[lastIdx].text || lines[lastIdx].text.trim() === '')) {
+    lastIdx -= 1;
+  }
+  if (lastIdx < 0) {
+    return { kind: 'starting', verb: 'Starting agent', detail: '', sinceMs: 0 };
+  }
+
+  const lastLine = lines[lastIdx];
+  const lastMs = Date.parse(lastLine.timestamp);
+  const sinceMs = Number.isFinite(lastMs) ? Math.max(0, nowMs - lastMs) : 0;
+
+  const groups = parseActivityLog(lines);
+  // Skip purely runtime/bookkeeping groups - they aren't what the user
+  // means by "what is the agent doing now".
+  let lastGroup: ActivityLogGroup | null = null;
+  for (let i = groups.length - 1; i >= 0; i--) {
+    const g = groups[i];
+    if (isLiveStatusNoise(g)) continue;
+    lastGroup = g;
+    break;
+  }
+  if (!lastGroup) {
+    return { kind: 'agent', verb: 'Thinking', detail: '', sinceMs };
+  }
+
+  if (lastGroup.lines[0]?.stream === 'user') {
+    return { kind: 'user', verb: 'Working on your message', detail: '', sinceMs };
+  }
+  if (lastGroup.kind === 'orchestrator') {
+    return { kind: 'orchestrator', verb: 'Orchestrator deciding', detail: '', sinceMs };
+  }
+  if (lastGroup.kind === 'error') {
+    return { kind: 'recovering', verb: 'Recovering from error', detail: '', sinceMs };
+  }
+
+  switch (lastGroup.kind) {
+    case 'read':
+      return { kind: 'tool', verb: 'Reading', detail: extractTargetLabel(lastGroup, 'file'), sinceMs };
+    case 'search':
+      return { kind: 'tool', verb: 'Searching', detail: extractTargetLabel(lastGroup, 'query'), sinceMs };
+    case 'edit':
+      return { kind: 'tool', verb: 'Editing', detail: extractTargetLabel(lastGroup, 'file'), sinceMs };
+    case 'command':
+      return { kind: 'tool', verb: 'Running', detail: extractTargetLabel(lastGroup, 'command'), sinceMs };
+    case 'task':
+      return { kind: 'tool', verb: 'Delegating', detail: extractTargetLabel(lastGroup, 'task'), sinceMs };
+    case 'todo':
+      return { kind: 'tool', verb: 'Updating todos', detail: '', sinceMs };
+    case 'message':
+    case 'other':
+    default:
+      return { kind: 'agent', verb: 'Thinking', detail: '', sinceMs };
+  }
+}
+
+function isLiveStatusNoise(group: ActivityLogGroup): boolean {
+  if (isTaskboardRuntimeMarker(group)) return true;
+  if (isWatchdogMetaLine(group)) return true;
+  // A blank-only group has nothing to say about current activity.
+  if (group.lines.every((l) => !l.text || l.text.trim() === '')) return true;
+  return false;
+}
+
+const LIVE_VERB_PREFIX_RE =
+  /^(Read|Reading|Search|Searching|Grep|Edit|Editing|Write|Writing|Run|Running|Build|Building|Check|Checking|Update|Updating|Apply|Applying|Move|Moving|Delete|Deleting|Create|Creating|Execute|Executing|Task|Todo)\b\s*[:(\-]?\s*/i;
+
+/**
+ * Pulls the operand out of an action title so the live status reads
+ * "Editing src/foo.ts" instead of repeating the verb. Handles batched
+ * titles ("Reading files ×3" -> "3 files") and Claude's "Read(path)"
+ * shape. Long paths collapse to a tail so the row stays one line.
+ */
+function extractTargetLabel(group: ActivityLogGroup, batchNoun: string): string {
+  const batched = /×\s*(\d+)\s*$/.exec(group.title);
+  if (batched) {
+    const n = Number(batched[1]);
+    return n === 1 ? `1 ${batchNoun}` : `${n} ${pluralize(batchNoun)}`;
+  }
+  let detail = group.title.trim();
+  detail = detail.replace(LIVE_VERB_PREFIX_RE, '');
+  // Strip wrapping () or quotes that some CLI drivers emit (Read(path), Search "needle").
+  detail = detail.replace(/^[("'`]+/, '').replace(/[)"'`]+$/, '');
+  // Collapse internal whitespace runs.
+  detail = detail.replace(/\s+/g, ' ').trim();
+  if (detail.length > 64) {
+    detail = '...' + detail.slice(-61);
+  }
+  return detail;
+}
+
+function pluralize(noun: string): string {
+  if (noun.endsWith('y')) return `${noun.slice(0, -1)}ies`;
+  if (noun.endsWith('s')) return noun;
+  return `${noun}s`;
+}
+
+/**
+ * Compact "since" formatter for the live-status row. Aims for the
+ * shortest readable form: "" for sub-second values (don't show), then
+ * "4s", "47s", "1m 12s", "1h 5m". Used by the activity-log view.
+ */
+export function formatLiveSince(ms: number): string {
+  if (!Number.isFinite(ms) || ms < 1500) return '';
+  const totalSec = Math.round(ms / 1000);
+  if (totalSec < 60) return `${totalSec}s`;
+  const totalMin = Math.floor(totalSec / 60);
+  const sec = totalSec % 60;
+  if (totalMin < 60) return sec === 0 ? `${totalMin}m` : `${totalMin}m ${sec}s`;
+  const hr = Math.floor(totalMin / 60);
+  const min = totalMin % 60;
+  return min === 0 ? `${hr}h` : `${hr}h ${min}m`;
+}
+
 /**
  * Compact human label for a tool-burst duration. Aimed at the small grey chip
  * in the Conversation view: "<1s", "4s", "1m 20s", "12m". Anything north of

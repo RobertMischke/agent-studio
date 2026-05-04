@@ -19,6 +19,7 @@ import { copyTextToClipboard } from '../../../services/clipboard.util';
 export class LogOverlayComponent implements OnDestroy {
   readonly cliOutput = input<CliOutputLine[]>([]);
   readonly log = input<JobLogEntry[]>([]);
+  readonly isRunning = input(false);
 
   readonly close = output<void>();
 

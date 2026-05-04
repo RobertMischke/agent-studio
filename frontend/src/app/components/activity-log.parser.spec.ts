@@ -4,9 +4,11 @@ import {
   buildChatMessages,
   buildConversationTurns,
   defaultActivityLogFilters,
+  deriveLiveStatus,
   filterActivityGroups,
   flattenActivityLines,
   formatBurstDuration,
+  formatLiveSince,
   parseActivityLog,
   summarizeToolBurst
 } from './activity-log.parser';
@@ -257,6 +259,112 @@ describe('formatBurstDuration', () => {
     expect(formatBurstDuration(80_000)).toBe('1m 20s');
     expect(formatBurstDuration(3_600_000)).toBe('1h');
     expect(formatBurstDuration(3_660_000)).toBe('1h 1m');
+  });
+});
+
+describe('deriveLiveStatus', () => {
+  const T = '2026-04-26T12:00:00.000Z';
+  const NOW = Date.parse(T) + 4_000; // 4 seconds after the last line
+
+  it('returns null when the run is not active', () => {
+    const status = deriveLiveStatus([line('* Read prompt.md', 'stdout', T)], false, NOW);
+    expect(status).toBeNull();
+  });
+
+  it('reports a Starting state when the buffer is empty but the run has begun', () => {
+    const status = deriveLiveStatus([], true, NOW);
+    expect(status).not.toBeNull();
+    expect(status!.kind).toBe('starting');
+    expect(status!.verb).toMatch(/Starting/i);
+  });
+
+  it('names the file when the latest action is a single Read', () => {
+    const status = deriveLiveStatus([
+      line('* Read prompt.md', 'stdout', T),
+      line('  | prompt.md', 'stdout', T)
+    ], true, NOW);
+    expect(status!.kind).toBe('tool');
+    expect(status!.verb).toBe('Reading');
+    expect(status!.detail).toBe('prompt.md');
+  });
+
+  it('aggregates a batched read burst into a count detail', () => {
+    const status = deriveLiveStatus([
+      line('* Read a.ts', 'stdout', T),
+      line('  | a.ts', 'stdout', T),
+      line('* Read b.ts', 'stdout', T),
+      line('  | b.ts', 'stdout', T),
+      line('* Read c.ts', 'stdout', T),
+      line('  | c.ts', 'stdout', T)
+    ], true, NOW);
+    expect(status!.kind).toBe('tool');
+    expect(status!.verb).toBe('Reading');
+    expect(status!.detail).toBe('3 files');
+  });
+
+  it('classifies search, edit, and command actions with their own verbs', () => {
+    const search = deriveLiveStatus(
+      [line('* Search "needle"', 'stdout', T)], true, NOW)!;
+    expect(search.verb).toBe('Searching');
+
+    const edit = deriveLiveStatus(
+      [line('* Edit src/foo.ts', 'stdout', T)], true, NOW)!;
+    expect(edit.verb).toBe('Editing');
+    expect(edit.detail).toBe('src/foo.ts');
+
+    const cmd = deriveLiveStatus(
+      [line('* Run npm test (shell)', 'stdout', T)], true, NOW)!;
+    expect(cmd.verb).toBe('Running');
+  });
+
+  it('falls back to "Thinking" for free-form agent text', () => {
+    const status = deriveLiveStatus([
+      line('Looking at the activity-log component to understand the chat surface.', 'stdout', T)
+    ], true, NOW)!;
+    expect(status.kind).toBe('agent');
+    expect(status.verb).toBe('Thinking');
+    expect(status.detail).toBe('');
+  });
+
+  it('reports "Working on your message" right after a user follow-up', () => {
+    const status = deriveLiveStatus([
+      line('* Read prompt.md', 'stdout', T),
+      line('please continue', 'user', T)
+    ], true, NOW)!;
+    expect(status.kind).toBe('user');
+    expect(status.verb).toMatch(/your message/i);
+  });
+
+  it('skips taskboard runtime markers when picking the last meaningful group', () => {
+    const status = deriveLiveStatus([
+      line('* Read prompt.md', 'stdout', T),
+      line('  | prompt.md', 'stdout', T),
+      line('[taskboard] checkpoint', 'system', T)
+    ], true, NOW)!;
+    expect(status.verb).toBe('Reading');
+    expect(status.detail).toBe('prompt.md');
+  });
+
+  it('counts seconds since the last log line', () => {
+    const lastTs = '2026-04-26T12:00:00.000Z';
+    const now = Date.parse(lastTs) + 7_500; // 7.5 s later
+    const status = deriveLiveStatus([line('* Read prompt.md', 'stdout', lastTs)], true, now)!;
+    // 7.5 s -> rounded sinceMs is at least the gap.
+    expect(status.sinceMs).toBeGreaterThanOrEqual(7_000);
+    expect(status.sinceMs).toBeLessThanOrEqual(8_000);
+  });
+});
+
+describe('formatLiveSince', () => {
+  it('hides sub-second values, then renders compact "Ns / Nm Ns / Nh Nm"', () => {
+    expect(formatLiveSince(0)).toBe('');
+    expect(formatLiveSince(800)).toBe('');
+    expect(formatLiveSince(2_000)).toBe('2s');
+    expect(formatLiveSince(47_000)).toBe('47s');
+    expect(formatLiveSince(60_000)).toBe('1m');
+    expect(formatLiveSince(72_000)).toBe('1m 12s');
+    expect(formatLiveSince(3_600_000)).toBe('1h');
+    expect(formatLiveSince(3_900_000)).toBe('1h 5m');
   });
 });
 
