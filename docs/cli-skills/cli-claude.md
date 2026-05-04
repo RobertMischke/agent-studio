@@ -14,6 +14,16 @@ Anthropic's official Claude Code CLI. Distributed as the npm package `@anthropic
 > **Tests:** [`backend.Tests/ClaudeQuotaProbeTests.cs`](../../backend.Tests/ClaudeQuotaProbeTests.cs) (probe). Driver-level `TransformReadLine` tests live alongside fixtures under `backend.Tests/Fixtures/cli/claude/` (see § "Fixtures").
 > **Contract:** [docs/supported-clis.md §3.1](../../docs/supported-clis.md).
 
+## Commit / push boundary
+
+| Question | Answer |
+|---|---|
+| Does this CLI commit on its own? | **No.** The platform owns the commit boundary. |
+| Does this CLI push on its own? | **No.** Push is the runner's job (today: a tracked gap). |
+| What if it does? | Regression. Raise an issue and cite [docs/commit-push-doctrine.md](../commit-push-doctrine.md). |
+
+Claude Code is the most agentic of the four and *will* run `git status` / `git diff` to inspect the working tree under `--dangerously-skip-permissions`. That is fine. What it must never do: `git commit`, `git push`, `git amend`, `git checkout`, `git reset --hard`, or any branch-mutating command. The runner records the commit on the `3-progress -> 4-review` transition; see [docs/commit-push-doctrine.md](../commit-push-doctrine.md) and [ADR-0019](../architecture-decisions.md#adr-0019---platform-owns-the-commit-boundary-2026-05-04).
+
 ## Identity card
 
 | | Value |

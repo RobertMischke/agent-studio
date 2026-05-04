@@ -422,3 +422,24 @@ The reference clones at `c:/Projects/agent-taskboard-devspace/cli-source-referen
 **Implementation pointers.** [`docs/companion-app-design.md`](companion-app-design.md) (V1 contract with endpoints and DTO shapes); [`backend/Services/Companion/CompanionSyncService.cs`](../backend/Services/Companion/CompanionSyncService.cs) (HostedService tick loop); [`backend/Services/Companion/CompanionSnapshotBuilder.cs`](../backend/Services/Companion/CompanionSnapshotBuilder.cs) (pure snapshot folding); [`backend/Services/Companion/CompanionCommandDispatcher.cs`](../backend/Services/Companion/CompanionCommandDispatcher.cs) (queued command -> existing service); [`companion/relay/Program.cs`](../companion/relay/Program.cs) (relay minimal API).
 
 **Status.** Accepted.
+
+---
+
+## ADR-0019 - Platform owns the commit boundary (2026-05-04)
+
+**Decision.** The runner is the only entity in the system that runs `git commit`. The CLI agent never commits, never pushes, never branches. Commits land deterministically on the `3-progress -> 4-review` transition through `JobTransitionService.MoveAsync`, are gated by a per-project `AutoCommit` setting, use a Haiku-rendered Conventional Commit message from [`prompts/runtime/commit-message.md`](../prompts/runtime/commit-message.md), and stamp the resulting SHA onto `JobInfo.Commit`. Push is the runner's job too; today it is a known gap, deliberately tracked rather than delegated to the CLI.
+
+**Context.** Modern coding CLIs (Claude / Codex / Copilot / Gemini) each ship with their own opinion about whether to commit when they "finish": some will, some won't, none agree on message style, and none align with our state-machine transition. Letting the model commit splits authority over the same working tree between the CLI's own heuristics and the runner's lifecycle policy. The product needs a single author of git history per project so the run timeline, the per-run change set, and `JobInfo.Commit` all line up against the same SHA. The user's framing was explicit: "der Task Prozessor macht den Commit, der Task Prozessor pusht."
+
+**Non-goals.**
+- CLI-side commits, even as a fallback when the runner skips. A skipped commit (clean tree, AutoCommit off, run did not reach review) carries meaning. Laundering that signal into a silent CLI write is the failure mode ADR-0002 was written to prevent.
+- Orchestrator-side commits via an LLM call ("the run is done, let the orchestrator wrap up by committing"). The orchestrator supervises the commit boundary but does not author git history; supervision speaks via `OrchestratorChatLog` typed entries, not via git.
+- Per-CLI commit conventions. The platform produces one shape of commit message regardless of which CLI did the work, so the user reads consistent history.
+- Branching, worktrees, PR-shaped review. Per ADR-0001 the product is single-branch per project.
+- `git commit --amend` after the fact. Each Progress -> Review transition produces a fresh SHA; amends conflict with the run-timeline's deterministic before/after SHA capture.
+
+**Reasoning style.** Single state-machine writer applied to git history: exactly one path commits, exactly one path pushes, both gated by typed flags, both stamped onto the job for audit. The doctrine is publishable as a marketing claim ("models do work, the platform records work") and operational at the same time, so the public framing and the code path do not drift. Failure modes that look like edge cases (mid-run commit, split-brain message, branch drift, lost SHA stamp) are listed up front in [docs/commit-push-doctrine.md](commit-push-doctrine.md) so a contributor evaluating a new feature can disqualify the wrong patterns without re-deriving them.
+
+**Implementation pointers.** [docs/commit-push-doctrine.md](commit-push-doctrine.md) (full doctrine, marketing layer + internal layer + suggested follow-ups); [`backend/Services/Jobs/JobTransitionService.cs`](../backend/Services/Jobs/JobTransitionService.cs) (commit gate on `3-progress -> 4-review`); [`backend/Services/Runner/RunCompletionPolicy.cs`](../backend/Services/Runner/RunCompletionPolicy.cs) (`ShouldMoveToReview`); [`backend/Services/GitService.cs`](../backend/Services/GitService.cs) (`AutoCommitAsync`, `GenerateCommitMessageAsync`, `Commit`); [`prompts/runtime/commit-message.md`](../prompts/runtime/commit-message.md) (commit-message template); per-CLI confirmation rows in [`docs/cli-skills/cli-claude.md`](cli-skills/cli-claude.md), [`cli-codex.md`](cli-skills/cli-codex.md), [`cli-copilot.md`](cli-skills/cli-copilot.md), [`cli-gemini.md`](cli-skills/cli-gemini.md). Push: not yet implemented; tracked as the first follow-up in `commit-push-doctrine.md`.
+
+**Status.** Accepted.

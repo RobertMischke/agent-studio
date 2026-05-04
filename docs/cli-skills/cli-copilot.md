@@ -14,6 +14,16 @@ GitHub's Copilot CLI. Distributed as the npm package `@github/copilot-cli`. The 
 > **Tests:** Coverage lives in higher-level integration tests; unit-level driver tests are sparse — known gap.
 > **Contract:** [docs/supported-clis.md §3.3](../../docs/supported-clis.md).
 
+## Commit / push boundary
+
+| Question | Answer |
+|---|---|
+| Does this CLI commit on its own? | **No.** The platform owns the commit boundary. |
+| Does this CLI push on its own? | **No.** Push is the runner's job (today: a tracked gap). |
+| What if it does? | Regression. Raise an issue and cite [docs/commit-push-doctrine.md](../commit-push-doctrine.md). |
+
+Copilot CLI is the most likely of the four to lean on git semantically (it is GitHub's product after all). That is fine for inspection - `git status`, `git diff`, `git log`. What it must never do: `git commit`, `git push`, `git amend`, `git checkout`, `git reset --hard`, or any branch-mutating command. The runner records the commit on the `3-progress -> 4-review` transition; see [docs/commit-push-doctrine.md](../commit-push-doctrine.md) and [ADR-0019](../architecture-decisions.md#adr-0019---platform-owns-the-commit-boundary-2026-05-04).
+
 ## Identity card
 
 | | Value |

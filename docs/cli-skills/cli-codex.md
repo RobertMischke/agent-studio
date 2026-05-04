@@ -14,6 +14,16 @@ OpenAI's Codex CLI. Distributed as the npm package `@openai/codex`. Headless inv
 > **Tests:** [`backend.Tests/CodexModelDiscoveryTests.cs`](../../backend.Tests/CodexModelDiscoveryTests.cs).
 > **Contract:** [docs/supported-clis.md §3.2](../../docs/supported-clis.md).
 
+## Commit / push boundary
+
+| Question | Answer |
+|---|---|
+| Does this CLI commit on its own? | **No.** The platform owns the commit boundary. |
+| Does this CLI push on its own? | **No.** Push is the runner's job (today: a tracked gap). |
+| What if it does? | Regression. Raise an issue and cite [docs/commit-push-doctrine.md](../commit-push-doctrine.md). |
+
+Codex `exec` runs unattended and may inspect the working tree with `git status` / `git diff`. That is fine. What it must never do: `git commit`, `git push`, `git amend`, `git checkout`, `git reset --hard`, or any branch-mutating command. The runner records the commit on the `3-progress -> 4-review` transition; see [docs/commit-push-doctrine.md](../commit-push-doctrine.md) and [ADR-0019](../architecture-decisions.md#adr-0019---platform-owns-the-commit-boundary-2026-05-04).
+
 ## Identity card
 
 | | Value |
