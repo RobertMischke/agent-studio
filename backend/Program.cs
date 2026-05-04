@@ -6,6 +6,7 @@ using OrchestratorApi.Services.Jobs;
 using OrchestratorApi.Services.Pty;
 using OrchestratorApi.Services.Quota;
 using OrchestratorApi.Services.Runner;
+using OrchestratorApi.Services.Supervisor;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.Diagnostics;
 
@@ -59,6 +60,7 @@ builder.Services.AddSingleton<ContextUsageParser>();
 builder.Services.AddSingleton<SummaryGenerationService>();
 builder.Services.AddSingleton<RuntimePromptService>();
 builder.Services.AddSingleton<TaskRunnerService>();
+builder.Services.AddSingleton<ProjectObservationService>();
 builder.Services.AddSingleton<GitService>();
 builder.Services.AddSingleton<ProjectSettingsService>();
 builder.Services.AddSingleton<ProjectDocsService>();
