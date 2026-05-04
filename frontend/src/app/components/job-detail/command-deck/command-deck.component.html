@@ -72,9 +72,18 @@
       </button>
       <button class="btn-exec btn-exec--stop commandbar__action" (click)="stop.emit()">⏹ Stop</button>
     } @else if (canStart()) {
-      <button class="btn-exec btn-exec--start commandbar__action" (click)="start.emit()" [disabled]="starting()">
+      <button class="btn-exec btn-exec--start commandbar__action"
+              data-testid="command-deck-start"
+              (click)="start.emit()"
+              [disabled]="starting() || !!startDisabledReason()"
+              [attr.title]="startDisabledReason()">
         {{ starting() ? '⏳' : '▶ Start' }}
       </button>
+      @if (startDisabledReason()) {
+        <span class="commandbar__disabled-reason" data-testid="command-deck-start-disabled-reason">
+          {{ startDisabledReason() }}
+        </span>
+      }
     }
   }
 </div>

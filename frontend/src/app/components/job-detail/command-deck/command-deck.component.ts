@@ -28,6 +28,7 @@ export class CommandDeckComponent {
 
   readonly isRunning = input(false);
   readonly canStart = input(false);
+  readonly startDisabledReason = input<string | null>(null);
   readonly starting = input(false);
   readonly elapsedTime = input('');
   /** Compact mode: hides selectors and shows a "Show setup" toggle.

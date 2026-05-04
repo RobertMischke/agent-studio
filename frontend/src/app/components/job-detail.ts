@@ -66,6 +66,7 @@ import { markdownToHtml } from './markdown-utils';
         [availableModels]="availableModels()"
         [isRunning]="isRunning()"
         [canStart]="canStartJob()"
+        [startDisabledReason]="startDisabledReason()"
         [starting]="starting()"
         [elapsedTime]="elapsedTime()"
         [collapsed]="setupCollapsed()"
@@ -1627,6 +1628,24 @@ export class JobDetailComponent implements OnDestroy {
     const state = this.detail().info.state;
     return (state === '2-ready' || state === '3-progress') && !this.isRunning();
   }
+
+  /**
+   * When the Start button is shown but should not actually fire, return a
+   * short reason for the tooltip and disabled state. Today's case: another
+   * job in the same project is already running on a CLI - the backend
+   * rejects starts in this state, so disabling the button before the click
+   * keeps the user from chasing a 4xx round-trip and explains why.
+   */
+  startDisabledReason = computed<string | null>(() => {
+    const info = this.detail()?.info;
+    if (!info) return null;
+    const status = this.jobService.runnerStatus();
+    const project = status?.projects?.[info.projectName];
+    if (!project) return null;
+    const activeId = project.activeJobId;
+    if (!activeId || activeId === info.id) return null;
+    return `Project "${info.projectName}" is already running ${activeId}. Stop the active run first or wait for it to finish.`;
+  });
 
   startJob(): void {
     this.errorMsg.set(null);
