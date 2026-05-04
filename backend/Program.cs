@@ -61,6 +61,7 @@ builder.Services.AddSingleton<SummaryGenerationService>();
 builder.Services.AddSingleton<RuntimePromptService>();
 builder.Services.AddSingleton<TaskRunnerService>();
 builder.Services.AddSingleton<ProjectObservationService>();
+builder.Services.AddSingleton<SupervisorInterventionService>();
 builder.Services.AddSingleton<GitService>();
 builder.Services.AddSingleton<ProjectSettingsService>();
 builder.Services.AddSingleton<ProjectDocsService>();

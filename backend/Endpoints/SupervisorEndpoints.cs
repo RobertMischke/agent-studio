@@ -24,5 +24,54 @@ public static class SupervisorEndpoints
             var observation = await obs.ObserveAsync(project, ct);
             return Results.Ok(observation);
         });
+
+        group.MapPost("/{project}/intervene/cancel-run", async (
+            string project,
+            InterventionRequest body,
+            SupervisorInterventionService svc,
+            CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(body.JobId)) return Results.BadRequest(new { error = "jobId required" });
+            if (string.IsNullOrWhiteSpace(body.Reason)) return Results.BadRequest(new { error = "reason required" });
+            await svc.CancelRunAsync(project, body.JobId!, body.Reason!, SupervisorSource.User, ct);
+            return Results.Ok(new { ok = true });
+        });
+
+        group.MapPost("/{project}/intervene/pause-pickup", async (
+            string project,
+            InterventionRequest body,
+            SupervisorInterventionService svc,
+            CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(body.Reason)) return Results.BadRequest(new { error = "reason required" });
+            var ttl = body.TtlSeconds.HasValue ? TimeSpan.FromSeconds(body.TtlSeconds.Value) : (TimeSpan?)null;
+            await svc.PausePickupAsync(project, body.Reason!, ttl, SupervisorSource.User, ct);
+            return Results.Ok(new { ok = true });
+        });
+
+        group.MapPost("/{project}/intervene/force-fail", async (
+            string project,
+            InterventionRequest body,
+            SupervisorInterventionService svc,
+            CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(body.JobId)) return Results.BadRequest(new { error = "jobId required" });
+            if (string.IsNullOrWhiteSpace(body.Reason)) return Results.BadRequest(new { error = "reason required" });
+            await svc.ForceFailAsync(project, body.JobId!, body.Reason!, SupervisorSource.User, ct);
+            return Results.Ok(new { ok = true });
+        });
+
+        group.MapPost("/{project}/intervene/resume", async (
+            string project,
+            InterventionRequest body,
+            SupervisorInterventionService svc,
+            CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(body.Reason)) return Results.BadRequest(new { error = "reason required" });
+            await svc.ResumeAsync(project, body.Reason!, SupervisorSource.User, ct);
+            return Results.Ok(new { ok = true });
+        });
     }
 }
+
+public sealed record InterventionRequest(string? Reason, string? JobId, int? TtlSeconds);
