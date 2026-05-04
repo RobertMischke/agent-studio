@@ -47,6 +47,27 @@ This lookup section matters because users may work both through the orchestrator
 
 When changing skill behavior, keep [docs/architecture-decisions.md](docs/architecture-decisions.md) in sync if the change affects this boundary.
 
+## Stable update policy
+
+The dev checkout (`agent-taskboard-dev/`) and the stable checkout (`agent-taskboard-stable/`) sit side by side under `agent-taskboard-devspace/`. All edits go to dev. Stable receives changes via `update-stable.sh` in the parent folder, which `git pull --ff-only`s from `origin/main`, runs `npm install` if `package-lock.json` changed, and restarts stable. **Stable is never edited directly.**
+
+When to update stable:
+
+- **After a coherent batch ships and is verified in dev.** A "batch" is a feature plus its tests plus its documentation, all green. Single-commit speculative pushes to stable add risk for no gain.
+- **Before a long unattended run.** If you are about to leave the orchestrator working on a board for hours, update stable first so the running version matches the documented behaviour. The Layer 3 system review monitor watches stable; running it against an out-of-date stable wastes the run.
+- **After a load-bearing change to runner / supervisor / outcome-policy / agent contract.** These are observation surfaces; if dev and stable diverge on them, the activity log and supervisor logs disagree on what the system is actually doing.
+- **Never mid-run.** `update-stable.sh` stops stable. If a job is in `3-progress` on stable, finish or stop it explicitly first.
+
+When NOT to update stable:
+
+- Dev work is unfinished or untested. Wait for the batch to settle.
+- A change is purely exploratory (mockups under `docs/mockups/`, research under `docs/research/`). These do not affect runtime; they can sit in dev.
+- The stable instance is currently being used to drive a long task. Wait for the task to finish or stop, then update.
+
+The push step is its own decision. The default is to push only after the user has reviewed the dev commits and explicitly asks. Do not push silently as part of "wrapping up a batch"; the user owns that gate.
+
+Layer 3 - the system review monitor at [`scripts/supervisor/run-system-review.sh`](scripts/supervisor/run-system-review.sh) - reads stable's state read-only. It is the most useful right after a stable update has happened: it can confirm the new code is running, capture a baseline, and surface any drift against the just-shipped behaviour.
+
 ## Documentation Language
 
 All written artifacts in this repository (README, ROADMAP.md, AGENTS.md, docs/, prompts, code comments, commit messages, PR descriptions) are written in **English**. Chat conversation with the user may happen in any language, but anything you commit or write to disk in this repo stays English.
