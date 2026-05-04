@@ -214,6 +214,19 @@ p { color: var(--muted); line-height: 1.48; margin: 0; }
   gap: 10px;
   align-items: stretch;
 }
+.subnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+.section-label {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin: 16px 0 8px;
+}
 .module {
   min-height: 72px;
   border: 1px solid var(--line);
@@ -256,23 +269,48 @@ p { color: var(--muted); line-height: 1.48; margin: 0; }
 <body>
 <header>
   <div>
-    <h1>Creative Design Loops</h1>
-    <div class="subtitle">Screenshots, council critique, and next-version steering for beautiful software.</div>
+    <h1>Project: Agent Task Processor</h1>
+    <div class="subtitle">Project-level surfaces for UX/UI, design evidence, testing, QA, source metrics, and action-driven reports.</div>
   </div>
 </header>
 <main>
   <aside>
     <div class="nav">
-      <button class="active" data-view="loop">Design Loop</button>
-      <button data-view="references">Design References</button>
-      <button data-view="council">Council</button>
-      <button data-view="testing">Testing And QA</button>
-      <button data-view="source">Source Map</button>
-      <button data-view="memory">Design Memory</button>
+      <div class="section-label">Project</div>
+      <button data-view="overview">Overview</button>
+      <button data-view="security">Security</button>
+      <button data-view="architecture">Architecture</button>
+      <button class="active" data-view="uxui">UX/UI</button>
+      <button data-view="testquality">Test Quality</button>
+      <button data-view="jobs">Jobs</button>
+      <div class="section-label">Configuration</div>
+      <button data-view="settings">Settings</button>
     </div>
   </aside>
   <section class="content">
-    <div id="loop">
+    <div id="overview" class="hidden">
+      <div class="grid">
+        <div class="card span-4"><h2>Security</h2><p>Latest security baseline and review evidence.</p><span class="pill warn">refresh due</span></div>
+        <div class="card span-4"><h2>Architecture</h2><p>ADR history, drift checks, and module boundaries.</p><span class="pill good">documented</span></div>
+        <div class="card span-4"><h2>UX/UI</h2><p>Design references, screenshot variants, council critique, and visual direction.</p><span class="pill good">loop active</span></div>
+        <div class="card span-4"><h2>Test Quality</h2><p>Backend tests, e2e tests, tuning runs, coverage, source metrics.</p><span class="pill warn">2 skipped</span></div>
+        <div class="card span-8"><h2>Project Evidence</h2><p>Each project dimension has its own surface. Task evidence stays beside jobs; project memory stays readable for direct CLI agents.</p></div>
+      </div>
+    </div>
+    <div id="security" class="hidden">
+      <div class="card span-12"><h2>Security</h2><p>Placeholder project dimension. Security remains first-class and separate from UX/UI and Test Quality.</p></div>
+    </div>
+    <div id="architecture" class="hidden">
+      <div class="card span-12"><h2>Architecture</h2><p>Placeholder project dimension for ADRs, architecture drift, and module boundaries.</p></div>
+    </div>
+    <div id="uxui">
+      <div class="subnav">
+        <span class="pill good">Project menu: UX/UI</span>
+        <span class="pill">Design references</span>
+        <span class="pill">Screenshots</span>
+        <span class="pill">Council</span>
+        <span class="pill">Design memory</span>
+      </div>
       <div class="grid">
         <div class="card span-7">
           <div class="variant-title">
@@ -322,10 +360,27 @@ p { color: var(--muted); line-height: 1.48; margin: 0; }
             <div class="step"><div class="dot">3</div><p>v2 tightened hierarchy and improved primary actions. Current recommendation: one more polish pass.</p></div>
           </div>
         </div>
-      </div>
-    </div>
-    <div id="council" class="hidden">
-      <div class="grid">
+        <div class="card span-8">
+          <h2>Design References</h2>
+          <p>References are task or project evidence: screenshots, markdown briefs, images, accepted examples, and rejected alternatives.</p>
+          <div class="reference-grid" style="margin-top:14px">
+            <div class="reference image"><h3>Product Screenshot</h3><p>Review panel v2, desktop and mobile.</p><span class="pill good">accepted</span></div>
+            <div class="reference"><h3>Markdown Brief</h3><p><code>results/design/briefs/visual-direction.md</code></p><span class="pill">brief</span></div>
+            <div class="reference image"><h3>External Inspiration</h3><p>Dense inspector layout, stored with attribution.</p><span class="pill warn">reference</span></div>
+            <div class="reference"><h3>Rejected Pattern</h3><p>Hero-like dashboard composition made the tool feel like marketing.</p><span class="pill hot">avoid</span></div>
+            <div class="reference"><h3>Copy Tone</h3><p>Direct, calm, product-focused. No vague quality claims.</p><span class="pill">markdown</span></div>
+            <div class="reference image"><h3>Variant Set</h3><p>v1, v2, v3 screenshots grouped for comparison.</p><span class="pill">screenshots</span></div>
+          </div>
+        </div>
+        <div class="card span-4">
+          <h2>Reference Actions</h2>
+          <p>References are added or generated by explicit actions. They do not silently steer every task.</p>
+          <div class="actions">
+            <button class="btn primary" data-action="uxui">Add reference</button>
+            <button class="btn" data-action="uxui">Write design brief</button>
+            <button class="btn" data-action="uxui">Compare variants</button>
+          </div>
+        </div>
         <div class="card span-8">
           <h2>Council Critique</h2>
           <div class="council">
@@ -345,34 +400,33 @@ p { color: var(--muted); line-height: 1.48; margin: 0; }
             <button class="btn" data-action="accept">Save direction</button>
           </div>
         </div>
-      </div>
-    </div>
-    <div id="references" class="hidden">
-      <div class="grid">
-        <div class="card span-8">
-          <h2>Design References</h2>
-          <p>References are task or project evidence: screenshots, markdown briefs, images, accepted examples, and rejected alternatives.</p>
-          <div class="reference-grid" style="margin-top:14px">
-            <div class="reference image"><h3>Product Screenshot</h3><p>Review panel v2, desktop and mobile.</p><span class="pill good">accepted</span></div>
-            <div class="reference"><h3>Markdown Brief</h3><p><code>results/design/briefs/visual-direction.md</code></p><span class="pill">brief</span></div>
-            <div class="reference image"><h3>External Inspiration</h3><p>Dense inspector layout, stored with attribution.</p><span class="pill warn">reference</span></div>
-            <div class="reference"><h3>Rejected Pattern</h3><p>Hero-like dashboard composition made the tool feel like marketing.</p><span class="pill hot">avoid</span></div>
-            <div class="reference"><h3>Copy Tone</h3><p>Direct, calm, product-focused. No vague quality claims.</p><span class="pill">markdown</span></div>
-            <div class="reference image"><h3>Variant Set</h3><p>v1, v2, v3 screenshots grouped for comparison.</p><span class="pill">screenshots</span></div>
-          </div>
+        <div class="card span-4">
+          <h3>Visual Direction</h3>
+          <p>Dense, calm, tool-like. Strong review hierarchy. Avoid marketing-page composition inside the app.</p>
         </div>
         <div class="card span-4">
-          <h2>Reference Actions</h2>
-          <p>References are added or generated by explicit actions. They do not silently steer every task.</p>
-          <div class="actions">
-            <button class="btn primary" data-action="reference">Add reference</button>
-            <button class="btn" data-action="reference">Write design brief</button>
-            <button class="btn" data-action="reference">Compare variants</button>
-          </div>
+          <h3>Accepted Examples</h3>
+          <p>Review panel v2, task evidence panel v1, project security baseline v1.</p>
+        </div>
+        <div class="card span-4">
+          <h3>Rejected Patterns</h3>
+          <p>Decorative dashboards, oversized heroes, vague quality labels, hidden screenshot evidence.</p>
+        </div>
+        <div class="card span-12">
+          <h2>Design Memory File</h2>
+          <p><code>.orchestrator/design-memory.md</code> records chosen visual direction, council summaries, and links back to screenshot evidence.</p>
         </div>
       </div>
     </div>
-    <div id="testing" class="hidden">
+    <div id="testquality" class="hidden">
+      <div class="subnav">
+        <span class="pill good">Project menu: Test Quality</span>
+        <span class="pill">Backend tests</span>
+        <span class="pill">End-to-end tests</span>
+        <span class="pill">Tuning tests</span>
+        <span class="pill">Coverage</span>
+        <span class="pill">Source map</span>
+      </div>
       <div class="grid">
         <div class="card span-12">
           <h2>Testing And QA Run History</h2>
@@ -402,10 +456,6 @@ p { color: var(--muted); line-height: 1.48; margin: 0; }
             <button class="btn" data-action="qa">Generate coverage report</button>
           </div>
         </div>
-      </div>
-    </div>
-    <div id="source" class="hidden">
-      <div class="grid">
         <div class="card span-7">
           <h2>Source-Code Perspective</h2>
           <p>A Skill can generate a visual map of the software the LLM is creating: modules, lines of code, coverage, dependencies, and organization risks.</p>
@@ -440,31 +490,17 @@ p { color: var(--muted); line-height: 1.48; margin: 0; }
         </div>
       </div>
     </div>
-    <div id="memory" class="hidden">
-      <div class="grid">
-        <div class="card span-4">
-          <h3>Visual Direction</h3>
-          <p>Dense, calm, tool-like. Strong review hierarchy. Avoid marketing-page composition inside the app.</p>
-        </div>
-        <div class="card span-4">
-          <h3>Accepted Examples</h3>
-          <p>Review panel v2, task evidence panel v1, project security baseline v1.</p>
-        </div>
-        <div class="card span-4">
-          <h3>Rejected Patterns</h3>
-          <p>Decorative dashboards, oversized heroes, vague quality labels, hidden screenshot evidence.</p>
-        </div>
-        <div class="card span-12">
-          <h2>Design Memory File</h2>
-          <p><code>.orchestrator/design-memory.md</code> records chosen visual direction, council summaries, and links back to screenshot evidence.</p>
-        </div>
-      </div>
+    <div id="jobs" class="hidden">
+      <div class="card span-12"><h2>Jobs</h2><p>Placeholder for project task list. UX/UI and Test Quality outputs can create normal follow-up jobs.</p></div>
+    </div>
+    <div id="settings" class="hidden">
+      <div class="card span-12"><h2>Settings</h2><p>Project-level defaults for explicit actions. Broad design and QA loops stay button-driven unless a narrow safe automation is configured later.</p></div>
     </div>
   </section>
 </main>
 <script>
 const buttons = document.querySelectorAll('[data-view]');
-const views = ['loop', 'references', 'council', 'testing', 'source', 'memory'].map(id => document.getElementById(id));
+const views = ['overview', 'security', 'architecture', 'uxui', 'testquality', 'jobs', 'settings'].map(id => document.getElementById(id));
 buttons.forEach(button => {
   button.addEventListener('click', () => {
     buttons.forEach(b => b.classList.remove('active'));
@@ -484,19 +520,19 @@ document.addEventListener('click', event => {
     decision.textContent = `Created follow-up design iteration v${version}: preserve workflow density, improve visual hierarchy, capture desktop and mobile screenshots.`;
   }
   if (action === 'council') {
-    document.querySelector('[data-view="council"]').click();
+    document.querySelector('[data-view="uxui"]').click();
   }
   if (action === 'accept') {
     decision.textContent = `Accepted v${version}. Save council summary and screenshots to design memory.`;
   }
-  if (action === 'reference') {
-    document.querySelector('[data-view="references"]').click();
+  if (action === 'uxui') {
+    document.querySelector('[data-view="uxui"]').click();
   }
   if (action === 'qa') {
-    document.querySelector('[data-view="testing"]').click();
+    document.querySelector('[data-view="testquality"]').click();
   }
   if (action === 'source') {
-    document.querySelector('[data-view="source"]').click();
+    document.querySelector('[data-view="testquality"]').click();
   }
 });
 </script>

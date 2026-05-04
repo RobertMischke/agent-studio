@@ -40,6 +40,8 @@ The council should never become another implementation actor. It observes and cr
 ## 3. Recommended Vocabulary
 
 - **Design Loop** - the full iteration cycle from intent to screenshot to critique to next version.
+- **UX/UI** - project-level surface for design references, screenshots, council critique, design memory, and visual iteration actions.
+- **Test Quality** - project-level surface for test history, QA runs, coverage, tuning results, source metrics, source maps, and module organization review.
 - **Council** - a structured multi-role critique pass.
 - **Version** - one visual attempt captured by screenshots and notes.
 - **Design Evidence** - screenshots, variant notes, critique, chosen direction, rejected alternatives.
@@ -54,6 +56,8 @@ The council should never become another implementation actor. It observes and cr
 Avoid using "Quality" as the umbrella. Design is not merely quality control. It is creative direction plus critique.
 
 Avoid making these actions invisible. Design, QA, and source-analysis Skills should be user-triggered by buttons or explicit orchestrator steering. The app can recommend actions, but should not quietly run broad creative or testing loops unless a later project setting opts into a narrow, safe automation.
+
+UX/UI and Test Quality are project menu entries, not just Skill categories. A user looking at a project should be able to find all design evidence under UX/UI and all test/source-metric evidence under Test Quality without knowing which Skill generated it.
 
 ## 4. Council Roles
 
@@ -197,15 +201,16 @@ The interface is expected output, not blind trust.
 
 ## 8. First Implementation Order
 
-1. Add design evidence contract to protocol docs.
-2. Add design reference library and task/project reference picker.
-3. Add screenshot version comparison in job detail.
-4. Add local design Skill definitions.
-5. Add QA run history for backend, end-to-end, tuning, and coverage actions.
-6. Add source map action and code metrics panel.
-7. Add council prompt and structured output parser.
-8. Add "Next version" follow-up task action.
-9. Add project-level design memory.
+1. Add UX/UI and Test Quality as project-level menu entries beside Security and Architecture.
+2. Add design evidence contract to protocol docs.
+3. Add design reference library and task/project reference picker.
+4. Add screenshot version comparison in job detail.
+5. Add local design Skill definitions.
+6. Add QA run history for backend, end-to-end, tuning, and coverage actions.
+7. Add source map action and code metrics panel under Test Quality.
+8. Add council prompt and structured output parser.
+9. Add "Next version" follow-up task action.
+10. Add project-level design memory.
 
 ## Open Questions
 
@@ -217,3 +222,4 @@ The interface is expected output, not blind trust.
 6. Which QA actions are safe to suggest automatically, even if the user still triggers them?
 7. What minimum report schema is stable enough for Skills across CLIs?
 8. Should source metrics live on project pages, task details, or both?
+9. Should the production label be "Test Quality", "QA", or "Testing and QA"? The mockup currently chooses "Test Quality" for the project menu because it includes test history plus code metrics.

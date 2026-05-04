@@ -34,6 +34,15 @@ Design evidence is broader than screenshots. A project can carry reference image
 
 Testing and QA evidence belongs beside design evidence. Backend tests, end-to-end tests, tuning/performance tests, coverage, lines of code, module organization, dependency shape, and source-code maps should be visible as run history. The LLM can evaluate those reports, but it evaluates structured evidence. It should not invent pass/fail state from prose.
 
+## Project-Level Menus
+
+The project page should expose two dedicated surfaces:
+
+- **UX/UI** - the place for design references, screenshots, markdown briefs, visual direction, council critique, design memory, and "next version" actions.
+- **Test Quality** - the place for backend test runs, end-to-end test runs, tuning tests, coverage, source-code metrics, module organization, source maps, and QA report history.
+
+These are peer project dimensions beside Security and Architecture. They should not be buried under a generic Skills or Quality menu. Skills power the actions, but the user finds the results on the project surface.
+
 ## Council Concept
 
 A Council is a structured critique pass with multiple roles. It is not parallel implementation.
@@ -99,15 +108,16 @@ If parsing fails, the UI must show the raw Markdown report with an "unstructured
 
 ## First Implementation Slice
 
-1. Design evidence format for screenshot variants and council notes.
-2. Design reference library for screenshots, markdown briefs, images, accepted examples, and rejected alternatives.
-3. Screenshot comparison panel in task detail.
-4. Local design Skills for screenshot critique, UI polish, copy tone, and accessibility design review.
-5. Testing and QA run history for backend tests, end-to-end tests, tuning tests, coverage, and code metrics.
-6. Source-code map action that visualizes modules, lines of code, ownership areas, and organization concerns.
-7. Council review prompt with role-separated critique.
-8. "Next version" action that creates a follow-up task from council feedback.
-9. Project-level design memory for accepted visual direction and examples.
+1. Add UX/UI and Test Quality as project-level menu surfaces.
+2. Design evidence format for screenshot variants and council notes.
+3. Design reference library for screenshots, markdown briefs, images, accepted examples, and rejected alternatives.
+4. Screenshot comparison panel in task detail.
+5. Local design Skills for screenshot critique, UI polish, copy tone, and accessibility design review.
+6. Testing and QA run history for backend tests, end-to-end tests, tuning tests, coverage, and code metrics.
+7. Source-code map action that visualizes modules, lines of code, ownership areas, and organization concerns.
+8. Council review prompt with role-separated critique.
+9. "Next version" action that creates a follow-up task from council feedback.
+10. Project-level design memory for accepted visual direction and examples.
 
 ## What This Mockup Is For
 
@@ -116,6 +126,8 @@ This mockup should help future implementation tasks answer:
 - What does a design loop produce?
 - What does the council critique?
 - What references should a design loop read?
+- What belongs under UX/UI on a project?
+- What belongs under Test Quality on a project?
 - Which testing and QA actions are available?
 - Which source-code metrics should be visualized?
 - What does a parseable report contract look like?
