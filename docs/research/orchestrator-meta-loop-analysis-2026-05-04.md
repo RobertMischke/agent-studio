@@ -40,11 +40,11 @@ There is no continuous external supervisor that can ask, in real time, "should t
 
 Runs per project, continuously. Observes Layer 1's state and recent activity. Asks a small fixed set of questions every tick. Surfaces concerns to the user. May (under controlled conditions) intervene: cancel the running CLI, pause job pickup, force-fail a stuck task. Maintains its own append-only protocol so the user can reconstruct what the supervisor saw and decided.
 
-User's words: "Was machst du denn gerade? Ist es denn sinnvoll, was du machst? Sehe ich hier irgendwelche Probleme?"
+User framing: the supervisor should continuously ask what the lower loop is doing, whether that activity still makes sense, and whether any problems are visible.
 
 ### Layer 3 - System review monitor (the auditor)
 
-Runs from outside the app, on stable, on an hours-to-days cadence. Reads the system as a whole: jobs across all projects, recent activity, recent commits, supervisor logs. Produces a periodic structured report: "after ten hours of running, here is what the system has done and here is what looks off." User's words: "ein gedrücktes Meter-Lock, wo man dann halt irgendwie nach zehn Stunden gucken kann, wie sieht es aus."
+Runs from outside the app, on stable, on an hours-to-days cadence. Reads the system as a whole: jobs across all projects, recent activity, recent commits, supervisor logs. Produces a periodic structured report: "after ten hours of running, here is what the system has done and here is what looks off." User framing: a slow external review loop that lets the user inspect system behavior after a long unattended run.
 
 This layer is operationally distinct: not part of the app's runtime, driven externally (Claude Code spawned by the user, or a scheduled task).
 
