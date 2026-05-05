@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-taskboard.local/schemas/agent-artifact-ref.schema.json",
+  "title": "AgentArtifactRef",
+  "description": "Pointer from an AgentMessage to a concrete piece of evidence on disk or in another structured stream. Always a reference, never an inlined blob. Used for screenshots in <job>/results/, log slices in logs/cli-output.log, supervisor advisories in logs/meta/<project>/observations.jsonl, product runtime events, status.md projections, and external diagnostics endpoints. The bus stays small; the artifact is fetched on demand by the UI projection.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "uri"],
+  "properties": {
+    "kind": {
+      "type": "string",
+      "enum": [
+        "screenshot",
+        "log-slice",
+        "status-md",
+        "diff",
+        "markdown-report",
+        "json-document",
+        "supervisor-advisory",
+        "supervisor-intervention",
+        "runtime-event",
+        "transcript",
+        "external"
+      ],
+      "description": "What flavour of artifact this reference points at. Drives how the UI renders the link (image preview, log range, markdown render, raw JSON viewer)."
+    },
+    "uri": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Reference path. Prefer workspace-relative POSIX paths for on-disk artifacts (results/playwright/foo.png, logs/cli-output.log, logs/meta/<project>/observations.jsonl). Use file: for absolute filesystem paths and https: only for external integrations. The reader resolves these against the project root or workspace root depending on the artifact kind."
+    },
+    "label": {
+      "type": ["string", "null"],
+      "description": "Short human-readable label rendered next to the link, e.g. 'Run 3 screenshot', 'observations.jsonl line 42'. Optional; the UI falls back to the basename of the uri."
+    },
+    "byteRange": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Optional byte slice for log-slice artifacts. Lets the timeline link to the exact span of CLI output the message refers to without copying the bytes onto the bus.",
+      "properties": {
+        "start": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Inclusive byte offset within the referenced file."
+        },
+        "end": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Exclusive byte offset within the referenced file."
+        }
+      },
+      "required": ["start", "end"]
+    },
+    "lineRange": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Optional 1-based line slice for log-slice and markdown artifacts when line numbers are more meaningful than bytes.",
+      "properties": {
+        "start": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "end": {
+          "type": "integer",
+          "minimum": 1
+        }
+      },
+      "required": ["start", "end"]
+    },
+    "sha256": {
+      "type": ["string", "null"],
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "Optional content hash, lower-case hex. Helps the system-review monitor confirm an artifact has not been overwritten by a later run before citing it."
+    },
+    "bytes": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Optional artifact size in bytes at write time. Helps the UI decide whether to inline-render or lazy-fetch."
+    }
+  }
+}

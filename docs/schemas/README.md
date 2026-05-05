@@ -17,6 +17,9 @@ Schemas in this folder are the single contract. C# records, TypeScript interface
 - `supervisor-advisory.schema.json` - one entry in `logs/meta/<project>/observations.jsonl`.
 - `supervisor-intervention.schema.json` - one entry in `logs/meta/<project>/interventions.jsonl`.
 - `token-aggregate.schema.json` - per-project rolling totals of tokens, dollars, time-window.
+- `agent-message.schema.json` - one record on the Agent Message Bus, append-only in `logs/bus/<project>/<date>.jsonl`. Contract in [`docs/agent-message-bus.md`](../agent-message-bus.md).
+- `agent-participant.schema.json` - one actor on the bus (user, orchestrator, supervisor, coding agent, supporting agent, system-review, runtime, external).
+- `agent-artifact-ref.schema.json` - typed pointer from a bus message to evidence on disk or another structured stream.
 
 More schemas land here as concepts get formalised (audit findings, performance probes, companion snapshots). Keep one concept per file. Filename is `<concept-kebab>.schema.json`.
 

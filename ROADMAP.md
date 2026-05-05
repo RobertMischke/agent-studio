@@ -236,6 +236,8 @@ The Project Screen should make the bus visible:
 
 Storage stays deliberately simple: many small documents on disk as source of truth, backed by a strongly typed in-memory projection for query, aggregation, and UI speed. No SQL, SQLite, LiteDB, or EF until the file-backed model is proven insufficient. If the bus grows into tens of thousands of documents, the next optimization is indexing and snapshotting inside the in-memory layer, not a premature database migration.
 
+The contract lives in [`docs/agent-message-bus.md`](docs/agent-message-bus.md) with schemas under [`docs/schemas/`](docs/schemas/README.md) (`agent-message`, `agent-participant`, `agent-artifact-ref`). Subsequent slices implement the projection, bridge writers, UI panel, supporting-agent emitters, and system-health reader on top of that contract.
+
 First implementation order:
 
 1. Document the contract in `docs/agent-message-bus.md` and add JSON schemas under `docs/schemas/`.

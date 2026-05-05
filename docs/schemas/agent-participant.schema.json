@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-taskboard.local/schemas/agent-participant.schema.json",
+  "title": "AgentParticipant",
+  "description": "One actor that may emit messages onto the Agent Message Bus. Stable identifier plus presentation metadata. Participants are declared once per workspace and referenced by id from every AgentMessage so the timeline, participant graph, and filters can render without re-deriving identity. Participants are descriptive only; they do not own any queue state, lifecycle authority, or scheduling rights.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "kind", "displayName"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[a-z0-9][a-z0-9._:-]{0,127}$",
+      "description": "Stable kebab-or-colon-separated id, e.g. user, orchestrator, supervisor:my-project, agent:claude, system-review, master-of-disaster, support:security-audit. Used as AgentMessage.participantId. Must be unique within a workspace and must not change once messages reference it."
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "User",
+        "Orchestrator",
+        "Supervisor",
+        "CodingAgent",
+        "SupportingAgent",
+        "SystemReview",
+        "Runtime",
+        "External"
+      ],
+      "description": "Coarse role on the bus. User is a real human input, Orchestrator is the per-project or global pickup loop, Supervisor is the Layer 2 health watcher, CodingAgent is the active CLI editing the repo, SupportingAgent is a user-triggered meta worker (audits, councils, design loops), SystemReview is the Layer 3 master-of-disaster monitor, Runtime is the application itself when it logs lifecycle, External covers integrations such as relay or companion app."
+    },
+    "displayName": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Short human-readable label rendered in the timeline, e.g. You, Orchestrator, Supervisor, Claude, Codex, Security Audit."
+    },
+    "cli": {
+      "type": ["string", "null"],
+      "enum": ["claude", "codex", "copilot", "gemini", null],
+      "description": "When kind is CodingAgent or SupportingAgent and the actor is a CLI, the concrete CLI it is driven by. Null for non-CLI participants (User, Orchestrator, Supervisor, Runtime)."
+    },
+    "skill": {
+      "type": ["string", "null"],
+      "description": "Optional skill or workflow definition this participant is currently executing, e.g. security-review, ux-council, screenshot-critique. Helps filter the timeline by reusable workflow."
+    },
+    "project": {
+      "type": ["string", "null"],
+      "description": "Project name when the participant is scoped to one project (per-project orchestrator, per-project supervisor). Null for workspace-wide actors such as the global orchestrator, system-review, or user."
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp at which this participant record was first written. Optional but recommended; allows cleanup of stale identifiers."
+    }
+  }
+}
