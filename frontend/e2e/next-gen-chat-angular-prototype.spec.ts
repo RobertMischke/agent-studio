@@ -18,7 +18,15 @@ test.describe('@mockup next-gen chat Angular prototype', () => {
     await expect(page.getByTestId('prototype-topbar-runline')).toContainText('42k tokens');
     await expect(page.getByTestId('prototype-topbar-nav')).toHaveCount(0);
     await expect(page.getByTestId('prototype-summary-strip')).toBeVisible();
+    await expect(page.getByTestId('prototype-document-tabs')).toBeVisible();
+    await expect(page.getByTestId('prototype-document-result')).toContainText('Summary');
+    await expect(page.getByTestId('prototype-document-chat')).toContainText('Task Chat');
+    await expect(page.getByTestId('prototype-summary-document')).toContainText('Review ready');
     await expect(page.getByTestId('prototype-pane-result-view')).toContainText('Result summary');
+    await page.screenshot({
+      path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-document-tabs.png'),
+      fullPage: false,
+    });
     const resultPane = page.getByTestId('prototype-pane-result-view');
     await resultPane.getByRole('button', { name: 'Prompt history' }).click();
     await expect(page.getByTestId('prototype-feature-modal')).toContainText('prompt.md');
@@ -104,11 +112,13 @@ test.describe('@mockup next-gen chat Angular prototype', () => {
     await page.getByTestId('prototype-pane-git').click();
     await expect(page.getByTestId('prototype-pane-result-view')).toBeVisible();
     await expect(page.getByTestId('prototype-pane-git-view')).toContainText('Git changes');
+    await expect(page.getByTestId('prototype-document-git')).toContainText('Git changes');
     await page.getByTestId('prototype-pane-all').click();
     await expect(page.getByTestId('prototype-pane-result-view')).toBeVisible();
     await expect(page.getByTestId('prototype-pane-git-view')).toBeVisible();
     await expect(page.getByTestId('prototype-pane-preview-view')).toBeVisible();
     await expect(page.getByTestId('prototype-pane-debug-view')).toBeVisible();
+    await expect(page.getByTestId('prototype-document-debug')).toContainText('Debug trace');
     await page.screenshot({
       path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-all-panes.png'),
       fullPage: false,
@@ -131,6 +141,7 @@ test.describe('@mockup next-gen chat Angular prototype', () => {
 
     await page.getByTestId('prototype-chat-toggle').click();
     await expect(page.getByTestId('prototype-conversation')).toBeHidden();
+    await expect(page.getByTestId('prototype-document-chat')).toHaveCount(0);
     await page.screenshot({
       path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-git-no-chat.png'),
       fullPage: false,
