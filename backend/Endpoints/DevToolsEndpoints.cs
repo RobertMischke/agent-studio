@@ -80,6 +80,23 @@ public static class DevToolsEndpoints
             return Results.Ok(matches);
         });
 
+        // Fixture-marker migration: scan the workspace for fixture-shaped
+        // job folders that pre-date the `fixture: true` flag and report what
+        // would be marked. Dry-run by default; pass apply=true to rewrite
+        // the job.json files. Reuses the DeleteE2EJobs gate since it is the
+        // same one-shot fixture maintenance surface.
+        group.MapGet("/fixtures/scan", (
+            IConfiguration config,
+            FixtureMigrationService migration,
+            bool? apply) =>
+        {
+            if (!config.GetValue<bool>("DevTools:DeleteE2EJobsEnabled"))
+                return Results.StatusCode(StatusCodes.Status403Forbidden);
+
+            var report = migration.Scan(apply == true);
+            return Results.Ok(report);
+        });
+
         group.MapPost("/e2e-jobs/delete", (
             IConfiguration config,
             JobScannerService scanner,

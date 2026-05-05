@@ -103,6 +103,15 @@ public record JobInfo
     /// <c>[[TASK_DONE]]</c> awaiting human accept.
     /// </summary>
     public string? OrchestratorVerdict { get; init; }
+
+    /// <summary>
+    /// True when this job was created by an E2E spec / Playwright fixture and
+    /// should be hidden from the default kanban response. Stored as
+    /// <c>"fixture": true</c> in <c>job.json</c>. Endpoints filter fixtures
+    /// out of <c>/api/jobs</c> and <c>/api/jobs/grouped</c> by default;
+    /// <c>?includeFixtures=true</c> exposes them for debugging.
+    /// </summary>
+    public bool Fixture { get; init; }
 }
 
 /// <summary>
@@ -316,6 +325,14 @@ public record CreateJobRequest
     /// request, then to <see cref="DefaultClientIdentity.Id"/>.
     /// </summary>
     public string? OwnerClientId { get; init; }
+
+    /// <summary>
+    /// When <c>true</c>, the new job is marked as an E2E test fixture and is
+    /// hidden from the default kanban response. Used by Playwright specs that
+    /// create real job folders to keep their fixtures out of the user's view
+    /// on stable.
+    /// </summary>
+    public bool Fixture { get; init; }
 }
 
 public record ReorderRequest

@@ -1052,7 +1052,14 @@ import { NextGenChatWorkbenchPrototypeComponent } from './components/mockups/nex
       border: 1px solid rgba(255,255,255,0.04);
       border-radius: 18px;
       background: rgba(255,255,255,0.015);
-      flex: 0 0 auto;
+      /*
+       * Lane groups grow to share the dashboard's horizontal space so
+       * the board fills 100% of the viewport. Inside each group, the
+       * .column children are flex: 1 1 220px and split the group's
+       * width between them. Below the sum-of-min-widths the dashboard's
+       * overflow-x: auto scrolls horizontally.
+       */
+      flex: 1 1 auto;
     }
     .lane-group__head {
       display: flex;
@@ -1079,8 +1086,11 @@ import { NextGenChatWorkbenchPrototypeComponent } from './components/mockups/nex
       min-width: 0;
       align-items: stretch;
     }
-    /* Each non-collapsed lane keeps its old min-width so the board feels
-       the same when nothing is collapsed. */
+    /* The app-job-column host is transparent to flex layout so the
+       inner .column div participates as the actual flex item with its
+       own flex: 1 1 220px rule. Without this the host's default
+       inline-block sizing pinned columns to their content width and
+       left empty space at the right of the dashboard. */
     .lane-group__lanes > app-job-column { display: contents; }
     .workspace {
       display: grid;
@@ -1477,6 +1487,8 @@ import { NextGenChatWorkbenchPrototypeComponent } from './components/mockups/nex
       padding: 16px;
       background: var(--surface-2, #1e1e2e);
       align-items: stretch;
+      width: 100%;
+      max-width: none;
     }
     .app--kanban-spec-v1 .lane-group {
       display: contents;

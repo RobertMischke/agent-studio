@@ -62,6 +62,15 @@ export interface CreateJobInput {
   model?: string;
   promptMarkdown?: string;
   targetState?: string; // default '1-preparation'; we usually want '2-ready'
+  /**
+   * When true, the new job is marked as a Playwright / E2E fixture
+   * (`fixture: true` in job.json) and is hidden from the default
+   * `/api/jobs` and `/api/jobs/grouped` responses on stable. Tests can
+   * still observe their own fixtures via `?includeFixtures=true`.
+   * Defaults to `true` so spec authors do not have to remember the flag;
+   * pass `false` only when a spec genuinely needs to plant a "real" job.
+   */
+  fixture?: boolean;
 }
 
 export async function createJob(input: CreateJobInput): Promise<{ id: string }> {
@@ -75,7 +84,8 @@ export async function createJob(input: CreateJobInput): Promise<{ id: string }> 
       cliType: input.cliType ?? 'claude',
       model: input.model ?? null,
       promptMarkdown: input.promptMarkdown ?? null,
-      targetState: input.targetState ?? '2-ready'
+      targetState: input.targetState ?? '2-ready',
+      fixture: input.fixture ?? true
     })
   });
 }

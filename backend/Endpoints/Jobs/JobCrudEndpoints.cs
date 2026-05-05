@@ -17,18 +17,20 @@ public static class JobCrudEndpoints
 {
     public static void MapJobCrudEndpoints(this RouteGroupBuilder group)
     {
-        group.MapGet("/", (JobScannerService scanner, CliRouter router, TaskRunnerService runners, TokenSummaryService tokens, IConfiguration configuration) =>
+        group.MapGet("/", (bool? includeFixtures, JobScannerService scanner, CliRouter router, TaskRunnerService runners, TokenSummaryService tokens, IConfiguration configuration) =>
         {
             var raw = scanner.ScanAllJobs();
+            if (includeFixtures != true) raw = raw.Where(j => !j.Fixture).ToList();
             var tokenLookup = BuildTokenLookup(raw, tokens);
             var verdictLookup = BuildOrchestratorVerdictLookup(raw, configuration);
             var jobs = raw.Select(job => WithRuntime(job, router, runners, tokenLookup, verdictLookup)).ToList();
             return Results.Ok(jobs);
         });
 
-        group.MapGet("/grouped", (JobScannerService scanner, CliRouter router, TaskRunnerService runners, TokenSummaryService tokens, IConfiguration configuration) =>
+        group.MapGet("/grouped", (bool? includeFixtures, JobScannerService scanner, CliRouter router, TaskRunnerService runners, TokenSummaryService tokens, IConfiguration configuration) =>
         {
             var raw = scanner.ScanAllJobs();
+            if (includeFixtures != true) raw = raw.Where(j => !j.Fixture).ToList();
             var tokenLookup = BuildTokenLookup(raw, tokens);
             var verdictLookup = BuildOrchestratorVerdictLookup(raw, configuration);
             var jobs = raw.Select(job => WithRuntime(job, router, runners, tokenLookup, verdictLookup)).ToList();

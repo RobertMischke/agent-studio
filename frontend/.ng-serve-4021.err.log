@@ -1,0 +1,2508 @@
+[1m[31m[2m16:18:31[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs[31m
+Error: read ECONNRESET
+    at TCP.onStreamRead (node:internal/stream_base_commons:216:20)[39m[22m
+[1m[31m[2m16:18:31[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs/grouped[31m
+Error: read ECONNRESET
+    at TCP.onStreamRead (node:internal/stream_base_commons:216:20)[39m[22m
+[1m[31m[2m16:18:31[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/status[31m
+Error: read ECONNRESET
+    at TCP.onStreamRead (node:internal/stream_base_commons:216:20)[39m[22m
+[1m[31m[2m16:18:33[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:33[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs/grouped[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:33[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/status[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:35[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:35[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs/grouped[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:35[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/status[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:37[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:37[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs/grouped[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:37[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/status[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:39[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:39[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs/grouped[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:39[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/status[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:41[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:41[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs/grouped[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:41[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/status[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:43[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:43[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs/grouped[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:43[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/status[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:45[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:45[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs/grouped[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:45[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/status[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:47[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:47[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs/grouped[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:47[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/status[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:49[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:49[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs/grouped[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:49[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/status[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:49[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:49[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:51[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:51[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs/grouped[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:51[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/status[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:53[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:53[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs/grouped[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:53[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/status[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:55[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:55[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs/grouped[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:55[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/status[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:57[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:57[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs/grouped[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:57[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/status[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:59[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:59[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs/grouped[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:18:59[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/status[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:01[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:01[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs/grouped[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:01[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/status[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:03[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:03[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs/grouped[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:03[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/status[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:05[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:05[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs/grouped[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:05[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/status[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'getProjectAutonomyLevel' does not exist on type 'JobService'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/autonomy-slider.ts:76:20:
+[37m      76 │     this.jobService.[32mgetProjectAutonomyLevel[37m(this.projectName()).su...
+         ╵                     [32m~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS7006: Parameter 'resp' implicitly has an 'any' type.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/autonomy-slider.ts:77:13:
+[37m      77 │       next: ([32mresp[37m) => this.level.set(this.clamp(resp?.level ?? 2)),
+         ╵              [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'setProjectAutonomyLevel' does not exist on type 'JobService'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/autonomy-slider.ts:86:20:
+[37m      86 │     this.jobService.[32msetProjectAutonomyLevel[37m(this.projectName(), cl...
+         ╵                     [32m~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+[39m[22m
+[1m[31m[2m16:19:07[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:07[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs/grouped[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:07[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/status[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:09[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:09[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs/grouped[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:09[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/status[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:11[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:11[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs/grouped[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:11[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/status[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:13[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:13[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs/grouped[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:13[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/status[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:15[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:15[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs/grouped[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:15[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/status[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:16[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/environment[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:16[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:16[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs/grouped[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:16[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/status[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:16[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/watch-paths[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:16[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/environment[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:16[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/clients/[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:16[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/copilot/models[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:16[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/status[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:16[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:16[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate/cached[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:16[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:16[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:16[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:18[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:18[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs/grouped[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:18[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/status[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:20[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:20[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs/grouped[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:20[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/status[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:22[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:22[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs/grouped[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:22[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/status[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:46[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:19:46[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:20:16[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:20:16[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:20:16[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:20:16[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:20:46[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:20:46[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:21:16[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:21:16[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:21:16[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:21:16[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:21:46[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:21:46[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:22:16[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:22:16[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:22:16[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:22:16[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'activityItems' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:37:22:
+[37m      37 │         @for (item of [32mactivityItems[37m; track item.label) {
+         ╵                       [32m~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:43:28:
+[37m      43 │               @for (path of [32miconPath[37m(item.icon); track path) {
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:52:26:
+[37m      52 │             @for (path of [32miconPath[37m('close'); track path) {
+         ╵                           [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:67:28:
+[37m      67 │               @for (path of [32miconPath[37m(density() === 'compact' ? 'ex...
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:74:28:
+[37m      74 │               @for (path of [32miconPath[37m(theme() === 'light' ? 'sun' :...
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:81:28:
+[37m      81 │               @for (path of [32miconPath[37m('command'); track path) {
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:88:28:
+[37m      88 │               @for (path of [32miconPath[37m('bug'); track path) {
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:95:28:
+[37m      95 │               @for (path of [32miconPath[37m('close'); track path) {
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'guideOpen' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:122:90:
+[37m      122 │ ...xplain this rail" (click)="[32mguideOpen[37m.set(true)" data-testid="p...
+          ╵                               [32m~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:124:32:
+[37m      124 │                   @for (path of [32miconPath[37m('panel'); track path) {
+          ╵                                 [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'taskTabs' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:133:29:
+[37m      133 │                 @for (tab of [32mtaskTabs[37m; track tab.label) {
+          ╵                              [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:138:36:
+[37m      138 │ ...                  @for (path of [32miconPath[37m(tab.icon); track path) {
+          ╵                                    [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:154:36:
+[37m      154 │ ...                 @for (path of [32miconPath[37m(chip.icon); track path) {
+          ╵                                   [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:172:36:
+[37m      172 │ ...                 @for (path of [32miconPath[37m(mode.icon); track path) {
+          ╵                                   [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'icon' does not exist on type '{ id: WorkbenchPane; label: string; short: string; }'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:172:50:
+[37m      172 │ ...                 @for (path of iconPath(mode.[32micon[37m); track path) {
+          ╵                                                 [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:188:36:
+[37m      188 │ ...             @for (path of [32miconPath[37m(scenario.icon); track path) {
+          ╵                               [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'icon' does not exist on type '{ id: Scenario; label: string; }'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:188:54:
+[37m      188 │ ...             @for (path of iconPath(scenario.[32micon[37m); track path) {
+          ╵                                                 [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:206:36:
+[37m      206 │                       @for (path of [32miconPath[37m('code'); track path) {
+          ╵                                     [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:214:36:
+[37m      214 │                       @for (path of [32miconPath[37m('bug'); track path) {
+          ╵                                     [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:277:40:
+[37m      277 │ ...                    @for (path of [32miconPath[37m('plus'); track path) {
+          ╵                                      [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:290:40:
+[37m      290 │ ...                    @for (path of [32miconPath[37m('play'); track path) {
+          ╵                                      [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:311:40:
+[37m      311 │ ...                   @for (path of [32miconPath[37m('close'); track path) {
+          ╵                                     [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:318:40:
+[37m      318 │ ...                     @for (path of [32miconPath[37m('bug'); track path) {
+          ╵                                       [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:422:30:
+[37m      422 │                 @for (path of [32miconPath[37m(sideSheetOpen() ? 'panelCl...
+          ╵                               [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'guideOpen' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:496:11:
+[37m      496 │       @if ([32mguideOpen[37m()) {
+          ╵            [32m~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'guideOpen' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:497:77:
+[37m      497 │ ...stid="prototype-rail-guide-modal" (click)="[32mguideOpen[37m.set(false)">
+          ╵                                               [32m~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'guideOpen' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:501:31:
+[37m      501 │               <button (click)="[32mguideOpen[37m.set(false)">Close</button>
+          ╵                                [32m~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2741: Property 'icon' is missing in type '{ value: string; label: string; pane: "result"; tone: "ok"; }' but required in type 'SummaryChip'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:1622:4:
+[37m      1622 │     [32m{ value: 'Review', label: 'run 4', pane: 'result', tone: 'ok[37m...
+           ╵     [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+  'icon' is declared here.
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:12:2:
+[37m      12 │   [32micon[37m: string;
+         ╵   [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2741: Property 'icon' is missing in type '{ value: string; label: string; pane: "debug"; tone: "warn"; }' but required in type 'SummaryChip'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:1623:4:
+[37m      1623 │     [32m{ value: '42k', label: 'tokens', pane: 'debug', tone: 'warn' }[37m,
+           ╵     [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+  'icon' is declared here.
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:12:2:
+[37m      12 │   [32micon[37m: string;
+         ╵   [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2741: Property 'icon' is missing in type '{ value: string; label: string; pane: "git"; }' but required in type 'SummaryChip'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:1624:4:
+[37m      1624 │     [32m{ value: '3', label: 'commits', pane: 'git' }[37m,
+           ╵     [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+  'icon' is declared here.
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:12:2:
+[37m      12 │   [32micon[37m: string;
+         ╵   [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2741: Property 'icon' is missing in type '{ value: string; label: string; pane: "git"; }' but required in type 'SummaryChip'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:1625:4:
+[37m      1625 │     [32m{ value: '8', label: 'files', pane: 'git' }[37m,
+           ╵     [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+  'icon' is declared here.
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:12:2:
+[37m      12 │   [32micon[37m: string;
+         ╵   [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2741: Property 'icon' is missing in type '{ value: string; label: string; pane: "preview"; }' but required in type 'SummaryChip'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:1626:4:
+[37m      1626 │     [32m{ value: '4', label: 'images', pane: 'preview' }[37m,
+           ╵     [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+  'icon' is declared here.
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:12:2:
+[37m      12 │   [32micon[37m: string;
+         ╵   [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2741: Property 'icon' is missing in type '{ value: string; label: string; pane: "debug"; tone: "danger"; }' but required in type 'SummaryChip'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:1627:4:
+[37m      1627 │     [32m{ value: '1', label: 'failed retry', pane: 'debug', tone: 'd[37m...
+           ╵     [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+  'icon' is declared here.
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:12:2:
+[37m      12 │   [32micon[37m: string;
+         ╵   [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2741: Property 'icon' is missing in type '{ value: string; label: string; pane: "result"; }' but required in type 'SummaryChip'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:1628:4:
+[37m      1628 │     [32m{ value: '12m', label: 'active', pane: 'result' }[37m,
+           ╵     [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+  'icon' is declared here.
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:12:2:
+[37m      12 │   [32micon[37m: string;
+         ╵   [32m~~~~[0m
+
+[39m[22m
+[1m[31m[2m16:23:16[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:23:16[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:23:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:23:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'activityItems' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:37:22:
+[37m      37 │         @for (item of [32mactivityItems[37m; track item.label) {
+         ╵                       [32m~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:43:28:
+[37m      43 │               @for (path of [32miconPath[37m(item.icon); track path) {
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:52:26:
+[37m      52 │             @for (path of [32miconPath[37m('close'); track path) {
+         ╵                           [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:67:28:
+[37m      67 │               @for (path of [32miconPath[37m(density() === 'compact' ? 'ex...
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:74:28:
+[37m      74 │               @for (path of [32miconPath[37m(theme() === 'light' ? 'sun' :...
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:81:28:
+[37m      81 │               @for (path of [32miconPath[37m('command'); track path) {
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:88:28:
+[37m      88 │               @for (path of [32miconPath[37m('bug'); track path) {
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:95:28:
+[37m      95 │               @for (path of [32miconPath[37m('close'); track path) {
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'guideOpen' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:122:90:
+[37m      122 │ ...xplain this rail" (click)="[32mguideOpen[37m.set(true)" data-testid="p...
+          ╵                               [32m~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:124:32:
+[37m      124 │                   @for (path of [32miconPath[37m('panel'); track path) {
+          ╵                                 [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'taskTabs' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:133:29:
+[37m      133 │                 @for (tab of [32mtaskTabs[37m; track tab.label) {
+          ╵                              [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:138:36:
+[37m      138 │ ...                  @for (path of [32miconPath[37m(tab.icon); track path) {
+          ╵                                    [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:154:36:
+[37m      154 │ ...                 @for (path of [32miconPath[37m(chip.icon); track path) {
+          ╵                                   [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:172:36:
+[37m      172 │ ...                 @for (path of [32miconPath[37m(mode.icon); track path) {
+          ╵                                   [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'icon' does not exist on type '{ id: WorkbenchPane; label: string; short: string; }'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:172:50:
+[37m      172 │ ...                 @for (path of iconPath(mode.[32micon[37m); track path) {
+          ╵                                                 [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:188:36:
+[37m      188 │ ...             @for (path of [32miconPath[37m(scenario.icon); track path) {
+          ╵                               [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'icon' does not exist on type '{ id: Scenario; label: string; }'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:188:54:
+[37m      188 │ ...             @for (path of iconPath(scenario.[32micon[37m); track path) {
+          ╵                                                 [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:206:36:
+[37m      206 │                       @for (path of [32miconPath[37m('code'); track path) {
+          ╵                                     [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:214:36:
+[37m      214 │                       @for (path of [32miconPath[37m('bug'); track path) {
+          ╵                                     [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:277:40:
+[37m      277 │ ...                    @for (path of [32miconPath[37m('plus'); track path) {
+          ╵                                      [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:290:40:
+[37m      290 │ ...                    @for (path of [32miconPath[37m('play'); track path) {
+          ╵                                      [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:311:40:
+[37m      311 │ ...                   @for (path of [32miconPath[37m('close'); track path) {
+          ╵                                     [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:318:40:
+[37m      318 │ ...                     @for (path of [32miconPath[37m('bug'); track path) {
+          ╵                                       [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:422:30:
+[37m      422 │                 @for (path of [32miconPath[37m(sideSheetOpen() ? 'panelCl...
+          ╵                               [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'guideOpen' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:496:11:
+[37m      496 │       @if ([32mguideOpen[37m()) {
+          ╵            [32m~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'guideOpen' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:497:77:
+[37m      497 │ ...stid="prototype-rail-guide-modal" (click)="[32mguideOpen[37m.set(false)">
+          ╵                                               [32m~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'guideOpen' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:501:31:
+[37m      501 │               <button (click)="[32mguideOpen[37m.set(false)">Close</button>
+          ╵                                [32m~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2741: Property 'icon' is missing in type '{ value: string; label: string; pane: "result"; tone: "ok"; }' but required in type 'SummaryChip'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:1640:4:
+[37m      1640 │     [32m{ value: 'Review', label: 'run 4', pane: 'result', tone: 'ok[37m...
+           ╵     [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+  'icon' is declared here.
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:12:2:
+[37m      12 │   [32micon[37m: string;
+         ╵   [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2741: Property 'icon' is missing in type '{ value: string; label: string; pane: "debug"; tone: "warn"; }' but required in type 'SummaryChip'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:1641:4:
+[37m      1641 │     [32m{ value: '42k', label: 'tokens', pane: 'debug', tone: 'warn' }[37m,
+           ╵     [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+  'icon' is declared here.
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:12:2:
+[37m      12 │   [32micon[37m: string;
+         ╵   [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2741: Property 'icon' is missing in type '{ value: string; label: string; pane: "git"; }' but required in type 'SummaryChip'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:1642:4:
+[37m      1642 │     [32m{ value: '3', label: 'commits', pane: 'git' }[37m,
+           ╵     [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+  'icon' is declared here.
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:12:2:
+[37m      12 │   [32micon[37m: string;
+         ╵   [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2741: Property 'icon' is missing in type '{ value: string; label: string; pane: "git"; }' but required in type 'SummaryChip'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:1643:4:
+[37m      1643 │     [32m{ value: '8', label: 'files', pane: 'git' }[37m,
+           ╵     [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+  'icon' is declared here.
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:12:2:
+[37m      12 │   [32micon[37m: string;
+         ╵   [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2741: Property 'icon' is missing in type '{ value: string; label: string; pane: "preview"; }' but required in type 'SummaryChip'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:1644:4:
+[37m      1644 │     [32m{ value: '4', label: 'images', pane: 'preview' }[37m,
+           ╵     [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+  'icon' is declared here.
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:12:2:
+[37m      12 │   [32micon[37m: string;
+         ╵   [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2741: Property 'icon' is missing in type '{ value: string; label: string; pane: "debug"; tone: "danger"; }' but required in type 'SummaryChip'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:1645:4:
+[37m      1645 │     [32m{ value: '1', label: 'failed retry', pane: 'debug', tone: 'd[37m...
+           ╵     [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+  'icon' is declared here.
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:12:2:
+[37m      12 │   [32micon[37m: string;
+         ╵   [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2741: Property 'icon' is missing in type '{ value: string; label: string; pane: "result"; }' but required in type 'SummaryChip'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:1646:4:
+[37m      1646 │     [32m{ value: '12m', label: 'active', pane: 'result' }[37m,
+           ╵     [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+  'icon' is declared here.
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:12:2:
+[37m      12 │   [32micon[37m: string;
+         ╵   [32m~~~~[0m
+
+[39m[22m
+[1m[31m[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'activityItems' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:37:22:
+[37m      37 │         @for (item of [32mactivityItems[37m; track item.label) {
+         ╵                       [32m~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:43:28:
+[37m      43 │               @for (path of [32miconPath[37m(item.icon); track path) {
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:52:26:
+[37m      52 │             @for (path of [32miconPath[37m('close'); track path) {
+         ╵                           [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:67:28:
+[37m      67 │               @for (path of [32miconPath[37m(density() === 'compact' ? 'ex...
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:74:28:
+[37m      74 │               @for (path of [32miconPath[37m(theme() === 'light' ? 'sun' :...
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:81:28:
+[37m      81 │               @for (path of [32miconPath[37m('command'); track path) {
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:88:28:
+[37m      88 │               @for (path of [32miconPath[37m('bug'); track path) {
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:95:28:
+[37m      95 │               @for (path of [32miconPath[37m('close'); track path) {
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'guideOpen' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:122:90:
+[37m      122 │ ...xplain this rail" (click)="[32mguideOpen[37m.set(true)" data-testid="p...
+          ╵                               [32m~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:124:32:
+[37m      124 │                   @for (path of [32miconPath[37m('panel'); track path) {
+          ╵                                 [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'taskTabs' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:133:29:
+[37m      133 │                 @for (tab of [32mtaskTabs[37m; track tab.label) {
+          ╵                              [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:138:36:
+[37m      138 │ ...                  @for (path of [32miconPath[37m(tab.icon); track path) {
+          ╵                                    [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:154:36:
+[37m      154 │ ...                 @for (path of [32miconPath[37m(chip.icon); track path) {
+          ╵                                   [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:172:36:
+[37m      172 │ ...                 @for (path of [32miconPath[37m(mode.icon); track path) {
+          ╵                                   [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'icon' does not exist on type '{ id: WorkbenchPane; label: string; short: string; }'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:172:50:
+[37m      172 │ ...                 @for (path of iconPath(mode.[32micon[37m); track path) {
+          ╵                                                 [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:188:36:
+[37m      188 │ ...             @for (path of [32miconPath[37m(scenario.icon); track path) {
+          ╵                               [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'icon' does not exist on type '{ id: Scenario; label: string; }'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:188:54:
+[37m      188 │ ...             @for (path of iconPath(scenario.[32micon[37m); track path) {
+          ╵                                                 [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:206:36:
+[37m      206 │                       @for (path of [32miconPath[37m('code'); track path) {
+          ╵                                     [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:214:36:
+[37m      214 │                       @for (path of [32miconPath[37m('bug'); track path) {
+          ╵                                     [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:277:40:
+[37m      277 │ ...                    @for (path of [32miconPath[37m('plus'); track path) {
+          ╵                                      [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:290:40:
+[37m      290 │ ...                    @for (path of [32miconPath[37m('play'); track path) {
+          ╵                                      [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:311:40:
+[37m      311 │ ...                   @for (path of [32miconPath[37m('close'); track path) {
+          ╵                                     [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:318:40:
+[37m      318 │ ...                     @for (path of [32miconPath[37m('bug'); track path) {
+          ╵                                       [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:422:30:
+[37m      422 │                 @for (path of [32miconPath[37m(sideSheetOpen() ? 'panelCl...
+          ╵                               [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'guideOpen' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:496:11:
+[37m      496 │       @if ([32mguideOpen[37m()) {
+          ╵            [32m~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'guideOpen' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:497:77:
+[37m      497 │ ...stid="prototype-rail-guide-modal" (click)="[32mguideOpen[37m.set(false)">
+          ╵                                               [32m~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'guideOpen' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:501:31:
+[37m      501 │               <button (click)="[32mguideOpen[37m.set(false)">Close</button>
+          ╵                                [32m~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2741: Property 'icon' is missing in type '{ value: string; label: string; pane: "result"; tone: "ok"; }' but required in type 'SummaryChip'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:1715:4:
+[37m      1715 │     [32m{ value: 'Review', label: 'run 4', pane: 'result', tone: 'ok[37m...
+           ╵     [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+  'icon' is declared here.
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:12:2:
+[37m      12 │   [32micon[37m: string;
+         ╵   [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2741: Property 'icon' is missing in type '{ value: string; label: string; pane: "debug"; tone: "warn"; }' but required in type 'SummaryChip'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:1716:4:
+[37m      1716 │     [32m{ value: '42k', label: 'tokens', pane: 'debug', tone: 'warn' }[37m,
+           ╵     [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+  'icon' is declared here.
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:12:2:
+[37m      12 │   [32micon[37m: string;
+         ╵   [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2741: Property 'icon' is missing in type '{ value: string; label: string; pane: "git"; }' but required in type 'SummaryChip'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:1717:4:
+[37m      1717 │     [32m{ value: '3', label: 'commits', pane: 'git' }[37m,
+           ╵     [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+  'icon' is declared here.
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:12:2:
+[37m      12 │   [32micon[37m: string;
+         ╵   [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2741: Property 'icon' is missing in type '{ value: string; label: string; pane: "git"; }' but required in type 'SummaryChip'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:1718:4:
+[37m      1718 │     [32m{ value: '8', label: 'files', pane: 'git' }[37m,
+           ╵     [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+  'icon' is declared here.
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:12:2:
+[37m      12 │   [32micon[37m: string;
+         ╵   [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2741: Property 'icon' is missing in type '{ value: string; label: string; pane: "preview"; }' but required in type 'SummaryChip'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:1719:4:
+[37m      1719 │     [32m{ value: '4', label: 'images', pane: 'preview' }[37m,
+           ╵     [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+  'icon' is declared here.
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:12:2:
+[37m      12 │   [32micon[37m: string;
+         ╵   [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2741: Property 'icon' is missing in type '{ value: string; label: string; pane: "debug"; tone: "danger"; }' but required in type 'SummaryChip'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:1720:4:
+[37m      1720 │     [32m{ value: '1', label: 'failed retry', pane: 'debug', tone: 'd[37m...
+           ╵     [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+  'icon' is declared here.
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:12:2:
+[37m      12 │   [32micon[37m: string;
+         ╵   [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2741: Property 'icon' is missing in type '{ value: string; label: string; pane: "result"; }' but required in type 'SummaryChip'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:1721:4:
+[37m      1721 │     [32m{ value: '12m', label: 'active', pane: 'result' }[37m,
+           ╵     [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+  'icon' is declared here.
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:12:2:
+[37m      12 │   [32micon[37m: string;
+         ╵   [32m~~~~[0m
+
+[39m[22m
+[1m[31m[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'activityItems' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:37:22:
+[37m      37 │         @for (item of [32mactivityItems[37m; track item.label) {
+         ╵                       [32m~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:43:28:
+[37m      43 │               @for (path of [32miconPath[37m(item.icon); track path) {
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:52:26:
+[37m      52 │             @for (path of [32miconPath[37m('close'); track path) {
+         ╵                           [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:67:28:
+[37m      67 │               @for (path of [32miconPath[37m(density() === 'compact' ? 'ex...
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:74:28:
+[37m      74 │               @for (path of [32miconPath[37m(theme() === 'light' ? 'sun' :...
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:81:28:
+[37m      81 │               @for (path of [32miconPath[37m('command'); track path) {
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:88:28:
+[37m      88 │               @for (path of [32miconPath[37m('bug'); track path) {
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:95:28:
+[37m      95 │               @for (path of [32miconPath[37m('close'); track path) {
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'guideOpen' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:122:90:
+[37m      122 │ ...xplain this rail" (click)="[32mguideOpen[37m.set(true)" data-testid="p...
+          ╵                               [32m~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:124:32:
+[37m      124 │                   @for (path of [32miconPath[37m('panel'); track path) {
+          ╵                                 [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'taskTabs' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:133:29:
+[37m      133 │                 @for (tab of [32mtaskTabs[37m; track tab.label) {
+          ╵                              [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:138:36:
+[37m      138 │ ...                  @for (path of [32miconPath[37m(tab.icon); track path) {
+          ╵                                    [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:154:36:
+[37m      154 │ ...                 @for (path of [32miconPath[37m(chip.icon); track path) {
+          ╵                                   [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:172:36:
+[37m      172 │ ...                 @for (path of [32miconPath[37m(mode.icon); track path) {
+          ╵                                   [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'icon' does not exist on type '{ id: WorkbenchPane; label: string; short: string; }'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:172:50:
+[37m      172 │ ...                 @for (path of iconPath(mode.[32micon[37m); track path) {
+          ╵                                                 [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:188:36:
+[37m      188 │ ...             @for (path of [32miconPath[37m(scenario.icon); track path) {
+          ╵                               [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'icon' does not exist on type '{ id: Scenario; label: string; }'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:188:54:
+[37m      188 │ ...             @for (path of iconPath(scenario.[32micon[37m); track path) {
+          ╵                                                 [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:206:36:
+[37m      206 │                       @for (path of [32miconPath[37m('code'); track path) {
+          ╵                                     [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:214:36:
+[37m      214 │                       @for (path of [32miconPath[37m('bug'); track path) {
+          ╵                                     [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:277:40:
+[37m      277 │ ...                    @for (path of [32miconPath[37m('plus'); track path) {
+          ╵                                      [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:290:40:
+[37m      290 │ ...                    @for (path of [32miconPath[37m('play'); track path) {
+          ╵                                      [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:311:40:
+[37m      311 │ ...                   @for (path of [32miconPath[37m('close'); track path) {
+          ╵                                     [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:318:40:
+[37m      318 │ ...                     @for (path of [32miconPath[37m('bug'); track path) {
+          ╵                                       [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:422:30:
+[37m      422 │                 @for (path of [32miconPath[37m(sideSheetOpen() ? 'panelCl...
+          ╵                               [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'guideOpen' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:496:11:
+[37m      496 │       @if ([32mguideOpen[37m()) {
+          ╵            [32m~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'guideOpen' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:497:77:
+[37m      497 │ ...stid="prototype-rail-guide-modal" (click)="[32mguideOpen[37m.set(false)">
+          ╵                                               [32m~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'guideOpen' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:501:31:
+[37m      501 │               <button (click)="[32mguideOpen[37m.set(false)">Close</button>
+          ╵                                [32m~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2741: Property 'icon' is missing in type '{ value: string; label: string; pane: "result"; tone: "ok"; }' but required in type 'SummaryChip'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:1726:4:
+[37m      1726 │     [32m{ value: 'Review', label: 'run 4', pane: 'result', tone: 'ok[37m...
+           ╵     [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+  'icon' is declared here.
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:12:2:
+[37m      12 │   [32micon[37m: string;
+         ╵   [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2741: Property 'icon' is missing in type '{ value: string; label: string; pane: "debug"; tone: "warn"; }' but required in type 'SummaryChip'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:1727:4:
+[37m      1727 │     [32m{ value: '42k', label: 'tokens', pane: 'debug', tone: 'warn' }[37m,
+           ╵     [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+  'icon' is declared here.
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:12:2:
+[37m      12 │   [32micon[37m: string;
+         ╵   [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2741: Property 'icon' is missing in type '{ value: string; label: string; pane: "git"; }' but required in type 'SummaryChip'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:1728:4:
+[37m      1728 │     [32m{ value: '3', label: 'commits', pane: 'git' }[37m,
+           ╵     [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+  'icon' is declared here.
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:12:2:
+[37m      12 │   [32micon[37m: string;
+         ╵   [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2741: Property 'icon' is missing in type '{ value: string; label: string; pane: "git"; }' but required in type 'SummaryChip'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:1729:4:
+[37m      1729 │     [32m{ value: '8', label: 'files', pane: 'git' }[37m,
+           ╵     [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+  'icon' is declared here.
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:12:2:
+[37m      12 │   [32micon[37m: string;
+         ╵   [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2741: Property 'icon' is missing in type '{ value: string; label: string; pane: "preview"; }' but required in type 'SummaryChip'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:1730:4:
+[37m      1730 │     [32m{ value: '4', label: 'images', pane: 'preview' }[37m,
+           ╵     [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+  'icon' is declared here.
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:12:2:
+[37m      12 │   [32micon[37m: string;
+         ╵   [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2741: Property 'icon' is missing in type '{ value: string; label: string; pane: "debug"; tone: "danger"; }' but required in type 'SummaryChip'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:1731:4:
+[37m      1731 │     [32m{ value: '1', label: 'failed retry', pane: 'debug', tone: 'd[37m...
+           ╵     [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+  'icon' is declared here.
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:12:2:
+[37m      12 │   [32micon[37m: string;
+         ╵   [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2741: Property 'icon' is missing in type '{ value: string; label: string; pane: "result"; }' but required in type 'SummaryChip'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:1732:4:
+[37m      1732 │     [32m{ value: '12m', label: 'active', pane: 'result' }[37m,
+           ╵     [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+  'icon' is declared here.
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:12:2:
+[37m      12 │   [32micon[37m: string;
+         ╵   [32m~~~~[0m
+
+[39m[22m
+[1m[31m[2m16:24:16[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:24:16[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'activityItems' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:37:22:
+[37m      37 │         @for (item of [32mactivityItems[37m; track item.label) {
+         ╵                       [32m~~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:43:28:
+[37m      43 │               @for (path of [32miconPath[37m(item.icon); track path) {
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:52:26:
+[37m      52 │             @for (path of [32miconPath[37m('close'); track path) {
+         ╵                           [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:67:28:
+[37m      67 │               @for (path of [32miconPath[37m(density() === 'compact' ? 'ex...
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:74:28:
+[37m      74 │               @for (path of [32miconPath[37m(theme() === 'light' ? 'sun' :...
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:81:28:
+[37m      81 │               @for (path of [32miconPath[37m('command'); track path) {
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:88:28:
+[37m      88 │               @for (path of [32miconPath[37m('bug'); track path) {
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:95:28:
+[37m      95 │               @for (path of [32miconPath[37m('close'); track path) {
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'guideOpen' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:122:90:
+[37m      122 │ ...xplain this rail" (click)="[32mguideOpen[37m.set(true)" data-testid="p...
+          ╵                               [32m~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:124:32:
+[37m      124 │                   @for (path of [32miconPath[37m('panel'); track path) {
+          ╵                                 [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'taskTabs' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:133:29:
+[37m      133 │                 @for (tab of [32mtaskTabs[37m; track tab.label) {
+          ╵                              [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:138:36:
+[37m      138 │ ...                  @for (path of [32miconPath[37m(tab.icon); track path) {
+          ╵                                    [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:154:36:
+[37m      154 │ ...                 @for (path of [32miconPath[37m(chip.icon); track path) {
+          ╵                                   [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:172:36:
+[37m      172 │ ...                 @for (path of [32miconPath[37m(mode.icon); track path) {
+          ╵                                   [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'icon' does not exist on type '{ id: WorkbenchPane; label: string; short: string; }'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:172:50:
+[37m      172 │ ...                 @for (path of iconPath(mode.[32micon[37m); track path) {
+          ╵                                                 [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:188:36:
+[37m      188 │ ...             @for (path of [32miconPath[37m(scenario.icon); track path) {
+          ╵                               [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'icon' does not exist on type '{ id: Scenario; label: string; }'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:188:54:
+[37m      188 │ ...             @for (path of iconPath(scenario.[32micon[37m); track path) {
+          ╵                                                 [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:206:36:
+[37m      206 │                       @for (path of [32miconPath[37m('code'); track path) {
+          ╵                                     [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:214:36:
+[37m      214 │                       @for (path of [32miconPath[37m('bug'); track path) {
+          ╵                                     [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:277:40:
+[37m      277 │ ...                    @for (path of [32miconPath[37m('plus'); track path) {
+          ╵                                      [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:290:40:
+[37m      290 │ ...                    @for (path of [32miconPath[37m('play'); track path) {
+          ╵                                      [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:311:40:
+[37m      311 │ ...                   @for (path of [32miconPath[37m('close'); track path) {
+          ╵                                     [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:318:40:
+[37m      318 │ ...                     @for (path of [32miconPath[37m('bug'); track path) {
+          ╵                                       [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:422:30:
+[37m      422 │                 @for (path of [32miconPath[37m(sideSheetOpen() ? 'panelCl...
+          ╵                               [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'guideOpen' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:496:11:
+[37m      496 │       @if ([32mguideOpen[37m()) {
+          ╵            [32m~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'guideOpen' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:497:77:
+[37m      497 │ ...stid="prototype-rail-guide-modal" (click)="[32mguideOpen[37m.set(false)">
+          ╵                                               [32m~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'guideOpen' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:501:31:
+[37m      501 │               <button (click)="[32mguideOpen[37m.set(false)">Close</button>
+          ╵                                [32m~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2741: Property 'icon' is missing in type '{ value: string; label: string; pane: "result"; tone: "ok"; }' but required in type 'SummaryChip'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:1788:4:
+[37m      1788 │     [32m{ value: 'Review', label: 'run 4', pane: 'result', tone: 'ok[37m...
+           ╵     [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+  'icon' is declared here.
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:12:2:
+[37m      12 │   [32micon[37m: string;
+         ╵   [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2741: Property 'icon' is missing in type '{ value: string; label: string; pane: "debug"; tone: "warn"; }' but required in type 'SummaryChip'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:1789:4:
+[37m      1789 │     [32m{ value: '42k', label: 'tokens', pane: 'debug', tone: 'warn' }[37m,
+           ╵     [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+  'icon' is declared here.
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:12:2:
+[37m      12 │   [32micon[37m: string;
+         ╵   [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2741: Property 'icon' is missing in type '{ value: string; label: string; pane: "git"; }' but required in type 'SummaryChip'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:1790:4:
+[37m      1790 │     [32m{ value: '3', label: 'commits', pane: 'git' }[37m,
+           ╵     [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+  'icon' is declared here.
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:12:2:
+[37m      12 │   [32micon[37m: string;
+         ╵   [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2741: Property 'icon' is missing in type '{ value: string; label: string; pane: "git"; }' but required in type 'SummaryChip'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:1791:4:
+[37m      1791 │     [32m{ value: '8', label: 'files', pane: 'git' }[37m,
+           ╵     [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+  'icon' is declared here.
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:12:2:
+[37m      12 │   [32micon[37m: string;
+         ╵   [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2741: Property 'icon' is missing in type '{ value: string; label: string; pane: "preview"; }' but required in type 'SummaryChip'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:1792:4:
+[37m      1792 │     [32m{ value: '4', label: 'images', pane: 'preview' }[37m,
+           ╵     [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+  'icon' is declared here.
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:12:2:
+[37m      12 │   [32micon[37m: string;
+         ╵   [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2741: Property 'icon' is missing in type '{ value: string; label: string; pane: "debug"; tone: "danger"; }' but required in type 'SummaryChip'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:1793:4:
+[37m      1793 │     [32m{ value: '1', label: 'failed retry', pane: 'debug', tone: 'd[37m...
+           ╵     [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+  'icon' is declared here.
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:12:2:
+[37m      12 │   [32micon[37m: string;
+         ╵   [32m~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2741: Property 'icon' is missing in type '{ value: string; label: string; pane: "result"; }' but required in type 'SummaryChip'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:1794:4:
+[37m      1794 │     [32m{ value: '12m', label: 'active', pane: 'result' }[37m,
+           ╵     [32m~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~[0m
+
+  'icon' is declared here.
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:12:2:
+[37m      12 │   [32micon[37m: string;
+         ╵   [32m~~~~[0m
+
+[39m[22m
+[1m[31m[2m16:24:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:24:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:43:28:
+[37m      43 │               @for (path of [32miconPath[37m(item.icon); track path) {
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:52:26:
+[37m      52 │             @for (path of [32miconPath[37m('close'); track path) {
+         ╵                           [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:67:28:
+[37m      67 │               @for (path of [32miconPath[37m(density() === 'compact' ? 'ex...
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:74:28:
+[37m      74 │               @for (path of [32miconPath[37m(theme() === 'light' ? 'sun' :...
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:81:28:
+[37m      81 │               @for (path of [32miconPath[37m('command'); track path) {
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:88:28:
+[37m      88 │               @for (path of [32miconPath[37m('bug'); track path) {
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:95:28:
+[37m      95 │               @for (path of [32miconPath[37m('close'); track path) {
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:124:32:
+[37m      124 │                   @for (path of [32miconPath[37m('panel'); track path) {
+          ╵                                 [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:138:36:
+[37m      138 │ ...                  @for (path of [32miconPath[37m(tab.icon); track path) {
+          ╵                                    [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:154:36:
+[37m      154 │ ...                 @for (path of [32miconPath[37m(chip.icon); track path) {
+          ╵                                   [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:172:36:
+[37m      172 │ ...                 @for (path of [32miconPath[37m(mode.icon); track path) {
+          ╵                                   [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:188:36:
+[37m      188 │ ...             @for (path of [32miconPath[37m(scenario.icon); track path) {
+          ╵                               [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:206:36:
+[37m      206 │                       @for (path of [32miconPath[37m('code'); track path) {
+          ╵                                     [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:214:36:
+[37m      214 │                       @for (path of [32miconPath[37m('bug'); track path) {
+          ╵                                     [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:277:40:
+[37m      277 │ ...                    @for (path of [32miconPath[37m('plus'); track path) {
+          ╵                                      [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:290:40:
+[37m      290 │ ...                    @for (path of [32miconPath[37m('play'); track path) {
+          ╵                                      [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:311:40:
+[37m      311 │ ...                   @for (path of [32miconPath[37m('close'); track path) {
+          ╵                                     [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:318:40:
+[37m      318 │ ...                     @for (path of [32miconPath[37m('bug'); track path) {
+          ╵                                       [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:422:30:
+[37m      422 │                 @for (path of [32miconPath[37m(sideSheetOpen() ? 'panelCl...
+          ╵                               [32m~~~~~~~~[0m
+
+[39m[22m
+[1m[31m[2m16:25:16[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:25:16[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:25:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:25:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2551: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'. Did you mean 'iconPaths'?[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:43:28:
+[37m      43 │               @for (path of [32miconPath[37m(item.icon); track path) {
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2551: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'. Did you mean 'iconPaths'?[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:52:26:
+[37m      52 │             @for (path of [32miconPath[37m('close'); track path) {
+         ╵                           [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2551: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'. Did you mean 'iconPaths'?[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:67:28:
+[37m      67 │               @for (path of [32miconPath[37m(density() === 'compact' ? 'ex...
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2551: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'. Did you mean 'iconPaths'?[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:74:28:
+[37m      74 │               @for (path of [32miconPath[37m(theme() === 'light' ? 'sun' :...
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2551: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'. Did you mean 'iconPaths'?[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:81:28:
+[37m      81 │               @for (path of [32miconPath[37m('command'); track path) {
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2551: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'. Did you mean 'iconPaths'?[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:88:28:
+[37m      88 │               @for (path of [32miconPath[37m('bug'); track path) {
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2551: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'. Did you mean 'iconPaths'?[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:95:28:
+[37m      95 │               @for (path of [32miconPath[37m('close'); track path) {
+         ╵                             [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2551: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'. Did you mean 'iconPaths'?[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:124:32:
+[37m      124 │                   @for (path of [32miconPath[37m('panel'); track path) {
+          ╵                                 [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2551: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'. Did you mean 'iconPaths'?[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:138:36:
+[37m      138 │ ...                  @for (path of [32miconPath[37m(tab.icon); track path) {
+          ╵                                    [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2551: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'. Did you mean 'iconPaths'?[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:154:36:
+[37m      154 │ ...                 @for (path of [32miconPath[37m(chip.icon); track path) {
+          ╵                                   [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2551: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'. Did you mean 'iconPaths'?[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:172:36:
+[37m      172 │ ...                 @for (path of [32miconPath[37m(mode.icon); track path) {
+          ╵                                   [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2551: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'. Did you mean 'iconPaths'?[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:188:36:
+[37m      188 │ ...             @for (path of [32miconPath[37m(scenario.icon); track path) {
+          ╵                               [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2551: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'. Did you mean 'iconPaths'?[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:206:36:
+[37m      206 │                       @for (path of [32miconPath[37m('code'); track path) {
+          ╵                                     [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2551: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'. Did you mean 'iconPaths'?[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:214:36:
+[37m      214 │                       @for (path of [32miconPath[37m('bug'); track path) {
+          ╵                                     [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2551: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'. Did you mean 'iconPaths'?[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:277:40:
+[37m      277 │ ...                    @for (path of [32miconPath[37m('plus'); track path) {
+          ╵                                      [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2551: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'. Did you mean 'iconPaths'?[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:290:40:
+[37m      290 │ ...                    @for (path of [32miconPath[37m('play'); track path) {
+          ╵                                      [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2551: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'. Did you mean 'iconPaths'?[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:311:40:
+[37m      311 │ ...                   @for (path of [32miconPath[37m('close'); track path) {
+          ╵                                     [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2551: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'. Did you mean 'iconPaths'?[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:318:40:
+[37m      318 │ ...                     @for (path of [32miconPath[37m('bug'); track path) {
+          ╵                                       [32m~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2551: Property 'iconPath' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'. Did you mean 'iconPaths'?[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:422:30:
+[37m      422 │                 @for (path of [32miconPath[37m(sideSheetOpen() ? 'panelCl...
+          ╵                               [32m~~~~~~~~[0m
+
+[39m[22m
+[1m[31m[2m16:25:51[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/environment[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:25:51[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:25:51[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs/grouped[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:25:51[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/status[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:25:51[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/watch-paths[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:25:51[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/environment[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:25:51[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/clients/[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:25:51[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/status[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:25:51[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/copilot/models[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:25:51[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:25:51[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate/cached[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:25:51[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:25:51[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:25:51[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:26:22[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:26:22[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:26:52[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:26:52[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:26:52[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:26:52[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:27:22[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:27:22[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:27:52[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:27:52[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:27:52[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:27:52[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:28:22[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:28:22[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:28:52[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:28:52[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:28:52[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:28:52[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:29:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:29:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:30:52[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:30:52[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:31:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:31:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:31:52[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:31:52[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:32:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:32:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:33:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:33:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:33:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:33:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:34:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:34:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:34:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:34:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:35:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:35:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:35:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:35:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:36:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:36:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:36:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:36:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:37:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:37:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:37:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:37:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:38:06[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/copilot/models[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:38:06[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:38:06[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate/cached[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:38:06[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:38:06[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:38:06[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:38:14[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/copilot/models[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:38:14[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:38:14[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate/cached[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:38:14[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:38:14[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:38:14[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:38:45[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:38:45[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:39:15[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:39:15[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:39:15[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:39:15[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:39:45[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:39:45[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m

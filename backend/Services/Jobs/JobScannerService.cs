@@ -187,7 +187,9 @@ public class JobScannerService
                     : null,
                 CommitCount = ComputeCommitCountHint(raw, jobDir),
                 SessionChain = ReadSessionChain(raw),
-                PendingIntent = ReadPendingIntent(jobDir)
+                PendingIntent = ReadPendingIntent(jobDir),
+                Fixture = raw.TryGetProperty("fixture", out var fix)
+                    && fix.ValueKind is JsonValueKind.True
             };
         }
         catch (Exception ex)

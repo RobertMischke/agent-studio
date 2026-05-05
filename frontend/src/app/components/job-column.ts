@@ -166,18 +166,15 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
       border-radius: 16px;
       padding: 16px;
       /*
-       * 200px floor keeps the seven ADR-0025 lanes within a 1440px
-       * viewport once two are collapsed to rails (the default
-       * collapse the kanban-seven-lanes spec captures). Pre-ADR-0025
-       * this was 280px; that worked for six lanes but spills past the
-       * viewport with seven. flex: 0 1 200px starts every column at
-       * its 200px basis and lets the dashboard's row flex shrink
-       * lanes proportionally when the seven do not fit; the
-       * dashboard's overflow-x: auto is the graceful fallback when
-       * even the floor is too wide.
+       * Columns share whatever horizontal space the dashboard has left
+       * after gaps and group padding. The 220px floor matches the
+       * kanban-board-design-spec-mockup-first contract; below that the
+       * dashboard's overflow-x: auto kicks in. flex: 1 1 220px lets
+       * lanes grow past their floor so the board fills 100% of the
+       * viewport instead of leaving empty space at the right.
        */
-      min-width: 200px;
-      flex: 0 1 200px;
+      min-width: 220px;
+      flex: 1 1 220px;
       display: flex;
       flex-direction: column;
       gap: 12px;

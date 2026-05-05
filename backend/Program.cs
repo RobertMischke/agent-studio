@@ -59,6 +59,7 @@ builder.Services.AddSingleton<JobScannerService>();
 builder.Services.AddSingleton<ScreenshotIndexService>();
 builder.Services.AddSingleton<JobStateMachine>();
 builder.Services.AddSingleton<JobMutationService>();
+builder.Services.AddSingleton<FixtureMigrationService>();
 builder.Services.AddSingleton<JobSessionLog>();
 builder.Services.AddSingleton<OrchestratorChatLog>();
 builder.Services.AddSingleton<OrchestratorLog>();

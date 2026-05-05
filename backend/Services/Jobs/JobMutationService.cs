@@ -162,6 +162,8 @@ public class JobMutationService
             jobJson["model"] = req.Model;
         if (!string.IsNullOrWhiteSpace(req.CliType))
             jobJson["cliType"] = CliTypes.Normalize(req.CliType);
+        if (req.Fixture)
+            jobJson["fixture"] = true;
 
         File.WriteAllText(Path.Combine(jobDir, "job.json"),
             JsonSerializer.Serialize(jobJson, new JsonSerializerOptions { WriteIndented = true }));
