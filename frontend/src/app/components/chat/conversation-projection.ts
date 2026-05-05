@@ -30,7 +30,6 @@ import {
 import type {
   ConversationEvent,
   RawLineRange,
-  ToolBurstSamples,
   ToolFamily,
   TraceLink,
   WorkbenchSummaryAggregate
@@ -104,7 +103,7 @@ export function projectConversation(
     const range = rangeForGroup(group, indexByLine, ctx.source);
     const startLineIdx = range.start;
     const matchedRun = runByLineIndex.get(startLineIdx);
-    if (matchedRun && matchedRun.run.index !== currentRun?.run?.index) {
+    if (matchedRun?.run && matchedRun.run.index !== currentRun?.run?.index) {
       currentRun = matchedRun;
       if (ctx.emitRunMarkers) {
         events.push(toRunMarker(matchedRun, range));
@@ -227,7 +226,8 @@ function projectGroup(
       const dedupeKey = `schema-drift:${firstLine.text.trim()}`;
       if (seenParserDedupeKeys.has(dedupeKey)) return null;
       seenParserDedupeKeys.add(dedupeKey);
-      const expected = /expected\s+([A-Za-z][\w.-]*)/i.exec(firstLine.text)?.[1]
+      const expectedRaw = /expected\s+([A-Za-z][\w-]*)/i.exec(firstLine.text)?.[1];
+      const expected = expectedRaw
         ?? (/MetaCycle/i.test(firstLine.text) ? 'MetaCycleReport' : 'structured-report');
       return [
         {
@@ -319,6 +319,19 @@ function projectGroup(
     return [toToolBurst(group, range, runId)];
   }
 
+  // The activity-log parser collapses any failed action into kind='error',
+  // erasing the original tool family. To keep the workbench summary's
+  // failure count meaningful, re-classify error groups whose first line
+  // looks like a tool action ("x Run ...", "x Edit ...") as failed tool
+  // bursts. Plain error prose still surfaces as a `message.taskAgent`
+  // with severity=error.
+  if (group.kind === 'error') {
+    const recovered = recoverToolFamilyFromErrorLine(firstLine.text);
+    if (recovered) {
+      return [toToolBurstFromError(group, range, runId, recovered)];
+    }
+  }
+
   if (group.kind === 'error' || group.status === 'error') {
     return [
       {
@@ -360,7 +373,7 @@ function isToolKind(k: ActivityLogKind): k is Exclude<ToolFamily, 'other'> {
 
 function toToolBurst(group: ActivityLogGroup, range: RawLineRange, runId?: number) {
   const families: Partial<Record<ToolFamily, number>> = {};
-  const samples: ToolBurstSamples = {};
+  const samples: { [family: string]: string | undefined } = {};
   const family = group.kind as ToolFamily;
   const count = inferBatchSize(group);
   families[family] = count;
@@ -383,6 +396,48 @@ function toToolBurst(group: ActivityLogGroup, range: RawLineRange, runId?: numbe
     failures,
     durationMs,
     files: files.length > 0 ? files : undefined,
+    samples,
+    collapsedByDefault: true
+  };
+}
+
+function recoverToolFamilyFromErrorLine(text: string): ToolFamily | null {
+  // Action lines are emitted as `<marker> <verb> ...`. The parser already
+  // stripped the marker, but the original CliOutputLine still carries it.
+  const m = /^[xX*]\s+(?<verb>Read|Search|Grep|Edit|Write|Run|Execute|Build|Check|Update|Apply|Move|Delete|Create|Task|Todo)\b/i.exec(text);
+  if (!m) return null;
+  const verb = m.groups!['verb'].toLowerCase();
+  if (verb === 'read') return 'read';
+  if (verb === 'search' || verb === 'grep') return 'search';
+  if (verb === 'edit' || verb === 'write' || verb === 'create' || verb === 'delete' || verb === 'move' || verb === 'update' || verb === 'apply') return 'edit';
+  if (verb === 'run' || verb === 'execute' || verb === 'build' || verb === 'check') return 'command';
+  if (verb === 'task') return 'task';
+  if (verb === 'todo') return 'todo';
+  return null;
+}
+
+function toToolBurstFromError(
+  group: ActivityLogGroup,
+  range: RawLineRange,
+  runId: number | undefined,
+  family: ToolFamily
+) {
+  const families: Partial<Record<ToolFamily, number>> = {};
+  const samples: { [family: string]: string | undefined } = {};
+  families[family] = 1;
+  samples[family] = group.subtitle || group.title;
+
+  return {
+    id: `${range.source}:${range.start}-${range.end}:tool-error`,
+    kind: 'toolBurst' as const,
+    timestamp: group.lines[0].timestamp,
+    runId,
+    rawRange: range,
+    severity: 'error' as const,
+    count: 1,
+    families,
+    failures: 1,
+    durationMs: computeDurationMs(group.lines),
     samples,
     collapsedByDefault: true
   };
@@ -620,18 +675,219 @@ function toWorkbenchSummary(
   lineNumbers: Map<CliOutputLine, number>
 ) {
   const range = transcriptRange(ctx, lineNumbers);
-  const toolBursts = collected.filter((e): e is Extract<ConversationEvent, { kind: 'toolBurst' }> => e.kind === 'toolBurst');
-  const totalCalls = toolBursts.reduce((acc, b) => acc + b.count, 0);
-  const failures = toolBursts.reduce((acc, b) => acc + b.failures, 0);
-  const headlineParts = [`${totalCalls} tool call${totalCalls === 1 ? '' : 's'}`];
-  if (failures > 0) headlineParts.push(`${failures} failure${failures === 1 ? '' : 's'}`);
+  const aggregate = computeSummaryAggregate(collected, ctx);
+
+  const headlineParts: string[] = [];
+  if (aggregate.toolCallCount && aggregate.toolCallCount > 0) {
+    headlineParts.push(`${aggregate.toolCallCount} tool call${aggregate.toolCallCount === 1 ? '' : 's'}`);
+  }
+  if (aggregate.toolFailureCount && aggregate.toolFailureCount > 0) {
+    headlineParts.push(`${aggregate.toolFailureCount} failure${aggregate.toolFailureCount === 1 ? '' : 's'}`);
+  }
+  if (aggregate.commitCount && aggregate.commitCount > 0) {
+    headlineParts.push(`${aggregate.commitCount} commit${aggregate.commitCount === 1 ? '' : 's'}`);
+  }
+  if (aggregate.filesChanged && aggregate.filesChanged > 0) {
+    headlineParts.push(`${aggregate.filesChanged} file${aggregate.filesChanged === 1 ? '' : 's'}`);
+  }
+  if (aggregate.screenshotCount && aggregate.screenshotCount > 0) {
+    headlineParts.push(`${aggregate.screenshotCount} screenshot${aggregate.screenshotCount === 1 ? '' : 's'}`);
+  }
+  if (aggregate.retryWarningCount && aggregate.retryWarningCount > 0) {
+    headlineParts.push(`${aggregate.retryWarningCount} warning${aggregate.retryWarningCount === 1 ? '' : 's'}`);
+  }
+  if (aggregate.totalInputTokens || aggregate.totalOutputTokens) {
+    const tokens = (aggregate.totalInputTokens ?? 0) + (aggregate.totalOutputTokens ?? 0);
+    headlineParts.push(`${formatCount(tokens)} tokens`);
+  }
+  if (aggregate.latestResult) {
+    headlineParts.push(aggregate.latestResult);
+  }
+
+  const bullets: string[] = [];
+  if (aggregate.runCount && aggregate.runCount > 0) {
+    const status = aggregate.latestRunStatus ? ` (${aggregate.latestRunStatus})` : '';
+    bullets.push(`${aggregate.runCount} run${aggregate.runCount === 1 ? '' : 's'}${status}`);
+  }
+  if (aggregate.totalDurationSeconds && aggregate.totalDurationSeconds > 0) {
+    bullets.push(`Duration: ${formatDurationSec(aggregate.totalDurationSeconds)}`);
+  }
+  if (aggregate.watchdogKilled) {
+    bullets.push('Watchdog killed at least one run');
+  }
+  if (aggregate.state) {
+    bullets.push(`Lane: ${aggregate.state}`);
+  }
+
   return {
     id: `${range.source}:workbench:summary`,
     kind: 'workbench.summary' as const,
     timestamp: ctx.lines[0]?.timestamp ?? new Date(0).toISOString(),
     rawRange: range,
-    headline: headlineParts.join(' · ')
+    headline: headlineParts.length > 0 ? headlineParts.join(' · ') : 'No activity yet',
+    bullets: bullets.length > 0 ? bullets : undefined,
+    aggregate
   };
+}
+
+function computeSummaryAggregate(
+  collected: ConversationEvent[],
+  ctx: ConversationProjectionContext
+): WorkbenchSummaryAggregate {
+  const toolBursts = collected.filter(
+    (e): e is Extract<ConversationEvent, { kind: 'toolBurst' }> => e.kind === 'toolBurst'
+  );
+  const tokenMetrics = collected.filter(
+    (e): e is Extract<ConversationEvent, { kind: 'metric.token' }> => e.kind === 'metric.token'
+  );
+  const taskScopedTokens = tokenMetrics.find((m) => m.scope === 'task') ?? tokenMetrics[0];
+  const supervisorWaits = collected.filter(
+    (e): e is Extract<ConversationEvent, { kind: 'supervisor.wait' }> => e.kind === 'supervisor.wait'
+  );
+  const parserWarnings = collected.filter((e) => e.kind === 'system.parserWarning');
+  const captureFails = collected.filter((e) => e.kind === 'system.captureFail');
+  const schemaDrifts = collected.filter((e) => e.kind === 'system.schemaDrift');
+  const decisionRetries = collected.filter(
+    (e): e is Extract<ConversationEvent, { kind: 'decision.orchestrator' }> =>
+      e.kind === 'decision.orchestrator' && e.action === 'reissue'
+  );
+
+  const toolCallCount = toolBursts.reduce((acc, b) => acc + b.count, 0);
+  const toolFailureCount = toolBursts.reduce((acc, b) => acc + b.failures, 0);
+  const retryWarningCount =
+    parserWarnings.length + captureFails.length + schemaDrifts.length + decisionRetries.length;
+
+  const filesFromCommits = (ctx.commits ?? []).reduce(
+    (acc, c) => acc + (c.files?.length ?? 0),
+    0
+  );
+
+  const timeline = ctx.runTimeline ?? null;
+  const latestRun = timeline && timeline.runs.length > 0
+    ? timeline.runs[timeline.runs.length - 1]
+    : null;
+
+  const totalDurationSeconds = timeline
+    ? timeline.runs.reduce((acc, r) => acc + (r.durationSeconds ?? 0), 0)
+    : undefined;
+
+  return {
+    state: ctx.job?.state,
+    runCount: timeline?.runCount,
+    latestRunStatus: latestRun?.status,
+    latestRunIntent: latestRun?.intent,
+    totalDurationSeconds: totalDurationSeconds && totalDurationSeconds > 0 ? totalDurationSeconds : undefined,
+    totalInputTokens: taskScopedTokens?.inputTokens,
+    totalOutputTokens: taskScopedTokens?.outputTokens,
+    toolCallCount,
+    toolFailureCount,
+    commitCount: ctx.commits?.length,
+    filesChanged: filesFromCommits || undefined,
+    screenshotCount: ctx.screenshots?.length,
+    retryWarningCount: retryWarningCount > 0 ? retryWarningCount : undefined,
+    watchdogKilled: supervisorWaits.some((w) => w.state === 'killed') || undefined,
+    latestResult: ctx.latestResult
+  };
+}
+
+function toWorkbenchDebug(
+  collected: ConversationEvent[],
+  ctx: ConversationProjectionContext,
+  lineNumbers: Map<CliOutputLine, number>
+) {
+  const range = transcriptRange(ctx, lineNumbers);
+  const messages = collected.filter(
+    (e): e is Extract<ConversationEvent, { kind: `message.${string}` }> =>
+      e.kind.startsWith('message.')
+  );
+  const toolBursts = collected.filter(
+    (e): e is Extract<ConversationEvent, { kind: 'toolBurst' }> => e.kind === 'toolBurst'
+  );
+  const supervisorWaits = collected.filter(
+    (e): e is Extract<ConversationEvent, { kind: 'supervisor.wait' }> => e.kind === 'supervisor.wait'
+  );
+  const tokenMetrics = collected.filter(
+    (e): e is Extract<ConversationEvent, { kind: 'metric.token' }> => e.kind === 'metric.token'
+  );
+
+  const families: Partial<Record<ToolFamily, number>> = {};
+  let toolFailures = 0;
+  for (const burst of toolBursts) {
+    toolFailures += burst.failures;
+    for (const [family, count] of Object.entries(burst.families)) {
+      families[family as ToolFamily] = (families[family as ToolFamily] ?? 0) + (count ?? 0);
+    }
+  }
+
+  const timeline = ctx.runTimeline ?? null;
+  const completedCount = timeline ? timeline.runs.filter((r) => r.status === 'completed').length : 0;
+  const failedCount = timeline ? timeline.runs.filter((r) => r.status === 'failed').length : 0;
+  const cancelledCount = timeline ? timeline.runs.filter((r) => r.status === 'cancelled').length : 0;
+
+  const traceLinks: TraceLink[] = collected
+    .filter((e) => e.kind === 'runMarker' || e.kind === 'toolBurst' || e.kind === 'system.parserWarning')
+    .slice(0, 12)
+    .map((e) => ({
+      range: e.rawRange,
+      label: `${e.kind} @ ${e.rawRange.start}-${e.rawRange.end}`
+    }));
+
+  return {
+    id: `${range.source}:workbench:debug`,
+    kind: 'workbench.debug' as const,
+    timestamp: ctx.lines[0]?.timestamp ?? new Date(0).toISOString(),
+    rawRange: range,
+    actorCounts: {
+      user: messages.filter((m) => m.kind === 'message.user').length,
+      taskAgent: messages.filter((m) => m.kind === 'message.taskAgent').length,
+      orchestrator: messages.filter((m) => m.kind === 'message.orchestrator').length,
+      supervisor: messages.filter((m) => m.kind === 'message.supervisor').length,
+      supportingAgent: messages.filter((m) => m.kind === 'message.supportingAgent').length
+    },
+    toolDensity: {
+      total: toolBursts.reduce((acc, b) => acc + b.count, 0),
+      failures: toolFailures,
+      families
+    },
+    warningCounts: {
+      supervisorAdvisories: messages.filter((m) => m.kind === 'message.supervisor').length,
+      parserWarnings: collected.filter((e) => e.kind === 'system.parserWarning').length,
+      captureFails: collected.filter((e) => e.kind === 'system.captureFail').length,
+      schemaDrifts: collected.filter((e) => e.kind === 'system.schemaDrift').length,
+      needsInputLoops: collected.filter((e) => e.kind === 'agent.needsInput').length,
+      watchdogQuiet: supervisorWaits.filter((w) => w.state === 'quiet').length,
+      watchdogKills: supervisorWaits.filter((w) => w.state === 'killed').length
+    },
+    tokenTotals: {
+      inputTokens: tokenMetrics.reduce((acc, m) => acc + (m.inputTokens ?? 0), 0),
+      outputTokens: tokenMetrics.reduce((acc, m) => acc + (m.outputTokens ?? 0), 0),
+      reasoningTokens: tokenMetrics.reduce((acc, m) => acc + (m.reasoningTokens ?? 0), 0),
+      cost: tokenMetrics.reduce((acc, m) => acc + (m.cost ?? 0), 0) || undefined
+    },
+    runStats: {
+      runCount: timeline?.runCount ?? 0,
+      completedCount,
+      failedCount,
+      cancelledCount
+    },
+    traceLinks
+  };
+}
+
+function formatCount(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  return `${n}`;
+}
+
+function formatDurationSec(seconds: number): string {
+  if (seconds < 60) return `${Math.round(seconds)}s`;
+  const m = Math.floor(seconds / 60);
+  const s = Math.round(seconds % 60);
+  if (m < 60) return s === 0 ? `${m}m` : `${m}m ${s}s`;
+  const h = Math.floor(m / 60);
+  const min = m % 60;
+  return min === 0 ? `${h}h` : `${h}h ${min}m`;
 }
 
 function toTraceLink(

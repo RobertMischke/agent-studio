@@ -9,9 +9,14 @@ import {
   orchestratorReissueFragment,
   resetFixtureClock,
   runTimelineForComposite,
+  schemaDriftFragment,
   supervisorAdvisoryFragment,
+  testFailRetryFragment,
+  tokenSpikeFragment,
+  tokenSpikeSummary,
   toolBurstFragment,
   userMessageFragment,
+  waitLoopFragment,
   watchdogKillFragment,
   watchdogQuietResumeFragment
 } from './conversation-projection.fixtures';
@@ -210,6 +215,211 @@ describe('projectConversation', () => {
     expect(sequence[sequence.length - 1]).toBe('message.taskAgent');
   });
 
+  it('emits a watchdog wait loop as quiet → quiet → quiet → resumed', () => {
+    const events = projectConversation({ source: SOURCE, lines: waitLoopFragment() });
+    expect(events.map((e) => e.kind)).toEqual([
+      'supervisor.wait',
+      'supervisor.wait',
+      'supervisor.wait',
+      'supervisor.wait'
+    ]);
+    expect((events[0] as any).state).toBe('quiet');
+    expect((events[3] as any).state).toBe('resumed');
+    // Trace preservation: every wait row must point back into the source.
+    for (const ev of events) {
+      expect(ev.rawRange.source).toBe(SOURCE);
+      expect(ev.rawRange.start).toBeGreaterThan(0);
+      expect(ev.rawRange.end).toBeGreaterThanOrEqual(ev.rawRange.start);
+    }
+  });
+
+  it('emits a system.schemaDrift event for unparseable structured reports', () => {
+    const events = projectConversation({ source: SOURCE, lines: schemaDriftFragment() });
+    expect(events).toHaveLength(1);
+    expect(events[0].kind).toBe('system.schemaDrift');
+    expect((events[0] as any).expectedSchema).toBe('MetaCycleReport');
+    expect((events[0] as any).rawLink.range.source).toBe(SOURCE);
+    expect(events[0].severity).toBe('warn');
+  });
+
+  it('captures a token spike via metric.token and surfaces it in the summary aggregate', () => {
+    const events = projectConversation({
+      source: SOURCE,
+      lines: tokenSpikeFragment(),
+      tokenSummary: tokenSpikeSummary(),
+      emitWorkbenchSummary: true
+    });
+    const metric = events.find((e) => e.kind === 'metric.token');
+    expect(metric).toBeDefined();
+    expect((metric as any).inputTokens).toBe(280_000);
+
+    const summary = events.find((e) => e.kind === 'workbench.summary');
+    expect(summary).toBeDefined();
+    const aggregate = (summary as any).aggregate;
+    expect(aggregate.totalInputTokens).toBe(280_000);
+    expect(aggregate.totalOutputTokens).toBe(14_500);
+    // Headline must reference tokens so the summary strip can show pressure.
+    expect((summary as any).headline).toMatch(/token/i);
+  });
+
+  it('models a test fail/retry/pass burst with failure visible in the workbench aggregate', () => {
+    const events = projectConversation({
+      source: SOURCE,
+      lines: testFailRetryFragment(),
+      emitWorkbenchSummary: true
+    });
+    const tools = events.filter((e) => e.kind === 'toolBurst');
+    expect(tools.length).toBeGreaterThan(0);
+    const failures = tools.reduce((acc, t: any) => acc + t.failures, 0);
+    expect(failures).toBeGreaterThan(0);
+
+    const summary = events.find((e) => e.kind === 'workbench.summary') as any;
+    expect(summary.aggregate.toolFailureCount).toBeGreaterThan(0);
+    expect(summary.headline).toMatch(/failure/);
+  });
+
+  it('produces a workbench.summary aggregate with state, run, tokens, commits, files, screenshots, and warnings', () => {
+    const events = projectConversation({
+      source: SOURCE,
+      lines: compositeFragment(),
+      runTimeline: runTimelineForComposite(),
+      job: {
+        id: 'fixture-job',
+        jobKey: 'wp::fixture-job',
+        title: 'Fixture',
+        state: '3-progress',
+        order: 0,
+        agent: 'claude',
+        createdAt: '2026-05-05T11:55:00Z',
+        watchPath: 'C:/wp',
+        projectName: 'agent-taskboard',
+        folderPath: '',
+        lastActivity: '2026-05-05T12:02:00Z',
+        sessionName: null,
+        model: 'claude-opus-4-7',
+        cliType: 'claude',
+        useOwnSession: false,
+        lastUsage: null,
+        execution: null,
+        commit: null
+      },
+      tokenSummary: {
+        calls: 1,
+        inputTokens: 1200,
+        outputTokens: 250,
+        cacheReadTokens: 0,
+        cacheCreationTokens: 0,
+        totalTokens: 1450,
+        lastModel: 'claude-opus-4-7',
+        lastUpdate: '2026-05-05T12:02:00Z',
+        entries: []
+      },
+      commits: [
+        {
+          sha: 'aaa',
+          shortSha: 'aaa',
+          subject: 'feat: x',
+          authorDateUtc: '2026-05-05T12:01:00Z',
+          files: [
+            { status: 'M', path: 'a.ts', added: 1, removed: 0 },
+            { status: 'M', path: 'b.ts', added: 2, removed: 1 }
+          ]
+        }
+      ],
+      screenshots: [
+        { caption: 'one', sourcePath: 'results/a.png', durablePath: 'results/a.png' }
+      ],
+      latestResult: '[[TASK_DONE]]',
+      emitWorkbenchSummary: true,
+      emitWorkbenchPreviews: true,
+      emitRunMarkers: true
+    });
+
+    const summary = events.find((e) => e.kind === 'workbench.summary') as any;
+    expect(summary).toBeDefined();
+    const a = summary.aggregate;
+    expect(a.state).toBe('3-progress');
+    expect(a.runCount).toBe(1);
+    expect(a.latestRunStatus).toBe('completed');
+    expect(a.totalDurationSeconds).toBe(120);
+    expect(a.totalInputTokens).toBe(1200);
+    expect(a.totalOutputTokens).toBe(250);
+    expect(a.commitCount).toBe(1);
+    expect(a.filesChanged).toBe(2);
+    expect(a.screenshotCount).toBe(1);
+    expect(a.toolCallCount).toBeGreaterThan(0);
+    expect(a.retryWarningCount).toBeUndefined();
+    expect(a.latestResult).toBe('[[TASK_DONE]]');
+    expect(summary.headline).toMatch(/commit/);
+  });
+
+  it('emits a workbench.debug aggregate with actor, tool, warning, token, and run rollups', () => {
+    const events = projectConversation({
+      source: SOURCE,
+      lines: [
+        ...compositeFragment(),
+        ...captureFailFragment(),
+        ...heuristicWarningFragment(),
+        ...schemaDriftFragment()
+      ],
+      runTimeline: runTimelineForComposite(),
+      tokenSummary: {
+        calls: 1,
+        inputTokens: 1200,
+        outputTokens: 250,
+        cacheReadTokens: 0,
+        cacheCreationTokens: 0,
+        totalTokens: 1450,
+        lastModel: 'claude-opus-4-7',
+        lastUpdate: '2026-05-05T12:02:00Z',
+        entries: []
+      },
+      emitDebugAggregate: true
+    });
+    const debug = events.find((e) => e.kind === 'workbench.debug') as any;
+    expect(debug).toBeDefined();
+    expect(debug.actorCounts.user).toBeGreaterThan(0);
+    expect(debug.actorCounts.taskAgent).toBeGreaterThan(0);
+    expect(debug.toolDensity.total).toBeGreaterThan(0);
+    expect(debug.warningCounts.captureFails).toBe(1);
+    expect(debug.warningCounts.parserWarnings).toBe(1);
+    expect(debug.warningCounts.schemaDrifts).toBe(1);
+    expect(debug.warningCounts.watchdogQuiet).toBeGreaterThanOrEqual(1);
+    expect(debug.tokenTotals.inputTokens).toBe(1200);
+    expect(debug.runStats.runCount).toBe(1);
+    expect(debug.runStats.completedCount).toBe(1);
+    expect(debug.traceLinks.length).toBeGreaterThan(0);
+    for (const link of debug.traceLinks) {
+      expect(link.range.source).toBe(SOURCE);
+      expect(link.range.end).toBeGreaterThanOrEqual(link.range.start);
+    }
+  });
+
+  it('preserves trace addressability: every emitted event keeps a 1-based raw range into the source log', () => {
+    const lines = compositeFragment();
+    const events = projectConversation({
+      source: SOURCE,
+      lines,
+      runTimeline: runTimelineForComposite(),
+      emitWorkbenchSummary: true,
+      emitDebugAggregate: true,
+      emitTraceLink: true
+    });
+    expect(events.length).toBeGreaterThan(0);
+    for (const ev of events) {
+      expect(ev.rawRange.source).toBe(SOURCE);
+      expect(ev.rawRange.start).toBeGreaterThanOrEqual(1);
+      expect(ev.rawRange.end).toBeGreaterThanOrEqual(ev.rawRange.start);
+      expect(ev.rawRange.end).toBeLessThanOrEqual(lines.length);
+    }
+    // The dedicated trace link is the explicit "open raw" handle the renderer
+    // uses; it must address the full transcript.
+    const trace = events.find((e) => e.kind === 'traceLink') as any;
+    expect(trace).toBeDefined();
+    expect(trace.link.range.start).toBe(1);
+    expect(trace.link.range.end).toBe(lines.length);
+  });
+
   it('exports every advertised kind through CONVERSATION_EVENT_KINDS', () => {
     // Guard rail: keep the union and the runtime list in lockstep so future
     // jobs can iterate kinds without TypeScript discriminated-union juggling.
@@ -223,5 +433,7 @@ describe('projectConversation', () => {
     expect(CONVERSATION_EVENT_KINDS).toContain('taskMarker');
     expect(CONVERSATION_EVENT_KINDS).toContain('runMarker');
     expect(CONVERSATION_EVENT_KINDS).toContain('traceLink');
+    expect(CONVERSATION_EVENT_KINDS).toContain('workbench.debug');
+    expect(CONVERSATION_EVENT_KINDS).toContain('system.schemaDrift');
   });
 });

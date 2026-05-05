@@ -10,7 +10,6 @@ type DebugTab = 'overview' | 'actors' | 'tools' | 'tokens' | 'trace';
 type ComposeMode = 'continue' | 'extend' | 'steer' | 'followup';
 type ActivityTarget = 'projects' | 'tasks' | 'search' | 'git' | 'qa' | 'tokens';
 type StatusPanel = 'health' | 'queue' | 'tokens' | 'evidence' | 'model';
-type TaskTabId = 'prompt' | 'log' | 'chat' | 'files' | 'commits' | 'shots';
 
 interface SummaryChip {
   label: string;
@@ -80,7 +79,7 @@ interface ChatTurn {
             </svg>
             <span>{{ chatOpen() ? 'Hide Chat' : 'Show Chat' }}</span>
           </button>
-          <button [class.detail-chrome__pane--active]="contextOpen() && pane() === 'git'"
+          <button [class.detail-chrome__pane--active]="isPaneButtonActive('git')"
                   (click)="togglePane('git')"
                   data-testid="prototype-topbar-git">
             <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -187,10 +186,11 @@ interface ChatTurn {
               </svg>
             </button>
             <span class="detail-chrome__state">2-ready</span>
-            <nav class="detail-chrome__panes" aria-label="Existing task panes">
+            <nav class="detail-chrome__panes" aria-label="Pin task panes">
               @for (panel of detailPanels; track panel.label) {
                 <button [class.detail-chrome__pane--active]="isPaneButtonActive(panel.pane)"
                         [attr.title]="panel.title"
+                        [attr.aria-label]="panel.title"
                         (click)="togglePane(panel.pane)">
                   <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
                     @for (path of iconPath(panel.icon); track path) {
@@ -212,8 +212,8 @@ interface ChatTurn {
                     <path [attr.d]="path"></path>
                   }
                 </svg>
-                <span>Workbench</span>
-                <small>pane tools</small>
+                <span>Quick views</span>
+                <small>pin additive panes</small>
               </button>
               <div class="inspector-rail__summary" data-testid="prototype-summary-strip">
                 <b>Signals</b>
@@ -233,7 +233,19 @@ interface ChatTurn {
                 }
               </div>
               <div class="inspector-rail__modes" data-testid="prototype-layout-buttons">
-                <b>Views</b>
+                <b>Pin</b>
+                <button class="rail-action rail-action--all"
+                        title="Pin all review panes"
+                        aria-label="Pin all review panes"
+                        data-testid="prototype-pane-all"
+                        (click)="openAllContextPanes()">
+                  <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    @for (path of iconPath('columns'); track path) {
+                      <path [attr.d]="path"></path>
+                    }
+                  </svg>
+                  <span>All</span>
+                </button>
                 @for (mode of paneButtons; track mode.id) {
                   <button class="rail-action"
                           [class.icon-btn--active]="isPaneButtonActive(mode.id)"
@@ -1127,12 +1139,12 @@ interface ChatTurn {
       min-width: 0;
       min-height: 0;
       display: grid;
-      grid-template-columns: 200px minmax(650px, 1fr) minmax(292px, 30vw);
+      grid-template-columns: 176px minmax(650px, 1fr) minmax(292px, 30vw);
       background: var(--bg);
     }
 
     .workspace--sheet-closed {
-      grid-template-columns: 200px minmax(650px, 1fr) 0;
+      grid-template-columns: 176px minmax(650px, 1fr) 0;
     }
 
     .task-list,
@@ -1271,21 +1283,29 @@ interface ChatTurn {
       min-width: 0;
       display: flex;
       align-items: center;
-      gap: 4px;
+      gap: 3px;
       overflow: hidden;
     }
 
     .detail-chrome__panes button {
-      min-height: 26px;
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
+      width: 26px;
+      height: 26px;
+      display: grid;
+      place-items: center;
       border: 1px solid var(--line);
       border-radius: 6px;
       background: var(--surface);
       color: var(--muted);
-      padding: 2px 7px;
+      padding: 0;
       font-size: 11px;
+    }
+
+    .detail-chrome__panes button span {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
       white-space: nowrap;
     }
 
@@ -1336,7 +1356,7 @@ interface ChatTurn {
       min-height: 0;
       min-width: 0;
       display: grid;
-      grid-template-columns: 96px minmax(0, 1fr);
+      grid-template-columns: 82px minmax(0, 1fr);
       grid-template-rows: minmax(0, 1fr);
       padding: 0;
       background: var(--surface);
@@ -1348,8 +1368,8 @@ interface ChatTurn {
       display: grid;
       grid-template-rows: auto auto auto minmax(0, 1fr);
       align-content: start;
-      gap: 7px;
-      padding: 6px;
+      gap: 6px;
+      padding: 5px;
       border-right: 1px solid var(--line);
       background: var(--chrome);
     }
@@ -1364,7 +1384,7 @@ interface ChatTurn {
       align-items: center;
       column-gap: 7px;
       row-gap: 1px;
-      padding: 7px;
+      padding: 6px;
       border: 1px solid var(--line);
       border-radius: 7px;
       background: var(--surface);
@@ -1380,14 +1400,14 @@ interface ChatTurn {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 700;
     }
 
     .rail-guide small {
       grid-area: hint;
       color: var(--muted);
-      font-size: 10px;
+      font-size: 9px;
     }
 
     .inspector-rail__tabs,
@@ -1412,11 +1432,11 @@ interface ChatTurn {
     .inspector-rail__scenarios button,
     .rail-action {
       width: 100%;
-      min-height: 28px;
+      min-height: 26px;
       display: grid;
-      grid-template-columns: 18px minmax(0, 1fr);
+      grid-template-columns: 16px minmax(0, 1fr);
       align-items: center;
-      gap: 6px;
+      gap: 5px;
       border: 1px solid transparent;
       border-radius: 6px;
       background: transparent;
@@ -1424,7 +1444,7 @@ interface ChatTurn {
       font-size: 11px;
       font-weight: 700;
       text-align: left;
-      padding: 0 6px;
+      padding: 0 5px;
     }
 
     .inspector-rail__tabs button span,
@@ -1448,9 +1468,9 @@ interface ChatTurn {
 
     .inspector-rail__summary .summary-chip {
       width: 100%;
-      min-height: 34px;
+      min-height: 30px;
       display: grid;
-      grid-template-columns: 18px minmax(0, 1fr);
+      grid-template-columns: 16px minmax(0, 1fr);
       grid-template-areas:
         "icon value"
         "icon label";
@@ -1458,7 +1478,7 @@ interface ChatTurn {
       justify-items: start;
       gap: 0;
       border-radius: 6px;
-      padding: 4px 6px;
+      padding: 3px 5px;
       text-align: left;
     }
 
@@ -2427,7 +2447,6 @@ export class NextGenChatWorkbenchPrototypeComponent {
   readonly markerOpen = signal(false);
   readonly statusPanel = signal<StatusPanel | null>(null);
   readonly activeActivity = signal<ActivityTarget>('projects');
-  readonly activeTaskTab = signal<TaskTabId>('chat');
   readonly chatOpen = signal(true);
   readonly contextPanes = signal<readonly ContextPane[]>(['result']);
   readonly contextOpen = computed(() => this.contextPanes().length > 0);
@@ -2478,15 +2497,6 @@ export class NextGenChatWorkbenchPrototypeComponent {
     { id: 'git', icon: 'git', label: 'Git', title: 'Git changes' },
     { id: 'qa', icon: 'check', label: 'QA', title: 'QA, tests, and health' },
     { id: 'tokens', icon: 'tokens', label: 'Tokens', title: 'Token usage' },
-  ];
-
-  readonly taskTabs: Array<{ id: TaskTabId; icon: string; label: string; title: string; pane: WorkbenchPane }> = [
-    { id: 'prompt', icon: 'file', label: 'Prompt', title: 'Prompt tab', pane: 'result' },
-    { id: 'log', icon: 'list', label: 'Log', title: 'Protocol and raw trace tab', pane: 'debug' },
-    { id: 'chat', icon: 'chat', label: 'Chat', title: 'Chat tab', pane: 'chat' },
-    { id: 'files', icon: 'fileDiff', label: 'Files', title: 'Files tab', pane: 'git' },
-    { id: 'commits', icon: 'git', label: 'Commits', title: 'Commits tab', pane: 'git' },
-    { id: 'shots', icon: 'image', label: 'Shots', title: 'Screenshots tab', pane: 'preview' },
   ];
 
   readonly detailPanels: Array<{ icon: string; label: string; title: string; pane: WorkbenchPane }> = [
@@ -2726,7 +2736,6 @@ export class NextGenChatWorkbenchPrototypeComponent {
   setPane(pane: WorkbenchPane): void {
     if (pane === 'chat') {
       this.chatOpen.set(true);
-      this.activeTaskTab.set('chat');
       return;
     }
     this.pane.set(pane);
@@ -2738,20 +2747,12 @@ export class NextGenChatWorkbenchPrototypeComponent {
     return this.contextPanes().includes(pane);
   }
 
-  isTaskTabActive(tab: TaskTabId): boolean {
-    return this.activeTaskTab() === tab;
-  }
-
   togglePane(pane: WorkbenchPane): void {
     if (pane === 'chat') {
       this.toggleChat();
       return;
     }
     if (this.contextPanes().includes(pane)) {
-      if (!this.chatOpen()) {
-        this.chatOpen.set(true);
-        return;
-      }
       this.removeContextPane(pane);
       return;
     }
@@ -2763,16 +2764,15 @@ export class NextGenChatWorkbenchPrototypeComponent {
       this.addContextPane('result');
     }
     this.chatOpen.set(!this.chatOpen());
-    if (this.chatOpen()) this.activeTaskTab.set('chat');
   }
 
   closeContextPane(pane: ContextPane): void {
     this.removeContextPane(pane);
   }
 
-  activateTaskTab(tab: TaskTabId, pane: WorkbenchPane): void {
-    this.activeTaskTab.set(tab);
-    this.setPane(pane);
+  openAllContextPanes(): void {
+    this.contextPanes.set(['result', 'git', 'preview', 'debug']);
+    this.pane.set('debug');
   }
 
   paneTitle(pane: ContextPane): string {

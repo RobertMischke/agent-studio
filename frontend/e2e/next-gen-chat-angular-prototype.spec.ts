@@ -110,8 +110,9 @@ test.describe('@mockup next-gen chat Angular prototype', () => {
     await page.getByTestId('prototype-pane-git').click();
     await expect(page.getByTestId('prototype-pane-result-view')).toBeVisible();
     await expect(page.getByTestId('prototype-pane-git-view')).toContainText('Git changes');
-    await page.getByTestId('prototype-pane-preview').click();
-    await page.getByTestId('prototype-pane-debug').click();
+    await page.getByTestId('prototype-pane-all').click();
+    await expect(page.getByTestId('prototype-pane-result-view')).toBeVisible();
+    await expect(page.getByTestId('prototype-pane-git-view')).toBeVisible();
     await expect(page.getByTestId('prototype-pane-preview-view')).toBeVisible();
     await expect(page.getByTestId('prototype-pane-debug-view')).toBeVisible();
     await page.screenshot({

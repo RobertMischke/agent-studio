@@ -122,6 +122,80 @@ export function supervisorAdvisoryFragment(): CliOutputLine[] {
   return [line('Job is approaching its retry budget (high)', 'supervisor')];
 }
 
+/**
+ * Watchdog wait loop: agent goes quiet, watchdog repeats the warning, the
+ * agent eventually resumes streaming. This is the v6 "wait loop" canonical
+ * case from `activity-log-edge-cases.md`.
+ */
+export function waitLoopFragment(): CliOutputLine[] {
+  resetFixtureClock();
+  return [
+    line('[watchdog] Agent has been quiet for 30s', 'orchestrator'),
+    line('[watchdog] Still silent at 60s', 'orchestrator'),
+    line('[watchdog] Still silent at 120s', 'orchestrator'),
+    line('[watchdog] Agent resumed streaming', 'orchestrator')
+  ];
+}
+
+/**
+ * Token spike: orchestrator and supporting-agent calls land near each other
+ * with conspicuously high usage. The fixture exposes the lines plus an
+ * accompanying `JobTokenSummary` companion the projection can read.
+ */
+export function tokenSpikeFragment(): CliOutputLine[] {
+  resetFixtureClock();
+  return [
+    line('Continue with the long synthesis pass.', 'user'),
+    line('Synthesizing the meta-cycle report...'),
+    line('  | walking 30k lines of evidence')
+  ];
+}
+
+export function tokenSpikeSummary(): import('../../models/job.model').JobTokenSummary {
+  return {
+    calls: 4,
+    inputTokens: 280_000,
+    outputTokens: 14_500,
+    cacheReadTokens: 9_400,
+    cacheCreationTokens: 0,
+    totalTokens: 303_900,
+    lastModel: 'claude-opus-4-7',
+    lastUpdate: '2026-05-05T12:05:00Z',
+    entries: []
+  };
+}
+
+/**
+ * Schema drift: orchestrator (or meta-cycle hosted service) reports that a
+ * structured Markdown / JSON report could not be parsed. The projection
+ * raises a `system.schemaDrift` event, not a generic parser warning.
+ */
+export function schemaDriftFragment(): CliOutputLine[] {
+  resetFixtureClock();
+  return [
+    line('[schema-drift] Failed to parse expected MetaCycleReport.json: missing recommendations[]', 'orchestrator')
+  ];
+}
+
+/**
+ * A failing test followed by a passing retry. This stresses the tool-burst
+ * `tests` aggregate (one failure, then one pass) plus the failure flag
+ * surfacing into the workbench summary.
+ */
+export function testFailRetryFragment(): CliOutputLine[] {
+  resetFixtureClock();
+  return [
+    line('* Run npx playwright test perf-frontend.spec.ts (shell)'),
+    line('  | running playwright tests'),
+    line('x Run npx playwright test perf-frontend.spec.ts (shell): exited with error 1'),
+    line('  | grouped jobs poll took 11521 ms', 'stderr'),
+    line('* Run npx playwright test perf-frontend.spec.ts (shell)'),
+    line('  | rerunning after fix'),
+    line('* Run npx playwright test perf-frontend.spec.ts (shell)'),
+    line('  | passed in 320ms')
+  ];
+}
+
 /** Composite sample mixing user → tools → agent with a watchdog quiet event. */
 export function compositeFragment(): CliOutputLine[] {
   resetFixtureClock();
