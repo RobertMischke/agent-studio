@@ -91,6 +91,14 @@ End every run with exactly one of these tokens on its own line:
 
 Do not paraphrase the tokens or wrap them in code fences. Multiple tokens in a single run are not allowed; the orchestrator treats only the last one as authoritative.
 
+`[[TASK_NOOP]]` is a **recoverable signal, not a terminal state**. When a job lands in `4-review` ending in NOOP, the orchestrator inspects the task and decides deterministically:
+
+- If the task title and prompt body are real (non-empty, non-placeholder) and the per-job reissue budget has not been exhausted, the orchestrator reissues the task back to `3-progress` with a sharpened framing built from `RunOutcomePolicy.BuildReissueFollowupPrompt` and writes it as `orchestrator-follow-up.md`.
+- If the title or prompt is empty / placeholder, the orchestrator escalates by creating a `human-decision-needed-<slug>` task in `1-preparation` and leaves the original in `4-review` with a `[supervisor] [escalate]` banner.
+- If the task has already passed the reissue budget (default 2, shared with NEEDS_INPUT-driven reissues so the agent never sees double-spend), the orchestrator escalates the same way.
+
+The NOOP branch is fully deterministic - no fast-model CLI call, no per-hour rate consumption.
+
 When no token is emitted, the orchestrator falls back to a heuristic, marks the verdict as fallback, and posts an `Orchestrator` meta message into the chat so the user can see that the deterministic contract did not match.
 
 When you receive a recovery prompt (the previous CLI session was lost), the user follow-up is the primary instruction. Do not reply "task done" without performing the follow-up; if you cannot perform it, emit `[[TASK_BLOCKED:<reason>]]`.

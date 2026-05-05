@@ -129,6 +129,141 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         Assert.False(File.Exists(ReviewDecisionLog.DecisionsFile(_workspace, Project)));
     }
 
+    [Fact]
+    public async Task NoOp_WithRealPrompt_ReissuesWithSharpenedFraming_WithoutSpendingFastModel()
+    {
+        SeedReviewJobWithNoOp("flesh-out-readme",
+            title: "Add product overview to README",
+            promptBody: "# Add product overview\n\nWrite a clear two-paragraph product overview at the top of README.md describing the kanban board, the agent loop, and the watch-path model.\n");
+        var calls = 0;
+        var orchestrator = BuildOrchestrator(cliResponse: "", onCall: () => calls++);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        // No fast-model call should have been made.
+        Assert.Equal(0, calls);
+
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "flesh-out-readme")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Review, "flesh-out-readme")));
+
+        var log = ReadCliLog(JobStates.Progress, "flesh-out-readme");
+        Assert.Contains("[orchestrator]", log);
+        Assert.Contains("[reissue]", log);
+        Assert.Contains("NOOP recovery", log);
+
+        var followUpPath = Path.Combine(_watchPath, JobStates.Progress, "flesh-out-readme", "orchestrator-follow-up.md");
+        Assert.True(File.Exists(followUpPath));
+        var followUp = File.ReadAllText(followUpPath);
+        Assert.Contains("Do not reply 'task done'", followUp);
+        Assert.Contains("Add product overview", followUp);
+
+        var record = ReadOnlyDecisionRecord();
+        Assert.Equal(ReviewDecisionKind.Reissue, record.Kind);
+    }
+
+    [Fact]
+    public async Task NoOp_WithEmptyPrompt_EscalatesToHumanDecisionIntake()
+    {
+        SeedReviewJobWithNoOp("placeholder-task",
+            title: "TODO: fill in",
+            promptBody: "# TODO\n\nplaceholder\n");
+        var calls = 0;
+        var orchestrator = BuildOrchestrator(cliResponse: "", onCall: () => calls++);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        Assert.Equal(0, calls);
+
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Review, "placeholder-task")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "placeholder-task")));
+
+        var log = ReadCliLog(JobStates.Review, "placeholder-task");
+        Assert.Contains("[supervisor]", log);
+        Assert.Contains("[escalate]", log);
+        Assert.Contains("empty or placeholder", log);
+
+        var intake = Path.Combine(_watchPath, JobStates.Preparation, "human-decision-needed-placeholder-task");
+        Assert.True(Directory.Exists(intake));
+        Assert.True(File.Exists(Path.Combine(intake, "job.json")));
+        var intakePrompt = File.ReadAllText(Path.Combine(intake, "prompt.md"));
+        Assert.Contains("[[TASK_NOOP]]", intakePrompt);
+
+        var record = ReadOnlyDecisionRecord();
+        Assert.Equal(ReviewDecisionKind.Escalate, record.Kind);
+    }
+
+    [Fact]
+    public async Task NoOp_AfterReissueBudgetExhausted_EscalatesInsteadOfReissuing()
+    {
+        SeedReviewJobWithNoOp("repeated-noop",
+            title: "Implement caching layer",
+            promptBody: "# Implement caching\n\nAdd an LRU cache in front of the JobScannerService.GetJobs call to avoid the O(N) disk scan on every poll.\n");
+
+        // Pre-populate the journal with two prior reissues for this job
+        // (default budget = 2). Any further reissue should escalate.
+        for (var i = 0; i < 2; i++)
+        {
+            ReviewDecisionLog.Append(_workspace, new ReviewDecisionRecord(
+                CreatedAt: DateTime.UtcNow.AddMinutes(-10 + i),
+                JobId: "repeated-noop",
+                Project: Project,
+                Kind: ReviewDecisionKind.Reissue,
+                Reason: "prior reissue",
+                Prompt: "(test seed)",
+                Response: "(test seed)",
+                FollowUp: "(test seed)"));
+        }
+
+        var calls = 0;
+        var orchestrator = BuildOrchestrator(cliResponse: "", onCall: () => calls++);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        Assert.Equal(0, calls);
+        // Budget-exhausted NOOP must escalate, NOT reissue.
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Review, "repeated-noop")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "repeated-noop")));
+
+        var intake = Path.Combine(_watchPath, JobStates.Preparation, "human-decision-needed-repeated-noop");
+        Assert.True(Directory.Exists(intake));
+
+        var log = ReadCliLog(JobStates.Review, "repeated-noop");
+        Assert.Contains("[supervisor]", log);
+        Assert.Contains("[escalate]", log);
+        Assert.Contains("prior orchestrator reissue", log);
+
+        // Three records: two seed reissues, plus this tick's escalate.
+        var records = ReviewDecisionLog.ReadAll(_workspace, Project);
+        Assert.Equal(3, records.Count);
+        Assert.Equal(ReviewDecisionKind.Escalate, records[^1].Kind);
+    }
+
+    [Fact]
+    public void IsPromptUsable_SeparatesRealPromptsFromPlaceholders()
+    {
+        // Heuristic guard: any future change to the placeholder rules
+        // must keep these classifications stable so the NOOP branch logic
+        // continues to route correctly.
+        Assert.False(ReviewDecisionOrchestrator.IsPromptUsable("", "Real body with twenty plus characters of detail."));
+        Assert.False(ReviewDecisionOrchestrator.IsPromptUsable("Real title", ""));
+        Assert.False(ReviewDecisionOrchestrator.IsPromptUsable("TODO: fill in", "# TODO\n\nplaceholder\n"));
+        Assert.False(ReviewDecisionOrchestrator.IsPromptUsable("Real title", "# Heading only\n"));
+        Assert.True(ReviewDecisionOrchestrator.IsPromptUsable("Add caching layer",
+            "# Add caching\n\nWrap GetJobs in an LRU cache to avoid the disk scan on every poll.\n"));
+    }
+
+    private void SeedReviewJobWithNoOp(string slug, string title, string promptBody)
+    {
+        var dir = Path.Combine(_watchPath, JobStates.Review, slug);
+        Directory.CreateDirectory(Path.Combine(dir, "logs"));
+        File.WriteAllText(Path.Combine(dir, "job.json"),
+            $"{{\"id\":\"{slug}\",\"title\":{System.Text.Json.JsonSerializer.Serialize(title)},\"state\":\"{JobStates.Review}\",\"order\":1,\"agent\":\"claude\"}}");
+        File.WriteAllText(Path.Combine(dir, "prompt.md"), promptBody);
+        File.WriteAllText(Path.Combine(dir, "logs", "cli-output.log"),
+            $"[12:00:00.000] [stdout] starting{Environment.NewLine}" +
+            $"[12:00:01.000] [stdout] [[TASK_NOOP]]{Environment.NewLine}");
+    }
+
     private string JobPathLog(string state, string slug) =>
         Path.Combine(_watchPath, state, slug, "logs", "cli-output.log");
 

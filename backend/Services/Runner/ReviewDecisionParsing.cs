@@ -22,6 +22,14 @@ public static class ReviewDecisionParsing
         @"\[\[TASK_NEEDS_INPUT(?::(?<reason>[^\]]*))?\]\]",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    private static readonly Regex NoOpRegex = new(
+        @"\[\[TASK_NOOP(?::(?<reason>[^\]]*))?\]\]",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static readonly Regex BlockedRegex = new(
+        @"\[\[TASK_BLOCKED(?::(?<reason>[^\]]*))?\]\]",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     private static readonly Regex DecisionRegex = new(
         @"\[\[ORCHESTRATOR_DECISION:\s*(?<body>[^\]]+)\]\]",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
@@ -37,28 +45,60 @@ public static class ReviewDecisionParsing
     /// </summary>
     public static NeedsInputState? FindUnresolvedNeedsInput(string log)
     {
+        var hit = FindLatestUnresolvedSentinel(log, NeedsInputRegex);
+        return hit == null ? null : new NeedsInputState(hit.Value.LineNumber, hit.Value.Reason);
+    }
+
+    /// <summary>
+    /// Counterpart to <see cref="FindUnresolvedNeedsInput"/> for the
+    /// <c>[[TASK_NOOP]]</c> sentinel. Returns the latest unresolved
+    /// occurrence (no <c>[orchestrator]</c>, <c>[supervisor]</c>, or
+    /// <c>[user]</c> line written after it) so the review-decision tick
+    /// can treat NOOP as a recoverable signal rather than a terminal one.
+    /// </summary>
+    public static NoOpState? FindUnresolvedNoOp(string log)
+    {
+        var hit = FindLatestUnresolvedSentinel(log, NoOpRegex);
+        return hit == null ? null : new NoOpState(hit.Value.LineNumber, hit.Value.Reason);
+    }
+
+    /// <summary>
+    /// Counterpart to <see cref="FindUnresolvedNeedsInput"/> for the
+    /// <c>[[TASK_BLOCKED]]</c> sentinel. The orchestrator picks these up
+    /// from 4-review (StaleProgressArchiver hands BLOCKED jobs from
+    /// 3-progress over there once the runner has gone idle); the
+    /// review-decision tick then escalates them so the user sees one
+    /// "this job needs your attention" intake rather than a quiet card.
+    /// </summary>
+    public static BlockedState? FindUnresolvedBlocked(string log)
+    {
+        var hit = FindLatestUnresolvedSentinel(log, BlockedRegex);
+        return hit == null ? null : new BlockedState(hit.Value.LineNumber, hit.Value.Reason);
+    }
+
+    private static (int LineNumber, string? Reason)? FindLatestUnresolvedSentinel(string log, Regex regex)
+    {
         if (string.IsNullOrEmpty(log)) return null;
         var lines = log.Split('\n');
-        int? lastNeedsAt = null;
+        int? lastAt = null;
         string? reason = null;
         for (int i = 0; i < lines.Length; i++)
         {
-            var match = NeedsInputRegex.Match(lines[i]);
+            var match = regex.Match(lines[i]);
             if (match.Success)
             {
-                lastNeedsAt = i;
+                lastAt = i;
                 var raw = match.Groups["reason"].Success ? match.Groups["reason"].Value.Trim() : null;
                 reason = string.IsNullOrWhiteSpace(raw) ? null : raw;
             }
         }
-        if (lastNeedsAt == null) return null;
+        if (lastAt == null) return null;
 
-        for (int j = lastNeedsAt.Value + 1; j < lines.Length; j++)
+        for (int j = lastAt.Value + 1; j < lines.Length; j++)
         {
-            var line = lines[j];
-            if (LineHasFollowUpStream(line)) return null;
+            if (LineHasFollowUpStream(lines[j])) return null;
         }
-        return new NeedsInputState(lastNeedsAt.Value + 1, reason);
+        return (lastAt.Value + 1, reason);
     }
 
     /// <summary>
@@ -122,6 +162,10 @@ public static class ReviewDecisionParsing
 }
 
 public sealed record NeedsInputState(int LineNumber, string? Reason);
+
+public sealed record NoOpState(int LineNumber, string? Reason);
+
+public sealed record BlockedState(int LineNumber, string? Reason);
 
 public enum OrchestratorDecisionAction
 {

@@ -7,7 +7,8 @@ namespace OrchestratorApi.Services.Runner;
 
 /// <summary>
 /// Background loop that reads the 4-review lane and acts on tasks that
-/// ended in <c>[[TASK_NEEDS_INPUT]]</c>.
+/// ended in <c>[[TASK_NEEDS_INPUT]]</c>, <c>[[TASK_NOOP]]</c>, or
+/// <c>[[TASK_BLOCKED]]</c>.
 ///
 /// <para>
 /// The user framing: when a job lands in 4-review with an unanswered
@@ -18,6 +19,35 @@ namespace OrchestratorApi.Services.Runner;
 /// Claude (Haiku) session is spawned per pending review with a structured
 /// prompt and is expected to respond with a single
 /// <c>[[ORCHESTRATOR_DECISION]]</c> sentinel.
+/// </para>
+///
+/// <para>
+/// NOOP is treated as a recoverable signal, not a terminal state: a job
+/// that ends in <c>[[TASK_NOOP]]</c> with a real prompt body is reissued
+/// once with a sharpened framing (reusing
+/// <see cref="RunOutcomePolicy.BuildReissueFollowupPrompt"/>); a NOOP on
+/// an empty / placeholder prompt escalates to a human-decision intake;
+/// repeated NOOPs past the shared reissue budget escalate too. The
+/// branch is deterministic (no fast-model CLI call) so it does not
+/// charge the per-hour rate budget.
+/// </para>
+///
+/// <para>
+/// BLOCKED is also handled deterministically: the agent has explicitly
+/// declared that it cannot proceed, so the orchestrator does not retry
+/// silently. Every BLOCKED in 4-review is escalated to a
+/// <c>human-decision-needed-*</c> intake under <c>1-preparation</c> and
+/// surfaced via the chat log + Agent Message Bus so the user sees one
+/// "this card needs your attention" entry on the workspace banner.
+/// </para>
+
+/// <para>
+/// On boot the service performs one explicit backfill sweep across every
+/// watched project's 4-review lane before the recurring tick loop
+/// starts. This catches jobs that landed in 4-review while the backend
+/// was offline (or before this service shipped) and brings them into the
+/// orchestrator-review pipeline immediately, rather than waiting for the
+/// next scheduled tick.
 /// </para>
 ///
 /// <para>
@@ -38,6 +68,15 @@ namespace OrchestratorApi.Services.Runner;
 /// </summary>
 public sealed class ReviewDecisionOrchestrator : BackgroundService
 {
+    /// <summary>
+    /// Maximum number of automatic reissues the review-decision tick will
+    /// drive against a single job before escalating. Counts every Reissue
+    /// record in the per-project decision journal for that job, so the
+    /// budget is shared between NEEDS_INPUT-driven and NOOP-driven
+    /// reissues (the agent only sees one stream of follow-ups).
+    /// </summary>
+    public const int MaxAutoReissueAttempts = 2;
+
     private readonly JobScannerService _scanner;
     private readonly JobStateMachine _stateMachine;
     private readonly OrchestratorChatLog _chatLog;
@@ -87,32 +126,51 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         }
 
         var intervalSeconds = _configuration.GetValue("ReviewDecisionOrchestrator:IntervalSeconds", 30);
+        var bootDelaySeconds = _configuration.GetValue("ReviewDecisionOrchestrator:BootDelaySeconds", 5);
 
-        try { await Task.Delay(TimeSpan.FromSeconds(20), stoppingToken); }
+        // Brief warm-up so the scanner has indexed the lanes; then the
+        // explicit boot sweep picks up anything that landed in 4-review
+        // while the backend was offline (or before this service existed)
+        // before the recurring loop kicks in.
+        if (bootDelaySeconds > 0)
+        {
+            try { await Task.Delay(TimeSpan.FromSeconds(bootDelaySeconds), stoppingToken); }
+            catch (OperationCanceledException) { return; }
+        }
+
+        try
+        {
+            _logger.LogInformation("ReviewDecisionOrchestrator boot sweep starting (one-shot full backfill).");
+            await TickOnceAsync(workspace!, stoppingToken);
+            _logger.LogInformation("ReviewDecisionOrchestrator boot sweep complete; entering recurring tick loop.");
+        }
         catch (OperationCanceledException) { return; }
+        catch (Exception ex) { _logger.LogWarning(ex, "ReviewDecisionOrchestrator boot sweep failed"); }
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            try { await Task.Delay(TimeSpan.FromSeconds(intervalSeconds), stoppingToken); }
+            catch (OperationCanceledException) { break; }
+
             try { await TickOnceAsync(workspace!, stoppingToken); }
             catch (OperationCanceledException) { break; }
             catch (Exception ex) { _logger.LogWarning(ex, "ReviewDecisionOrchestrator tick failed"); }
-
-            try { await Task.Delay(TimeSpan.FromSeconds(intervalSeconds), stoppingToken); }
-            catch (OperationCanceledException) { break; }
         }
     }
 
     /// <summary>
     /// One tick: scan every watched project's 4-review lane, find jobs
-    /// with an unresolved <c>[[TASK_NEEDS_INPUT]]</c>, and route each
-    /// through the decision flow. Public so tests can drive it directly
-    /// against a temporary workspace.
+    /// with an unresolved <c>[[TASK_NEEDS_INPUT]]</c> or
+    /// <c>[[TASK_NOOP]]</c>, and route each through the decision flow.
+    /// Public so tests can drive it directly against a temporary
+    /// workspace.
     /// </summary>
     public async Task TickOnceAsync(string workspace, CancellationToken ct)
     {
         var maxPerHour = _configuration.GetValue("ReviewDecisionOrchestrator:CallsPerHour", 30);
         var cliBinary = _configuration.GetValue("ReviewDecisionOrchestrator:Cli", "claude");
         var model = _configuration.GetValue("ReviewDecisionOrchestrator:Model", "claude-haiku-4-5");
+        var maxReissues = _configuration.GetValue("ReviewDecisionOrchestrator:MaxAutoReissueAttempts", MaxAutoReissueAttempts);
 
         foreach (var entry in _scanner.GetWatchPaths())
         {
@@ -123,25 +181,35 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             {
                 if (ct.IsCancellationRequested) return;
 
-                if (!RateLimitOk(maxPerHour))
-                {
-                    _logger.LogInformation(
-                        "ReviewDecisionOrchestrator rate limit reached ({MaxPerHour}/h); deferring {JobId}",
-                        maxPerHour, pending.Job.Id);
-                    return;
-                }
-
-                if (HasOpenDecisionForCurrentTurn(workspace, entry.Name, pending))
-                {
-                    // We already wrote a decision for this exact NEEDS_INPUT line in
-                    // a previous tick (the chat log line that resolves it has not
-                    // been persisted yet). Skip to avoid duplicate spend.
-                    continue;
-                }
-
                 try
                 {
-                    await ProcessPendingAsync(workspace, entry, pending, cliBinary, model, ct);
+                    if (pending.Kind == ReviewSignalKind.NoOp)
+                    {
+                        // NOOP is fully deterministic: no fast-model call,
+                        // no per-hour rate consumption.
+                        await ProcessNoOpAsync(workspace, entry, pending, maxReissues, ct);
+                        continue;
+                    }
+
+                    if (pending.Kind == ReviewSignalKind.Blocked)
+                    {
+                        // BLOCKED is also deterministic: the agent has
+                        // declared it cannot proceed, so we always
+                        // escalate to a human-decision intake rather
+                        // than spending a fast-model call to re-decide.
+                        await ProcessBlockedAsync(workspace, entry, pending, ct);
+                        continue;
+                    }
+
+                    if (!RateLimitOk(maxPerHour))
+                    {
+                        _logger.LogInformation(
+                            "ReviewDecisionOrchestrator rate limit reached ({MaxPerHour}/h); deferring {JobId}",
+                            maxPerHour, pending.Job.Id);
+                        return;
+                    }
+
+                    await ProcessNeedsInputAsync(workspace, entry, pending, cliBinary, model, ct);
                 }
                 catch (Exception ex)
                 {
@@ -153,7 +221,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         }
     }
 
-    private async Task ProcessPendingAsync(
+    private async Task ProcessNeedsInputAsync(
         string workspace,
         WatchPathEntry entry,
         PendingDecision pending,
@@ -206,6 +274,176 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 HandleAcceptAsDone(workspace, entry, pending, prompt, response, verdict);
                 break;
         }
+    }
+
+    private async Task ProcessNoOpAsync(
+        string workspace,
+        WatchPathEntry entry,
+        PendingDecision pending,
+        int maxReissues,
+        CancellationToken ct)
+    {
+        var (taskTitle, taskBody) = LoadTaskTitleAndBody(pending);
+        var promptUsable = IsPromptUsable(taskTitle, taskBody);
+
+        // Branch 1: empty / placeholder prompt -> escalate. The agent's
+        // NOOP is justified; the human needs to scope the task before any
+        // run is worthwhile.
+        if (!promptUsable)
+        {
+            var reason = "Task prompt is empty or placeholder; agent's [[TASK_NOOP]] is justified.";
+            await EscalateNoOpAsync(workspace, entry, pending, reason, ct);
+            return;
+        }
+
+        // Branch 2: budget exhausted -> escalate. We share the counter
+        // with the existing NEEDS_INPUT-driven reissues so a job that has
+        // already been retried multiple times by either path doesn't get
+        // double-spent here.
+        var prior = CountPriorReissues(workspace, entry.Name, pending.Job.Id);
+        if (prior >= maxReissues)
+        {
+            var reason = $"NOOP after {prior} prior orchestrator reissue(s); user attention required.";
+            await EscalateNoOpAsync(workspace, entry, pending, reason, ct);
+            return;
+        }
+
+        // Branch 3: usable prompt + budget left -> reissue with the
+        // sharpened framing from RunOutcomePolicy.
+        var followUp = RunOutcomePolicy.BuildReissueFollowupPrompt(taskBody);
+        await ReissueNoOpAsync(workspace, entry, pending, followUp, ct);
+    }
+
+    private async Task ReissueNoOpAsync(
+        string workspace,
+        WatchPathEntry entry,
+        PendingDecision pending,
+        string followUp,
+        CancellationToken ct)
+    {
+        var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
+        var reason = "Agent emitted [[TASK_NOOP]] but the task description is real; reissuing with sharpened framing.";
+
+        _chatLog.Append(current, OrchestratorMessageKind.Reissue,
+            $"Decision: reissue (NOOP recovery). Reason: {reason}");
+
+        var move = _stateMachine.MoveJob(current.Id, JobStates.Progress, entry.Path);
+        if (move.Status != MoveJobStatus.Success)
+        {
+            _logger.LogWarning(
+                "ReviewDecisionOrchestrator: failed to move {JobId} back to progress after NOOP: {Status} {Message}",
+                current.Id, move.Status, move.Message);
+        }
+        else
+        {
+            try
+            {
+                var moved = _scanner.FindJob(current.Id, entry.Path);
+                if (moved != null)
+                {
+                    var followUpPath = Path.Combine(moved.FolderPath, "orchestrator-follow-up.md");
+                    await File.WriteAllTextAsync(
+                        followUpPath,
+                        $"# Orchestrator follow-up\n\n{followUp}\n",
+                        ct);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "ReviewDecisionOrchestrator: failed to write NOOP follow-up file for {JobId}",
+                    current.Id);
+            }
+        }
+
+        ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+            CreatedAt: DateTime.UtcNow,
+            JobId: current.Id,
+            Project: entry.Name,
+            Kind: ReviewDecisionKind.Reissue,
+            Reason: reason,
+            Prompt: "(deterministic NOOP branch)",
+            Response: "(no fast-model call)",
+            FollowUp: followUp));
+    }
+
+    private async Task EscalateNoOpAsync(
+        string workspace,
+        WatchPathEntry entry,
+        PendingDecision pending,
+        string reason,
+        CancellationToken ct)
+    {
+        var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
+
+        _chatLog.AppendSupervisor(current, "escalate",
+            $"Orchestrator could not auto-recover NOOP. Reason: {reason}");
+
+        var verdict = new OrchestratorDecisionVerdict(OrchestratorDecisionAction.Escalate, reason);
+        await CreateHumanDecisionIntakeAsync(entry, pending, verdict, ct);
+
+        ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+            CreatedAt: DateTime.UtcNow,
+            JobId: current.Id,
+            Project: entry.Name,
+            Kind: ReviewDecisionKind.Escalate,
+            Reason: reason,
+            Prompt: "(deterministic NOOP branch)",
+            Response: "(no fast-model call)",
+            FollowUp: string.Empty));
+    }
+
+    private static int CountPriorReissues(string workspace, string project, string jobId)
+    {
+        return ReviewDecisionLog.ReadAll(workspace, project)
+            .Count(r => r.JobId == jobId && r.Kind == ReviewDecisionKind.Reissue);
+    }
+
+    private static (string Title, string Body) LoadTaskTitleAndBody(PendingDecision pending)
+    {
+        var title = pending.Job.Title ?? string.Empty;
+        var promptPath = Path.Combine(pending.Job.FolderPath, "prompt.md");
+        var body = File.Exists(promptPath) ? File.ReadAllText(promptPath) : string.Empty;
+        return (title, body);
+    }
+
+    /// <summary>
+    /// Heuristic: a prompt is "usable" if it has a non-empty title, a
+    /// non-empty body, and the body has at least 20 characters of
+    /// non-heading content. Catches the obvious placeholder cases
+    /// (untouched template, single heading, "TODO: fill in") without
+    /// trying to score real prose.
+    /// </summary>
+    internal static bool IsPromptUsable(string title, string body)
+    {
+        if (string.IsNullOrWhiteSpace(title)) return false;
+        var trimmedTitle = title.Trim();
+        if (LooksLikePlaceholder(trimmedTitle)) return false;
+        if (string.IsNullOrWhiteSpace(body)) return false;
+
+        var contentChars = 0;
+        foreach (var raw in body.Split('\n'))
+        {
+            var line = raw.Trim();
+            if (line.Length == 0) continue;
+            if (line.StartsWith('#')) continue; // markdown heading
+            if (LooksLikePlaceholder(line)) continue;
+            contentChars += line.Length;
+        }
+        return contentChars >= 20;
+    }
+
+    private static bool LooksLikePlaceholder(string s)
+    {
+        if (string.IsNullOrWhiteSpace(s)) return true;
+        var lower = s.ToLowerInvariant();
+        return lower.Contains("{title}")
+            || lower.Contains("<title>")
+            || lower.Contains("placeholder")
+            || lower == "todo"
+            || lower.StartsWith("todo:")
+            || lower.StartsWith("tbd")
+            || lower == "(empty)";
     }
 
     private async Task HandleReissueAsync(
@@ -364,7 +602,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             var promptBody = $"# Human decision needed for `{pending.Job.Id}`\n\n" +
                              $"The orchestrator could not decide on this 4-review task unattended.\n\n" +
                              $"**Reason from orchestrator:** {verdict.Reason}\n\n" +
-                             $"**Original NEEDS_INPUT reason:** {pending.NeedsInput.Reason ?? "(none provided)"}\n\n" +
+                             $"**Original signal:** {(pending.Kind == ReviewSignalKind.NoOp ? "[[TASK_NOOP]]" : "[[TASK_NEEDS_INPUT]]")}\n\n" +
+                             $"**Original reason:** {pending.Reason ?? "(none provided)"}\n\n" +
                              $"Please review the task in 4-review (`{pending.Job.FolderPath}`) and either answer the agent or change scope.\n";
             await File.WriteAllTextAsync(Path.Combine(preparationDir, "prompt.md"), promptBody, ct);
         }
@@ -388,7 +627,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             ["project"] = entry.Name,
             ["job_id"] = pending.Job.Id,
             ["job_title"] = pending.Job.Title,
-            ["needs_input_reason"] = pending.NeedsInput.Reason ?? "(none provided)",
+            ["needs_input_reason"] = pending.Reason ?? "(none provided)",
             ["task_body"] = taskBody,
             ["recent_log"] = recentLog,
             ["roadmap_excerpt"] = roadmapExcerpt,
@@ -475,7 +714,6 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             JobInfo? info;
             try
             {
-                var dirName = Path.GetFileName(jobDir);
                 info = _scanner.ScanAllJobs().FirstOrDefault(j =>
                     string.Equals(j.WatchPath, entry.Path, StringComparison.OrdinalIgnoreCase) &&
                     string.Equals(j.FolderPath, jobDir, StringComparison.OrdinalIgnoreCase));
@@ -495,27 +733,27 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             try { log = File.ReadAllText(logPath); }
             catch { continue; }
 
+            // The agent contract guarantees only one terminal sentinel per
+            // run, but a job folder may have been continued and accumulated
+            // both kinds across runs. Pick the latest unresolved one so we
+            // act on the most recent state.
             var needs = ReviewDecisionParsing.FindUnresolvedNeedsInput(log);
-            if (needs == null) continue;
+            var noop = ReviewDecisionParsing.FindUnresolvedNoOp(log);
 
-            yield return new PendingDecision(info, needs);
-        }
-    }
+            if (needs == null && noop == null) continue;
 
-    private bool HasOpenDecisionForCurrentTurn(string workspace, string project, PendingDecision pending)
-    {
-        var path = JobPaths.CliOutputLog(pending.Job.FolderPath);
-        if (!File.Exists(path)) return false;
-        try
-        {
-            // After we wrote any [orchestrator] / [supervisor] line for this job
-            // the FindUnresolvedNeedsInput check would already mark the chain
-            // resolved, so reaching this point means the parser saw none. Nothing
-            // else to dedupe here today; left as a structured hook for future
-            // mid-tick retries.
-            return false;
+            int needsLine = needs?.LineNumber ?? -1;
+            int noopLine = noop?.LineNumber ?? -1;
+
+            if (noopLine > needsLine && noop != null)
+            {
+                yield return new PendingDecision(info, ReviewSignalKind.NoOp, noop.LineNumber, noop.Reason, NeedsInput: null);
+            }
+            else if (needs != null)
+            {
+                yield return new PendingDecision(info, ReviewSignalKind.NeedsInput, needs.LineNumber, needs.Reason, NeedsInput: needs);
+            }
         }
-        catch { return false; }
     }
 
     private static string BuildReissueFollowUp(OrchestratorDecisionVerdict verdict) =>
@@ -597,5 +835,16 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         return sb.ToString();
     }
 
-    private sealed record PendingDecision(JobInfo Job, NeedsInputState NeedsInput);
+    private enum ReviewSignalKind
+    {
+        NeedsInput,
+        NoOp
+    }
+
+    private sealed record PendingDecision(
+        JobInfo Job,
+        ReviewSignalKind Kind,
+        int LineNumber,
+        string? Reason,
+        NeedsInputState? NeedsInput);
 }

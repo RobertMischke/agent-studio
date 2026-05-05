@@ -63,6 +63,51 @@ public class ReviewDecisionParsingTests
     }
 
     [Fact]
+    public void FindUnresolvedNoOp_ReturnsLatestWhenNoFollowUp()
+    {
+        var log = string.Join('\n',
+            "[12:00:00.000] [stdout] starting...",
+            "[12:00:01.000] [stdout] [[TASK_NOOP]]",
+            "[12:00:02.000] [stdout] (idle)");
+
+        var state = ReviewDecisionParsing.FindUnresolvedNoOp(log);
+
+        Assert.NotNull(state);
+        Assert.Null(state!.Reason);
+    }
+
+    [Fact]
+    public void FindUnresolvedNoOp_ReturnsNull_WhenOrchestratorAlreadyReissued()
+    {
+        var log = string.Join('\n',
+            "[12:00:00.000] [stdout] [[TASK_NOOP]]",
+            "[12:00:30.000] [orchestrator] [reissue] Decision: reissue (NOOP recovery).");
+
+        Assert.Null(ReviewDecisionParsing.FindUnresolvedNoOp(log));
+    }
+
+    [Fact]
+    public void FindUnresolvedNoOp_ReturnsNull_WhenSupervisorAlreadyEscalated()
+    {
+        var log = string.Join('\n',
+            "[12:00:00.000] [stdout] [[TASK_NOOP]]",
+            "[12:00:30.000] [supervisor] [escalate] Orchestrator could not auto-recover NOOP.");
+
+        Assert.Null(ReviewDecisionParsing.FindUnresolvedNoOp(log));
+    }
+
+    [Fact]
+    public void FindUnresolvedNoOp_CapturesReasonWhenProvided()
+    {
+        var log = "[12:00:00.000] [stdout] [[TASK_NOOP: nothing actionable in prompt]]";
+
+        var state = ReviewDecisionParsing.FindUnresolvedNoOp(log);
+
+        Assert.NotNull(state);
+        Assert.Equal("nothing actionable in prompt", state!.Reason);
+    }
+
+    [Fact]
     public void ParseDecision_Reissue_RoundTripsActionAndReason()
     {
         var output = "After reading the roadmap...\n[[ORCHESTRATOR_DECISION: action=reissue; reason=Roadmap names option A as canonical.]]\n[[TASK_DONE]]";
