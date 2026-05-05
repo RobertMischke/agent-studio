@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.Runner;
 
 namespace OrchestratorApi.Services.Supervisor;
 
@@ -37,6 +38,7 @@ public sealed class MetaCycleHostedService : BackgroundService
     private readonly JobScannerService _scanner;
     private readonly SupervisorInterventionService _interventions;
     private readonly ProjectSettingsService _projectSettings;
+    private readonly OrchestratorChatLog _chatLog;
     private readonly IConfiguration _configuration;
     private readonly ILogger<MetaCycleHostedService> _logger;
     private readonly TimeProvider _time;
@@ -54,6 +56,7 @@ public sealed class MetaCycleHostedService : BackgroundService
         JobScannerService scanner,
         SupervisorInterventionService interventions,
         ProjectSettingsService projectSettings,
+        OrchestratorChatLog chatLog,
         IConfiguration configuration,
         ILogger<MetaCycleHostedService> logger,
         TimeProvider? time = null)
@@ -62,6 +65,7 @@ public sealed class MetaCycleHostedService : BackgroundService
         _scanner = scanner;
         _interventions = interventions;
         _projectSettings = projectSettings;
+        _chatLog = chatLog;
         _configuration = configuration;
         _logger = logger;
         _time = time ?? TimeProvider.System;
@@ -386,17 +390,20 @@ public sealed class MetaCycleHostedService : BackgroundService
         switch (report.Action.Kind)
         {
             case MetaCycleActionKind.Resume:
-                await _interventions.ResumeAsync(project, $"meta-cycle:{report.CycleId} {report.Action.Reason}", SupervisorSource.AutoIntervention, ct);
+                await ResumeWithVerificationAsync(workspace, project, report,
+                    $"meta-cycle:{report.CycleId} {report.Action.Reason}", ct);
                 break;
 
             case MetaCycleActionKind.UpdateStableThenResume:
                 TryRunUpdateStable(workspace, project, report);
-                await _interventions.ResumeAsync(project, $"meta-cycle:{report.CycleId} {report.Action.Reason}", SupervisorSource.AutoIntervention, ct);
+                await ResumeWithVerificationAsync(workspace, project, report,
+                    $"meta-cycle:{report.CycleId} {report.Action.Reason}", ct);
                 break;
 
             case MetaCycleActionKind.QueueFix:
                 report = report with { Action = report.Action with { FollowUpJobId = QueueFollowUpTask(workspace, project, report) } };
-                await _interventions.ResumeAsync(project, $"meta-cycle:{report.CycleId} resumed-after-fix-queued", SupervisorSource.AutoIntervention, ct);
+                await ResumeWithVerificationAsync(workspace, project, report,
+                    $"meta-cycle:{report.CycleId} resumed-after-fix-queued", ct);
                 break;
 
             case MetaCycleActionKind.EscalateToUser:
@@ -409,6 +416,225 @@ public sealed class MetaCycleHostedService : BackgroundService
                 break;
         }
     }
+
+    /// <summary>
+    /// Wraps <see cref="SupervisorInterventionService.ResumeAsync"/> with a
+    /// verification loop. After every resume call the cycle reads back the
+    /// project's runner mode through <see cref="TaskRunnerService.GetStatus"/>
+    /// (in-process; no HTTP self-call) and only declares success when the
+    /// observed mode is <c>auto-continuous</c>. If the mode is still
+    /// <c>paused</c> after <c>Supervisor:MetaCycleResumeMaxAttempts</c> tries,
+    /// a high-severity <c>cycle-resume-failed</c> advisory plus a
+    /// <c>[supervisor]</c> chat-note are emitted so the operator is alerted
+    /// rather than silently stuck. Without this loop a single missed resume
+    /// (transient SetMode failure, runner not yet wired for the project)
+    /// leaves the project paused forever.
+    /// </summary>
+    private async Task ResumeWithVerificationAsync(
+        string workspace,
+        string project,
+        MetaCycleReport report,
+        string reason,
+        CancellationToken ct)
+    {
+        var maxAttempts = Math.Max(1, _configuration.GetValue("Supervisor:MetaCycleResumeMaxAttempts", 5));
+        var backoffMs = Math.Max(0, _configuration.GetValue("Supervisor:MetaCycleResumeBackoffBaseMs", 1000));
+        var baseBackoff = TimeSpan.FromMilliseconds(backoffMs);
+
+        var outcome = await VerifyResumeWithRetryAsync(
+            resumeAttempt: async (attempt, c) =>
+            {
+                _logger.LogInformation(
+                    "MetaCycle:{CycleId} {Project} resume attempt {Attempt}/{Max} reason={Reason}",
+                    report.CycleId, project, attempt, maxAttempts, reason);
+                await _interventions.ResumeAsync(project, reason, SupervisorSource.AutoIntervention, c);
+            },
+            getCurrentMode: () => GetProjectMode(project),
+            expectedMode: "auto-continuous",
+            maxAttempts: maxAttempts,
+            baseBackoff: baseBackoff,
+            time: _time,
+            ct: ct);
+
+        switch (outcome.Result)
+        {
+            case ResumeVerificationResult.VerifiedFirstTry:
+                _logger.LogInformation(
+                    "MetaCycle:{CycleId} {Project} resume verified on first attempt; mode=auto-continuous.",
+                    report.CycleId, project);
+                break;
+            case ResumeVerificationResult.VerifiedAfterRetries:
+                _logger.LogWarning(
+                    "MetaCycle:{CycleId} {Project} resume needed {Attempts} attempts; mode=auto-continuous. Treat as drift signal.",
+                    report.CycleId, project, outcome.AttemptsMade);
+                break;
+            case ResumeVerificationResult.ExhaustedRetries:
+                _logger.LogError(
+                    "MetaCycle:{CycleId} {Project} resume FAILED after {Attempts} attempts; last observed mode='{Mode}'. Project remains paused; emitting advisory.",
+                    report.CycleId, project, outcome.AttemptsMade, outcome.LastObservedMode ?? "(unknown)");
+                EmitResumeFailureSignals(workspace, project, report, outcome);
+                break;
+        }
+    }
+
+    private string? GetProjectMode(string project)
+    {
+        try
+        {
+            var status = _taskRunner.GetStatus();
+            if (status?.Projects == null) return null;
+            return status.Projects.TryGetValue(project, out var p) ? p.Mode : null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "MetaCycle GetProjectMode probe failed for {Project}", project);
+            return null;
+        }
+    }
+
+    private void EmitResumeFailureSignals(
+        string workspace,
+        string project,
+        MetaCycleReport report,
+        ResumeVerificationOutcome outcome)
+    {
+        var advisory = BuildResumeFailedAdvisory(project, report, outcome, _time.GetUtcNow().UtcDateTime);
+        try
+        {
+            HardHealthCheckHostedService.AppendObservationRecord(workspace, advisory);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "MetaCycle resume-failed advisory write failed for {Project}", project);
+        }
+
+        // Best-effort chat-note: pin to the most recent observed job in the
+        // window so the operator sees the alert next to the work that
+        // triggered the cycle. If we have no job context we still wrote the
+        // advisory above, which the supervisor panel + Layer 3 review pick up.
+        var lastJobId = report.JobsObserved.LastOrDefault()?.JobId;
+        if (string.IsNullOrWhiteSpace(lastJobId)) return;
+        try
+        {
+            var info = _scanner.FindJob(lastJobId);
+            if (info != null)
+            {
+                _chatLog.AppendSupervisor(info, "cycle-resume-failed",
+                    BuildResumeFailedChatNoteText(project, report, outcome));
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "MetaCycle resume-failed chat-note write failed for {Project}", project);
+        }
+    }
+
+    /// <summary>
+    /// Pure builder for the high-severity advisory raised when the
+    /// resume-with-verification loop gives up. Public + static so tests can
+    /// assert the shape without standing up the hosted service.
+    /// </summary>
+    public static SupervisorAdvisory BuildResumeFailedAdvisory(
+        string project,
+        MetaCycleReport report,
+        ResumeVerificationOutcome outcome,
+        DateTime atUtc)
+        => new(
+            CreatedAt: atUtc,
+            Project: project,
+            Severity: SupervisorSeverity.High,
+            Source: SupervisorSource.AutoIntervention,
+            Topic: "cycle-resume-failed",
+            Message: $"meta-cycle:{report.CycleId} resume to auto-continuous failed after {outcome.AttemptsMade} attempts; last observed mode='{outcome.LastObservedMode ?? "(unknown)"}'. Project remains paused; user must resume manually.");
+
+    /// <summary>
+    /// Pure builder for the supervisor chat-note text rendered next to the
+    /// last job in the cycle window. Kept separate so the formatting is
+    /// asserted directly in tests without a JobInfo / OrchestratorChatLog.
+    /// </summary>
+    public static string BuildResumeFailedChatNoteText(
+        string project,
+        MetaCycleReport report,
+        ResumeVerificationOutcome outcome)
+        => $"meta-cycle:{report.CycleId} could not resume {project} after {outcome.AttemptsMade} attempts (last mode={outcome.LastObservedMode ?? "?"}). Project stays paused; resume manually after fixing the underlying cause.";
+
+    /// <summary>
+    /// Calls <paramref name="resumeAttempt"/> and immediately reads the
+    /// project's mode through <paramref name="getCurrentMode"/>. Re-attempts
+    /// up to <paramref name="maxAttempts"/> with exponential backoff
+    /// (<paramref name="baseBackoff"/>, doubling each time) until the mode
+    /// observation matches <paramref name="expectedMode"/>. Pure helper: no
+    /// DI, no IO, deterministic against a fake <see cref="TimeProvider"/>.
+    /// Exceptions thrown by <paramref name="resumeAttempt"/> are captured and
+    /// surface on the final outcome; cancellation propagates.
+    /// </summary>
+    internal static async Task<ResumeVerificationOutcome> VerifyResumeWithRetryAsync(
+        Func<int, CancellationToken, Task> resumeAttempt,
+        Func<string?> getCurrentMode,
+        string expectedMode,
+        int maxAttempts,
+        TimeSpan baseBackoff,
+        TimeProvider time,
+        CancellationToken ct)
+    {
+        if (maxAttempts < 1) throw new ArgumentOutOfRangeException(nameof(maxAttempts), "must be >= 1");
+
+        Exception? lastException = null;
+        string? lastMode = null;
+
+        for (var attempt = 1; attempt <= maxAttempts; attempt++)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            try
+            {
+                await resumeAttempt(attempt, ct);
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                lastException = ex;
+            }
+
+            lastMode = getCurrentMode();
+            if (string.Equals(lastMode, expectedMode, StringComparison.Ordinal))
+            {
+                var verifiedResult = attempt == 1
+                    ? ResumeVerificationResult.VerifiedFirstTry
+                    : ResumeVerificationResult.VerifiedAfterRetries;
+                return new ResumeVerificationOutcome(verifiedResult, attempt, lastMode, null);
+            }
+
+            if (attempt < maxAttempts && baseBackoff > TimeSpan.Zero)
+            {
+                // Exponential backoff: base, 2*base, 4*base, ... Cap the
+                // shift to avoid overflow on absurdly large maxAttempts.
+                var shift = Math.Min(attempt - 1, 30);
+                var delay = TimeSpan.FromTicks(baseBackoff.Ticks * (1L << shift));
+                try { await Task.Delay(delay, time, ct); }
+                catch (OperationCanceledException) { throw; }
+            }
+        }
+
+        return new ResumeVerificationOutcome(
+            ResumeVerificationResult.ExhaustedRetries,
+            maxAttempts,
+            lastMode,
+            lastException);
+    }
+
+    public enum ResumeVerificationResult
+    {
+        VerifiedFirstTry,
+        VerifiedAfterRetries,
+        ExhaustedRetries
+    }
+
+    public sealed record ResumeVerificationOutcome(
+        ResumeVerificationResult Result,
+        int AttemptsMade,
+        string? LastObservedMode,
+        Exception? LastException);
 
     private async Task WaitForProjectQuiescenceAsync(string project, string cycleId, TimeSpan timeout, CancellationToken ct)
     {

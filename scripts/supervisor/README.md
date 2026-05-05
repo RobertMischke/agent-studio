@@ -49,6 +49,21 @@ ATP_RESTART_THRESHOLD=5 ATP_WORKSPACE=/some/other/workspace \
   ./scripts/supervisor/run-stable-restart-watcher.sh
 ```
 
+#### Resume verification after the restart
+
+`update-stable.sh` stops stable, pulls, and restarts. The fresh backend comes back up in whatever runner mode it had before, so for the supervisor's pause-then-update-then-resume recipe the watcher needs an explicit verified resume after the restart finishes. A single missed `PUT /api/runner/<project>/mode` (transient backend-restart race or a missing `X-Client-Id`) silently leaves the project paused — that is the regression that motivated `resume-runner.sh`.
+
+`restart-stable-after-batch.sh` calls `resume-runner.sh` automatically after a successful update. The helper:
+
+1. Polls `/healthz` until 200 (60 s ceiling; treats 503 as "still booting", not a failure).
+2. Auto-registers a `service` identity at `POST /api/clients/register` if `ATP_CLIENT_ID` was not provided. Re-registration is idempotent on `displayName`.
+3. Sends `PUT /api/runner/<project>/mode` with `X-Client-Id` and `mode=auto-continuous`.
+4. Reads `/api/runner/status` back and only declares success when the project's `mode` is `auto-continuous`. On mismatch it retries the PUT with exponential backoff up to `ATP_RESUME_MAX_ATTEMPTS` (default 5).
+
+If the resume cannot be verified the helper exits non-zero so the watcher can log a `resume-failed-rc-N` status in `stable-restarts.jsonl` instead of pretending success.
+
+`./scripts/supervisor/test-resume-runner.sh` exercises the helper against a tiny Python stub backend that returns 503 for the first three healthz polls and only flips its mode on the third PUT. Skips with code 0 when Python 3 is not on PATH.
+
 #### How it relates to the system-review monitor
 
 Both watchers read stable from outside the running process; neither mutates job state. They run independently and can be started in different terminals or under different schedulers. The system review answers "is stable behaving correctly?" — the restart watcher answers "is now a safe moment to swap stable to newer source?". They share a logs root (`<workspace>/logs/`) but write to different files, so a user reviewing recent activity can tail both without crossing wires.

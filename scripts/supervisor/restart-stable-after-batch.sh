@@ -160,6 +160,23 @@ after="$(stable_head)"
 
 if [ "$update_rc" -eq 0 ]; then
   status="ok"
+  # update-stable.sh stops stable, pulls, and restarts. The fresh backend
+  # comes back up in whatever mode it was in before, so for the
+  # pause-then-update-then-resume recipe we need an explicit verified
+  # resume here. Without verification, a transient backend-restart race
+  # or a missing X-Client-Id silently leaves the runner paused — that is
+  # the regression that motivated this hardening (see in-product
+  # MetaCycleHostedService.ResumeWithVerificationAsync for the matching
+  # in-process path).
+  if [ -x "$SCRIPT_DIR/resume-runner.sh" ]; then
+    if ATP_API="$STABLE_API" "$SCRIPT_DIR/resume-runner.sh" "$PROJECT"; then
+      status="ok"
+    else
+      resume_rc=$?
+      status="resume-failed-rc-$resume_rc"
+      log "resume-runner.sh failed (rc=$resume_rc); stable runner may still be paused"
+    fi
+  fi
 else
   status="failed"
   log "update-stable.sh exited with code $update_rc"

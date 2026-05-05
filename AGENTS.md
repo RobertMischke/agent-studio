@@ -74,6 +74,7 @@ When to update stable:
 - **After a load-bearing change to runner / supervisor / outcome-policy / agent contract.** These are observation surfaces; if dev and stable diverge on them, the activity log and supervisor logs disagree on what the system is actually doing.
 - **Never mid-run.** `update-stable.sh` stops stable. If a job is in `3-progress` on stable, finish or stop it explicitly first.
 - **Dev stays offline outside Playwright.** Stable is the supervisor seat; dev is the regression-test target. Only Playwright specs running from stable may bring dev's backend up, via the `dev-backend` fixture. Don't add supervisor or auto-mode code paths that start dev as a side effect.
+- **Any external resume must verify mode after the backend restart and retry on mismatch.** `update-stable.sh` stops and restarts stable; a resume `PUT /api/runner/<project>/mode` that fires before the new backend is ready, or that is missing the `X-Client-Id` mutation header, silently leaves the project paused. Shell out to `scripts/supervisor/resume-runner.sh` (or replicate its four steps: wait for `/healthz`, auto-register a `service` identity if needed, PUT with `X-Client-Id`, read back `/api/runner/status` and retry the PUT until the project's mode is `auto-continuous`). The in-process equivalent lives in `MetaCycleHostedService.ResumeWithVerificationAsync` and emits a high-severity `cycle-resume-failed` advisory + `[supervisor]` chat-note on persistent failure rather than leaving the operator silently stuck.
 
 When NOT to update stable:
 

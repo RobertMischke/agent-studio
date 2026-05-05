@@ -71,6 +71,12 @@ Mirrors the deliverables in the parent task prompt:
 
 The slice does not include `update-stable.sh` invocation from inside the dev backend. That step is only called from the host context the meta-cycle is enabled in (stable seat, supervisor session). The hosted service shells out via a dedicated sh helper that the user can disable per project; the default action vocabulary stops one step before the helper.
 
+## Resume verification
+
+After every action that ends in resuming the runner (`Resume`, `UpdateStableThenResume`, and the `QueueFix` resume-after-fix) the cycle reads `TaskRunnerService.GetStatus()` back and only declares success when the project's mode has actually flipped to `auto-continuous`. On mismatch it retries the resume with exponential backoff (default 5 attempts, base 1 s, doubling); on persistent failure it raises a high-severity `cycle-resume-failed` advisory and a `[supervisor]` chat-note pinned to the most recent observed job. The control panel surfaces this as the **resume-verification** sub-status on the cycle banner: `verified` (first-try), `verified-after-retries` (recovered drift signal), and `failed` (paused, advisory raised, user must resume).
+
+The same contract applies to any external `sh` helper that resumes the runner over HTTP (notably `scripts/supervisor/resume-runner.sh`, which `restart-stable-after-batch.sh` shells out to after `update-stable.sh`). External callers must additionally wait for `/healthz` to return 200 before the PUT and send `X-Client-Id` on every mutation; the in-process path skips both because it talks to the runner directly through `SetMode`.
+
 ## What this mockup is for
 
 When the implementation lands, this folder should answer:
