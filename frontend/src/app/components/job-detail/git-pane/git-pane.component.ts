@@ -4,6 +4,7 @@ import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { html as diff2html } from 'diff2html';
 import { ColorSchemeType } from 'diff2html/lib-esm/types';
 import { GitPaneService } from '../git-pane.service';
+import { GitFileTreeComponent } from './git-file-tree.component';
 
 /**
  * Renders the Git pane of the job-detail view: working-tree status,
@@ -22,7 +23,7 @@ import { GitPaneService } from '../git-pane.service';
   selector: 'app-git-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DatePipe],
+  imports: [DatePipe, GitFileTreeComponent],
   templateUrl: './git-pane.component.html',
   styleUrls: ['./git-pane.component.scss']
 })
@@ -46,9 +47,10 @@ export class GitPaneComponent {
   readonly diffHtml = computed<SafeHtml | null>(() => {
     const text = this.git.diffText();
     if (!text) return null;
+    const sideBySide = this.maximized() || this.diffMaximized();
     const rendered = diff2html(text, {
       drawFileList: false,
-      outputFormat: this.diffMaximized() ? 'side-by-side' : 'line-by-line',
+      outputFormat: sideBySide ? 'side-by-side' : 'line-by-line',
       matching: 'lines',
       colorScheme: ColorSchemeType.DARK,
     });

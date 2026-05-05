@@ -1,4 +1,7 @@
-<section class="pane pane--git" [style.flex]="maximized() ? '1 1 100%' : weight()" data-testid="pane-git">
+<section class="pane pane--git"
+         [class.pane--git-split]="maximized()"
+         [style.flex]="maximized() ? '1 1 100%' : weight()"
+         data-testid="pane-git">
   <header class="pane__header">
     <h3 class="pane__title">{{ git.viewMode() === 'commit' ? '⏺ Task commit' : '⎇ Git view' }}</h3>
     @if (git.viewMode() === 'worktree') {
@@ -12,7 +15,9 @@
     </button>
     <button class="pane__hide" (click)="hide.emit()" title="Hide panel">×</button>
   </header>
-  <div class="pane__body git-view">
+  <div class="pane__body git-view"
+       [class.git-view--split]="maximized()"
+       data-testid="git-view-body">
     @if (git.viewMode() === 'commit') {
       @if (git.commitDetail()?.commit; as c) {
         <div class="git-view__commit-header" data-testid="git-commit-header">
@@ -24,43 +29,48 @@
           <pre class="git-view__commit-msg-display" data-testid="git-commit-message">{{ c.message }}</pre>
         </div>
         @if (git.commitDetail()?.files?.length) {
-          <ul class="git-view__files" data-testid="git-files">
-            @for (f of git.commitDetail()!.files; track f.path) {
-              <li class="git-view__file"
-                  [class.git-view__file--selected]="git.selectedDiffPath() === f.path"
-                  (click)="git.selectDiffPath(f.path)">
-                <span class="git-view__file-status" [title]="f.status">{{ f.status.trim() || '·' }}</span>
-                <span class="git-view__file-path">{{ f.path }}</span>
-                @if (f.added || f.removed) {
-                  <span class="git-view__file-stat">+{{ f.added }}/−{{ f.removed }}</span>
-                }
-              </li>
-            }
-          </ul>
-        } @else {
-          <div class="git-view__empty">No files recorded for this commit.</div>
-        }
-
-        @if (git.selectedDiffPath()) {
-          <div class="git-view__diff-wrap"
-               [class.git-view__diff-wrap--maximized]="diffMaximized()"
-               data-testid="git-diff-wrap">
-            <div class="git-view__diff-toolbar">
-              <span class="git-view__diff-path">{{ git.selectedDiffPath() }}</span>
-              <span class="git-view__diff-mode">{{ diffMaximized() ? 'side-by-side' : 'line-by-line' }}</span>
-              <button class="pane__maximize"
-                      data-testid="git-diff-maximize"
-                      (click)="toggleDiffMaximize()"
-                      [title]="diffMaximized() ? 'Restore diff' : 'Maximize diff'">
-                {{ diffMaximized() ? '⤡' : '⤢' }}
-              </button>
+          <div class="git-view__split-body">
+            <div class="git-view__tree-col" data-testid="git-tree-col">
+              <app-git-file-tree
+                [files]="git.commitDetail()!.files"
+                [selected]="git.selectedDiffPath()"
+                [fill]="maximized()"
+                (select)="git.selectDiffPath($event)" />
             </div>
-            @if (diffHtml(); as dh) {
-              <div class="git-view__diff" data-testid="git-diff" [innerHTML]="dh"></div>
-            } @else {
-              <div class="git-view__diff git-view__diff--placeholder" data-testid="git-diff">(loading…)</div>
+
+            @if (git.selectedDiffPath()) {
+              <div class="git-view__diff-col" data-testid="git-diff-col">
+                <div class="git-view__diff-wrap"
+                     [class.git-view__diff-wrap--maximized]="diffMaximized()"
+                     [class.git-view__diff-wrap--inline]="maximized()"
+                     data-testid="git-diff-wrap">
+                  <div class="git-view__diff-toolbar">
+                    <span class="git-view__diff-path">{{ git.selectedDiffPath() }}</span>
+                    <span class="git-view__diff-mode">{{ (maximized() || diffMaximized()) ? 'side-by-side' : 'line-by-line' }}</span>
+                    @if (!maximized()) {
+                      <button class="pane__maximize"
+                              data-testid="git-diff-maximize"
+                              (click)="toggleDiffMaximize()"
+                              [title]="diffMaximized() ? 'Restore diff' : 'Maximize diff'">
+                        {{ diffMaximized() ? '⤡' : '⤢' }}
+                      </button>
+                    }
+                  </div>
+                  @if (diffHtml(); as dh) {
+                    <div class="git-view__diff" data-testid="git-diff" [innerHTML]="dh"></div>
+                  } @else {
+                    <div class="git-view__diff git-view__diff--placeholder" data-testid="git-diff">(loading…)</div>
+                  }
+                </div>
+              </div>
+            } @else if (maximized()) {
+              <div class="git-view__diff-col git-view__diff-col--empty" data-testid="git-diff-col">
+                <div class="git-view__empty">Select a file on the left to view its diff.</div>
+              </div>
             }
           </div>
+        } @else {
+          <div class="git-view__empty">No files recorded for this commit.</div>
         }
       } @else {
         <div class="git-view__empty">Loading commit…</div>
@@ -79,41 +89,46 @@
         @if (g.files.length === 0) {
           <div class="git-view__empty">Working tree clean.</div>
         } @else {
-          <ul class="git-view__files" data-testid="git-files">
-            @for (f of g.files; track f.path) {
-              <li class="git-view__file"
-                  [class.git-view__file--selected]="git.selectedDiffPath() === f.path"
-                  (click)="git.selectDiffPath(f.path)">
-                <span class="git-view__file-status" [title]="f.status">{{ f.status.trim() || '·' }}</span>
-                <span class="git-view__file-path">{{ f.path }}</span>
-                @if (f.added || f.removed) {
-                  <span class="git-view__file-stat">+{{ f.added }}/−{{ f.removed }}</span>
-                }
-              </li>
-            }
-          </ul>
-
-          @if (git.selectedDiffPath()) {
-            <div class="git-view__diff-wrap"
-                 [class.git-view__diff-wrap--maximized]="diffMaximized()"
-                 data-testid="git-diff-wrap">
-              <div class="git-view__diff-toolbar">
-                <span class="git-view__diff-path">{{ git.selectedDiffPath() }}</span>
-                <span class="git-view__diff-mode">{{ diffMaximized() ? 'side-by-side' : 'line-by-line' }}</span>
-                <button class="pane__maximize"
-                        data-testid="git-diff-maximize"
-                        (click)="toggleDiffMaximize()"
-                        [title]="diffMaximized() ? 'Restore diff' : 'Maximize diff'">
-                  {{ diffMaximized() ? '⤡' : '⤢' }}
-                </button>
-              </div>
-              @if (diffHtml(); as dh) {
-                <div class="git-view__diff" data-testid="git-diff" [innerHTML]="dh"></div>
-              } @else {
-                <div class="git-view__diff git-view__diff--placeholder" data-testid="git-diff">(loading…)</div>
-              }
+          <div class="git-view__split-body">
+            <div class="git-view__tree-col" data-testid="git-tree-col">
+              <app-git-file-tree
+                [files]="g.files"
+                [selected]="git.selectedDiffPath()"
+                [fill]="maximized()"
+                (select)="git.selectDiffPath($event)" />
             </div>
-          }
+
+            @if (git.selectedDiffPath()) {
+              <div class="git-view__diff-col" data-testid="git-diff-col">
+                <div class="git-view__diff-wrap"
+                     [class.git-view__diff-wrap--maximized]="diffMaximized()"
+                     [class.git-view__diff-wrap--inline]="maximized()"
+                     data-testid="git-diff-wrap">
+                  <div class="git-view__diff-toolbar">
+                    <span class="git-view__diff-path">{{ git.selectedDiffPath() }}</span>
+                    <span class="git-view__diff-mode">{{ (maximized() || diffMaximized()) ? 'side-by-side' : 'line-by-line' }}</span>
+                    @if (!maximized()) {
+                      <button class="pane__maximize"
+                              data-testid="git-diff-maximize"
+                              (click)="toggleDiffMaximize()"
+                              [title]="diffMaximized() ? 'Restore diff' : 'Maximize diff'">
+                        {{ diffMaximized() ? '⤡' : '⤢' }}
+                      </button>
+                    }
+                  </div>
+                  @if (diffHtml(); as dh) {
+                    <div class="git-view__diff" data-testid="git-diff" [innerHTML]="dh"></div>
+                  } @else {
+                    <div class="git-view__diff git-view__diff--placeholder" data-testid="git-diff">(loading…)</div>
+                  }
+                </div>
+              </div>
+            } @else if (maximized()) {
+              <div class="git-view__diff-col git-view__diff-col--empty" data-testid="git-diff-col">
+                <div class="git-view__empty">Select a file on the left to view its diff.</div>
+              </div>
+            }
+          </div>
 
           <div class="git-view__commit">
             <textarea class="git-view__msg" rows="3"

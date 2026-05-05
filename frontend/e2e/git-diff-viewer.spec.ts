@@ -81,8 +81,9 @@ test.describe('Git pane — diff viewer + maximize', () => {
       await expect(page.getByTestId('pane-git')).toBeVisible();
       await expect(page.getByTestId('git-files-count')).toHaveText('1 files');
 
-      // Select the file to load the diff.
-      await page.getByTestId('git-files').getByText('src/example.ts').click();
+      // Select the file leaf in the tree to load the diff. The tree renders
+      // src/ as a folder and example.ts as a leaf below it; click the leaf.
+      await page.getByTestId('git-files').locator('[data-testid="git-tree-file"]').filter({ hasText: 'example.ts' }).click();
 
       // diff2html injects classes like d2h-file-wrapper / d2h-code-line — assert
       // the viewer rendered structurally instead of pinning specific text.

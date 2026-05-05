@@ -193,6 +193,59 @@
 }
 .git-view__commit-files { color: #cbd5e1; }
 .git-view__commit-when { color: #94a3b8; margin-left: auto; }
+
+/*
+ * Split layout: when the pane is maximized the user wants the tree on
+ * the left and the diff on the right (the user's "fullscreen, links die
+ * Dateien, rechts der Datei-Inhalt" ask). The split-body container
+ * keeps the tree and diff side-by-side; outside maximize it falls back
+ * to the previous stacked layout so narrow side panels stay readable.
+ */
+.git-view__split-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+.git-view--split { min-height: 0; height: 100%; }
+.git-view--split .git-view__split-body {
+  flex: 1;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 12px;
+  min-height: 0;
+}
+.git-view--split .git-view__tree-col {
+  flex: 0 0 32%;
+  min-width: 260px;
+  max-width: 520px;
+  display: flex;
+  min-height: 0;
+}
+.git-view--split .git-view__tree-col app-git-file-tree {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.git-view--split .git-view__diff-col {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  min-height: 0;
+}
+.git-view--split .git-view__diff-col--empty {
+  align-items: center;
+  justify-content: center;
+}
+.git-view--split .git-view__diff-wrap--inline {
+  flex: 1;
+  min-height: 0;
+}
+.git-view--split .git-view__diff-wrap--inline .git-view__diff {
+  max-height: none;
+  height: 100%;
+}
 .git-view__commit-msg-display {
   margin: 0;
   padding: 6px 8px;
