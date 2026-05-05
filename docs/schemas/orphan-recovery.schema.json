@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-taskboard.local/schemas/orphan-recovery.schema.json",
+  "title": "OrphanRecoveryDecision",
+  "description": "One row appended to <workspace>/logs/orphan-recoveries.jsonl by the boot-time StaleProgressArchiver. Records what happened to each candidate folder in 3-progress: archived as orphan, archived as empty, recovered into 4-review via a missed transition, or skipped. Pairs with the crash-recovery doctrine (ADR-0020): crash-recovery rescues file changes, this sweep rescues the lane shape so the one-task-per-project promise holds visually.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["at", "kind", "projectName", "slug", "reason"],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp at which the sweep made the decision."
+    },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "archived-orphan",
+        "archived-empty",
+        "recovered-to-review",
+        "recovery-failed",
+        "archive-failed"
+      ],
+      "description": "Outcome class. The 'fresh' and 'skipped' transient verdicts are not persisted; only actionable outcomes land in the JSONL."
+    },
+    "projectName": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Project name as it appears in WatchPaths and runner status."
+    },
+    "slug": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Original folder slug under 3-progress at the time of the sweep."
+    },
+    "jobId": {
+      "type": ["string", "null"],
+      "description": "Job id read from job.json when present; usually equal to the folder slug."
+    },
+    "archiveSlug": {
+      "type": ["string", "null"],
+      "description": "Slug under 6-archive after the move. Format: '<original>-orphan-<yyyy-mm-dd>' or '<original>-empty-<yyyy-mm-dd>', with a numeric suffix on collisions. Absent for recovered-to-review."
+    },
+    "targetState": {
+      "type": ["string", "null"],
+      "enum": [null, "4-review", "6-archive"],
+      "description": "Destination state folder. Only set on successful moves."
+    },
+    "sentinelKeyword": {
+      "type": ["string", "null"],
+      "enum": [null, "DONE", "BLOCKED", "NEEDS_INPUT"],
+      "description": "Completion sentinel found in the last 50 lines of cli-output.log. Set on recovered-to-review and recovery-failed."
+    },
+    "ageSeconds": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Folder age at the time of the sweep, in seconds. Recorded for diagnostic verdicts only."
+    },
+    "reason": {
+      "type": "string",
+      "description": "Human-readable explanation of the verdict; surfaces in the structured backend log line."
+    }
+  }
+}

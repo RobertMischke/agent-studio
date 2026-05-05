@@ -85,6 +85,7 @@ builder.Services.AddSingleton<RuntimePromptService>();
 builder.Services.AddSingleton<RoadmapIntakeService>();
 builder.Services.AddSingleton<TaskRunnerService>();
 builder.Services.AddSingleton<CrashRecoveryService>();
+builder.Services.AddSingleton<StaleProgressArchiver>();
 builder.Services.AddSingleton<AgentMessageBusStore>();
 builder.Services.AddSingleton<OrchestratorApi.Services.State.SupervisorAdvisoryStore>();
 builder.Services.AddSingleton<OrchestratorApi.Services.State.SupervisorInterventionStore>();
@@ -185,6 +186,18 @@ catch (Exception ex)
     // Recovery never blocks boot; a failure here is logged and surfaced
     // through the crash recorder so the operator can find it.
     crashRecorder.Record("CrashRecoveryService", ex);
+}
+
+// After file-level crash recovery, sweep the 3-progress lane for folders that
+// have been wedged past the resume window. Pairs with crash recovery: that
+// rescues changes, this rescues the lane (one running job per project, ADR-0001).
+try
+{
+    app.Services.GetRequiredService<StaleProgressArchiver>().SweepAsync().GetAwaiter().GetResult();
+}
+catch (Exception ex)
+{
+    crashRecorder.Record("StaleProgressArchiver", ex);
 }
 
 // Wire up FileSystemWatcher → SignalR push
