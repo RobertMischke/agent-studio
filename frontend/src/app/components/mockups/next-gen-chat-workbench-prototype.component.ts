@@ -2,6 +2,7 @@ import { Component, computed, inject, signal } from '@angular/core';
 import { FeatureFlagsService } from '../../services/feature-flags.service';
 
 type WorkbenchPane = 'result' | 'git' | 'preview' | 'debug' | 'chat';
+type ContextPane = Exclude<WorkbenchPane, 'chat'>;
 type Density = 'comfortable' | 'compact';
 type Theme = 'light' | 'dark';
 type Scenario = 'review' | 'tools' | 'wait' | 'visual' | 'drift';
@@ -214,22 +215,6 @@ interface ChatTurn {
                 <span>Workbench</span>
                 <small>pane tools</small>
               </button>
-              <nav class="inspector-rail__tabs" aria-label="Task detail tabs">
-                <b>Task</b>
-                @for (tab of taskTabs; track tab.label) {
-                  <button [class.inspector-rail__active]="isTaskTabActive(tab.id)"
-                          [attr.title]="tab.title"
-                          [attr.aria-label]="tab.title"
-                          (click)="activateTaskTab(tab.id, tab.pane)">
-                    <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
-                      @for (path of iconPath(tab.icon); track path) {
-                        <path [attr.d]="path"></path>
-                      }
-                    </svg>
-                    <span>{{ tab.label }}</span>
-                  </button>
-                }
-              </nav>
               <div class="inspector-rail__summary" data-testid="prototype-summary-strip">
                 <b>Signals</b>
                 @for (chip of summaryChips; track chip.label) {
@@ -251,7 +236,7 @@ interface ChatTurn {
                 <b>Views</b>
                 @for (mode of paneButtons; track mode.id) {
                   <button class="rail-action"
-                          [class.icon-btn--active]="mode.id === 'chat' ? chatOpen() : contextOpen() && pane() === mode.id"
+                          [class.icon-btn--active]="isPaneButtonActive(mode.id)"
                           [attr.title]="mode.label"
                           [attr.data-testid]="'prototype-pane-' + mode.id"
                           (click)="togglePane(mode.id)">
@@ -471,7 +456,7 @@ interface ChatTurn {
               </section>
               }
 
-              @if (chatOpen() && contextOpen()) {
+              @if (chatOpen() && contextPanes().length > 0) {
                 <div class="workbench-splitter"
                      role="separator"
                      tabindex="0"
@@ -487,12 +472,15 @@ interface ChatTurn {
                 </div>
               }
 
-              @if (contextOpen()) {
-                <aside class="context" aria-label="Workbench context pane" data-testid="prototype-context-pane">
+              @for (openPane of contextPanes(); track openPane) {
+                <aside class="context"
+                       aria-label="Workbench context pane"
+                       [attr.data-pane]="openPane"
+                       [attr.data-testid]="'prototype-pane-' + openPane + '-view'">
                   <header class="context__head">
                     <div>
-                      <strong>{{ contextTitle() }}</strong>
-                      <span>{{ contextSubtitle() }}</span>
+                      <strong>{{ paneTitle(openPane) }}</strong>
+                      <span>{{ paneSubtitle(openPane) }}</span>
                     </div>
                     <div>
                       <button class="icon-btn"
@@ -506,7 +494,11 @@ interface ChatTurn {
                           }
                         </svg>
                       </button>
-                      <button class="icon-btn" (click)="closeContextPane()" title="Close pane" aria-label="Close pane" data-testid="prototype-context-close">
+                      <button class="icon-btn"
+                              (click)="closeContextPane(openPane)"
+                              [title]="'Close ' + paneTitle(openPane)"
+                              [attr.aria-label]="'Close ' + paneTitle(openPane)"
+                              [attr.data-testid]="'prototype-pane-' + openPane + '-close'">
                         <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
                           @for (path of iconPath('close'); track path) {
                             <path [attr.d]="path"></path>
@@ -522,7 +514,7 @@ interface ChatTurn {
                       </button>
                     </div>
                   </header>
-                  @switch (pane()) {
+                  @switch (openPane) {
                     @case ('result') {
                       <section class="context__body">
                         <div class="metric-grid">
@@ -558,7 +550,7 @@ interface ChatTurn {
                     }
                     @case ('git') {
                       <section class="context__body">
-                        <div style="display:grid;grid-template-columns:minmax(190px,34%) minmax(0,1fr);gap:8px;min-height:100%">
+                        <div class="git-split">
                           <div>
                             <div class="git-summary">
                               <b>3 commits</b>
@@ -983,7 +975,7 @@ interface ChatTurn {
         <div class="modal" data-testid="prototype-command-palette" (click)="commandOpen.set(false)">
           <section class="command" (click)="$event.stopPropagation()">
             <input value="workbench: switch to git changes" aria-label="Command palette input" />
-            <button (click)="setPane('git'); commandOpen.set(false)">Open Git split</button>
+            <button (click)="setPane('git'); commandOpen.set(false)">Pin Git review</button>
             <button (click)="setPane('preview'); commandOpen.set(false)">Open screenshots</button>
             <button (click)="setPane('debug'); commandOpen.set(false)">Open debug pane</button>
             <button (click)="markerOpen.set(true); commandOpen.set(false)">Inspect current run</button>
@@ -1344,7 +1336,7 @@ interface ChatTurn {
       min-height: 0;
       min-width: 0;
       display: grid;
-      grid-template-columns: 126px minmax(0, 1fr);
+      grid-template-columns: 96px minmax(0, 1fr);
       grid-template-rows: minmax(0, 1fr);
       padding: 0;
       background: var(--surface);
@@ -1354,10 +1346,10 @@ interface ChatTurn {
       min-height: 0;
       overflow: auto;
       display: grid;
-      grid-template-rows: auto auto auto auto minmax(0, 1fr);
+      grid-template-rows: auto auto auto minmax(0, 1fr);
       align-content: start;
-      gap: 10px;
-      padding: 8px;
+      gap: 7px;
+      padding: 6px;
       border-right: 1px solid var(--line);
       background: var(--chrome);
     }
@@ -1456,7 +1448,7 @@ interface ChatTurn {
 
     .inspector-rail__summary .summary-chip {
       width: 100%;
-      min-height: 40px;
+      min-height: 34px;
       display: grid;
       grid-template-columns: 18px minmax(0, 1fr);
       grid-template-areas:
@@ -1502,7 +1494,8 @@ interface ChatTurn {
       grid-template-columns: minmax(360px, 1fr) minmax(250px, 34%);
       border: 0;
       border-radius: 0;
-      overflow: hidden;
+      overflow-x: auto;
+      overflow-y: hidden;
       background: var(--surface);
     }
 
@@ -1992,6 +1985,13 @@ interface ChatTurn {
       background: var(--surface);
     }
 
+    .git-split {
+      min-height: 100%;
+      display: grid;
+      grid-template-columns: minmax(165px, 34%) minmax(260px, 1fr);
+      gap: 8px;
+    }
+
     .context__head,
     .sheet__head {
       min-height: 30px;
@@ -2300,7 +2300,7 @@ interface ChatTurn {
       grid-template-columns: 184px minmax(590px, 1fr) minmax(260px, 28vw);
     }
 
-    .ng-chat-prototype[data-density="compact"] .workbench { grid-template-columns: 70px minmax(0, 1fr); }
+    .ng-chat-prototype[data-density="compact"] .workbench { grid-template-columns: 56px minmax(0, 1fr); }
     .ng-chat-prototype[data-density="compact"] .inspector-rail { padding: 5px 4px; gap: 5px; }
     .ng-chat-prototype[data-density="compact"] .rail-guide {
       min-height: 34px;
@@ -2414,7 +2414,7 @@ interface ChatTurn {
 export class NextGenChatWorkbenchPrototypeComponent {
   private readonly featureFlags = inject(FeatureFlagsService);
 
-  readonly pane = signal<WorkbenchPane>('result');
+  readonly pane = signal<ContextPane>('result');
   readonly density = signal<Density>('comfortable');
   readonly theme = signal<Theme>('light');
   readonly activeScenario = signal<Scenario>('review');
@@ -2427,8 +2427,10 @@ export class NextGenChatWorkbenchPrototypeComponent {
   readonly markerOpen = signal(false);
   readonly statusPanel = signal<StatusPanel | null>(null);
   readonly activeActivity = signal<ActivityTarget>('projects');
+  readonly activeTaskTab = signal<TaskTabId>('chat');
   readonly chatOpen = signal(true);
-  readonly contextOpen = signal(true);
+  readonly contextPanes = signal<readonly ContextPane[]>(['result']);
+  readonly contextOpen = computed(() => this.contextPanes().length > 0);
   readonly splitRatio = signal(54);
   readonly splitDragging = signal(false);
   readonly activeGitFile = signal('frontend/src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts');
@@ -2478,13 +2480,13 @@ export class NextGenChatWorkbenchPrototypeComponent {
     { id: 'tokens', icon: 'tokens', label: 'Tokens', title: 'Token usage' },
   ];
 
-  readonly taskTabs: Array<{ icon: string; label: string; title: string; pane: WorkbenchPane }> = [
-    { icon: 'file', label: 'Prompt', title: 'Prompt tab', pane: 'result' },
-    { icon: 'list', label: 'Log', title: 'Protocol and raw trace tab', pane: 'debug' },
-    { icon: 'chat', label: 'Chat', title: 'Chat tab', pane: 'chat' },
-    { icon: 'fileDiff', label: 'Files', title: 'Files tab', pane: 'git' },
-    { icon: 'git', label: 'Commits', title: 'Commits tab', pane: 'git' },
-    { icon: 'image', label: 'Shots', title: 'Screenshots tab', pane: 'preview' },
+  readonly taskTabs: Array<{ id: TaskTabId; icon: string; label: string; title: string; pane: WorkbenchPane }> = [
+    { id: 'prompt', icon: 'file', label: 'Prompt', title: 'Prompt tab', pane: 'result' },
+    { id: 'log', icon: 'list', label: 'Log', title: 'Protocol and raw trace tab', pane: 'debug' },
+    { id: 'chat', icon: 'chat', label: 'Chat', title: 'Chat tab', pane: 'chat' },
+    { id: 'files', icon: 'fileDiff', label: 'Files', title: 'Files tab', pane: 'git' },
+    { id: 'commits', icon: 'git', label: 'Commits', title: 'Commits tab', pane: 'git' },
+    { id: 'shots', icon: 'image', label: 'Shots', title: 'Screenshots tab', pane: 'preview' },
   ];
 
   readonly detailPanels: Array<{ icon: string; label: string; title: string; pane: WorkbenchPane }> = [
@@ -2572,14 +2574,14 @@ export class NextGenChatWorkbenchPrototypeComponent {
       role: 'Project steering',
       tone: 'user',
       title: 'You',
-      body: 'I want to keep the chat open while I inspect the result, Git changes, screenshots, and token pressure beside it.',
+      body: 'I want chat to be optional. Sometimes I need the transcript, sometimes I need Git, result, screenshots, or debug panes to own the workspace.',
     },
     {
       actor: 'A',
       role: 'Task agent',
       tone: 'agent',
       title: 'Task Agent',
-      body: 'The workbench keeps chat as the main surface and turns adjacent evidence into deterministic split presets. It avoids a full window manager for the first slice.',
+      body: 'The workbench treats Chat, Result, Git, Preview, and Debug as pinable panes. They can be combined without turning the task view into a full docking system.',
       actions: ['Show technical layer', 'Open Verbose Debug'],
     },
     {
@@ -2588,7 +2590,7 @@ export class NextGenChatWorkbenchPrototypeComponent {
       tone: 'orchestrator',
       title: 'Orchestrator decision',
       meta: 'retry 1/1',
-      body: 'Result, Git, Preview, and Debug are preview panes. The existing Files, Commits, Screenshots, Trace, and token surfaces remain canonical.',
+      body: 'The existing Files, Commits, Screenshots, Trace, and token surfaces remain canonical. The workbench panes are fast review lenses that can stay visible together.',
       actions: ['Git split', 'Debug pane'],
     },
     {
@@ -2683,13 +2685,12 @@ export class NextGenChatWorkbenchPrototypeComponent {
       case 'drift':
         return 'Parser drift, duplicate sentinels, and malformed reports stay visible but human-first.';
       default:
-        return 'Review mode shows the final result, risk signals, token pressure, and evidence shortcuts beside the chat.';
+        return 'Review mode lets chat, result, Git, screenshots, and debug panes be pinned only when useful.';
     }
   });
 
   readonly paneDescription = computed(() => {
     switch (this.pane()) {
-      case 'chat': return 'Conversation fills the available task surface.';
       case 'git': return 'Conversation plus Git changes, without leaving the task.';
       case 'preview': return 'Conversation plus screenshot evidence.';
       case 'debug': return 'Conversation plus token and actor summary.';
@@ -2697,29 +2698,16 @@ export class NextGenChatWorkbenchPrototypeComponent {
     }
   });
 
-  readonly contextTitle = computed(() => {
-    switch (this.pane()) {
-      case 'git': return 'Git changes';
-      case 'preview': return 'Screenshot preview';
-      case 'debug': return 'Debug summary';
-      default: return 'Result summary';
-    }
-  });
-
-  readonly contextSubtitle = computed(() => {
-    switch (this.pane()) {
-      case 'git': return 'Changed files and commits beside chat';
-      case 'preview': return 'Durable visual evidence and lightbox';
-      case 'debug': return 'Tokens, actors, waits, and raw links';
-      default: return 'Human-readable outcome and risk signals';
-    }
-  });
-
   readonly workbenchColumns = computed(() => {
-    if (this.chatOpen() && this.contextOpen()) {
-      return `minmax(320px, ${this.splitRatio()}fr) 7px minmax(260px, ${100 - this.splitRatio()}fr)`;
+    const columns: string[] = [];
+    if (this.chatOpen()) {
+      columns.push(`minmax(320px, ${this.splitRatio()}fr)`);
+      if (this.contextPanes().length > 0) columns.push('7px');
     }
-    return 'minmax(0, 1fr)';
+    for (const pane of this.contextPanes()) {
+      columns.push(pane === 'git' ? 'minmax(430px, 1.25fr)' : 'minmax(255px, .85fr)');
+    }
+    return columns.length ? columns.join(' ') : 'minmax(0, 1fr)';
   });
 
   readonly selectedGitFile = computed(() =>
@@ -2738,20 +2726,20 @@ export class NextGenChatWorkbenchPrototypeComponent {
   setPane(pane: WorkbenchPane): void {
     if (pane === 'chat') {
       this.chatOpen.set(true);
-      this.contextOpen.set(false);
+      this.activeTaskTab.set('chat');
       return;
     }
     this.pane.set(pane);
-    this.contextOpen.set(true);
+    this.addContextPane(pane);
   }
 
   isPaneButtonActive(pane: WorkbenchPane): boolean {
     if (pane === 'chat') return this.chatOpen();
-    return this.contextOpen() && this.pane() === pane;
+    return this.contextPanes().includes(pane);
   }
 
-  isTaskTabActive(pane: WorkbenchPane): boolean {
-    return this.isPaneButtonActive(pane);
+  isTaskTabActive(tab: TaskTabId): boolean {
+    return this.activeTaskTab() === tab;
   }
 
   togglePane(pane: WorkbenchPane): void {
@@ -2759,31 +2747,61 @@ export class NextGenChatWorkbenchPrototypeComponent {
       this.toggleChat();
       return;
     }
-    if (this.contextOpen() && this.pane() === pane) {
+    if (this.contextPanes().includes(pane)) {
       if (!this.chatOpen()) {
         this.chatOpen.set(true);
         return;
       }
-      this.contextOpen.set(false);
+      this.removeContextPane(pane);
       return;
     }
     this.setPane(pane);
   }
 
   toggleChat(): void {
-    if (this.chatOpen() && !this.contextOpen()) {
-      this.contextOpen.set(true);
+    if (this.chatOpen() && this.contextPanes().length === 0) {
+      this.addContextPane('result');
     }
     this.chatOpen.set(!this.chatOpen());
+    if (this.chatOpen()) this.activeTaskTab.set('chat');
   }
 
-  closeContextPane(): void {
-    if (!this.contextOpen()) return;
-    if (!this.chatOpen()) {
-      this.chatOpen.set(true);
-      return;
+  closeContextPane(pane: ContextPane): void {
+    this.removeContextPane(pane);
+  }
+
+  activateTaskTab(tab: TaskTabId, pane: WorkbenchPane): void {
+    this.activeTaskTab.set(tab);
+    this.setPane(pane);
+  }
+
+  paneTitle(pane: ContextPane): string {
+    switch (pane) {
+      case 'git': return 'Git changes';
+      case 'preview': return 'Screenshot preview';
+      case 'debug': return 'Debug summary';
+      default: return 'Result summary';
     }
-    this.contextOpen.set(false);
+  }
+
+  paneSubtitle(pane: ContextPane): string {
+    switch (pane) {
+      case 'git': return 'Changed files, commits, source diff';
+      case 'preview': return 'Durable visual evidence and lightbox';
+      case 'debug': return 'Tokens, actors, waits, and raw links';
+      default: return 'Human-readable outcome and risk signals';
+    }
+  }
+
+  private addContextPane(pane: ContextPane): void {
+    this.contextPanes.update((panes) => panes.includes(pane) ? panes : [...panes, pane]);
+  }
+
+  private removeContextPane(pane: ContextPane): void {
+    this.contextPanes.update((panes) => panes.filter((openPane) => openPane !== pane));
+    if (!this.chatOpen() && this.contextPanes().length === 0) {
+      this.chatOpen.set(true);
+    }
   }
 
   setSplitRatioValue(value: number): void {

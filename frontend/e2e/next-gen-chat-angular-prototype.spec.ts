@@ -45,11 +45,14 @@ test.describe('@mockup next-gen chat Angular prototype', () => {
     await enablePrototype(page);
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
+    await page.addStyleTag({
+      content: '.dev-banner{display:none!important}body{padding-top:0!important}',
+    });
 
     await expect(page.getByTestId('next-gen-chat-angular-prototype')).toBeVisible();
     await expect(page.getByTestId('prototype-detail-chrome')).toContainText('Complete & Next');
     await expect(page.getByTestId('prototype-summary-strip')).toBeVisible();
-    await expect(page.getByTestId('prototype-context-pane')).toContainText('Result summary');
+    await expect(page.getByTestId('prototype-pane-result-view')).toContainText('Result summary');
     await page.waitForTimeout(250);
     await page.screenshot({
       path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-result.png'),
@@ -105,7 +108,19 @@ test.describe('@mockup next-gen chat Angular prototype', () => {
     await page.getByTestId('prototype-rail-guide-modal').getByText('Close').click();
 
     await page.getByTestId('prototype-pane-git').click();
-    await expect(page.getByTestId('prototype-context-pane')).toContainText('Git changes');
+    await expect(page.getByTestId('prototype-pane-result-view')).toBeVisible();
+    await expect(page.getByTestId('prototype-pane-git-view')).toContainText('Git changes');
+    await page.getByTestId('prototype-pane-preview').click();
+    await page.getByTestId('prototype-pane-debug').click();
+    await expect(page.getByTestId('prototype-pane-preview-view')).toBeVisible();
+    await expect(page.getByTestId('prototype-pane-debug-view')).toBeVisible();
+    await page.screenshot({
+      path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-all-panes.png'),
+      fullPage: false,
+    });
+    await page.getByTestId('prototype-pane-preview-close').click();
+    await page.getByTestId('prototype-pane-debug-close').click();
+    await page.getByTestId('prototype-pane-result-close').click();
     await expect(page.getByTestId('prototype-git-editor')).toContainText('Source editor / diff');
     await page.getByTestId('prototype-topbar-sheet').click();
     await expect(page.getByTestId('prototype-splitter')).toBeVisible();
@@ -137,8 +152,8 @@ test.describe('@mockup next-gen chat Angular prototype', () => {
     });
 
     await page.getByTestId('prototype-pane-preview').click();
-    await expect(page.getByTestId('prototype-context-pane')).toContainText('Screenshot preview');
-    await page.getByTestId('prototype-context-pane').getByRole('button', { name: 'Git split' }).click();
+    await expect(page.getByTestId('prototype-pane-preview-view')).toContainText('Screenshot preview');
+    await page.getByTestId('prototype-pane-preview-view').getByRole('button', { name: 'Git split' }).click();
     await expect(page.getByTestId('prototype-lightbox')).toBeVisible();
     await page.screenshot({
       path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-lightbox.png'),

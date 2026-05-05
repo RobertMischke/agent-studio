@@ -31,7 +31,9 @@ import type {
   ConversationEvent,
   RawLineRange,
   ToolBurstSamples,
-  ToolFamily
+  ToolFamily,
+  TraceLink,
+  WorkbenchSummaryAggregate
 } from './conversation-event';
 
 export interface ScreenshotEvidence {
@@ -74,6 +76,10 @@ export interface ConversationProjectionContext {
   emitWorkbenchPreviews?: boolean;
   /** When true, a final `traceLink` event is appended pointing at the raw log. */
   emitTraceLink?: boolean;
+  /** When true, a `workbench.debug` aggregate is appended for the Verbose Debug pane. */
+  emitDebugAggregate?: boolean;
+  /** Latest run result string the host knows about (e.g. `[[TASK_DONE]]`, `heuristic-noop`). */
+  latestResult?: string;
 }
 
 /** Public entry point — returns a flat, ordered list of conversation events. */
@@ -134,6 +140,9 @@ export function projectConversation(
   }
   if (ctx.emitWorkbenchSummary) {
     events.push(toWorkbenchSummary(events, ctx, lineNumbers));
+  }
+  if (ctx.emitDebugAggregate) {
+    events.push(toWorkbenchDebug(events, ctx, lineNumbers));
   }
   if (ctx.emitTraceLink) {
     events.push(toTraceLink(ctx, lineNumbers));
@@ -211,6 +220,28 @@ function projectGroup(
           severity: 'warn',
           cliType: cliMatch?.[1] ?? 'unknown',
           fallback: 'rebuild from disk on next follow-up'
+        }
+      ];
+    }
+    if (/\[schema-drift\]/i.test(firstLine.text) || /report is unstructured/i.test(firstLine.text) || /failed to parse/i.test(firstLine.text)) {
+      const dedupeKey = `schema-drift:${firstLine.text.trim()}`;
+      if (seenParserDedupeKeys.has(dedupeKey)) return null;
+      seenParserDedupeKeys.add(dedupeKey);
+      const expected = /expected\s+([A-Za-z][\w.-]*)/i.exec(firstLine.text)?.[1]
+        ?? (/MetaCycle/i.test(firstLine.text) ? 'MetaCycleReport' : 'structured-report');
+      return [
+        {
+          id: `${baseId}:schema-drift`,
+          kind: 'system.schemaDrift',
+          timestamp: ts,
+          runId,
+          rawRange: range,
+          severity: 'warn',
+          expectedSchema: expected,
+          message: firstLine.text.trim(),
+          recovery: 'Open raw report and regenerate',
+          rawLink: { range, label: 'Open raw report' },
+          collapsedByDefault: true
         }
       ];
     }

@@ -77,9 +77,12 @@ export type ConversationEventKind =
   | 'workbench.summary'
   | 'workbench.gitPreview'
   | 'workbench.visualPreview'
+  | 'workbench.debug'
   | 'taskMarker'
   | 'runMarker'
-  | 'traceLink';
+  | 'traceLink'
+  // System / parser edge cases beyond the v6 baseline
+  | 'system.schemaDrift';
 
 interface ConversationEventBase {
   /** Stable id, deterministic per source range so renderers can dedupe. */
@@ -219,6 +222,46 @@ export interface MetricTokenEvent extends ConversationEventBase {
   window?: string;
 }
 
+/**
+ * Aggregate snapshot the v7 summary strip renders without re-parsing UI text.
+ * The renderer should treat every field as optional: a host can populate the
+ * subset it has cheap access to (e.g. tokens may be unknown when the token
+ * summary call has not landed yet).
+ *
+ * The taxonomy here mirrors `docs/mockups/chat-window-next-gen/README.md` v7
+ * summary strip - state/run, tokens, commits, changed files, screenshots,
+ * retry/parser warnings, duration, latest result.
+ */
+export interface WorkbenchSummaryAggregate {
+  /** Job lane / state ("3-progress", "4-auto-review", ...). */
+  state?: string;
+  /** Total runs and the latest run's outcome (`completed` / `failed` / ...). */
+  runCount?: number;
+  latestRunStatus?: string;
+  latestRunIntent?: string;
+  /** Total wall-clock duration across runs in seconds, when known. */
+  totalDurationSeconds?: number;
+  /** Aggregated token usage for the whole task. */
+  totalInputTokens?: number;
+  totalOutputTokens?: number;
+  /** Number of distinct tool calls aggregated from `toolBurst` events. */
+  toolCallCount?: number;
+  /** Tool failures aggregated from `toolBurst` events. */
+  toolFailureCount?: number;
+  /** Number of commits attached to the task (or its runs). */
+  commitCount?: number;
+  /** Number of files changed across the attached commits. */
+  filesChanged?: number;
+  /** Number of screenshot artefacts. */
+  screenshotCount?: number;
+  /** Retry / parser / capture-fail warnings raised during the task. */
+  retryWarningCount?: number;
+  /** True when the watchdog killed at least one run. */
+  watchdogKilled?: boolean;
+  /** Latest result string (sentinel name + heuristic flag), when known. */
+  latestResult?: string;
+}
+
 export interface WorkbenchSummaryEvent extends ConversationEventBase {
   kind: 'workbench.summary';
   /** Headline shown in the summary strip ("12 reads · 3 edits · tests passing"). */
@@ -227,6 +270,8 @@ export interface WorkbenchSummaryEvent extends ConversationEventBase {
   bullets?: ReadonlyArray<string>;
   /** Linked drill-down events the right pane can open. */
   drillDowns?: ReadonlyArray<TraceLink>;
+  /** Typed aggregate so renderers don't need to scan the event list themselves. */
+  aggregate?: WorkbenchSummaryAggregate;
 }
 
 export interface WorkbenchGitPreviewEvent extends ConversationEventBase {
@@ -244,6 +289,73 @@ export interface WorkbenchVisualPreviewEvent extends ConversationEventBase {
   images: ReadonlyArray<{ caption: string; path: string }>;
   /** Optional caption above the strip. */
   groupCaption?: string;
+}
+
+/**
+ * Read-only debug aggregate that backs the Verbose Debug pane and the
+ * status-bar Debug split. The renderer composes these counts into tabs
+ * (Overview, Actors, Tools, Tokens, Trace) without re-walking the raw log.
+ */
+export interface WorkbenchDebugEvent extends ConversationEventBase {
+  kind: 'workbench.debug';
+  /** Per-actor message counts. */
+  actorCounts: {
+    user: number;
+    taskAgent: number;
+    orchestrator: number;
+    supervisor: number;
+    supportingAgent: number;
+  };
+  /** Per-family tool call counts plus failures. */
+  toolDensity: {
+    total: number;
+    failures: number;
+    families: Partial<Record<ToolFamily, number>>;
+  };
+  /** Counts of supervisor and parser-warning rows. */
+  warningCounts: {
+    supervisorAdvisories: number;
+    parserWarnings: number;
+    captureFails: number;
+    schemaDrifts: number;
+    needsInputLoops: number;
+    watchdogQuiet: number;
+    watchdogKills: number;
+  };
+  /** Token rollup mirroring `metric.token` events the host emitted. */
+  tokenTotals: {
+    inputTokens: number;
+    outputTokens: number;
+    reasoningTokens: number;
+    cost?: number;
+  };
+  /** Number of runs in the timeline, plus the count that finished cleanly. */
+  runStats: {
+    runCount: number;
+    completedCount: number;
+    failedCount: number;
+    cancelledCount: number;
+  };
+  /** Trace ranges exposed for the "Trace" tab. */
+  traceLinks: ReadonlyArray<TraceLink>;
+}
+
+/**
+ * A schema-drift row is raised when a structured Markdown / JSON report the
+ * orchestrator expected (a meta-cycle report, summary template, etc.) cannot
+ * be parsed cleanly. Renderers show a human-friendly "Report is unstructured"
+ * row with a recovery link.
+ */
+export interface SystemSchemaDriftEvent extends ConversationEventBase {
+  kind: 'system.schemaDrift';
+  /** What the parser was expecting (`MetaCycleReport`, `summary-template`, ...). */
+  expectedSchema: string;
+  /** Short reason from the parser. */
+  message: string;
+  /** Suggested recovery action ("regenerate report", "open raw"). */
+  recovery?: string;
+  /** Trace link to the raw blob the parser tried to consume. */
+  rawLink?: TraceLink;
 }
 
 export interface TaskMarkerEvent extends ConversationEventBase {
@@ -292,11 +404,13 @@ export type ConversationEvent =
   | AgentNeedsInputEvent
   | SystemCaptureFailEvent
   | SystemParserWarningEvent
+  | SystemSchemaDriftEvent
   | ArtifactImageEvent
   | MetricTokenEvent
   | WorkbenchSummaryEvent
   | WorkbenchGitPreviewEvent
   | WorkbenchVisualPreviewEvent
+  | WorkbenchDebugEvent
   | TaskMarkerEvent
   | RunMarkerEvent
   | TraceLinkEvent;
@@ -314,11 +428,13 @@ export const CONVERSATION_EVENT_KINDS: ReadonlyArray<ConversationEventKind> = [
   'agent.needsInput',
   'system.captureFail',
   'system.parserWarning',
+  'system.schemaDrift',
   'artifact.image',
   'metric.token',
   'workbench.summary',
   'workbench.gitPreview',
   'workbench.visualPreview',
+  'workbench.debug',
   'taskMarker',
   'runMarker',
   'traceLink'
