@@ -146,3 +146,43 @@ Expected UI:
 - Composer does not cover the latest message.
 - Run header remains usable without horizontal scrolling.
 
+## 15. Bottom Control Bar
+
+The user wants to select model, current chat, agent mode, permissions, start, stop, and configuration without losing chat space.
+
+Expected UI:
+
+- Controls live at the bottom edge beside or above the composer.
+- Model selection, chat selection, agent mode, permission level, start, stop, configuration, jobs, debug view, and context chips are interactive in the mockup.
+- Changing controls does not inject noisy system messages into the transcript. Important changes appear as subtle events only when needed.
+
+## 16. Continuous Chat With Task Markers
+
+The project chat spans several tasks and continuations.
+
+Expected UI:
+
+- New tasks appear as thin markers, not large cards.
+- Hovering or clicking a marker shows task metadata: job id, lane, model, prompt, run, duration, tokens, related commits, and evidence.
+- The default transcript still reads as one continuous human conversation.
+
+## 17. Human Layer First, Technical Layer On Demand
+
+Stable chat evidence contains too many technical messages by default.
+
+Expected UI:
+
+- The default text is written for a human reviewer.
+- Raw commands, paths, JSON, sentinel matches, prompt payloads, stack traces, and tool outputs are hidden behind details, Trace, Inspector, or Verbose Debug.
+- The user can globally toggle the technical layer for debugging.
+
+## 18. Verbose Debug Fullscreen
+
+The user opens a developer debugging view from the compact chat.
+
+Expected UI:
+
+- The view is fullscreen or near-fullscreen and read-only. It does not need a composer.
+- It explains the history: actor activity counts, orchestrator activity, supervisor activity, task markers, tool density, duration, token usage, warnings, artifacts, and decision evidence.
+- It keeps the dashboard-like diagnostic value from the first mockup while improving the visual hierarchy.
+- It can filter or drill down by Agent, Orchestrator, Tools, Warnings, and Tasks.

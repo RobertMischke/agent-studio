@@ -48,8 +48,9 @@ Agent Task Processor should not imitate a two-person assistant chat because its 
 - The **center column is the chatflow**: human, agent, orchestrator, supervisor, and supporting agents as alternating participant turns.
 - The **meta layer docks to the side**: run metrics, token totals, tool families, commits, tests, screenshots, and raw trace filters live in an inspector that can collapse.
 - The **inline transcript uses disclosure rows**: tool bursts, decision summaries, artifacts, and warnings are one-line or two-line items until expanded.
-- The **composer carries controls**: mode, target, context chips, attachments, slash actions, and send/stop live at the input edge.
+- The **composer carries controls**: current chat, model, agent mode, permission level, configuration, context chips, attachments, slash actions, start, stop, and send live at the input edge.
 - The **trace is a mode, not the default**: raw log, JSON, and individual tool calls stay one click away.
+- The **verbose debug view is separate**: the dashboard-like diagnostic view is still valuable, but it opens as a read-only fullscreen developer surface instead of competing with the normal chat.
 
 ## Concrete UI Rules
 
@@ -65,6 +66,7 @@ Agent Task Processor should not imitate a two-person assistant chat because its 
 | Composer | Keep mode, target, context, and slash actions visible as small chips above the input. |
 | Screenshots | Show a small artifact chip inline and thumbnail in inspector or artifact view. |
 | Raw trace | Keep exact raw entries in Trace mode and expansion panels. |
+| Debug view | Provide a fullscreen read-only view for actor counts, duration, tool density, task markers, orchestrator explanations, warnings, and raw trace links. |
 
 ## Revised Mockup Direction
 
@@ -78,3 +80,4 @@ The revised mockup should look like a polished developer chat, not an operations
 
 The inspector can sit beside the chat when space allows, which was useful in the first mockup. On smaller screens it collapses behind an `Inspector` control.
 
+The first dashboard-style mockup should survive as `Verbose Debug`. That gives developers the richer analysis surface when they need to understand a confusing run, while preserving the compact primary chat for daily use.

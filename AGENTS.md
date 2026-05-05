@@ -303,6 +303,20 @@ See `docs/filesystem-contract.md` for full details.
 
 Prefer `data-testid="..."` for stable test hooks. If a feature you're touching lacks one and a spec needs it, add it to the component rather than reaching for a CSS-class selector.
 
+### Mockups must be interactive
+
+Mockups created in this repository should be meaningfully interactive, even when they are short-lived design artifacts. Static screenshots are supporting evidence, not the mockup itself.
+
+For HTML mockups:
+
+- Core controls should be clickable: mode switches, menus, drawers, overlays, expanders, filters, settings, and start/stop-style controls.
+- Important states should be reachable in the mockup without editing the file.
+- Technical details should be expandable when the concept depends on drill-down.
+- If a concept includes overlays or context menus, implement those overlays.
+- Render and inspect Playwright screenshots for the important states before declaring the mockup ready.
+
+If a mockup deliberately stays static, document why in the mockup README.
+
 ## Watched Target Instructions
 
 This repository uses an app-owned task lifecycle for dependent projects. The shared boundary is defined in [docs/agent-task-contract.md](docs/agent-task-contract.md); treat it as the single source of truth for what the application controls and what the CLI agent controls.

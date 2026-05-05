@@ -91,10 +91,12 @@ This means the best UI is not a simple two-party chat. It is a conversation time
 1. Conversation mode should be the default for review.
 2. Trace mode should be optimized for debugging and can remain dense.
 3. The default conversation should look like a compact back-and-forth chat, not a dashboard.
-4. Tool calls should collapse into grouped inline bursts with counts, failures, duration, and artifacts.
-5. Decisions should render as terse inline rows first; expanded cards show reason, evidence, action, and budget.
-6. Context should be visible near the composer: current run, target actor, attached files, mode, slash actions, and follow-up intent.
-7. Metrics, raw logs, token details, screenshots, and trace filters belong in a collapsible inspector.
-8. Failed schema parsing or weak log parsing should surface as a system warning inside the stream, not as a silent formatting collapse.
+4. Bottom controls should carry session choices: current chat, model, agent mode, permission level, configuration, start, stop, context chips, and slash actions.
+5. Tool calls should collapse into grouped inline bursts with counts, failures, duration, and artifacts.
+6. Decisions should render as terse inline rows first; expanded cards show reason, evidence, action, and budget.
+7. Context should be visible near the composer: current run, target actor, attached files, mode, slash actions, and follow-up intent.
+8. Metrics, raw logs, token details, screenshots, and trace filters belong in a collapsible inspector.
+9. A separate Verbose Debug view should preserve the deeper dashboard analysis for developers.
+10. Failed schema parsing or weak log parsing should surface as a system warning inside the stream, not as a silent formatting collapse.
 
 The detailed comparison lives in [best-practices-comparison.md](best-practices-comparison.md).

@@ -197,7 +197,7 @@ Make each watched project easier to inspect and operate:
 
 ### Next-Generation Chat Window
 
-Make the task chat the primary human review surface for long-running, multi-actor agent work. The current Activity Log is valuable evidence, but real Stable jobs already produce hundreds of conversation entries and more than a hundred tool chips. The next surface should keep the raw trace available while making the default view a compact developer chat, closer to GitHub Copilot Chat in VS Code than to an operations dashboard.
+Make the task chat the primary human review surface for long-running, multi-actor agent work. The current Activity Log is valuable evidence, but real Stable jobs already produce hundreds of conversation entries and more than a hundred tool chips. The next surface should keep the raw trace available while making the default view a compact developer chat, closer to GitHub Copilot Chat in VS Code than to an operations dashboard. The richer dashboard-style view from the first mockup remains valuable as a read-only fullscreen developer debugging view.
 
 The chat should render:
 
@@ -206,7 +206,9 @@ The chat should render:
 - Tool use as compact inline bursts by default, with counts by family, failure count, duration, touched files, artifacts, and one-click raw detail.
 - Orchestrator and supervisor output as terse inline decision/advisory rows first. Expanded cards show reason, evidence, action, budget, and next step.
 - User intervention as explicit steering: continue, interrupt, stop, accept, or create follow-up.
-- Conversation mode as the default, trace mode as the debugging view, artifacts as a dedicated evidence view, and the meta layer as a docked or collapsed inspector.
+- Task starts and continuations as subtle markers in a continuous project chat, with task metadata available on hover or click.
+- Bottom composer controls for current chat, model, agent mode, permission level, start, stop, configuration, jobs, debug view, context chips, and slash actions.
+- Conversation mode as the default, trace mode as the raw debugging view, artifacts as a dedicated evidence view, the meta layer as a docked or collapsed inspector, and Verbose Debug as a fullscreen read-only history analysis.
 
 First implementation order:
 
@@ -214,10 +216,13 @@ First implementation order:
 2. Group tool calls into compact inline `ToolBurst` events in conversation mode while preserving raw trace mode.
 3. Add persistent actor rails and labels for all participant types.
 4. Add compact decision/advisory rows for orchestrator and supervisor events, with expandable `DecisionCard` details.
-5. Fix layout reservations so auto-eval banners, run timeline, mode controls, stream, and composer cannot overlap.
-6. Add Playwright coverage using Stable evidence cases: tool-heavy archive, review job with orchestrator output, analysis report job, empty run, failed tool retry, and user intervention.
+5. Add bottom composer controls and interactive configuration overlays.
+6. Add continuous-chat task markers with hover/click metadata.
+7. Add a fullscreen Verbose Debug view for actor counts, duration, task markers, tool density, tokens, warnings, artifacts, and orchestrator explanations.
+8. Fix layout reservations so auto-eval banners, run timeline, mode controls, stream, and composer cannot overlap.
+9. Add Playwright coverage using Stable evidence cases: tool-heavy archive, review job with orchestrator output, analysis report job, empty run, failed tool retry, and user intervention.
 
-Queued at `agent-taskboard/2-ready/chat-conversation-event-projection/`, `agent-taskboard/2-ready/chat-tool-burst-collapsing/`, `agent-taskboard/2-ready/chat-actor-decision-cards/`, and `agent-taskboard/2-ready/chat-window-playwright-regression-suite/`.
+Queued at `agent-taskboard/2-ready/chat-conversation-event-projection/`, `agent-taskboard/2-ready/chat-tool-burst-collapsing/`, `agent-taskboard/2-ready/chat-actor-decision-cards/`, `agent-taskboard/2-ready/chat-window-playwright-regression-suite/`, and `agent-taskboard/2-ready/chat-verbose-debug-view/`.
 
 ### Expanded Lifecycle Lanes
 

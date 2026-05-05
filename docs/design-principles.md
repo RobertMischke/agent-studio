@@ -120,6 +120,10 @@ Orchestrator and supervisor output should render as terse decision or advisory r
 
 The meta layer belongs beside or behind the transcript. Metrics, run timelines, tokens, screenshots, commits, tests, and raw trace filters can dock into an inspector when there is room, but the central column remains the compact chat.
 
+Task starts, continuations, and task boundaries are real events, but they should not dominate the default transcript. They appear as subtle timeline markers inside the continuous project chat. Hover or click exposes job id, lane, model, prompt, duration, tokens, commits, and evidence.
+
+The first, dashboard-like diagnostic surface remains valuable as a separate `Verbose Debug` view. It is a read-only fullscreen developer view for understanding history and causality: actor activity counts, orchestrator actions, supervisor advisories, duration, tool density, warnings, task markers, artifacts, token usage, and raw trace links. It must not replace the compact human chat.
+
 The next-generation chat mockup lives at [mockups/chat-window-next-gen](mockups/chat-window-next-gen/README.md).
 
 ## Continuous over batch
