@@ -140,7 +140,9 @@ Agent-facing steering documents are product surface, not hidden implementation d
 
 Task-level feedback is different. Security audits, code-review findings, task checks, screenshots, run protocols, and reviewer notes belong with the task evidence, usually in the watched project's `.orchestrator/jobs/<state>/<job>/` folder. If that evidence reveals new product work, create a normal queued task instead of burying the work inside the report.
 
-Repositories should not stay dirty after a task is accepted. When a task reaches review or completion and its changes are accepted, the changed software and the task evidence should be committed promptly in the target repository. Pushing is a deliberate project operation, but the product should make uncommitted and unpushed task work visible so finished work does not quietly pile up on disk.
+Repositories should not stay dirty after a task is accepted. When a task reaches review or completion and its changes are accepted, the changed software and the task evidence should be committed promptly in the target repository and pushed unless the user has explicitly held the push back. The product should make uncommitted and unpushed task work visible so finished work does not quietly pile up on disk.
+
+Direct-agent maintenance follows the same hygiene at the human session level: a small documentation, mockup, prompt, roadmap, or task-queue change should be committed and pushed as soon as it is coherent. That keeps project memory durable and avoids losing steering in a local checkout.
 
 ---
 

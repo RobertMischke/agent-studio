@@ -82,7 +82,9 @@ When NOT to update stable:
 - A change is purely exploratory (mockups under `docs/mockups/`, research under `docs/research/`). These do not affect runtime; they can sit in dev.
 - The stable instance is currently being used to drive a long task. Wait for the task to finish or stop, then update.
 
-The push step is its own decision. The default is to push only after the user has reviewed the dev commits and explicitly asks. Do not push silently as part of "wrapping up a batch"; the user owns that gate.
+Direct-agent work in this repository should not remain local after it is finished. When Codex or another directly-invoked agent changes source, docs, mockups, prompts, or task evidence, commit the coherent batch and push it before reporting done, unless the user explicitly says not to push. Keep the commit scoped to the files touched for the request and do not sweep in unrelated dirty work.
+
+This rule does not allow worker CLIs spawned by Agent Task Processor to commit or push on their own. Managed task runs still follow [docs/commit-push-doctrine.md](docs/commit-push-doctrine.md): the platform owns the commit and push boundary. The direct-agent rule is for interactive repository work like this file, documentation updates, mockups, and task-queue maintenance.
 
 Layer 3 - the system review monitor at [`scripts/supervisor/run-system-review.sh`](scripts/supervisor/run-system-review.sh) - reads stable's state read-only. It is the most useful right after a stable update has happened: it can confirm the new code is running, capture a baseline, and surface any drift against the just-shipped behaviour.
 
