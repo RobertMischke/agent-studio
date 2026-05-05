@@ -222,3 +222,89 @@ Expected UI:
 - Dark theme uses the same spacing, hierarchy, borders, actor labels, and component behavior.
 - Theme changes do not change the conversation grammar or hide status, warning, or failure signals.
 - Playwright evidence covers task chat in light, task chat in dark, widened side sheet, and mobile.
+
+## 22. Watchdog Quiet, Resume, And Kill
+
+The agent becomes silent long enough for the watchdog to report a quiet period. Sometimes the agent resumes. Sometimes the watchdog kills the run.
+
+Expected UI:
+
+- A resumed quiet period renders as a low-emphasis supervisor row.
+- A killed run renders as a stronger supervisor row with stopped status.
+- Expanded details show quiet duration, last output, action taken, and whether the session can continue.
+- Verbose Debug shows the silent gap as a timing band.
+
+## 23. Needs-Input Loop With Orchestrator Answer
+
+The task agent emits `TASK_NEEDS_INPUT` and the orchestrator answers within a bounded loop.
+
+Expected UI:
+
+- The default chat shows one compact orchestrator decision row.
+- The row shows loop index and loop limit.
+- Expanded details show the agent question, orchestrator answer source, next action, and when the loop becomes a human handoff.
+- Circuit-breaker state is visible before another automatic continuation is attempted.
+
+## 24. Capture Fail And Session Rebuild
+
+The Activity Log includes a capture failure such as "No claude session id from this run".
+
+Expected UI:
+
+- Default chat shows a quiet system warning, not a task-agent error.
+- Expanded details show missing session metadata, fallback behavior, and raw log range.
+- The composer explains whether the next continuation reuses the same session or rebuilds from disk.
+
+## 25. Duplicate Sentinel And Parser De-Dupe
+
+The log contains repeated terminal sentinels such as multiple `TASK_DONE` lines.
+
+Expected UI:
+
+- The transcript does not show duplicate terminal messages.
+- Expanded parser detail shows first match, ignored duplicates, and policy result.
+- Verbose Debug exposes a sentinel parse table.
+
+## 26. Image Evidence Lightbox
+
+The run references attachments, Playwright scratch screenshots, durable `results/` screenshots, or visual design references.
+
+Expected UI:
+
+- Chat shows a compact evidence strip only when visuals affect review.
+- Clicking a thumbnail opens a lightbox with caption, source path, durable result path, task link, and source tool.
+- Scratch paths and durable result paths are distinct.
+- The side sheet can summarize available evidence but task evidence remains attached to the task.
+
+## 27. Token Spike In A Long Chat
+
+The job consumes significant tokens across task agent, supporting jobs, and orchestrator decisions.
+
+Expected UI:
+
+- Default chat uses small token chips only where they explain a decision or budget risk.
+- Expanded rows show per-run and per-actor breakdown.
+- Verbose Debug shows a token heatmap.
+- Existing Status Bar, CLI Usage, Workspace Token Timeline, and project token summaries remain available.
+
+## 28. Schema Drift In Structured Reports
+
+A supporting agent produces Markdown or JSON that does not match the expected contract.
+
+Expected UI:
+
+- Default chat says the report is unstructured in human language.
+- Expanded details show expected schema, parse issue, raw Markdown, and recovery action.
+- The drift can become a follow-up task from the row.
+- Trace mode keeps the original text.
+
+## 29. Implementation Handoff From Mockup To Jobs
+
+The design is complete enough to enter the queue.
+
+Expected UI:
+
+- The mockup includes a handoff map that matches queued jobs.
+- Jobs reference the edge-case taxonomy before implementation starts.
+- The first implementation job creates a feature flag, event contract, host inventory, and fixture plan.
+- Later jobs must not replace existing Trace, composer, run timeline, token, side-sheet, or screenshot surfaces until equivalent behavior is verified.

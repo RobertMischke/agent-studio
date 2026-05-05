@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Embedded Chat Surfaces, v5</title>
+  <title>Embedded Chat Surfaces, v6</title>
   <style>
     :root {
       color-scheme: light;
@@ -263,6 +263,44 @@
       margin-bottom: 10px;
     }
 
+    .scenario-rail {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      overflow-x: auto;
+      padding: 2px 0 10px;
+      margin-bottom: 6px;
+    }
+
+    .scenario-button {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      color: var(--soft);
+      min-height: 30px;
+      padding: 4px 10px;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .scenario-button.active,
+    .scenario-button:hover {
+      border-color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 10%, var(--surface));
+      color: var(--text);
+    }
+
+    .scenario-note {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--surface) 76%, transparent);
+      color: var(--soft);
+      font-size: 13px;
+      line-height: 1.42;
+      padding: 9px 11px;
+      margin-bottom: 14px;
+    }
+
     .file-stack {
       border: 1px solid var(--line);
       border-radius: 8px;
@@ -502,6 +540,188 @@
       white-space: nowrap;
     }
 
+    .event-cluster,
+    .handoff-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--surface) 78%, transparent);
+      margin: 14px 0;
+      overflow: hidden;
+    }
+
+    .event-cluster header,
+    .handoff-card header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      background: var(--chrome);
+    }
+
+    .event-cluster h3,
+    .handoff-card h3 {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.28;
+    }
+
+    .event-cluster header span,
+    .handoff-card header span {
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .event-row {
+      width: 100%;
+      border: 0;
+      border-bottom: 1px solid var(--line);
+      background: transparent;
+      display: grid;
+      grid-template-columns: 112px minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      min-height: 42px;
+      padding: 8px 12px;
+      text-align: left;
+      color: var(--soft);
+    }
+
+    .event-row:last-of-type { border-bottom: 0; }
+
+    .event-row:hover,
+    .event-row.active {
+      background: var(--surface-hover);
+    }
+
+    .event-row strong {
+      color: var(--text);
+      font-size: 13px;
+    }
+
+    .event-row span {
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      font-size: 13px;
+    }
+
+    .event-meta {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      justify-content: end;
+      white-space: nowrap;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .pill {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      color: var(--soft);
+      padding: 2px 7px;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .pill.warn {
+      border-color: color-mix(in srgb, var(--orange) 58%, var(--line));
+      color: var(--orange);
+    }
+
+    .pill.fail {
+      border-color: color-mix(in srgb, var(--red) 58%, var(--line));
+      color: var(--red);
+    }
+
+    .pill.ok {
+      border-color: color-mix(in srgb, var(--green) 58%, var(--line));
+      color: var(--green);
+    }
+
+    .evidence-strip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .thumb {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background:
+        linear-gradient(135deg, color-mix(in srgb, var(--accent) 22%, var(--surface)), var(--surface) 62%),
+        var(--surface);
+      min-height: 76px;
+      padding: 8px;
+      color: var(--text);
+      display: grid;
+      align-content: end;
+      text-align: left;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .thumb::before {
+      content: "";
+      position: absolute;
+      inset: 8px 8px auto;
+      height: 26px;
+      border-radius: 5px;
+      background: color-mix(in srgb, var(--surface) 72%, transparent);
+      border: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
+    }
+
+    .thumb:nth-child(2) {
+      background:
+        linear-gradient(135deg, color-mix(in srgb, var(--red) 20%, var(--surface)), var(--surface) 64%),
+        var(--surface);
+    }
+
+    .thumb:nth-child(3) {
+      background:
+        linear-gradient(135deg, color-mix(in srgb, var(--teal) 24%, var(--surface)), var(--surface) 60%),
+        var(--surface);
+    }
+
+    .thumb span {
+      position: relative;
+      z-index: 1;
+      font-size: 12px;
+      color: var(--soft);
+    }
+
+    .handoff-list {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      padding: 12px;
+    }
+
+    .handoff-step {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      padding: 10px;
+    }
+
+    .handoff-step b {
+      display: block;
+      font-size: 13px;
+      margin-bottom: 4px;
+    }
+
+    .handoff-step span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
     .composer {
       border: 1px solid var(--line-strong);
       border-radius: 8px;
@@ -717,6 +937,27 @@
       line-height: 1.42;
     }
 
+    .lightbox-preview {
+      min-height: 420px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background:
+        linear-gradient(180deg, color-mix(in srgb, var(--surface-soft) 82%, transparent), transparent 46%),
+        repeating-linear-gradient(90deg, color-mix(in srgb, var(--line) 54%, transparent) 0 1px, transparent 1px 84px),
+        var(--surface);
+      display: grid;
+      place-items: center;
+      color: var(--soft);
+      margin-bottom: 12px;
+    }
+
+    .lightbox-preview strong {
+      display: block;
+      color: var(--text);
+      font-size: 18px;
+      margin-bottom: 6px;
+    }
+
     .metric-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -846,6 +1087,21 @@
       .band {
         grid-template-columns: 1fr;
       }
+
+      .event-cluster header,
+      .handoff-card header,
+      .event-row {
+        grid-template-columns: 1fr;
+      }
+
+      .event-meta {
+        justify-content: start;
+      }
+
+      .evidence-strip,
+      .handoff-list {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
@@ -865,9 +1121,9 @@
     <header class="titlebar">
       <h1>Agent Task Processor - Task detail and side sheet chat surfaces</h1>
       <div class="title-actions">
-        <button class="button" data-theme-toggle>Light</button>
+        <button class="button" data-theme-toggle data-testid="chat-theme-toggle">Light</button>
         <button class="button" data-action="wide-sheet">Widen sheet</button>
-        <button class="button" data-modal="debug">Verbose Debug</button>
+        <button class="button" data-modal="debug" data-testid="chat-debug-open">Verbose Debug</button>
       </div>
     </header>
 
@@ -881,7 +1137,7 @@
           <div class="chips">
             <span class="chip">Claude Opus 4.7</span>
             <span class="chip">2-ready</span>
-            <span class="chip">v5 context mockup</span>
+            <span class="chip">v6 edge-case mockup</span>
           </div>
         </header>
 
@@ -895,26 +1151,39 @@
         </nav>
 
         <div class="task-content">
-          <section class="task-chat" aria-label="Task chat tab">
+          <section class="task-chat" aria-label="Task chat tab" data-testid="chat-task-surface">
             <div class="surface-label">
               <span>Task Chat - embedded in the existing task detail tab, not a global chat window</span>
-              <span>Light and dark use the same layout tokens</span>
+              <span>136 logs audited, 27,634 lines sampled</span>
+            </div>
+
+            <div class="scenario-rail" aria-label="Edge-case scenario switcher" data-testid="scenario-rail">
+              <button class="scenario-button active" data-scenario="tool" data-testid="scenario-tool">Tool burst</button>
+              <button class="scenario-button" data-scenario="wait" data-testid="scenario-wait">Wait loop</button>
+              <button class="scenario-button" data-scenario="needsInput" data-testid="scenario-needs-input">Needs input</button>
+              <button class="scenario-button" data-scenario="images" data-testid="scenario-images">Images</button>
+              <button class="scenario-button" data-scenario="handoff" data-testid="scenario-handoff">Handoff</button>
+              <button class="scenario-button" data-scenario="drift" data-testid="scenario-drift">Schema drift</button>
+            </div>
+
+            <div class="scenario-note" id="scenario-note" data-testid="scenario-note">
+              Tool-heavy logs collapse into one readable row by default. Expansion keeps the exact tools, failures, changed files, tests, and raw trace range available.
             </div>
 
             <div class="file-stack" aria-label="Recent changed files">
               <div class="file-row">
                 <code>docs/mockups/chat-window-next-gen/ui.html</code>
-                <div class="delta"><span class="add">+284</span><span class="del">-196</span><span class="dot"></span></div>
+                <div class="delta"><span class="add">+410</span><span class="del">-116</span><span class="dot"></span></div>
                 <span>v</span>
               </div>
               <div class="file-row">
                 <code>docs/mockups/chat-window-next-gen/README.md</code>
-                <div class="delta"><span class="add">+12</span><span class="del">-4</span><span class="dot"></span></div>
+                <div class="delta"><span class="add">+18</span><span class="del">-2</span><span class="dot"></span></div>
                 <span>v</span>
               </div>
               <div class="file-row">
-                <code>docs/mockups/chat-window-next-gen/scenarios.md</code>
-                <div class="delta"><span class="add">+9</span><span class="del">-0</span><span class="dot"></span></div>
+                <code>docs/mockups/chat-window-next-gen/activity-log-edge-cases.md</code>
+                <div class="delta"><span class="add">+96</span><span class="del">-0</span><span class="dot"></span></div>
                 <span>v</span>
               </div>
             </div>
@@ -937,6 +1206,7 @@
                 <div class="bubble">
                   <div class="speaker"><b>Task Agent</b><span>Design update</span></div>
                   <p>Agreed. The chat pattern now has two concrete homes: the task-detail Chat tab and the project side sheet. The default layout is light, VS Code-inspired, compact, and dense without turning into a dashboard.</p>
+                  <p>This iteration adds the communication edge cases from real Activity Logs: wait loops, watchdog kills, needs-input cycles, images, duplicate sentinels, parser drift, token spikes, and job handoffs.</p>
                   <div class="row-actions">
                     <button class="button" data-collapse="agent-details">Show technical layer</button>
                     <button class="button" data-modal="debug">Open Verbose Debug</button>
@@ -952,16 +1222,74 @@
               <span class="task-chip">Task event: Chat tab becomes the task-level home</span>
             </div>
 
+            <section class="event-cluster" aria-label="Activity log communication edge cases" data-testid="edge-case-cluster">
+              <header>
+                <h3>Activity-log edge cases, compact by default</h3>
+                <span>Real samples: 136 logs, 27,634 lines</span>
+              </header>
+
+              <button class="event-row active" data-collapse="edge-tool" data-scenario-tags="tool">
+                <strong>Tool burst</strong>
+                <span>364 tool-ish entries collapse into one readable row in the heaviest sample.</span>
+                <div class="event-meta"><span class="pill warn">1 failed</span><span>read 86</span><span>search 74</span></div>
+              </button>
+              <div class="collapse-content" id="edge-tool">
+                Default: one row with tool count, families, failures, duration, files touched, tests, and artifact count. Expanded: exact call table, raw trace line range, retry outcome, and durable evidence links.
+              </div>
+
+              <button class="event-row" data-collapse="edge-wait" data-scenario-tags="wait">
+                <strong>Wait loop</strong>
+                <span>Watchdog reports quiet periods, resumed streaming, and killed-after-silence cases.</span>
+                <div class="event-meta"><span class="pill warn">quiet 30s</span><span class="pill ok">resumed</span></div>
+              </button>
+              <div class="collapse-content" id="edge-wait">
+                Default: a slim supervisor row says "Agent was quiet, then resumed" or "Killed after silence". Expanded: quiet timer, last output line, watchdog decision, reissue link, and whether the same CLI session survived.
+              </div>
+
+              <button class="event-row" data-collapse="edge-needs-input" data-scenario-tags="needsInput handoff">
+                <strong>Needs input</strong>
+                <span>Agent emits `TASK_NEEDS_INPUT`; orchestrator can answer within a bounded loop.</span>
+                <div class="event-meta"><span class="pill">loop 2 / 5</span><span>decision</span></div>
+              </button>
+              <div class="collapse-content" id="edge-needs-input">
+                Default: the chat shows a short orchestrator decision row. Expanded: question, answer source, loop budget, next action, and a handoff button if a human should decide instead of the orchestrator.
+              </div>
+
+              <button class="event-row" data-collapse="edge-images" data-scenario-tags="images">
+                <strong>Image evidence</strong>
+                <span>Attachments, Playwright failures, copied screenshots, and durable result images appear inline.</span>
+                <div class="event-meta"><span class="pill ok">4 images</span><span>lightbox</span></div>
+              </button>
+              <div class="collapse-content" id="edge-images">
+                <div>Default: a small strip only when images matter for review. Expanded: image metadata, source path, durable `results/` path, test status, and open-task links.</div>
+                <div class="evidence-strip" aria-label="Screenshot evidence strip">
+                  <button class="thumb" data-modal="lightbox" data-testid="evidence-thumb-1"><span>Stable chat crop</span></button>
+                  <button class="thumb" data-modal="lightbox" data-testid="evidence-thumb-2"><span>Failed test</span></button>
+                  <button class="thumb" data-modal="lightbox" data-testid="evidence-thumb-3"><span>Design reference</span></button>
+                  <button class="thumb" data-modal="lightbox" data-testid="evidence-thumb-4"><span>Final verification</span></button>
+                </div>
+              </div>
+
+              <button class="event-row" data-collapse="edge-drift" data-scenario-tags="drift">
+                <strong>Schema drift</strong>
+                <span>Unstructured Markdown, duplicate sentinels, capture-fail, and parser warnings stay visible but quiet.</span>
+                <div class="event-meta"><span class="pill warn">parser</span><span class="pill fail">capture fail</span></div>
+              </button>
+              <div class="collapse-content" id="edge-drift">
+                Default: one system warning row with human wording. Expanded: JSON contract status, duplicate sentinel de-dupe, capture-fail reason, session rebuild plan, and the raw log slice.
+              </div>
+            </section>
+
             <article class="turn">
               <div class="avatar orchestrator">O</div>
               <div>
                 <button class="collapse-row" data-collapse="orchestrator-detail">
                   <strong>Orchestrator</strong>
-                  <span>Route project-wide conversation to side sheet; route task evidence and task follow-up to this Chat tab.</span>
+                  <span>Route project-wide conversation to side sheet; route task evidence, wait loops, images, and task follow-up to this Chat tab.</span>
                   <span>v</span>
                 </button>
                 <div class="collapse-content" id="orchestrator-detail">
-                  Decision: do not introduce a new global chat surface. Use existing task detail and side-sheet contexts. The same message grammar can render in both, but task scope and project scope remain separate.
+                  Decision: do not introduce a new global chat surface. Use existing task detail and side-sheet contexts. The same message grammar can render in both, but task scope and project scope remain separate. Watchdog, needs-input, image evidence, and parser drift must be projection events, not one-off text parsing in the component.
                 </div>
               </div>
             </article>
@@ -975,6 +1303,7 @@
                   <li>Project side-sheet chat can be widened and keeps its own compact composer.</li>
                   <li>Light and dark themes share spacing, borders, and actor grammar.</li>
                   <li>VS Code-style chrome appears as activity bar, tabs, status bar, compact rows, and low-chrome panels.</li>
+                  <li>Every special case has a compact row, an expanded row, a Debug representation, and a job-handoff note.</li>
                 </ul>
               </div>
             </article>
@@ -983,15 +1312,48 @@
               <div class="avatar">A</div>
               <div>
                 <button class="collapse-row" data-collapse="tool-burst">
-                  <strong>Tool use 12</strong>
-                  <span>Read mockup, revised embedded context, rendered light/dark/side-sheet/mobile screenshots.</span>
+                  <strong>Tool use 28</strong>
+                  <span>Audit logs, update docs, render v6 states, and update queued jobs through the task API.</span>
                   <span>v</span>
                 </button>
                 <div class="collapse-content" id="tool-burst">
-                  Read: current chat mockup, roadmap, scenarios, and upcoming VS Code layout jobs. Update: v5 embedded context, theme toggle, side sheet resize. Verify: Playwright screenshots for light, dark, wide side sheet, and mobile.
+                  Read: 136 Activity Logs, current chat mockup, roadmap, scenarios, and upcoming VS Code layout jobs. Update: v6 edge-case states, scenario switcher, image lightbox, handoff map, debug metrics. Verify: Playwright screenshots for light, wait loop, image lightbox, dark debug, and mobile.
                 </div>
               </div>
             </article>
+
+            <section class="handoff-card" aria-label="Implementation handoff" data-testid="handoff-card">
+              <header>
+                <h3>Implementation handoff, reduced drift</h3>
+                <span>Queue contract for upcoming jobs</span>
+              </header>
+              <div class="handoff-list">
+                <div class="handoff-step">
+                  <b>1. Bridge</b>
+                  <span>Inventory hosts, add `Frontend:NextGenChat`, define `ConversationEvent`, and lock fixture inputs.</span>
+                </div>
+                <div class="handoff-step">
+                  <b>2. Projection</b>
+                  <span>Map raw Activity Log, runs, screenshots, tokens, commits, and status into typed events.</span>
+                </div>
+                <div class="handoff-step">
+                  <b>3. Renderer</b>
+                  <span>Render compact chat rows first; keep Trace, current composer, and old Activity Log fallback.</span>
+                </div>
+                <div class="handoff-step">
+                  <b>4. Edge cases</b>
+                  <span>Add wait loops, needs-input, duplicate sentinels, capture-fail, schema drift, and image evidence.</span>
+                </div>
+                <div class="handoff-step">
+                  <b>5. Debug</b>
+                  <span>Open read-only Verbose Debug with actor counts, timing, tokens, tools, warnings, and raw links.</span>
+                </div>
+                <div class="handoff-step">
+                  <b>6. Tests</b>
+                  <span>Use real log fixtures and Playwright states before replacing any existing surface.</span>
+                </div>
+              </div>
+            </section>
 
             <div class="composer" aria-label="Task chat composer">
               <div class="input-area" contenteditable="true">Reply in task context. Use #prompt, #latest-run, #screenshot, or /create-follow-up...</div>
@@ -1038,21 +1400,21 @@
 
           <article class="sheet-turn">
             <div class="speaker"><b>Orchestrator</b><span>Routing</span></div>
-            <p>This is the project-level conversation. I can reference active tasks, queue status, screenshots, and docs without hijacking the task-level chat.</p>
+            <p>This is the project-level conversation. I can reference active tasks, queue status, screenshots, drift reports, and docs without hijacking the task-level chat.</p>
           </article>
 
           <button class="collapse-row" data-collapse="sheet-summary">
             <strong>Upcoming design work</strong>
-            <span>VS Code layout density, visual evidence strip, task chat v5 context, light/dark themes.</span>
+            <span>VS Code layout density, visual evidence strip, task chat v6 edge cases, light/dark themes.</span>
             <span>v</span>
           </button>
           <div class="collapse-content" id="sheet-summary">
-            The side sheet should share typography, row density, tabs, and status chrome with the main layout proposal. It can be wide, but it remains attached to the existing app instead of becoming a separate product.
+            The side sheet should share typography, row density, tabs, and status chrome with the main layout proposal. It can be wide, but it remains attached to the existing app instead of becoming a separate product. It can show project-level summaries of wait loops, tool bursts, image evidence, and drift warnings, while task-specific evidence remains in the task Chat tab.
           </div>
 
           <article class="sheet-turn">
             <div class="speaker"><b>Task Agent</b><span>Compact answer</span></div>
-            <p>I will update the jobs so implementation consumes the embedded chat contexts and not the earlier standalone chat window.</p>
+            <p>I will update the jobs so implementation consumes the embedded chat contexts, the edge-case taxonomy, and the handoff order instead of the earlier standalone chat window.</p>
           </article>
         </div>
 
@@ -1084,7 +1446,7 @@
     </footer>
   </div>
 
-  <div class="modal-backdrop" id="modal-debug" aria-hidden="true">
+  <div class="modal-backdrop" id="modal-debug" aria-hidden="true" data-testid="chat-debug-modal">
     <section class="modal debug-modal" role="dialog" aria-label="Verbose debug">
       <header>
         <h2>Verbose Debug, read-only developer view</h2>
@@ -1102,36 +1464,36 @@
             <div class="panel">
               <h3>Actor activity</h3>
               <div class="metric-grid">
-                <div class="metric"><b>4</b><span>Agent turns</span></div>
-                <div class="metric"><b>3</b><span>User turns</span></div>
-                <div class="metric"><b>2</b><span>Orchestrator events</span></div>
-                <div class="metric"><b>1</b><span>QA event</span></div>
+                <div class="metric"><b>136</b><span>Logs audited</span></div>
+                <div class="metric"><b>27.6k</b><span>Lines sampled</span></div>
+                <div class="metric"><b>11</b><span>Event families</span></div>
+                <div class="metric"><b>9</b><span>Fixture jobs</span></div>
               </div>
             </div>
             <div class="panel">
               <h3>Context split</h3>
-              <p>Task chat owns task evidence and follow-up. Side sheet chat owns project steering and cross-task conversation.</p>
+              <p>Task chat owns task evidence and follow-up. Side sheet chat owns project steering and cross-task conversation. Verbose Debug owns timing, causality, parser drift, token spikes, raw line ranges, and actor counts.</p>
             </div>
           </aside>
 
           <section>
             <div class="panel">
               <h3>Timeline</h3>
-              <div class="band"><b>User</b><div class="heat"><span style="--w: 58%;"></span></div><span>3 turns</span></div>
-              <div class="band"><b>Task chat</b><div class="heat"><span style="--w: 82%;"></span></div><span>task evidence</span></div>
-              <div class="band"><b>Side sheet</b><div class="heat"><span style="--w: 46%;"></span></div><span>project steering</span></div>
-              <div class="band"><b>Tools</b><div class="heat"><span style="--w: 72%;"></span></div><span>12 calls</span></div>
+              <div class="band"><b>Tool density</b><div class="heat"><span style="--w: 92%;"></span></div><span>364 in top sample</span></div>
+              <div class="band"><b>Watchdog</b><div class="heat"><span style="--w: 74%;"></span></div><span>quiet, resumed, killed</span></div>
+              <div class="band"><b>Images</b><div class="heat"><span style="--w: 68%;"></span></div><span>100 in top sample</span></div>
+              <div class="band"><b>Schema drift</b><div class="heat"><span style="--w: 46%;"></span></div><span>parser, sentinel, capture</span></div>
             </div>
             <div class="panel">
               <h3>Explanation</h3>
-              <p>The standalone chat reference was useful visually, but it did not match the product surface. The v5 mockup places the same chat grammar inside the task detail Chat tab and the resizable project side sheet, with shared light and dark theme tokens.</p>
+              <p>The standalone chat reference was useful visually, but it did not match the product surface. The v6 mockup places the same chat grammar inside the task detail Chat tab and the resizable project side sheet, then maps real edge cases into compact rows and a read-only Debug view.</p>
             </div>
           </section>
 
           <aside>
             <div class="panel">
               <h3>Rules</h3>
-              <p>No new global chat window. Keep the existing app shell, tabs, task detail, side sheet, status bar, and Visual Studio Code-style layout direction.</p>
+              <p>No new global chat window. Keep the existing app shell, tabs, task detail, side sheet, status bar, and Visual Studio Code-style layout direction. Do not drop Trace or existing token surfaces while introducing the compact projection.</p>
             </div>
             <div class="panel">
               <h3>Raw trace links</h3>
@@ -1143,12 +1505,55 @@
     </section>
   </div>
 
+  <div class="modal-backdrop" id="modal-lightbox" aria-hidden="true" data-testid="image-lightbox">
+    <section class="modal" role="dialog" aria-label="Screenshot evidence">
+      <header>
+        <h2>Screenshot evidence</h2>
+        <div class="row-actions">
+          <button class="button">Open task</button>
+          <button class="button">Copy result path</button>
+          <button class="button" data-close>Close</button>
+        </div>
+      </header>
+      <div class="modal-content">
+        <div class="lightbox-preview">
+          <div>
+            <strong>Failed test, then fixed verification</strong>
+            <code>results/playwright/chat-edge-case-lightbox.png</code>
+          </div>
+        </div>
+        <div class="chips">
+          <span class="chip">2 / 4</span>
+          <span class="chip">Playwright artifact</span>
+          <span class="chip">Durable result</span>
+          <span class="chip">Linked to tool burst</span>
+        </div>
+      </div>
+    </section>
+  </div>
+
   <div class="toast" id="toast">Ready.</div>
 
   <script>
     const body = document.body;
     const sheet = document.querySelector('.side-sheet');
     const toast = document.getElementById('toast');
+    const scenarioNote = document.getElementById('scenario-note');
+    const scenarioNotes = {
+      tool: 'Tool-heavy logs collapse into one readable row by default. Expansion keeps the exact tools, failures, changed files, tests, and raw trace range available.',
+      wait: 'Wait-loop rendering turns watchdog silence, resumed streaming, and kill decisions into slim supervisor rows with one-click timing detail.',
+      needsInput: 'Needs-input cycles show the agent question, orchestrator answer, loop budget, and whether the next step should be a human handoff.',
+      images: 'Image-heavy work gets an inline evidence strip only when review depends on visuals. The lightbox keeps scratch paths and durable result paths inspectable.',
+      handoff: 'The handoff map ties the mockup directly to queued implementation jobs, so the design does not drift before coding starts.',
+      drift: 'Schema drift, duplicate sentinels, capture-fail, and parser warnings stay quiet by default but remain traceable in expanded rows and Verbose Debug.'
+    };
+    const scenarioTargets = {
+      tool: 'edge-tool',
+      wait: 'edge-wait',
+      needsInput: 'edge-needs-input',
+      images: 'edge-images',
+      drift: 'edge-drift'
+    };
 
     function showToast(message) {
       toast.textContent = message;
@@ -1163,7 +1568,37 @@
       showToast(`${theme} theme active.`);
     }
 
+    function setScenario(scenario) {
+      body.dataset.scenario = scenario;
+      document.querySelectorAll('[data-scenario]').forEach((button) => {
+        button.classList.toggle('active', button.dataset.scenario === scenario);
+      });
+      document.querySelectorAll('.event-row').forEach((row) => {
+        const tags = (row.dataset.scenarioTags || '').split(' ');
+        row.classList.toggle('active', tags.includes(scenario));
+      });
+      document.querySelectorAll('.event-cluster .collapse-content').forEach((content) => {
+        content.classList.remove('open');
+      });
+      const target = scenarioTargets[scenario];
+      if (target) {
+        const targetContent = document.getElementById(target);
+        targetContent?.classList.add('open');
+        targetContent?.previousElementSibling?.scrollIntoView({ block: 'center', behavior: 'auto' });
+      }
+      if (scenario === 'handoff') {
+        document.querySelector('[data-testid="handoff-card"]')?.scrollIntoView({ block: 'center', behavior: 'auto' });
+      }
+      scenarioNote.textContent = scenarioNotes[scenario] || scenarioNotes.tool;
+      showToast(`Scenario: ${scenario}.`);
+    }
+
     document.addEventListener('click', (event) => {
+      const scenarioButton = event.target.closest('[data-scenario]');
+      if (scenarioButton) {
+        setScenario(scenarioButton.dataset.scenario);
+      }
+
       const themeButton = event.target.closest('[data-theme-toggle]');
       if (themeButton) {
         setTheme(body.dataset.theme === 'light' ? 'dark' : 'light');
@@ -1172,7 +1607,7 @@
       const modalButton = event.target.closest('[data-modal]');
       if (modalButton) {
         document.getElementById(`modal-${modalButton.dataset.modal}`)?.classList.add('open');
-        showToast('Verbose Debug opened.');
+        showToast(modalButton.dataset.modal === 'debug' ? 'Verbose Debug opened.' : 'Evidence lightbox opened.');
       }
 
       const closeButton = event.target.closest('[data-close]');

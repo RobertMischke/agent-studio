@@ -6,12 +6,13 @@ This folder is not existing product behavior. It is the target surface for the n
 
 ## Files
 
-- [ui.html](ui.html) - interactive v5 visual mockup for the next-generation chat surfaces. This is the current reference.
+- [ui.html](ui.html) - interactive v6 visual mockup for the next-generation chat surfaces. This is the current reference.
 - [scenarios.md](scenarios.md) - typical cases the UI must render well.
+- [activity-log-edge-cases.md](activity-log-edge-cases.md) - real Activity Log edge-case taxonomy from 136 sampled logs.
 - [research.md](research.md) - Stable observations and external product research.
 - [best-practices-comparison.md](best-practices-comparison.md) - focused comparison with VS Code Copilot Chat, Claude Code, Gemini Code Assist, and Codex.
 - [visual-audit.md](visual-audit.md) - visual critique of the current Stable chat evidence.
-- [integration-plan.md](integration-plan.md) - migration plan from today's Activity Log, side sheet, run evidence, token surfaces, and composer controls into the v5 chat grammar.
+- [integration-plan.md](integration-plan.md) - migration plan from today's Activity Log, side sheet, run evidence, token surfaces, and composer controls into the v6 chat grammar.
 - [evidence/stable-playwright-observations.json](evidence/stable-playwright-observations.json) - Playwright metrics from Stable.
 - [evidence/next-gen-chat-mockup-desktop.png](evidence/next-gen-chat-mockup-desktop.png) - rendered desktop screenshot of the proposed mockup.
 - [evidence/next-gen-chat-mockup-mobile.png](evidence/next-gen-chat-mockup-mobile.png) - rendered mobile screenshot of the proposed mockup.
@@ -33,13 +34,20 @@ This folder is not existing product behavior. It is the target surface for the n
 - [evidence/next-gen-chat-v5-wide-sidesheet.png](evidence/next-gen-chat-v5-wide-sidesheet.png) - current v5 with widened side-sheet project chat.
 - [evidence/next-gen-chat-v5-debug.png](evidence/next-gen-chat-v5-debug.png) - current v5 Verbose Debug from the embedded app context.
 - [evidence/next-gen-chat-v5-mobile.png](evidence/next-gen-chat-v5-mobile.png) - current v5 mobile task-chat reference.
+- [evidence/next-gen-chat-v6-edge-cases-light.png](evidence/next-gen-chat-v6-edge-cases-light.png) - current v6 light task Chat tab with edge-case scenario rail.
+- [evidence/next-gen-chat-v6-wait-loop.png](evidence/next-gen-chat-v6-wait-loop.png) - current v6 wait-loop scenario.
+- [evidence/next-gen-chat-v6-image-lightbox.png](evidence/next-gen-chat-v6-image-lightbox.png) - current v6 image evidence lightbox.
+- [evidence/next-gen-chat-v6-debug-dark.png](evidence/next-gen-chat-v6-debug-dark.png) - current v6 dark Verbose Debug view.
+- [evidence/next-gen-chat-v6-mobile.png](evidence/next-gen-chat-v6-mobile.png) - current v6 mobile task-chat reference.
 - [evidence/tool-heavy-archive-full.png](evidence/tool-heavy-archive-full.png) - Stable screenshot for a tool-heavy archived job.
 - [evidence/review-chat-project-switch-full.png](evidence/review-chat-project-switch-full.png) - Stable screenshot for a review job.
 - [evidence/analysis-report-review-full.png](evidence/analysis-report-review-full.png) - Stable screenshot for an analysis-report job.
 
 ## Recommendation
 
-The current Activity Log is useful evidence but not yet a great conversation surface. It exposes the raw stream too directly, and the first mockup overcorrected toward an operations dashboard. The current v5 direction is a **compact embedded developer chat**: the same message grammar is placed into the existing task-detail Chat tab and the existing project side sheet. There is no new global chat window. The visual direction is light-first, dark-capable, VS Code-inspired, and compact without turning into an operations dashboard.
+The current Activity Log is useful evidence but not yet a great conversation surface. It exposes the raw stream too directly, and the first mockup overcorrected toward an operations dashboard. The current v6 direction is a **compact embedded developer chat**: the same message grammar is placed into the existing task-detail Chat tab and the existing project side sheet. There is no new global chat window. The visual direction is light-first, dark-capable, VS Code-inspired, and compact without turning into an operations dashboard.
+
+The v6 iteration adds a log-grounded edge-case taxonomy. A local sweep scanned 136 `cli-output.log` files with 27,634 lines and found recurring cases that must be explicit in the projection contract: tool-heavy bursts, watchdog wait and kill events, needs-input loops, orchestrator reissues, heuristic outcomes, capture-fail/session-rebuild cases, duplicate sentinels, image evidence, test fail/retry/pass runs, token spikes, parser/schema drift, user interventions, and cross-task side-sheet steering.
 
 In Stable, tool-heavy jobs already reach this density:
 
@@ -185,7 +193,7 @@ See [research.md](research.md) for sources.
 10. Add the fullscreen read-only Verbose Debug view.
 11. Fix layout reservations so banners, inspector, popovers, mode controls, stream, and composer cannot overlap or intercept each other.
 12. Add Playwright coverage using the Stable evidence cases: tool-heavy archived job, review job with orchestrator output, analysis-report job, failed/empty run, and user-intervention continuation.
-13. Add screenshot assertions for desktop, mobile, light theme, dark theme, config overlay, artifacts overlay, jobs overlay, tool details, task marker popover, inspector collapsed, technical layer, side sheet wide mode, and Verbose Debug.
+13. Add screenshot assertions for desktop, mobile, light theme, dark theme, config overlay, artifacts overlay, jobs overlay, tool details, task marker popover, inspector collapsed, technical layer, side sheet wide mode, edge-case scenario rail, image lightbox, wait-loop state, and Verbose Debug.
 
 ## Boundaries
 

@@ -81,3 +81,19 @@ The revised mockup should look like a polished developer chat, not an operations
 The inspector can sit beside the chat when space allows, which was useful in the first mockup. On smaller screens it collapses behind an `Inspector` control.
 
 The first dashboard-style mockup should survive as `Verbose Debug`. That gives developers the richer analysis surface when they need to understand a confusing run, while preserving the compact primary chat for daily use.
+
+## Edge-Case Iteration Delta
+
+The v6 mockup adds one more best-practice rule: complicated agent communication should be represented as typed events before it is represented as UI. This is the bridge between modern agent chats and Agent Task Processor's Activity Logs.
+
+Best-practice alignment:
+
+| Source pattern | Product lesson | v6 mockup response |
+|----------------|----------------|--------------------|
+| VS Code chat exposes session type, agent, permission level, model, context mentions, image carousel, review, and checkpoints. | Agent controls and evidence browsing should sit near chat without becoming the message body. | Scenario rail, compact composer controls, evidence strip, image lightbox, and Verbose Debug. |
+| VS Code custom agents support handoffs between specialized agents with relevant context. | Handoff should be explicit and user-reviewable, not hidden inside prose. | Handoff card maps bridge, projection, renderer, edge cases, debug, and tests to queued jobs. |
+| Claude Code exposes commands for model, permissions, cost, usage, review, memory, and compaction. | Cost, permissions, and session controls belong in persistent controls and drill-downs. | Token chips stay small in chat; token heatmaps move to Verbose Debug and existing token surfaces. |
+| Gemini Code Assist agent mode asks for tool approval, supports plan review, tool configuration, MCP visibility, stop, and project instruction files. | Trust boundaries and tool visibility need compact defaults plus inspectable detail. | Tool bursts, wait loops, needs-input loops, capture-fail, and schema drift become typed projection events. |
+| Codex use cases emphasize screenshots, visual checks, scoped tasks, review, and repeatable skills. | Visual evidence and handoff artifacts must be durable and task-linked. | Image evidence row, lightbox, durable `results/` path, and fixture-backed Playwright screenshots. |
+
+The design should not imitate any single product. VS Code remains the density reference, Claude Code remains the session-control reference, Gemini remains the approval and tool-visibility reference, and Codex remains the task-artifact and visual-verification reference.

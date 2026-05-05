@@ -48,11 +48,16 @@ Recommended event kinds:
 - `message.supervisor`
 - `message.supportingAgent`
 - `toolBurst`
+- `supervisor.wait`
+- `agent.needsInput`
+- `system.captureFail`
+- `system.parserWarning`
 - `taskMarker`
 - `runMarker`
 - `decision`
 - `warning`
 - `artifact`
+- `artifact.image`
 - `metric`
 - `traceLink`
 
@@ -121,13 +126,14 @@ Debug and project surfaces:
 ## Rollout Order
 
 1. Add `Frontend:NextGenChat`, pure `ConversationEvent` projection, and fixture-based tests from real Stable logs.
-2. Swap the task Activity tab renderer behind the flag while preserving Trace, run timeline, auto-eval banner, and composer.
-3. Add tool-burst rows and decision rows on top of the projection.
-4. Add actor rails and labels in the shared renderer.
-5. Adapt the project side sheet to the shared renderer and theme tokens.
-6. Move model, start, stop, config, context chips, and mode controls into the compact composer toolbar.
-7. Add Verbose Debug using the same projected events plus run, token, artifact, and screenshot aggregates.
-8. Add Playwright coverage for current layout off, NextGenChat on, VsCodeLayout on, both flags on, light theme, dark theme, mobile, side sheet wide, and Verbose Debug.
+2. Copy representative fixture fragments from the audited Activity Logs into tests for tool bursts, watchdog wait/kill, needs-input, capture-fail, duplicate sentinel, image evidence, test retry, token spike, and schema drift.
+3. Swap the task Activity tab renderer behind the flag while preserving Trace, run timeline, auto-eval banner, and composer.
+4. Add tool-burst rows and decision rows on top of the projection.
+5. Add actor rails and labels in the shared renderer.
+6. Adapt the project side sheet to the shared renderer and theme tokens.
+7. Move model, start, stop, config, context chips, and mode controls into the compact composer toolbar.
+8. Add Verbose Debug using the same projected events plus run, token, artifact, and screenshot aggregates.
+9. Add Playwright coverage for current layout off, NextGenChat on, VsCodeLayout on, both flags on, light theme, dark theme, mobile, side sheet wide, wait-loop scenario, image lightbox, schema-drift row, and Verbose Debug.
 
 ## Risk Controls
 
@@ -141,11 +147,11 @@ Debug and project surfaces:
 
 The queued work should be treated as a staged migration:
 
-1. `chat-layout-integration-bridge` should run before the chat implementation tasks. It creates the feature flag, shared event contract, mapping tests, and host inventory.
-2. `chat-conversation-event-projection` builds the projection and first task-host rendering.
+1. `chat-layout-integration-bridge` should run before the chat implementation tasks. It creates the feature flag, shared event contract, mapping tests, host inventory, and fixture list from [activity-log-edge-cases.md](activity-log-edge-cases.md).
+2. `chat-conversation-event-projection` builds the projection and first task-host rendering, including parser warnings and raw trace links.
 3. `chat-tool-burst-collapsing` adds dense tool rows without changing the host structure.
-4. `chat-actor-decision-cards` adds actor and decision grammar.
-5. `chat-verbose-debug-view` adds the secondary read-only developer view.
-6. `chat-window-playwright-regression-suite` locks the whole migration with screenshots and interaction tests.
+4. `chat-actor-decision-cards` adds actor and decision grammar for orchestrator, supervisor, needs-input, capture-fail, and schema-drift rows.
+5. `chat-verbose-debug-view` adds the secondary read-only developer view with actor counts, timing, tokens, tool density, image evidence, and warnings.
+6. `chat-window-playwright-regression-suite` locks the whole migration with screenshots and interaction tests, including v6 edge-case states.
 
 The VS Code layout task remains the app-shell foundation. Chat work must read `docs/mockups/vscode-layout/taxonomy.md`, but it must not wait for the full shell if the Activity tab can improve safely behind `Frontend:NextGenChat`.
