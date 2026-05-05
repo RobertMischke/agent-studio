@@ -1,4 +1,5 @@
 using System.Text.Json;
+using OrchestratorApi.Models;
 using OrchestratorApi.Services.Supervisor;
 using Xunit;
 
@@ -108,6 +109,42 @@ public class SchemaRoundTripTests
             Assert.True(Enum.TryParse<SupervisorSeverity>(name, ignoreCase: false, out _),
                 $"Schema severity '{name}' has no matching C# enum value.");
         }
+    }
+
+    [Fact]
+    public void ClientIdentitySchema_PublishesTheRegistrationBoundaryShape()
+    {
+        var schema = LoadSchema("client-identity.schema.json");
+        var required = ReadStringArray(schema, "required");
+        Assert.Contains("id", required);
+        Assert.Contains("displayName", required);
+        Assert.Contains("kind", required);
+        Assert.Contains("registeredAt", required);
+
+        var properties = schema.GetProperty("properties");
+        var kinds = ReadStringArray(properties.GetProperty("kind"), "enum");
+        Assert.Equal(new[] { "human", "agent-instance", "external-tool", "service", "retired" }, kinds);
+
+        // Every documented kind round-trips through the C# parser.
+        Assert.Equal(ClientIdentityKind.Human, ClientIdentityKinds.Parse("human"));
+        Assert.Equal(ClientIdentityKind.AgentInstance, ClientIdentityKinds.Parse("agent-instance"));
+        Assert.Equal(ClientIdentityKind.ExternalTool, ClientIdentityKinds.Parse("external-tool"));
+        Assert.Equal(ClientIdentityKind.Service, ClientIdentityKinds.Parse("service"));
+        Assert.Equal(ClientIdentityKind.Retired, ClientIdentityKinds.Parse("retired"));
+    }
+
+    [Fact]
+    public void TokenAggregateByClientSchema_KeysOnClientIdInAdditionToProject()
+    {
+        var schema = LoadSchema("token-aggregate-by-client.schema.json");
+        var required = ReadStringArray(schema, "required");
+        Assert.Contains("clientId", required);
+        Assert.Contains("project", required);
+        Assert.Contains("windowStart", required);
+        Assert.Contains("windowEnd", required);
+        Assert.Contains("cli", required);
+        Assert.Contains("model", required);
+        Assert.Contains("tokens", required);
     }
 
     [Fact]

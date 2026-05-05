@@ -50,6 +50,21 @@ The button is the contract boundary:
 - The raw report stays available when parsing fails.
 - Follow-up work becomes a normal queued task.
 
+## Analysis reports are first-class product memory
+
+Some actions are not task execution. They are inspections of the system itself: "are we on track?", "what drifted from the roadmap?", "which jobs are stale?", "did the last batch look healthy?", "which docs need sync?", or "what should be split into follow-up tasks?" These analyses may be manual, scheduled, or produced by a meta-cycle.
+
+The output still follows the same evidence rule:
+
+- Markdown is the human-readable artifact and must remain readable on disk.
+- Structured JSON is the app contract when the analysis needs filtering, badges, trends, or follow-up automation.
+- A failed JSON parse does not hide the report. The UI marks it as unstructured and keeps the Markdown.
+- Reports carry scope: workspace, project, task, run, source branch, time window, and triggering action.
+- Reports can reference Agent Message Bus records, runtime logs, screenshots, commits, task folders, and other reports, but they should not duplicate raw evidence wholesale.
+- A finding that requires implementation becomes a normal queued task.
+
+The UI should give analysis reports their own place at project level. They are not buried inside one task unless the analysis was explicitly task-scoped.
+
 ## See What Happened With Confidence
 
 The user must always have a confident, current picture of what the agents and the software did. Three rules follow:

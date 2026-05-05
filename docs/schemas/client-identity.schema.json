@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-taskboard.local/schemas/client-identity.schema.json",
+  "title": "ClientIdentity",
+  "description": "Identity record for one client of the Task Access Layer. A client is anything that talks to the API: a human-driven UI session, a CLI agent instance, an external tool, or a backend service. Stored as JSON files under <workspace>/identities/<id>.json. Loaded on Task Access Layer boot. The layer rejects mutations from unregistered identities. This is a registration boundary, not a security model: the door has a sign, every visitor signs in. Cryptographic signing is a follow-up.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "displayName", "kind", "registeredAt"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "minLength": 1,
+      "maxLength": 64,
+      "description": "Stable, immutable, kebab-case slug. Assigned by the API on first registration. Once written, never re-keyed; soft-delete sets kind=retired but preserves id so historical task attribution stays valid."
+    },
+    "displayName": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80,
+      "description": "Free-form human-readable name, e.g. \"Robert's Workshop\" or \"Layer 3 Review\". Re-registering the same displayName is idempotent (returns the existing id)."
+    },
+    "emoji": {
+      "type": ["string", "null"],
+      "description": "Single grapheme cluster used as a visual marker on cards and chips, e.g. \"🦊\". Optional. Validated as a non-empty short string; the frontend renders whatever is supplied."
+    },
+    "colour": {
+      "type": ["string", "null"],
+      "pattern": "^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$",
+      "description": "CSS hex colour applied to the chip background. Optional. The frontend falls back to a neutral default when omitted."
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["human", "agent-instance", "external-tool", "service", "retired"],
+      "description": "What kind of caller this identity represents. Soft-delete flips kind to \"retired\"; the record stays so historical attribution remains resolvable."
+    },
+    "registeredAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp the identity was first registered. Immutable."
+    },
+    "lastSeenAt": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "UTC timestamp of the most recent request bearing this clientId. Updated on every authenticated read or write."
+    },
+    "tokenBudgetMonthly": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Optional monthly token cap. The API rejects mutations from this client once the rolling 30-day token total exceeds this value. Null disables the cap."
+    },
+    "notes": {
+      "type": ["string", "null"],
+      "maxLength": 1000,
+      "description": "Free-form operator notes (\"shared dev box\", \"Layer 3 review on stable\", etc.)."
+    }
+  }
+}

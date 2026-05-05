@@ -9,6 +9,7 @@ import { OrchestratorSideSheetComponent } from './components/orchestrator-side-s
 import { ProjectDetailComponent } from './components/project-detail';
 import { StatusBarComponent } from './components/status-bar';
 import { JobService } from './services/job.service';
+import { ClientService } from './services/client.service';
 import { JobDetail, JobInfo, GroupedJobs, WatchPathEntry, CliType, CLI_TYPES, CliModelInfo } from './models/job.model';
 import { ErrorDialogService } from './services/error-dialog.service';
 import { cliTypeLabel as fmtCliTypeLabel, formatMultiplier as fmtMultiplier } from './services/format.util';
@@ -46,6 +47,18 @@ import { E2ECleanupDialogComponent } from './components/dev-tools/e2e-cleanup-di
           (toggleAuto)="onToggleAuto($event)"
           (openDetail)="openProjectDetail($event)" />
         <div class="header__actions">
+          <label class="client-filter" data-testid="client-filter">
+            <span class="client-filter__label">Owner:</span>
+            <select class="client-filter__select"
+                    data-testid="client-filter-select"
+                    [value]="activeClientFilter() ?? ''"
+                    (change)="setClientFilter(clientFilterChange($event))">
+              <option value="">All</option>
+              @for (c of clientService.clients(); track c.id) {
+                <option [value]="c.id">{{ c.emoji || '·' }} {{ c.displayName }}</option>
+              }
+            </select>
+          </label>
           <button class="btn btn--create" (click)="openCreate()">
             ＋ Add Task
           </button>
@@ -348,7 +361,35 @@ import { E2ECleanupDialogComponent } from './components/dev-tools/e2e-cleanup-di
       font-size: 11px;
     }
     .header__subtitle { font-size: 11px; color: #64748b; }
-    .header__actions { display: flex; gap: 6px; flex: 0 0 auto; }
+    .header__actions { display: flex; gap: 6px; flex: 0 0 auto; align-items: center; }
+    .client-filter {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: #cbd5e1;
+      padding: 0 6px;
+    }
+    .client-filter__label {
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      font-weight: 600;
+      font-size: 11px;
+      color: #94a3b8;
+    }
+    .client-filter__select {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.10);
+      color: #e2e8f0;
+      border-radius: 6px;
+      padding: 4px 8px;
+      font-size: 12px;
+      max-width: 220px;
+    }
+    .client-filter__select:focus {
+      outline: 1px solid rgba(139,92,246,0.6);
+      outline-offset: 1px;
+    }
     .header__filters { display: flex; gap: 6px; align-items: center; }
     /* Filter chip carries each project's identity colour as a CSS variable
        supplied per chip; the active state pulls the chip into the project's
@@ -1230,8 +1271,11 @@ export class App implements OnInit {
   readonly filteredGrouped = computed(() => {
     const grouped = this.jobService.grouped();
     const active = this.activeProjects();
-    if (active.size === 0) return grouped;
-    const filterJobs = (jobs: JobInfo[]) => jobs.filter(j => active.has(j.projectName));
+    const ownerId = this.activeClientFilter();
+    if (active.size === 0 && !ownerId) return grouped;
+    const filterJobs = (jobs: JobInfo[]) => jobs.filter(j =>
+      (active.size === 0 || active.has(j.projectName))
+      && (!ownerId || j.ownerClientId === ownerId));
     return {
       preparation: filterJobs(grouped.preparation),
       ready: filterJobs(grouped.ready),
@@ -1241,6 +1285,18 @@ export class App implements OnInit {
       archive: filterJobs(grouped.archive ?? []),
     } as GroupedJobs;
   });
+
+  /** null = no filter; otherwise show only jobs whose ownerClientId matches. */
+  readonly activeClientFilter = signal<string | null>(null);
+  setClientFilter(id: string | null): void {
+    this.activeClientFilter.set(id || null);
+  }
+  /** Read the new value out of the (change) event so the template stays terse. */
+  clientFilterChange(event: Event): string | null {
+    const target = event.target as HTMLSelectElement | null;
+    const v = target?.value ?? '';
+    return v ? v : null;
+  }
 
   // The visible lane order is the canonical Order field, which is also what
   // ProjectRunner.GetNextReadyJob picks by. Keeping a single source of truth
@@ -1358,6 +1414,7 @@ export class App implements OnInit {
     readonly jobService: JobService,
     readonly errorDialog: ErrorDialogService,
     readonly devTools: DevToolsService,
+    readonly clientService: ClientService,
     private readonly _completionSound: JobCompletionSoundService,
   ) {
     effect(() => {
@@ -1411,6 +1468,7 @@ export class App implements OnInit {
     });
     this.jobService.refreshRunnerStatus();
     this.devTools.loadFlags();
+    this.clientService.refresh();
     this.restoreDetailFromUrl();
   }
 

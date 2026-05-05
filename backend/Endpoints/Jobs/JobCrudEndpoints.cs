@@ -69,10 +69,22 @@ public static class JobCrudEndpoints
             return success ? Results.Ok() : Results.NotFound();
         });
 
-        group.MapPost("/", (CreateJobRequest req, JobMutationService mutations) =>
+        group.MapPost("/", (CreateJobRequest req, HttpContext ctx, JobMutationService mutations) =>
         {
             if (string.IsNullOrWhiteSpace(req.Title))
                 return Results.BadRequest("Title is required");
+
+            // Header X-Client-Id wins when the body does not name an owner.
+            // The middleware has already validated the header against the
+            // ClientIdentityStore, so we trust it here.
+            if (string.IsNullOrWhiteSpace(req.OwnerClientId))
+            {
+                var headerOwner = ctx.Request.Headers["X-Client-Id"].FirstOrDefault();
+                if (!string.IsNullOrWhiteSpace(headerOwner))
+                {
+                    req = req with { OwnerClientId = headerOwner };
+                }
+            }
 
             var jobId = mutations.CreateJob(req);
             return jobId is null ? Results.Conflict("Job already exists or invalid input") : Results.Ok(new { id = jobId });

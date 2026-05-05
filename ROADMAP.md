@@ -34,6 +34,7 @@ Today the application provides:
 - CLI quota and session visibility where the underlying tools expose enough data.
 - Recovery after session loss via job-folder evidence and deterministic continuation planning.
 - Early project-level planning tasks for Security and Architecture dimensions.
+- Supervisor, system-review, and meta-cycle concepts for recurring "is this on track?" inspection, with Markdown reports and structured JSON contracts where the app needs to parse results.
 - An integrated design mockup for project-level Security, Architecture, UX/UI, Test Quality, Token Usage, Audits and Checks, and Skills under `docs/mockups/quality-system/`. This is exploratory, not product behavior yet.
 
 ## Roadmap Themes
@@ -224,12 +225,36 @@ Treat orchestrator-to-CLI communication as a core capability instead of a side-e
 Add a meta-orchestrator loop above the per-project job-pickup loop, plus an external system review monitor. Today the app runs two loops (the CLI agent's internal loop and the orchestrator's job-pickup loop). Both decide things the user only sees afterwards. The supervision layer is the watcher above:
 
 - A **per-project supervisor** that observes the orchestrator's runner in real time and asks fixed questions every tick: is the run progressing, is quota close to exhausted, is the agent's current activity aligned with the prompt scope, are findings accumulating that should pause the queue. Cooperative-signal model by default, with a small set of emergency primitives (cancel run, pause pickup, force fail, resume) for clearly broken behaviour. Each intervention is typed, logged, and visible in the activity feed as a separate participant.
+- A **meta-cycle** that runs at quiet batch boundaries, after N jobs reach review or when the user manually asks for an inspection. It pauses pickup, compares recent jobs and evidence against the roadmap and health rules, writes a structured report, then resumes, queues a fix, updates stable through the external helper, or escalates.
 - A **continuous protocol** per project: append-only structured logs the user can replay to see what the supervisor saw and decided. A panel on the project page shows the live state.
 - A **system review monitor**, run from outside on a multi-hour cadence, that produces structured "after ten hours, this is what the system did and this is what looks off" reports. Stand-alone, not part of the app's runtime, so it survives any app failure mode.
 
 Hard boundary: supervision is advice-first, force-rare. The deterministic post-run policy in `RunOutcomePolicy.cs` stays the authoritative path for routine outcomes; the supervisor adds an outer kill-switch and a soft-reasoning second opinion, not a parallel orchestrator.
 
 The full conceptual analysis - loop-to-loop control options, communication contract sketch, execution-model tradeoffs (in-process vs sidecar vs CLI-driven), open conceptual problems, and recommended task spinout - lives in [docs/research/orchestrator-meta-loop-analysis-2026-05-04.md](docs/research/orchestrator-meta-loop-analysis-2026-05-04.md). The recommended first slice is the system review monitor (Layer 3) because it ships value immediately on stable without touching the runtime.
+
+### Analysis Reports and Meta-Actions
+
+Make manual and scheduled analyses first-class product output. The user should be able to ask a project-level question such as "are we on track?", "which jobs are stale?", "does the queue match the roadmap?", "which docs need sync?", "what changed in the last few hours?", or "what should become a follow-up task?" The orchestrator, a supporting agent, the meta-cycle, or an external monitor can answer, but the result lands in the same report system.
+
+The report model:
+
+- Markdown is the durable human-readable report.
+- Structured JSON is required when the app needs to aggregate, filter, trend, or create badges from the result.
+- Reports carry scope: workspace, project, task, run, time window, source prompt, trigger, producer, schema version, tags, and artifact references.
+- Reports can reference Agent Message Bus records, runtime events, screenshots, commits, task folders, test runs, and previous reports.
+- If JSON parsing fails, the Markdown remains visible with an unstructured-report warning.
+- Findings can create normal queued tasks. Reports do not silently mutate source code or move jobs around the board.
+
+The UI should expose a project-level **Analysis Reports** area:
+
+- Manual action buttons for roadmap alignment, security posture, architecture drift, QA status, token spend review, stale jobs, and docs drift.
+- Scheduling controls for daily or every-few-hours analyses, default off.
+- Report history with status, severity, producer, scope, time window, parse status, and follow-up links.
+- Drill-down to Markdown, structured JSON, raw artifacts, and referenced jobs or bus messages.
+- A clear split between project-scoped reports and task-scoped reports. Task reports stay beside task evidence; project reports live at project level.
+
+Queued at `agent-taskboard/2-ready/analysis-report-contract-and-storage/`, `agent-taskboard/2-ready/project-analysis-reports-surface/`, and `agent-taskboard/2-ready/roadmap-alignment-analysis-action/`.
 
 ### Agent Message Bus and Observability
 

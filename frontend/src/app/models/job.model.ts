@@ -195,6 +195,29 @@ export interface JobInfo {
    * working on a card that just landed in 4-review.
    */
   summaryState?: JobSummaryState | null;
+  /**
+   * Client identity that owns this job. References ClientIdentity.id.
+   * Defaults to `local-default` for legacy jobs whose `job.json` predates
+   * per-task attribution. The frontend renders a small chip on the card
+   * (emoji + colour) so reviewers can see at a glance who is responsible.
+   */
+  ownerClientId?: string | null;
+}
+
+/**
+ * One entry returned by GET /api/clients. Keep in sync with the backend
+ * `ClientSummary` record.
+ */
+export interface ClientSummary {
+  id: string;
+  displayName: string;
+  emoji: string | null;
+  colour: string | null;
+  kind: 'human' | 'agent-instance' | 'external-tool' | 'service' | 'retired';
+  registeredAt: string;
+  lastSeenAt: string | null;
+  tokenBudgetMonthly: number | null;
+  notes: string | null;
 }
 
 export interface AutoLoopSnapshot {

@@ -1,6 +1,7 @@
 import { Component, OnDestroy, OnInit, computed, inject, input, signal } from '@angular/core';
 import { AutoLoopSnapshot, JobInfo, PendingIntent } from '../models/job.model';
 import { GitSummaryService } from '../services/git-summary.service';
+import { ClientService } from '../services/client.service';
 import { cliTypeIcon } from '../services/format.util';
 import { projectIdentity } from '../services/project-identity.util';
 
@@ -30,6 +31,18 @@ if (typeof window !== 'undefined') {
           <span class="job-card__project-disk" aria-hidden="true">{{ identity().initial }}</span>
           <span class="job-card__project-name">{{ job().projectName }}</span>
         </span>
+        @if (ownerChip(); as oc) {
+          <span class="job-card__owner-chip"
+                data-testid="job-card-owner"
+                [attr.data-owner-id]="oc.id"
+                [style.background]="oc.background"
+                [style.borderColor]="oc.border"
+                [style.color]="oc.foreground"
+                [title]="oc.tooltip">
+            <span class="job-card__owner-emoji" aria-hidden="true">{{ oc.emoji }}</span>
+            <span class="job-card__owner-name">{{ oc.label }}</span>
+          </span>
+        }
         <span class="job-card__order">#{{ job().order }}</span>
       </div>
       <h3 class="job-card__title">{{ job().title || job().id }}</h3>
@@ -185,6 +198,30 @@ if (typeof window !== 'undefined') {
       flex: 0 0 auto;
     }
     .job-card__project-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+    }
+    .job-card__owner-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 2px 8px 2px 4px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.10);
+      color: #cbd5e1;
+      max-width: 140px;
+      overflow: hidden;
+    }
+    .job-card__owner-emoji {
+      font-size: 12px;
+      line-height: 1;
+    }
+    .job-card__owner-name {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -381,7 +418,49 @@ if (typeof window !== 'undefined') {
 export class JobCardComponent implements OnInit, OnDestroy {
   readonly job = input.required<JobInfo>();
   private readonly gitSummary = inject(GitSummaryService);
+  private readonly clients = inject(ClientService);
   private stopPolling: (() => void) | null = null;
+
+  /**
+   * Owner-attribution chip on every card. Resolves the job's
+   * `ownerClientId` against the registry from /api/clients and renders
+   * emoji + display name + the owner's chosen colour. Falls back to a
+   * neutral placeholder when the registry has not loaded yet.
+   */
+  readonly ownerChip = computed<{
+    id: string;
+    label: string;
+    emoji: string;
+    background: string;
+    border: string;
+    foreground: string;
+    tooltip: string;
+  } | null>(() => {
+    const ownerId = this.job().ownerClientId;
+    if (!ownerId) return null;
+    const c = this.clients.resolve(ownerId);
+    const baseColour = c.colour || '#64748b';
+    return {
+      id: c.id,
+      label: c.displayName || c.id,
+      emoji: c.emoji || '·',
+      background: this.tintFromHex(baseColour, 0.12),
+      border: this.tintFromHex(baseColour, 0.32),
+      foreground: '#e2e8f0',
+      tooltip: `Owner: ${c.displayName || c.id} (${c.id})`
+    };
+  });
+
+  private tintFromHex(hex: string, alpha: number): string {
+    const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(hex.trim());
+    if (!m) return `rgba(100,116,139,${alpha})`;
+    let body = m[1];
+    if (body.length === 3) body = body.split('').map(ch => ch + ch).join('');
+    const r = parseInt(body.slice(0, 2), 16);
+    const g = parseInt(body.slice(2, 4), 16);
+    const b = parseInt(body.slice(4, 6), 16);
+    return `rgba(${r},${g},${b},${alpha})`;
+  }
 
   // Git status only matters for tasks the user is actively working on or
   // about to review — pre-work lanes (preparation/ready) and post-review

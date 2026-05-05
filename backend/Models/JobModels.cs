@@ -32,6 +32,15 @@ public record JobInfo
     /// <summary>Auto-commit produced on the progress→review transition; null when no commit recorded.</summary>
     public JobCommitInfo? Commit { get; init; }
     /// <summary>
+    /// Client identity that owns this job. References
+    /// <see cref="ClientIdentity.Id"/>. Defaults to
+    /// <see cref="DefaultClientIdentity.Id"/> for legacy jobs whose
+    /// <c>job.json</c> predates per-task attribution; the scanner
+    /// rewrites the file with that value on first read so the field
+    /// is non-null after migration.
+    /// </summary>
+    public string OwnerClientId { get; init; } = DefaultClientIdentity.Id;
+    /// <summary>
     /// Lower-bound count of commits attributed to this job, derived
     /// cheaply by the scanner from session-events.jsonl SHA ranges plus
     /// <see cref="Commit"/>. The kanban card surfaces a "+N commits"
@@ -245,6 +254,12 @@ public record CreateJobRequest
     public string? TargetState { get; init; }
     /// <summary>Optional CLI backend (copilot|claude|codex). Defaults to copilot when omitted.</summary>
     public string? CliType { get; init; }
+    /// <summary>
+    /// Optional client identity that owns the new job. When omitted, the
+    /// endpoint falls back to the X-Client-Id header on the incoming
+    /// request, then to <see cref="DefaultClientIdentity.Id"/>.
+    /// </summary>
+    public string? OwnerClientId { get; init; }
 }
 
 public record ReorderRequest

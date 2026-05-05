@@ -144,6 +144,10 @@ public class JobMutationService
             .Max();
         var resolvedOrder = req.Order != 999 ? req.Order : (existingMaxOrder ?? 0) + 10;
 
+        var ownerClientId = !string.IsNullOrWhiteSpace(req.OwnerClientId)
+            ? req.OwnerClientId!
+            : DefaultClientIdentity.Id;
+
         var jobJson = new Dictionary<string, object?>
         {
             ["id"] = jobId,
@@ -151,7 +155,8 @@ public class JobMutationService
             ["createdAt"] = DateTime.UtcNow.ToString("o"),
             ["state"] = targetState,
             ["order"] = resolvedOrder,
-            ["agent"] = req.Agent
+            ["agent"] = req.Agent,
+            ["ownerClientId"] = ownerClientId
         };
         if (!string.IsNullOrWhiteSpace(req.Model))
             jobJson["model"] = req.Model;

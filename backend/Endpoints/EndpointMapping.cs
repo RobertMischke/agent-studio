@@ -33,5 +33,6 @@ public static class EndpointMapping
         app.MapDiagnosticsEndpoints();
         app.MapRoadmapIntakeEndpoints();
         app.MapBusEndpoints();
+        app.MapClientEndpoints();
     }
 }

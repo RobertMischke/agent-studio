@@ -3,6 +3,7 @@ using OrchestratorApi.Hubs;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.Bus;
 using OrchestratorApi.Services.Cli;
+using OrchestratorApi.Services.Clients;
 using OrchestratorApi.Services.Companion;
 using OrchestratorApi.Services.Diagnostics;
 using OrchestratorApi.Services.Jobs;
@@ -53,6 +54,7 @@ AppDomain.CurrentDomain.UnhandledException += (_, e) =>
     Console.Error.WriteLine($"[UnhandledException] terminating={e.IsTerminating} {e.ExceptionObject}");
 };
 
+builder.Services.AddSingleton<ClientIdentityStore>();
 builder.Services.AddSingleton<JobScannerService>();
 builder.Services.AddSingleton<JobStateMachine>();
 builder.Services.AddSingleton<JobMutationService>();
@@ -167,6 +169,15 @@ app.UseExceptionHandler(exceptionApp =>
 });
 
 app.UseCors();
+
+// X-Client-Id registration boundary: rejects mutations from unregistered
+// identities, stamps lastSeenAt on known ones. Carve-outs for /api/clients/register,
+// hubs, and health checks live in the middleware itself.
+app.UseClientIdentity();
+
+// Touch the identity store at boot so the bootstrap "local-default" identity
+// is created before any caller looks at it.
+app.Services.GetRequiredService<ClientIdentityStore>().EnsureLoaded();
 
 // Ensure state folders exist and migrate legacy flat jobs
 app.Services.GetRequiredService<JobStateMachine>().EnsureStateFoldersAndMigrate();

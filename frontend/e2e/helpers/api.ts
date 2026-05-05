@@ -14,12 +14,22 @@ export const BACKEND =
   process.env.PW_BACKEND_URL?.trim()
   || (apiTarget === 'stable' ? 'http://localhost:5031' : 'http://localhost:5030');
 
+/** Default identity used by Playwright specs when no override is given.
+ * The bootstrap "local-default" identity exists on every backend boot,
+ * so signing in as it lets specs perform mutations without registering
+ * a per-test identity. Override with PW_CLIENT_ID for multi-client specs. */
+const DEFAULT_CLIENT_ID = process.env.PW_CLIENT_ID?.trim() || 'local-default';
+
 export async function api<T = unknown>(
   path: string,
   init: RequestInit = {}
 ): Promise<T> {
   const res = await fetch(`${BACKEND}${path}`, {
-    headers: { 'content-type': 'application/json', ...(init.headers ?? {}) },
+    headers: {
+      'content-type': 'application/json',
+      'x-client-id': DEFAULT_CLIENT_ID,
+      ...(init.headers ?? {})
+    },
     ...init
   });
   const text = await res.text();

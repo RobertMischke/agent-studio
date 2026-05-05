@@ -158,10 +158,13 @@ public class JobScannerService
             }
             var resolvedId = folderId;
 
+            var ownerClientId = ResolveOwnerClientId(raw, jobDir);
+
             return new JobInfo
             {
                 Id = resolvedId,
                 JobKey = JobIdentity.CreateKey(entry.Path, resolvedId),
+                OwnerClientId = ownerClientId,
                 Title = raw.TryGetProperty("title", out var title) ? title.GetString() ?? "" : "",
                 State = state,
                 Order = raw.TryGetProperty("order", out var ord) && ord.TryGetInt32(out var orderVal) ? orderVal : 999,
@@ -290,6 +293,27 @@ public class JobScannerService
         }
 
         return count;
+    }
+
+    /// <summary>
+    /// Returns the job's <c>ownerClientId</c>, migrating legacy job.json
+    /// files (which predate the field) by writing <see cref="DefaultClientIdentity.Id"/>
+    /// back to disk so the next scan finds a non-null value.
+    /// </summary>
+    private string ResolveOwnerClientId(JsonElement raw, string jobDir)
+    {
+        if (raw.TryGetProperty("ownerClientId", out var owner)
+            && owner.ValueKind == JsonValueKind.String
+            && owner.GetString() is { Length: > 0 } existing)
+        {
+            return existing;
+        }
+        // Migration: stamp the default identity on legacy jobs so attribution is
+        // non-null everywhere. Idempotent against re-scans because subsequent
+        // reads find the value above.
+        JobJsonFile.UpdateField(jobDir, "ownerClientId", DefaultClientIdentity.Id, _logger);
+        _logger.LogInformation("Migrated job folder '{Dir}' to ownerClientId='{Owner}'", jobDir, DefaultClientIdentity.Id);
+        return DefaultClientIdentity.Id;
     }
 
     /// <summary>
