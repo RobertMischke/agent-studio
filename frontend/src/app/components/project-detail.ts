@@ -9,6 +9,8 @@ import { ProjectSecuritySectionComponent } from './project-security-section';
 import { ProjectArchitectureSectionComponent } from './project-architecture-section';
 import { ProjectSupervisorSectionComponent } from './project-supervisor-section';
 import { ProjectMetaCycleSectionComponent } from './project-meta-cycle-section';
+import { ProjectAnalysisReportsSectionComponent } from './project-analysis-reports-section';
+import { AnalysisReport } from '../models/analysis-report.model';
 
 interface ProjectSettingsRow {
   autoCommit: boolean;
@@ -36,7 +38,8 @@ interface ProjectSettingsRow {
     ProjectSecuritySectionComponent,
     ProjectArchitectureSectionComponent,
     ProjectSupervisorSectionComponent,
-    ProjectMetaCycleSectionComponent
+    ProjectMetaCycleSectionComponent,
+    ProjectAnalysisReportsSectionComponent
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -167,6 +170,10 @@ interface ProjectSettingsRow {
       <app-project-supervisor-section [projectName]="projectName()" />
 
       <app-project-meta-cycle-section [projectName]="projectName()" />
+
+      <app-project-analysis-reports-section
+        [projectName]="projectName()"
+        (openReport)="openReport.emit($event)" />
 
       <app-project-security-section [projectName]="projectName()" />
 
@@ -407,6 +414,7 @@ interface ProjectSettingsRow {
 export class ProjectDetailComponent implements OnInit, OnDestroy {
   readonly projectName = input.required<string>();
   readonly openFeed = output<string>();
+  readonly openReport = output<AnalysisReport>();
 
   private readonly jobService = inject(JobService);
 

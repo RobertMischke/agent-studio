@@ -352,6 +352,19 @@ public record ProjectSettings
     /// the user can downgrade to Sonnet for cost. Null means use the default.
     /// </summary>
     public string? OrchestratorModel { get; init; }
+
+    /// <summary>
+    /// Per-topic cadence for scheduled analysis reports (project-level
+    /// "Analysis Reports" surface). Map of topic slug
+    /// (e.g. <c>roadmapAlignment</c>, <c>queueHealth</c>, <c>docsDrift</c>,
+    /// <c>staleJobs</c>, <c>tokenSpend</c>, <c>qaStatus</c>) to one of
+    /// <c>disabled</c>, <c>fewHours</c>, <c>daily</c>, <c>manualOnly</c>.
+    /// Default null = "disabled" for every topic; reports never auto-run
+    /// without an explicit opt-in. The contract for execution is documented
+    /// in <c>docs/analysis-reports.md</c>; this struct stores the user's
+    /// cadence choice only.
+    /// </summary>
+    public Dictionary<string, string>? AnalysisSchedules { get; init; }
 }
 
 public record SetAutoCommitRequest

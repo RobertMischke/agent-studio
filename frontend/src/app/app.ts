@@ -7,6 +7,7 @@ import { CliUsageSheetComponent } from './components/cli-usage-sheet';
 import { OrchestratorFeedComponent } from './components/orchestrator-feed';
 import { OrchestratorSideSheetComponent } from './components/orchestrator-side-sheet/orchestrator-side-sheet.component';
 import { ProjectDetailComponent } from './components/project-detail';
+import { AnalysisReportDrilldownComponent } from './components/analysis-report-drilldown';
 import { StatusBarComponent } from './components/status-bar';
 import { JobService } from './services/job.service';
 import { ClientService } from './services/client.service';
@@ -25,7 +26,7 @@ import { WorkspaceTokenTimelineComponent } from './components/workspace-token-ti
 
 @Component({
   selector: 'app-root',
-  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceTokenTimelineComponent],
+  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, AnalysisReportDrilldownComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceTokenTimelineComponent],
   // Keep styles global to this subtree — the App shell still owns the
   // .header*, .filter-chip*, .overlay*, .create-dialog*, .error-dialog*
   // class rules used by the extracted dialogs and project-tabs.
@@ -230,7 +231,20 @@ import { WorkspaceTokenTimelineComponent } from './components/workspace-token-ti
             <button class="overlay__close" (click)="closeProjectDetail()" title="Close">×</button>
             <app-project-detail
               [projectName]="proj"
-              (openFeed)="onOpenFeedFromDetail($event)" />
+              (openFeed)="onOpenFeedFromDetail($event)"
+              (openReport)="openAnalysisReport(proj, $event.reportId)" />
+          </div>
+        </div>
+      }
+
+      @if (analysisReportFocus(); as f) {
+        <div class="overlay" data-testid="analysis-report-overlay" (click)="closeAnalysisReport()">
+          <div class="overlay__panel" (click)="$event.stopPropagation()">
+            <button class="overlay__close" (click)="closeAnalysisReport()" title="Close">×</button>
+            <app-analysis-report-drilldown
+              [projectName]="f.project"
+              [reportId]="f.reportId"
+              (close)="closeAnalysisReport()" />
           </div>
         </div>
       }
@@ -1268,6 +1282,13 @@ export class App implements OnInit {
   readonly orchFeedProject = signal<string | null>(null);
   /** When non-null, names the project whose detail panel is open. */
   readonly projectDetailName = signal<string | null>(null);
+  /**
+   * When non-null, the (project, reportId) pair whose Analysis Reports
+   * drill-down overlay is open. Stacked above the project-detail overlay so
+   * the user can return to the list with a single click without losing
+   * context.
+   */
+  readonly analysisReportFocus = signal<{ project: string; reportId: string } | null>(null);
   /** Workspace token timeline overlay. Triggered from the usage hover panel
    *  and from the deep-link `#/workspace/tokens` so it can be opened from
    *  another tab or a bookmark. */
@@ -1714,6 +1735,15 @@ export class App implements OnInit {
 
   closeProjectDetail(): void {
     this.projectDetailName.set(null);
+  }
+
+  /** Open the analysis-report drill-down overlay for one report. */
+  openAnalysisReport(project: string, reportId: string): void {
+    this.analysisReportFocus.set({ project, reportId });
+  }
+
+  closeAnalysisReport(): void {
+    this.analysisReportFocus.set(null);
   }
 
   openWorkspaceTokens(): void {

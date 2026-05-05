@@ -82,6 +82,35 @@ public class ProjectSettingsService
         }
     }
 
+    /// <summary>
+    /// Sets the cadence for one analysis-report topic on this project.
+    /// Cadences are validated by the caller; null or empty value clears the
+    /// entry (revert to "disabled" default). Every project starts with no
+    /// schedules so reports never auto-run without an explicit opt-in.
+    /// </summary>
+    public void SetAnalysisSchedule(string projectName, string topic, string? cadence)
+    {
+        if (string.IsNullOrWhiteSpace(topic)) return;
+        EnsureLoaded();
+        lock (_lock)
+        {
+            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
+            var map = current.AnalysisSchedules is null
+                ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+                : new Dictionary<string, string>(current.AnalysisSchedules, StringComparer.OrdinalIgnoreCase);
+            if (string.IsNullOrWhiteSpace(cadence))
+            {
+                map.Remove(topic.Trim());
+            }
+            else
+            {
+                map[topic.Trim()] = cadence.Trim();
+            }
+            _cache[projectName] = current with { AnalysisSchedules = map };
+            Persist();
+        }
+    }
+
     private void EnsureLoaded()
     {
         lock (_lock)
