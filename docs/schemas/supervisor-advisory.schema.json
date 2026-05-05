@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-taskboard.local/schemas/supervisor-advisory.schema.json",
+  "title": "SupervisorAdvisory",
+  "description": "One typed advisory written by the per-project supervisor (Layer 2). Append-only entry in logs/meta/<project>/observations.jsonl. Severity is informational; the auto-intervention policy decides whether to escalate. Mirrors backend/Services/Supervisor/SupervisorContract.cs::SupervisorAdvisory.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["createdAt", "project", "severity", "source", "topic", "message"],
+  "properties": {
+    "createdAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp at which the advisory was emitted by the supervisor."
+    },
+    "project": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Project name as it appears in WatchPaths and runner status. Matches ProjectRunnerStatus.projectName."
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["Info", "Warn", "High"],
+      "description": "Informational severity. Even High does not by itself trigger an automatic intervention; auto-intervention is gated and opt-in per project."
+    },
+    "source": {
+      "type": "string",
+      "enum": ["HardCheck", "SoftReasoning", "User", "AutoIntervention"],
+      "description": "Origin of the advisory. The auto-intervention policy filters out advisories whose source is AutoIntervention or User to prevent feedback loops."
+    },
+    "topic": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Short kebab-case label, e.g. no-progress, error-burst, quota-critical, tool-call-repeat. Topics map to known auto-intervention actions when enabled."
+    },
+    "message": {
+      "type": "string",
+      "minLength": 1,
+      "description": "One-line human-readable description of what the supervisor saw. Under 200 characters. Plain prose, no markdown."
+    },
+    "jobId": {
+      "type": ["string", "null"],
+      "description": "If the advisory pertains to a specific running job, that job's id. Null when the observation is project-wide."
+    }
+  }
+}

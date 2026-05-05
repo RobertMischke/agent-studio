@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-taskboard.local/schemas/supervisor-intervention.schema.json",
+  "title": "SupervisorIntervention",
+  "description": "One pre-emptive control action invoked by the supervisor. Append-only entry in logs/meta/<project>/interventions.jsonl. Each invocation routes through the existing TaskRunnerService methods; the runner remains the single state-machine authority. Mirrors backend/Services/Supervisor/SupervisorContract.cs::SupervisorIntervention.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["createdAt", "project", "kind", "source", "reason"],
+  "properties": {
+    "createdAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp at which the intervention was invoked."
+    },
+    "project": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Project name. Matches ProjectRunnerStatus.projectName."
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["CancelRun", "PausePickup", "ForceFail", "Resume"],
+      "description": "Which emergency primitive was invoked. CancelRun and ForceFail require a jobId; PausePickup may carry a TTL; Resume lifts a pause."
+    },
+    "source": {
+      "type": "string",
+      "enum": ["HardCheck", "SoftReasoning", "User", "AutoIntervention"],
+      "description": "Who decided to invoke. User is a manual click in the supervisor panel; AutoIntervention is the gated automatic policy; HardCheck and SoftReasoning record themselves only when they (rarely) escalate."
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Mandatory typed reason, propagated to the orchestrator chat log so the activity feed shows why an intervention fired."
+    },
+    "jobId": {
+      "type": ["string", "null"],
+      "description": "Required for CancelRun and ForceFail; null for PausePickup and Resume (they target the project, not a single run)."
+    },
+    "pauseTtl": {
+      "type": ["string", "null"],
+      "description": "ISO 8601 duration (or .NET TimeSpan string) for PausePickup. After the TTL elapses the runner auto-resumes. Null when not applicable.",
+      "pattern": "^([0-9]+:)?[0-9]{2}:[0-9]{2}(\\.[0-9]+)?$|^P.*$"
+    }
+  }
+}
