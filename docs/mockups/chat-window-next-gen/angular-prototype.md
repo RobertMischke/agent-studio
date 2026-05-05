@@ -47,6 +47,8 @@ This follows the repo's product boundary: the app itself should not grow branch/
 
 The latest iteration is a tall workbench. Task tabs, summary metrics, split presets, and scenario switches moved out of horizontal top bands into a narrow left inspector rail. Chat and the adjacent Result, Git, Preview, Debug, or Source pane now start directly under a compact task-detail chrome and run down to the status bar. This is the working target for the production handoff: normal chat and adjacent review panes should use roughly the full available task height.
 
+The nav and status-bar iteration adds a more VS Code-like control model. The activity bar is clickable, the top chrome exposes task chat, Git split, project side sheet, and queue shortcuts, and the status bar becomes a dense action surface instead of a passive label. Queue, token usage, health, visual evidence, and CLI/model configuration open as lightweight bottom popovers. The goal is to keep professional working height for chat and adjacent panes while still making observability, tokens, automation state, and run configuration one click away.
+
 The rail now has inline icons, visible labels in comfortable density, tooltip titles, and a `Workbench` guide button that explains why the controls live there. Compact density collapses the same controls back to icons so the chat area stays large. The prototype is also deferred behind the feature flag, so the normal app does not pay the prototype bundle cost when the flag is off.
 
 The prototype currently covers:
@@ -55,6 +57,9 @@ The prototype currently covers:
 - Workbench panes: Result, Git, Preview, Debug, Source, and Chat-only.
 - Left inspector rail with task tabs, run state, tokens, commits, files, screenshots, failed retry, duration, split presets, and scenario switches.
 - Rail guide modal that explains the control model.
+- Clickable activity bar and top navigation for task chat, Git split, project side sheet, and queue.
+- Interactive status bar with queue, token, health, visual evidence, CLI/model, density, theme, and command-palette entry points.
+- Status-bar popovers for queue automation, token heat, system health, evidence shortcuts, and model controls.
 - Clickable run marker popover with CLI, model, session, trace range, outcome, token budget, and artifact counts.
 - Scenario controls: Review, Tool burst, Wait loop, Images, Drift.
 - Tool-burst expansion.
@@ -71,6 +76,10 @@ The prototype currently covers:
 The durable screenshots live in `docs/mockups/chat-window-next-gen/evidence/`:
 
 - `next-gen-chat-angular-prototype-result.png`
+- `next-gen-chat-angular-prototype-nav-queue.png`
+- `next-gen-chat-angular-prototype-status-tokens.png`
+- `next-gen-chat-angular-prototype-status-health.png`
+- `next-gen-chat-angular-prototype-status-model.png`
 - `next-gen-chat-angular-prototype-run-popover.png`
 - `next-gen-chat-angular-prototype-rail-guide.png`
 - `next-gen-chat-angular-prototype-git.png`

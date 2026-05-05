@@ -738,7 +738,7 @@ interface ChatTurn {
       <footer class="statusbar" data-testid="prototype-statusbar">
         <div class="statusbar__group">
           <button (click)="toggleStatusPanel('health')" data-testid="prototype-status-health">
-            <span class="statusbar__dot"></span>
+            <span style="width:7px;height:7px;border-radius:999px;background:#90ee90"></span>
             <span>2 running</span>
           </button>
           <button (click)="toggleStatusPanel('queue')" data-testid="prototype-status-queue">
@@ -2145,17 +2145,6 @@ interface ChatTurn {
       white-space: nowrap;
     }
 
-    .statusbar button:hover {
-      background: rgba(255, 255, 255, 0.18);
-    }
-
-    .statusbar__dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 999px;
-      background: #90ee90;
-    }
-
     .modal {
       position: fixed;
       inset: 0;
@@ -2224,9 +2213,6 @@ interface ChatTurn {
 
     .debug-grid h3 { margin: 0 0 10px; font-size: 14px; }
     .debug-grid p { color: var(--muted); line-height: 1.45; margin: 0; }
-
-    .guide-grid { display: grid; gap: 10px; padding: 12px; }
-    .image-box { min-height: 420px; display: grid; place-items: center; text-align: center; }
 
     .ng-chat-prototype[data-density="compact"] .workspace {
       grid-template-columns: 184px minmax(590px, 1fr) minmax(260px, 28vw);
@@ -2305,6 +2291,14 @@ interface ChatTurn {
       .topbar__nav span { display: none; }
       .statusbar { grid-template-columns: minmax(0, 1fr) auto; }
       .statusbar__group--center { display: none; }
+      .statusbar__group:first-child button:nth-child(n+2),
+      .statusbar__group--right button:nth-child(2),
+      .statusbar__group--right button:nth-child(3) { display: none; }
+      .statusbar__group--right button:first-child span {
+        max-width: 136px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
       .detail { grid-template-rows: auto minmax(0, 1fr); }
       .detail-chrome {
         min-height: 34px;
