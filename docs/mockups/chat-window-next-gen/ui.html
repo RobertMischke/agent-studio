@@ -3,27 +3,52 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Next-Generation Chat Window, v4 Reference</title>
+  <title>Embedded Chat Surfaces, v5</title>
   <style>
     :root {
       color-scheme: light;
-      --bg: #f5f6f8;
+      --bg: #f3f4f7;
+      --chrome: #f8f9fb;
+      --activity: #edf0f5;
       --surface: #ffffff;
       --surface-soft: #f0f2f5;
-      --surface-hover: #e9edf2;
-      --line: #dde2ea;
-      --line-strong: #c8d0dc;
+      --surface-hover: #e8edf4;
+      --line: #d9e0eb;
+      --line-strong: #bdc7d6;
       --text: #20242c;
-      --soft: #4f5867;
-      --muted: #8a93a3;
-      --faint: #b6bfcc;
-      --blue: #3367d6;
+      --soft: #4d5666;
+      --muted: #8993a4;
+      --faint: #b8c0ce;
+      --accent: #356ad8;
       --orange: #f4a21f;
-      --green: #4a9a24;
+      --green: #3f8f22;
       --red: #d11515;
       --purple: #6f55d9;
       --teal: #188f8a;
-      --shadow: 0 18px 48px rgba(26, 33, 44, 0.12);
+      --shadow: 0 18px 44px rgba(28, 36, 50, 0.12);
+    }
+
+    [data-theme="dark"] {
+      color-scheme: dark;
+      --bg: #111318;
+      --chrome: #171a21;
+      --activity: #10131a;
+      --surface: #1d222c;
+      --surface-soft: #151922;
+      --surface-hover: #252c38;
+      --line: #303846;
+      --line-strong: #455063;
+      --text: #ecf1f8;
+      --soft: #c4cfdf;
+      --muted: #919caf;
+      --faint: #6f7a8c;
+      --accent: #7aa7ff;
+      --orange: #f0b56d;
+      --green: #8bd17c;
+      --red: #ff6f7d;
+      --purple: #a990ff;
+      --teal: #73d6cc;
+      --shadow: 0 18px 44px rgba(0, 0, 0, 0.34);
     }
 
     * { box-sizing: border-box; }
@@ -45,116 +70,205 @@
       letter-spacing: 0;
     }
 
-    button {
-      cursor: pointer;
-    }
+    button { cursor: pointer; }
 
     .app {
       height: 100vh;
       display: grid;
-      grid-template-rows: 56px minmax(0, 1fr) auto;
+      grid-template-columns: 48px minmax(0, 1fr);
+      grid-template-rows: 36px minmax(0, 1fr) 22px;
+      background: var(--bg);
     }
 
-    .topbar {
-      height: 56px;
+    .activitybar {
+      grid-row: 1 / 4;
+      background: var(--activity);
+      border-right: 1px solid var(--line);
       display: grid;
-      grid-template-columns: auto minmax(0, 1fr) auto;
+      grid-template-rows: repeat(6, 44px) minmax(0, 1fr) 44px;
       align-items: center;
-      gap: 14px;
-      padding: 0 22px;
-      border-bottom: 1px solid var(--line);
-      background: rgba(250, 251, 253, 0.9);
-      backdrop-filter: blur(14px);
-      position: sticky;
-      top: 0;
-      z-index: 8;
+      justify-items: center;
+      padding-top: 6px;
     }
 
-    .back {
+    .activity-button {
+      width: 32px;
+      height: 32px;
       border: 0;
+      border-radius: 7px;
       background: transparent;
       color: var(--muted);
-      font-size: 24px;
-      line-height: 1;
-      padding: 4px 6px;
+      font-weight: 700;
+      font-size: 12px;
     }
 
-    .title {
-      min-width: 0;
-      display: flex;
-      align-items: baseline;
-      gap: 10px;
+    .activity-button.active,
+    .activity-button:hover {
+      color: var(--text);
+      background: var(--surface-hover);
     }
 
-    .title h1 {
+    .titlebar {
+      grid-column: 2;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 12px;
+      padding: 0 12px;
+      background: var(--chrome);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .titlebar h1 {
       margin: 0;
-      font-size: 15px;
+      font-size: 13px;
       font-weight: 600;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
 
-    .title span {
-      color: var(--muted);
+    .title-actions,
+    .row-actions,
+    .chips,
+    .composer-actions {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      min-width: 0;
+    }
+
+    .button,
+    .icon-button,
+    .chip {
+      border: 1px solid var(--line);
+      background: transparent;
+      color: var(--soft);
+      border-radius: 7px;
+      min-height: 28px;
+      padding: 4px 8px;
       font-size: 12px;
       white-space: nowrap;
     }
 
-    .top-actions,
-    .composer-actions,
-    .chips,
-    .row-actions {
-      display: flex;
+    .icon-button {
+      width: 30px;
+      padding: 0;
+      display: grid;
+      place-items: center;
+    }
+
+    .button:hover,
+    .icon-button:hover,
+    .chip:hover {
+      background: var(--surface-hover);
+    }
+
+    .workspace {
+      grid-column: 2;
+      min-height: 0;
+      min-width: 0;
+      display: grid;
+      grid-template-columns: minmax(520px, 1fr) minmax(320px, 38vw);
+      background: var(--bg);
+    }
+
+    body.sheet-wide .workspace {
+      grid-template-columns: minmax(420px, 1fr) minmax(560px, 46vw);
+    }
+
+    .task-detail {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr);
+      border-right: 1px solid var(--line);
+      background: var(--bg);
+    }
+
+    .project-header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
       align-items: center;
-      gap: 8px;
+      gap: 12px;
+      padding: 10px 14px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .project-title {
       min-width: 0;
     }
 
-    .icon,
-    .small-button {
-      min-width: 32px;
+    .project-title span {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      margin-bottom: 2px;
+    }
+
+    .project-title h2 {
+      margin: 0;
+      font-size: 15px;
+      line-height: 1.25;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 0;
+      min-width: 0;
+      background: var(--chrome);
+      border-bottom: 1px solid var(--line);
+      overflow-x: auto;
+    }
+
+    .tab {
       min-height: 32px;
-      border: 1px solid transparent;
-      border-radius: 8px;
+      border: 0;
+      border-right: 1px solid var(--line);
       background: transparent;
-      color: var(--soft);
-      display: inline-grid;
-      place-items: center;
-      padding: 0 8px;
-      font-size: 13px;
+      color: var(--muted);
+      padding: 0 12px;
+      font-size: 12px;
+      white-space: nowrap;
     }
 
-    .icon:hover,
-    .small-button:hover,
-    .collapse-row:hover {
-      background: var(--surface-hover);
-      border-color: var(--line);
+    .tab.active {
+      color: var(--text);
+      background: var(--surface);
+      box-shadow: inset 0 -2px 0 var(--accent);
     }
 
-    .small-button {
-      min-width: auto;
-      min-height: 28px;
-      gap: 6px;
-    }
-
-    .main {
+    .task-content {
       min-height: 0;
       overflow: auto;
-      padding: 18px 18px 22px;
+      padding: 14px;
     }
 
-    .chat {
-      width: min(984px, 100%);
+    .task-chat {
+      width: min(980px, 100%);
       margin: 0 auto;
+    }
+
+    .surface-label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      color: var(--muted);
+      font-size: 12px;
+      margin-bottom: 10px;
     }
 
     .file-stack {
       border: 1px solid var(--line);
       border-radius: 8px;
-      background: rgba(255, 255, 255, 0.55);
+      background: color-mix(in srgb, var(--surface) 72%, transparent);
       overflow: hidden;
-      margin: 2px 0 30px;
+      margin-bottom: 20px;
     }
 
     .file-row {
@@ -162,19 +276,16 @@
       grid-template-columns: minmax(0, 1fr) auto auto;
       align-items: center;
       gap: 10px;
-      min-height: 55px;
-      padding: 0 18px;
+      min-height: 45px;
+      padding: 0 14px;
       border-bottom: 1px solid var(--line);
       color: var(--soft);
-      font-size: 18px;
+      font-size: 14px;
     }
 
-    .file-row:last-child {
-      border-bottom: 0;
-    }
+    .file-row:last-child { border-bottom: 0; }
 
     .file-row code {
-      color: var(--soft);
       font-family: inherit;
       overflow: hidden;
       white-space: nowrap;
@@ -184,49 +295,45 @@
     .delta {
       display: flex;
       align-items: center;
-      gap: 7px;
+      gap: 6px;
       white-space: nowrap;
-      font-size: 16px;
+      font-size: 13px;
     }
 
-    .delta .add { color: var(--green); }
-    .delta .del { color: var(--red); }
+    .add { color: var(--green); }
+    .del { color: var(--red); }
+
     .dot {
-      width: 9px;
-      height: 9px;
+      width: 7px;
+      height: 7px;
       border-radius: 50%;
       background: var(--red);
       display: inline-block;
     }
 
-    .chevron {
-      color: var(--soft);
-      font-size: 18px;
-    }
-
     .turn {
       display: grid;
-      grid-template-columns: 34px minmax(0, 1fr);
-      gap: 12px;
-      margin: 16px 0;
+      grid-template-columns: 30px minmax(0, 1fr);
+      gap: 10px;
+      margin: 12px 0;
     }
 
     .turn.user {
       grid-template-columns: minmax(0, 660px);
       justify-content: end;
-      margin: 22px 0 36px;
+      margin: 18px 0 24px;
     }
 
     .avatar {
-      width: 30px;
-      height: 30px;
+      width: 28px;
+      height: 28px;
       border-radius: 50%;
       display: grid;
       place-items: center;
       font-size: 11px;
       font-weight: 700;
       color: #fff;
-      background: var(--blue);
+      background: var(--accent);
       margin-top: 2px;
     }
 
@@ -237,15 +344,14 @@
       border: 1px solid var(--line);
       border-radius: 8px;
       background: var(--surface);
-      padding: 14px 18px;
-      box-shadow: 0 1px 0 rgba(26, 33, 44, 0.03);
+      padding: 12px 14px;
+      box-shadow: 0 1px 0 rgba(28, 36, 50, 0.04);
       min-width: 0;
     }
 
     .turn.user .bubble {
-      background: #f0f2f5;
-      border-color: #edf0f4;
-      padding: 16px 18px;
+      background: var(--surface-soft);
+      border-color: color-mix(in srgb, var(--line) 78%, transparent);
     }
 
     .speaker {
@@ -254,7 +360,7 @@
       gap: 8px;
       color: var(--muted);
       font-size: 12px;
-      margin-bottom: 6px;
+      margin-bottom: 5px;
     }
 
     .speaker b {
@@ -265,79 +371,50 @@
     .bubble p {
       margin: 0;
       color: var(--text);
-      font-size: 18px;
-      line-height: 1.5;
+      font-size: 16px;
+      line-height: 1.48;
     }
 
-    .bubble p + p {
-      margin-top: 12px;
+    .bubble p + p { margin-top: 10px; }
+
+    .bubble ul {
+      margin: 10px 0 0;
+      padding-left: 22px;
+      font-size: 15px;
+      line-height: 1.48;
     }
 
-    .bubble ul,
-    .bubble ol {
-      margin: 12px 0 0;
-      padding-left: 28px;
-      font-size: 18px;
-      line-height: 1.52;
-    }
+    .bubble li + li { margin-top: 5px; }
 
-    .bubble li + li {
-      margin-top: 6px;
-    }
-
-    .bubble code,
+    code,
     .code-chip {
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       font-size: 0.92em;
-      background: #f0f1f3;
-      border-radius: 6px;
-      padding: 1px 5px;
-      color: #596273;
-    }
-
-    .attachment {
-      display: inline-flex;
-      align-items: center;
-      gap: 7px;
-      border: 1px solid var(--line);
-      border-radius: 7px;
       background: var(--surface-soft);
-      color: var(--text);
-      padding: 7px 9px;
-      margin-bottom: 12px;
-      font-size: 15px;
-      max-width: 100%;
+      border-radius: 5px;
+      padding: 1px 5px;
+      color: var(--soft);
     }
 
-    .attachment span {
+    .status-line,
+    .thinking {
       color: var(--muted);
-      font-size: 13px;
-    }
-
-    .status-line {
-      color: var(--muted);
-      font-size: 18px;
-      margin: 0 0 14px 0;
+      font-size: 14px;
+      margin: 12px 0;
     }
 
     .thin-rule {
       border-top: 1px solid var(--line);
-      margin: 0 0 22px 0;
-    }
-
-    .thinking {
-      color: var(--faint);
-      font-size: 18px;
-      margin: 18px 0;
+      margin: 0 0 14px;
     }
 
     .collapsed-line {
-      margin: 14px 0 18px;
+      margin: 10px 0 12px;
       display: flex;
       align-items: center;
-      gap: 10px;
-      color: #c6ccd6;
-      font-size: 16px;
+      gap: 8px;
+      color: var(--faint);
+      font-size: 13px;
       min-width: 0;
     }
 
@@ -357,28 +434,28 @@
       place-items: center;
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       font-size: 10px;
+      flex: 0 0 auto;
     }
 
     .collapse-row {
       width: 100%;
       border: 1px solid var(--line);
       border-radius: 8px;
-      background: rgba(255, 255, 255, 0.54);
+      background: color-mix(in srgb, var(--surface) 72%, transparent);
       display: grid;
       grid-template-columns: auto minmax(0, 1fr) auto;
       align-items: center;
-      gap: 10px;
-      min-height: 42px;
-      padding: 8px 10px;
+      gap: 9px;
+      min-height: 38px;
+      padding: 7px 9px;
       color: var(--soft);
       text-align: left;
-      margin: 12px 0;
+      margin: 10px 0;
     }
 
-    .collapse-row strong {
-      color: var(--text);
-    }
+    .collapse-row:hover { background: var(--surface-hover); }
 
+    .collapse-row strong { color: var(--text); }
     .collapse-row span {
       overflow: hidden;
       white-space: nowrap;
@@ -390,25 +467,23 @@
       border: 1px solid var(--line);
       border-radius: 8px;
       background: var(--surface);
-      padding: 12px;
-      margin-top: -6px;
-      margin-bottom: 12px;
+      padding: 10px;
+      margin-top: -5px;
+      margin-bottom: 10px;
       color: var(--soft);
-      font-size: 14px;
+      font-size: 13px;
       line-height: 1.45;
     }
 
-    .collapse-content.open {
-      display: block;
-    }
+    .collapse-content.open { display: block; }
 
     .task-marker {
       display: flex;
       align-items: center;
       gap: 10px;
       color: var(--muted);
-      font-size: 13px;
-      margin: 24px 0 18px;
+      font-size: 12px;
+      margin: 18px 0 14px;
     }
 
     .task-marker::before,
@@ -423,112 +498,148 @@
       border: 1px solid var(--line);
       border-radius: 999px;
       background: var(--surface);
-      padding: 4px 10px;
+      padding: 4px 9px;
       white-space: nowrap;
     }
 
-    .markdown-card {
-      margin-top: 16px;
-      padding-left: 28px;
-    }
-
-    .markdown-card h2 {
-      margin: 0 0 18px;
-      font-size: 28px;
-      line-height: 1.18;
-    }
-
-    .markdown-card h3 {
-      margin: 24px 0 8px;
-      font-size: 18px;
-    }
-
-    .queue {
-      margin-top: 22px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      color: #6a7280;
-      font-size: 16px;
-      line-height: 1.55;
-      white-space: pre-wrap;
-    }
-
     .composer {
-      border-top: 1px solid var(--line);
-      background: rgba(245, 246, 248, 0.94);
-      padding: 12px 42px 16px;
-      z-index: 9;
-    }
-
-    .composer-box {
-      width: min(984px, 100%);
-      margin: 0 auto;
       border: 1px solid var(--line-strong);
       border-radius: 8px;
       background: var(--surface);
-      box-shadow: 0 8px 28px rgba(26, 33, 44, 0.08);
+      box-shadow: var(--shadow);
       overflow: hidden;
+      margin-top: 14px;
+    }
+
+    .composer.compact {
+      margin-top: 10px;
+      box-shadow: none;
     }
 
     .input-area {
-      min-height: 66px;
-      padding: 16px 18px 8px;
+      min-height: 56px;
+      padding: 13px 14px 7px;
       color: var(--faint);
-      font-size: 18px;
+      font-size: 15px;
       outline: none;
     }
 
     .composer-bottom {
-      min-height: 48px;
+      min-height: 42px;
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
       align-items: center;
-      gap: 10px;
-      padding: 8px 10px;
+      gap: 8px;
+      padding: 7px 8px;
     }
 
     .select-like {
       border: 0;
       background: transparent;
       color: var(--soft);
-      min-height: 30px;
+      min-height: 28px;
       padding: 0 4px;
-      font-size: 14px;
+      font-size: 12px;
     }
 
-    .access {
-      color: var(--orange);
-    }
+    .access { color: var(--orange); }
 
-    .model {
-      color: var(--soft);
-    }
-
-    .send {
-      width: 42px;
-      height: 42px;
+    .send,
+    .stop {
+      width: 38px;
+      height: 38px;
       border: 0;
       border-radius: 50%;
-      background: #303236;
-      color: #fff;
-      font-size: 15px;
+      background: var(--text);
+      color: var(--surface);
+      font-size: 13px;
       display: grid;
       place-items: center;
     }
 
-    .stop {
-      width: 42px;
-      height: 42px;
-      border: 0;
-      border-radius: 50%;
-      background: #303236;
-      color: #fff;
-      font-size: 15px;
-      display: none;
-      place-items: center;
-    }
-
+    .stop { display: none; }
     body.running .send { display: none; }
     body.running .stop { display: grid; }
+
+    .side-sheet {
+      min-width: 320px;
+      max-width: 760px;
+      min-height: 0;
+      resize: horizontal;
+      overflow: auto;
+      direction: rtl;
+      background: var(--surface);
+      border-left: 1px solid var(--line);
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+    }
+
+    .side-sheet > * { direction: ltr; }
+
+    .sheet-header {
+      display: grid;
+      gap: 8px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line);
+      background: var(--chrome);
+    }
+
+    .sheet-header h2 {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.25;
+    }
+
+    .sheet-header span {
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .sheet-body {
+      min-height: 0;
+      overflow: auto;
+      padding: 12px;
+    }
+
+    .sheet-turn {
+      margin-bottom: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      padding: 10px;
+    }
+
+    .sheet-turn.user {
+      background: var(--surface-soft);
+    }
+
+    .sheet-turn p {
+      margin: 0;
+      color: var(--text);
+      font-size: 13px;
+      line-height: 1.42;
+    }
+
+    .sheet-turn p + p { margin-top: 7px; }
+
+    .sheet-footer {
+      border-top: 1px solid var(--line);
+      padding: 10px;
+      background: var(--chrome);
+    }
+
+    .statusbar {
+      grid-column: 2;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 12px;
+      min-height: 22px;
+      padding: 0 8px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 11px;
+    }
 
     .modal-backdrop {
       position: fixed;
@@ -540,12 +651,10 @@
       z-index: 40;
     }
 
-    .modal-backdrop.open {
-      display: grid;
-    }
+    .modal-backdrop.open { display: grid; }
 
     .modal {
-      width: min(980px, 96vw);
+      width: min(1120px, 96vw);
       max-height: 88vh;
       overflow: auto;
       border: 1px solid var(--line);
@@ -554,7 +663,7 @@
       box-shadow: var(--shadow);
     }
 
-    .debug-modal {
+    .modal.debug-modal {
       width: min(1260px, 98vw);
       height: min(850px, 92vh);
       display: grid;
@@ -566,19 +675,19 @@
       justify-content: space-between;
       align-items: center;
       gap: 12px;
-      padding: 14px 16px;
+      padding: 12px 14px;
       border-bottom: 1px solid var(--line);
     }
 
     .modal h2 {
       margin: 0;
-      font-size: 18px;
+      font-size: 17px;
     }
 
     .modal-content {
       min-height: 0;
       overflow: auto;
-      padding: 16px;
+      padding: 14px;
     }
 
     .debug-grid {
@@ -591,7 +700,7 @@
     .panel {
       border: 1px solid var(--line);
       border-radius: 8px;
-      background: #fbfcfd;
+      background: color-mix(in srgb, var(--surface) 88%, var(--bg));
       padding: 12px;
       margin-bottom: 12px;
     }
@@ -599,6 +708,13 @@
     .panel h3 {
       margin: 0 0 10px;
       font-size: 14px;
+    }
+
+    .panel p {
+      margin: 0;
+      color: var(--soft);
+      font-size: 13px;
+      line-height: 1.42;
     }
 
     .metric-grid {
@@ -625,22 +741,14 @@
       font-size: 12px;
     }
 
-    .timeline {
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #fbfcfd;
-      padding: 14px;
-      display: grid;
-      gap: 10px;
-    }
-
     .band {
       display: grid;
-      grid-template-columns: 110px minmax(0, 1fr) auto;
+      grid-template-columns: 112px minmax(0, 1fr) auto;
       gap: 10px;
       align-items: center;
       font-size: 13px;
       color: var(--soft);
+      margin-bottom: 8px;
     }
 
     .heat {
@@ -654,13 +762,13 @@
       display: block;
       height: 100%;
       width: var(--w, 50%);
-      background: linear-gradient(90deg, var(--blue), var(--teal), var(--orange));
+      background: linear-gradient(90deg, var(--accent), var(--teal), var(--orange));
     }
 
     .toast {
       position: fixed;
       right: 22px;
-      bottom: 118px;
+      bottom: 40px;
       border: 1px solid var(--line);
       border-radius: 8px;
       background: var(--surface);
@@ -679,28 +787,42 @@
       transform: translateY(0);
     }
 
-    @media (max-width: 820px) {
-      .topbar {
-        padding: 0 12px;
-        grid-template-columns: auto minmax(0, 1fr) auto;
+    @media (max-width: 980px) {
+      .workspace {
+        grid-template-columns: minmax(0, 1fr);
       }
 
-      .title span {
+      .side-sheet {
+        display: none;
+      }
+    }
+
+    @media (max-width: 680px) {
+      .app {
+        grid-template-columns: 1fr;
+      }
+
+      .activitybar {
         display: none;
       }
 
-      .app {
-        grid-template-rows: auto minmax(0, 1fr) auto;
+      .titlebar,
+      .workspace,
+      .statusbar {
+        grid-column: 1;
       }
 
-      .main {
-        padding: 12px 10px 16px;
+      .title-actions .button:nth-child(2) {
+        display: none;
       }
 
-      .file-row {
-        font-size: 14px;
-        min-height: 46px;
-        padding: 0 10px;
+      .project-header,
+      .composer-bottom {
+        grid-template-columns: 1fr;
+      }
+
+      .task-content {
+        padding: 10px;
       }
 
       .turn,
@@ -713,28 +835,8 @@
         display: none;
       }
 
-      .bubble p,
-      .bubble ul,
-      .bubble ol,
-      .status-line,
-      .thinking {
-        font-size: 16px;
-      }
-
-      .markdown-card {
-        padding-left: 0;
-      }
-
-      .composer {
-        padding: 10px;
-      }
-
-      .composer-bottom {
-        grid-template-columns: 1fr;
-      }
-
-      .composer-actions {
-        flex-wrap: wrap;
+      .bubble p {
+        font-size: 15px;
       }
 
       .debug-grid {
@@ -747,206 +849,239 @@
     }
   </style>
 </head>
-<body>
+<body data-theme="light">
   <div class="app">
-    <header class="topbar">
-      <button class="back" title="Back">&lt;</button>
-      <div class="title">
-        <h1>Check latest logs for errors</h1>
-        <span>Project chat, compact transcript</span>
-      </div>
-      <div class="top-actions">
-        <button class="small-button" title="History" data-modal="history">History</button>
-        <button class="small-button" title="Settings" data-modal="settings">Config</button>
-        <button class="small-button" title="Verbose debug" data-modal="debug">Debug</button>
+    <nav class="activitybar" aria-label="Activity bar">
+      <button class="activity-button active" title="Projects">P</button>
+      <button class="activity-button" title="Tasks">T</button>
+      <button class="activity-button" title="Search">S</button>
+      <button class="activity-button" title="Git">G</button>
+      <button class="activity-button" title="Quality">Q</button>
+      <button class="activity-button" title="Settings">C</button>
+      <div></div>
+      <button class="activity-button" title="Account">A</button>
+    </nav>
+
+    <header class="titlebar">
+      <h1>Agent Task Processor - Task detail and side sheet chat surfaces</h1>
+      <div class="title-actions">
+        <button class="button" data-theme-toggle>Light</button>
+        <button class="button" data-action="wide-sheet">Widen sheet</button>
+        <button class="button" data-modal="debug">Verbose Debug</button>
       </div>
     </header>
 
-    <main class="main">
-      <section class="chat" aria-label="Compact continuous project chat">
-        <div class="file-stack" aria-label="Recent changed files">
-          <div class="file-row">
-            <code>docs/design-principles.md</code>
-            <div class="delta"><span class="add">+0</span><span class="del">-155</span><span class="dot"></span></div>
-            <span class="chevron">v</span>
+    <main class="workspace">
+      <section class="task-detail" aria-label="Task detail">
+        <header class="project-header">
+          <div class="project-title">
+            <span>Agent Task Processor / 2-ready / chat-conversation-event-projection</span>
+            <h2>Next-gen chat conversation event projection</h2>
           </div>
-          <div class="file-row">
-            <code>docs/mockups/chat-window-next-gen/README.md</code>
-            <div class="delta"><span class="add">+0</span><span class="del">-142</span><span class="dot"></span></div>
-            <span class="chevron">v</span>
+          <div class="chips">
+            <span class="chip">Claude Opus 4.7</span>
+            <span class="chip">2-ready</span>
+            <span class="chip">v5 context mockup</span>
           </div>
-          <div class="file-row">
-            <code>docs/mockups/chat-window-next-gen/ui.html</code>
-            <div class="delta"><span class="add">+0</span><span class="del">-746</span><span class="dot"></span></div>
-            <span class="chevron">v</span>
-          </div>
-        </div>
+        </header>
 
-        <article class="turn user">
-          <div class="bubble">
-            <p>I still do not see a chat that matches what I expect.</p>
-            <p><code>chat-window-next-gen/ui.html</code></p>
-          </div>
-        </article>
+        <nav class="tabs" aria-label="Task detail tabs">
+          <button class="tab">Prompt</button>
+          <button class="tab">Protocol</button>
+          <button class="tab active">Chat</button>
+          <button class="tab">Files</button>
+          <button class="tab">Commits</button>
+          <button class="tab">Screenshots</button>
+        </nav>
 
-        <section class="status-line">Working for 22s</section>
-        <div class="thin-rule"></div>
+        <div class="task-content">
+          <section class="task-chat" aria-label="Task chat tab">
+            <div class="surface-label">
+              <span>Task Chat - embedded in the existing task detail tab, not a global chat window</span>
+              <span>Light and dark use the same layout tokens</span>
+            </div>
 
-        <article class="turn">
-          <div class="avatar">A</div>
-          <div>
-            <p class="collapsed-line"><span class="terminal-icon">&gt;_</span> Running <code>git log --oneline -5 -- docs/mockups/chat-window-next-gen/ui.html</code></p>
-            <div class="thinking">Thinking</div>
-            <div class="bubble">
-              <div class="speaker"><b>Task Agent</b><span>Mockup revision</span></div>
-              <p>You are right. The previous version was still too much observability console and too little chat. The default surface now follows the examples you pointed at: quiet transcript, readable prose, compact file and tool rows, and a composer that feels like a real working area.</p>
-              <div class="row-actions">
-                <button class="small-button" data-collapse="agent-details">Show technical details</button>
-                <button class="small-button" data-modal="debug">Open Verbose Debug</button>
+            <div class="file-stack" aria-label="Recent changed files">
+              <div class="file-row">
+                <code>docs/mockups/chat-window-next-gen/ui.html</code>
+                <div class="delta"><span class="add">+284</span><span class="del">-196</span><span class="dot"></span></div>
+                <span>v</span>
+              </div>
+              <div class="file-row">
+                <code>docs/mockups/chat-window-next-gen/README.md</code>
+                <div class="delta"><span class="add">+12</span><span class="del">-4</span><span class="dot"></span></div>
+                <span>v</span>
+              </div>
+              <div class="file-row">
+                <code>docs/mockups/chat-window-next-gen/scenarios.md</code>
+                <div class="delta"><span class="add">+9</span><span class="del">-0</span><span class="dot"></span></div>
+                <span>v</span>
               </div>
             </div>
-            <div class="collapse-content" id="agent-details">
-              Raw layer: local file `ui.html`, source docs, Playwright screenshots, changed-file projection, task markers, tool burst summaries, and API job prompts. This stays hidden by default.
-            </div>
-          </div>
-        </article>
 
-        <div class="task-marker">
-          <span class="task-chip">Task started: chat-window-v4-reference</span>
+            <article class="turn user">
+              <div class="bubble">
+                <p>The chat has to work inside the existing application. There is a task chat and a side-sheet chat. There is no global chat window.</p>
+                <p>Also plan light and dark theme support. I mostly work in light mode.</p>
+              </div>
+            </article>
+
+            <section class="status-line">Working for 18s</section>
+            <div class="thin-rule"></div>
+
+            <article class="turn">
+              <div class="avatar">A</div>
+              <div>
+                <p class="collapsed-line"><span class="terminal-icon">&gt;_</span><code>Reading existing task detail and side-sheet constraints</code></p>
+                <div class="thinking">Thinking</div>
+                <div class="bubble">
+                  <div class="speaker"><b>Task Agent</b><span>Design update</span></div>
+                  <p>Agreed. The chat pattern now has two concrete homes: the task-detail Chat tab and the project side sheet. The default layout is light, VS Code-inspired, compact, and dense without turning into a dashboard.</p>
+                  <div class="row-actions">
+                    <button class="button" data-collapse="agent-details">Show technical layer</button>
+                    <button class="button" data-modal="debug">Open Verbose Debug</button>
+                  </div>
+                </div>
+                <div class="collapse-content" id="agent-details">
+                  Raw layer: task id, run index, prompt snapshot, CLI output range, tool payloads, JSON parse status, screenshot evidence, and API job prompt updates. It stays hidden in normal review.
+                </div>
+              </div>
+            </article>
+
+            <div class="task-marker">
+              <span class="task-chip">Task event: Chat tab becomes the task-level home</span>
+            </div>
+
+            <article class="turn">
+              <div class="avatar orchestrator">O</div>
+              <div>
+                <button class="collapse-row" data-collapse="orchestrator-detail">
+                  <strong>Orchestrator</strong>
+                  <span>Route project-wide conversation to side sheet; route task evidence and task follow-up to this Chat tab.</span>
+                  <span>v</span>
+                </button>
+                <div class="collapse-content" id="orchestrator-detail">
+                  Decision: do not introduce a new global chat surface. Use existing task detail and side-sheet contexts. The same message grammar can render in both, but task scope and project scope remain separate.
+                </div>
+              </div>
+            </article>
+
+            <article class="turn">
+              <div class="avatar qa">QA</div>
+              <div class="bubble">
+                <div class="speaker"><b>Design QA</b><span>Theme and context checks</span></div>
+                <ul>
+                  <li>Task-level chat renders in the existing task detail tab.</li>
+                  <li>Project side-sheet chat can be widened and keeps its own compact composer.</li>
+                  <li>Light and dark themes share spacing, borders, and actor grammar.</li>
+                  <li>VS Code-style chrome appears as activity bar, tabs, status bar, compact rows, and low-chrome panels.</li>
+                </ul>
+              </div>
+            </article>
+
+            <article class="turn">
+              <div class="avatar">A</div>
+              <div>
+                <button class="collapse-row" data-collapse="tool-burst">
+                  <strong>Tool use 12</strong>
+                  <span>Read mockup, revised embedded context, rendered light/dark/side-sheet/mobile screenshots.</span>
+                  <span>v</span>
+                </button>
+                <div class="collapse-content" id="tool-burst">
+                  Read: current chat mockup, roadmap, scenarios, and upcoming VS Code layout jobs. Update: v5 embedded context, theme toggle, side sheet resize. Verify: Playwright screenshots for light, dark, wide side sheet, and mobile.
+                </div>
+              </div>
+            </article>
+
+            <div class="composer" aria-label="Task chat composer">
+              <div class="input-area" contenteditable="true">Reply in task context. Use #prompt, #latest-run, #screenshot, or /create-follow-up...</div>
+              <div class="composer-bottom">
+                <div class="composer-actions">
+                  <button class="icon-button" title="Attach">+</button>
+                  <button class="button">Task context</button>
+                  <button class="button access">Full access v</button>
+                  <button class="button">ui.html</button>
+                </div>
+                <div class="composer-actions">
+                  <select class="select-like" aria-label="Model">
+                    <option>5.5 Extra High</option>
+                    <option>Claude Opus 4.7</option>
+                    <option>Gemini 3 Pro</option>
+                  </select>
+                  <button class="send" data-action="start" title="Send">^</button>
+                  <button class="stop" data-action="stop" title="Stop">Stop</button>
+                </div>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <aside class="side-sheet" aria-label="Resizable side sheet project chat">
+        <header class="sheet-header">
+          <div>
+            <h2>Project side sheet chat</h2>
+            <span>Resizable project conversation, attached to the current app shell</span>
+          </div>
+          <div class="chips">
+            <span class="chip">Project scope</span>
+            <span class="chip">4 chats</span>
+            <span class="chip">Live</span>
+          </div>
+        </header>
+
+        <div class="sheet-body">
+          <article class="sheet-turn user">
+            <div class="speaker"><b>You</b><span>Project steering</span></div>
+            <p>Keep the upcoming design proposals aligned with a VS Code-style layout. The side sheet should be able to grow large enough to read the chat comfortably.</p>
+          </article>
+
+          <article class="sheet-turn">
+            <div class="speaker"><b>Orchestrator</b><span>Routing</span></div>
+            <p>This is the project-level conversation. I can reference active tasks, queue status, screenshots, and docs without hijacking the task-level chat.</p>
+          </article>
+
+          <button class="collapse-row" data-collapse="sheet-summary">
+            <strong>Upcoming design work</strong>
+            <span>VS Code layout density, visual evidence strip, task chat v5 context, light/dark themes.</span>
+            <span>v</span>
+          </button>
+          <div class="collapse-content" id="sheet-summary">
+            The side sheet should share typography, row density, tabs, and status chrome with the main layout proposal. It can be wide, but it remains attached to the existing app instead of becoming a separate product.
+          </div>
+
+          <article class="sheet-turn">
+            <div class="speaker"><b>Task Agent</b><span>Compact answer</span></div>
+            <p>I will update the jobs so implementation consumes the embedded chat contexts and not the earlier standalone chat window.</p>
+          </article>
         </div>
 
-        <article class="turn user">
-          <div class="bubble">
-            <div class="attachment">image.png <span>2880 x 1509</span></div>
-            <p>Another topic needs to be planned too: the visual space I have for reading the chat and the project README is very small. Please research how Visual Studio Code handles this density.</p>
-          </div>
-        </article>
-
-        <article class="turn">
-          <div class="avatar orchestrator">O</div>
-          <div>
-            <button class="collapse-row" data-collapse="orchestrator-detail">
-              <strong>Orchestrator</strong>
-              <span>Converted the steering into two implementation jobs via API, kept the visible answer as markdown.</span>
-              <span>v</span>
-            </button>
-            <div class="collapse-content" id="orchestrator-detail">
-              Decision: use the user's chat references as primary visual target. Implementation jobs must not build the earlier dashboard-like concept as default. Debug remains a secondary fullscreen surface.
+        <footer class="sheet-footer">
+          <div class="composer compact" aria-label="Side sheet composer">
+            <div class="input-area" contenteditable="true">Ask in project side sheet...</div>
+            <div class="composer-bottom">
+              <div class="composer-actions">
+                <button class="icon-button" title="Attach">+</button>
+                <button class="button">Project chat</button>
+              </div>
+              <div class="composer-actions">
+                <select class="select-like" aria-label="Side sheet model">
+                  <option>Claude Opus 4.7</option>
+                  <option>5.5 Extra High</option>
+                </select>
+                <button class="send" data-action="start">^</button>
+                <button class="stop" data-action="stop">Stop</button>
+              </div>
             </div>
           </div>
-        </article>
-
-        <article class="turn">
-          <div class="avatar qa">QA</div>
-          <div class="bubble">
-            <div class="speaker"><b>Assistant</b><span>Markdown answer</span></div>
-            <div class="markdown-card">
-              <h2>2 new jobs created via API</h2>
-              <h3><code>vscode-style-layout-density-and-tabs</code> <span class="code-chip">order=1</span>:</h3>
-              <ul>
-                <li>VS Code research instructions directly in the prompt: activity bar, compact tabs, status bar, 13/14px density, 6px padding cap, and persistent resize handles.</li>
-                <li>Mockup under <code>docs/mockups/vscode-layout/</code> with README, taxonomy, and two interactive states.</li>
-                <li>First slice behind feature flag <code>Frontend:VsCodeLayout</code>, default off.</li>
-              </ul>
-
-              <h3><code>visual-evidence-priority-screenshots-clickable</code> <span class="code-chip">order=1</span>:</h3>
-              <ul>
-                <li>Per-task horizontal thumbnail strip above chat, sourced from job results and frontend test results.</li>
-                <li>Lightbox with previous/next, pass/fail badge, and open-in-folder action.</li>
-                <li>Workspace feed with a visual evidence lane and hour buckets.</li>
-              </ul>
-
-              <h3>Queue order now:</h3>
-              <div class="queue">active=kanban-lane-grouping-collapse
-1. noop-as-decision-trigger
-2. orchestrator-review-lane-and-bubble-up
-3. visual-evidence-priority-screenshots-clickable
-4. vscode-style-layout-density-and-tabs
-5. readme-points-to-task-access-api
-6. lifecycle-substate-migration-compatibility</div>
-            </div>
-          </div>
-        </article>
-
-        <article class="turn">
-          <div class="avatar">A</div>
-          <div>
-            <button class="collapse-row" data-collapse="tool-burst">
-              <strong>Tool use 17</strong>
-              <span>Read docs, updated ui.html, rendered desktop/mobile/debug screenshots, verified compact spacing.</span>
-              <span>v</span>
-            </button>
-            <div class="collapse-content" id="tool-burst">
-              <ul>
-                <li>Read: existing mockup, roadmap, scenarios, design principles.</li>
-                <li>Edit: replaced dashboard-first UI with transcript-first reference.</li>
-                <li>Verify: Playwright screenshots for default, expanded details, composer, and debug modal.</li>
-              </ul>
-            </div>
-          </div>
-        </article>
-      </section>
+        </footer>
+      </aside>
     </main>
 
-    <footer class="composer" aria-label="Chat composer">
-      <div class="composer-box">
-        <div class="input-area" contenteditable="true" aria-label="Message input">Ask for follow-up changes</div>
-        <div class="composer-bottom">
-          <div class="composer-actions">
-            <button class="icon" title="Attach">+</button>
-            <button class="small-button" data-modal="settings">Edit automatically</button>
-            <button class="small-button access">Full access v</button>
-            <button class="small-button" data-modal="history">ui.html</button>
-          </div>
-          <div class="composer-actions">
-            <select class="select-like" aria-label="Current chat">
-              <option>Project chat</option>
-              <option>QA chat</option>
-              <option>Implementation chat</option>
-            </select>
-            <select class="select-like model" aria-label="Model">
-              <option>5.5 Extra High</option>
-              <option>Claude Opus 4.7</option>
-              <option>Gemini 3 Pro</option>
-            </select>
-            <button class="send" data-action="start" title="Send">^</button>
-            <button class="stop" data-action="stop" title="Stop">Stop</button>
-          </div>
-        </div>
-      </div>
+    <footer class="statusbar">
+      <span>main | Agent Task Processor | light/dark tokens | task chat + side sheet chat</span>
+      <span>Ready</span>
     </footer>
-  </div>
-
-  <div class="modal-backdrop" id="modal-settings" aria-hidden="true">
-    <section class="modal" role="dialog" aria-label="Settings">
-      <header>
-        <h2>Run configuration</h2>
-        <button class="small-button" data-close>Close</button>
-      </header>
-      <div class="modal-content">
-        <div class="panel">
-          <h3>Default behavior</h3>
-          <p>Human-readable chat is primary. Raw logs, paths, JSON contracts, tool payloads, task metadata, and queue state are always available behind expanders or the debug view.</p>
-        </div>
-        <div class="panel">
-          <h3>Composer controls</h3>
-          <p>Model, permission mode, current chat, attachment context, start, stop, and edit mode live at the bottom so the transcript can stay focused.</p>
-        </div>
-      </div>
-    </section>
-  </div>
-
-  <div class="modal-backdrop" id="modal-history" aria-hidden="true">
-    <section class="modal" role="dialog" aria-label="History">
-      <header>
-        <h2>Conversation history</h2>
-        <button class="small-button" data-close>Close</button>
-      </header>
-      <div class="modal-content">
-        <div class="panel"><h3>Current thread</h3><p>7 human-visible turns, 2 task markers, 1 orchestrator intervention, 17 collapsed tool calls.</p></div>
-        <div class="panel"><h3>Files</h3><p><code>chat-window-next-gen/ui.html</code>, <code>README.md</code>, <code>scenarios.md</code>, screenshot evidence.</p></div>
-      </div>
-    </section>
   </div>
 
   <div class="modal-backdrop" id="modal-debug" aria-hidden="true">
@@ -954,11 +1089,11 @@
       <header>
         <h2>Verbose Debug, read-only developer view</h2>
         <div class="row-actions">
-          <button class="small-button">Agent</button>
-          <button class="small-button">Orchestrator</button>
-          <button class="small-button">Tools</button>
-          <button class="small-button">Warnings</button>
-          <button class="small-button" data-close>Close</button>
+          <button class="button">Agent</button>
+          <button class="button">Orchestrator</button>
+          <button class="button">Tools</button>
+          <button class="button">Warnings</button>
+          <button class="button" data-close>Close</button>
         </div>
       </header>
       <div class="modal-content">
@@ -974,32 +1109,33 @@
               </div>
             </div>
             <div class="panel">
-              <h3>Timing</h3>
-              <p>Total duration: 31 min. Active tool time: 14 min. Waiting: 6 min. Longest review gap: 4 min.</p>
+              <h3>Context split</h3>
+              <p>Task chat owns task evidence and follow-up. Side sheet chat owns project steering and cross-task conversation.</p>
             </div>
           </aside>
-          <section class="timeline">
-            <div class="band"><b>User</b><div class="heat"><span style="--w: 48%;"></span></div><span>3 turns</span></div>
-            <div class="band"><b>Agent</b><div class="heat"><span style="--w: 88%;"></span></div><span>4 turns</span></div>
-            <div class="band"><b>Tools</b><div class="heat"><span style="--w: 76%;"></span></div><span>17 calls</span></div>
-            <div class="band"><b>Orchestrator</b><div class="heat"><span style="--w: 34%;"></span></div><span>2 decisions</span></div>
+
+          <section>
+            <div class="panel">
+              <h3>Timeline</h3>
+              <div class="band"><b>User</b><div class="heat"><span style="--w: 58%;"></span></div><span>3 turns</span></div>
+              <div class="band"><b>Task chat</b><div class="heat"><span style="--w: 82%;"></span></div><span>task evidence</span></div>
+              <div class="band"><b>Side sheet</b><div class="heat"><span style="--w: 46%;"></span></div><span>project steering</span></div>
+              <div class="band"><b>Tools</b><div class="heat"><span style="--w: 72%;"></span></div><span>12 calls</span></div>
+            </div>
             <div class="panel">
               <h3>Explanation</h3>
-              <p>The first visual direction was too dashboard-heavy. The user supplied two chat references. The orchestrator converted that into a v4 chat-first mockup: transcript first, compact tool/change rows, bottom composer, debug as a secondary fullscreen view.</p>
+              <p>The standalone chat reference was useful visually, but it did not match the product surface. The v5 mockup places the same chat grammar inside the task detail Chat tab and the resizable project side sheet, with shared light and dark theme tokens.</p>
+            </div>
+          </section>
+
+          <aside>
+            <div class="panel">
+              <h3>Rules</h3>
+              <p>No new global chat window. Keep the existing app shell, tabs, task detail, side sheet, status bar, and Visual Studio Code-style layout direction.</p>
             </div>
             <div class="panel">
               <h3>Raw trace links</h3>
-              <p><code>logs/cli-output.log</code>, <code>session-events.jsonl</code>, Playwright screenshots, changed files, prompt snapshots, and API job updates.</p>
-            </div>
-          </section>
-          <aside>
-            <div class="panel">
-              <h3>Warnings</h3>
-              <p>One design mismatch: the prior mockup over-prioritized metadata. Fixed in the default view by moving metadata behind expanders.</p>
-            </div>
-            <div class="panel">
-              <h3>Drill-down</h3>
-              <p>Click actor filters, task markers, changed files, or tool bursts to inspect causality without polluting the normal chat.</p>
+              <p><code>logs/cli-output.log</code>, <code>session-events.jsonl</code>, screenshots, changed files, prompt snapshots, and API job updates.</p>
             </div>
           </aside>
         </div>
@@ -1011,6 +1147,7 @@
 
   <script>
     const body = document.body;
+    const sheet = document.querySelector('.side-sheet');
     const toast = document.getElementById('toast');
 
     function showToast(message) {
@@ -1020,12 +1157,22 @@
       window.toastTimer = setTimeout(() => toast.classList.remove('show'), 1500);
     }
 
+    function setTheme(theme) {
+      body.dataset.theme = theme;
+      document.querySelector('[data-theme-toggle]').textContent = theme === 'light' ? 'Light' : 'Dark';
+      showToast(`${theme} theme active.`);
+    }
+
     document.addEventListener('click', (event) => {
+      const themeButton = event.target.closest('[data-theme-toggle]');
+      if (themeButton) {
+        setTheme(body.dataset.theme === 'light' ? 'dark' : 'light');
+      }
+
       const modalButton = event.target.closest('[data-modal]');
       if (modalButton) {
-        const modal = document.getElementById(`modal-${modalButton.dataset.modal}`);
-        modal?.classList.add('open');
-        showToast(`${modalButton.dataset.modal} opened.`);
+        document.getElementById(`modal-${modalButton.dataset.modal}`)?.classList.add('open');
+        showToast('Verbose Debug opened.');
       }
 
       const closeButton = event.target.closest('[data-close]');
@@ -1035,8 +1182,7 @@
 
       const collapseButton = event.target.closest('[data-collapse]');
       if (collapseButton) {
-        const panel = document.getElementById(collapseButton.dataset.collapse);
-        panel?.classList.toggle('open');
+        document.getElementById(collapseButton.dataset.collapse)?.classList.toggle('open');
       }
 
       const actionButton = event.target.closest('[data-action]');
@@ -1047,6 +1193,10 @@
       if (actionButton?.dataset.action === 'stop') {
         body.classList.remove('running');
         showToast('Run stopped.');
+      }
+      if (actionButton?.dataset.action === 'wide-sheet') {
+        body.classList.toggle('sheet-wide');
+        showToast('Side sheet width toggled.');
       }
 
       if (event.target.classList.contains('modal-backdrop')) {

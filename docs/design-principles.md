@@ -122,6 +122,10 @@ The meta layer belongs beside or behind the transcript. Metrics, run timelines, 
 
 Task starts, continuations, and task boundaries are real events, but they should not dominate the default transcript. They appear as subtle timeline markers inside the continuous project chat. Hover or click exposes job id, lane, model, prompt, duration, tokens, commits, and evidence.
 
+Chat surfaces must stay embedded in the existing application. Task-scoped conversation belongs in the task detail Chat tab. Project-scoped conversation belongs in the resizable side sheet. Do not introduce a new global chat window to solve a layout problem that belongs in those two surfaces.
+
+Light theme is a first-class product surface. Dark theme must use the same component grammar, spacing, actor labels, warning signals, and debug affordances, but light mode is not a secondary skin.
+
 The first, dashboard-like diagnostic surface remains valuable as a separate `Verbose Debug` view. It is a read-only fullscreen developer view for understanding history and causality: actor activity counts, orchestrator actions, supervisor advisories, duration, tool density, warnings, task markers, artifacts, token usage, and raw trace links. It must not replace the compact human chat.
 
 The next-generation chat mockup lives at [mockups/chat-window-next-gen](mockups/chat-window-next-gen/README.md).
