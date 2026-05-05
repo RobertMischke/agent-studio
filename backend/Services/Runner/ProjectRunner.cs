@@ -183,6 +183,13 @@ public class ProjectRunner
         // for hangs. Cheap (one timestamp arithmetic per active job).
         TickWatchdog();
 
+        // Defensive reconciliation: if the in-memory active-job latch is
+        // pointing at a job whose folder is no longer in 3-progress, release
+        // it now so the rest of this tick (and future pickup ticks) are not
+        // wedged. Covers external-script moves and the boot-time stuck-folder
+        // sweep where no API event fired to clear us synchronously.
+        ReconcileActiveJobAgainstDisk();
+
         if (_mode is "manual" or "paused") return;
         if (_processing || _activeJobId != null) return;
 
@@ -1396,6 +1403,110 @@ public class ProjectRunner
     private ICliExecutionService GetCliFor(JobInfo info) => _router.Get(info.CliType);
     private string GetJobKey(string jobId) => JobIdentity.CreateKey(Entry.Path, jobId);
     private string? GetActiveJobKey() => _activeJobId != null ? GetJobKey(_activeJobId) : null;
+
+    /// <summary>
+    /// Atomically releases the in-memory active-job latch when an external
+    /// actor (the API move endpoint, the boot-time stuck-folder sweep, a
+    /// hand-edited folder move) takes the active job out of <c>3-progress</c>.
+    /// Without this, the runner's <c>_activeJobId</c> stays pinned at a slug
+    /// whose folder is gone or in another lane, every subsequent pickup tick
+    /// short-circuits on <c>_activeJobId != null</c>, and the project is
+    /// wedged until a backend restart.
+    ///
+    /// <para>
+    /// Stops a live CLI process for that job first when one is recorded; the
+    /// usual cli-finished callback then runs through and would clear the
+    /// latch on its own, but we also clear synchronously so the next caller
+    /// (orchestrator move side-effect, watcher reconciliation) sees a clean
+    /// slate without waiting for the OS to reap the child.
+    /// </para>
+    /// </summary>
+    /// <returns>True if the runner was holding this job and the latch was cleared.</returns>
+    public bool ClearActiveJobIfMatches(string jobId, string reason)
+    {
+        if (string.IsNullOrEmpty(jobId)) return false;
+        if (_activeJobId != jobId) return false;
+
+        _logger.LogInformation(
+            "Runner '{Project}' clearing active job '{JobId}': {Reason}",
+            ProjectName, jobId, reason);
+
+        if (_activeCliType != null)
+        {
+            try
+            {
+                var jobKey = GetJobKey(jobId);
+                _router.Get(_activeCliType).Stop(jobKey, RunStopReason.Cancelled);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogDebug(ex, "ClearActiveJobIfMatches: cli.Stop failed for {JobId}", jobId);
+            }
+        }
+
+        _activeJobId = null;
+        _activeCliType = null;
+        _activeIntent = default;
+        _activeFollowup = null;
+        _activePlan = null;
+        _activeReissueAttempt = 0;
+
+        // Best-effort: drop a chat-log line on the moved folder so the
+        // protocol pane shows why the latch was released. The job's folder
+        // has already moved, so we look it up by id post-move; if the job
+        // is gone (delete + folder-rm), we skip silently.
+        try
+        {
+            var movedInfo = _scanner.FindJob(jobId, Entry.Path);
+            if (movedInfo != null)
+            {
+                _chatLog.Append(movedInfo, OrchestratorMessageKind.Decision,
+                    $"Runner active state cleared: {reason}");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "ClearActiveJobIfMatches: chat-log append failed for {JobId}", jobId);
+        }
+
+        NotifyStatus();
+        return true;
+    }
+
+    /// <summary>
+    /// Defensive watcher reconciliation: if the in-memory active-job latch
+    /// points at a job whose folder is no longer in <c>3-progress</c>
+    /// (deleted, moved by an external script, archived by the boot-time
+    /// stuck-folder sweep), release the latch so the next pickup tick can
+    /// choose freely. Cheap when there is no active job; costs one
+    /// <see cref="JobScannerService.FindJob"/> when there is.
+    /// </summary>
+    /// <returns>True if the latch was held and got cleared by this call.</returns>
+    public bool ReconcileActiveJobAgainstDisk()
+    {
+        var jobId = _activeJobId;
+        if (jobId == null) return false;
+        if (_processing) return false;
+
+        JobInfo? info = null;
+        try { info = _scanner.FindJob(jobId, Entry.Path); }
+        catch (Exception ex) { _logger.LogDebug(ex, "Reconcile: FindJob threw for {JobId}", jobId); }
+
+        if (info != null && info.State == JobStates.Progress) return false;
+
+        var reason = info == null
+            ? "active job folder no longer exists"
+            : $"active job moved out of 3-progress (now in {info.State})";
+        return ClearActiveJobIfMatches(jobId, reason);
+    }
+
+    /// <summary>Test seam: lets a unit test prime the active-job latch
+    /// without spinning up a real CLI run.</summary>
+    internal void SetActiveJobForTest(string jobId, string? cliType = null)
+    {
+        _activeJobId = jobId;
+        _activeCliType = cliType;
+    }
 
     private string RenderPrompt(RunPlan plan, JobInfo info)
     {

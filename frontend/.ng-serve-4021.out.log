@@ -102,3 +102,12 @@ Component update sent to client(s).
 Application bundle generation complete. [0.872 seconds] - 2026-05-05T14:40:04.014Z
 
 Component update sent to client(s).
+[33m>[39m Changes detected. Rebuilding...
+[32m√[39m Changes detected. Rebuilding...
+[1mInitial chunk files[22m[2m | [22m[1mNames[22m[2m | [22m[1mRaw size[22m
+[32mmain.js[39m            [2m | [22m[2mmain[22m [2m | [22m [36m2.09 MB[39m[2m | [22m
+
+Application bundle generation complete. [0.861 seconds] - 2026-05-05T15:04:32.257Z
+
+Page reload sent to client(s).
+[33m>[39m Changes detected. Rebuilding...

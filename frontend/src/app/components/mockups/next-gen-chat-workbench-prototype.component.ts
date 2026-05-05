@@ -5,6 +5,8 @@ type WorkbenchPane = 'result' | 'git' | 'preview' | 'debug' | 'source' | 'chat';
 type Density = 'comfortable' | 'compact';
 type Theme = 'light' | 'dark';
 type Scenario = 'review' | 'tools' | 'wait' | 'visual' | 'drift';
+type DebugTab = 'overview' | 'actors' | 'tools' | 'tokens' | 'trace';
+type ComposeMode = 'continue' | 'extend' | 'steer' | 'followup';
 
 interface SummaryChip {
   label: string;
@@ -117,6 +119,43 @@ interface ChatTurn {
         </aside>
 
         <section class="detail" aria-label="Task detail">
+          <header class="detail-chrome" data-testid="prototype-detail-chrome">
+            <button class="detail-chrome__back" title="Back to board" aria-label="Back to board">
+              <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                @for (path of iconPath('back'); track path) {
+                  <path [attr.d]="path"></path>
+                }
+              </svg>
+            </button>
+            <div class="detail-chrome__title">
+              <span class="project-pill"><b>ATP</b> Agent Task Processor</span>
+              <strong>Next-gen chat conversation event projection</strong>
+            </div>
+            <button class="detail-chrome__edit" title="Rename task" aria-label="Rename task">
+              <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                @for (path of iconPath('edit'); track path) {
+                  <path [attr.d]="path"></path>
+                }
+              </svg>
+            </button>
+            <span class="detail-chrome__state">2-ready</span>
+            <nav class="detail-chrome__panes" aria-label="Existing task panes">
+              @for (panel of detailPanels; track panel.label) {
+                <button [class.detail-chrome__pane--active]="panel.active"
+                        [attr.title]="panel.title"
+                        (click)="panel.pane ? setPane(panel.pane) : null">
+                  <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    @for (path of iconPath(panel.icon); track path) {
+                      <path [attr.d]="path"></path>
+                    }
+                  </svg>
+                  <span>{{ panel.label }}</span>
+                </button>
+              }
+            </nav>
+            <button class="detail-chrome__complete" title="Complete and move to next task">Complete & Next</button>
+          </header>
+
           <section class="workbench" aria-label="Task chat workbench">
             <aside class="inspector-rail" aria-label="Task inspector rail">
               <button class="rail-guide" type="button" title="Explain this rail" (click)="guideOpen.set(true)" data-testid="prototype-rail-guide">

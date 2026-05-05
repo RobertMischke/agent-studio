@@ -16,6 +16,18 @@ public sealed class JobTransitionService
     private readonly ProjectSettingsService _settings;
     private readonly ILogger<JobTransitionService> _logger;
 
+    /// <summary>
+    /// Fires after a successful folder move with the resolved project name,
+    /// the job id, the source state (the lane the job was in before the move),
+    /// and the target state. Subscribers must be cheap and side-effect-only;
+    /// the move itself is already on disk by the time this fires. The
+    /// load-bearing subscriber is the runner-active-state clearer wired in
+    /// <c>Program.cs</c>: when the moved job was the active one for that
+    /// project, the runner's in-memory <c>_activeJobId</c> is reconciled
+    /// atomically so the next pickup tick is unblocked.
+    /// </summary>
+    public event Action<string, string, string, string>? OnJobMoved;
+
     public JobTransitionService(
         JobScannerService scanner,
         JobStateMachine states,
@@ -60,6 +72,9 @@ public sealed class JobTransitionService
             commitToStamp = await TryAutoCommitAsync(jobId, watchPath, ct);
         }
 
+        var fromState = info.State;
+        var projectName = info.ProjectName;
+
         var outcome = _states.MoveJob(jobId, targetState, watchPath);
         if (outcome.Status == MoveJobStatus.Success && commitToStamp != null)
         {
@@ -67,6 +82,18 @@ public sealed class JobTransitionService
             if (moved != null)
             {
                 _mutations.SetJobCommitOnFolder(moved.FolderPath, commitToStamp);
+            }
+        }
+
+        if (outcome.Status == MoveJobStatus.Success && fromState != targetState)
+        {
+            try
+            {
+                OnJobMoved?.Invoke(projectName, jobId, fromState, targetState);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "OnJobMoved subscriber threw for {JobId} ({From} -> {To})", jobId, fromState, targetState);
             }
         }
 

@@ -567,6 +567,41 @@ public class TaskRunnerService : BackgroundService
         return (snapshot, null);
     }
 
+    /// <summary>
+    /// Releases the in-memory active-job latch on the matching project's
+    /// runner when an external mutation (the move endpoint, the boot-time
+    /// stuck-folder sweep, a manual folder rearrangement) takes the active
+    /// job out of <c>3-progress</c>. Wired off
+    /// <see cref="JobTransitionService.OnJobMoved"/> in <c>Program.cs</c> so
+    /// the clear is atomic with the move from the API caller's perspective:
+    /// a successful <c>POST /api/jobs/{id}/move</c> guarantees the next
+    /// pickup tick sees <c>active=null</c>.
+    /// </summary>
+    public bool ClearActiveJobForProject(string projectName, string jobId, string reason)
+    {
+        if (string.IsNullOrEmpty(projectName) || string.IsNullOrEmpty(jobId)) return false;
+        if (!_runners.TryGetValue(projectName, out var runner)) return false;
+        return runner.ClearActiveJobIfMatches(jobId, reason);
+    }
+
+    /// <summary>
+    /// Sweeps every project runner's defensive
+    /// <see cref="ProjectRunner.ReconcileActiveJobAgainstDisk"/>. Cheap when
+    /// no project has an active-job latch held; one disk scan per project
+    /// otherwise. Wired off <see cref="JobWatcherService.OnJobChanged"/> so
+    /// non-API folder changes (external scripts, hand edits, boot-time
+    /// stuck-folder sweep) get reconciled within the watcher's debounce
+    /// interval rather than waiting for the next 5 s pickup tick.
+    /// </summary>
+    public void ReconcileAllRunners()
+    {
+        foreach (var runner in _runners.Values)
+        {
+            try { runner.ReconcileActiveJobAgainstDisk(); }
+            catch (Exception ex) { _logger.LogDebug(ex, "Reconcile failed for runner {Project}", runner.ProjectName); }
+        }
+    }
+
     public bool StartRunner(string projectName)
     {
         if (!_runners.TryGetValue(projectName, out var runner)) return false;

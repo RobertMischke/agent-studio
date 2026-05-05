@@ -1,5 +1,6 @@
 using OrchestratorApi.Endpoints;
 using OrchestratorApi.Hubs;
+using OrchestratorApi.Models;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.Bus;
 using OrchestratorApi.Services.Cli;
@@ -233,6 +234,26 @@ catch (Exception ex) { crashRecorder.Record("AgentMessageBusBridge.Seed", ex); }
 var watcher = app.Services.GetRequiredService<JobWatcherService>();
 var hubContext = app.Services.GetRequiredService<IHubContext<JobHub>>();
 watcher.OnJobChanged += _ => hubContext.Clients.All.SendAsync("jobsChanged");
+
+// Wire JobTransitionService move events to atomically clear the per-project
+// runner's _activeJobId when the active job is moved out of 3-progress.
+// Without this, an external move (API or otherwise) leaves the runner pinned
+// to a slug whose folder has left the lane, every pickup tick short-circuits
+// on `active != null`, and the project wedges until backend restart.
+var transitionsForRunner = app.Services.GetRequiredService<JobTransitionService>();
+var runnerForTransitions = app.Services.GetRequiredService<TaskRunnerService>();
+transitionsForRunner.OnJobMoved += (projectName, jobId, fromState, toState) =>
+{
+    if (fromState != JobStates.Progress) return;
+    runnerForTransitions.ClearActiveJobForProject(
+        projectName, jobId,
+        $"job moved out of 3-progress externally ({fromState} -> {toState})");
+};
+
+// Defensive: when a non-API folder change touches the watch tree (external
+// script, manual edit, boot-time stuck-folder sweep), sweep every runner so
+// a stale active-job latch is cleared before the next pickup tick.
+watcher.OnJobChanged += _ => runnerForTransitions.ReconcileAllRunners();
 
 // Wire up CLI events → SignalR push (across all CLI backends via the router)
 var cliRouter = app.Services.GetRequiredService<CliRouter>();
