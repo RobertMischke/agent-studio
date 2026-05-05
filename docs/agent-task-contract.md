@@ -95,6 +95,23 @@ When no token is emitted, the orchestrator falls back to a heuristic, marks the 
 
 When you receive a recovery prompt (the previous CLI session was lost), the user follow-up is the primary instruction. Do not reply "task done" without performing the follow-up; if you cannot perform it, emit `[[TASK_BLOCKED:<reason>]]`.
 
+## Build-time Observability
+
+Coding agents should consider practical build-time observability whenever their change introduces or alters meaningful product behavior. This is guidance, not a checklist; many tasks need none of it.
+
+Apply when relevant:
+
+- Preserve existing structured logs and event names. Do not silently delete instrumentation while editing nearby code.
+- For new meaningful behavior, emit structured logs or domain events with stable event names and useful error context, and add timing around expensive or user-visible paths when it would help future debugging, performance review, or QA.
+- Use the project's existing logging conventions and field names. Do not invent a parallel logging style.
+
+Do not apply when the change is trivial:
+
+- Tiny helpers, pure refactors, doc-only edits, dependency bumps, and throwaway scripts do not need new instrumentation.
+- Observability is not a reason to bloat simple code or pad a diff. If a single log line would not help any future reader, skip it.
+
+The project-level observability contract (event envelope, sinks, correlation rules) lives in `docs/product-runtime-observability.md` once that file exists. Until then, follow the project's current logging conventions.
+
 ## Documentation Drift
 
 After a CLI-executed task finishes, check whether README.md, ROADMAP.md, AGENTS.md, or docs need to be updated. Update them when the change affects product direction, public behavior, architecture, CLI contracts, filesystem contracts, or agent workflow. If no documentation update is needed, say so briefly in the task report.

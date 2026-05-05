@@ -173,6 +173,54 @@ public class TaskRunnerPromptTests
     }
 
     [Fact]
+    public void AllRunnerTemplates_MentionBuildTimeObservabilityWithoutDominating()
+    {
+        var prompts = Prompts();
+        foreach (var template in new[]
+        {
+            RuntimePromptService.RunnerFreshStart,
+            RuntimePromptService.RunnerResumeInterrupted,
+            RuntimePromptService.RunnerResumeRestart,
+            RuntimePromptService.RunnerRecoveryContinuation
+        })
+        {
+            var rendered = prompts.Render(template, new Dictionary<string, string?>
+            {
+                ["prompt_path"] = "prompt.md",
+                ["job_folder"] = "job",
+                ["working_directory"] = "work",
+                ["repository_path"] = "repo",
+                ["user_followup"] = "follow up",
+                ["title"] = "title",
+                ["prompt_text"] = "body"
+            });
+
+            // Each runner template carries the small observability nudge so
+            // coding agents preserve and extend structured logging when the
+            // change introduces meaningful product behavior.
+            Assert.Contains("observability", rendered, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("structured log", rendered, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("stable event name", rendered, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("error context", rendered, StringComparison.OrdinalIgnoreCase);
+            Assert.Contains("timing", rendered, StringComparison.OrdinalIgnoreCase);
+
+            // The opt-out clause must be present so trivial changes are not
+            // padded with logging just to satisfy the guidance.
+            Assert.Contains("Skip instrumentation", rendered, StringComparison.OrdinalIgnoreCase);
+
+            // Guidance must stay short. The block should not dominate the
+            // prompt; cap it at a small fraction of total characters so a
+            // future edit cannot quietly turn it into a checklist.
+            var blockStart = rendered.IndexOf("Build-time observability", StringComparison.OrdinalIgnoreCase);
+            Assert.True(blockStart >= 0, "observability block must be present");
+            var blockEnd = rendered.IndexOf("When you finish", blockStart, StringComparison.OrdinalIgnoreCase);
+            if (blockEnd < 0) blockEnd = rendered.Length;
+            var blockLength = blockEnd - blockStart;
+            Assert.InRange(blockLength, 1, 1200);
+        }
+    }
+
+    [Fact]
     public void RunnerTemplates_DoNotContainEmDashes()
     {
         var prompts = Prompts();
