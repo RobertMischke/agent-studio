@@ -275,6 +275,20 @@ Only jobs in `2-ready` or `3-progress` can be started via `/api/jobs/{id}/start`
 
 Successful CLI runs move from `3-progress` to `4-review` through application code. Failed or stopped runs stay in `3-progress` for inspection, restart, or continuation.
 
+### Job organization rule: API first
+
+Agents must organize jobs through the application API, not by directly creating, moving, deleting, or reordering folders in `agent-taskboard-workspace/projects/<projectKey>/`.
+
+Use:
+
+- `GET /api/watch-paths` to find the effective `watchPath`.
+- `POST /api/jobs` with `CreateJobRequest` to create jobs.
+- `POST /api/jobs/{jobId}/move?watchPath=...` to move jobs.
+- `POST /api/jobs/reorder` to reorder jobs.
+- `DELETE /api/jobs/{jobId}?watchPath=...` to delete jobs.
+
+Direct filesystem changes are only for backend implementation, migrations, recovery tasks, and tests that intentionally exercise the filesystem contract. Normal planning and queue management must go through the API so validation, ownership, live updates, and the future Task Access layer stay authoritative.
+
 See `docs/filesystem-contract.md` for full details.
 
 ## Code Conventions

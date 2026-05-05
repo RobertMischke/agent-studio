@@ -237,6 +237,20 @@ The file is gitignored so it stays per-checkout. Stable lacks the file, so the s
 
 `RepositoryPath` is optional. Use it when the Git repository root differs from the CLI working directory, for example a monorepo or a source app under a parent repository. Git status, diff, commits, and the VS Code handoff use `RepositoryPath`; when it is omitted, they fall back to `RootPath` and still ask Git for the work-tree top-level.
 
+### Job Organization Through The API
+
+Agents and scripts must organize jobs through the application API, not by directly creating, moving, deleting, or reordering folders under `agent-taskboard-workspace/projects/<projectKey>/`.
+
+Use the API for normal job operations:
+
+- `GET /api/watch-paths` to discover the correct `watchPath`.
+- `POST /api/jobs` with `CreateJobRequest` to create a job. Set `targetState` when a job should land directly in `1-preparation` or `2-ready`.
+- `POST /api/jobs/{jobId}/move?watchPath=...` to move a job.
+- `POST /api/jobs/reorder` to reorder jobs.
+- `DELETE /api/jobs/{jobId}?watchPath=...` to delete a job.
+
+Direct filesystem edits are reserved for backend implementation, migrations, recovery work, and tests that deliberately exercise the filesystem contract. They are not the normal operating path for agents. The API is the boundary that keeps ownership, client identity, validation, live updates, and future Task Access behavior in one place.
+
 ### Supported CLIs
 
 Claude Code, Codex, GitHub Copilot, Gemini. The contract every CLI must satisfy, including process lifecycle, session model, model selection, quota probing, logging, and cancellation, is in [docs/supported-clis.md](docs/supported-clis.md).

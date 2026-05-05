@@ -24,6 +24,18 @@ With that pointer, jobs are resolved under the configured `TaskRepository` at `p
 
 `RootPath` is the implementation working directory for CLI runs and pointer lookup. A watch entry may also set `RepositoryPath` when Git operations should run from a different directory, such as a parent repository that contains the app folder. If `RepositoryPath` is omitted, Git operations fall back to `RootPath` and resolve the Git work-tree top-level from there.
 
+## Operational Boundary
+
+The filesystem layout is the storage contract, not the normal operating interface. Agents and scripts must create, move, delete, and reorder jobs through the API:
+
+- `GET /api/watch-paths`
+- `POST /api/jobs`
+- `POST /api/jobs/{jobId}/move?watchPath=...`
+- `POST /api/jobs/reorder`
+- `DELETE /api/jobs/{jobId}?watchPath=...`
+
+Direct folder edits are reserved for backend implementation, migrations, recovery, and tests that deliberately exercise this contract. Normal queue management goes through the API so validation, owner identity, SignalR updates, and the Task Access layer remain authoritative.
+
 ## Job Folder Layout
 
 Each visible state is a folder, and each job is a subfolder inside one state:
