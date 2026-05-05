@@ -34,11 +34,14 @@ echo "[restart-watcher] starting; tick=${TICK}s; inner=$INNER"
 while :; do
   # The inner script swallows operational errors and returns 0 for a
   # handled tick; a non-zero exit is fatal misconfiguration. Don't re-run
-  # if the inner script asks us to stop.
-  if ! "$INNER"; then
-    rc=$?
-    echo "[restart-watcher] inner script exited $rc — stopping" >&2
-    exit "$rc"
+  # if the inner script asks us to stop. We must capture $? *before* any
+  # other command runs (including the echo), otherwise the log line below
+  # would clobber the real exit code with its own.
+  if "$INNER"; then
+    sleep "$TICK"
+    continue
   fi
-  sleep "$TICK"
+  rc=$?
+  echo "[restart-watcher] inner script exited $rc — stopping" >&2
+  exit "$rc"
 done

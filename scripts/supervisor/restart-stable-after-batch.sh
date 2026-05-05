@@ -41,6 +41,14 @@
 
 set -eu
 
+# Pin to the C locale for the whole script so `sort` and `comm` agree on
+# byte ordering. Without this, MSYS/Git-Bash on Windows runs `sort` under
+# LC_ALL=C (set explicitly below) but `comm` under the inherited UTF-8
+# locale, and `comm --check-order` then aborts with "input is not in
+# sorted order" the moment any new job arrives. Setting it once at the
+# top removes the mismatch.
+export LC_ALL=C
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 THIS_CHECKOUT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 DEVSPACE_DIR="$(cd "$THIS_CHECKOUT/.." && pwd)"
