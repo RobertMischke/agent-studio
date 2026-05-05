@@ -19,13 +19,15 @@ if (typeof window !== 'undefined') {
     <div class="job-card"
          [class]="'job-card--' + job().state"
          [class.job-card--running]="isRunning()"
+         [class.job-card--compact]="compact()"
          [style.--project-color]="identity().color"
          [style.--project-border]="identity().border"
          [style.--project-soft]="identity().soft"
          [style.--project-on]="identity().onColor"
          data-testid="job-card"
          [attr.data-project]="job().projectName"
-         [attr.data-running]="isRunning() ? 'true' : null">
+         [attr.data-running]="isRunning() ? 'true' : null"
+         [attr.data-compact]="compact() ? 'true' : null">
       <div class="job-card__header">
         <span class="job-card__project" data-testid="job-card-project">
           <span class="job-card__project-disk" aria-hidden="true">{{ identity().initial }}</span>
@@ -51,7 +53,20 @@ if (typeof window !== 'undefined') {
                 aria-label="Delete task"
                 (click)="onDeleteClick($event)">🗑</button>
       </div>
-      <h3 class="job-card__title">{{ job().title || job().id }}</h3>
+      <h3 class="job-card__title">
+        @if (compact()) {
+          <span class="job-card__compact-disk"
+                [attr.aria-label]="job().projectName"
+                aria-hidden="true">{{ identity().initial }}</span>
+          <span class="job-card__compact-cli" aria-hidden="true">{{ agentIcon() }}</span>
+        }
+        <span class="job-card__title-text">{{ job().title || job().id }}</span>
+        @if (compact()) {
+          <span class="job-card__compact-time" [title]="'Last activity: ' + relativeActivity()">
+            {{ relativeActivity() }}
+          </span>
+        }
+      </h3>
       <div class="job-card__badges">
         <span class="job-card__state-pill">{{ stateLabel() }}</span>
         @if (executionBadge(); as badge) {
@@ -655,10 +670,81 @@ if (typeof window !== 'undefined') {
       text-decoration: none;
     }
     .job-card__token-link:hover { text-decoration: underline; }
+
+    /* Compact-card mode: collapse the card to a single dense row showing
+       only what is needed to find a task by name. CLI icon + project
+       initial sit before the title; a relative timestamp sits at the end.
+       Everything else (header chips, badges, meta, git/commit pills,
+       activity line) is hidden so the user can fit many more cards on
+       screen. The drag-handle, click-to-open behaviour, and per-state
+       border accent are preserved. */
+    .job-card--compact {
+      padding: 6px 10px;
+      border-radius: 8px;
+    }
+    .job-card--compact .job-card__header,
+    .job-card--compact .job-card__badges,
+    .job-card--compact .job-card__meta,
+    .job-card--compact .job-card__git,
+    .job-card--compact .job-card__commit,
+    .job-card--compact .job-card__activity {
+      display: none;
+    }
+    .job-card--compact .job-card__title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0;
+      font-size: 13px;
+      font-weight: 500;
+      line-height: 1.25;
+      min-width: 0;
+    }
+    .job-card--compact .job-card__title-text {
+      flex: 1 1 auto;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .job-card--compact .job-card__compact-disk {
+      display: inline-grid;
+      place-items: center;
+      width: 16px;
+      height: 16px;
+      border-radius: 999px;
+      background: var(--project-color, #8b5cf6);
+      color: var(--project-on, #0b1020);
+      font-size: 9px;
+      font-weight: 800;
+      flex: 0 0 auto;
+    }
+    .job-card--compact .job-card__compact-cli {
+      font-size: 12px;
+      line-height: 1;
+      flex: 0 0 auto;
+    }
+    .job-card--compact .job-card__compact-time {
+      font-size: 10px;
+      color: #64748b;
+      font-variant-numeric: tabular-nums;
+      flex: 0 0 auto;
+      white-space: nowrap;
+    }
+    /* In compact mode the running pulse animation would move every row in
+       a busy column; replace it with a steady accent so the eye is drawn
+       to the running card without a constantly-shifting background. */
+    .job-card--compact.job-card--running {
+      animation: none;
+      background:
+        linear-gradient(180deg, rgba(59,130,246,0.16), rgba(59,130,246,0.04)),
+        #1e1e2e;
+    }
   `]
 })
 export class JobCardComponent implements OnInit, OnDestroy {
   readonly job = input.required<JobInfo>();
+  readonly compact = input<boolean>(false);
   readonly deleteRequested = output<JobInfo>();
   private readonly gitSummary = inject(GitSummaryService);
   private readonly clients = inject(ClientService);

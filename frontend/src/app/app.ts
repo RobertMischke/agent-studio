@@ -89,6 +89,15 @@ interface VerboseDebugContext {
               }
             </select>
           </label>
+          <button class="btn btn--compact-toggle"
+                  data-testid="compact-cards-toggle"
+                  [class.btn--compact-toggle--active]="compactCards()"
+                  [attr.aria-pressed]="compactCards()"
+                  [title]="compactCards() ? 'Show full cards' : 'Show compact cards (titles only)'"
+                  (click)="toggleCompactCards()">
+            <span aria-hidden="true">{{ compactCards() ? '▤' : '▥' }}</span>
+            <span class="btn--compact-toggle__label">{{ compactCards() ? 'Compact' : 'Full' }}</span>
+          </button>
           <button class="btn btn--create" (click)="openCreate()">
             ＋ Add Task
           </button>
@@ -231,6 +240,7 @@ interface VerboseDebugContext {
                       [state]="lane.state"
                       [jobs]="lane.jobs"
                       [collapsed]="isLaneCollapsed(lane.state)"
+                      [compact]="compactCards()"
                       (collapseToggle)="toggleLaneCollapse(lane.state)"
                       (jobClick)="openDetail($event)"
                       (jobDrop)="onJobDrop($event)"
@@ -679,6 +689,22 @@ interface VerboseDebugContext {
       box-shadow: 0 1px 4px rgba(139,92,246,0.30);
     }
     .btn--create:hover { background: rgba(139,92,246,0.6); border-color: rgba(196,181,253,0.95); }
+    .btn--compact-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+    }
+    .btn--compact-toggle--active {
+      background: rgba(56,189,248,0.20);
+      border-color: rgba(56,189,248,0.55);
+      color: #bae6fd;
+    }
+    .btn--compact-toggle--active:hover {
+      background: rgba(56,189,248,0.28);
+      border-color: rgba(56,189,248,0.75);
+    }
+    .btn--compact-toggle__label { font-weight: 600; }
     .devtools-menu { position: relative; display: inline-flex; }
     .devtools-menu__trigger {
       background: transparent;
@@ -1678,6 +1704,14 @@ export class App implements OnInit {
    */
   readonly collapsedLanes = signal<Set<string>>(new Set(JSON.parse(localStorage.getItem('collapsedLanes') ?? '[]')));
   readonly taskNavCollapsed = signal<boolean>(localStorage.getItem('taskNavCollapsed') === '1');
+  /**
+   * Compact-card mode trades the full per-card metadata (model badge,
+   * agent line, git pill, commit pill, last-activity line) for a dense
+   * one-row title with a small CLI icon and a relative timestamp. Lets
+   * the user fit many more cards on screen when they're scanning for a
+   * task by name. Persisted across reloads.
+   */
+  readonly compactCards = signal<boolean>(localStorage.getItem('compactCards') === '1');
   readonly showUpdateStable = signal(false);
   readonly showE2ECleanup = signal(false);
   readonly devToolsMenuOpen = signal(false);
@@ -2791,6 +2825,12 @@ export class App implements OnInit {
   setTaskNavCollapsed(collapsed: boolean) {
     this.taskNavCollapsed.set(collapsed);
     localStorage.setItem('taskNavCollapsed', collapsed ? '1' : '0');
+  }
+
+  toggleCompactCards(): void {
+    const next = !this.compactCards();
+    this.compactCards.set(next);
+    localStorage.setItem('compactCards', next ? '1' : '0');
   }
 
   startResize(event: MouseEvent) {

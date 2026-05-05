@@ -113,6 +113,7 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
               @for (job of group.jobs; track job.jobKey) {
                 <app-job-card
                   [job]="job"
+                  [compact]="compact()"
                   (click)="jobClick.emit(job)"
                   (deleteRequested)="jobDeleteRequest.emit($event)"
                   draggable="true"
@@ -135,6 +136,7 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
             }
             <app-job-card
               [job]="job"
+              [compact]="compact()"
               (click)="jobClick.emit(job)"
               draggable="true"
               (dragstart)="onDragStart($event, job)" />
@@ -563,6 +565,7 @@ export class JobColumnComponent {
   readonly jobs = input.required<JobInfo[]>();
   readonly reorderDisabled = input<boolean>(false);
   readonly collapsed = input<boolean>(false);
+  readonly compact = input<boolean>(false);
   readonly jobClick = output<JobInfo>();
   readonly jobDrop = output<{ jobId: string; watchPath: string; targetState: string }>();
   readonly jobReorder = output<{ state: string; jobs: JobOrderItem[] }>();
