@@ -197,23 +197,23 @@ Make each watched project easier to inspect and operate:
 
 ### Next-Generation Chat Window
 
-Make the task chat the primary human review surface for long-running, multi-actor agent work. The current Activity Log is valuable evidence, but real Stable jobs already produce hundreds of conversation entries and more than a hundred tool chips. The next surface should keep the raw trace available while making the default view readable.
+Make the task chat the primary human review surface for long-running, multi-actor agent work. The current Activity Log is valuable evidence, but real Stable jobs already produce hundreds of conversation entries and more than a hundred tool chips. The next surface should keep the raw trace available while making the default view a compact developer chat, closer to GitHub Copilot Chat in VS Code than to an operations dashboard.
 
 The chat should render:
 
 - The user, task agent, project orchestrator, supervisor, supporting agents, tool runner, and system warnings as distinct actors.
-- Runs as the unit of conversation, with run headers for CLI, model, duration, token usage, tool count, tests, commits, and outcome.
-- Tool use as collapsed bursts by default, with counts by family, failure count, duration, touched files, artifacts, and one-click raw detail.
-- Orchestrator and supervisor output as typed decision cards with reason, evidence, action, budget, and next step.
+- Runs as thin separators in the conversation, with detailed CLI, model, duration, token usage, tool count, tests, commits, and outcome in the collapsible inspector.
+- Tool use as compact inline bursts by default, with counts by family, failure count, duration, touched files, artifacts, and one-click raw detail.
+- Orchestrator and supervisor output as terse inline decision/advisory rows first. Expanded cards show reason, evidence, action, budget, and next step.
 - User intervention as explicit steering: continue, interrupt, stop, accept, or create follow-up.
-- Conversation mode as the default, trace mode as the debugging view, and artifacts as a dedicated evidence view.
+- Conversation mode as the default, trace mode as the debugging view, artifacts as a dedicated evidence view, and the meta layer as a docked or collapsed inspector.
 
 First implementation order:
 
 1. Add a `ConversationEvent` projection above the existing Activity Log parser.
-2. Group tool calls into compact `ToolBurst` events in conversation mode while preserving raw trace mode.
+2. Group tool calls into compact inline `ToolBurst` events in conversation mode while preserving raw trace mode.
 3. Add persistent actor rails and labels for all participant types.
-4. Add typed `DecisionCard` rendering for orchestrator and supervisor events.
+4. Add compact decision/advisory rows for orchestrator and supervisor events, with expandable `DecisionCard` details.
 5. Fix layout reservations so auto-eval banners, run timeline, mode controls, stream, and composer cannot overlap.
 6. Add Playwright coverage using Stable evidence cases: tool-heavy archive, review job with orchestrator output, analysis report job, empty run, failed tool retry, and user intervention.
 

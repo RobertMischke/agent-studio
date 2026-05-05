@@ -3,19 +3,21 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Next-Generation Chat Window Mockup</title>
+  <title>Compact Next-Generation Chat Mockup</title>
   <style>
     :root {
       color-scheme: dark;
-      --bg: #10131a;
-      --panel: #171b24;
-      --panel-2: #1d2330;
-      --line: #2f3747;
-      --text: #e8edf7;
-      --muted: #9aa6ba;
-      --soft: #c5cee0;
+      --bg: #0e1118;
+      --surface: #141923;
+      --surface-2: #191f2b;
+      --surface-3: #202838;
+      --line: #30394c;
+      --line-soft: rgba(48,57,76,0.62);
+      --text: #eef3fb;
+      --muted: #97a2b6;
+      --soft: #c7d0e2;
       --user: #f0b56d;
-      --agent: #84c7ff;
+      --agent: #7cc7ff;
       --orch: #8aadf4;
       --supervisor: #f5c470;
       --support: #8bd5ca;
@@ -36,667 +38,709 @@
       letter-spacing: 0;
     }
 
-    .shell {
+    button, input, textarea {
+      font: inherit;
+      letter-spacing: 0;
+    }
+
+    .app {
       display: grid;
-      grid-template-columns: 280px minmax(0, 1fr);
+      grid-template-rows: 52px minmax(0, 1fr);
       min-height: 100vh;
     }
 
-    .sidebar {
-      border-right: 1px solid var(--line);
-      background: #0d1017;
-      padding: 18px 14px;
-    }
-
-    .brand {
-      font-size: 12px;
-      color: var(--muted);
-      text-transform: uppercase;
-      margin-bottom: 18px;
-    }
-
-    .task-card {
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: var(--panel);
-      padding: 12px;
-      margin-bottom: 10px;
-    }
-
-    .task-card.active {
-      border-color: #f0b56d;
-      box-shadow: inset 3px 0 0 #f0b56d;
-    }
-
-    .task-title {
-      font-size: 13px;
-      line-height: 1.35;
-      margin: 0 0 8px;
-      color: var(--text);
-    }
-
-    .pill-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
+    .top {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
       align-items: center;
+      gap: 14px;
+      border-bottom: 1px solid var(--line);
+      background: #10151f;
+      padding: 8px 14px;
     }
 
-    .pill {
-      min-height: 22px;
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      padding: 3px 8px;
+    .title {
+      min-width: 0;
+    }
+
+    .title small {
+      display: block;
+      color: var(--muted);
       font-size: 11px;
-      color: var(--soft);
-      background: rgba(255,255,255,0.03);
+      line-height: 1.2;
+    }
+
+    .title h1 {
+      margin: 2px 0 0;
+      font-size: 15px;
+      line-height: 1.25;
+      overflow: hidden;
+      text-overflow: ellipsis;
       white-space: nowrap;
     }
 
-    .main {
-      display: grid;
-      grid-template-rows: auto auto minmax(0, 1fr) auto;
+    .top-actions,
+    .chips {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 6px;
       min-width: 0;
-      min-height: 100vh;
     }
 
-    .topbar {
+    .chip {
+      min-height: 22px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.025);
+      color: var(--soft);
+      padding: 3px 8px;
+      font-size: 11px;
+      line-height: 1.2;
+      white-space: nowrap;
+    }
+
+    .chip.warning { color: var(--warning); border-color: rgba(238,212,159,0.35); }
+    .chip.success { color: var(--success); border-color: rgba(166,218,149,0.35); }
+
+    .layout {
+      min-height: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 320px;
+    }
+
+    .chat-shell {
+      min-width: 0;
+      min-height: 0;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr) auto;
+      border-right: 1px solid var(--line);
+    }
+
+    .toolbar {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 10px;
       border-bottom: 1px solid var(--line);
-      background: rgba(23,27,36,0.92);
-      padding: 12px 18px;
+      background: var(--surface);
+      padding: 8px 12px;
     }
 
-    .breadcrumb {
-      color: var(--muted);
+    .segmented {
+      display: inline-flex;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      overflow: hidden;
+    }
+
+    .segmented button {
+      min-height: 28px;
+      border: 0;
+      border-right: 1px solid var(--line);
+      background: transparent;
+      color: var(--soft);
+      padding: 5px 10px;
       font-size: 12px;
+    }
+
+    .segmented button:last-child { border-right: 0; }
+    .segmented .active { background: #263047; color: var(--text); }
+
+    .search {
+      min-width: 120px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #0f141d;
+      color: var(--muted);
+      padding: 6px 9px;
+      font-size: 12px;
+    }
+
+    .stream {
+      min-height: 0;
+      overflow: auto;
+      padding: 12px 14px 18px;
+    }
+
+    .run-divider {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 11px;
+      margin: 8px 0 10px;
+    }
+
+    .run-divider::before,
+    .run-divider::after {
+      content: "";
+      flex: 1;
+      border-top: 1px solid var(--line-soft);
+    }
+
+    .message {
+      display: grid;
+      grid-template-columns: 32px minmax(0, 1fr);
+      gap: 10px;
+      margin: 8px 0;
+      max-width: 980px;
+    }
+
+    .message.user {
+      grid-template-columns: minmax(0, 1fr) 32px;
+      margin-left: auto;
+      max-width: 760px;
+    }
+
+    .avatar {
+      width: 28px;
+      height: 28px;
+      border: 1px solid var(--line);
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: #0f1118;
+      background: var(--tool);
+      margin-top: 2px;
+    }
+
+    .avatar.user { background: var(--user); }
+    .avatar.agent { background: var(--agent); }
+    .avatar.support { background: var(--support); }
+
+    .bubble {
+      min-width: 0;
+      border: 1px solid var(--line-soft);
+      border-radius: 8px;
+      background: var(--surface);
+      padding: 8px 10px;
+    }
+
+    .user .bubble {
+      background: rgba(240,181,109,0.11);
+      border-color: rgba(240,181,109,0.36);
+    }
+
+    .message-head {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.2;
+      margin-bottom: 4px;
+    }
+
+    .message-head b {
+      color: var(--text);
+      font-size: 12px;
+    }
+
+    .message p {
+      margin: 0;
+      color: var(--text);
+      font-size: 13px;
+      line-height: 1.42;
+    }
+
+    .message p + p { margin-top: 6px; }
+
+    .compact-event {
+      max-width: 980px;
+      display: grid;
+      grid-template-columns: 32px minmax(0, 1fr);
+      gap: 10px;
+      margin: 6px 0;
+    }
+
+    .event-line {
+      min-width: 0;
+      border: 1px solid var(--line-soft);
+      border-radius: 7px;
+      background: rgba(255,255,255,0.025);
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      padding: 6px 8px;
+      font-size: 12px;
+      color: var(--soft);
+    }
+
+    .event-line strong {
+      color: var(--text);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .event-line span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .event-line.orch {
+      border-color: rgba(138,173,244,0.42);
+      background: rgba(36,45,70,0.42);
+    }
+
+    .event-line.supervisor {
+      border-color: rgba(245,196,112,0.42);
+      background: rgba(245,196,112,0.08);
+    }
+
+    .event-line.tool {
+      border-color: rgba(166,173,200,0.32);
+    }
+
+    .event-line.system {
+      opacity: 0.82;
+    }
+
+    .event-icon {
+      width: 22px;
+      height: 22px;
+      border-radius: 6px;
+      display: grid;
+      place-items: center;
+      font-size: 11px;
+      font-weight: 700;
+      color: #0f1118;
+      background: var(--tool);
+    }
+
+    .event-icon.orch { background: var(--orch); }
+    .event-icon.supervisor { background: var(--supervisor); }
+    .event-icon.support { background: var(--support); }
+    .event-icon.system { background: var(--muted); }
+
+    .link-button {
+      border: 0;
+      background: transparent;
+      color: var(--agent);
+      padding: 0;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .tool-grid {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 4px;
+      margin-top: 7px;
+    }
+
+    .tool-mini {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 5px 6px;
+      text-align: center;
+      min-width: 0;
+      color: var(--muted);
+      font-size: 10px;
+    }
+
+    .tool-mini b {
+      display: block;
+      color: var(--text);
+      font-size: 12px;
+      margin-bottom: 1px;
+    }
+
+    .composer {
+      border-top: 1px solid var(--line);
+      background: #10151f;
+      padding: 8px 12px 10px;
+    }
+
+    .composer .chips {
       margin-bottom: 6px;
     }
 
-    h1 {
-      margin: 0;
-      font-size: 18px;
-      line-height: 1.25;
-      font-weight: 700;
+    .composer-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      gap: 8px;
+      align-items: end;
     }
 
-    .session-strip {
-      display: grid;
-      grid-template-columns: repeat(6, minmax(90px, 1fr));
+    .input {
+      min-height: 44px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #0d121b;
+      color: var(--muted);
+      padding: 8px 10px;
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .send,
+    .stop {
+      min-height: 36px;
+      border-radius: 8px;
+      padding: 0 13px;
+      font-weight: 700;
+      font-size: 12px;
+    }
+
+    .send {
+      border: 1px solid var(--user);
+      background: var(--user);
+      color: #20140a;
+    }
+
+    .stop {
+      border: 1px solid var(--line);
+      background: var(--surface-2);
+      color: var(--soft);
+    }
+
+    .inspector {
+      min-height: 0;
+      overflow: auto;
+      background: #0c1017;
+      padding: 12px;
+    }
+
+    .inspector-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
       gap: 8px;
-      padding: 10px 18px;
-      border-bottom: 1px solid var(--line);
-      background: #111620;
+      margin-bottom: 10px;
+    }
+
+    .inspector h2 {
+      margin: 0;
+      font-size: 13px;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      padding: 10px;
+      margin-bottom: 10px;
+    }
+
+    .panel h3 {
+      margin: 0 0 8px;
+      font-size: 12px;
+      color: var(--text);
+    }
+
+    .metric-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
     }
 
     .metric {
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 8px 10px;
-      background: var(--panel);
+      border: 1px solid var(--line-soft);
+      border-radius: 7px;
+      padding: 7px;
       min-width: 0;
     }
 
     .metric b {
       display: block;
       font-size: 14px;
-      line-height: 1.2;
+      line-height: 1.1;
     }
 
     .metric span {
       display: block;
       color: var(--muted);
-      font-size: 11px;
-      margin-top: 2px;
-      overflow-wrap: anywhere;
-    }
-
-    .workspace {
-      min-height: 0;
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 300px;
-    }
-
-    .chat {
-      min-width: 0;
-      min-height: 0;
-      display: flex;
-      flex-direction: column;
-      border-right: 1px solid var(--line);
-    }
-
-    .chat-toolbar {
-      display: flex;
-      justify-content: space-between;
-      gap: 12px;
-      padding: 10px 18px;
-      border-bottom: 1px solid var(--line);
-      background: var(--panel);
-      position: sticky;
-      top: 0;
-      z-index: 1;
-    }
-
-    .segmented {
-      display: inline-flex;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      overflow: hidden;
-    }
-
-    .segmented button,
-    .icon-button {
-      border: 0;
-      background: transparent;
-      color: var(--soft);
-      padding: 7px 10px;
-      font: inherit;
-      font-size: 12px;
-      cursor: default;
-    }
-
-    .segmented button.active {
-      background: #263047;
-      color: var(--text);
-    }
-
-    .filters {
-      display: flex;
-      gap: 6px;
-      flex-wrap: wrap;
-      justify-content: flex-end;
-    }
-
-    .stream {
-      min-height: 0;
-      overflow: auto;
-      padding: 18px;
-    }
-
-    .run {
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: rgba(23,27,36,0.74);
-      margin-bottom: 16px;
-      overflow: hidden;
-    }
-
-    .run-header {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      gap: 12px;
-      align-items: center;
-      padding: 10px 12px;
-      background: var(--panel-2);
-      border-bottom: 1px solid var(--line);
-    }
-
-    .run-header strong {
-      display: block;
-      font-size: 13px;
-    }
-
-    .run-header span {
-      color: var(--muted);
-      font-size: 11px;
-    }
-
-    .message {
-      display: grid;
-      grid-template-columns: 112px minmax(0, 1fr);
-      gap: 12px;
-      padding: 12px;
-      border-bottom: 1px solid rgba(47,55,71,0.55);
-    }
-
-    .message:last-child { border-bottom: 0; }
-
-    .actor {
-      display: flex;
-      align-items: flex-start;
-      gap: 8px;
-      min-width: 0;
-      font-size: 12px;
-      color: var(--soft);
-    }
-
-    .rail {
-      width: 4px;
-      min-height: 34px;
-      border-radius: 4px;
-      background: var(--tool);
-      flex: 0 0 auto;
-    }
-
-    .actor-user .rail { background: var(--user); }
-    .actor-agent .rail { background: var(--agent); }
-    .actor-orch .rail { background: var(--orch); }
-    .actor-supervisor .rail { background: var(--supervisor); }
-    .actor-support .rail { background: var(--support); }
-    .actor-tool .rail { background: var(--tool); }
-
-    .actor-name {
-      min-width: 0;
-    }
-
-    .actor-name b {
-      display: block;
-      font-size: 12px;
-      color: var(--text);
-      overflow-wrap: anywhere;
-    }
-
-    .actor-name span {
-      display: block;
-      color: var(--muted);
-      font-size: 11px;
-      margin-top: 2px;
-      overflow-wrap: anywhere;
-    }
-
-    .bubble {
-      min-width: 0;
-      border: 1px solid rgba(47,55,71,0.75);
-      border-radius: 8px;
-      background: #131923;
-      padding: 10px 12px;
-    }
-
-    .bubble p {
-      margin: 0;
-      font-size: 13px;
-      line-height: 1.45;
-      color: var(--text);
-    }
-
-    .decision,
-    .toolburst,
-    .artifact {
-      display: grid;
-      gap: 8px;
-    }
-
-    .decision {
-      border-color: rgba(138,173,244,0.55);
-      background: rgba(36,45,70,0.65);
-    }
-
-    .decision h2,
-    .toolburst h2,
-    .artifact h2 {
-      margin: 0;
-      font-size: 13px;
-      line-height: 1.25;
-    }
-
-    .kv {
-      display: grid;
-      grid-template-columns: 90px minmax(0, 1fr);
-      gap: 6px 10px;
-      font-size: 12px;
-      color: var(--soft);
-    }
-
-    .kv span:nth-child(odd) {
-      color: var(--muted);
-    }
-
-    .toolburst {
-      border-color: rgba(166,173,200,0.5);
-      background: rgba(28,34,46,0.95);
-    }
-
-    .tool-stats {
-      display: grid;
-      grid-template-columns: repeat(5, minmax(58px, 1fr));
-      gap: 6px;
-    }
-
-    .tool-stat {
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      padding: 6px;
-      text-align: center;
-      min-width: 0;
-    }
-
-    .tool-stat b {
-      display: block;
-      font-size: 13px;
-    }
-
-    .tool-stat span {
-      color: var(--muted);
       font-size: 10px;
+      margin-top: 2px;
       overflow-wrap: anywhere;
     }
 
-    .warning {
-      color: var(--warning);
-    }
-
-    .danger {
-      color: var(--danger);
-    }
-
-    .success {
-      color: var(--success);
-    }
-
-    .side {
-      min-width: 0;
-      min-height: 0;
-      overflow: auto;
-      background: #0f141d;
-      padding: 14px;
-    }
-
-    .side h2 {
-      font-size: 13px;
-      margin: 0 0 10px;
-    }
-
-    .side-card {
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: var(--panel);
-      padding: 10px;
-      margin-bottom: 10px;
-    }
-
-    .side-card h3 {
-      font-size: 12px;
-      margin: 0 0 8px;
-    }
-
-    .timeline-item {
+    .run-list {
       display: grid;
-      grid-template-columns: 42px minmax(0, 1fr);
-      gap: 8px;
+      gap: 6px;
+    }
+
+    .run-item {
+      border: 1px solid var(--line-soft);
+      border-radius: 7px;
+      padding: 7px;
       font-size: 11px;
-      color: var(--soft);
-      padding: 8px 0;
-      border-top: 1px solid rgba(47,55,71,0.6);
-    }
-
-    .timeline-item:first-of-type { border-top: 0; }
-
-    .composer {
-      border-top: 1px solid var(--line);
-      background: var(--panel);
-      padding: 12px 18px;
-    }
-
-    .composer-grid {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      gap: 10px;
-      align-items: end;
-    }
-
-    .input {
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #0f141d;
-      min-height: 52px;
-      padding: 9px 10px;
       color: var(--muted);
-      font-size: 13px;
     }
 
-    .send {
-      border: 1px solid #f0b56d;
-      border-radius: 8px;
-      background: #f0b56d;
-      color: #20140a;
-      padding: 11px 14px;
-      font-weight: 700;
-      font-size: 13px;
+    .run-item b {
+      display: block;
+      color: var(--text);
+      font-size: 12px;
+      margin-bottom: 2px;
     }
 
-    @media (max-width: 960px) {
-      .shell { grid-template-columns: 1fr; }
-      .sidebar { display: none; }
-      .workspace { grid-template-columns: 1fr; }
-      .side { display: none; }
-      .session-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-      .message { grid-template-columns: 82px minmax(0, 1fr); }
-      .tool-stats { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .bar {
+      height: 7px;
+      border-radius: 999px;
+      background: #0d121b;
+      overflow: hidden;
+      margin-top: 6px;
     }
 
-    @media (max-width: 560px) {
-      .topbar, .stream, .composer, .chat-toolbar { padding-left: 12px; padding-right: 12px; }
-      .session-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-left: 12px; padding-right: 12px; }
-      .chat-toolbar { flex-direction: column; align-items: stretch; }
-      .segmented { display: grid; grid-template-columns: repeat(3, 1fr); width: 100%; }
-      .segmented button { min-width: 0; padding-left: 6px; padding-right: 6px; }
-      .filters { justify-content: flex-start; }
-      .message { grid-template-columns: 1fr; }
-      .actor { min-height: 24px; }
-      .kv { grid-template-columns: 1fr; }
-      .composer-grid { grid-template-columns: 1fr; }
+    .bar span {
+      display: block;
+      height: 100%;
+      width: var(--w, 50%);
+      background: linear-gradient(90deg, var(--agent), var(--user));
+    }
+
+    @media (max-width: 1040px) {
+      .layout { grid-template-columns: minmax(0, 1fr); }
+      .inspector { display: none; }
+      .chat-shell { border-right: 0; }
+      .top-actions .desktop-only { display: none; }
+    }
+
+    @media (max-width: 680px) {
+      .app { grid-template-rows: auto minmax(0, 1fr); }
+      .top { grid-template-columns: 1fr; }
+      .top-actions { justify-content: flex-start; }
+      .toolbar { grid-template-columns: 1fr; align-items: stretch; }
+      .segmented { display: grid; grid-template-columns: repeat(3, 1fr); }
+      .stream { padding-left: 10px; padding-right: 10px; }
+      .message,
+      .message.user,
+      .compact-event {
+        grid-template-columns: 28px minmax(0, 1fr);
+        max-width: none;
+        margin-left: 0;
+      }
+      .message.user .avatar { grid-column: 1; grid-row: 1; }
+      .message.user .bubble { grid-column: 2; grid-row: 1; }
+      .event-line { grid-template-columns: auto minmax(0, 1fr); }
+      .event-line .link-button { grid-column: 2; justify-self: start; }
+      .tool-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .composer-row { grid-template-columns: 1fr; }
+      .send, .stop { width: 100%; }
     }
   </style>
 </head>
 <body>
-  <div class="shell">
-    <aside class="sidebar">
-      <div class="brand">Agent Task Processor</div>
-      <article class="task-card active">
-        <p class="task-title">Next-gen chat window for orchestrated agent work</p>
-        <div class="pill-row">
-          <span class="pill">4-review</span>
-          <span class="pill">Claude</span>
-          <span class="pill">3 runs</span>
-        </div>
-      </article>
-      <article class="task-card">
-        <p class="task-title">Project Drift control surface</p>
-        <div class="pill-row">
-          <span class="pill">2-ready</span>
-          <span class="pill">Design</span>
-        </div>
-      </article>
-      <article class="task-card">
-        <p class="task-title">Token usage heatmap</p>
-        <div class="pill-row">
-          <span class="pill">2-ready</span>
-          <span class="pill">Metrics</span>
-        </div>
-      </article>
-    </aside>
+  <div class="app">
+    <header class="top">
+      <div class="title">
+        <small>Agent Task Processor / Activity / Conversation</small>
+        <h1>Next-gen compact chatflow for orchestrated agent work</h1>
+      </div>
+      <div class="top-actions">
+        <span class="chip success">4-review</span>
+        <span class="chip">Run 3 active</span>
+        <span class="chip">Claude Opus 4.7</span>
+        <span class="chip warning">1 warning</span>
+        <span class="chip desktop-only">Inspector docked</span>
+      </div>
+    </header>
 
-    <main class="main">
-      <header class="topbar">
-        <div class="breadcrumb">Agent Task Processor / Review / Activity</div>
-        <h1>Next-gen chat window for orchestrated agent work</h1>
-      </header>
+    <main class="layout">
+      <section class="chat-shell" aria-label="Compact conversation">
+        <div class="toolbar">
+          <div class="segmented" aria-label="View mode">
+            <button class="active">Chat</button>
+            <button>Trace</button>
+            <button>Artifacts</button>
+          </div>
+          <div class="chips">
+            <span class="chip">All participants</span>
+            <span class="chip">Tools compact</span>
+            <span class="chip">Decisions inline</span>
+          </div>
+          <input class="search" value="Filter transcript" aria-label="Filter transcript">
+        </div>
 
-      <section class="session-strip" aria-label="Session summary">
-        <div class="metric"><b>3 runs</b><span>Latest active 2 min ago</span></div>
-        <div class="metric"><b>245 turns</b><span>Conversation projection</span></div>
-        <div class="metric"><b>148 tools</b><span>Collapsed into 9 bursts</span></div>
-        <div class="metric"><b>6 commits</b><span>2 files still dirty</span></div>
-        <div class="metric"><b>482k tokens</b><span>Job plus orchestrator</span></div>
-        <div class="metric"><b class="warning">1 warning</b><span>Heuristic fallback</span></div>
-      </section>
+        <div class="stream">
+          <div class="run-divider">Run 1 - initial implementation | 18 min | 96 tools | 4 commits</div>
 
-      <div class="workspace">
-        <section class="chat" aria-label="Conversation">
-          <div class="chat-toolbar">
-            <div class="segmented" aria-label="View mode">
-              <button class="active">Conversation</button>
-              <button>Trace</button>
-              <button>Artifacts</button>
+          <article class="message user">
+            <div class="bubble">
+              <div class="message-head"><b>You</b><span>Initial prompt</span></div>
+              <p>Build the next chat surface so tool use, orchestrator decisions, and user steering stay readable in long jobs.</p>
             </div>
-            <div class="filters">
-              <span class="pill">All actors</span>
-              <span class="pill">Tools collapsed</span>
-              <span class="pill">Failures visible</span>
+            <div class="avatar user" aria-label="You">Y</div>
+          </article>
+
+          <article class="message">
+            <div class="avatar agent" aria-label="Task Agent">A</div>
+            <div class="bubble">
+              <div class="message-head"><b>Task Agent</b><span>Claude</span><span class="chip">planning</span></div>
+              <p>I will keep the transcript readable first, then put raw events behind trace and artifact drill-downs.</p>
+            </div>
+          </article>
+
+          <div class="compact-event">
+            <div class="event-icon">T</div>
+            <div class="event-line tool">
+              <strong>Tools 96</strong>
+              <span>read 44 | search 22 | edit 12 | shell 9 | tests 4 | 1 failed | 14 min</span>
+              <button class="link-button">Expand</button>
             </div>
           </div>
 
-          <div class="stream">
-            <article class="run">
-              <header class="run-header">
-                <div>
-                  <strong>Run 1 - Initial implementation</strong>
-                  <span>Claude Opus 4.7 | 18 min | 96 tool calls | 4 commits</span>
-                </div>
-                <div class="pill-row">
-                  <span class="pill success">Done</span>
-                  <span class="pill">316k tokens</span>
-                </div>
-              </header>
-
-              <div class="message actor-user">
-                <div class="actor"><span class="rail"></span><div class="actor-name"><b>You</b><span>Initial prompt</span></div></div>
-                <div class="bubble"><p>Build the next chat surface so tool use, orchestrator decisions, and user steering stay readable in long jobs.</p></div>
+          <div class="compact-event">
+            <div></div>
+            <div class="bubble" style="padding-top: 7px;">
+              <div class="message-head"><b>Tool breakdown</b><span>expanded preview</span></div>
+              <div class="tool-grid">
+                <div class="tool-mini"><b>44</b>Read</div>
+                <div class="tool-mini"><b>22</b>Search</div>
+                <div class="tool-mini"><b>12</b>Edit</div>
+                <div class="tool-mini"><b>9</b>Shell</div>
+                <div class="tool-mini"><b>4</b>Tests</div>
+                <div class="tool-mini"><b style="color: var(--danger);">1</b>Failed</div>
               </div>
+            </div>
+          </div>
 
-              <div class="message actor-tool">
-                <div class="actor"><span class="rail"></span><div class="actor-name"><b>Tools</b><span>Collapsed burst</span></div></div>
-                <div class="bubble toolburst">
-                  <h2>Tools - 96 calls over 14 min</h2>
-                  <div class="tool-stats">
-                    <div class="tool-stat"><b>44</b><span>Read</span></div>
-                    <div class="tool-stat"><b>22</b><span>Search</span></div>
-                    <div class="tool-stat"><b>12</b><span>Edit</span></div>
-                    <div class="tool-stat"><b>9</b><span>Shell</span></div>
-                    <div class="tool-stat"><b class="danger">1</b><span>Failed</span></div>
-                  </div>
-                  <div class="pill-row">
-                    <span class="pill">Files: activity-log.ts, parser.ts, app.ts</span>
-                    <span class="pill">Tests: failed once, passed on retry</span>
-                    <span class="pill">Expand details</span>
-                  </div>
-                </div>
-              </div>
+          <article class="message">
+            <div class="avatar agent" aria-label="Task Agent">A</div>
+            <div class="bubble">
+              <div class="message-head"><b>Task Agent</b><span>Claude</span><span class="chip success">done</span></div>
+              <p>Implemented a compact conversation projection with inline tool bursts, actor labels, run separators, and a docked inspector for deeper evidence.</p>
+            </div>
+          </article>
 
-              <div class="message actor-agent">
-                <div class="actor"><span class="rail"></span><div class="actor-name"><b>Task Agent</b><span>Claude</span></div></div>
-                <div class="bubble"><p>Implemented the conversation projection, grouped tool bursts, actor labels, and run summaries. Playwright covers the tool-heavy archived job and the review job.</p></div>
-              </div>
-            </article>
+          <div class="run-divider">Run 2 - user steering and orchestrator reissue | 6 min | 21 tools | 1 commit</div>
 
-            <article class="run">
-              <header class="run-header">
-                <div>
-                  <strong>Run 2 - User steering and orchestrator reissue</strong>
-                  <span>Continuation | 6 min | 21 tool calls | 1 commit</span>
-                </div>
-                <div class="pill-row">
-                  <span class="pill warning">Reissued</span>
-                  <span class="pill">82k tokens</span>
-                </div>
-              </header>
+          <article class="message user">
+            <div class="bubble">
+              <div class="message-head"><b>You</b><span>Steering</span></div>
+              <p>Make the actor identity stronger, but keep the chat itself compact. I do not want the dashboard to overpower the flow.</p>
+            </div>
+            <div class="avatar user" aria-label="You">Y</div>
+          </article>
 
-              <div class="message actor-user">
-                <div class="actor"><span class="rail"></span><div class="actor-name"><b>You</b><span>Steering</span></div></div>
-                <div class="bubble"><p>Make actor identity stronger. The current chat makes it too hard to tell who is speaking.</p></div>
-              </div>
+          <div class="compact-event">
+            <div class="event-icon orch">O</div>
+            <div class="event-line orch">
+              <strong>Orchestrator reissued</strong>
+              <span>Agent reported done too fast, no commits, user follow-up not addressed, retry 1/1</span>
+              <button class="link-button">Why</button>
+            </div>
+          </div>
 
-              <div class="message actor-orch">
-                <div class="actor"><span class="rail"></span><div class="actor-name"><b>Orchestrator</b><span>Decision</span></div></div>
-                <div class="bubble decision">
-                  <h2>Decision - Reissue continuation</h2>
-                  <div class="kv">
-                    <span>Reason</span><span>Agent returned done after 4.6 s without addressing actor identity.</span>
-                    <span>Evidence</span><span>No commits, no screenshot update, sentinel matched `TASK_DONE`.</span>
-                    <span>Action</span><span>Continue same session with stronger framing.</span>
-                    <span>Budget</span><span>Retry 1/1, 6.2k orchestrator tokens.</span>
-                  </div>
-                </div>
-              </div>
+          <article class="message">
+            <div class="avatar agent" aria-label="Task Agent">A</div>
+            <div class="bubble">
+              <div class="message-head"><b>Task Agent</b><span>Claude</span><span class="chip">revision</span></div>
+              <p>Adjusted the visual hierarchy: normal chat bubbles stay compact, decisions become one-line events, and metrics move into the inspector.</p>
+            </div>
+          </article>
 
-              <div class="message actor-agent">
-                <div class="actor"><span class="rail"></span><div class="actor-name"><b>Task Agent</b><span>Claude</span></div></div>
-                <div class="bubble"><p>Added persistent actor rails, non-color labels, and compact run headers. The visual hierarchy now separates user, task agent, orchestrator, supervisor, supporting agent, tools, and system warnings.</p></div>
-              </div>
-            </article>
+          <div class="compact-event">
+            <div class="event-icon system">S</div>
+            <div class="event-line system">
+              <strong>Artifacts</strong>
+              <span>desktop screenshot, mobile screenshot, evidence JSON, source comparison notes</span>
+              <button class="link-button">Open</button>
+            </div>
+          </div>
 
-            <article class="run">
-              <header class="run-header">
-                <div>
-                  <strong>Run 3 - QA and supervisor review</strong>
-                  <span>Supporting run | 9 min | Playwright and screenshot evidence</span>
-                </div>
-                <div class="pill-row">
-                  <span class="pill success">Passed</span>
-                  <span class="pill">84k tokens</span>
-                </div>
-              </header>
+          <div class="run-divider">Run 3 - QA and supervisor review | 9 min | screenshots and tests</div>
 
-              <div class="message actor-support">
-                <div class="actor"><span class="rail"></span><div class="actor-name"><b>QA Agent</b><span>Playwright</span></div></div>
-                <div class="bubble artifact">
-                  <h2>Report - Chat scenarios covered</h2>
-                  <p>Desktop and mobile screenshots passed. Tool-heavy archive, review reissue, failed tool retry, and empty run states are covered.</p>
-                  <div class="pill-row">
-                    <span class="pill">7 screenshots</span>
-                    <span class="pill">5 specs</span>
-                    <span class="pill success">JSON parsed</span>
-                  </div>
-                </div>
-              </div>
+          <article class="message">
+            <div class="avatar support" aria-label="QA Agent">Q</div>
+            <div class="bubble">
+              <div class="message-head"><b>QA Agent</b><span>Playwright</span><span class="chip success">parsed report</span></div>
+              <p>Desktop and mobile screenshots render without overlap. Compact mode keeps all common cases visible without turning the transcript into a dashboard.</p>
+            </div>
+          </article>
 
-              <div class="message actor-supervisor">
-                <div class="actor"><span class="rail"></span><div class="actor-name"><b>Supervisor</b><span>Advisory</span></div></div>
-                <div class="bubble decision">
-                  <h2>Advisory - One layout risk remains</h2>
-                  <div class="kv">
-                    <span>Severity</span><span class="warning">Medium</span>
-                    <span>Observed</span><span>Composer may cover latest message below 390px height.</span>
-                    <span>Action</span><span>Create follow-up task or keep release behind feature flag.</span>
-                  </div>
-                </div>
-              </div>
-            </article>
+          <div class="compact-event">
+            <div class="event-icon supervisor">SV</div>
+            <div class="event-line supervisor">
+              <strong>Supervisor advisory</strong>
+              <span>Medium: verify composer does not cover last message below 390px height</span>
+              <button class="link-button">Details</button>
+            </div>
+          </div>
+        </div>
+
+        <footer class="composer">
+          <div class="chips">
+            <span class="chip">Mode: Continue</span>
+            <span class="chip">Target: Task agent</span>
+            <span class="chip">#currentJob</span>
+            <span class="chip">#latestRun</span>
+            <span class="chip">/review</span>
+            <span class="chip">/create-follow-up</span>
+          </div>
+          <div class="composer-row">
+            <div class="input">Write steering, ask the orchestrator to inspect, or attach context with #...</div>
+            <button class="stop">Stop</button>
+            <button class="send">Send</button>
+          </div>
+        </footer>
+      </section>
+
+      <aside class="inspector" aria-label="Docked inspector">
+        <div class="inspector-head">
+          <h2>Inspector</h2>
+          <span class="chip">Collapsible</span>
+        </div>
+
+        <section class="panel">
+          <h3>Session</h3>
+          <div class="metric-list">
+            <div class="metric"><b>3</b><span>Runs</span></div>
+            <div class="metric"><b>245</b><span>Turns</span></div>
+            <div class="metric"><b>148</b><span>Tools</span></div>
+            <div class="metric"><b>482k</b><span>Tokens</span></div>
           </div>
         </section>
 
-        <aside class="side" aria-label="Run and evidence panel">
-          <h2>Run Timeline</h2>
-          <div class="side-card">
-            <div class="timeline-item"><strong>Run 1</strong><span>Initial implementation, 96 tools, 4 commits</span></div>
-            <div class="timeline-item"><strong>Run 2</strong><span>User steering, orchestrator reissue</span></div>
-            <div class="timeline-item"><strong>Run 3</strong><span>QA agent report, screenshots</span></div>
+        <section class="panel">
+          <h3>Run timeline</h3>
+          <div class="run-list">
+            <div class="run-item"><b>Run 1</b>Initial implementation, 96 tools, 4 commits<div class="bar"><span style="--w: 82%;"></span></div></div>
+            <div class="run-item"><b>Run 2</b>User steering, orchestrator reissue<div class="bar"><span style="--w: 48%;"></span></div></div>
+            <div class="run-item"><b>Run 3</b>QA report, screenshots, advisory<div class="bar"><span style="--w: 36%;"></span></div></div>
           </div>
+        </section>
 
-          <div class="side-card">
-            <h3>Actors</h3>
-            <div class="pill-row">
-              <span class="pill">You 2</span>
-              <span class="pill">Agent 3</span>
-              <span class="pill">Orchestrator 1</span>
-              <span class="pill">Supervisor 1</span>
-              <span class="pill">Tools 9 bursts</span>
-            </div>
+        <section class="panel">
+          <h3>Participants</h3>
+          <div class="chips">
+            <span class="chip">You 2</span>
+            <span class="chip">Agent 4</span>
+            <span class="chip">Orchestrator 1</span>
+            <span class="chip">QA 1</span>
+            <span class="chip">Supervisor 1</span>
           </div>
+        </section>
 
-          <div class="side-card">
-            <h3>Evidence</h3>
-            <div class="pill-row">
-              <span class="pill">Commits 6</span>
-              <span class="pill">Tests 5</span>
-              <span class="pill">Screenshots 7</span>
-              <span class="pill">Reports 1</span>
-            </div>
+        <section class="panel">
+          <h3>Evidence</h3>
+          <div class="chips">
+            <span class="chip">Commits 6</span>
+            <span class="chip">Tests 5</span>
+            <span class="chip">Screenshots 7</span>
+            <span class="chip">Reports 1</span>
+            <span class="chip warning">Trace warning 1</span>
           </div>
-        </aside>
-      </div>
+        </section>
 
-      <footer class="composer">
-        <div class="pill-row" style="margin-bottom: 8px;">
-          <span class="pill">Mode: Continue</span>
-          <span class="pill">Target: Task agent</span>
-          <span class="pill">Context: current job, latest run, selected artifacts</span>
-        </div>
-        <div class="composer-grid">
-          <div class="input">Add steering, ask the orchestrator to inspect, or create a follow-up task...</div>
-          <button class="send">Send</button>
-        </div>
-      </footer>
+        <section class="panel">
+          <h3>Best-practice mapping</h3>
+          <div class="run-list">
+            <div class="run-item"><b>VS Code Copilot</b>Chat first, context chips, tool approvals, diffs outside transcript.</div>
+            <div class="run-item"><b>Claude Code</b>Slash commands and usage controls stay compact.</div>
+            <div class="run-item"><b>Gemini</b>Context files, tool inventory, approvals, and MCP visibility.</div>
+          </div>
+        </section>
+      </aside>
     </main>
   </div>
 </body>
 </html>
+

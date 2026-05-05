@@ -9,6 +9,7 @@ This folder is not existing product behavior. It is the target surface for the n
 - [ui.html](ui.html) - static visual mockup for the next-generation chat window.
 - [scenarios.md](scenarios.md) - typical cases the UI must render well.
 - [research.md](research.md) - Stable observations and external product research.
+- [best-practices-comparison.md](best-practices-comparison.md) - focused comparison with VS Code Copilot Chat, Claude Code, Gemini Code Assist, and Codex.
 - [evidence/stable-playwright-observations.json](evidence/stable-playwright-observations.json) - Playwright metrics from Stable.
 - [evidence/next-gen-chat-mockup-desktop.png](evidence/next-gen-chat-mockup-desktop.png) - rendered desktop screenshot of the proposed mockup.
 - [evidence/next-gen-chat-mockup-mobile.png](evidence/next-gen-chat-mockup-mobile.png) - rendered mobile screenshot of the proposed mockup.
@@ -18,7 +19,9 @@ This folder is not existing product behavior. It is the target surface for the n
 
 ## Recommendation
 
-The current Activity Log is useful evidence but not yet a great conversation surface. It exposes the raw stream too directly. In Stable, tool-heavy jobs already reach this density:
+The current Activity Log is useful evidence but not yet a great conversation surface. It exposes the raw stream too directly, and the first mockup overcorrected toward an operations dashboard. The next direction is a **compact developer chat** with an optional inspector, closer to GitHub Copilot Chat in VS Code.
+
+In Stable, tool-heavy jobs already reach this density:
 
 | Stable job | Conversation turns | Tool pills | Tool chips |
 |------------|--------------------|------------|------------|
@@ -28,37 +31,45 @@ The current Activity Log is useful evidence but not yet a great conversation sur
 
 At that size, the UI has to summarize by default and reveal details on demand. The important next step is not "make the log prettier"; it is to define the conversation grammar.
 
+The pure chatflow remains the center:
+
+- User and agent messages alternate like a normal chat.
+- Orchestrator, supervisor, tool, QA, and artifact events appear as compact inline rows.
+- Run metadata, tokens, commits, tests, screenshots, and raw trace filters dock into a side inspector that can collapse.
+- Large operational cards are expansion states, not the default.
+
 ## Design Goals
 
 1. **Actors are instantly recognizable.** User, task agent, orchestrator, supervisor, supporting agent, and tool runner need different visual anchors, not just differently worded messages.
-2. **Runs are the backbone.** A run is one CLI invocation between user inputs. The chat groups messages by run, with run-level status, model, duration, token usage, tests, commits, and outcome.
-3. **Tool use is a burst, not a wall.** Consecutive tools collapse into one compact tool-burst card: counts by tool family, failures, changed files, duration, and "expand details".
-4. **Orchestrator decisions are first-class.** Reissue, heuristic warning, circuit breaker, supervisor advisory, and user override should look like decisions with reason, evidence, and next action.
-5. **The raw trace never disappears.** Conversation mode is the default. Trace mode is one click away and can filter by actor, run, tool family, failure, or artifact.
-6. **Screen space is respected.** The default view should fit long jobs by using dense headers, compact actor rails, collapsed tool bursts, and sticky context instead of repeated banners.
-7. **Overlays never block core chat controls.** Stable currently shows click interception around conversation/trace controls in some states. The next UI must reserve layout space for run timeline, auto-eval banners, and composer controls.
+2. **Chatflow wins over dashboarding.** The default view is a compact transcript. Meta information is inline when urgent and in the inspector when supporting.
+3. **Runs are thin separators.** A run is one CLI invocation between user inputs, but run boundaries should be slim rows, not large containers around the whole chat.
+4. **Tool use is a burst, not a wall.** Consecutive tools collapse into one compact inline tool row: counts by tool family, failures, changed files, duration, and "expand details".
+5. **Orchestrator decisions are first-class but terse.** Reissue, heuristic warning, circuit breaker, supervisor advisory, and user override should be one-line decision rows by default. Expanded cards show reason, evidence, action, and budget.
+6. **The raw trace never disappears.** Conversation mode is the default. Trace mode is one click away and can filter by actor, run, tool family, failure, or artifact.
+7. **Screen space is respected.** The default view should fit long jobs by using dense headers, compact actor rails, collapsed tool bursts, and sticky context instead of repeated banners.
+8. **Overlays never block core chat controls.** Stable currently shows click interception around conversation/trace controls in some states. The next UI must reserve layout space for run timeline, auto-eval banners, and composer controls.
 
 ## Information Architecture
 
-The chat window should have four stacked layers:
+The chat window should have four layers:
 
 | Layer | Purpose | Default density |
 |-------|---------|-----------------|
-| Session header | Current task, run count, active actor, latest outcome, tokens, tool count, commits/tests | One compact row |
-| Run stack | Run cards as the unit of conversation | Collapsed summary with active run expanded |
-| Message stream | User, agent, orchestrator, supervisor, tool bursts, artifacts | Conversation mode |
-| Composer | Continue, steer, stop, accept, create follow-up | Sticky, mode-aware |
+| Compact header | Current task, state, active run, mode, latest warning | One slim row |
+| Message stream | Normal back-and-forth chat with inline events | Conversation mode |
+| Inspector | Runs, tokens, tools, commits, tests, screenshots, raw trace filters | Docked or collapsed |
+| Composer | Continue, steer, stop, accept, create follow-up, slash actions, context chips | Sticky, mode-aware |
 
 ## Actor Model
 
 | Actor | Visual treatment | Typical content |
 |-------|------------------|-----------------|
-| User | Right-aligned or warm accent, explicit "You" label | Initial prompt, steering, interruption, accept/reject |
-| Task agent | Main neutral rail, CLI/model badge | Work narrative, final result, blocked question |
-| Orchestrator | Blue decision rail, decision card body | Reissue, heuristic verdict, needs-input answer, circuit breaker |
-| Supervisor | Amber or red advisory rail | Stuck warning, health issue, emergency recommendation |
-| Supporting agent | Purple/teal secondary rail with skill badge | Security audit, QA check, design council, meta-analysis |
-| Tool runner | Compact gray burst card | Read, search, edit, shell, test, browser, screenshot |
+| User | Right-aligned bubble, warm avatar, explicit `You` label | Initial prompt, steering, interruption, accept/reject |
+| Task agent | Left-aligned bubble, CLI/model badge | Work narrative, final result, blocked question |
+| Orchestrator | Compact blue inline decision row | Reissue, heuristic verdict, needs-input answer, circuit breaker |
+| Supervisor | Compact amber advisory row | Stuck warning, health issue, emergency recommendation |
+| Supporting agent | Left-aligned compact report row with skill badge | Security audit, QA check, design council, meta-analysis |
+| Tool runner | Inline disclosure row | Read, search, edit, shell, test, browser, screenshot |
 | System | Low-emphasis utility row | Parser warning, missing schema, attachment copied |
 
 The actor label should be visible even when the message body is collapsed. Color alone is not enough.

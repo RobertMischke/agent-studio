@@ -112,11 +112,13 @@ The task chat is not a simple user/assistant transcript. It is a project convers
 - Tool runners create low-level evidence such as reads, searches, edits, shell commands, browser runs, tests, and screenshots.
 - System rows explain parser warnings, missing structured output, or artifact handling.
 
-The UI must make those actors recognizable without relying on color alone. Labels, actor rails, badges, and typed cards are part of the evidence model.
+The UI must make those actors recognizable without relying on color alone. Labels, compact avatars or rails, role chips, and typed inline rows are part of the evidence model.
 
-Tool calls are especially dense. Conversation mode should collapse contiguous tool activity into tool bursts with counts, failures, duration, touched files, and artifact links. Trace mode keeps every raw entry available. A failed tool burst must show its failure count even while collapsed.
+Tool calls are especially dense. Conversation mode should collapse contiguous tool activity into compact tool bursts with counts, failures, duration, touched files, and artifact links. Trace mode keeps every raw entry available. A failed tool burst must show its failure count even while collapsed.
 
-Orchestrator and supervisor output should render as decision or advisory cards, not as ordinary model prose. Each card should answer: what was decided, why, which evidence was used, what action follows, and which budget or retry limit applies.
+Orchestrator and supervisor output should render as terse decision or advisory rows in the normal chatflow, not as ordinary model prose and not as oversized dashboard cards. Expanded details answer: what was decided, why, which evidence was used, what action follows, and which budget or retry limit applies.
+
+The meta layer belongs beside or behind the transcript. Metrics, run timelines, tokens, screenshots, commits, tests, and raw trace filters can dock into an inspector when there is room, but the central column remains the compact chat.
 
 The next-generation chat mockup lives at [mockups/chat-window-next-gen](mockups/chat-window-next-gen/README.md).
 

@@ -1,6 +1,6 @@
 # Next-Generation Chat Window Research
 
-This research combines Stable observations from Playwright with official external product documentation. It focuses on interaction patterns, not visual cloning.
+This research combines Stable observations from Playwright with official external product documentation. It focuses on interaction patterns, not visual cloning. The revised mockup treats GitHub Copilot Chat in VS Code as the leading compact-chat reference.
 
 ## Stable Observation
 
@@ -50,7 +50,7 @@ Sources:
 
 GitHub and VS Code describe chat as multiple surfaces: chat view, inline chat, quick chat, and command-line chat. VS Code agent mode includes agent target, agent picker, permission level, model selection, context mentions, image context, tool configuration, checkpoints, diffs, and an Agent Logs view for chronological tool calls, LLM requests, and prompt discovery.
 
-Relevant pattern: the conversation is the human-friendly layer; agent logs and tool traces remain separate but reachable.
+Relevant pattern: the conversation is the human-friendly layer; agent logs and tool traces remain separate but reachable. In the VS Code docs, the chat view is explicitly for multi-turn conversations and agentic workflows, while inline chat and quick chat cover tighter contexts. Context is added through implicit active-file state, `#` mentions for files, folders, codebase, terminal selection, and tools, `@` mentions for specialized participants, images, and browser elements. Review and manage changes are handled through inline diffs, keep/undo controls, checkpoints, staging, and discard rather than dumping all diffs into the transcript. Tool approvals are configured centrally and grouped by tool source.
 
 Sources:
 
@@ -90,8 +90,11 @@ This means the best UI is not a simple two-party chat. It is a conversation time
 
 1. Conversation mode should be the default for review.
 2. Trace mode should be optimized for debugging and can remain dense.
-3. Tool calls should collapse into grouped bursts with counts, failures, duration, and artifacts.
-4. Decisions should render as cards with reason, evidence, action, and budget.
-5. Context should be visible near the composer: current run, target actor, attached files, mode, and follow-up intent.
-6. Failed schema parsing or weak log parsing should surface as a system warning inside the stream, not as a silent formatting collapse.
+3. The default conversation should look like a compact back-and-forth chat, not a dashboard.
+4. Tool calls should collapse into grouped inline bursts with counts, failures, duration, and artifacts.
+5. Decisions should render as terse inline rows first; expanded cards show reason, evidence, action, and budget.
+6. Context should be visible near the composer: current run, target actor, attached files, mode, slash actions, and follow-up intent.
+7. Metrics, raw logs, token details, screenshots, and trace filters belong in a collapsible inspector.
+8. Failed schema parsing or weak log parsing should surface as a system warning inside the stream, not as a silent formatting collapse.
 
+The detailed comparison lives in [best-practices-comparison.md](best-practices-comparison.md).
