@@ -44,7 +44,9 @@ import { NextGenChatWorkbenchPrototypeComponent } from './components/mockups/nex
          [class.app--task-open]="!!selectedJob()"
          data-testid="app-root">
       @if (featureFlags.nextGenChatPrototype()) {
-        <app-next-gen-chat-workbench-prototype />
+        @defer (when featureFlags.nextGenChatPrototype()) {
+          <app-next-gen-chat-workbench-prototype />
+        }
       }
       <header class="header">
         <div class="header__brand">

@@ -924,7 +924,6 @@ interface ChatTurn {
 
     .task-list__header span,
     .task-card__meta,
-    .detail-head__copy span,
     .context__head span,
     .sheet__head span {
       color: var(--muted);
@@ -1080,27 +1079,6 @@ interface ChatTurn {
       background: color-mix(in srgb, var(--accent) 8%, var(--surface)) !important;
     }
 
-    .detail-head {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      align-items: center;
-      gap: 10px;
-      padding: 9px 10px;
-      background: var(--surface);
-      border-bottom: 1px solid var(--line);
-    }
-
-    .detail-head h1 {
-      margin: 1px 0 0;
-      font-size: 15px;
-      line-height: 1.2;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .detail-head__chips,
-    .workbench__buttons,
     .composer__bar > div,
     .context__head > div:last-child {
       display: flex;
@@ -1123,41 +1101,6 @@ interface ChatTurn {
       min-height: 26px;
       padding: 3px 8px;
       font-size: 12px;
-    }
-
-    .tabs {
-      display: flex;
-      min-width: 0;
-      overflow-x: auto;
-      background: var(--chrome);
-      border-bottom: 1px solid var(--line);
-    }
-
-    .tabs button {
-      min-height: 31px;
-      border: 0;
-      border-right: 1px solid var(--line);
-      background: transparent;
-      color: var(--muted);
-      padding: 0 12px;
-      font-size: 12px;
-    }
-
-    .tabs__active {
-      color: var(--text) !important;
-      background: var(--surface) !important;
-      box-shadow: inset 0 -2px 0 var(--accent);
-    }
-
-    .summary-strip {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      padding: 5px 8px;
-      min-height: 34px;
-      overflow-x: auto;
-      background: var(--bg);
-      border-bottom: 1px solid var(--line);
     }
 
     .summary-chip {
@@ -1230,20 +1173,6 @@ interface ChatTurn {
       grid-area: hint;
       color: var(--muted);
       font-size: 10px;
-    }
-
-    .inspector-rail__task {
-      display: grid;
-      gap: 3px;
-      color: var(--muted);
-      font-size: 10px;
-      line-height: 1.2;
-    }
-
-    .inspector-rail__task strong {
-      color: var(--text);
-      font-size: 11px;
-      line-height: 1.25;
     }
 
     .inspector-rail__tabs,
@@ -1337,30 +1266,6 @@ interface ChatTurn {
       grid-template-rows: minmax(0, 1fr);
     }
 
-    .workbench__bar {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      align-items: center;
-      gap: 8px;
-      min-height: 34px;
-      padding: 4px 6px;
-      border: 1px solid var(--line);
-      border-radius: 8px 8px 0 0;
-      background: var(--chrome);
-    }
-
-    .workbench__title {
-      min-width: 0;
-      display: flex;
-      align-items: center;
-      gap: 7px;
-      color: var(--muted);
-      font-size: 12px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
     .badge--ok {
       color: var(--ok);
       border-color: color-mix(in srgb, var(--ok) 42%, var(--line));
@@ -1443,38 +1348,9 @@ interface ChatTurn {
       padding: 8px 12px 4px;
     }
 
-    .scenario-row {
-      display: flex;
-      gap: 5px;
-      overflow-x: auto;
-      margin-bottom: 8px;
-    }
-
     .scenario-row__active {
       border-color: var(--accent) !important;
       color: var(--accent) !important;
-    }
-
-    .source-banner {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      align-items: center;
-      gap: 8px;
-      padding: 8px 10px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: var(--surface);
-      color: var(--muted);
-      font-size: 13px;
-      margin-bottom: 9px;
-    }
-
-    .source-banner button {
-      border: 1px solid var(--line);
-      background: var(--surface-soft);
-      border-radius: 6px;
-      min-height: 24px;
-      color: var(--text);
     }
 
     .run-marker {
@@ -2239,7 +2115,13 @@ interface ChatTurn {
     .ng-chat-prototype[data-density="compact"] .turn { margin: 7px 0; }
     .ng-chat-prototype[data-density="compact"] .turn__body { padding: 8px 10px; }
     .ng-chat-prototype[data-density="compact"] .turn__body p { font-size: 14px; line-height: 1.38; }
-    .ng-chat-prototype[data-density="compact"] .composer__input { min-height: 34px; }
+    .ng-chat-prototype[data-density="compact"] .composer__input { min-height: 34px; padding: 8px 10px; }
+    .ng-chat-prototype[data-density="compact"] .composer__quick { display: none; }
+    .ng-chat-prototype[data-density="compact"] .composer__bar { min-height: 34px; }
+    .ng-chat-prototype[data-density="compact"] .detail-chrome { grid-template-columns: 28px minmax(0, 1fr) auto auto; }
+    .ng-chat-prototype[data-density="compact"] .detail-chrome__edit,
+    .ng-chat-prototype[data-density="compact"] .detail-chrome__state,
+    .ng-chat-prototype[data-density="compact"] .detail-chrome__panes span { display: none; }
 
     @media (max-width: 1080px) {
       .workspace,
@@ -2261,10 +2143,17 @@ interface ChatTurn {
       .workspace,
       .statusbar { grid-column: 1; }
       .topbar__title span { display: none; }
-      .detail-head,
-      .workbench__bar,
+      .detail { grid-template-rows: auto minmax(0, 1fr); }
+      .detail-chrome {
+        min-height: 34px;
+        grid-template-columns: 28px minmax(0, 1fr) auto;
+      }
+      .detail-chrome__edit,
+      .detail-chrome__state,
+      .detail-chrome__panes,
+      .detail-chrome__complete,
+      .project-pill { display: none; }
       .composer__bar { grid-template-columns: 1fr; }
-      .detail-head__chips { overflow-x: auto; }
       .workbench,
       .ng-chat-prototype[data-density="compact"] .workbench { grid-template-columns: minmax(0, 1fr); }
       .inspector-rail { display: none; }
@@ -2276,9 +2165,10 @@ interface ChatTurn {
       .turn,
       .turn[data-tone="user"] { grid-template-columns: minmax(0, 1fr); justify-content: stretch; }
       .turn__avatar { display: none; }
-      .summary-strip { scrollbar-width: thin; }
       .debug-grid { grid-template-columns: 1fr; }
       .guide-grid { grid-template-columns: 1fr; }
+      .run-popover__grid,
+      .function-grid { grid-template-columns: 1fr; }
     }
   `]
 })
@@ -2351,6 +2241,14 @@ export class NextGenChatWorkbenchPrototypeComponent {
     { icon: 'image', label: 'Shots', title: 'Screenshots tab' },
   ];
 
+  readonly detailPanels: Array<{ icon: string; label: string; title: string; pane?: WorkbenchPane; active?: boolean }> = [
+    { icon: 'file', label: 'Task', title: 'Prompt and task history', pane: 'source' },
+    { icon: 'chat', label: 'Chat', title: 'Next generation chat tab', pane: 'result', active: true },
+    { icon: 'git', label: 'Git', title: 'Git pane beside the conversation', pane: 'git' },
+    { icon: 'image', label: 'Shots', title: 'Screenshot evidence', pane: 'preview' },
+    { icon: 'terminal', label: 'Trace', title: 'Activity and raw trace drill-down', pane: 'debug' },
+  ];
+
   readonly paneButtons: Array<{ id: WorkbenchPane; label: string; short: string; icon: string }> = [
     { id: 'chat', label: 'Chat only', short: 'Chat', icon: 'chat' },
     { id: 'result', label: 'Result summary', short: 'Result', icon: 'check' },
@@ -2366,6 +2264,21 @@ export class NextGenChatWorkbenchPrototypeComponent {
     { id: 'wait', label: 'Wait', icon: 'clock' },
     { id: 'visual', label: 'Images', icon: 'image' },
     { id: 'drift', label: 'Drift', icon: 'warning' },
+  ];
+
+  readonly composeModes: Array<{ id: ComposeMode; label: string; icon: string; description: string }> = [
+    { id: 'continue', label: 'Continue', icon: 'play', description: 'Continue the running task or restart the next run with this follow-up.' },
+    { id: 'extend', label: 'Extend task', icon: 'file', description: 'Append a task extension to prompt history before the next run.' },
+    { id: 'steer', label: 'Steer', icon: 'panel', description: 'Send steering to the orchestrator without changing the task body.' },
+    { id: 'followup', label: 'Follow-up job', icon: 'plus', description: 'Create a queued follow-up task from this chat turn.' },
+  ];
+
+  readonly debugTabs: Array<{ id: DebugTab; label: string }> = [
+    { id: 'overview', label: 'Overview' },
+    { id: 'actors', label: 'Actors' },
+    { id: 'tools', label: 'Tools' },
+    { id: 'tokens', label: 'Tokens' },
+    { id: 'trace', label: 'Trace' },
   ];
 
   readonly summaryChips: SummaryChip[] = [
@@ -2384,6 +2297,28 @@ export class NextGenChatWorkbenchPrototypeComponent {
     { id: 'tools', title: 'Collapse tool-heavy chat logs into bursts', state: 'ready', meta: 'order 70', active: false },
     { id: 'actors', title: 'Chat actor rails and decision cards', state: 'ready', meta: 'order 80', active: false },
     { id: 'debug', title: 'Fullscreen verbose debug view', state: 'ready', meta: 'order 90', active: false },
+  ];
+
+  readonly runMarkerDetails = [
+    { label: 'CLI', value: 'Codex' },
+    { label: 'Model', value: '5.5 Extra High' },
+    { label: 'Mode', value: 'Continue' },
+    { label: 'Session', value: 'preserved' },
+    { label: 'Trace', value: 'lines 418-731' },
+    { label: 'Outcome', value: 'review' },
+    { label: 'Budget', value: '42k tokens' },
+    { label: 'Artifacts', value: '4 screenshots' },
+  ];
+
+  readonly featureParity: Array<{ label: string; icon: string; note: string; pane?: WorkbenchPane }> = [
+    { label: 'Prompt history', icon: 'file', note: 'Original prompt plus task extensions remain visible.', pane: 'source' },
+    { label: 'Activity and Trace', icon: 'terminal', note: 'Raw CLI output stays available through the debug lens.', pane: 'debug' },
+    { label: 'Run timeline', icon: 'clock', note: 'Run cards become thin chat markers with popover metadata.', pane: 'debug' },
+    { label: 'Git review', icon: 'git', note: 'Files, commits, diff, commit message, and commit action remain accessible.', pane: 'git' },
+    { label: 'Screenshots', icon: 'image', note: 'Durable screenshot evidence opens in the preview pane.', pane: 'preview' },
+    { label: 'Token usage', icon: 'tokens', note: 'Task and project token pressure stay visible without crowding the transcript.', pane: 'debug' },
+    { label: 'Side sheet', icon: 'panelOpen', note: 'Project-level steering remains in the resizable side sheet.' },
+    { label: 'Start/Stop', icon: 'play', note: 'Execution controls move into the compact composer command deck.' },
   ];
 
   readonly turns: ChatTurn[] = [
@@ -2543,6 +2478,15 @@ export class NextGenChatWorkbenchPrototypeComponent {
       case 'debug': return 'Tokens, actors, waits, and raw links';
       case 'source': return 'Where this becomes real Angular code';
       default: return 'Human-readable outcome and risk signals';
+    }
+  });
+
+  readonly composerModeLabel = computed(() => {
+    switch (this.composerMode()) {
+      case 'extend': return 'Extend';
+      case 'steer': return 'Steer';
+      case 'followup': return 'Create job';
+      default: return 'Continue';
     }
   });
 
