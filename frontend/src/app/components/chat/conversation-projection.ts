@@ -110,6 +110,36 @@ export function projectConversation(
       }
     }
 
+    // Contiguous tool / failed-tool groups collapse into a single ToolBurst
+    // event so the chat does not paint a wall of chips. The window stops at
+    // the first non-tool group; user / agent / orchestrator turns always
+    // break a burst even when the agent immediately resumes tool calls
+    // afterwards (the natural reading rhythm is tool burst → reply).
+    const burstFamily = classifyToolGroup(group);
+    if (burstFamily) {
+      const burstGroups: { group: ActivityLogGroup; family: ToolFamily }[] = [
+        { group, family: burstFamily }
+      ];
+      let lookahead = i + 1;
+      while (lookahead < groups.length) {
+        const next = groups[lookahead];
+        const nextFamily = classifyToolGroup(next);
+        if (!nextFamily) break;
+        burstGroups.push({ group: next, family: nextFamily });
+        lookahead += 1;
+      }
+      const lastIdx = lookahead - 1;
+      const lastRange = rangeForGroup(groups[lastIdx], indexByLine, ctx.source);
+      const mergedRange: RawLineRange = {
+        source: ctx.source,
+        start: range.start,
+        end: Math.max(range.end, lastRange.end)
+      };
+      events.push(toMergedToolBurst(burstGroups, mergedRange, currentRun?.run?.index));
+      i = lastIdx;
+      continue;
+    }
+
     const ev = projectGroup(group, range, currentRun, seenParserDedupeKeys);
     if (ev) events.push(...ev);
   }
@@ -315,23 +345,11 @@ function projectGroup(
     ];
   }
 
-  if (isToolKind(group.kind)) {
-    return [toToolBurst(group, range, runId)];
-  }
-
-  // The activity-log parser collapses any failed action into kind='error',
-  // erasing the original tool family. To keep the workbench summary's
-  // failure count meaningful, re-classify error groups whose first line
-  // looks like a tool action ("x Run ...", "x Edit ...") as failed tool
-  // bursts. Plain error prose still surfaces as a `message.taskAgent`
-  // with severity=error.
-  if (group.kind === 'error') {
-    const recovered = recoverToolFamilyFromErrorLine(firstLine.text);
-    if (recovered) {
-      return [toToolBurstFromError(group, range, runId, recovered)];
-    }
-  }
-
+  // Tool / tool-error groups never reach this branch: the main loop
+  // collapses contiguous tool activity into a single merged ToolBurst
+  // before delegating non-tool groups here. That keeps every burst in
+  // the conversation a single dense row and lets the renderer summarise
+  // multi-family activity without re-walking the event list.
   if (group.kind === 'error' || group.status === 'error') {
     return [
       {
@@ -371,34 +389,22 @@ function isToolKind(k: ActivityLogKind): k is Exclude<ToolFamily, 'other'> {
   return TOOL_KINDS.includes(k);
 }
 
-function toToolBurst(group: ActivityLogGroup, range: RawLineRange, runId?: number) {
-  const families: Partial<Record<ToolFamily, number>> = {};
-  const samples: { [family: string]: string | undefined } = {};
-  const family = group.kind as ToolFamily;
-  const count = inferBatchSize(group);
-  families[family] = count;
-  samples[family] = group.subtitle || group.title;
-
-  const failures = group.status === 'error' ? count : 0;
-  const durationMs = computeDurationMs(group.lines);
-  const files: string[] = [];
-  if (family === 'edit' && group.subtitle) files.push(group.subtitle);
-
-  return {
-    id: `${range.source}:${range.start}-${range.end}:tool`,
-    kind: 'toolBurst' as const,
-    timestamp: group.lines[0].timestamp,
-    runId,
-    rawRange: range,
-    severity: failures > 0 ? ('error' as const) : ('info' as const),
-    count,
-    families,
-    failures,
-    durationMs,
-    files: files.length > 0 ? files : undefined,
-    samples,
-    collapsedByDefault: true
-  };
+/**
+ * Returns the tool family for a group that should fold into a contiguous
+ * tool burst, or `null` when the group is not tool-like. The error case
+ * exists because the activity-log parser collapses any failing action into
+ * kind='error', erasing the original verb; we recover it from the raw
+ * line text so a failed `Run npm test` still folds into the burst with
+ * `failures + 1` instead of escaping as a generic agent error message.
+ */
+function classifyToolGroup(group: ActivityLogGroup): ToolFamily | null {
+  if (isToolKind(group.kind)) return group.kind as ToolFamily;
+  if (group.kind === 'error') {
+    const firstLine = group.lines[0];
+    if (!firstLine) return null;
+    return recoverToolFamilyFromErrorLine(firstLine.text);
+  }
+  return null;
 }
 
 function recoverToolFamilyFromErrorLine(text: string): ToolFamily | null {
@@ -416,31 +422,164 @@ function recoverToolFamilyFromErrorLine(text: string): ToolFamily | null {
   return null;
 }
 
-function toToolBurstFromError(
-  group: ActivityLogGroup,
+interface BurstMember {
+  group: ActivityLogGroup;
+  family: ToolFamily;
+}
+
+function toMergedToolBurst(
+  members: ReadonlyArray<BurstMember>,
   range: RawLineRange,
-  runId: number | undefined,
-  family: ToolFamily
+  runId: number | undefined
 ) {
   const families: Partial<Record<ToolFamily, number>> = {};
   const samples: { [family: string]: string | undefined } = {};
-  families[family] = 1;
-  samples[family] = group.subtitle || group.title;
+  const files: string[] = [];
+  const artifacts: string[] = [];
+  const tests: { command: string; status: 'pass' | 'fail' | 'unknown' }[] = [];
+  const allLines: CliOutputLine[] = [];
+
+  let count = 0;
+  let failures = 0;
+
+  for (const { group, family } of members) {
+    const batchSize = inferBatchSize(group);
+    const isFailure = group.kind === 'error' || group.status === 'error';
+    families[family] = (families[family] ?? 0) + batchSize;
+    count += batchSize;
+    if (isFailure) failures += batchSize;
+    if (!samples[family]) {
+      samples[family] = group.subtitle || stripBatchSuffix(group.title);
+    }
+    for (const path of collectFilePaths(group, family)) {
+      if (!files.includes(path)) files.push(path);
+      if (looksLikeArtifact(path) && !artifacts.includes(path)) {
+        artifacts.push(path);
+      }
+    }
+    if (family === 'command') {
+      const test = detectTest(group);
+      if (test) tests.push(test);
+    }
+    allLines.push(...group.lines);
+  }
+
+  // Tests sometimes appear as "run", "rerun", "passed in 320ms". Roll
+  // multiple identical commands into a single test entry whose final
+  // status is the latest non-unknown status seen, so a fail/retry/pass
+  // pattern surfaces as one passing test rather than three rows.
+  const collapsedTests = collapseTestsByCommand(tests);
 
   return {
-    id: `${range.source}:${range.start}-${range.end}:tool-error`,
+    id: `${range.source}:${range.start}-${range.end}:tool`,
     kind: 'toolBurst' as const,
-    timestamp: group.lines[0].timestamp,
+    timestamp: members[0].group.lines[0].timestamp,
     runId,
     rawRange: range,
-    severity: 'error' as const,
-    count: 1,
+    severity: failures > 0 ? ('error' as const) : ('info' as const),
+    count,
     families,
-    failures: 1,
-    durationMs: computeDurationMs(group.lines),
+    failures,
+    durationMs: computeDurationMs(allLines),
+    files: files.length > 0 ? files : undefined,
+    artifacts: artifacts.length > 0 ? artifacts : undefined,
+    tests: collapsedTests.length > 0 ? collapsedTests : undefined,
     samples,
     collapsedByDefault: true
   };
+}
+
+function stripBatchSuffix(title: string): string {
+  return title.replace(/\s*(?:×\d+|\(\d+\))\s*$/, '').trim();
+}
+
+/**
+ * Pulls likely file paths out of a tool group. Read / search lines carry
+ * the path in the title verb ("Read prompt.md") and again as the `|`
+ * continuation. Edit groups put the path in the subtitle. Commands
+ * generally do not name a file, so we leave their files alone.
+ */
+function collectFilePaths(group: ActivityLogGroup, family: ToolFamily): string[] {
+  const out: string[] = [];
+  const push = (raw: string | undefined): void => {
+    if (!raw) return;
+    const cleaned = raw.replace(/^[\s|`\\/_-]+/, '').trim();
+    if (!cleaned) return;
+    if (cleaned.length > 200) return;
+    if (!/[./\\]/.test(cleaned)) return;
+    if (!out.includes(cleaned)) out.push(cleaned);
+  };
+  if (family === 'read' || family === 'search' || family === 'edit') {
+    push(group.subtitle);
+    const verbMatch = /^(?:Read|Edit|Write|Create|Update|Apply|Delete|Move)\s+(.+)$/i.exec(stripBatchSuffix(group.title));
+    if (verbMatch) push(verbMatch[1]);
+  }
+  for (const line of group.lines) {
+    if (line.text && /^\s*\|/.test(line.text)) {
+      push(line.text);
+    }
+  }
+  return out;
+}
+
+function looksLikeArtifact(path: string): boolean {
+  return /\.(png|jpg|jpeg|gif|svg|webp|pdf|html|json|md)$/i.test(path)
+    || /(?:^|[\\/])(results|screenshots|artifacts|evidence)[\\/]/i.test(path);
+}
+
+const TEST_VERB_RE = /\b(test|spec|playwright|pytest|jest|vitest|mocha|xunit|dotnet test|npm (?:run )?test|npx playwright)\b/i;
+
+function detectTest(group: ActivityLogGroup): { command: string; status: 'pass' | 'fail' | 'unknown' } | null {
+  // The activity-log parser may have merged a fail / retry / pass run into
+  // one "Commands ×N" batch group whose title no longer mentions "test".
+  // Recover the test signal from any underlying line so the burst still
+  // surfaces a Test rollup row in expanded mode.
+  const actionLines = group.lines.filter((l) => /^\s*[xX*]\s+/.test(l.text));
+  const looksLikeTest = TEST_VERB_RE.test(group.title)
+    || actionLines.some((l) => TEST_VERB_RE.test(l.text));
+  if (!looksLikeTest) return null;
+
+  const sourceTitle = actionLines[0]?.text ?? group.title;
+  const labelMatch = /^\s*[xX*]\s+(.+)$/.exec(sourceTitle);
+  const baseTitle = stripBatchSuffix((labelMatch?.[1] ?? sourceTitle).trim());
+
+  // Strip the "(shell)" trailer and the parser's "exited with error N" /
+  // "failed" suffix so the de-dup key stays stable across pass/fail/retry
+  // runs of the same command.
+  const command = baseTitle
+    .replace(/:\s*(?:exited with error\s*\d*|failed.*)$/i, '')
+    .replace(/\s*\(shell\)\s*$/i, '')
+    .trim();
+
+  let status: 'pass' | 'fail' | 'unknown' = 'unknown';
+  const isFailure = group.kind === 'error' || group.status === 'error'
+    || /:\s*exited with error|\bfailed\b|\bFAIL\b/.test(group.title);
+  const passEvidence = group.lines.some(
+    (l) => /\bpassed\b|✓|\bsucceeded\b|\bOK\b|all tests pass/i.test(l.text)
+  );
+  if (passEvidence) status = 'pass';
+  else if (isFailure) status = 'fail';
+  return { command, status };
+}
+
+function collapseTestsByCommand(
+  tests: ReadonlyArray<{ command: string; status: 'pass' | 'fail' | 'unknown' }>
+): { command: string; status: 'pass' | 'fail' | 'unknown' }[] {
+  const order: string[] = [];
+  const map = new Map<string, 'pass' | 'fail' | 'unknown'>();
+  for (const t of tests) {
+    if (!map.has(t.command)) {
+      order.push(t.command);
+      map.set(t.command, t.status);
+      continue;
+    }
+    const prev = map.get(t.command)!;
+    // Latest non-unknown status wins so retry-then-pass surfaces as pass,
+    // and pass-then-fail surfaces as fail.
+    if (t.status !== 'unknown') map.set(t.command, t.status);
+    else if (prev === 'unknown') map.set(t.command, t.status);
+  }
+  return order.map((cmd) => ({ command: cmd, status: map.get(cmd)! }));
 }
 
 function inferBatchSize(group: ActivityLogGroup): number {

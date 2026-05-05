@@ -49,22 +49,23 @@ The latest iteration is a tall workbench. Task tabs, summary metrics, split pres
 
 The nav and status-bar iteration adds a more VS Code-like control model. The activity bar is clickable, the top chrome exposes task chat, Git split, project side sheet, and queue shortcuts, and the status bar becomes a dense action surface instead of a passive label. Queue, token usage, health, visual evidence, and CLI/model configuration open as lightweight bottom popovers. The goal is to keep professional working height for chat and adjacent panes while still making observability, tokens, automation state, and run configuration one click away.
 
-The next iteration treats every workbench pane as optional. Chat is no longer assumed to be permanent: it can be closed while the Git review surface stays open. Git review now owns the source/editor preview, with a changes list on the left and the selected source diff on the right. A split slider models user-controlled width between chat and the adjacent pane, with preset actions for wider chat or wider editor.
+The next iteration treats every workbench pane as optional and additive. Chat is no longer assumed to be permanent: it can be closed while Git review, Result, Preview, or Debug stays open. Git review now owns the source/editor preview, with a changes list on the left and the selected source diff on the right. The old range slider is gone; width is modeled by a real vertical splitter with keyboard support.
 
-The rail now has inline icons, visible labels in comfortable density, tooltip titles, and a `Workbench` guide button that explains why the controls live there. Compact density collapses the same controls back to icons so the chat area stays large. The prototype is also deferred behind the feature flag, so the normal app does not pay the prototype bundle cost when the flag is off.
+The rail now has inline icons, visible labels in comfortable density, tooltip titles, and a `Quick views` guide button that explains why the controls live there. Compact density collapses the same controls back to icons so the chat area stays large. The detail header no longer duplicates the pane switcher; the rail owns pinning, the top bar owns global toggles, and the status bar owns runtime controls. The prototype is also deferred behind the feature flag, so the normal app does not pay the prototype bundle cost when the flag is off.
 
 The prototype currently covers:
 
-- Task detail shell with project chip, editable-title affordance, state pill, existing pane toggles, Complete & Next, task list, Chat tab, side sheet, and status bar.
+- Task detail shell with project chip, editable-title affordance, state pill, Complete & Next, narrow task list, Chat tab, side sheet, and status bar.
 - Workbench panes: Result, Git plus source diff, Preview, Debug, and optional Chat.
-- Left inspector rail with task tabs, run state, tokens, commits, files, screenshots, failed retry, duration, split presets, and scenario switches.
+- Left quick-view rail with run state, tokens, commits, files, screenshots, failed retry, duration, additive pane pinning, and scenario switches.
 - Rail guide modal that explains the control model.
 - Clickable activity bar and top navigation for task chat, Git split, project side sheet, and queue.
 - Interactive status bar with queue, token, health, visual evidence, CLI/model, density, theme, and command-palette entry points.
 - Status-bar popovers for queue automation, token heat, system health, evidence shortcuts, and model controls.
-- Optional chat toggle, context-pane toggle, and split-width slider.
+- Optional chat toggle, additive context-pane toggles, "pin all" review panes, and a vertical splitter between chat and pinned review panes.
 - Clickable run marker popover with CLI, model, session, trace range, outcome, token budget, and artifact counts.
 - Scenario controls: Review, Tool burst, Wait loop, Images, Drift.
+- Decision scenario covering reissue, heuristic, needs-input, circuit breaker, capture-fail, and schema-drift rows.
 - Tool-burst expansion.
 - Composer command deck with Continue, Extend task, Steer, Follow-up job, attachments, context chips, permissions, CLI, model, Start, Pause, and send action.
 - Git change preview next to chat.
@@ -73,6 +74,9 @@ The prototype currently covers:
 - Light and dark theme.
 - Comfortable and compact density.
 - Mobile collapse.
+- Persistent actor rails for User, Task Agent, Orchestrator, Supervisor, Supporting Agent, Tool Runner, and System with non-color cues (icon, glyph, shape, label, accent stripe).
+- Compact decision rows for reissue, heuristic, needs-input, circuit breaker, capture fail, and schema drift, expandable to reason / evidence / action / retry budget / token usage / next step plus a Trace link.
+- Target-aware user intervention chips (current run, next run, orchestrator, follow-up task) on user turns.
 
 ## Screenshots
 
@@ -83,6 +87,7 @@ The durable screenshots live in `docs/mockups/chat-window-next-gen/evidence/`:
 - `next-gen-chat-angular-prototype-status-tokens.png`
 - `next-gen-chat-angular-prototype-status-health.png`
 - `next-gen-chat-angular-prototype-status-model.png`
+- `next-gen-chat-angular-prototype-all-panes.png`
 - `next-gen-chat-angular-prototype-git-editor-split.png`
 - `next-gen-chat-angular-prototype-git-no-chat.png`
 - `next-gen-chat-angular-prototype-run-popover.png`
@@ -92,9 +97,13 @@ The durable screenshots live in `docs/mockups/chat-window-next-gen/evidence/`:
 - `next-gen-chat-angular-prototype-lightbox.png`
 - `next-gen-chat-angular-prototype-debug-dark.png`
 - `next-gen-chat-angular-prototype-mobile.png`
+- `next-gen-chat-actor-rails-default.png`
+- `next-gen-chat-actor-rails-decisions-light.png`
+- `next-gen-chat-actor-rails-decisions-dark.png`
+- `next-gen-chat-actor-rails-decisions-compact.png`
 
 ## Next Step
 
 Use this prototype as a clickable handoff for the queued `Frontend:NextGenChat` implementation tasks. The production implementation should not copy the prototype wholesale. It should extract the proved interaction model and re-implement it against real `ConversationEvent` data, existing task evidence, and existing side-sheet behavior.
 
-The key layout rule from this iteration is vertical discipline: do not put task metadata, tokens, run state, or scenario controls into stacked horizontal bars above the transcript. Put them in the left inspector, the pane header, the composer toolbar, the status bar, or a drill-down surface. The chat itself is also optional: professional review mode must support closing chat and using the available height for Git changes plus source editor/diff.
+The key layout rule from this iteration is vertical discipline: do not put task metadata, tokens, run state, or scenario controls into stacked horizontal bars above the transcript. Put them in the left rail, the pane header, the composer toolbar, the status bar, or a drill-down surface. The chat itself is also optional: professional review mode must support closing chat and using the available height for Git changes plus source editor/diff. Pane visibility is additive, but it is not a full docking system.

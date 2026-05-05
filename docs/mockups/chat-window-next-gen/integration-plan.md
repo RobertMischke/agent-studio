@@ -16,8 +16,8 @@ The existing implementation already has valuable pieces:
 | CLI usage and quota | `frontend/src/app/components/cli-usage-sheet.ts`, `quota-strip.ts`, `usage-hover-panel.ts`, `status-bar.ts` | Subscription windows, sessions, model picker, workspace token rollup |
 | Token detail | `token-summary-block.ts`, `workspace-token-timeline.ts`, `JobInfo.tokenSummary`, `lastUsage` | Project totals, workspace timeline, per-job bubble, session usage |
 | VS Code layout work | `docs/mockups/vscode-layout/`, `Frontend:VsCodeLayout` | Status bar, compact chrome, meta-panel direction, feature-flagged rollout |
-| Chat workbench research | `docs/mockups/chat-window-next-gen/workbench-layout-research.md` | Chat-only, Chat plus Result, Chat plus Git, Chat plus Preview, Chat plus Debug presets; summary strip; compact icon actions |
-| Angular clickware prototype | `frontend/src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts`, `atp.flag.nextGenChatPrototype` | Interactive shell for reviewing tall workbench layout, left inspector rail, split presets, side sheet, Git/source split, light/dark, density, debug, and mobile collapse |
+| Chat workbench research | `docs/mockups/chat-window-next-gen/workbench-layout-research.md` | Chat-only, Chat plus Result, Chat plus Git, Chat plus Preview, Chat plus Debug presets; additive pinned panes; compact icon actions |
+| Angular clickware prototype | `frontend/src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts`, `atp.flag.nextGenChatPrototype` | Interactive shell for reviewing tall workbench layout, left quick-view rail, additive pane pinning, side sheet, Git/source split, light/dark, density, debug, and mobile collapse |
 
 Any implementation that removes one of these without a replacement is not aligned with the mockup.
 
@@ -82,8 +82,8 @@ Migration shape:
 4. Keep the run timeline available, but render run boundaries as slim markers in the transcript and move detailed run filters into an inspector or expansion.
 5. Keep the existing composer behavior. Move start, stop, model, config, and mode controls into a compact composer toolbar only after projection and rendering are stable.
 6. Show token usage as a compact context chip or expanded row. Do not remove the existing token surfaces.
-7. Add the v7 workbench split host after the shared renderer is stable. The split presets are Chat only, Result, Git, Preview, and Debug. The right pane is a preview and drill-down launcher, not a replacement for Files, Commits, Screenshots, token details, or Verbose Debug.
-8. Persist split ratios only after the named panes are stable. The prototype proves the interaction with a slider, while production should still start with deterministic presets and then promote resizing once Playwright can lock it.
+7. Add the v7 workbench split host after the shared renderer is stable. The pane model is additive: Chat, Result, Git, Preview, and Debug are independent toggles, and Git owns the source editor/diff surface. The panes are previews and drill-down launchers, not replacements for Files, Commits, Screenshots, token details, or Verbose Debug.
+8. Persist split ratios only after the named panes are stable. The prototype proves the interaction with a real vertical splitter, while production should still start with deterministic presets and then promote resizing once Playwright can lock it.
 9. Keep vertical space sacred. Do not stack task metadata, scenario controls, token chips, run summaries, and layout buttons in horizontal bands above the transcript. Move them into a left inspector rail, compact pane headers, composer toolbar, status bar, or drill-down views so chat and the adjacent pane can use almost the full task height.
 
 ### Project Side Sheet
@@ -141,7 +141,7 @@ Debug and project surfaces:
 6. Adapt the project side sheet to the shared renderer and theme tokens.
 7. Move model, start, stop, config, context chips, and mode controls into the compact composer toolbar.
 8. Use the Angular clickware prototype as the interaction reference, but re-implement production behavior against real `ConversationEvent` data and existing hosts. Do not copy static prototype arrays into production code.
-9. Add the task Chat workbench split presets and left inspector rail: Chat only, Result, Git, Preview, and Debug. Source files and diffs belong inside Git changes, not in a standalone source browser.
+9. Add the task Chat workbench additive panes and left quick-view rail: Chat, Result, Git, Preview, and Debug. Chat is optional, all review panes can be visible together, and source files and diffs belong inside Git changes, not in a standalone source browser.
 10. Add Verbose Debug using the same projected events plus run, token, artifact, and screenshot aggregates.
 11. Add Playwright coverage for current layout off, NextGenChat on, VsCodeLayout on, both flags on, light theme, dark theme, mobile, side sheet wide, wait-loop scenario, image lightbox, schema-drift row, workbench Git/source split, workbench compact density, chat-only preset, optional chat closed, and Verbose Debug.
 

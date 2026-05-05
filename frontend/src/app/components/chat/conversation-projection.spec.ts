@@ -55,16 +55,24 @@ describe('projectConversation', () => {
     expect((events[0] as any).action).toBe('reissue');
   });
 
-  it('collapses a read/search/edit run into toolBurst events with raw line ranges', () => {
+  it('collapses a contiguous read/search/edit run into a single multi-family toolBurst', () => {
     const events = projectConversation({ source: SOURCE, lines: toolBurstFragment() });
-    // Reads compress, search and edit each produce their own burst.
+    // The whole tool-heavy fragment must surface as one dense row, not a wall
+    // of chips. Family counts and total stay accurate so renderers can show
+    // "12 reads · 3 searches · 4 edits" inside that single row.
     const tools = events.filter((e) => e.kind === 'toolBurst');
-    expect(tools.length).toBeGreaterThanOrEqual(3);
-    const reads = tools.find((t) => 'families' in t && (t as any).families.read);
-    expect(reads).toBeDefined();
-    expect((reads as any).count).toBe(3);
-    expect(reads!.collapsedByDefault).toBe(true);
-    // Every event must keep an end >= start raw range pointing at the source.
+    expect(tools).toHaveLength(1);
+    const burst = tools[0] as any;
+    expect(burst.count).toBe(5);
+    expect(burst.families.read).toBe(3);
+    expect(burst.families.search).toBe(1);
+    expect(burst.families.edit).toBe(1);
+    expect(burst.failures).toBe(0);
+    expect(burst.collapsedByDefault).toBe(true);
+    expect(burst.rawRange.source).toBe(SOURCE);
+    // Range spans the whole tool-heavy stretch so Trace can jump back to it.
+    expect(burst.rawRange.start).toBe(1);
+    expect(burst.rawRange.end).toBeGreaterThan(burst.rawRange.start);
     for (const ev of events) {
       expect(ev.rawRange.source).toBe(SOURCE);
       expect(ev.rawRange.end).toBeGreaterThanOrEqual(ev.rawRange.start);
@@ -262,20 +270,65 @@ describe('projectConversation', () => {
     expect((summary as any).headline).toMatch(/token/i);
   });
 
-  it('models a test fail/retry/pass burst with failure visible in the workbench aggregate', () => {
+  it('models a test fail/retry/pass burst as one merged burst with failure + tests rollup', () => {
     const events = projectConversation({
       source: SOURCE,
       lines: testFailRetryFragment(),
       emitWorkbenchSummary: true
     });
-    const tools = events.filter((e) => e.kind === 'toolBurst');
-    expect(tools.length).toBeGreaterThan(0);
-    const failures = tools.reduce((acc, t: any) => acc + t.failures, 0);
-    expect(failures).toBeGreaterThan(0);
+    const tools = events.filter((e) => e.kind === 'toolBurst') as any[];
+    // Fail/retry/pass is one tool burst, not three. Failure stays visible in
+    // both the burst row and the summary headline.
+    expect(tools).toHaveLength(1);
+    const burst = tools[0];
+    expect(burst.failures).toBeGreaterThan(0);
+    expect(burst.severity).toBe('error');
+    expect(burst.tests).toBeDefined();
+    expect(burst.tests.length).toBe(1);
+    // Final status survives the retry: the latest non-unknown status wins.
+    expect(burst.tests[0].status).toBe('pass');
 
     const summary = events.find((e) => e.kind === 'workbench.summary') as any;
     expect(summary.aggregate.toolFailureCount).toBeGreaterThan(0);
     expect(summary.headline).toMatch(/failure/);
+  });
+
+  it('extracts touched files and artifact paths from contiguous tool bursts', () => {
+    const events = projectConversation({
+      source: SOURCE,
+      lines: [
+        ...toolBurstFragment(),
+        ...imageArtifactFragment()
+      ]
+    });
+    const tools = events.filter((e) => e.kind === 'toolBurst') as any[];
+    expect(tools).toHaveLength(1);
+    const burst = tools[0];
+    expect(burst.files).toBeDefined();
+    // Files come from read / search / edit groups (subtitle + verb-derived).
+    expect(burst.files.some((f: string) => f.includes('prompt.md'))).toBe(true);
+    expect(burst.files.some((f: string) => f.includes('feature-flags.service.ts'))).toBe(true);
+    // Artifacts split out from the file list when the path looks like a
+    // result / screenshot / report.
+    expect(burst.artifacts).toBeDefined();
+    expect(burst.artifacts.some((a: string) => a.endsWith('.png'))).toBe(true);
+  });
+
+  it('does not merge tool bursts across an agent reply', () => {
+    const events = projectConversation({
+      source: SOURCE,
+      lines: [
+        ...toolBurstFragment(),
+        ...agentTextFragment(),
+        ...toolBurstFragment()
+      ]
+    });
+    const tools = events.filter((e) => e.kind === 'toolBurst');
+    // The agent prose breaks the burst so the chat reads as
+    // tool-burst → reply → tool-burst.
+    expect(tools).toHaveLength(2);
+    const agent = events.find((e) => e.kind === 'message.taskAgent');
+    expect(agent).toBeDefined();
   });
 
   it('produces a workbench.summary aggregate with state, run, tokens, commits, files, screenshots, and warnings', () => {

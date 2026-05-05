@@ -5,11 +5,14 @@ type WorkbenchPane = 'result' | 'git' | 'preview' | 'debug' | 'chat';
 type ContextPane = Exclude<WorkbenchPane, 'chat'>;
 type Density = 'comfortable' | 'compact';
 type Theme = 'light' | 'dark';
-type Scenario = 'review' | 'tools' | 'wait' | 'visual' | 'drift';
+type Scenario = 'review' | 'tools' | 'wait' | 'visual' | 'drift' | 'decisions';
 type DebugTab = 'overview' | 'actors' | 'tools' | 'tokens' | 'trace';
 type ComposeMode = 'continue' | 'extend' | 'steer' | 'followup';
 type ActivityTarget = 'projects' | 'tasks' | 'search' | 'git' | 'qa' | 'tokens';
 type StatusPanel = 'health' | 'queue' | 'tokens' | 'evidence' | 'model';
+type ActorKind = 'user' | 'agent' | 'orchestrator' | 'supervisor' | 'support' | 'tool' | 'system';
+type InterventionTarget = 'currentRun' | 'nextRun' | 'orchestrator' | 'followUp';
+type DecisionKind = 'reissue' | 'heuristic' | 'needsInput' | 'circuit' | 'captureFail' | 'drift';
 
 interface SummaryChip {
   label: string;
@@ -19,15 +22,44 @@ interface SummaryChip {
   tone?: 'ok' | 'warn' | 'danger';
 }
 
-interface ChatTurn {
-  actor: string;
-  role: string;
-  tone: 'user' | 'agent' | 'orchestrator' | 'qa' | 'system';
+interface ActorMeta {
+  kind: ActorKind;
+  label: string;
+  glyph: string;
+  icon: string;
+  shape: 'circle' | 'rounded' | 'square' | 'hex' | 'shield' | 'triangle' | 'pill';
+  help: string;
+}
+
+interface ChatTurnEntry {
+  kind: 'turn';
+  id: string;
+  actor: ActorKind;
   title: string;
   body: string;
   meta?: string;
   actions?: string[];
+  intervention?: InterventionTarget;
 }
+
+interface DecisionEntry {
+  kind: 'decision';
+  id: string;
+  decision: DecisionKind;
+  actor: ActorKind;
+  title: string;
+  summary: string;
+  tone: 'info' | 'warn' | 'danger';
+  reason: string;
+  evidence: string;
+  action: string;
+  retry: string;
+  tokens: string;
+  traceRange: string;
+  nextStep: string;
+}
+
+type TranscriptEntry = ChatTurnEntry | DecisionEntry;
 
 @Component({
   selector: 'app-next-gen-chat-workbench-prototype',
@@ -186,21 +218,6 @@ interface ChatTurn {
               </svg>
             </button>
             <span class="detail-chrome__state">2-ready</span>
-            <nav class="detail-chrome__panes" aria-label="Pin task panes">
-              @for (panel of detailPanels; track panel.label) {
-                <button [class.detail-chrome__pane--active]="isPaneButtonActive(panel.pane)"
-                        [attr.title]="panel.title"
-                        [attr.aria-label]="panel.title"
-                        (click)="togglePane(panel.pane)">
-                  <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
-                    @for (path of iconPath(panel.icon); track path) {
-                      <path [attr.d]="path"></path>
-                    }
-                  </svg>
-                  <span>{{ panel.label }}</span>
-                </button>
-              }
-            </nav>
             <button class="detail-chrome__complete" title="Complete and move to next task">Complete & Next</button>
           </header>
 
@@ -267,6 +284,7 @@ interface ChatTurn {
                   <button [class.scenario-row__active]="activeScenario() === scenario.id"
                           [attr.title]="scenario.label"
                           [attr.aria-label]="scenario.label"
+                          [attr.data-testid]="'prototype-scenario-' + scenario.id"
                           (click)="activeScenario.set(scenario.id)">
                     <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
                       @for (path of iconPath(scenario.icon); track path) {
@@ -352,27 +370,131 @@ interface ChatTurn {
                   </aside>
                 }
 
-                @for (turn of visibleTurns(); track turn.title) {
-                  <article class="turn" [attr.data-tone]="turn.tone">
-                    <div class="turn__avatar">{{ turn.actor }}</div>
-                    <div class="turn__body">
-                      <header>
-                        <strong>{{ turn.title }}</strong>
-                        <span>{{ turn.role }}</span>
-                        @if (turn.meta) {
-                          <em>{{ turn.meta }}</em>
-                        }
-                      </header>
-                      <p>{{ turn.body }}</p>
-                      @if (turn.actions?.length) {
-                        <div class="turn__actions">
-                          @for (action of turn.actions; track action) {
-                            <button (click)="handleAction(action)">{{ action }}</button>
+                <div class="actor-key" data-testid="prototype-actor-key" aria-label="Actors active in this run">
+                  <span class="actor-key__label">Actors</span>
+                  @for (kind of actorRailItems; track kind) {
+                    <span class="actor-key__chip"
+                          [attr.data-actor]="kind"
+                          [attr.data-shape]="actorMeta(kind).shape"
+                          [attr.title]="actorMeta(kind).help"
+                          [attr.data-testid]="'prototype-actor-chip-' + kind">
+                      <span class="actor-avatar"
+                            [attr.data-shape]="actorMeta(kind).shape"
+                            aria-hidden="true">
+                        <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                          @for (path of iconPath(actorMeta(kind).icon); track path) {
+                            <path [attr.d]="path"></path>
+                          }
+                        </svg>
+                        <i>{{ actorMeta(kind).glyph }}</i>
+                      </span>
+                      <b>{{ actorMeta(kind).label }}</b>
+                      <em>{{ actorRailCounts()[kind] }}</em>
+                    </span>
+                  }
+                </div>
+
+                @for (entry of visibleTurns(); track entry.id) {
+                  @switch (entry.kind) {
+                    @case ('turn') {
+                      <article class="turn"
+                               [attr.data-actor]="entry.actor"
+                               [attr.data-shape]="actorMeta(entry.actor).shape"
+                               [attr.data-testid]="'prototype-turn-' + entry.actor">
+                        <span class="actor-avatar turn__avatar"
+                              [attr.data-shape]="actorMeta(entry.actor).shape"
+                              [attr.aria-label]="actorMeta(entry.actor).label">
+                          <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            @for (path of iconPath(actorMeta(entry.actor).icon); track path) {
+                              <path [attr.d]="path"></path>
+                            }
+                          </svg>
+                          <i>{{ actorMeta(entry.actor).glyph }}</i>
+                        </span>
+                        <div class="turn__body">
+                          <header>
+                            <strong>{{ entry.title }}</strong>
+                            <span class="turn__role">{{ actorMeta(entry.actor).label }}</span>
+                            @if (entry.intervention) {
+                              <span class="turn__target"
+                                    [attr.data-target]="entry.intervention"
+                                    [attr.title]="interventionMeta(entry.intervention).help"
+                                    [attr.data-testid]="'prototype-target-' + entry.intervention">
+                                <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                  @for (path of iconPath(interventionMeta(entry.intervention).icon); track path) {
+                                    <path [attr.d]="path"></path>
+                                  }
+                                </svg>
+                                <span>&rarr; {{ interventionMeta(entry.intervention).label }}</span>
+                              </span>
+                            }
+                            @if (entry.meta) {
+                              <em>{{ entry.meta }}</em>
+                            }
+                          </header>
+                          <p>{{ entry.body }}</p>
+                          @if (entry.actions?.length) {
+                            <div class="turn__actions">
+                              @for (action of entry.actions; track action) {
+                                <button (click)="handleAction(action)">{{ action }}</button>
+                              }
+                            </div>
                           }
                         </div>
-                      }
-                    </div>
-                  </article>
+                      </article>
+                    }
+                    @case ('decision') {
+                      <article class="decision"
+                               [attr.data-actor]="entry.actor"
+                               [attr.data-decision]="entry.decision"
+                               [attr.data-tone]="entry.tone"
+                               [attr.data-expanded]="isDecisionExpanded(entry.id)"
+                               [attr.data-testid]="'prototype-decision-' + entry.decision">
+                        <button class="decision__row"
+                                type="button"
+                                (click)="toggleDecision(entry.id)"
+                                [attr.aria-expanded]="isDecisionExpanded(entry.id)"
+                                [attr.aria-controls]="'decision-detail-' + entry.id">
+                          <span class="actor-avatar"
+                                [attr.data-shape]="actorMeta(entry.actor).shape"
+                                aria-hidden="true">
+                            <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                              @for (path of iconPath(decisionMeta[entry.decision].icon); track path) {
+                                <path [attr.d]="path"></path>
+                              }
+                            </svg>
+                            <i>{{ actorMeta(entry.actor).glyph }}</i>
+                          </span>
+                          <span class="decision__lead">
+                            <strong>{{ decisionMeta[entry.decision].label }}</strong>
+                            <span>{{ entry.title }}</span>
+                          </span>
+                          <span class="decision__summary">{{ entry.summary }}</span>
+                          <span class="decision__retry">{{ entry.retry }}</span>
+                          <b>{{ isDecisionExpanded(entry.id) ? 'Hide' : 'Details' }}</b>
+                        </button>
+                        @if (isDecisionExpanded(entry.id)) {
+                          <div class="decision__detail"
+                               [attr.id]="'decision-detail-' + entry.id"
+                               [attr.data-testid]="'prototype-decision-detail-' + entry.decision">
+                            <dl>
+                              <div><dt>Reason</dt><dd>{{ entry.reason }}</dd></div>
+                              <div><dt>Evidence</dt><dd>{{ entry.evidence }}</dd></div>
+                              <div><dt>Action</dt><dd>{{ entry.action }}</dd></div>
+                              <div><dt>Retry budget</dt><dd>{{ entry.retry }}</dd></div>
+                              <div><dt>Token usage</dt><dd>{{ entry.tokens }}</dd></div>
+                              <div><dt>Next step</dt><dd>{{ entry.nextStep }}</dd></div>
+                            </dl>
+                            <footer>
+                              <button (click)="openTrace(entry.traceRange)">Open trace · {{ entry.traceRange }}</button>
+                              <button (click)="setPane('debug')">Pin debug pane</button>
+                              <button (click)="debugOpen.set(true)">Verbose Debug</button>
+                            </footer>
+                          </div>
+                        }
+                      </article>
+                    }
+                  }
                 }
 
                 <button class="tool-burst"
@@ -380,7 +502,7 @@ interface ChatTurn {
                         (click)="toolOpen.set(!toolOpen())"
                         data-testid="prototype-tool-burst">
                   <strong>Tools 28</strong>
-                  <span>read 12 · search 7 · edit 4 · shell 3 · browser 2 · 1 failed · 4 artifacts</span>
+                  <span>read 12 - search 7 - edit 4 - shell 3 - browser 2 - 1 failed - 4 artifacts</span>
                   <b>{{ toolOpen() ? 'close' : 'open' }}</b>
                 </button>
                 @if (toolOpen()) {
@@ -1208,7 +1330,7 @@ interface ChatTurn {
       min-width: 0;
       min-height: 38px;
       display: grid;
-      grid-template-columns: 30px minmax(0, 1fr) 28px auto auto auto;
+      grid-template-columns: 30px minmax(0, 1fr) 28px auto auto;
       align-items: center;
       gap: 6px;
       padding: 4px 8px;
@@ -1248,7 +1370,6 @@ interface ChatTurn {
       gap: 5px;
       color: var(--muted);
       font-size: 10px;
-      text-transform: uppercase;
     }
 
     .project-pill b {
@@ -1348,9 +1469,9 @@ interface ChatTurn {
     }
 
     .summary-chip strong { color: var(--text); }
-    .summary-chip[data-tone="ok"] { border-color: color-mix(in srgb, var(--ok) 48%, var(--line)); }
-    .summary-chip[data-tone="warn"] { border-color: color-mix(in srgb, var(--warn) 58%, var(--line)); color: var(--warn); }
-    .summary-chip[data-tone="danger"] { border-color: color-mix(in srgb, var(--danger) 58%, var(--line)); color: var(--danger); }
+    .summary-chip[data-tone="ok"] { border-color: var(--ok); }
+    .summary-chip[data-tone="warn"] { border-color: var(--warn); color: var(--warn); }
+    .summary-chip[data-tone="danger"] { border-color: var(--danger); color: var(--danger); }
 
     .workbench {
       min-height: 0;
@@ -1401,16 +1522,13 @@ interface ChatTurn {
       text-overflow: ellipsis;
       white-space: nowrap;
       font-size: 11px;
-      font-weight: 700;
     }
 
     .rail-guide small {
       grid-area: hint;
       color: var(--muted);
-      font-size: 9px;
     }
 
-    .inspector-rail__tabs,
     .inspector-rail__modes,
     .inspector-rail__scenarios,
     .inspector-rail__summary {
@@ -1418,17 +1536,13 @@ interface ChatTurn {
       gap: 5px;
     }
 
-    .inspector-rail__tabs b,
     .inspector-rail__modes b,
     .inspector-rail__scenarios b,
     .inspector-rail__summary b {
       color: var(--muted);
       font-size: 10px;
-      font-weight: 800;
-      text-transform: uppercase;
     }
 
-    .inspector-rail__tabs button,
     .inspector-rail__scenarios button,
     .rail-action {
       width: 100%;
@@ -1447,7 +1561,6 @@ interface ChatTurn {
       padding: 0 5px;
     }
 
-    .inspector-rail__tabs button span,
     .inspector-rail__scenarios button span,
     .rail-action span {
       min-width: 0;
@@ -1456,8 +1569,6 @@ interface ChatTurn {
       white-space: nowrap;
     }
 
-    .inspector-rail__active,
-    .inspector-rail__tabs button:hover,
     .inspector-rail__scenarios button:hover,
     .rail-action:hover,
     .rail-action.icon-btn--active {
@@ -1503,7 +1614,7 @@ interface ChatTurn {
 
     .badge--ok {
       color: var(--ok);
-      border-color: color-mix(in srgb, var(--ok) 42%, var(--line));
+      border-color: var(--ok);
       border-radius: 999px;
     }
 
@@ -1536,12 +1647,10 @@ interface ChatTurn {
     }
 
     .workbench-splitter span {
-      width: 1px;
+      width: 2px;
       height: 48px;
       border-radius: 999px;
       background: var(--line-strong);
-      box-shadow: -2px 0 0 var(--line), 2px 0 0 var(--line);
-      opacity: 0.82;
     }
 
     .workbench-splitter:hover,
@@ -1555,12 +1664,6 @@ interface ChatTurn {
     .workbench-splitter:focus-visible span,
     .workbench__body[data-split-dragging="true"] .workbench-splitter span {
       background: var(--accent);
-      box-shadow: -2px 0 0 color-mix(in srgb, var(--accent) 32%, transparent),
-                  2px 0 0 color-mix(in srgb, var(--accent) 32%, transparent);
-    }
-
-    .workbench__body--chat-only {
-      grid-template-columns: minmax(0, 1fr);
     }
 
     .conversation {
@@ -1745,39 +1848,358 @@ interface ChatTurn {
       margin: 10px 0;
     }
 
-    .turn[data-tone="user"] {
+    .turn[data-actor="user"] {
       grid-template-columns: minmax(0, 650px);
       justify-content: end;
     }
 
-    .turn__avatar {
+    .actor-avatar {
       width: 28px;
       height: 28px;
-      border-radius: 50%;
       display: grid;
       place-items: center;
-      color: #fff;
+      color: var(--surface);
       background: var(--accent);
       font-weight: 700;
-      font-size: 11px;
+      font-size: 10px;
       margin-top: 2px;
+      position: relative;
+      flex: 0 0 auto;
     }
 
-    .turn[data-tone="user"] .turn__avatar { display: none; }
-    .turn[data-tone="orchestrator"] .turn__avatar { background: var(--purple); }
-    .turn[data-tone="qa"] .turn__avatar { background: var(--teal); }
-    .turn[data-tone="system"] .turn__avatar { background: var(--warn); }
+    .actor-avatar .svg-icon {
+      width: 13px;
+      height: 13px;
+      color: var(--surface);
+    }
+
+    .actor-avatar i {
+      position: absolute;
+      right: -3px;
+      bottom: -3px;
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      background: var(--surface);
+      color: var(--text);
+      border: 1px solid var(--line);
+      display: grid;
+      place-items: center;
+      font-size: 9px;
+      font-style: normal;
+      font-weight: 800;
+    }
+
+    .actor-avatar[data-shape="circle"] { border-radius: 50%; }
+    .actor-avatar[data-shape="rounded"] { border-radius: 8px; }
+    .actor-avatar[data-shape="square"] { border-radius: 3px; }
+    .actor-avatar[data-shape="hex"] { clip-path: polygon(25% 6%, 75% 6%, 100% 50%, 75% 94%, 25% 94%, 0% 50%); border-radius: 0; }
+    .actor-avatar[data-shape="shield"] { clip-path: polygon(50% 0, 100% 18%, 100% 65%, 50% 100%, 0 65%, 0 18%); border-radius: 0; }
+    .actor-avatar[data-shape="triangle"] { clip-path: polygon(50% 6%, 100% 96%, 0 96%); border-radius: 0; }
+    .actor-avatar[data-shape="pill"] { border-radius: 999px; }
+
+    .actor-avatar[data-shape="hex"] i,
+    .actor-avatar[data-shape="shield"] i,
+    .actor-avatar[data-shape="triangle"] i { display: none; }
+
+    .turn[data-actor="user"] .turn__avatar { display: none; }
+    .turn[data-actor="agent"] .turn__avatar { background: var(--accent); }
+    .turn[data-actor="orchestrator"] .turn__avatar { background: var(--purple); }
+    .turn[data-actor="supervisor"] .turn__avatar { background: var(--warn); }
+    .turn[data-actor="support"] .turn__avatar { background: var(--teal); }
+    .turn[data-actor="tool"] .turn__avatar { background: color-mix(in srgb, var(--text) 70%, var(--muted)); }
+    .turn[data-actor="system"] .turn__avatar { background: var(--danger); }
 
     .turn__body {
       border: 1px solid var(--line);
+      border-left: 3px solid var(--line-strong);
       border-radius: 8px;
       background: var(--surface);
       padding: 10px 12px;
       min-width: 0;
+      position: relative;
     }
 
-    .turn[data-tone="user"] .turn__body {
+    .turn[data-actor="user"] .turn__body {
       background: var(--surface-soft);
+      border-left-color: var(--text);
+    }
+    .turn[data-actor="agent"] .turn__body { border-left-color: var(--accent); }
+    .turn[data-actor="orchestrator"] .turn__body { border-left-color: var(--purple); }
+    .turn[data-actor="supervisor"] .turn__body {
+      border-left-color: var(--warn);
+      background: color-mix(in srgb, var(--warn) 5%, var(--surface));
+    }
+    .turn[data-actor="support"] .turn__body { border-left-color: var(--teal); }
+    .turn[data-actor="tool"] .turn__body {
+      border-left-style: dashed;
+      border-left-color: var(--muted);
+      background: var(--surface-soft);
+    }
+    .turn[data-actor="system"] .turn__body {
+      border-left-color: var(--danger);
+      background: color-mix(in srgb, var(--danger) 5%, var(--surface));
+    }
+
+    .turn__role {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 1px 7px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface-soft);
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .turn[data-actor="user"] .turn__role { background: var(--text); color: var(--surface); border-color: var(--text); }
+    .turn[data-actor="agent"] .turn__role { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); }
+    .turn[data-actor="orchestrator"] .turn__role { color: var(--purple); border-color: color-mix(in srgb, var(--purple) 50%, var(--line)); }
+    .turn[data-actor="supervisor"] .turn__role { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 60%, var(--line)); }
+    .turn[data-actor="support"] .turn__role { color: var(--teal); border-color: color-mix(in srgb, var(--teal) 50%, var(--line)); }
+    .turn[data-actor="tool"] .turn__role { color: var(--muted); border-style: dashed; }
+    .turn[data-actor="system"] .turn__role { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 60%, var(--line)); }
+
+    .turn__target {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 1px 7px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--surface);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    .turn__target .svg-icon { width: 12px; height: 12px; }
+    .turn__target[data-target="currentRun"] { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); }
+    .turn__target[data-target="nextRun"] { color: var(--teal); border-color: color-mix(in srgb, var(--teal) 55%, var(--line)); }
+    .turn__target[data-target="orchestrator"] { color: var(--purple); border-color: color-mix(in srgb, var(--purple) 55%, var(--line)); }
+    .turn__target[data-target="followUp"] { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 55%, var(--line)); }
+
+    .actor-key {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 8px;
+      margin: 0 0 6px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      font-size: 11px;
+    }
+
+    .actor-key__label {
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-right: 2px;
+    }
+
+    .actor-key__chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 1px 7px 1px 2px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface-soft);
+      color: var(--text);
+      white-space: nowrap;
+    }
+
+    .actor-key__chip .actor-avatar {
+      width: 18px;
+      height: 18px;
+      margin: 0;
+      display: grid !important;
+    }
+
+    .actor-key__chip .actor-avatar .svg-icon { width: 10px; height: 10px; }
+    .actor-key__chip .actor-avatar i { display: none; }
+
+    .actor-key__chip b {
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .actor-key__chip em {
+      font-style: normal;
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 700;
+      min-width: 14px;
+      text-align: right;
+    }
+
+    .actor-key__chip[data-actor="user"] .actor-avatar { background: var(--text); }
+    .actor-key__chip[data-actor="agent"] .actor-avatar { background: var(--accent); }
+    .actor-key__chip[data-actor="orchestrator"] .actor-avatar { background: var(--purple); }
+    .actor-key__chip[data-actor="supervisor"] .actor-avatar { background: var(--warn); }
+    .actor-key__chip[data-actor="support"] .actor-avatar { background: var(--teal); }
+    .actor-key__chip[data-actor="tool"] .actor-avatar { background: color-mix(in srgb, var(--text) 70%, var(--muted)); }
+    .actor-key__chip[data-actor="system"] .actor-avatar { background: var(--danger); }
+
+    .decision {
+      display: block;
+      margin: 8px 0;
+      border: 1px solid var(--line);
+      border-left-width: 3px;
+      border-radius: 8px;
+      background: var(--surface);
+      overflow: hidden;
+    }
+
+    .decision[data-tone="info"] { border-left-color: var(--purple); }
+    .decision[data-tone="warn"] {
+      border-left-color: var(--warn);
+      background: color-mix(in srgb, var(--warn) 4%, var(--surface));
+    }
+    .decision[data-tone="danger"] {
+      border-left-color: var(--danger);
+      background: color-mix(in srgb, var(--danger) 5%, var(--surface));
+    }
+
+    .decision__row {
+      width: 100%;
+      display: grid;
+      grid-template-columns: 26px minmax(0, 1.1fr) minmax(0, 1.6fr) auto auto;
+      align-items: center;
+      gap: 9px;
+      padding: 7px 9px;
+      border: 0;
+      background: transparent;
+      color: var(--text);
+      text-align: left;
+      font-size: 12px;
+    }
+
+    .decision__row .actor-avatar {
+      width: 22px;
+      height: 22px;
+      margin: 0;
+    }
+
+    .decision[data-actor="orchestrator"] .decision__row .actor-avatar { background: var(--purple); }
+    .decision[data-actor="supervisor"] .decision__row .actor-avatar { background: var(--warn); }
+    .decision[data-actor="system"] .decision__row .actor-avatar { background: var(--danger); }
+
+    .decision__row .actor-avatar .svg-icon { width: 12px; height: 12px; }
+    .decision__row .actor-avatar i { display: none; }
+
+    .decision__lead {
+      min-width: 0;
+      display: grid;
+      gap: 1px;
+    }
+
+    .decision__lead strong {
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+
+    .decision[data-tone="info"] .decision__lead strong { color: var(--purple); }
+    .decision[data-tone="warn"] .decision__lead strong { color: var(--warn); }
+    .decision[data-tone="danger"] .decision__lead strong { color: var(--danger); }
+
+    .decision__lead span {
+      font-size: 13px;
+      font-weight: 650;
+      color: var(--text);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .decision__summary {
+      min-width: 0;
+      color: var(--muted);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 12px;
+    }
+
+    .decision__retry {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 1px 7px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--surface);
+      white-space: nowrap;
+    }
+
+    .decision__row b {
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .decision__detail {
+      border-top: 1px solid var(--line);
+      padding: 9px 11px;
+      background: var(--surface);
+    }
+
+    .decision__detail dl {
+      margin: 0;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px 14px;
+    }
+
+    .decision__detail dl > div {
+      min-width: 0;
+      display: grid;
+      gap: 1px;
+    }
+
+    .decision__detail dt {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      font-weight: 800;
+    }
+
+    .decision__detail dd {
+      margin: 0;
+      color: var(--text);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .decision__detail footer {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      margin-top: 9px;
+      padding-top: 8px;
+      border-top: 1px dashed var(--line);
+    }
+
+    .decision__detail footer button {
+      min-height: 26px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--surface-soft);
+      color: var(--text);
+      padding: 2px 8px;
+      font-size: 11px;
     }
 
     .turn__body header {
@@ -1873,7 +2295,6 @@ interface ChatTurn {
       background: var(--surface);
       margin: 6px 8px 8px;
       overflow: hidden;
-      box-shadow: 0 14px 36px rgba(20, 27, 40, 0.12);
     }
 
     .composer__input {
@@ -1896,8 +2317,7 @@ interface ChatTurn {
     .composer__quick,
     .composer__context,
     .composer__runtime,
-    .git-actions,
-    .function-grid {
+    .git-actions {
       display: flex;
       align-items: center;
       gap: 5px;
@@ -2113,16 +2533,15 @@ interface ChatTurn {
       border: 1px solid var(--line);
       border-radius: 8px;
       color: var(--text);
-      background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 20%, var(--surface)), var(--surface) 64%);
+      background: var(--surface-soft);
       padding: 8px;
     }
 
     .preview-grid span {
       display: block;
       height: 34px;
-      border: 1px solid color-mix(in srgb, var(--line) 60%, transparent);
       border-radius: 5px;
-      background: color-mix(in srgb, var(--surface) 74%, transparent);
+      background: var(--surface);
       margin-bottom: 18px;
     }
 
@@ -2265,7 +2684,6 @@ interface ChatTurn {
       border: 1px solid var(--line);
       border-radius: 8px;
       background: var(--surface);
-      box-shadow: 0 22px 58px rgba(0, 0, 0, 0.24);
     }
 
     .modal__panel header {
@@ -2317,7 +2735,7 @@ interface ChatTurn {
     .debug-grid p { color: var(--muted); line-height: 1.45; margin: 0; }
 
     .ng-chat-prototype[data-density="compact"] .workspace {
-      grid-template-columns: 184px minmax(590px, 1fr) minmax(260px, 28vw);
+      grid-template-columns: 168px minmax(590px, 1fr) minmax(260px, 28vw);
     }
 
     .ng-chat-prototype[data-density="compact"] .workbench { grid-template-columns: 56px minmax(0, 1fr); }
@@ -2331,17 +2749,14 @@ interface ChatTurn {
     }
     .ng-chat-prototype[data-density="compact"] .rail-guide span,
     .ng-chat-prototype[data-density="compact"] .rail-guide small,
-    .ng-chat-prototype[data-density="compact"] .inspector-rail__tabs b,
     .ng-chat-prototype[data-density="compact"] .inspector-rail__modes b,
     .ng-chat-prototype[data-density="compact"] .inspector-rail__scenarios b,
     .ng-chat-prototype[data-density="compact"] .inspector-rail__summary b,
-    .ng-chat-prototype[data-density="compact"] .inspector-rail__tabs button span,
     .ng-chat-prototype[data-density="compact"] .inspector-rail__scenarios button span,
     .ng-chat-prototype[data-density="compact"] .rail-action span,
     .ng-chat-prototype[data-density="compact"] .summary-chip span {
       display: none;
     }
-    .ng-chat-prototype[data-density="compact"] .inspector-rail__tabs button,
     .ng-chat-prototype[data-density="compact"] .inspector-rail__scenarios button,
     .ng-chat-prototype[data-density="compact"] .rail-action {
       grid-template-columns: 1fr;
@@ -2368,6 +2783,11 @@ interface ChatTurn {
     .ng-chat-prototype[data-density="compact"] .detail-chrome__edit,
     .ng-chat-prototype[data-density="compact"] .detail-chrome__state,
     .ng-chat-prototype[data-density="compact"] .detail-chrome__panes span { display: none; }
+    .ng-chat-prototype[data-density="compact"] .actor-key { padding: 4px 6px; gap: 4px; }
+    .ng-chat-prototype[data-density="compact"] .actor-key__chip b { display: none; }
+    .ng-chat-prototype[data-density="compact"] .decision__row { padding: 5px 7px; gap: 7px; }
+    .ng-chat-prototype[data-density="compact"] .decision__summary { font-size: 11px; }
+    .ng-chat-prototype[data-density="compact"] .decision__detail { padding: 7px 9px; }
 
     @media (max-width: 1080px) {
       .workspace,
@@ -2422,8 +2842,14 @@ interface ChatTurn {
       .conversation__topline button:last-child { display: none; }
       .context { display: none; }
       .turn,
-      .turn[data-tone="user"] { grid-template-columns: minmax(0, 1fr); justify-content: stretch; }
+      .turn[data-actor="user"] { grid-template-columns: minmax(0, 1fr); justify-content: stretch; }
       .turn__avatar { display: none; }
+      .decision__row { grid-template-columns: 22px minmax(0, 1fr) auto; }
+      .decision__summary,
+      .decision__retry { display: none; }
+      .decision__detail dl { grid-template-columns: 1fr; }
+      .actor-key { gap: 4px; padding: 4px 6px; }
+      .actor-key__chip b { display: none; }
       .debug-grid { grid-template-columns: 1fr; }
       .guide-grid { grid-template-columns: 1fr; }
       .run-popover__grid,
@@ -2488,6 +2914,14 @@ export class NextGenChatWorkbenchPrototypeComponent {
     terminal: ['M4 7l5 5-5 5', 'M11 17h9'],
     tokens: ['M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20', 'M8 12h8', 'M12 8v8'],
     warning: ['M12 3l10 18H2z', 'M12 9v5', 'M12 18h.01'],
+    user: ['M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8', 'M4 21a8 8 0 0 1 16 0'],
+    agent: ['M5 4h14v12H5z', 'M9 8h.01', 'M15 8h.01', 'M9 12h6', 'M9 20l3-4 3 4'],
+    compass: ['M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20', 'M16 8l-2 6-6 2 2-6 6-2z'],
+    shield: ['M12 3l8 4v6c0 4.5-3.5 8-8 9-4.5-1-8-4.5-8-9V7z', 'M9 12l2 2 4-4'],
+    helper: ['M9 4h6l3 4v8a3 3 0 0 1-3 3H9a3 3 0 0 1-3-3V8z', 'M9 12h6', 'M9 16h4'],
+    plug: ['M7 8V4', 'M11 8V4', 'M5 8h8v6a4 4 0 1 1-8 0z', 'M9 18v3'],
+    rerun: ['M4 12a8 8 0 0 1 14-5l3 3', 'M21 4v6h-6', 'M20 12a8 8 0 0 1-14 5l-3-3', 'M3 20v-6h6'],
+    help: ['M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20', 'M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.9.5-1 1-1 1.7', 'M12 17h.01'],
   };
 
   readonly activityItems: Array<{ id: ActivityTarget; icon: string; label: string; title: string }> = [
@@ -2497,14 +2931,6 @@ export class NextGenChatWorkbenchPrototypeComponent {
     { id: 'git', icon: 'git', label: 'Git', title: 'Git changes' },
     { id: 'qa', icon: 'check', label: 'QA', title: 'QA, tests, and health' },
     { id: 'tokens', icon: 'tokens', label: 'Tokens', title: 'Token usage' },
-  ];
-
-  readonly detailPanels: Array<{ icon: string; label: string; title: string; pane: WorkbenchPane }> = [
-    { icon: 'file', label: 'Task', title: 'Prompt and task history', pane: 'result' },
-    { icon: 'chat', label: 'Chat', title: 'Toggle task chat pane', pane: 'chat' },
-    { icon: 'git', label: 'Git', title: 'Git pane beside the conversation', pane: 'git' },
-    { icon: 'image', label: 'Shots', title: 'Screenshot evidence', pane: 'preview' },
-    { icon: 'terminal', label: 'Trace', title: 'Activity and raw trace drill-down', pane: 'debug' },
   ];
 
   readonly paneButtons: Array<{ id: WorkbenchPane; label: string; short: string; icon: string }> = [
@@ -2521,7 +2947,36 @@ export class NextGenChatWorkbenchPrototypeComponent {
     { id: 'wait', label: 'Wait', icon: 'clock' },
     { id: 'visual', label: 'Images', icon: 'image' },
     { id: 'drift', label: 'Drift', icon: 'warning' },
+    { id: 'decisions', label: 'Decisions', icon: 'shield' },
   ];
+
+  readonly actors: Record<ActorKind, ActorMeta> = {
+    user: { kind: 'user', label: 'You', glyph: 'Y', icon: 'user', shape: 'pill', help: 'Human steering. Always right-aligned and target-tagged.' },
+    agent: { kind: 'agent', label: 'Task Agent', glyph: 'A', icon: 'agent', shape: 'circle', help: 'The CLI working the active task.' },
+    orchestrator: { kind: 'orchestrator', label: 'Orchestrator', glyph: 'O', icon: 'compass', shape: 'hex', help: 'Deterministic post-run policy. Reissues, heuristics, retry budget.' },
+    supervisor: { kind: 'supervisor', label: 'Supervisor', glyph: 'S', icon: 'shield', shape: 'shield', help: 'Watchdog and circuit breaker. Quiet, resume, kill.' },
+    support: { kind: 'support', label: 'Supporting Agent', glyph: 'Q', icon: 'helper', shape: 'rounded', help: 'Sub-agent or QA helper feeding a structured report back to the task.' },
+    tool: { kind: 'tool', label: 'Tool Runner', glyph: 'T', icon: 'terminal', shape: 'square', help: 'Read, search, edit, shell, browser, and test invocations.' },
+    system: { kind: 'system', label: 'System', glyph: '!', icon: 'warning', shape: 'triangle', help: 'Parser, capture, and contract warnings from the orchestrator runtime.' },
+  };
+
+  readonly actorRailItems: ActorKind[] = ['user', 'agent', 'orchestrator', 'supervisor', 'support', 'tool', 'system'];
+
+  readonly interventionTargets: Record<InterventionTarget, { label: string; help: string; icon: string }> = {
+    currentRun: { label: 'Current run', icon: 'play', help: 'Steers the run that is active right now.' },
+    nextRun: { label: 'Next run', icon: 'clock', help: 'Lands as continuation context for the next CLI invocation.' },
+    orchestrator: { label: 'Orchestrator', icon: 'compass', help: 'Talks to the deterministic post-run policy, not the agent body.' },
+    followUp: { label: 'Follow-up task', icon: 'plus', help: 'Spawns a queued follow-up task instead of changing this run.' },
+  };
+
+  readonly decisionMeta: Record<DecisionKind, { label: string; actor: ActorKind; tone: 'info' | 'warn' | 'danger'; icon: string }> = {
+    reissue: { label: 'Reissue', actor: 'orchestrator', tone: 'info', icon: 'rerun' },
+    heuristic: { label: 'Heuristic outcome', actor: 'orchestrator', tone: 'warn', icon: 'warning' },
+    needsInput: { label: 'Needs-input loop', actor: 'orchestrator', tone: 'warn', icon: 'help' },
+    circuit: { label: 'Circuit breaker', actor: 'supervisor', tone: 'danger', icon: 'shield' },
+    captureFail: { label: 'Capture fail', actor: 'system', tone: 'warn', icon: 'plug' },
+    drift: { label: 'Schema drift', actor: 'system', tone: 'warn', icon: 'warning' },
+  };
 
   readonly composeModes: Array<{ id: ComposeMode; label: string; icon: string; description: string }> = [
     { id: 'continue', label: 'Continue', icon: 'play', description: 'Continue the running task or restart the next run with this follow-up.' },
@@ -2578,38 +3033,205 @@ export class NextGenChatWorkbenchPrototypeComponent {
     { label: 'Start/Stop', icon: 'play', note: 'Execution controls move into the compact composer command deck.' },
   ];
 
-  readonly turns: ChatTurn[] = [
+  readonly transcript: TranscriptEntry[] = [
     {
-      actor: 'Y',
-      role: 'Project steering',
-      tone: 'user',
+      kind: 'turn',
+      id: 'user-steer',
+      actor: 'user',
       title: 'You',
       body: 'I want chat to be optional. Sometimes I need the transcript, sometimes I need Git, result, screenshots, or debug panes to own the workspace.',
+      intervention: 'orchestrator',
     },
     {
-      actor: 'A',
-      role: 'Task agent',
-      tone: 'agent',
+      kind: 'turn',
+      id: 'agent-1',
+      actor: 'agent',
       title: 'Task Agent',
       body: 'The workbench treats Chat, Result, Git, Preview, and Debug as pinable panes. They can be combined without turning the task view into a full docking system.',
       actions: ['Show technical layer', 'Open Verbose Debug'],
     },
     {
-      actor: 'O',
-      role: 'Orchestrator',
-      tone: 'orchestrator',
-      title: 'Orchestrator decision',
-      meta: 'retry 1/1',
-      body: 'The existing Files, Commits, Screenshots, Trace, and token surfaces remain canonical. The workbench panes are fast review lenses that can stay visible together.',
-      actions: ['Git split', 'Debug pane'],
+      kind: 'decision',
+      id: 'reissue-1',
+      decision: 'reissue',
+      actor: 'orchestrator',
+      title: 'Orchestrator reissued the run',
+      summary: 'Fast Done after follow-up. Reissued once with stronger framing.',
+      tone: 'info',
+      reason: 'Agent emitted [[TASK_DONE]] within 18s of a UserContinue carrying a follow-up. Policy treats this as suspect.',
+      evidence: 'cli-output.log lines 412-431 plus prior follow-up at line 318.',
+      action: 'Reissue with stronger framing once, then stop and ask the user.',
+      retry: 'used 1 of 1 reissues',
+      tokens: '+3.2k orchestrator tokens',
+      traceRange: 'lines 318-431',
+      nextStep: 'If next run also returns fast Done, the policy escalates to human review.',
     },
     {
-      actor: 'Q',
-      role: 'Design QA',
-      tone: 'qa',
-      title: 'QA report',
+      kind: 'turn',
+      id: 'agent-2',
+      actor: 'agent',
+      title: 'Task Agent',
+      body: 'Re-running with the stronger frame. The reissue turned a fast Done into a real implementation pass with three commits and four screenshots.',
+      meta: 'run 4 active',
+    },
+    {
+      kind: 'turn',
+      id: 'support-1',
+      actor: 'support',
+      title: 'Design QA',
+      meta: 'helper agent',
       body: 'Light mode is primary, dark mode matches hierarchy, mobile collapses to chat, and click interception is covered by Playwright.',
       actions: ['Open screenshots'],
+    },
+    {
+      kind: 'turn',
+      id: 'tool-1',
+      actor: 'tool',
+      title: 'Tool Runner',
+      meta: '28 calls',
+      body: 'read 12, search 7, edit 4, shell 3, browser 2. One shell failure on playwright chromium retried successfully.',
+      actions: ['Show technical layer'],
+    },
+  ];
+
+  readonly waitDecision: DecisionEntry = {
+    kind: 'decision',
+    id: 'circuit-1',
+    decision: 'circuit',
+    actor: 'supervisor',
+    title: 'Supervisor watched a quiet window',
+    summary: '30s silent, agent resumed. No kill issued.',
+    tone: 'warn',
+    reason: 'Agent stdout went quiet at line 612 and resumed at line 614 without producing structured output.',
+    evidence: 'last output was a tool spawn header; resume produced an answer 30s later.',
+    action: 'Hold the kill switch. Emit advisory only.',
+    retry: 'within 1/3 quiet windows for this run',
+    tokens: 'no orchestrator tokens spent',
+    traceRange: 'lines 612-679',
+    nextStep: 'A second quiet window above 90s would trip the circuit breaker.',
+  };
+
+  readonly driftDecision: DecisionEntry = {
+    kind: 'decision',
+    id: 'drift-1',
+    decision: 'drift',
+    actor: 'system',
+    title: 'Schema drift in structured report',
+    summary: 'Report does not match the JSON contract. Markdown body still renders.',
+    tone: 'warn',
+    reason: 'Expected `{ summary, evidence, nextStep }` but the agent emitted free-form Markdown headings.',
+    evidence: 'parser warning at line 731. Raw Markdown remains attached.',
+    action: 'Surface as a system row. Keep the Markdown human-readable. Flag drift in metrics.',
+    retry: 'no retry consumed',
+    tokens: 'no extra orchestrator tokens',
+    traceRange: 'lines 715-742',
+    nextStep: 'If drift recurs in the next run, queue a contract follow-up task.',
+  };
+
+  readonly decisionShowcase: TranscriptEntry[] = [
+    {
+      kind: 'turn',
+      id: 'user-currentRun',
+      actor: 'user',
+      title: 'You',
+      body: 'Stop the active run. The Playwright shell call is in a retry loop and will burn tokens.',
+      intervention: 'currentRun',
+    },
+    {
+      kind: 'decision',
+      id: 'heuristic-1',
+      decision: 'heuristic',
+      actor: 'orchestrator',
+      title: 'Outcome inferred without a sentinel',
+      summary: 'Could not classify the agent reply. Fell back to heuristic.',
+      tone: 'warn',
+      reason: 'No hard sentinel matched. Last 60 lines suggest "needs review", confidence 0.52.',
+      evidence: 'matched phrase "ready for human review" at line 504; no [[TASK_*]] sentinel in the log.',
+      action: 'Mark MatchedSentinel = false. Surface heuristic verdict as a meta message.',
+      retry: 'retry budget unchanged',
+      tokens: '+0.4k parser tokens',
+      traceRange: 'lines 446-505',
+      nextStep: 'Recommend the agent emit [[TASK_DONE]] explicitly on the next pass.',
+    },
+    {
+      kind: 'decision',
+      id: 'needsInput-1',
+      decision: 'needsInput',
+      actor: 'orchestrator',
+      title: 'Needs-input loop counter advanced',
+      summary: 'Third needs-input in a row. One slot left before circuit trip.',
+      tone: 'warn',
+      reason: 'Agent asked the same disambiguation three times. Loop guard threshold is 4.',
+      evidence: 'sentinels [[TASK_NEEDS_INPUT:scope]] at lines 220, 318, 401.',
+      action: 'Answer with the most recent project rule, mark loop counter at 3/4.',
+      retry: 'loop 3 of 4',
+      tokens: '+1.1k orchestrator tokens',
+      traceRange: 'lines 220-401',
+      nextStep: 'A fourth identical question hands off to the user.',
+    },
+    {
+      kind: 'turn',
+      id: 'user-followUp',
+      actor: 'user',
+      title: 'You',
+      body: 'Do not change this task body. Queue a follow-up that fixes the Playwright shell flake.',
+      intervention: 'followUp',
+    },
+    {
+      kind: 'decision',
+      id: 'circuit-showcase',
+      decision: 'circuit',
+      actor: 'supervisor',
+      title: 'Supervisor armed the circuit breaker',
+      summary: 'Two quiet windows in this run. Next breach trips kill.',
+      tone: 'danger',
+      reason: 'Quiet windows of 30s and 65s back-to-back without structured output.',
+      evidence: 'watchdog markers at lines 612 and 740. No tool calls in between.',
+      action: 'Hold kill. Raise the breaker to "armed". Next quiet > 90s ends the run.',
+      retry: '2 of 3 quiet windows used',
+      tokens: 'no orchestrator tokens spent',
+      traceRange: 'lines 612-742',
+      nextStep: 'Operator can pre-empt with Pause to keep tokens out of a kill cycle.',
+    },
+    {
+      kind: 'decision',
+      id: 'captureFail-1',
+      decision: 'captureFail',
+      actor: 'system',
+      title: 'Session capture failed',
+      summary: 'No Claude session id from this run. Next continuation rebuilds from disk.',
+      tone: 'warn',
+      reason: 'CLI exited before the session sentinel landed in `~/.claude/projects/.../session.jsonl`.',
+      evidence: '[capture-fail] log marker at line 802. Session registry sees no id.',
+      action: 'Mark session as rebuilt-on-next-continue. Keep the run output intact.',
+      retry: 'no retry consumed',
+      tokens: 'no orchestrator tokens spent',
+      traceRange: 'lines 798-815',
+      nextStep: 'Next continuation re-derives prompt history and attaches the original task body.',
+    },
+    {
+      kind: 'turn',
+      id: 'user-nextRun',
+      actor: 'user',
+      title: 'You',
+      body: 'Before you start the next run, switch the model to Haiku 4.5 to keep the budget tight.',
+      intervention: 'nextRun',
+    },
+    {
+      kind: 'decision',
+      id: 'drift-showcase',
+      decision: 'drift',
+      actor: 'system',
+      title: 'Schema drift in structured report',
+      summary: 'Report does not match the JSON contract. Markdown body still renders.',
+      tone: 'warn',
+      reason: 'Expected `{ summary, evidence, nextStep }` but the agent emitted free-form Markdown headings.',
+      evidence: 'parser warning at line 731. Raw Markdown remains attached.',
+      action: 'Surface as a system row. Keep the Markdown human-readable. Flag drift in metrics.',
+      retry: 'no retry consumed',
+      tokens: 'no extra orchestrator tokens',
+      traceRange: 'lines 715-742',
+      nextStep: 'If drift recurs in the next run, queue a contract follow-up task.',
     },
   ];
 
@@ -2643,45 +3265,26 @@ export class NextGenChatWorkbenchPrototypeComponent {
     { name: 'Images', value: '4 files', percent: 52 },
   ];
 
-  readonly visibleTurns = computed(() => {
+  readonly visibleTurns = computed<TranscriptEntry[]>(() => {
     const scenario = this.activeScenario();
-    if (scenario === 'tools') return this.turns;
+    if (scenario === 'tools') return this.transcript;
     if (scenario === 'wait') {
-      return [
-        ...this.turns,
-        {
-          actor: 'S',
-          role: 'Supervisor',
-          tone: 'system',
-          title: 'Supervisor advisory',
-          meta: 'quiet 30s',
-          body: 'The agent was quiet, then resumed. The default chat shows this as a slim row; Verbose Debug shows the timing band.',
-          actions: ['Debug pane'],
-        } satisfies ChatTurn,
-      ];
+      return [...this.transcript, this.waitDecision];
     }
     if (scenario === 'visual') {
-      return this.turns.map((turn) =>
-        turn.tone === 'qa'
-          ? { ...turn, body: 'Screenshots are rendered as a compact evidence reel and open into a durable lightbox. Scratch output is never the only evidence path.' }
-          : turn
+      return this.transcript.map((entry) =>
+        entry.kind === 'turn' && entry.actor === 'support'
+          ? { ...entry, body: 'Screenshots are rendered as a compact evidence reel and open into a durable lightbox. Scratch output is never the only evidence path.' }
+          : entry
       );
     }
     if (scenario === 'drift') {
-      return [
-        ...this.turns,
-        {
-          actor: 'D',
-          role: 'System',
-          tone: 'system',
-          title: 'Schema drift warning',
-          meta: 'recoverable',
-          body: 'The structured report did not match the JSON contract. The row stays human-readable by default and exposes raw Markdown in Trace.',
-          actions: ['Open changes'],
-        } satisfies ChatTurn,
-      ];
+      return [...this.transcript, this.driftDecision];
     }
-    return this.turns;
+    if (scenario === 'decisions') {
+      return [...this.transcript, ...this.decisionShowcase];
+    }
+    return this.transcript;
   });
 
   readonly scenarioText = computed(() => {
@@ -2694,19 +3297,46 @@ export class NextGenChatWorkbenchPrototypeComponent {
         return 'Visual evidence gets a preview pane and lightbox without turning the transcript into a gallery.';
       case 'drift':
         return 'Parser drift, duplicate sentinels, and malformed reports stay visible but human-first.';
+      case 'decisions':
+        return 'Reissue, heuristic, needs-input, circuit, capture-fail, and drift become one-line rows with full causal detail on expand.';
       default:
         return 'Review mode lets chat, result, Git, screenshots, and debug panes be pinned only when useful.';
     }
   });
 
-  readonly paneDescription = computed(() => {
-    switch (this.pane()) {
-      case 'git': return 'Conversation plus Git changes, without leaving the task.';
-      case 'preview': return 'Conversation plus screenshot evidence.';
-      case 'debug': return 'Conversation plus token and actor summary.';
-      default: return 'Conversation plus human-readable result summary.';
+  readonly actorRailCounts = computed<Record<ActorKind, number>>(() => {
+    const counts: Record<ActorKind, number> = {
+      user: 0, agent: 0, orchestrator: 0, supervisor: 0, support: 0, tool: 0, system: 0,
+    };
+    for (const entry of this.visibleTurns()) {
+      counts[entry.actor] += 1;
     }
+    return counts;
   });
+
+  readonly expandedDecisions = signal<ReadonlySet<string>>(new Set());
+
+  isDecisionExpanded(id: string): boolean {
+    return this.expandedDecisions().has(id);
+  }
+
+  toggleDecision(id: string): void {
+    const next = new Set(this.expandedDecisions());
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    this.expandedDecisions.set(next);
+  }
+
+  actorMeta(kind: ActorKind): ActorMeta {
+    return this.actors[kind];
+  }
+
+  interventionMeta(target: InterventionTarget) {
+    return this.interventionTargets[target];
+  }
 
   readonly workbenchColumns = computed(() => {
     const columns: string[] = [];
@@ -2887,6 +3517,11 @@ export class NextGenChatWorkbenchPrototypeComponent {
     if (action === 'Open screenshots') this.setPane('preview');
     if (action === 'Open changes') this.setPane('git');
     if (action === 'Show technical layer') this.toolOpen.set(true);
+  }
+
+  openTrace(_range: string): void {
+    this.debugTab.set('trace');
+    this.debugOpen.set(true);
   }
 
   iconPath(name: string): string[] {

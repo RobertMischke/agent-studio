@@ -67,11 +67,11 @@
                   "maximumWarning": "600kB",
                   "maximumError": "1MB"
                 },
-                {
-                  "type": "anyComponentStyle",
-                  "maximumWarning": "20kB",
-                  "maximumError": "24kB"
-                }
+                  {
+                    "type": "anyComponentStyle",
+                    "maximumWarning": "32kB",
+                    "maximumError": "36kB"
+                  }
               ],
               "outputHashing": "all",
               "serviceWorker": "ngsw-config.json"
