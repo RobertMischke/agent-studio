@@ -1689,6 +1689,8 @@ export class App implements OnInit {
     const autoReviewFiltered = filterJobs(grouped.autoReview ?? grouped.review);
     return {
       preparation: filterJobs(grouped.preparation),
+      orchestratorPrep: filterJobs(grouped.orchestratorPrep ?? []),
+      needsHumanReview: filterJobs(grouped.needsHumanReview ?? []),
       ready: filterJobs(grouped.ready),
       progress: filterJobs(grouped.progress),
       autoReview: autoReviewFiltered,
