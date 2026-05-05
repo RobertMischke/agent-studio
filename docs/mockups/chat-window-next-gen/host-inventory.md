@@ -11,7 +11,7 @@ It complements:
 
 ## Hosts
 
-There are two real chat hosts in the app today, plus a feature-flagged clickware prototype. The next-gen renderer must land inside the real hosts. There is no new global chat window.
+There are two real chat hosts in the app today, plus a standalone clickware prototype. The next-gen renderer must land inside the real hosts. There is no new global chat window.
 
 ### 1. Task detail Activity / Chat tab
 
@@ -55,7 +55,8 @@ The side sheet keeps project picker, task tab, roadmap intake, attachments, and 
 ### 3. Mockups / prototype (do not touch in production)
 
 - File: `frontend/src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts`.
-- Flag: `atp.flag.nextGenChatPrototype` (independent from `atp.flag.nextGenChat`).
+- Standalone serve target: `npm run mockup:chat` from `frontend/`, opening `http://127.0.0.1:4022`.
+- The prototype is not mounted in `App` and must not be reintroduced as a normal dev-shell overlay.
 - Use the prototype as the interaction reference. Do not import its dummy data into production.
 
 ## Preserved companion data contracts

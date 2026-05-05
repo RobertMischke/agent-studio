@@ -1,5 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
-import { FeatureFlagsService } from '../../services/feature-flags.service';
+import { Component, computed, signal } from '@angular/core';
 
 type WorkbenchPane = 'result' | 'git' | 'preview' | 'debug' | 'chat';
 type ContextPane = Exclude<WorkbenchPane, 'chat'>;
@@ -65,11 +64,12 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
   selector: 'app-next-gen-chat-workbench-prototype',
   standalone: true,
   template: `
-    <section class="ng-chat-prototype"
-             [attr.data-theme]="theme()"
-             [attr.data-density]="density()"
-             [attr.data-pane]="pane()"
-             data-testid="next-gen-chat-angular-prototype">
+    @if (!closed()) {
+      <section class="ng-chat-prototype"
+               [attr.data-theme]="theme()"
+               [attr.data-density]="density()"
+               [attr.data-pane]="pane()"
+               data-testid="next-gen-chat-angular-prototype">
       <nav class="activity" aria-label="Prototype activity bar" data-testid="prototype-activity-bar">
         @for (item of activityItems; track item.id) {
           <button class="activity__item"
@@ -1108,7 +1108,17 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
           </section>
         </div>
       }
-    </section>
+      </section>
+    } @else {
+      <section class="ng-chat-prototype ng-chat-prototype--closed"
+               [attr.data-theme]="theme()"
+               data-testid="next-gen-chat-angular-prototype">
+        <div class="prototype-closed" data-testid="prototype-closed-state">
+          <strong>Prototype closed</strong>
+          <span>Restart the mockup server or refresh the page to open it again.</span>
+        </div>
+      </section>
+    }
   `,
   styles: [`
     :host {
@@ -1176,6 +1186,34 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
       --danger: #ff7180;
       --purple: #a990ff;
       --teal: #73d6cc;
+    }
+
+    .ng-chat-prototype--closed {
+      grid-template-columns: 1fr;
+      grid-template-rows: 1fr;
+      place-items: center;
+    }
+
+    .prototype-closed {
+      display: grid;
+      gap: 8px;
+      max-width: 360px;
+      padding: 18px 20px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      box-shadow: 0 12px 36px rgba(15, 23, 42, 0.12);
+      text-align: center;
+    }
+
+    .prototype-closed strong {
+      font-size: 15px;
+    }
+
+    .prototype-closed span {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.4;
     }
 
     .activity {
@@ -2852,8 +2890,7 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
   `]
 })
 export class NextGenChatWorkbenchPrototypeComponent {
-  private readonly featureFlags = inject(FeatureFlagsService);
-
+  readonly closed = signal(false);
   readonly pane = signal<ContextPane>('result');
   readonly density = signal<Density>('comfortable');
   readonly theme = signal<Theme>('light');
@@ -3523,6 +3560,6 @@ export class NextGenChatWorkbenchPrototypeComponent {
   }
 
   close(): void {
-    this.featureFlags.setNextGenChatPrototype(false);
+    this.closed.set(true);
   }
 }

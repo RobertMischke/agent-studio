@@ -1,53 +1,17 @@
 import { expect, Page, test } from '@playwright/test';
 import * as path from 'path';
 
-const FLAG_KEY = 'atp.flag.nextGenChatPrototype';
+const MOCKUP_BASE_URL = process.env.MOCKUP_BASE_URL ?? 'http://127.0.0.1:4022';
 const evidenceDir = path.resolve(__dirname, '../../docs/mockups/chat-window-next-gen/evidence');
 
-async function enablePrototype(page: Page): Promise<void> {
-  await page.addInitScript((key) => {
-    localStorage.setItem(key, '1');
-  }, FLAG_KEY);
-}
-
-async function stubApi(page: Page): Promise<void> {
-  await page.route('**/api/**', async (route) => {
-    const url = route.request().url();
-    if (url.includes('/watch-paths')) {
-      await route.fulfill({ json: [] });
-      return;
-    }
-    if (url.includes('/jobs/grouped')) {
-      await route.fulfill({
-        json: { preparation: [], ready: [], progress: [], review: [], autoReview: [], humanReview: [], completed: [], archive: [] }
-      });
-      return;
-    }
-    if (url.includes('/runner/status')) {
-      await route.fulfill({ json: { projects: {} } });
-      return;
-    }
-    if (url.includes('/cli/quota')) {
-      await route.fulfill({ json: { snapshots: [] } });
-      return;
-    }
-    if (url.includes('/cli/usage')) {
-      await route.fulfill({ json: { sessions: [], versions: [] } });
-      return;
-    }
-    await route.fulfill({ json: [] });
-  });
+async function openPrototype(page: Page): Promise<void> {
+  await page.goto(MOCKUP_BASE_URL);
 }
 
 test.describe('@mockup next-gen chat Angular prototype', () => {
   test('captures the interactive Angular workbench prototype', async ({ page }) => {
-    await stubApi(page);
-    await enablePrototype(page);
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto('/');
-    await page.addStyleTag({
-      content: '.dev-banner{display:none!important}body{padding-top:0!important}',
-    });
+    await openPrototype(page);
 
     await expect(page.getByTestId('next-gen-chat-angular-prototype')).toBeVisible();
     await expect(page.getByTestId('prototype-detail-chrome')).toContainText('Complete & Next');

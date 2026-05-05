@@ -7,7 +7,7 @@ This folder is not existing product behavior. It is the target surface for the n
 ## Files
 
 - [ui.html](ui.html) - interactive v7 visual mockup for the next-generation chat workbench. This is the current reference.
-- [angular-prototype.md](angular-prototype.md) - Angular-hosted clickware prototype, feature flag, evidence, and handoff notes.
+- [angular-prototype.md](angular-prototype.md) - standalone Angular clickware prototype, local evidence rules, and handoff notes.
 - [scenarios.md](scenarios.md) - typical cases the UI must render well.
 - [activity-log-edge-cases.md](activity-log-edge-cases.md) - real Activity Log edge-case taxonomy from 136 sampled logs.
 - [workbench-layout-research.md](workbench-layout-research.md) - VS Code-inspired layout research for side-by-side chat, Git, result, preview, token, and debug workflows.
@@ -16,66 +16,8 @@ This folder is not existing product behavior. It is the target surface for the n
 - [visual-audit.md](visual-audit.md) - visual critique of the current Stable chat evidence.
 - [integration-plan.md](integration-plan.md) - migration plan from today's Activity Log, side sheet, run evidence, token surfaces, and composer controls into the v6 chat grammar.
 - [evidence/stable-playwright-observations.json](evidence/stable-playwright-observations.json) - Playwright metrics from Stable.
-- [evidence/next-gen-chat-mockup-desktop.png](evidence/next-gen-chat-mockup-desktop.png) - rendered desktop screenshot of the proposed mockup.
-- [evidence/next-gen-chat-mockup-mobile.png](evidence/next-gen-chat-mockup-mobile.png) - rendered mobile screenshot of the proposed mockup.
-- [evidence/next-gen-chat-config-overlay.png](evidence/next-gen-chat-config-overlay.png) - interactive configuration overlay.
-- [evidence/next-gen-chat-artifacts-overlay.png](evidence/next-gen-chat-artifacts-overlay.png) - artifact browser overlay.
-- [evidence/next-gen-chat-jobs-overlay.png](evidence/next-gen-chat-jobs-overlay.png) - implementation-jobs overlay.
-- [evidence/next-gen-chat-tool-details.png](evidence/next-gen-chat-tool-details.png) - expanded tool-burst details.
-- [evidence/next-gen-chat-task-marker-popover.png](evidence/next-gen-chat-task-marker-popover.png) - task-marker hover/click metadata.
-- [evidence/next-gen-chat-technical-layer.png](evidence/next-gen-chat-technical-layer.png) - global technical-layer toggle.
-- [evidence/next-gen-chat-inspector-collapsed.png](evidence/next-gen-chat-inspector-collapsed.png) - compact chat with inspector collapsed.
-- [evidence/next-gen-chat-verbose-debug.png](evidence/next-gen-chat-verbose-debug.png) - fullscreen desktop Verbose Debug view.
-- [evidence/next-gen-chat-verbose-debug-mobile.png](evidence/next-gen-chat-verbose-debug-mobile.png) - mobile Verbose Debug view.
-- [evidence/next-gen-chat-v4-default.png](evidence/next-gen-chat-v4-default.png) - current v4 default chat reference.
-- [evidence/next-gen-chat-v4-expanded.png](evidence/next-gen-chat-v4-expanded.png) - current v4 with technical details expanded.
-- [evidence/next-gen-chat-v4-debug.png](evidence/next-gen-chat-v4-debug.png) - current v4 Verbose Debug view.
-- [evidence/next-gen-chat-v4-mobile.png](evidence/next-gen-chat-v4-mobile.png) - current v4 mobile reference.
-- [evidence/next-gen-chat-v5-task-light.png](evidence/next-gen-chat-v5-task-light.png) - current v5 task-detail Chat tab in light theme.
-- [evidence/next-gen-chat-v5-task-dark.png](evidence/next-gen-chat-v5-task-dark.png) - current v5 task-detail Chat tab in dark theme.
-- [evidence/next-gen-chat-v5-wide-sidesheet.png](evidence/next-gen-chat-v5-wide-sidesheet.png) - current v5 with widened side-sheet project chat.
-- [evidence/next-gen-chat-v5-debug.png](evidence/next-gen-chat-v5-debug.png) - current v5 Verbose Debug from the embedded app context.
-- [evidence/next-gen-chat-v5-mobile.png](evidence/next-gen-chat-v5-mobile.png) - current v5 mobile task-chat reference.
-- [evidence/next-gen-chat-v6-edge-cases-light.png](evidence/next-gen-chat-v6-edge-cases-light.png) - current v6 light task Chat tab with edge-case scenario rail.
-- [evidence/next-gen-chat-v6-wait-loop.png](evidence/next-gen-chat-v6-wait-loop.png) - current v6 wait-loop scenario.
-- [evidence/next-gen-chat-v6-image-lightbox.png](evidence/next-gen-chat-v6-image-lightbox.png) - current v6 image evidence lightbox.
-- [evidence/next-gen-chat-v6-debug-dark.png](evidence/next-gen-chat-v6-debug-dark.png) - current v6 dark Verbose Debug view.
-- [evidence/next-gen-chat-v6-mobile.png](evidence/next-gen-chat-v6-mobile.png) - current v6 mobile task-chat reference.
-- [evidence/next-gen-chat-v7-workbench-result.png](evidence/next-gen-chat-v7-workbench-result.png) - current v7 task chat with result summary side pane.
-- [evidence/next-gen-chat-v7-workbench-git.png](evidence/next-gen-chat-v7-workbench-git.png) - current v7 task chat with Git changes side pane.
-- [evidence/next-gen-chat-v7-workbench-compact.png](evidence/next-gen-chat-v7-workbench-compact.png) - current v7 compact-density workbench state.
-- [evidence/next-gen-chat-v7-chat-only.png](evidence/next-gen-chat-v7-chat-only.png) - current v7 chat-only state with the context pane closed.
-- [evidence/next-gen-chat-v7-wait-loop.png](evidence/next-gen-chat-v7-wait-loop.png) - current v7 wait-loop scenario inside the workbench.
-- [evidence/next-gen-chat-v7-image-lightbox.png](evidence/next-gen-chat-v7-image-lightbox.png) - current v7 image evidence lightbox from the workbench preview.
-- [evidence/next-gen-chat-v7-debug-dark.png](evidence/next-gen-chat-v7-debug-dark.png) - current v7 dark Verbose Debug view.
-- [evidence/next-gen-chat-v7-mobile.png](evidence/next-gen-chat-v7-mobile.png) - current v7 mobile chat reference.
-- [evidence/next-gen-chat-angular-prototype-result.png](evidence/next-gen-chat-angular-prototype-result.png) - Angular prototype Result split.
-- [evidence/next-gen-chat-angular-prototype-nav-queue.png](evidence/next-gen-chat-angular-prototype-nav-queue.png) - Angular prototype top chrome with queue popover.
-- [evidence/next-gen-chat-angular-prototype-status-tokens.png](evidence/next-gen-chat-angular-prototype-status-tokens.png) - Angular prototype status-bar token heat popover.
-- [evidence/next-gen-chat-angular-prototype-status-health.png](evidence/next-gen-chat-angular-prototype-status-health.png) - Angular prototype status-bar system health popover.
-- [evidence/next-gen-chat-angular-prototype-status-model.png](evidence/next-gen-chat-angular-prototype-status-model.png) - Angular prototype status-bar CLI and model controls.
-- [evidence/next-gen-chat-angular-prototype-all-panes.png](evidence/next-gen-chat-angular-prototype-all-panes.png) - Angular prototype with Result, Git, Preview, and Debug pinned together.
-- [evidence/next-gen-chat-angular-prototype-git-editor-split.png](evidence/next-gen-chat-angular-prototype-git-editor-split.png) - Angular prototype Git changes with source editor and vertical splitter.
-- [evidence/next-gen-chat-angular-prototype-git-no-chat.png](evidence/next-gen-chat-angular-prototype-git-no-chat.png) - Angular prototype Git/source review with chat closed.
-- [evidence/next-gen-chat-angular-prototype-run-popover.png](evidence/next-gen-chat-angular-prototype-run-popover.png) - Angular prototype run marker popover.
-- [evidence/next-gen-chat-angular-prototype-rail-guide.png](evidence/next-gen-chat-angular-prototype-rail-guide.png) - Angular prototype Workbench rail guide.
-- [evidence/next-gen-chat-angular-prototype-git.png](evidence/next-gen-chat-angular-prototype-git.png) - Angular prototype Git split.
-- [evidence/next-gen-chat-angular-prototype-compact.png](evidence/next-gen-chat-angular-prototype-compact.png) - Angular prototype compact density.
-- [evidence/next-gen-chat-angular-prototype-lightbox.png](evidence/next-gen-chat-angular-prototype-lightbox.png) - Angular prototype screenshot lightbox.
-- [evidence/next-gen-chat-angular-prototype-debug-dark.png](evidence/next-gen-chat-angular-prototype-debug-dark.png) - Angular prototype dark Verbose Debug.
-- [evidence/next-gen-chat-angular-prototype-mobile.png](evidence/next-gen-chat-angular-prototype-mobile.png) - Angular prototype mobile collapse.
-- [evidence/regression/](evidence/regression/) - durable evidence captured by `next-gen-chat-workbench-regression.spec.ts`. Each image is regenerated on every Playwright run and locks a v7 invariant:
-  - `workbench-result.png`, `workbench-git.png`, `workbench-preview.png`, `workbench-debug.png`, `workbench-all-panes.png` - Result, Git, Preview, Debug, and combined pinned states.
-  - `workbench-chat-only.png`, `workbench-git-no-chat.png` - Chat-only reclaims space; Git/source review remains usable when chat is closed.
-  - `workbench-compact.png`, `workbench-dark.png`, `workbench-light-side-sheet-wide.png`, `workbench-mobile.png` - Compact density, dark theme, light theme with the side sheet wide, mobile collapse.
-  - `workbench-splitter-extremes.png` - Keyboard-driven splitter at min and max keeps both panes visible.
-  - `edge-tool-burst.png`, `edge-wait-loop.png`, `edge-schema-drift.png`, `edge-decision-showcase.png`, `edge-image-lightbox.png` - Tool burst expansion, wait/circuit decision, schema drift decision, full decision showcase (reissue, heuristic, needs-input, capture-fail, drift, intervention chips), image lightbox.
-  - `drilldown-tokens.png`, `drilldown-verbose-debug-trace.png` - Token heat popover and Verbose Debug trace tab stay reachable.
-  - `guard-composer-reachable.png` - Click-interception guard: composer remains operable after panes, popovers, and tool burst overlays close.
-  - `workbench-side-sheet-restored.png` - Project side sheet toggles independently of the workbench.
-- [evidence/tool-heavy-archive-full.png](evidence/tool-heavy-archive-full.png) - Stable screenshot for a tool-heavy archived job.
-- [evidence/review-chat-project-switch-full.png](evidence/review-chat-project-switch-full.png) - Stable screenshot for a review job.
-- [evidence/analysis-report-review-full.png](evidence/analysis-report-review-full.png) - Stable screenshot for an analysis-report job.
+
+Mockup PNGs under `evidence/` are local Playwright output and are gitignored. Regenerate them for review when useful, but do not commit them to this source repository.
 
 ## Recommendation
 
@@ -85,7 +27,7 @@ The v6 iteration added a log-grounded edge-case taxonomy. A local sweep scanned 
 
 The v7 iteration adds the workbench layout contract. The task Chat tab keeps the conversation primary while offering explicit split presets: Chat only, Chat plus Result, Chat plus Git, Chat plus Preview, and Chat plus Debug. A compact summary strip surfaces state, tokens, commits, changed files, screenshots, retry warnings, and duration without pushing the transcript down. The adjacent pane is a fast preview and drill-down launcher; full evidence remains in the existing task tabs and Verbose Debug.
 
-The Angular prototype makes the same direction clickable inside the real frontend shell behind `atp.flag.nextGenChatPrototype`. It is intentionally full-screen and self-contained, so production chat remains untouched while the flag is off. The newest iteration is the tall workbench: task metadata, split controls, scenario switches, and run metrics sit in a left task rail or status bar so the transcript and adjacent Git, Result, Preview, Debug, or source-diff pane can use almost the full task height. The prototype now also mirrors more of the existing task-detail product surface: compact task chrome, Complete & Next, a narrower queue list, a richer composer command deck, clickable run markers, and a multi-tab Verbose Debug view. The rail uses inline icons, readable labels in comfortable density, compact icon-only mode, an explanatory guide modal, and an explicit "pin all" action for additive panes. The latest cleanup removes duplicated Chat/Git pane switches from the top chrome: pane visibility belongs in the task rail, the top chrome carries only run summary plus global Sheet and Queue shortcuts, and the bottom bar opens Queue, Token, Health, Evidence, and Model popovers without stealing height from the chat. Chat is optional: Git review can remain open with a changes list on the left and selected source/editor diff on the right, and a real vertical splitter replaces the range slider for adjustable widths. The prototype is lazy/deferred behind the flag to keep the normal app bundle lighter. See [angular-prototype.md](angular-prototype.md).
+The Angular prototype makes the same direction clickable as a standalone mockup app served with `npm run mockup:chat` on `http://127.0.0.1:4022`. It is intentionally full-screen and self-contained, so production chat remains untouched and the normal dev app cannot accidentally turn into the mockup through a localStorage flag. The newest iteration is the tall workbench: task metadata, split controls, scenario switches, and run metrics sit in a left task rail or status bar so the transcript and adjacent Git, Result, Preview, Debug, or source-diff pane can use almost the full task height. The prototype now also mirrors more of the existing task-detail product surface: compact task chrome, Complete & Next, a narrower queue list, a richer composer command deck, clickable run markers, and a multi-tab Verbose Debug view. The rail uses inline icons, readable labels in comfortable density, compact icon-only mode, an explanatory guide modal, and an explicit "pin all" action for additive panes. The latest cleanup removes duplicated Chat/Git pane switches from the top chrome: pane visibility belongs in the task rail, the top chrome carries only run summary plus global Sheet and Queue shortcuts, and the bottom bar opens Queue, Token, Health, Evidence, and Model popovers without stealing height from the chat. Chat is optional: Git review can remain open with a changes list on the left and selected source/editor diff on the right, and a real vertical splitter replaces the range slider for adjustable widths. See [angular-prototype.md](angular-prototype.md).
 
 In Stable, tool-heavy jobs already reach this density:
 

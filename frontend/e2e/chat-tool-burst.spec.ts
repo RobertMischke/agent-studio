@@ -1,7 +1,7 @@
 import { expect, Page, test } from '@playwright/test';
 import * as path from 'path';
 
-const FLAG_KEY = 'atp.flag.nextGenChatPrototype';
+const MOCKUP_BASE_URL = process.env.MOCKUP_BASE_URL ?? 'http://127.0.0.1:4022';
 
 /**
  * Visual coverage for the next-gen chat tool-burst chip
@@ -20,40 +20,14 @@ const RESULTS_DIR = path.resolve(
   '../../../../agent-taskboard-workspace/projects/agent-taskboard/3-progress/chat-tool-burst-collapsing/results'
 );
 
-async function enablePrototype(page: Page): Promise<void> {
-  await page.addInitScript((key) => {
-    localStorage.setItem(key, '1');
-  }, FLAG_KEY);
-}
-
-async function stubApi(page: Page): Promise<void> {
-  await page.route('**/api/**', async (route) => {
-    const url = route.request().url();
-    if (url.includes('/watch-paths')) return route.fulfill({ json: [] });
-    if (url.includes('/jobs/grouped')) {
-      return route.fulfill({
-        json: {
-          preparation: [], ready: [], progress: [], review: [],
-          autoReview: [], humanReview: [], completed: [], archive: []
-        }
-      });
-    }
-    if (url.includes('/runner/status')) return route.fulfill({ json: { projects: {} } });
-    if (url.includes('/cli/quota')) return route.fulfill({ json: { snapshots: [] } });
-    if (url.includes('/cli/usage')) return route.fulfill({ json: { sessions: [], versions: [] } });
-    return route.fulfill({ json: [] });
-  });
+async function openPrototype(page: Page): Promise<void> {
+  await page.goto(MOCKUP_BASE_URL);
 }
 
 test.describe('@mockup next-gen chat tool-burst chip', () => {
   test('collapses contiguous tool activity into one dense row with failure visible', async ({ page }) => {
-    await stubApi(page);
-    await enablePrototype(page);
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto('/');
-    await page.addStyleTag({
-      content: '.dev-banner{display:none!important}body{padding-top:0!important}'
-    });
+    await openPrototype(page);
 
     const chip = page.getByTestId('tool-burst-chip');
     await expect(chip).toBeVisible();

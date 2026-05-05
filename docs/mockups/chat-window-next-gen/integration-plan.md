@@ -17,7 +17,7 @@ The existing implementation already has valuable pieces:
 | Token detail | `token-summary-block.ts`, `workspace-token-timeline.ts`, `JobInfo.tokenSummary`, `lastUsage` | Project totals, workspace timeline, per-job bubble, session usage |
 | VS Code layout work | `docs/mockups/vscode-layout/`, `Frontend:VsCodeLayout` | Status bar, compact chrome, meta-panel direction, feature-flagged rollout |
 | Chat workbench research | `docs/mockups/chat-window-next-gen/workbench-layout-research.md` | Chat-only, Chat plus Result, Chat plus Git, Chat plus Preview, Chat plus Debug presets; additive pinned panes; compact icon actions |
-| Angular clickware prototype | `frontend/src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts`, `atp.flag.nextGenChatPrototype` | Interactive shell for reviewing tall workbench layout, narrow queue list, task rail, additive pane pinning, side sheet, Git/source split, light/dark, density, debug, and mobile collapse |
+| Angular clickware prototype | `frontend/src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts`, `npm run mockup:chat` | Standalone interactive shell for reviewing tall workbench layout, narrow queue list, task rail, additive pane pinning, side sheet, Git/source split, light/dark, density, debug, and mobile collapse |
 
 Any implementation that removes one of these without a replacement is not aligned with the mockup.
 

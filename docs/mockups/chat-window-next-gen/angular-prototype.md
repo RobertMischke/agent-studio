@@ -1,45 +1,44 @@
 # Angular Clickware Prototype
 
-This document records the first Angular-hosted prototype for the next-generation task chat workbench.
+This document records the Angular-hosted prototype for the next-generation task chat workbench.
 
-The static v7 HTML mockup remains the fast visual reference. The Angular prototype goes one step further: it runs inside the real frontend shell, uses Angular signals for interaction state, and can be opened through a local feature flag without replacing production chat behavior.
+The static v7 HTML mockup remains the fast visual reference. The Angular prototype goes one step further: it uses the real Angular component model and signals for interaction state, but it now runs as a standalone mockup application. It does not mount inside the normal dev frontend and it does not use the per-checkout DEV banner.
 
 ## How To Open
 
-Enable the prototype from the browser console:
+Run the standalone mockup app from `frontend/`:
 
-```js
-localStorage.setItem('atp.flag.nextGenChatPrototype', '1');
-location.reload();
+```sh
+npm run mockup:chat
 ```
 
-Disable it:
+Open:
 
-```js
-localStorage.removeItem('atp.flag.nextGenChatPrototype');
-location.reload();
+```text
+http://127.0.0.1:4022
 ```
 
-The prototype can also close itself through the `X` action, which clears the flag.
+The normal dev app continues to run on its own port. Do not use `atp.flag.nextGenChatPrototype` to replace the real app shell during design review.
 
 ## Files
 
 | File | Purpose |
 |------|---------|
 | `frontend/src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts` | Standalone Angular clickware component. |
-| `frontend/src/app/services/feature-flags.service.ts` | Adds the local `atp.flag.nextGenChatPrototype` flag. |
-| `frontend/src/app/app.ts` | Mounts the prototype as a full-screen overlay only when the flag is enabled. |
+| `frontend/src/mockups/next-gen-chat/main.ts` | Standalone Angular bootstrap for the mockup app. |
+| `frontend/src/mockups/next-gen-chat/index.html` | Dedicated mockup host document. |
+| `frontend/angular.json` | Defines the `next-gen-chat-mockup` app and serve target. |
 | `frontend/e2e/next-gen-chat-angular-prototype.spec.ts` | Playwright coverage and screenshot capture. |
 
 ## Why This Shape
 
-The user wants to evaluate the next layout without disrupting the current application. A separate branch or worktree can help when several implementation agents edit the same production files, but it is not necessary for this clickware layer. The lower-interference path is:
+The user wants to evaluate the next layout without disrupting the current application. The prototype must not steal the normal dev port, inherit the DEV marker, or depend on localStorage flags inside the production shell. The lower-interference path is:
 
 1. Keep the prototype in the dev checkout.
-2. Gate it with an explicit local flag.
+2. Serve it as its own Angular app on a separate port.
 3. Make it full-screen and self-contained.
-4. Keep production task chat, side sheet, Activity Log, Trace, Git, screenshots, and token surfaces unchanged while the flag is off.
-5. Use Playwright screenshots as review evidence.
+4. Keep production task chat, side sheet, Activity Log, Trace, Git, screenshots, and token surfaces unchanged.
+5. Use Playwright screenshots as local review evidence only.
 
 This follows the repo's product boundary: the app itself should not grow branch/worktree orchestration. A future engineering workflow may still use a normal Git worktree outside the product when multiple agents need isolated source checkouts, but that is a contributor workflow, not product behavior.
 
@@ -51,7 +50,7 @@ The nav and status-bar iteration adds a more VS Code-like control model. The act
 
 The next iteration treats every workbench pane as optional and additive. Chat is no longer assumed to be permanent: it can be closed while Git review, Result, Preview, or Debug stays open. Git review now owns the source/editor preview, with a changes list on the left and the selected source diff on the right. The old range slider is gone; width is modeled by a real vertical splitter with keyboard support.
 
-The rail now has inline icons, visible labels in comfortable density, tooltip titles, a `Task rail` guide button, and an explicit open-pane count on the "All" pin action. Compact density collapses the same controls back to icons so the chat area stays large. The detail header and top bar no longer duplicate the pane switcher; the rail owns pane pinning, the top bar owns global sheet and queue toggles, and the status bar owns runtime controls. The task list is intentionally narrower and only carries queue selection, not pane controls. The prototype is also deferred behind the feature flag, so the normal app does not pay the prototype bundle cost when the flag is off.
+The rail now has inline icons, visible labels in comfortable density, tooltip titles, a `Task rail` guide button, and an explicit open-pane count on the "All" pin action. Compact density collapses the same controls back to icons so the chat area stays large. The detail header and top bar no longer duplicate the pane switcher; the rail owns pane pinning, the top bar owns global sheet and queue toggles, and the status bar owns runtime controls. The task list is intentionally narrower and only carries queue selection, not pane controls. Because the prototype is a separate Angular app, the normal frontend does not pay for it and cannot accidentally show it.
 
 The prototype currently covers:
 
@@ -80,27 +79,7 @@ The prototype currently covers:
 
 ## Screenshots
 
-The durable screenshots live in `docs/mockups/chat-window-next-gen/evidence/`:
-
-- `next-gen-chat-angular-prototype-result.png`
-- `next-gen-chat-angular-prototype-nav-queue.png`
-- `next-gen-chat-angular-prototype-status-tokens.png`
-- `next-gen-chat-angular-prototype-status-health.png`
-- `next-gen-chat-angular-prototype-status-model.png`
-- `next-gen-chat-angular-prototype-all-panes.png`
-- `next-gen-chat-angular-prototype-git-editor-split.png`
-- `next-gen-chat-angular-prototype-git-no-chat.png`
-- `next-gen-chat-angular-prototype-run-popover.png`
-- `next-gen-chat-angular-prototype-rail-guide.png`
-- `next-gen-chat-angular-prototype-git.png`
-- `next-gen-chat-angular-prototype-compact.png`
-- `next-gen-chat-angular-prototype-lightbox.png`
-- `next-gen-chat-angular-prototype-debug-dark.png`
-- `next-gen-chat-angular-prototype-mobile.png`
-- `next-gen-chat-actor-rails-default.png`
-- `next-gen-chat-actor-rails-decisions-light.png`
-- `next-gen-chat-actor-rails-decisions-dark.png`
-- `next-gen-chat-actor-rails-decisions-compact.png`
+Playwright can still generate screenshots under `docs/mockups/chat-window-next-gen/evidence/`, but those PNG files are local review output and are gitignored. Do not commit regenerated screenshots from this mockup folder.
 
 ## Next Step
 
