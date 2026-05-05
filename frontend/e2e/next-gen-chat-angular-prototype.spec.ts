@@ -51,6 +51,18 @@ test.describe('@mockup next-gen chat Angular prototype', () => {
     });
     await page.getByTestId('prototype-status-popover').getByText('Close').click();
 
+    await expect(page.getByTestId('prototype-queue-module')).toBeVisible();
+    await page.getByTestId('prototype-queue-close').click();
+    await expect(page.getByTestId('prototype-queue-module')).toHaveCount(0);
+    await expect(page.getByTestId('next-gen-chat-angular-prototype')).toHaveAttribute('data-queue-open', 'false');
+    await page.screenshot({
+      path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-queue-closed.png'),
+      fullPage: false,
+    });
+    await page.getByTestId('prototype-activity-tasks').click();
+    await expect(page.getByTestId('prototype-queue-module')).toBeVisible();
+    await expect(page.getByTestId('next-gen-chat-angular-prototype')).toHaveAttribute('data-queue-open', 'true');
+
     await page.getByTestId('prototype-status-token').click();
     await expect(page.getByTestId('prototype-status-popover')).toContainText('Token usage heat');
     await page.screenshot({

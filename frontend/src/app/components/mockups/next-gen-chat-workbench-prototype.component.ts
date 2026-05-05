@@ -35,6 +35,7 @@ import {
                [attr.data-theme]="theme()"
                [attr.data-density]="density()"
                [attr.data-pane]="pane()"
+               [attr.data-queue-open]="queueOpen()"
                data-testid="next-gen-chat-angular-prototype">
       <nav class="activity" aria-label="Prototype activity bar" data-testid="prototype-activity-bar">
         @for (item of activityItems; track item.id) {
@@ -76,11 +77,29 @@ import {
         (closeRequested)="close()">
       </app-found-next-topbar>
 
-      <main class="workspace" [class.workspace--sheet-closed]="!sideSheetOpen()">
-        <aside class="task-list" aria-label="Task list">
+      <main class="workspace"
+            [class.workspace--queue-closed]="!queueOpen()"
+            [class.workspace--sheet-closed]="!sideSheetOpen()">
+        @if (queueOpen()) {
+        <aside class="task-list" aria-label="Queue module" data-testid="prototype-queue-module">
           <div class="task-list__header">
-            <strong>Queue</strong>
-            <span>2-ready · 5 tasks</span>
+            <div>
+              <strong>Queue</strong>
+              <br />
+              <span>2-ready · 5 tasks</span>
+            </div>
+            <button class="task-list__close icon-btn"
+                    type="button"
+                    title="Close Queue module"
+                    aria-label="Close Queue module"
+                    data-testid="prototype-queue-close"
+                    (click)="closeQueueModule()">
+              <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                @for (path of iconPath('panelClose'); track path) {
+                  <path [attr.d]="path"></path>
+                }
+              </svg>
+            </button>
           </div>
           @for (task of taskCards; track task.id) {
             <button class="task-card"
@@ -91,6 +110,7 @@ import {
             </button>
           }
         </aside>
+        }
 
         <section class="detail" aria-label="Task detail">
           <header class="detail-chrome" data-testid="prototype-detail-chrome">
@@ -784,6 +804,8 @@ import {
                 <h3>Dummy actions</h3>
                 <div class="function-grid">
                   <button (click)="setPane('result')">Open active task</button>
+                  <button (click)="openQueueModule()">Open Queue module</button>
+                  <button (click)="closeQueueModule()">Hide Queue module</button>
                   <button (click)="sideSheetOpen.set(true)">Open project sheet</button>
                   <button (click)="commandOpen.set(true)">Create follow-up</button>
                 </div>
@@ -1355,6 +1377,14 @@ import {
       grid-template-columns: 156px minmax(620px, 1fr) 0;
     }
 
+    .workspace--queue-closed {
+      grid-template-columns: minmax(620px, 1fr) minmax(304px, 29vw);
+    }
+
+    .workspace--queue-closed.workspace--sheet-closed {
+      grid-template-columns: minmax(620px, 1fr) 0;
+    }
+
     .task-list,
     .sheet {
       min-width: 0;
@@ -1366,11 +1396,15 @@ import {
 
     .task-list__header {
       display: grid;
+      grid-template-columns: minmax(0, 1fr) 26px;
+      align-items: center;
       gap: 2px;
       padding: 10px;
       border-bottom: 1px solid var(--line);
       background: var(--chrome);
     }
+
+    .task-list__close { justify-self: end; }
 
     .task-list__header span,
     .task-card__meta,
@@ -3124,7 +3158,7 @@ import {
       background: color-mix(in srgb, var(--chrome) 82%, var(--surface));
     }
 
-    .ng-chat-prototype[data-density="compact"] .workspace {
+    .ng-chat-prototype[data-density="compact"] .workspace:not(.workspace--queue-closed) {
       grid-template-columns: 144px minmax(590px, 1fr) minmax(272px, 28vw);
     }
 
@@ -3260,7 +3294,8 @@ export class NextGenChatWorkbenchPrototypeComponent {
   readonly markerOpen = signal(false);
   readonly featureModal = signal<FeatureAction | null>(null);
   readonly statusPanel = signal<StatusPanel | null>(null);
-  readonly activeActivity = signal<ActivityTarget>('projects');
+  readonly activeActivity = signal<ActivityTarget>('tasks');
+  readonly queueOpen = signal(true);
   readonly chatOpen = signal(true);
   readonly contextPanes = signal<readonly ContextPane[]>(['result']);
   readonly contextOpen = computed(() => this.contextPanes().length > 0);
@@ -3925,9 +3960,26 @@ export class NextGenChatWorkbenchPrototypeComponent {
     if (target === 'git') this.setPane('git');
     if (target === 'qa') this.toggleStatusPanel('health');
     if (target === 'tokens') this.toggleStatusPanel('tokens');
-    if (target === 'tasks') this.toggleStatusPanel('queue');
+    if (target === 'tasks') this.toggleQueueModule();
     if (target === 'search') this.commandOpen.set(true);
     if (target === 'projects') this.sideSheetOpen.set(true);
+  }
+
+  openQueueModule(): void {
+    this.queueOpen.set(true);
+    this.activeActivity.set('tasks');
+  }
+
+  closeQueueModule(): void {
+    this.queueOpen.set(false);
+    if (this.activeActivity() === 'tasks') {
+      this.activeActivity.set('projects');
+    }
+  }
+
+  toggleQueueModule(): void {
+    if (this.queueOpen()) this.closeQueueModule();
+    else this.openQueueModule();
   }
 
   openFeatureParity(action: FeatureAction): void {

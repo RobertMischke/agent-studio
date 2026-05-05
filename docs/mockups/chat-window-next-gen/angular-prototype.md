@@ -56,11 +56,14 @@ The next iteration treats every workbench pane as optional and additive. Chat is
 
 The document-model iteration reframes those panes as opened workbench documents. The left rail behaves more like a VS Code view container: it exposes documents and run facts, while the center work area shows a tab strip for `Summary`, `Task Chat`, `Git changes`, `Screenshots`, and `Debug trace`. `Summary` is the default dashboard document and should quickly explain phase, risk, evidence, and the next useful drill-down without pretending to be the full detail view.
 
+The queue iteration applies the same module rule to the task list. Queue selection is no longer treated as permanent chrome: it is a `Tasks / Queue` activity module with an explicit close button, and the Activity Bar can reopen it when the user wants to switch tasks. When closed, the task detail, chat documents, Git review, and side sheet reclaim the width.
+
 The rail now has inline icons, visible labels in comfortable density, tooltip titles, a `Task rail` guide button, and an explicit open-pane count on the "All" pin action. Compact density collapses the same controls back to icons so the chat area stays large. The detail header and top bar no longer duplicate the pane switcher; the rail owns pane pinning, the top bar owns global sheet and queue toggles, and the status bar owns runtime controls. The task list is intentionally narrower and only carries queue selection, not pane controls. Because the prototype is a separate Angular app, the normal frontend does not pay for it and cannot accidentally show it.
 
 The prototype currently covers:
 
 - Task detail shell with project chip, editable-title affordance, state pill, Complete & Next, narrow queue list, optional chat, side sheet, and status bar.
+- Optional Queue module that can be closed from the queue header and reopened through the Activity Bar.
 - Workbench panes: Result, Git plus source diff, Preview, Debug, and optional Chat.
 - Workbench document tabs for Summary, Task Chat, Git changes, Screenshots, and Debug trace.
 - Left task rail with additive pane pinning, quick signal jumps, run state, tokens, commits, files, screenshots, failed retry, duration, and scenario switches.
