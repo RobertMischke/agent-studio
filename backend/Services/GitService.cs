@@ -699,6 +699,27 @@ public class GitService
         return list;
     }
 
+    /// <summary>
+    /// Counts commits in the SHA range without deserialising any
+    /// metadata. Cheap enough for the per-job kanban aggregate path
+    /// (one process per non-trivial range). Returns 0 when the range is
+    /// empty, the SHAs are missing, or the repo is unavailable.
+    /// </summary>
+    public int CountCommitsInShaRange(string jobId, string? watchPath, string? beforeSha, string? afterSha)
+    {
+        if (string.IsNullOrWhiteSpace(beforeSha) || string.IsNullOrWhiteSpace(afterSha)) return 0;
+        if (string.Equals(beforeSha, afterSha, StringComparison.OrdinalIgnoreCase)) return 0;
+        if (!IsLikelyShaOrRef(beforeSha!) || !IsLikelyShaOrRef(afterSha!)) return 0;
+        var configured = ResolveRepoRoot(jobId, watchPath);
+        if (configured == null) return 0;
+        var root = ResolveGitToplevel(configured);
+        if (root == null) return 0;
+
+        var (output, _, code) = RunGit(root, $"rev-list --no-merges --count {beforeSha}..{afterSha}");
+        if (code != 0) return 0;
+        return int.TryParse(output.Trim(), out var n) ? n : 0;
+    }
+
     private static (int Files, int Added, int Removed) ParseShortstat(string? line)
     {
         if (string.IsNullOrWhiteSpace(line)) return (0, 0, 0);

@@ -29,5 +29,6 @@ public static class EndpointMapping
         app.MapCliEndpoints();
         app.MapDevToolsEndpoints();
         app.MapSupervisorEndpoints();
+        app.MapDiagnosticsEndpoints();
     }
 }

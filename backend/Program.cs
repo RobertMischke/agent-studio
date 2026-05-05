@@ -3,6 +3,7 @@ using OrchestratorApi.Hubs;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.Cli;
 using OrchestratorApi.Services.Companion;
+using OrchestratorApi.Services.Diagnostics;
 using OrchestratorApi.Services.Jobs;
 using OrchestratorApi.Services.Pty;
 using OrchestratorApi.Services.Quota;
@@ -11,19 +12,6 @@ using OrchestratorApi.Services.Supervisor;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.Diagnostics;
 
-// Last-resort safety nets: an uncaught exception in a fire-and-forget Task
-// (e.g. CLI output streaming, SignalR fan-out) used to take down the whole API
-// silently with an empty stderr. Log them instead of crashing.
-TaskScheduler.UnobservedTaskException += (_, e) =>
-{
-    Console.Error.WriteLine($"[UnobservedTaskException] {e.Exception}");
-    e.SetObserved();
-};
-AppDomain.CurrentDomain.UnhandledException += (_, e) =>
-{
-    Console.Error.WriteLine($"[UnhandledException] terminating={e.IsTerminating} {e.ExceptionObject}");
-};
-
 var builder = WebApplication.CreateBuilder(args);
 
 // Local-only override file (gitignored) - sets per-checkout flags such as
@@ -31,6 +19,38 @@ var builder = WebApplication.CreateBuilder(args);
 // can flip the dev banner / dev PWA icon on for their checkout without
 // committing the toggle.
 builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
+
+// Rolling backend file logger + crash marker (see Services/Diagnostics).
+// Built before WebApplication so the process-wide crash handlers below
+// can capture the very first throw, even if it lands during DI build.
+builder.Services.Configure<BackendFileLoggerOptions>(
+    builder.Configuration.GetSection(BackendFileLoggerOptions.SectionName));
+var fileLoggerOptions = new BackendFileLoggerOptions();
+builder.Configuration.GetSection(BackendFileLoggerOptions.SectionName).Bind(fileLoggerOptions);
+var fileLogSink = new BackendFileLogSink(fileLoggerOptions);
+var crashRecorder = new CrashRecorder(fileLoggerOptions, fileLogSink);
+builder.Services.AddSingleton(fileLogSink);
+builder.Services.AddSingleton(crashRecorder);
+builder.Logging.AddProvider(new BackendFileLoggerProvider(fileLogSink));
+
+// Last-resort safety nets: an uncaught exception in a fire-and-forget Task
+// (e.g. CLI output streaming, SignalR fan-out) used to take down the whole API
+// silently with an empty stderr. Log them and persist a crash marker so the
+// next operator (or Layer 3 review) can find the cause without re-attaching.
+TaskScheduler.UnobservedTaskException += (_, e) =>
+{
+    crashRecorder.Record("UnobservedTaskException", e.Exception, isTerminating: false);
+    Console.Error.WriteLine($"[UnobservedTaskException] {e.Exception}");
+    e.SetObserved();
+};
+AppDomain.CurrentDomain.UnhandledException += (_, e) =>
+{
+    if (e.ExceptionObject is Exception ex)
+    {
+        crashRecorder.Record("UnhandledException", ex, isTerminating: e.IsTerminating);
+    }
+    Console.Error.WriteLine($"[UnhandledException] terminating={e.IsTerminating} {e.ExceptionObject}");
+};
 
 builder.Services.AddSingleton<JobScannerService>();
 builder.Services.AddSingleton<JobStateMachine>();

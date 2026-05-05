@@ -22,3 +22,7 @@ test-results/
 backend/appsettings.Local.json
 .frontend.pid
 .frontend.log
+
+# Rolling backend logs (logs/backend/<date>.log + last-crash.json) live at the
+# repo root at runtime. Runtime artefacts never belong in source.
+logs/

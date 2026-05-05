@@ -22,7 +22,8 @@ Set the workspace root via the `ATP_WORKSPACE` env var; defaults to `C:\Projects
 3. **Activity logs per active job**: `<project>/<lane>/<job>/logs/cli-output.log`. Tail ~200 lines for "what is the agent saying right now" signal.
 4. **Supervisor logs (when present)**: `<workspace>/logs/meta/<project>/observations.jsonl`, `interventions.jsonl`, `reasoning.md`, `heartbeat.json`. Layer 3 reads these even though it is independent of Layer 2; if Layer 2 is dead the heartbeat will be stale and the review must say so.
 5. **Recent commits in the stable repo**: `git -C <stable-checkout> log --since="$LOOKBACK"` (default lookback 8 hours). Confirms the orchestrator actually shipped work, not just churn.
-6. **Previous system review files**: `<workspace>/logs/system-review/`. Last review's open items are followed up in this review.
+6. **Backend crash marker**: `<stable-checkout>/logs/backend/last-crash.json`. The backend's process-wide exception handlers write this when an `UnobservedTaskException` or `UnhandledException` fires. When present, it carries `capturedAt`, `source`, `exceptionType`, `message`, and `topFrame`. If the file is fresh (within the lookback window) the review must surface it under "Anomalies" with the captured fields and pointer the operator at the matching daily log file `<stable-checkout>/logs/backend/<date>.log` for the full stack. The same data is served by `GET http://127.0.0.1:5030/api/diagnostics/last-crash` when the backend is up.
+7. **Previous system review files**: `<workspace>/logs/system-review/`. Last review's open items are followed up in this review.
 
 If a path does not exist, note it in the review and continue. Never fail the run on a missing path.
 

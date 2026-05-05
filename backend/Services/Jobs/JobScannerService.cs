@@ -1,5 +1,6 @@
 using System.Text.Json;
 using OrchestratorApi.Models;
+using OrchestratorApi.Services;
 
 namespace OrchestratorApi.Services.Jobs;
 
@@ -183,6 +184,7 @@ public class JobScannerService
                 Commit = raw.TryGetProperty("commit", out var commit) && commit.ValueKind == JsonValueKind.Object
                     ? JsonSerializer.Deserialize<JobCommitInfo>(commit.GetRawText(), JobJsonFile.ReadOpts)
                     : null,
+                CommitCount = ComputeCommitCountHint(raw, jobDir),
                 SessionChain = ReadSessionChain(raw),
                 PendingIntent = ReadPendingIntent(jobDir)
             };
@@ -235,6 +237,59 @@ public class JobScannerService
             Log = BuildLog(dir),
             SummaryState = ResolveSummaryState(info.JobKey, statusMd)
         };
+    }
+
+    /// <summary>
+    /// Lower-bound count of commits attributed to a job, derived from
+    /// session-events.jsonl SHA ranges plus the auto-commit on
+    /// <c>job.json</c>. Drives the kanban "+N commits" hint without
+    /// paying per-render git costs. The exact list is computed lazily
+    /// behind <c>/api/jobs/{id}/commits</c>.
+    ///
+    /// Cheap by construction: skips the disk read entirely when the job
+    /// has no auto-commit AND no logs/ directory, which covers the
+    /// majority of jobs in <c>1-preparation</c> / <c>2-ready</c>.
+    /// </summary>
+    private static int ComputeCommitCountHint(JsonElement raw, string jobFolder)
+    {
+        var hasAutoCommit = raw.TryGetProperty("commit", out var commit)
+            && commit.ValueKind == JsonValueKind.Object;
+        var sessionLog = JobPaths.SessionEventsLog(jobFolder);
+        var hasSessionLog = File.Exists(sessionLog);
+        if (!hasAutoCommit && !hasSessionLog) return 0;
+
+        var seenRanges = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenShas = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var count = 0;
+
+        if (hasSessionLog)
+        {
+            foreach (var line in File.ReadLines(sessionLog))
+            {
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                SessionEvent? evt;
+                try { evt = JsonSerializer.Deserialize<SessionEvent>(line, JobJsonFile.ReadOpts); }
+                catch { continue; }
+                if (evt == null) continue;
+                if (string.IsNullOrWhiteSpace(evt.HeadShaBefore) || string.IsNullOrWhiteSpace(evt.HeadShaAfter)) continue;
+                if (string.Equals(evt.HeadShaBefore, evt.HeadShaAfter, StringComparison.OrdinalIgnoreCase)) continue;
+                var key = evt.HeadShaBefore + ".." + evt.HeadShaAfter;
+                if (!seenRanges.Add(key)) continue;
+                seenShas.Add(evt.HeadShaAfter!);
+                count++;
+            }
+        }
+
+        if (hasAutoCommit
+            && commit.TryGetProperty("sha", out var shaProp)
+            && shaProp.ValueKind == JsonValueKind.String
+            && shaProp.GetString() is { Length: > 0 } sha
+            && seenShas.Add(sha))
+        {
+            count++;
+        }
+
+        return count;
     }
 
     /// <summary>

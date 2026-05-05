@@ -32,6 +32,15 @@ public record JobInfo
     /// <summary>Auto-commit produced on the progress→review transition; null when no commit recorded.</summary>
     public JobCommitInfo? Commit { get; init; }
     /// <summary>
+    /// Lower-bound count of commits attributed to this job, derived
+    /// cheaply by the scanner from session-events.jsonl SHA ranges plus
+    /// <see cref="Commit"/>. The kanban card surfaces a "+N commits"
+    /// hint when this is greater than 1 so reviewers can see at a
+    /// glance that more than the single auto-commit is waiting. The
+    /// precise list lives behind <c>/api/jobs/{id}/commits</c>.
+    /// </summary>
+    public int CommitCount { get; init; }
+    /// <summary>
     /// Ordered history of CLI session ids used by this job (oldest → newest). Each
     /// successful resume of a forking CLI (Claude / Codex / Gemini) appends a new
     /// id. <see cref="SessionName"/> is always the chain's last entry.

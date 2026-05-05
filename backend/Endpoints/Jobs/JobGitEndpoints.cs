@@ -1,6 +1,7 @@
 using OrchestratorApi.Models;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.Runner;
 
 namespace OrchestratorApi.Endpoints.Jobs;
 
@@ -61,11 +62,74 @@ public static class JobGitEndpoints
             return Results.Text(git.GetCommitDiff(jobId, watchPath, info.Commit.Sha, path), "text/plain");
         });
 
+        // Job-level commit aggregation: every commit attributed to this
+        // job across all of its runs (deduped by SHA), plus the
+        // auto-commit when present. Drives the protocol-pane "Commits
+        // and change set" panel - the user must be able to see what
+        // landed without having to drill into individual runs first.
+        group.MapGet("/{jobId}/commits", (
+            string jobId, string? watchPath,
+            JobScannerService scanner, JobSessionLog sessions, GitService git) =>
+        {
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info == null) return Results.NotFound(new { error = "Job not found" });
+            var events = sessions.ReadSessionEvents(jobId, watchPath);
+            var lines = CliOutputLogParser.ParseFile(JobPaths.CliOutputLog(info.FolderPath));
+            var timeline = RunTimelineBuilder.Build(events, lines, DateTime.UtcNow);
+
+            var aggregate = JobCommitsAggregator.Aggregate(info, timeline.Runs,
+                (before, after) => git.GetCommitsInShaRange(jobId, watchPath, before, after));
+
+            return Results.Ok(aggregate);
+        });
+
+        // File list for one of the job's commits. Validates the SHA is
+        // actually a known commit on this job before calling git so the
+        // endpoint can't be coaxed into showing arbitrary repo history.
+        group.MapGet("/{jobId}/commits/{sha}/files", (
+            string jobId, string sha, string? watchPath,
+            JobScannerService scanner, JobSessionLog sessions, GitService git) =>
+        {
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info == null) return Results.NotFound(new { error = "Job not found" });
+            if (!IsKnownJobCommit(info, sessions, jobId, watchPath, git, sha))
+                return Results.NotFound(new { error = "Commit is not associated with this job." });
+            var files = git.GetCommitFiles(jobId, watchPath, sha);
+            return Results.Ok(new { sha, files });
+        });
+
+        group.MapGet("/{jobId}/commits/{sha}/diff", (
+            string jobId, string sha, string? path, string? watchPath,
+            JobScannerService scanner, JobSessionLog sessions, GitService git) =>
+        {
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info == null) return Results.NotFound(new { error = "Job not found" });
+            if (!IsKnownJobCommit(info, sessions, jobId, watchPath, git, sha))
+                return Results.NotFound(new { error = "Commit is not associated with this job." });
+            var diff = git.GetCommitDiff(jobId, watchPath, sha, path);
+            return Results.Ok(new { diff });
+        });
+
         group.MapPost("/{jobId}/open-in-vscode", (string jobId, string? watchPath, GitService git) =>
         {
             return git.OpenInVsCode(jobId, watchPath, out var error)
                 ? Results.Ok()
                 : Results.BadRequest(new { error });
         });
+    }
+
+    private static bool IsKnownJobCommit(
+        JobInfo info, JobSessionLog sessions,
+        string jobId, string? watchPath, GitService git, string sha)
+    {
+        if (string.IsNullOrWhiteSpace(sha)) return false;
+        if (info.Commit != null && string.Equals(info.Commit.Sha, sha, StringComparison.OrdinalIgnoreCase))
+            return true;
+        var events = sessions.ReadSessionEvents(jobId, watchPath);
+        var lines = CliOutputLogParser.ParseFile(JobPaths.CliOutputLog(info.FolderPath));
+        var timeline = RunTimelineBuilder.Build(events, lines, DateTime.UtcNow);
+        var aggregate = JobCommitsAggregator.Aggregate(info, timeline.Runs,
+            (before, after) => git.GetCommitsInShaRange(jobId, watchPath, before, after));
+        return aggregate.Commits.Any(c => string.Equals(c.Sha, sha, StringComparison.OrdinalIgnoreCase));
     }
 }
