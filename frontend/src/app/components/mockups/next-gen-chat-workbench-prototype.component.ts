@@ -339,29 +339,70 @@ interface ChatTurn {
                 </div>
 
                 <div class="composer" data-testid="prototype-composer">
-                  <div class="composer__input">Reply in task context. Use #latest-run, #git, #screenshot, or /create-follow-up...</div>
+                  <div class="composer__input">
+                    <span>Reply in task context. Use #latest-run, #git, #screenshot, or /create-follow-up...</span>
+                    <div class="composer__mentions">
+                      <button (click)="setPane('git')">#git</button>
+                      <button (click)="setPane('preview')">#screenshot</button>
+                      <button (click)="setPane('debug')">#latest-run</button>
+                      <button (click)="setPane('source')">#source-map</button>
+                    </div>
+                  </div>
+                  <div class="composer__quick" aria-label="Chat mode">
+                    @for (mode of composeModes; track mode.id) {
+                      <button type="button"
+                              [class.composer__mode--active]="composerMode() === mode.id"
+                              [attr.title]="mode.description"
+                              (click)="composerMode.set(mode.id)">
+                        <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                          @for (path of iconPath(mode.icon); track path) {
+                            <path [attr.d]="path"></path>
+                          }
+                        </svg>
+                        <span>{{ mode.label }}</span>
+                      </button>
+                    }
+                  </div>
                   <div class="composer__bar">
-                    <div>
-                      <button title="Attach context" aria-label="Attach context">
+                    <div class="composer__context">
+                      <button title="Attach files, screenshots, or report context" aria-label="Attach context">
                         <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
                           @for (path of iconPath('plus'); track path) {
                             <path [attr.d]="path"></path>
                           }
                         </svg>
+                        Attach
                       </button>
-                      <button>Task context</button>
-                      <button>Full access</button>
-                      <button>#ui.html</button>
+                      <button title="Scope follow-up to the active task">Task context</button>
+                      <button title="Permission mode for the next CLI run">Full access</button>
+                      <button title="Selected file context">ui.html</button>
                     </div>
-                    <div>
-                      <button>5.5 Extra High</button>
-                      <button class="composer__send">
+                    <div class="composer__runtime">
+                      <button title="CLI driver">Codex</button>
+                      <button title="Model and reasoning">5.5 Extra High</button>
+                      <button title="Start or continue the current task">
                         <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
                           @for (path of iconPath('play'); track path) {
                             <path [attr.d]="path"></path>
                           }
                         </svg>
-                        Run
+                        Start
+                      </button>
+                      <button title="Pause running agent">
+                        <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                          @for (path of iconPath('pause'); track path) {
+                            <path [attr.d]="path"></path>
+                          }
+                        </svg>
+                        Pause
+                      </button>
+                      <button class="composer__send" title="Send follow-up">
+                        <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                          @for (path of iconPath('play'); track path) {
+                            <path [attr.d]="path"></path>
+                          }
+                        </svg>
+                        {{ composerModeLabel() }}
                       </button>
                     </div>
                   </div>
@@ -409,6 +450,21 @@ interface ChatTurn {
                           <h3>Acceptance snapshot</h3>
                           <p>Preserve Trace, run timeline, Files, Commits, Screenshots, token surfaces, composer behavior, and side-sheet controls while the flag is off.</p>
                         </article>
+                        <article class="context-card">
+                          <h3>Existing functions carried forward</h3>
+                          <div class="function-grid">
+                            @for (item of featureParity; track item.label) {
+                              <button [attr.title]="item.note" (click)="item.pane ? setPane(item.pane) : debugOpen.set(true)">
+                                <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                                  @for (path of iconPath(item.icon); track path) {
+                                    <path [attr.d]="path"></path>
+                                  }
+                                </svg>
+                                <span>{{ item.label }}</span>
+                              </button>
+                            }
+                          </div>
+                        </article>
                       </section>
                     }
                     @case ('git') {
@@ -427,6 +483,12 @@ interface ChatTurn {
                           <h3>Review rule</h3>
                           <p>This pane previews changes beside chat. The existing Files and Commits tabs remain the canonical deep review surfaces.</p>
                         </article>
+                        <div class="git-actions">
+                          <button>Refresh</button>
+                          <button>Generate commit message</button>
+                          <button>Commit all</button>
+                          <button (click)="setPane('source')">Open source map</button>
+                        </div>
                       </section>
                     }
                     @case ('preview') {
@@ -527,37 +589,110 @@ interface ChatTurn {
             <header>
               <strong>Verbose Debug</strong>
               <div>
-                <button>Agent</button>
-                <button>Orchestrator</button>
-                <button>Tools</button>
-                <button>Tokens</button>
+                @for (tab of debugTabs; track tab.id) {
+                  <button [class.modal__tab--active]="debugTab() === tab.id"
+                          [attr.data-testid]="'prototype-debug-tab-' + tab.id"
+                          (click)="debugTab.set(tab.id)">
+                    {{ tab.label }}
+                  </button>
+                }
                 <button (click)="debugOpen.set(false)">Close</button>
               </div>
             </header>
             <div class="debug-grid">
-              <article>
-                <h3>Actors</h3>
-                <div class="metric-grid">
-                  <div><b>7</b><span>agent turns</span></div>
-                  <div><b>2</b><span>orchestrator</span></div>
-                  <div><b>1</b><span>supervisor</span></div>
-                  <div><b>1</b><span>QA report</span></div>
-                </div>
-              </article>
-              <article>
-                <h3>Timeline</h3>
-                @for (row of debugBands; track row.name) {
-                  <div class="debug-band">
-                    <span>{{ row.name }}</span>
-                    <i><em [style.width.%]="row.percent"></em></i>
-                    <b>{{ row.value }}</b>
-                  </div>
+              @switch (debugTab()) {
+                @case ('actors') {
+                  <article>
+                    <h3>Actor counts</h3>
+                    <div class="metric-grid">
+                      <div><b>7</b><span>agent turns</span></div>
+                      <div><b>2</b><span>orchestrator</span></div>
+                      <div><b>1</b><span>supervisor</span></div>
+                      <div><b>1</b><span>QA report</span></div>
+                    </div>
+                  </article>
+                  <article>
+                    <h3>Decision trail</h3>
+                    <p>Orchestrator reissued once after a fast heuristic done. Supervisor observed one quiet window and did not kill the run.</p>
+                  </article>
                 }
-              </article>
-              <article>
-                <h3>Explanation</h3>
-                <p>The workbench keeps normal chat readable while preserving the deep diagnostic surface for confusing runs. It is read-only and links back to raw trace, tokens, commits, screenshots, and task markers.</p>
-              </article>
+                @case ('tools') {
+                  <article>
+                    <h3>Tool calls</h3>
+                    @for (row of toolRows; track row.tool) {
+                      <div class="debug-band">
+                        <span>{{ row.tool }} · {{ row.target }}</span>
+                        <i><em [style.width.%]="row.tone === 'danger' ? 42 : 72"></em></i>
+                        <b>{{ row.result }}</b>
+                      </div>
+                    }
+                  </article>
+                  <article>
+                    <h3>Raw trace range</h3>
+                    <p>Lines 418-731 collapse into the visible tool burst. Expanding shows command, duration, exit code, and artifact links.</p>
+                  </article>
+                }
+                @case ('tokens') {
+                  <article>
+                    <h3>Token pressure</h3>
+                    <div class="token-bars">
+                      @for (row of tokenRows; track row.name) {
+                        <div>
+                          <span>{{ row.name }}</span>
+                          <i><em [style.width.%]="row.percent"></em></i>
+                          <b>{{ row.value }}</b>
+                        </div>
+                      }
+                    </div>
+                  </article>
+                  <article>
+                    <h3>Budget interpretation</h3>
+                    <p>Token heat should be visible at task, run, project, and supporting-agent level. The default chat shows only pressure and trend.</p>
+                  </article>
+                }
+                @case ('trace') {
+                  <article>
+                    <h3>Trace filters</h3>
+                    <div class="function-grid">
+                      <button>actor:agent</button>
+                      <button>actor:orchestrator</button>
+                      <button>tool:failed</button>
+                      <button>artifact:image</button>
+                      <button>sentinel:matched</button>
+                      <button>schema:drift</button>
+                    </div>
+                  </article>
+                  <article>
+                    <h3>Raw source</h3>
+                    <p>The raw Activity Log remains one click away. The chat projection is a readable lens, not a replacement for evidence.</p>
+                  </article>
+                }
+                @default {
+                  <article>
+                    <h3>Overview</h3>
+                    <div class="metric-grid">
+                      <div><b>12m</b><span>duration</span></div>
+                      <div><b>28</b><span>tool calls</span></div>
+                      <div><b>42k</b><span>tokens</span></div>
+                      <div><b>3</b><span>commits</span></div>
+                    </div>
+                  </article>
+                  <article>
+                    <h3>Timeline</h3>
+                    @for (row of debugBands; track row.name) {
+                      <div class="debug-band">
+                        <span>{{ row.name }}</span>
+                        <i><em [style.width.%]="row.percent"></em></i>
+                        <b>{{ row.value }}</b>
+                      </div>
+                    }
+                  </article>
+                  <article>
+                    <h3>Explanation</h3>
+                    <p>The workbench keeps normal chat readable while preserving the deep diagnostic surface for confusing runs. It is read-only and links back to raw trace, tokens, commits, screenshots, and task markers.</p>
+                  </article>
+                }
+              }
             </div>
           </section>
         </div>
@@ -582,6 +717,10 @@ interface ChatTurn {
               <article>
                 <h3>How it should ship</h3>
                 <p>The production version should bind these controls to real task tabs, token data, commits, screenshots, and ConversationEvent projections.</p>
+              </article>
+              <article>
+                <h3>What not to lose</h3>
+                <p>Start, Stop, model choice, permissions, prompt history, Activity, Trace, Files, Commits, Screenshots, quota, and project side-sheet steering all remain reachable from this workbench.</p>
               </article>
             </div>
           </section>
@@ -610,6 +749,9 @@ interface ChatTurn {
             <button (click)="setPane('git'); commandOpen.set(false)">Open Git split</button>
             <button (click)="setPane('preview'); commandOpen.set(false)">Open screenshots</button>
             <button (click)="setPane('debug'); commandOpen.set(false)">Open debug pane</button>
+            <button (click)="markerOpen.set(true); commandOpen.set(false)">Inspect current run</button>
+            <button (click)="sideSheetOpen.set(!sideSheetOpen()); commandOpen.set(false)">Toggle project side sheet</button>
+            <button (click)="composerMode.set('steer'); commandOpen.set(false)">Switch composer to steering</button>
           </section>
         </div>
       }
@@ -817,8 +959,125 @@ interface ChatTurn {
       min-width: 0;
       min-height: 0;
       display: grid;
-      grid-template-rows: minmax(0, 1fr);
+      grid-template-rows: 38px minmax(0, 1fr);
       border-right: 1px solid var(--line);
+    }
+
+    .detail-chrome {
+      min-width: 0;
+      min-height: 38px;
+      display: grid;
+      grid-template-columns: 30px minmax(0, 1fr) 28px auto auto auto;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 8px;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
+    }
+
+    .detail-chrome__back,
+    .detail-chrome__edit {
+      width: 28px;
+      height: 28px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      display: grid;
+      place-items: center;
+      background: var(--surface-soft);
+      color: var(--muted);
+    }
+
+    .detail-chrome__title {
+      min-width: 0;
+      display: grid;
+      gap: 1px;
+    }
+
+    .detail-chrome__title strong {
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      font-size: 13px;
+    }
+
+    .project-pill {
+      width: fit-content;
+      max-width: 100%;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      color: var(--muted);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .project-pill b {
+      display: inline-grid;
+      place-items: center;
+      width: 18px;
+      height: 18px;
+      border-radius: 999px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 9px;
+    }
+
+    .detail-chrome__state,
+    .detail-chrome__complete {
+      min-height: 26px;
+      border: 1px solid color-mix(in srgb, var(--ok) 45%, var(--line));
+      border-radius: 999px;
+      padding: 3px 9px;
+      color: var(--ok);
+      background: color-mix(in srgb, var(--ok) 10%, var(--surface));
+      font-size: 11px;
+      font-weight: 750;
+      white-space: nowrap;
+    }
+
+    .detail-chrome__complete {
+      border-radius: 6px;
+      color: var(--text);
+      background: var(--surface-soft);
+      border-color: var(--line);
+    }
+
+    .detail-chrome__panes {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      overflow: hidden;
+    }
+
+    .detail-chrome__panes button {
+      min-height: 26px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--muted);
+      padding: 2px 7px;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    .detail-chrome__panes .svg-icon {
+      width: 13px;
+      height: 13px;
+    }
+
+    .detail-chrome__pane--active {
+      color: var(--accent) !important;
+      border-color: color-mix(in srgb, var(--accent) 46%, var(--line)) !important;
+      background: color-mix(in srgb, var(--accent) 8%, var(--surface)) !important;
     }
 
     .detail-head {
@@ -1219,12 +1478,17 @@ interface ChatTurn {
     }
 
     .run-marker {
+      width: 100%;
       display: flex;
       align-items: center;
       gap: 8px;
       color: var(--muted);
       font-size: 12px;
       margin: 4px 0 8px;
+      border: 0;
+      background: transparent;
+      padding: 0;
+      text-align: center;
     }
 
     .run-marker::before,
@@ -1241,6 +1505,90 @@ interface ChatTurn {
       background: var(--surface);
       padding: 4px 9px;
       white-space: nowrap;
+    }
+
+    .run-marker b {
+      color: var(--accent);
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .run-marker--open span {
+      border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+      color: var(--accent);
+    }
+
+    .run-popover {
+      margin: -2px auto 10px;
+      width: min(620px, 100%);
+      border: 1px solid color-mix(in srgb, var(--accent) 36%, var(--line));
+      border-radius: 8px;
+      background: var(--surface);
+      box-shadow: 0 18px 44px rgba(20, 27, 40, 0.13);
+      overflow: hidden;
+    }
+
+    .run-popover header,
+    .run-popover footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 9px;
+      background: var(--chrome);
+      border-bottom: 1px solid var(--line);
+      font-size: 12px;
+    }
+
+    .run-popover header span {
+      color: var(--muted);
+    }
+
+    .run-popover footer {
+      border-top: 1px solid var(--line);
+      border-bottom: 0;
+      justify-content: flex-end;
+      background: var(--surface);
+    }
+
+    .run-popover footer button {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--surface-soft);
+      color: var(--text);
+      min-height: 25px;
+      padding: 2px 8px;
+      font-size: 12px;
+    }
+
+    .run-popover__grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 1px;
+      background: var(--line);
+    }
+
+    .run-popover__grid div {
+      min-width: 0;
+      display: grid;
+      gap: 2px;
+      padding: 8px;
+      background: var(--surface);
+    }
+
+    .run-popover__grid span {
+      color: var(--muted);
+      font-size: 10px;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+
+    .run-popover__grid b {
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+      font-size: 12px;
     }
 
     .turn {
@@ -1382,13 +1730,71 @@ interface ChatTurn {
     }
 
     .composer__input {
-      min-height: 42px;
+      min-height: 54px;
       padding: 10px 12px;
       color: var(--faint);
+      display: grid;
+      align-content: start;
+      gap: 8px;
+    }
+
+    .composer__input > span {
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .composer__mentions,
+    .composer__quick,
+    .composer__context,
+    .composer__runtime,
+    .git-actions,
+    .function-grid {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      flex-wrap: wrap;
+    }
+
+    .composer__mentions button {
+      min-height: 22px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+      padding: 1px 7px;
+      font-size: 11px;
+    }
+
+    .composer__quick {
+      padding: 0 6px 6px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .composer__quick button {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      min-height: 26px;
+      border-radius: 6px;
+      color: var(--muted);
+    }
+
+    .composer__quick .svg-icon,
+    .composer__bar .svg-icon {
+      width: 13px;
+      height: 13px;
+    }
+
+    .composer__mode--active {
+      color: var(--accent) !important;
+      border-color: color-mix(in srgb, var(--accent) 48%, var(--line)) !important;
+      background: color-mix(in srgb, var(--accent) 8%, var(--surface)) !important;
     }
 
     .composer__bar {
-      min-height: 38px;
+      min-height: 40px;
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
       align-items: center;
@@ -1402,6 +1808,45 @@ interface ChatTurn {
       display: inline-flex;
       align-items: center;
       gap: 5px;
+    }
+
+    .git-actions {
+      margin-top: -2px;
+      margin-bottom: 9px;
+    }
+
+    .git-actions button,
+    .function-grid button {
+      min-height: 26px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--surface-soft);
+      color: var(--text);
+      padding: 3px 8px;
+      font-size: 12px;
+    }
+
+    .function-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 6px;
+    }
+
+    .function-grid button {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 6px;
+      text-align: left;
+      overflow: hidden;
+    }
+
+    .function-grid button span {
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
     }
 
     .context {
@@ -1648,6 +2093,19 @@ interface ChatTurn {
       background: var(--chrome);
     }
 
+    .modal__panel header > div {
+      display: flex;
+      gap: 6px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .modal__tab--active {
+      color: var(--accent) !important;
+      border-color: color-mix(in srgb, var(--accent) 50%, var(--line)) !important;
+      background: color-mix(in srgb, var(--accent) 10%, var(--surface)) !important;
+    }
+
     .modal__panel--debug {
       height: min(760px, 88vh);
       display: grid;
@@ -1837,8 +2295,12 @@ export class NextGenChatWorkbenchPrototypeComponent {
   readonly lightboxOpen = signal(false);
   readonly commandOpen = signal(false);
   readonly guideOpen = signal(false);
+  readonly markerOpen = signal(false);
+  readonly debugTab = signal<DebugTab>('overview');
+  readonly composerMode = signal<ComposeMode>('continue');
 
   readonly iconPaths: Record<string, string[]> = {
+    back: ['M19 12H5', 'M12 19l-7-7 7-7'],
     bug: ['M8 2l1.5 2h5L16 2', 'M7 8h10v9a5 5 0 0 1-10 0V8', 'M5 13H2', 'M22 13h-3', 'M5 19H3', 'M21 19h-2', 'M9 12h.01', 'M15 12h.01'],
     chat: ['M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8'],
     check: ['M20 6L9 17l-5-5'],
@@ -1848,6 +2310,8 @@ export class NextGenChatWorkbenchPrototypeComponent {
     columns: ['M4 4h6v16H4z', 'M14 4h6v16h-6z'],
     command: ['M9 7H7a2 2 0 1 1 2-2v14a2 2 0 1 1-2-2h10a2 2 0 1 1-2 2V5a2 2 0 1 1 2 2H9'],
     compress: ['M8 3v5H3', 'M16 3v5h5', 'M8 21v-5H3', 'M16 21v-5h5'],
+    copy: ['M8 8h11v11H8z', 'M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1'],
+    edit: ['M12 20h9', 'M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4 11.5-11.5z'],
     expand: ['M3 8V3h5', 'M21 8V3h-5', 'M3 16v5h5', 'M21 16v5h-5'],
     file: ['M6 2h8l4 4v16H6z', 'M14 2v5h5'],
     fileDiff: ['M6 2h8l4 4v16H6z', 'M14 2v5h5', 'M9 13h6', 'M12 10v6'],
@@ -1859,6 +2323,7 @@ export class NextGenChatWorkbenchPrototypeComponent {
     panel: ['M4 4h16v16H4z', 'M9 4v16', 'M9 9h11'],
     panelClose: ['M4 4h16v16H4z', 'M15 4v16', 'M10 9l-3 3 3 3'],
     panelOpen: ['M4 4h16v16H4z', 'M9 4v16', 'M14 9l3 3-3 3'],
+    pause: ['M8 5v14', 'M16 5v14'],
     play: ['M7 5v14l11-7z'],
     plus: ['M12 5v14', 'M5 12h14'],
     search: ['M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16', 'M21 21l-4.3-4.3'],

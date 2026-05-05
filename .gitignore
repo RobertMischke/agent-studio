@@ -26,3 +26,12 @@ backend/appsettings.Local.json
 # Rolling backend logs (logs/backend/<date>.log + last-crash.json) live at the
 # repo root at runtime. Runtime artefacts never belong in source.
 logs/
+
+# ng serve runtime logs (frontend dev server). Per-port files like
+# .ng-serve-4021.out.log / .err.log are runtime artefacts; never commit.
+frontend/.ng-serve-*.log
+frontend/.ng-serve-*.out.log
+frontend/.ng-serve-*.err.log
+.ng-serve-*.log
+.ng-serve-*.out.log
+.ng-serve-*.err.log
