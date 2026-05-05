@@ -184,13 +184,33 @@ import { WorkspaceTokenTimelineComponent } from './components/workspace-token-ti
             </main>
           </div>
         } @else {
-          <main class="dashboard">
-            <app-job-column title="In Preparation" icon="📋" state="1-preparation" [jobs]="displayGrouped().preparation" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" (addTask)="openCreate($event)" />
-            <app-job-column title="Ready" icon="📦" state="2-ready" [jobs]="displayGrouped().ready" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" (addTask)="openCreate($event)" />
-            <app-job-column title="In Progress" icon="🔵" state="3-progress" [jobs]="displayGrouped().progress" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
-            <app-job-column title="Review" icon="🟡" state="4-review" [jobs]="displayGrouped().review" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
-            <app-job-column title="Completed" icon="🟢" state="5-completed" [jobs]="displayGrouped().completed" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" (archiveAll)="onArchiveAll()" />
-            <app-job-column title="Archive" icon="🗄️" state="6-archive" [jobs]="displayGrouped().archive" (jobClick)="openDetail($event)" (jobDrop)="onJobDrop($event)" (jobReorder)="onJobReorder($event)" />
+          <main class="dashboard" data-testid="kanban-dashboard">
+            @for (g of laneGroups(); track g.id) {
+              <section class="lane-group"
+                       [attr.data-testid]="'lane-group-' + g.id"
+                       [attr.data-axis]="g.axis">
+                <header class="lane-group__head">
+                  <span class="lane-group__label">{{ g.label }}</span>
+                  <span class="lane-group__axis">{{ g.axis }}</span>
+                </header>
+                <div class="lane-group__lanes">
+                  @for (lane of g.lanes; track lane.state) {
+                    <app-job-column
+                      [title]="lane.title"
+                      [icon]="lane.icon"
+                      [state]="lane.state"
+                      [jobs]="lane.jobs"
+                      [collapsed]="isLaneCollapsed(lane.state)"
+                      (collapseToggle)="toggleLaneCollapse(lane.state)"
+                      (jobClick)="openDetail($event)"
+                      (jobDrop)="onJobDrop($event)"
+                      (jobReorder)="onJobReorder($event)"
+                      (addTask)="openCreate($event)"
+                      (archiveAll)="onArchiveAll()" />
+                  }
+                </div>
+              </section>
+            }
           </main>
         }
       </div>
@@ -981,12 +1001,62 @@ import { WorkspaceTokenTimelineComponent } from './components/workspace-token-ti
     }
     .dashboard {
       display: flex;
-      gap: 16px;
+      gap: 18px;
       padding: 16px;
       overflow-x: auto;
       flex: 1;
       min-width: 0;
+      align-items: stretch;
     }
+    /*
+     * Lane groups bundle the individual columns into visually distinct
+     * phases of the workflow:
+     *   Backlog (human)    -> Preparation, Ready
+     *   Active (agent)     -> In Progress, Review
+     *   Done               -> Completed, Archive
+     * The group is just a contiguous flex container with a small header.
+     * It does not eat horizontal space when the inner lanes collapse, so
+     * the overall board reflows the same way it always did.
+     */
+    .lane-group {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 0;
+      padding: 6px 6px 0;
+      border: 1px solid rgba(255,255,255,0.04);
+      border-radius: 18px;
+      background: rgba(255,255,255,0.015);
+      flex: 0 0 auto;
+    }
+    .lane-group__head {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      padding: 4px 8px 0;
+      color: #94a3b8;
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+    .lane-group__label {
+      font-weight: 700;
+      color: #cbd5e1;
+    }
+    .lane-group__axis {
+      font-weight: 500;
+      color: rgba(148,163,184,0.65);
+    }
+    .lane-group__lanes {
+      display: flex;
+      gap: 12px;
+      flex: 1;
+      min-width: 0;
+      align-items: stretch;
+    }
+    /* Each non-collapsed lane keeps its old min-width so the board feels
+       the same when nothing is collapsed. */
+    .lane-group__lanes > app-job-column { display: contents; }
     .workspace {
       display: grid;
       grid-template-columns: var(--side-sheet-width, 280px) minmax(0, 1fr);
@@ -1299,6 +1369,14 @@ export class App implements OnInit {
   readonly activeProjects = signal<Set<string>>(new Set(JSON.parse(localStorage.getItem('activeProjects') ?? '[]')));
   readonly sideSheetWidth = signal<number>(parseInt(localStorage.getItem('sideSheetWidth') ?? '280'));
   readonly collapsedGroups = signal<Set<string>>(new Set(JSON.parse(localStorage.getItem('collapsedGroups') ?? '[]')));
+  /**
+   * Per-lane collapse preference for the main board. Values are state ids
+   * (`1-preparation` … `6-archive`); a state present here renders as a
+   * narrow rail instead of a full column. Persisted in localStorage so the
+   * user's layout survives reloads. Default is empty (everything expanded)
+   * to keep the first-run board useful before any customisation.
+   */
+  readonly collapsedLanes = signal<Set<string>>(new Set(JSON.parse(localStorage.getItem('collapsedLanes') ?? '[]')));
   readonly taskNavCollapsed = signal<boolean>(localStorage.getItem('taskNavCollapsed') === '1');
   readonly showUpdateStable = signal(false);
   readonly showE2ECleanup = signal(false);
@@ -1353,6 +1431,51 @@ export class App implements OnInit {
       { state: '4-review', title: 'Review', icon: '🟡', jobs: grouped.review },
       { state: '5-completed', title: 'Completed', icon: '🟢', jobs: grouped.completed },
       { state: '6-archive', title: 'Archive', icon: '🗄️', jobs: grouped.archive ?? [] }
+    ];
+  });
+
+  /**
+   * Board lane groups. Three contiguous buckets keep the existing left-to-
+   * right state flow intact while letting the user read the board as a
+   * workflow rather than six independent columns:
+   *
+   *  - backlog (human): Preparation, Ready
+   *  - active  (agent): In Progress, Review
+   *  - done           : Completed, Archive
+   *
+   * If the lifecycle-lanes expansion adds Intake / Post Processing they
+   * land in the `active` bucket; the grouping shape does not change.
+   */
+  readonly laneGroups = computed(() => {
+    const grouped = this.displayGrouped();
+    return [
+      {
+        id: 'backlog',
+        label: 'Backlog',
+        axis: 'human',
+        lanes: [
+          { state: '1-preparation', title: 'In Preparation', icon: '📋', jobs: grouped.preparation },
+          { state: '2-ready', title: 'Ready', icon: '📦', jobs: grouped.ready }
+        ]
+      },
+      {
+        id: 'active',
+        label: 'Active',
+        axis: 'agent',
+        lanes: [
+          { state: '3-progress', title: 'In Progress', icon: '🔵', jobs: grouped.progress },
+          { state: '4-review', title: 'Review', icon: '🟡', jobs: grouped.review }
+        ]
+      },
+      {
+        id: 'done',
+        label: 'Done',
+        axis: 'human',
+        lanes: [
+          { state: '5-completed', title: 'Completed', icon: '🟢', jobs: grouped.completed },
+          { state: '6-archive', title: 'Archive', icon: '🗄️', jobs: grouped.archive ?? [] }
+        ]
+      }
     ];
   });
   readonly selectedJobUsesCopilot = computed(() => (this.selectedJob()?.info.cliType ?? 'copilot') === 'copilot');
@@ -2049,6 +2172,18 @@ export class App implements OnInit {
 
   isGroupCollapsed(state: string): boolean {
     return this.collapsedGroups().has(state);
+  }
+
+  toggleLaneCollapse(state: string) {
+    const current = new Set(this.collapsedLanes());
+    if (current.has(state)) current.delete(state);
+    else current.add(state);
+    this.collapsedLanes.set(current);
+    localStorage.setItem('collapsedLanes', JSON.stringify([...current]));
+  }
+
+  isLaneCollapsed(state: string): boolean {
+    return this.collapsedLanes().has(state);
   }
 
   setTaskNavCollapsed(collapsed: boolean) {

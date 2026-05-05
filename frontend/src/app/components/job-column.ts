@@ -2,6 +2,7 @@ import { Component, computed, input, output } from '@angular/core';
 import { JobInfo, JobOrderItem } from '../models/job.model';
 import { JobCardComponent } from './job-card';
 import { projectIdentity } from '../services/project-identity.util';
+import { cliTypeIcon } from '../services/format.util';
 import { InstantTooltipDirective } from '../directives/instant-tooltip.directive';
 
 const ARCHIVE_VISIBLE_LIMIT = 20;
@@ -11,6 +12,45 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
   standalone: true,
   imports: [JobCardComponent, InstantTooltipDirective],
   template: `
+    @if (collapsed()) {
+      <button type="button"
+              class="column-rail"
+              [class.column-rail--dragover]="isDragOver"
+              [attr.data-testid]="'lane-rail-' + state()"
+              [attr.data-state]="state()"
+              [appTip]="railTooltip()"
+              (click)="collapseToggle.emit()"
+              (dragover)="onDragOver($event)"
+              (dragleave)="onDragLeave($event)"
+              (drop)="onDrop($event)">
+          <span class="column-rail__icon" aria-hidden="true">{{ icon() }}</span>
+          <span class="column-rail__count" data-testid="lane-rail-count">{{ jobs().length }}</span>
+          <span class="column-rail__title">{{ title() }}</span>
+          <span class="column-rail__indicators" aria-hidden="true">
+            @if (indicators().running > 0) {
+              <span class="column-rail__dot column-rail__dot--running"
+                    [attr.data-testid]="'lane-rail-running-' + state()"
+                    [attr.data-count]="indicators().running"></span>
+            }
+            @if (indicators().needsInput > 0) {
+              <span class="column-rail__dot column-rail__dot--needs-input"
+                    [attr.data-testid]="'lane-rail-needs-input-' + state()"
+                    [attr.data-count]="indicators().needsInput">!</span>
+            }
+            @if (indicators().error > 0) {
+              <span class="column-rail__dot column-rail__dot--error"
+                    [attr.data-testid]="'lane-rail-error-' + state()"
+                    [attr.data-count]="indicators().error">×</span>
+            }
+            @if (indicators().activeCli; as cli) {
+              <span class="column-rail__cli"
+                    [attr.data-testid]="'lane-rail-cli-' + state()"
+                    [attr.data-cli]="cli">{{ cliIconFor(cli) }}</span>
+            }
+          </span>
+          <span class="column-rail__expand" aria-hidden="true">›</span>
+      </button>
+    } @else {
     <div class="column"
          [class.column--dragover]="isDragOver"
          [class.column--archive]="isArchive()"
@@ -30,6 +70,11 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
             ⬇ Archive all
           </button>
         }
+        <button type="button"
+                class="column__collapse"
+                [attr.data-testid]="'lane-collapse-' + state()"
+                [appTip]="'Collapse ' + title() + ' lane'"
+                (click)="collapseToggle.emit()">‹</button>
       </div>
       <div class="column__body">
         @if (isArchive()) {
@@ -90,6 +135,7 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
         }
       </div>
     </div>
+    }
   `,
   styles: [`
     .column {
@@ -214,6 +260,136 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
       border-color: rgba(100, 116, 139, 0.55);
       color: #cbd5e1;
     }
+    .column__collapse {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      color: #94a3b8;
+      width: 22px;
+      height: 22px;
+      padding: 0;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      display: grid;
+      place-items: center;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .column__collapse:hover {
+      background: rgba(255,255,255,0.10);
+      border-color: rgba(255,255,255,0.18);
+      color: #e2e8f0;
+    }
+    /*
+     * Collapsed-lane rail. Same vertical rhythm as a full column so the
+     * board stays aligned, but only ~36px wide. The rail itself is the
+     * drop target and the click target for re-expansion. Indicators live
+     * in a vertical strip in the middle so the user still sees task
+     * count, active runs, needs-input flags, and errors at a glance.
+     */
+    .column-rail {
+      background: var(--column-bg, #181825);
+      border: 1px solid rgba(255,255,255,0.04);
+      border-radius: 14px;
+      width: 36px;
+      min-width: 36px;
+      flex: 0 0 36px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 4px 10px;
+      cursor: pointer;
+      color: #cbd5e1;
+      transition: outline 0.15s, background 0.15s;
+    }
+    .column-rail:hover {
+      background: #1a1a2b;
+    }
+    .column-rail--dragover {
+      outline: 2px solid rgba(99, 102, 241, 0.6);
+      outline-offset: -2px;
+      background: rgba(99, 102, 241, 0.05);
+    }
+    .column-rail__icon { font-size: 16px; line-height: 1; }
+    .column-rail__count {
+      background: rgba(255,255,255,0.08);
+      color: #cbd5e1;
+      border-radius: 10px;
+      padding: 2px 6px;
+      font-size: 11px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      min-width: 22px;
+      text-align: center;
+    }
+    .column-rail__title {
+      writing-mode: vertical-rl;
+      transform: rotate(180deg);
+      font-size: 11px;
+      font-weight: 600;
+      color: #94a3b8;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin: 4px 0 6px;
+      flex: 1 1 auto;
+      white-space: nowrap;
+    }
+    .column-rail__indicators {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+    .column-rail__dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      font-size: 9px;
+      font-weight: 800;
+      line-height: 1;
+    }
+    .column-rail__dot--running {
+      background: rgba(56,189,248,0.20);
+      border: 1px solid rgba(56,189,248,0.55);
+      color: #7dd3fc;
+      animation: column-rail-pulse 1.4s ease-in-out infinite;
+    }
+    .column-rail__dot--running::after {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: #7dd3fc;
+    }
+    .column-rail__dot--needs-input {
+      background: rgba(252, 211, 77, 0.18);
+      border: 1px solid rgba(252, 211, 77, 0.55);
+      color: #fcd34d;
+    }
+    .column-rail__dot--error {
+      background: rgba(244, 63, 94, 0.20);
+      border: 1px solid rgba(244, 63, 94, 0.55);
+      color: #fda4af;
+    }
+    @keyframes column-rail-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(56,189,248,0.55); }
+      50% { box-shadow: 0 0 0 4px rgba(56,189,248,0.0); }
+    }
+    .column-rail__cli {
+      font-size: 12px;
+      line-height: 1;
+      filter: saturate(1.1);
+    }
+    .column-rail__expand {
+      color: #64748b;
+      font-size: 14px;
+      line-height: 1;
+      margin-top: auto;
+    }
+    .column-rail:hover .column-rail__expand { color: #cbd5e1; }
     .column--archive .column__body { gap: 2px; }
     .archive-row {
       display: grid;
@@ -277,11 +453,58 @@ export class JobColumnComponent {
   readonly state = input.required<string>();
   readonly jobs = input.required<JobInfo[]>();
   readonly reorderDisabled = input<boolean>(false);
+  readonly collapsed = input<boolean>(false);
   readonly jobClick = output<JobInfo>();
   readonly jobDrop = output<{ jobId: string; watchPath: string; targetState: string }>();
   readonly jobReorder = output<{ state: string; jobs: JobOrderItem[] }>();
   readonly addTask = output<string>();
   readonly archiveAll = output<void>();
+  readonly collapseToggle = output<void>();
+
+  /**
+   * Aggregated lane indicators rendered in collapsed-rail mode. The rail
+   * stays useful for triage even when its cards are hidden: a running
+   * count, a needs-input count (saved follow-ups waiting for the
+   * orchestrator), an error/blocked count, and the CLI of the active
+   * run when one exists.
+   */
+  readonly indicators = computed(() => {
+    let running = 0;
+    let needsInput = 0;
+    let error = 0;
+    let activeCli: string | null = null;
+    for (const j of this.jobs()) {
+      const status = j.execution?.status ?? null;
+      if (status === 'running') {
+        running++;
+        if (!activeCli) activeCli = j.cliType ?? j.agent ?? null;
+      } else if (status === 'failed' || status === 'cancelled' || status === 'stopped') {
+        error++;
+      }
+      if (j.pendingIntent) needsInput++;
+    }
+    return { running, needsInput, error, activeCli };
+  });
+
+  cliIconFor(cli: string): string {
+    if (cli === 'copilot' || cli === 'claude' || cli === 'codex' || cli === 'gemini') {
+      return cliTypeIcon(cli);
+    }
+    return '🤖';
+  }
+
+  railTooltip(): string {
+    const i = this.indicators();
+    const lines: string[] = [];
+    lines.push(`${this.title()} (${this.jobs().length} task${this.jobs().length === 1 ? '' : 's'})`);
+    if (i.running) lines.push(`${i.running} running`);
+    if (i.needsInput) lines.push(`${i.needsInput} pending follow-up`);
+    if (i.error) lines.push(`${i.error} failed/stopped`);
+    if (i.activeCli) lines.push(`Active CLI: ${i.activeCli}`);
+    lines.push('');
+    lines.push('Click to expand');
+    return lines.join('\n');
+  }
 
   isDragOver = false;
   dropIndex = -1;
