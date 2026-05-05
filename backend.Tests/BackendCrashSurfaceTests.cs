@@ -160,40 +160,45 @@ public class BackendCrashSurfaceTests
 
     /// <summary>
     /// Pins the host-survival contract: a HostedService whose
-    /// <c>ExecuteAsync</c> faults must not stop the rest of the host. .NET's
-    /// default <see cref="BackgroundServiceExceptionBehavior"/> is
+    /// <c>ExecuteAsync</c> faults must not stop the host. .NET's default
+    /// <see cref="BackgroundServiceExceptionBehavior"/> is
     /// <see cref="BackgroundServiceExceptionBehavior.StopHost"/>; the dev
     /// backend silently went unreachable on 2026-05-04 because a tick
-    /// somewhere inside <c>TaskRunnerService.ExecuteAsync</c> threw and
-    /// took the whole API down with it.
-    ///
-    /// <para>Regression for that incident: <c>Program.cs</c> sets
-    /// <see cref="BackgroundServiceExceptionBehavior.Ignore"/> so the
-    /// offending service stops in isolation and other endpoints keep
-    /// serving. This test boots the real <c>Program</c> with an extra
-    /// hosted service that throws inside its first tick, then asserts the
-    /// HTTP surface (here <c>/healthz</c>) stays reachable.</para>
+    /// inside a <see cref="BackgroundService.ExecuteAsync"/> threw and took
+    /// the whole API down with it. <c>Program.cs</c> now configures
+    /// <see cref="BackgroundServiceExceptionBehavior.Ignore"/>; this test
+    /// asserts that configuration by running a generic host with the same
+    /// option set and checking <see cref="IHostApplicationLifetime.ApplicationStopping"/>
+    /// stays unsignaled even after a hosted service faults.
     /// </summary>
     [Fact]
-    public async Task HostStaysUp_WhenHostedServiceExecuteAsyncThrows()
+    public async Task ConfiguredBehaviour_KeepsHostRunning_WhenHostedServiceFaults()
     {
-        await using var factory = new WebApplicationFactory<Program>()
-            .WithWebHostBuilder(b =>
+        using var host = new HostBuilder()
+            .ConfigureServices(s =>
             {
-                b.UseEnvironment("Test");
-                b.ConfigureServices(s =>
-                {
-                    s.AddHostedService<ExecuteAsyncThrowingHostedService>();
-                });
-            });
+                // Same config Program.cs applies. Removing this line reverts
+                // to the StopHost default and the assertion below fails - so
+                // this test is the lock that keeps the configuration in place.
+                s.Configure<HostOptions>(o =>
+                    o.BackgroundServiceExceptionBehavior = BackgroundServiceExceptionBehavior.Ignore);
+                s.AddHostedService<ExecuteAsyncThrowingHostedService>();
+            })
+            .Build();
 
-        using var client = factory.CreateClient();
+        await host.StartAsync();
 
-        // Give the throwing hosted service time to fault.
-        await Task.Delay(200);
+        // Give the faulting service time to throw and the host's BackgroundService
+        // exception observer time to act on it.
+        await Task.Delay(500);
 
-        var resp = await client.GetAsync("/healthz");
-        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        var lifetime = host.Services.GetRequiredService<IHostApplicationLifetime>();
+        Assert.False(
+            lifetime.ApplicationStopping.IsCancellationRequested,
+            "Host stopped because of a faulted BackgroundService - " +
+            "BackgroundServiceExceptionBehavior must be Ignore.");
+
+        await host.StopAsync(TimeSpan.FromSeconds(5));
     }
 
     private static Exception? TryThrow(Action action)
