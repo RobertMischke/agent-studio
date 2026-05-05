@@ -101,6 +101,8 @@ async function installBoardMocks(page: Page): Promise<void> {
     }
     await route.fallback();
   });
+  // (catch-all is intentionally registered first so the specific routes
+  // below take precedence — Playwright evaluates routes LIFO.)
 
   await page.route('**/api/watch-paths', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json',
