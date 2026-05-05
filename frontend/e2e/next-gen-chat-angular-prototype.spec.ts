@@ -59,6 +59,24 @@ test.describe('@mockup next-gen chat Angular prototype', () => {
     });
     await page.getByTestId('prototype-status-popover').getByText('Close').click();
 
+    await page.getByTestId('prototype-status-session').click();
+    await expect(page.getByTestId('prototype-status-popover')).toContainText('Session continuity');
+    await expect(page.getByTestId('prototype-status-popover')).toContainText('Worklog');
+    await page.screenshot({
+      path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-status-session.png'),
+      fullPage: false,
+    });
+    await page.getByTestId('prototype-status-popover').getByText('Close').click();
+
+    await page.getByTestId('prototype-owner-switch').click();
+    await expect(page.getByTestId('prototype-status-popover')).toContainText('Project filter and owner');
+    await expect(page.getByTestId('prototype-status-popover')).toContainText('Default route');
+    await page.screenshot({
+      path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-project-owner.png'),
+      fullPage: false,
+    });
+    await page.getByTestId('prototype-status-popover').getByText('Close').click();
+
     await page.getByTestId('prototype-status-model').click();
     await expect(page.getByTestId('prototype-status-popover')).toContainText('CLI and model');
     await page.screenshot({

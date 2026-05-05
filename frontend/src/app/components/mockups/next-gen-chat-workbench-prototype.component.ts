@@ -923,6 +923,11 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
               <article>
                 <h3>Why it matters</h3>
                 <p>The next version must show whether a continuation reused the vendor session, rebuilt context from disk, or lost capture. That state belongs in the status bar and verbose debug.</p>
+                <div class="handoff-list">
+                  <span><b>Resume key</b> codex:next-gen-chat:run-4</span>
+                  <span><b>Context source</b> prompt.md + latest-run + status.md</span>
+                  <span><b>Worklog</b> 12m visible, 9m billable CLI time</span>
+                </div>
                 <div class="function-grid">
                   <button (click)="markerOpen.set(true)">Open run marker</button>
                   <button (click)="debugTab.set('overview'); debugOpen.set(true)">Open session debug</button>
@@ -948,6 +953,11 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
               <article>
                 <h3>Owner switch</h3>
                 <p>The header keeps owner filtering first-class. Found-next should preserve the fast switch for Robin, Orchestrator, QA, and Unassigned without pushing task content down.</p>
+                <div class="handoff-list">
+                  <span><b>Scope</b> active project set plus owner filter</span>
+                  <span><b>Default route</b> last selected project, then user-owned queue</span>
+                  <span><b>Empty state</b> keep side sheet and status bar available</span>
+                </div>
                 <div class="function-grid">
                   <button class="function-grid__active">Robin</button>
                   <button>Orchestrator</button>
@@ -1028,33 +1038,22 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
             <span>Usage</span>
           </button>
           <button class="statusbar__item" (click)="sideSheetOpen.set(true)">
-            <span>Orchestrator</span>
+            <span>Orch</span>
           </button>
           <button class="statusbar__item" (click)="debugTab.set('trace'); debugOpen.set(true)">
             <span>Feed</span>
           </button>
           <button class="statusbar__item" (click)="toggleStatusPanel('evidence')">
-            <span>Visual evidence</span>
+            <span>Visual</span>
           </button>
           <span class="statusbar__sep"></span>
           <button class="statusbar__item statusbar__picker" (click)="toggleStatusPanel('model')" data-testid="prototype-status-model">
-            <span>Default CLI</span>
             <b>Codex</b>
             <span class="statusbar__caret">v</span>
           </button>
           <button class="statusbar__item statusbar__picker" (click)="toggleStatusPanel('model')">
-            <span>Model</span>
             <b>5.5 Extra High</b>
             <span class="statusbar__caret">v</span>
-          </button>
-          <button class="statusbar__item" (click)="toggleDensity()">
-            <span>{{ density() }}</span>
-          </button>
-          <button class="statusbar__item" (click)="toggleTheme()">
-            <span>{{ theme() }}</span>
-          </button>
-          <button class="statusbar__item" (click)="commandOpen.set(true)">
-            <span>Command</span>
           </button>
         </div>
       </footer>
@@ -2980,7 +2979,7 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
       grid-column: 2;
       min-height: 28px;
       display: grid;
-      grid-template-columns: minmax(240px, .85fr) minmax(360px, 1.2fr) minmax(360px, 1fr);
+      grid-template-columns: minmax(230px, .75fr) minmax(460px, 1.25fr) auto;
       gap: 6px;
       align-items: center;
       background: #11111b;
@@ -3169,6 +3168,30 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
       color: var(--muted);
       font-style: normal;
       font-size: 11px;
+    }
+
+    .handoff-list {
+      display: grid;
+      gap: 5px;
+      margin: 8px 0;
+      color: var(--muted);
+      font-size: 11px;
+    }
+
+    .handoff-list span {
+      display: flex;
+      gap: 6px;
+      min-width: 0;
+      padding: 5px 7px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--surface-soft);
+    }
+
+    .handoff-list b {
+      flex: 0 0 auto;
+      color: var(--text);
+      font-weight: 760;
     }
 
     .modal {
