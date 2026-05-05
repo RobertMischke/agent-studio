@@ -1,69 +1,32 @@
 import { Component, computed, signal } from '@angular/core';
 
-type WorkbenchPane = 'result' | 'git' | 'preview' | 'debug' | 'chat';
-type ContextPane = Exclude<WorkbenchPane, 'chat'>;
-type Density = 'comfortable' | 'compact';
-type Theme = 'light' | 'dark';
-type Scenario = 'review' | 'tools' | 'wait' | 'visual' | 'drift' | 'decisions';
-type DebugTab = 'overview' | 'actors' | 'tools' | 'tokens' | 'trace';
-type ComposeMode = 'continue' | 'extend' | 'steer' | 'followup';
-type ActivityTarget = 'projects' | 'tasks' | 'search' | 'git' | 'qa' | 'tokens';
-type StatusPanel = 'health' | 'queue' | 'tokens' | 'evidence' | 'model' | 'session' | 'projects';
-type ActorKind = 'user' | 'agent' | 'orchestrator' | 'supervisor' | 'support' | 'tool' | 'system';
-type InterventionTarget = 'currentRun' | 'nextRun' | 'orchestrator' | 'followUp';
-type DecisionKind = 'reissue' | 'heuristic' | 'needsInput' | 'circuit' | 'captureFail' | 'drift';
-type FeatureAction = 'prompt' | 'activity' | 'timeline' | 'git' | 'screenshots' | 'tokens' | 'sideSheet' | 'startStop';
-
-interface SummaryChip {
-  label: string;
-  value: string;
-  icon: string;
-  pane: WorkbenchPane;
-  tone?: 'ok' | 'warn' | 'danger';
-}
-
-interface ActorMeta {
-  kind: ActorKind;
-  label: string;
-  glyph: string;
-  icon: string;
-  shape: 'circle' | 'rounded' | 'square' | 'hex' | 'shield' | 'triangle' | 'pill';
-  help: string;
-}
-
-interface ChatTurnEntry {
-  kind: 'turn';
-  id: string;
-  actor: ActorKind;
-  title: string;
-  body: string;
-  meta?: string;
-  actions?: string[];
-  intervention?: InterventionTarget;
-}
-
-interface DecisionEntry {
-  kind: 'decision';
-  id: string;
-  decision: DecisionKind;
-  actor: ActorKind;
-  title: string;
-  summary: string;
-  tone: 'info' | 'warn' | 'danger';
-  reason: string;
-  evidence: string;
-  action: string;
-  retry: string;
-  tokens: string;
-  traceRange: string;
-  nextStep: string;
-}
-
-type TranscriptEntry = ChatTurnEntry | DecisionEntry;
+import { FoundNextStatusbarComponent } from './found-next-statusbar.component';
+import { FoundNextTopbarComponent } from './found-next-topbar.component';
+import { ICON_PATHS, PROJECT_TABS, USAGE_STRIP } from './next-gen-chat-workbench-prototype.data';
+import {
+  ActivityTarget,
+  ActorKind,
+  ActorMeta,
+  ComposeMode,
+  ContextPane,
+  DebugTab,
+  DecisionEntry,
+  DecisionKind,
+  Density,
+  FeatureAction,
+  InterventionTarget,
+  Scenario,
+  StatusPanel,
+  SummaryChip,
+  Theme,
+  TranscriptEntry,
+  WorkbenchPane,
+} from './next-gen-chat-workbench-prototype.models';
 
 @Component({
   selector: 'app-next-gen-chat-workbench-prototype',
   standalone: true,
+  imports: [FoundNextTopbarComponent, FoundNextStatusbarComponent],
   template: `
     @if (!closed()) {
       <section class="ng-chat-prototype"
@@ -96,108 +59,20 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
         </button>
       </nav>
 
-      <header class="topbar">
-        <div class="topbar__title">
-          <strong>Agent Task Processor</strong>
-          <span>Task workbench</span>
-        </div>
-        <div class="topbar__projects" aria-label="Project filter" data-testid="prototype-project-switcher">
-          @for (project of projectTabs; track project.name) {
-            <button class="project-chip"
-                    [class.project-chip--active]="project.active"
-                    [style.--project-color]="project.color"
-                    [style.--project-soft]="project.soft"
-                    [style.--project-border]="project.border"
-                    [style.--project-on]="project.on"
-                    [attr.title]="project.tooltip"
-                    (click)="toggleStatusPanel('projects')">
-              <span class="project-chip__disk">{{ project.initial }}</span>
-              <span class="project-chip__name">{{ project.name }}</span>
-              <span class="project-chip__auto">{{ project.auto }}</span>
-            </button>
-          }
-        </div>
-        <div class="topbar__runline" aria-label="Current run summary" data-testid="prototype-topbar-runline">
-          <span>Run 4</span>
-          <span>12m</span>
-          <span>28 tools</span>
-          <span>42k tokens</span>
-          <span>3 commits</span>
-        </div>
-        <div class="topbar__actions">
-          <button class="owner-switch"
-                  title="Owner filter: Robin"
-                  aria-label="Owner filter Robin"
-                  data-testid="prototype-owner-switch"
-                  (click)="toggleStatusPanel('projects')">
-            <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
-              @for (path of iconPath('user'); track path) {
-                <path [attr.d]="path"></path>
-              }
-            </svg>
-            <span>Robin</span>
-          </button>
-          <button class="icon-btn"
-                  [class.icon-btn--active]="sideSheetOpen()"
-                  title="Toggle project sheet"
-                  aria-label="Toggle project sheet"
-                  (click)="sideSheetOpen.set(!sideSheetOpen())"
-                  data-testid="prototype-topbar-sheet">
-            <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
-              @for (path of iconPath(sideSheetOpen() ? 'panelClose' : 'panelOpen'); track path) {
-                <path [attr.d]="path"></path>
-              }
-            </svg>
-          </button>
-          <button class="icon-btn"
-                  [class.icon-btn--active]="statusPanel() === 'queue'"
-                  title="Queue and automation"
-                  aria-label="Queue and automation"
-                  (click)="toggleStatusPanel('queue')"
-                  data-testid="prototype-topbar-queue">
-            <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
-              @for (path of iconPath('columns'); track path) {
-                <path [attr.d]="path"></path>
-              }
-            </svg>
-          </button>
-          <button class="icon-btn" title="Toggle density" aria-label="Toggle density" (click)="toggleDensity()" data-testid="prototype-density-toggle">
-            <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
-              @for (path of iconPath(density() === 'compact' ? 'expand' : 'compress'); track path) {
-                <path [attr.d]="path"></path>
-              }
-            </svg>
-          </button>
-          <button class="icon-btn" title="Toggle theme" aria-label="Toggle theme" (click)="toggleTheme()" data-testid="prototype-theme-toggle">
-            <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
-              @for (path of iconPath(theme() === 'light' ? 'sun' : 'moon'); track path) {
-                <path [attr.d]="path"></path>
-              }
-            </svg>
-          </button>
-          <button class="icon-btn" title="Command palette" aria-label="Command palette" (click)="commandOpen.set(true)" data-testid="prototype-command-open">
-            <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
-              @for (path of iconPath('command'); track path) {
-                <path [attr.d]="path"></path>
-              }
-            </svg>
-          </button>
-          <button class="icon-btn" title="Verbose debug" aria-label="Verbose debug" (click)="debugOpen.set(true)" data-testid="prototype-debug-open">
-            <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
-              @for (path of iconPath('bug'); track path) {
-                <path [attr.d]="path"></path>
-              }
-            </svg>
-          </button>
-          <button class="icon-btn" title="Close prototype" aria-label="Close prototype" (click)="close()">
-            <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
-              @for (path of iconPath('close'); track path) {
-                <path [attr.d]="path"></path>
-              }
-            </svg>
-          </button>
-        </div>
-      </header>
+      <app-found-next-topbar
+        [theme]="theme()"
+        [density]="density()"
+        [sideSheetOpen]="sideSheetOpen()"
+        [statusPanel]="statusPanel()"
+        (projectPanelRequested)="toggleStatusPanel('projects')"
+        (sideSheetToggled)="sideSheetOpen.set(!sideSheetOpen())"
+        (queuePanelRequested)="toggleStatusPanel('queue')"
+        (densityToggled)="toggleDensity()"
+        (themeToggled)="toggleTheme()"
+        (commandRequested)="commandOpen.set(true)"
+        (debugRequested)="debugOpen.set(true)"
+        (closeRequested)="close()">
+      </app-found-next-topbar>
 
       <main class="workspace" [class.workspace--sheet-closed]="!sideSheetOpen()">
         <aside class="task-list" aria-label="Task list">
@@ -990,73 +865,11 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
         </section>
       }
 
-      <footer class="statusbar" data-testid="prototype-statusbar">
-        <div class="statusbar__group">
-          <button class="statusbar__item statusbar__item--readonly" (click)="toggleStatusPanel('health')" data-testid="prototype-status-health">
-            <span class="statusbar__dot statusbar__dot--live"></span>
-            <span>2 running</span>
-          </button>
-          <button class="statusbar__item statusbar__item--readonly" (click)="toggleStatusPanel('queue')" data-testid="prototype-status-queue">
-            <span class="statusbar__icon-text">auto</span>
-            <span>4/6</span>
-          </button>
-          <button class="statusbar__item" (click)="toggleStatusPanel('session')" data-testid="prototype-status-session">
-            <span class="statusbar__icon-text">session</span>
-            <span>preserved chain 3</span>
-          </button>
-        </div>
-        <div class="statusbar__group statusbar__group--center statusbar__usage">
-          @for (item of usageStrip; track item.label) {
-            <button class="usage-pill"
-                    [attr.data-tone]="item.tone"
-                    [attr.title]="item.detail"
-                    (click)="toggleStatusPanel('tokens')"
-                    [attr.data-testid]="item.testId">
-              <span>{{ item.label }}</span>
-              <b>{{ item.value }}</b>
-            </button>
-          }
-          <button class="usage-pill usage-pill--tokens" (click)="toggleStatusPanel('tokens')" data-testid="prototype-status-token">
-            <span>Tokens</span>
-            <b>42k</b>
-          </button>
-          <button class="usage-pill" (click)="setPane('git')" data-testid="prototype-status-git">
-            <span>Git</span>
-            <b>3 commits</b>
-          </button>
-          <button class="usage-pill" (click)="toggleStatusPanel('evidence')" data-testid="prototype-status-evidence">
-            <span>Visual</span>
-            <b>4 shots</b>
-          </button>
-          <button class="usage-pill" (click)="setPane('debug')">
-            <span>Tools</span>
-            <b>28</b>
-          </button>
-        </div>
-        <div class="statusbar__group statusbar__group--right">
-          <button class="statusbar__item" (click)="toggleStatusPanel('tokens')">
-            <span>Usage</span>
-          </button>
-          <button class="statusbar__item" (click)="sideSheetOpen.set(true)">
-            <span>Orch</span>
-          </button>
-          <button class="statusbar__item" (click)="debugTab.set('trace'); debugOpen.set(true)">
-            <span>Feed</span>
-          </button>
-          <button class="statusbar__item" (click)="toggleStatusPanel('evidence')">
-            <span>Visual</span>
-          </button>
-          <span class="statusbar__sep"></span>
-          <button class="statusbar__item statusbar__picker" (click)="toggleStatusPanel('model')" data-testid="prototype-status-model">
-            <b>Codex</b>
-            <span class="statusbar__caret">v</span>
-          </button>
-          <button class="statusbar__item statusbar__picker" (click)="toggleStatusPanel('model')">
-            <b>5.5 Extra High</b>
-            <span class="statusbar__caret">v</span>
-          </button>
-        </div>
-      </footer>
+      <app-found-next-statusbar
+        (statusPanelRequested)="toggleStatusPanel($event)"
+        (sideSheetRequested)="sideSheetOpen.set(true)"
+        (debugTraceRequested)="debugTab.set('trace'); debugOpen.set(true)">
+      </app-found-next-statusbar>
 
       @if (debugOpen()) {
         <div class="modal" data-testid="prototype-debug-modal" (click)="debugOpen.set(false)">
