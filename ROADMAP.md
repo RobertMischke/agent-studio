@@ -216,17 +216,20 @@ The chat should render:
 
 First implementation order:
 
-1. Add a `ConversationEvent` projection above the existing Activity Log parser.
-2. Group tool calls into compact inline `ToolBurst` events in conversation mode while preserving raw trace mode.
-3. Add persistent actor rails and labels for all participant types.
-4. Add compact decision/advisory rows for orchestrator and supervisor events, with expandable `DecisionCard` details.
-5. Add bottom composer controls and interactive configuration overlays.
-6. Add continuous-chat task markers with hover/click metadata.
-7. Add a fullscreen Verbose Debug view for actor counts, duration, task markers, tool density, tokens, warnings, artifacts, and orchestrator explanations.
-8. Fix layout reservations so auto-eval banners, run timeline, mode controls, stream, and composer cannot overlap.
-9. Add Playwright coverage using Stable evidence cases: tool-heavy archive, review job with orchestrator output, analysis report job, empty run, failed tool retry, and user intervention.
+1. Add the `Frontend:NextGenChat` integration bridge. It inventories and preserves the current Activity Log parser, Trace mode, run timeline, auto-eval banner, task composer, reusable `app-chat`, project side sheet, Status Bar quota, CLI Usage sheet, Workspace Token Timeline, and project token summaries.
+2. Add a `ConversationEvent` projection above the existing Activity Log parser.
+3. Render the projection in the existing Protocol pane Activity tab behind the flag while preserving raw trace access and current task controls.
+4. Group tool calls into compact inline `ToolBurst` events in conversation mode while preserving raw trace mode.
+5. Add persistent actor rails and labels for all participant types.
+6. Add compact decision/advisory rows for orchestrator and supervisor events, with expandable `DecisionCard` details.
+7. Adapt the existing project side sheet to the shared message grammar without removing project picker, task tab, roadmap intake, attachments, or make-task behavior.
+8. Add bottom composer controls and interactive configuration overlays.
+9. Add continuous-chat task markers with hover/click metadata.
+10. Add a fullscreen Verbose Debug view for actor counts, duration, task markers, tool density, tokens, warnings, artifacts, and orchestrator explanations.
+11. Fix layout reservations so auto-eval banners, run timeline, mode controls, stream, and composer cannot overlap.
+12. Add Playwright coverage using Stable evidence cases: tool-heavy archive, review job with orchestrator output, analysis report job, empty run, failed tool retry, user intervention, light theme, dark theme, side sheet wide mode, and both layout flags.
 
-Queued at `agent-taskboard/2-ready/chat-conversation-event-projection/`, `agent-taskboard/2-ready/chat-tool-burst-collapsing/`, `agent-taskboard/2-ready/chat-actor-decision-cards/`, `agent-taskboard/2-ready/chat-window-playwright-regression-suite/`, and `agent-taskboard/2-ready/chat-verbose-debug-view/`.
+Queued at `agent-taskboard/2-ready/chat-layout-integration-bridge/`, `agent-taskboard/2-ready/chat-conversation-event-projection/`, `agent-taskboard/2-ready/chat-tool-burst-collapsing/`, `agent-taskboard/2-ready/chat-actor-decision-cards/`, `agent-taskboard/2-ready/chat-window-playwright-regression-suite/`, and `agent-taskboard/2-ready/chat-verbose-debug-view/`.
 
 ### Expanded Lifecycle Lanes
 

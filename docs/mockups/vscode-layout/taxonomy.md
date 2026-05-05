@@ -104,3 +104,12 @@ Sections (chevron-collapsible):
 4. **Software** — branch, last commit, "Open in VS Code"
 
 The Meta panel scrolls independently of the chat.
+
+## Chat integration boundary
+
+The VS Code layout flag owns app chrome and density. The next-generation chat flag owns conversation grammar and rendering. They are related but separate:
+
+- `Frontend:VsCodeLayout` moves chrome to edges, tightens padding, and exposes the meta panel.
+- `Frontend:NextGenChat` changes the Activity tab and side sheet transcript into the v5 chat grammar.
+
+Do not use the layout work as permission to remove current chat functions. The task composer modes, run timeline, Trace mode, token and quota links, screenshots, commits, auto-eval banner, and raw technical output must stay reachable while the renderer changes.

@@ -11,6 +11,7 @@ This folder is not existing product behavior. It is the target surface for the n
 - [research.md](research.md) - Stable observations and external product research.
 - [best-practices-comparison.md](best-practices-comparison.md) - focused comparison with VS Code Copilot Chat, Claude Code, Gemini Code Assist, and Codex.
 - [visual-audit.md](visual-audit.md) - visual critique of the current Stable chat evidence.
+- [integration-plan.md](integration-plan.md) - migration plan from today's Activity Log, side sheet, run evidence, token surfaces, and composer controls into the v5 chat grammar.
 - [evidence/stable-playwright-observations.json](evidence/stable-playwright-observations.json) - Playwright metrics from Stable.
 - [evidence/next-gen-chat-mockup-desktop.png](evidence/next-gen-chat-mockup-desktop.png) - rendered desktop screenshot of the proposed mockup.
 - [evidence/next-gen-chat-mockup-mobile.png](evidence/next-gen-chat-mockup-mobile.png) - rendered mobile screenshot of the proposed mockup.
@@ -54,6 +55,8 @@ The pure chatflow remains the center, but it has two homes in the existing app:
 
 - Task-level chat lives in the task detail Chat tab, next to Prompt, Protocol, Files, Commits, and Screenshots.
 - Project-level chat lives in the resizable side sheet, where cross-task steering and project context already belong.
+- Integration must start from the existing implementation, not from a pasted mockup. Preserve the Activity Log parser, Trace mode, run timeline, auto-eval banner, task composer, project side sheet, CLI Usage sheet, Status Bar quota, Workspace Token Timeline, and project token summaries unless an equivalent replacement is already implemented and tested.
+- The chat renderer should sit behind a separate `Frontend:NextGenChat` flag so it can land independently of the `Frontend:VsCodeLayout` shell flag.
 - User and agent messages alternate like a normal chat in both places.
 - Orchestrator, supervisor, tool, QA, and artifact events appear as compact inline rows.
 - Run metadata, tokens, commits, tests, screenshots, and raw trace filters are available through collapsed rows, modals, or Verbose Debug. They are not a visible side dashboard by default.
@@ -170,16 +173,19 @@ See [research.md](research.md) for sources.
 
 ## First Implementation Slice
 
-1. Add a frontend-only `ConversationEvent` projection above the existing Activity Log parser. It groups raw entries into actors, runs, tool bursts, decisions, artifacts, and parser warnings.
-2. Replace per-tool chips in conversation mode with collapsed `ToolBurstCard` groups. Keep full trace mode for raw entries.
-3. Add persistent actor rails and labels for User, Task Agent, Orchestrator, Supervisor, Supporting Agent, Tool Runner, and System.
-4. Add compact decision/advisory rows for orchestrator and supervisor events, with expandable `DecisionCard` details.
-5. Add bottom composer controls for current chat, model, agent mode, permission level, start, stop, configuration, jobs, debug view, attachments, and context chips.
-6. Add subtle task markers in the continuous chat with hover/click metadata popovers.
-7. Add the fullscreen read-only Verbose Debug view.
-8. Fix layout reservations so banners, inspector, popovers, mode controls, stream, and composer cannot overlap or intercept each other.
-9. Add Playwright coverage using the Stable evidence cases: tool-heavy archived job, review job with orchestrator output, analysis-report job, failed/empty run, and user-intervention continuation.
-10. Add screenshot assertions for desktop, mobile, config overlay, artifacts overlay, jobs overlay, tool details, task marker popover, inspector collapsed, technical layer, and Verbose Debug.
+1. Add `Frontend:NextGenChat` and the integration bridge described in [integration-plan.md](integration-plan.md). Inventory the current hosts and token surfaces before changing the visible UI.
+2. Add a frontend-only `ConversationEvent` projection above the existing Activity Log parser. It groups raw entries into actors, runs, tool bursts, decisions, artifacts, and parser warnings.
+3. Render the projection inside the existing Protocol pane Activity tab behind the flag. Keep Trace mode, run timeline access, auto-eval banner, and composer behavior intact.
+4. Replace per-tool chips in conversation mode with collapsed `ToolBurstCard` groups. Keep full trace mode for raw entries.
+5. Add persistent actor rails and labels for User, Task Agent, Orchestrator, Supervisor, Supporting Agent, Tool Runner, and System.
+6. Add compact decision/advisory rows for orchestrator and supervisor events, with expandable `DecisionCard` details.
+7. Adapt the existing project side sheet to the shared message grammar without removing project picker, task tab, roadmap intake, attachments, or make-task behavior.
+8. Add bottom composer controls for current chat, model, agent mode, permission level, start, stop, configuration, jobs, debug view, attachments, and context chips.
+9. Add subtle task markers in the continuous chat with hover/click metadata popovers.
+10. Add the fullscreen read-only Verbose Debug view.
+11. Fix layout reservations so banners, inspector, popovers, mode controls, stream, and composer cannot overlap or intercept each other.
+12. Add Playwright coverage using the Stable evidence cases: tool-heavy archived job, review job with orchestrator output, analysis-report job, failed/empty run, and user-intervention continuation.
+13. Add screenshot assertions for desktop, mobile, light theme, dark theme, config overlay, artifacts overlay, jobs overlay, tool details, task marker popover, inspector collapsed, technical layer, side sheet wide mode, and Verbose Debug.
 
 ## Boundaries
 

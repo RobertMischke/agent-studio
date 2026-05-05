@@ -126,6 +126,8 @@ Chat surfaces must stay embedded in the existing application. Task-scoped conver
 
 Light theme is a first-class product surface. Dark theme must use the same component grammar, spacing, actor labels, warning signals, and debug affordances, but light mode is not a secondary skin.
 
+The chat redesign must preserve the existing product functions while it changes their presentation. The Activity Log parser, Trace mode, run timeline, auto-eval banner, task composer modes, reusable project chat component, CLI Usage sheet, Status Bar quota, Workspace Token Timeline, and project token summaries are inputs to the next design, not clutter to discard. A mockup can simplify them visually; implementation must either keep them reachable or provide a tested replacement.
+
 The first, dashboard-like diagnostic surface remains valuable as a separate `Verbose Debug` view. It is a read-only fullscreen developer view for understanding history and causality: actor activity counts, orchestrator actions, supervisor advisories, duration, tool density, warnings, task markers, artifacts, token usage, and raw trace links. It must not replace the compact human chat.
 
 The next-generation chat mockup lives at [mockups/chat-window-next-gen](mockups/chat-window-next-gen/README.md).
