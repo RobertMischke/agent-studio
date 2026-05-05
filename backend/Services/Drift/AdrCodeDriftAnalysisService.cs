@@ -333,6 +333,13 @@ public sealed class AdrCodeDriftAnalysisService
 
         var followUps = parse.FollowUps ?? Array.Empty<DriftFollowUpSuggestion>();
 
+        var parseStatus = parse.Status switch
+        {
+            AdrCodeDriftParseStatus.Structured => DriftReportParseStatus.Structured,
+            AdrCodeDriftParseStatus.MalformedJson => DriftReportParseStatus.MalformedJson,
+            _ => DriftReportParseStatus.Unstructured,
+        };
+
         var report = new DriftReport(
             ReportId: reportId,
             Project: scope.Project,
@@ -346,10 +353,22 @@ public sealed class AdrCodeDriftAnalysisService
             Dimensions: dimensions,
             Summary: parse.Summary,
             FollowUpTaskSuggestions: followUps,
-            SchemaVersion: CurrentSchemaVersion);
+            SchemaVersion: CurrentSchemaVersion,
+            Producer: new DriftReportProducer(MapProducerKind(trigger), Agent: Topic),
+            ParseStatus: parseStatus,
+            ParseError: parse.ParseError);
 
         return report;
     }
+
+    private static DriftReportProducerKind MapProducerKind(DriftReportTrigger trigger) => trigger switch
+    {
+        DriftReportTrigger.Scheduled => DriftReportProducerKind.Scheduled,
+        DriftReportTrigger.MetaCycle => DriftReportProducerKind.MetaCycle,
+        DriftReportTrigger.SupportingAgent => DriftReportProducerKind.SupportingAgent,
+        DriftReportTrigger.ExternalMonitor => DriftReportProducerKind.ExternalMonitor,
+        _ => DriftReportProducerKind.Manual,
+    };
 
     // ------------------------------------------------------------------
     // Scope assembly

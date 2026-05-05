@@ -3,23 +3,30 @@ using System.Text.Json.Serialization;
 namespace OrchestratorApi.Services.Drift;
 
 /// <summary>
-/// First in-code projection of <c>docs/schemas/drift-report.schema.json</c>.
-/// The companion task <c>drift-report-schema-and-scoring</c> will own the
-/// finalised contract (full dimension vocabulary, weighted scoring, validator
-/// round-trip tests). This contract is the minimum the ADR / Code Drift
-/// producer needs to emit a schema-valid record without blocking on that
-/// queued work.
-/// </summary>
-/// <remarks>
-/// Drift reports are a separate evidence pile from
+/// In-code projection of <c>docs/schemas/drift-report.schema.json</c> and the
+/// prose contract in <c>docs/drift-reports.md</c>. Drift reports are a
+/// separate evidence pile from
 /// <see cref="OrchestratorApi.Services.Analysis.AnalysisReport"/>: drift is a
 /// project dimension beside Architecture (ROADMAP "Drift Control"), so the
-/// store, schema, and surfaces are intentionally distinct. The two
-/// contracts will converge through normal schema work, not through
-/// inheritance.
-/// </remarks>
+/// store, schema, and surfaces are intentionally distinct. The two contracts
+/// share the producer model, the Markdown-plus-JSON convention, and the
+/// parse-failure semantics.
+/// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum DriftReportTrigger
+{
+    Manual,
+    Scheduled,
+    MetaCycle,
+    SupportingAgent,
+    ExternalMonitor,
+}
+
+/// <summary>Producer kind for one drift report. Mirrors the schema's
+/// <c>producer.kind</c> enum and the analysis-report producer model.
+/// Descriptive only; capability comes from code paths the user controls.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum DriftReportProducerKind
 {
     Manual,
     Scheduled,
@@ -41,8 +48,8 @@ public enum DriftReportScopeKind
 
 /// <summary>
 /// Triage band. <c>Unknown</c> is reserved for the evidence-only path where
-/// no agent narrative was supplied: the report exists, but the score has not
-/// been computed yet.
+/// no agent narrative was supplied or overall sourceCoverage was below the
+/// reporting threshold (see docs/drift-reports.md, Section 4).
 /// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum DriftScoreBand
@@ -84,10 +91,9 @@ public enum DriftFindingStatus
 }
 
 /// <summary>
-/// Drift dimension vocabulary. Mirrors the full schema enum so future
-/// producers can extend without re-defining the type. The ADR / Code Drift
-/// producer in this slice emits Architecture, Documentation, Process, and
-/// Schema entries.
+/// Drift dimension vocabulary. Producers must not invent new dimension names;
+/// adding one requires a schema bump and a contract update in
+/// docs/drift-reports.md (Section 2).
 /// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter))]
 public enum DriftDimensionType
@@ -117,9 +123,35 @@ public enum DriftFollowUpPriority
 }
 
 /// <summary>
+/// How the UI should present this report. The Markdown sibling is the durable
+/// human artifact; the JSON sidecar is the additive convenience. A failed
+/// JSON parse never hides the Markdown.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum DriftReportParseStatus
+{
+    /// <summary>Markdown sibling exists and the JSON sidecar parses cleanly.</summary>
+    Structured,
+    /// <summary>Markdown sibling exists; no JSON sidecar is present.</summary>
+    Unstructured,
+    /// <summary>Markdown sibling exists; the JSON sidecar failed to parse or validate.</summary>
+    MalformedJson,
+}
+
+/// <summary>
+/// Who wrote the report. Descriptive only; the participant id, when set,
+/// joins this report to the Agent Message Bus participant graph.
+/// </summary>
+public sealed record DriftReportProducer(
+    DriftReportProducerKind Kind,
+    string? ParticipantId = null,
+    string? Agent = null);
+
+/// <summary>
 /// Scope record for one drift report. Project scope is the common case for
-/// the ADR / Code Drift action; the other kinds remain in the contract so
-/// later producers (task-scoped or run-scoped) reuse the same record.
+/// the manual project-level Drift action; the other kinds remain in the
+/// contract so later producers (workspace audits, task-scoped or run-scoped
+/// drift, time-windowed inspections) reuse the same record.
 /// </summary>
 public sealed record DriftReportScope(
     DriftReportScopeKind Kind,
@@ -127,6 +159,46 @@ public sealed record DriftReportScope(
     string? RunId = null,
     string? TimeWindow = null,
     IReadOnlyList<string>? SourceRefs = null);
+
+/// <summary>
+/// Counts of findings by severity that contributed to a dimension's score.
+/// Mirrors <c>scoreInputs.findingsBySeverity</c> in the schema.
+/// </summary>
+public sealed record DriftFindingSeverityCounts(
+    int Info = 0,
+    int Warn = 0,
+    int High = 0,
+    int Critical = 0);
+
+/// <summary>
+/// Transparent breakdown of the inputs that produced a dimension's
+/// <see cref="DriftDimension.Score"/>. Consumers may render this as a
+/// tooltip or drill-down; the weighting is documented in
+/// docs/drift-reports.md (Section 5) so the score is reproducible from
+/// these inputs.
+/// </summary>
+public sealed record DriftScoreInputs(
+    DriftFindingSeverityCounts? FindingsBySeverity = null,
+    IReadOnlyList<string>? AffectedSurfaces = null,
+    int RecurrenceCount = 0,
+    double? OldestFindingAgeDays = null,
+    int TrackedFindings = 0,
+    int TotalFindings = 0);
+
+/// <summary>
+/// One itemised finding inside a dimension. Each finding carries its own
+/// status so a reviewer can mark one item Tracked while the dimension as a
+/// whole stays New.
+/// </summary>
+public sealed record DriftFinding(
+    string FindingId,
+    DriftSeverity Severity,
+    string Summary,
+    DriftFindingStatus Status,
+    DateTime? FirstSeenAt = null,
+    DateTime? LastSeenAt = null,
+    string? TrackedTaskId = null,
+    IReadOnlyList<string>? EvidenceRefs = null);
 
 /// <summary>One per-dimension entry in a drift report.</summary>
 public sealed record DriftDimension(
@@ -138,7 +210,9 @@ public sealed record DriftDimension(
     DriftFindingStatus Status,
     string Summary,
     IReadOnlyList<string> EvidenceRefs,
-    IReadOnlyList<string> RecommendedActions);
+    IReadOnlyList<string> RecommendedActions,
+    DriftScoreInputs? ScoreInputs = null,
+    IReadOnlyList<DriftFinding>? Findings = null);
 
 /// <summary>One follow-up task candidate. Suggestion until the user creates
 /// the actual job.</summary>
@@ -146,7 +220,9 @@ public sealed record DriftFollowUpSuggestion(
     string Title,
     string Summary,
     DriftFollowUpPriority Priority,
-    DriftDimensionType? RelatedDimension = null);
+    DriftDimensionType? RelatedDimension = null,
+    string? TargetState = null,
+    string? CreatedJobId = null);
 
 /// <summary>
 /// One element in a high-level architecture map. Drives the marble surface on
@@ -183,10 +259,22 @@ public sealed record DriftArchitectureModel(
     string? SourceRef = null);
 
 /// <summary>
+/// Sensible default values used by tests and the rare caller that does not
+/// have a specific producer or parse status. Production producers should set
+/// these explicitly so the recorded report reflects the real producer.
+/// </summary>
+public static class DriftReportDefaults
+{
+    public static readonly DriftReportProducer ManualProducer =
+        new(DriftReportProducerKind.Manual);
+}
+
+/// <summary>
 /// One drift report. JSON sidecar contract plus the Markdown sibling under
 /// <c>logs/drift/&lt;project&gt;/&lt;reportId&gt;.md</c>. Reports are
 /// append-only and immutable; corrections land as a new report, not as an
-/// edit.
+/// edit. Status transitions on findings (e.g. New -> Tracked) happen by
+/// emitting a new report that supersedes the prior one.
 /// </summary>
 public sealed record DriftReport(
     string ReportId,
@@ -200,4 +288,9 @@ public sealed record DriftReport(
     string Summary,
     IReadOnlyList<DriftFollowUpSuggestion> FollowUpTaskSuggestions,
     int SchemaVersion = 1,
-    DriftArchitectureModel? ArchitectureModel = null);
+    DriftArchitectureModel? ArchitectureModel = null,
+    DriftReportProducer? Producer = null,
+    DriftReportParseStatus ParseStatus = DriftReportParseStatus.Structured,
+    string? ParseError = null,
+    IReadOnlyList<string>? Tags = null,
+    string? MarkdownPath = null);

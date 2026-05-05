@@ -141,6 +141,8 @@ public class DriftReportArchitectureModelTests : IDisposable
             Summary: "test",
             FollowUpTaskSuggestions: Array.Empty<DriftFollowUpSuggestion>(),
             SchemaVersion: 1,
-            ArchitectureModel: architectureModel);
+            ArchitectureModel: architectureModel,
+            Producer: DriftReportDefaults.ManualProducer,
+            ParseStatus: DriftReportParseStatus.Structured);
     }
 }

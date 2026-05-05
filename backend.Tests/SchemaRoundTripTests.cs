@@ -1,6 +1,7 @@
 using System.Text.Json;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.Analysis;
+using OrchestratorApi.Services.Drift;
 using OrchestratorApi.Services.Supervisor;
 using Xunit;
 
@@ -307,6 +308,173 @@ public class SchemaRoundTripTests
         var topDecisionsItem = properties.GetProperty("topDecisions").GetProperty("items");
         var sevs = ReadStringArray(topDecisionsItem.GetProperty("properties").GetProperty("severity"), "enum");
         Assert.Equal(new[] { "Info", "Warn", "High", "Critical" }, sevs);
+    }
+
+    [Fact]
+    public void DriftReport_CanonicalExample_ContainsEverySchemaRequiredProperty()
+    {
+        var report = new DriftReport(
+            ReportId: "01HX0000000000000000000DRFT",
+            Project: "agent-taskboard",
+            CreatedAt: new DateTime(2026, 5, 5, 10, 0, 0, DateTimeKind.Utc),
+            Trigger: DriftReportTrigger.Manual,
+            Scope: new DriftReportScope(DriftReportScopeKind.Project),
+            OverallScore: 72,
+            ScoreBand: DriftScoreBand.Watch,
+            Dimensions: new[]
+            {
+                new DriftDimension(
+                    Type: DriftDimensionType.Architecture,
+                    Score: 64,
+                    Severity: DriftSeverity.Warn,
+                    Confidence: 0.78,
+                    SourceCoverage: 0.7,
+                    Status: DriftFindingStatus.New,
+                    Summary: "Two ADR assumptions are not reflected in the source layout.",
+                    EvidenceRefs: new[] { "docs/architecture-decisions.md", "backend/Services/Runner/" },
+                    RecommendedActions: new[] { "Create architecture follow-up task" },
+                    ScoreInputs: new DriftScoreInputs(
+                        FindingsBySeverity: new DriftFindingSeverityCounts(Warn: 2),
+                        AffectedSurfaces: new[] { "docs/architecture-decisions.md", "backend/Services/Runner/" },
+                        RecurrenceCount: 1,
+                        OldestFindingAgeDays: 14,
+                        TrackedFindings: 0,
+                        TotalFindings: 2),
+                    Findings: new[]
+                    {
+                        new DriftFinding(
+                            FindingId: "01HX-FIND-1",
+                            Severity: DriftSeverity.Warn,
+                            Summary: "ADR-0017 assumption no longer holds.",
+                            Status: DriftFindingStatus.New,
+                            FirstSeenAt: new DateTime(2026, 4, 21, 0, 0, 0, DateTimeKind.Utc),
+                            LastSeenAt: new DateTime(2026, 5, 5, 0, 0, 0, DateTimeKind.Utc),
+                            EvidenceRefs: new[] { "docs/architecture-decisions.md#adr-0017" }),
+                    }),
+            },
+            Summary: "Two ADR assumptions drifted; queue an architecture follow-up.",
+            FollowUpTaskSuggestions: new[]
+            {
+                new DriftFollowUpSuggestion(
+                    Title: "Sync ADR-0017 with current runner code",
+                    Summary: "ADR-0017's load-bearing rule no longer matches the runner.",
+                    Priority: DriftFollowUpPriority.Normal,
+                    RelatedDimension: DriftDimensionType.Architecture),
+            },
+            Producer: new DriftReportProducer(DriftReportProducerKind.Manual, Agent: "claude"),
+            ParseStatus: DriftReportParseStatus.Structured);
+
+        var serializerOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        {
+            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+        };
+        var json = JsonSerializer.SerializeToElement(report, serializerOptions);
+        AssertEveryRequiredPropertyPresent(LoadSchema("drift-report.schema.json"), json);
+    }
+
+    [Fact]
+    public void DriftReportSchema_ListsTheTwelveDimensionsAndFiveStatusStates()
+    {
+        var schema = LoadSchema("drift-report.schema.json");
+        var properties = schema.GetProperty("properties");
+        var dimensionItems = properties.GetProperty("dimensions").GetProperty("items").GetProperty("properties");
+
+        var dimensionTypes = ReadStringArray(dimensionItems.GetProperty("type"), "enum");
+        Assert.Equal(
+            new[]
+            {
+                "Intent", "Spec", "TaskJob", "Architecture", "Documentation", "Marketing",
+                "Design", "Test", "Runtime", "Process", "Schema", "Token",
+            },
+            dimensionTypes);
+        foreach (var name in dimensionTypes)
+        {
+            Assert.True(Enum.TryParse<DriftDimensionType>(name, ignoreCase: false, out _),
+                $"Schema dimension type '{name}' has no matching C# enum value.");
+        }
+
+        var statuses = ReadStringArray(dimensionItems.GetProperty("status"), "enum");
+        Assert.Equal(new[] { "New", "Accepted", "Ignored", "Tracked", "Resolved" }, statuses);
+        foreach (var name in statuses)
+        {
+            Assert.True(Enum.TryParse<DriftFindingStatus>(name, ignoreCase: false, out _),
+                $"Schema status '{name}' has no matching C# enum value.");
+        }
+
+        var severities = ReadStringArray(dimensionItems.GetProperty("severity"), "enum");
+        Assert.Equal(new[] { "Info", "Warn", "High", "Critical" }, severities);
+        foreach (var name in severities)
+        {
+            Assert.True(Enum.TryParse<DriftSeverity>(name, ignoreCase: false, out _),
+                $"Schema severity '{name}' has no matching C# enum value.");
+        }
+    }
+
+    [Fact]
+    public void DriftReportSchema_PublishesProducerTriggerScopeBandAndParseStatusEnums()
+    {
+        var schema = LoadSchema("drift-report.schema.json");
+        var properties = schema.GetProperty("properties");
+
+        var producerKinds = ReadStringArray(
+            properties.GetProperty("producer").GetProperty("properties").GetProperty("kind"), "enum");
+        Assert.Equal(new[] { "Manual", "Scheduled", "MetaCycle", "SupportingAgent", "ExternalMonitor" }, producerKinds);
+        foreach (var name in producerKinds)
+        {
+            Assert.True(Enum.TryParse<DriftReportProducerKind>(name, ignoreCase: false, out _),
+                $"Schema producer kind '{name}' has no matching C# enum value.");
+        }
+
+        var triggers = ReadStringArray(properties.GetProperty("trigger"), "enum");
+        Assert.Equal(new[] { "Manual", "Scheduled", "MetaCycle", "SupportingAgent", "ExternalMonitor" }, triggers);
+        foreach (var name in triggers)
+        {
+            Assert.True(Enum.TryParse<DriftReportTrigger>(name, ignoreCase: false, out _),
+                $"Schema trigger '{name}' has no matching C# enum value.");
+        }
+
+        var scopes = ReadStringArray(
+            properties.GetProperty("scope").GetProperty("properties").GetProperty("kind"), "enum");
+        Assert.Equal(new[] { "Workspace", "Project", "Task", "Run", "TimeWindow" }, scopes);
+        foreach (var name in scopes)
+        {
+            Assert.True(Enum.TryParse<DriftReportScopeKind>(name, ignoreCase: false, out _),
+                $"Schema scope kind '{name}' has no matching C# enum value.");
+        }
+
+        var bands = ReadStringArray(properties.GetProperty("scoreBand"), "enum");
+        Assert.Equal(new[] { "Healthy", "Watch", "Warn", "Critical", "Unknown" }, bands);
+        foreach (var name in bands)
+        {
+            Assert.True(Enum.TryParse<DriftScoreBand>(name, ignoreCase: false, out _),
+                $"Schema score band '{name}' has no matching C# enum value.");
+        }
+
+        var parseStates = ReadStringArray(properties.GetProperty("parseStatus"), "enum");
+        Assert.Equal(new[] { "Structured", "Unstructured", "MalformedJson" }, parseStates);
+        foreach (var name in parseStates)
+        {
+            Assert.True(Enum.TryParse<DriftReportParseStatus>(name, ignoreCase: false, out _),
+                $"Schema parseStatus '{name}' has no matching C# enum value.");
+        }
+    }
+
+    [Fact]
+    public void DriftReportSchema_ArchitectureModelHardLimitsTenElements()
+    {
+        var schema = LoadSchema("drift-report.schema.json");
+        var elements = schema.GetProperty("properties")
+            .GetProperty("architectureModel")
+            .GetProperty("properties")
+            .GetProperty("elements");
+        Assert.Equal(1, elements.GetProperty("minItems").GetInt32());
+        Assert.Equal(10, elements.GetProperty("maxItems").GetInt32());
+
+        var elementProps = elements.GetProperty("items").GetProperty("properties");
+        var elementStatuses = ReadStringArray(elementProps.GetProperty("status"), "enum");
+        Assert.Equal(new[] { "New", "Accepted", "Ignored", "Tracked", "Resolved" }, elementStatuses);
+        var elementSeverities = ReadStringArray(elementProps.GetProperty("severity"), "enum");
+        Assert.Equal(new[] { "Info", "Warn", "High", "Critical" }, elementSeverities);
     }
 
     [Fact]
