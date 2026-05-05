@@ -12,6 +12,7 @@ import { Injectable, signal } from '@angular/core';
  *
  *   localStorage.setItem('atp.flag.vsCodeLayout', '1'); location.reload();
  *   localStorage.setItem('atp.flag.nextGenChatPrototype', '1'); location.reload();
+ *   localStorage.setItem('atp.flag.nextGenChat', '1'); location.reload();
  */
 @Injectable({ providedIn: 'root' })
 export class FeatureFlagsService {
@@ -19,6 +20,7 @@ export class FeatureFlagsService {
   private static readonly KEY_VS_CODE_META_OPEN = 'atp.flag.vsCodeLayout.metaOpen';
   private static readonly KEY_KANBAN_DESIGN_SPEC_V1 = 'atp.flag.kanbanDesignSpecV1';
   private static readonly KEY_NEXT_GEN_CHAT_PROTOTYPE = 'atp.flag.nextGenChatPrototype';
+  private static readonly KEY_NEXT_GEN_CHAT = 'atp.flag.nextGenChat';
 
   /** `Frontend:VsCodeLayout` — VS Code-style chrome with status bar + collapsible meta. */
   readonly vsCodeLayout = signal<boolean>(this.read(FeatureFlagsService.KEY_VS_CODE_LAYOUT));
@@ -40,6 +42,19 @@ export class FeatureFlagsService {
    */
   readonly nextGenChatPrototype = signal<boolean>(this.read(FeatureFlagsService.KEY_NEXT_GEN_CHAT_PROTOTYPE));
 
+  /**
+   * `Frontend:NextGenChat` - production rollout flag for the next-gen chat
+   * conversation grammar inside the existing task Activity tab and project
+   * side sheet. Independent from `Frontend:VsCodeLayout`. Default off; when
+   * off every host must render exactly as before. The flag exists so the
+   * shared `ConversationEvent` projection can land before any visible
+   * replacement renderer is wired into a host.
+   *
+   * See docs/mockups/chat-window-next-gen/integration-plan.md and
+   * docs/mockups/chat-window-next-gen/host-inventory.md.
+   */
+  readonly nextGenChat = signal<boolean>(this.read(FeatureFlagsService.KEY_NEXT_GEN_CHAT));
+
   setVsCodeLayout(on: boolean): void {
     this.vsCodeLayout.set(on);
     this.write(FeatureFlagsService.KEY_VS_CODE_LAYOUT, on);
@@ -58,6 +73,11 @@ export class FeatureFlagsService {
   setNextGenChatPrototype(on: boolean): void {
     this.nextGenChatPrototype.set(on);
     this.write(FeatureFlagsService.KEY_NEXT_GEN_CHAT_PROTOTYPE, on);
+  }
+
+  setNextGenChat(on: boolean): void {
+    this.nextGenChat.set(on);
+    this.write(FeatureFlagsService.KEY_NEXT_GEN_CHAT, on);
   }
 
   private read(key: string): boolean {

@@ -108,11 +108,12 @@ test.describe('@mockup next-gen chat Angular prototype', () => {
     await expect(page.getByTestId('prototype-context-pane')).toContainText('Git changes');
     await expect(page.getByTestId('prototype-git-editor')).toContainText('Source editor / diff');
     await page.getByTestId('prototype-topbar-sheet').click();
-    await page.getByTestId('prototype-split-slider').evaluate((el) => {
-      const input = el as HTMLInputElement;
-      input.value = '42';
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-    });
+    await expect(page.getByTestId('prototype-splitter')).toBeVisible();
+    await page.getByTestId('prototype-splitter').focus();
+    await page.keyboard.press('ArrowLeft');
+    await page.keyboard.press('ArrowLeft');
+    await page.keyboard.press('ArrowLeft');
+    await expect(page.getByTestId('prototype-splitter')).toHaveAttribute('aria-valuenow', '42');
     await page.screenshot({
       path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-git-editor-split.png'),
       fullPage: false,

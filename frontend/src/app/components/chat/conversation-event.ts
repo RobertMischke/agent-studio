@@ -1,0 +1,325 @@
+/**
+ * Pure data contract for the next-gen chat conversation grammar
+ * (`Frontend:NextGenChat`).
+ *
+ * This module is the projection layer between raw evidence the app already
+ * collects (CLI output lines, run timeline, screenshots, commits, token
+ * usage, job metadata) and the renderer the chat hosts will consume. Every
+ * type here must stay pure TypeScript: no Angular injection, no DOM types,
+ * no localStorage reads, no service calls. Hosts pass the evidence in;
+ * `ConversationEvent[]` comes out.
+ *
+ * The kind taxonomy is anchored in
+ * `docs/mockups/chat-window-next-gen/activity-log-edge-cases.md` (the v6
+ * edge-case taxonomy for tool burst, watchdog, orchestrator decision,
+ * needs-input, capture-fail, parser warning, image evidence, token metric,
+ * task and run markers, user / agent message) plus the v7 workbench events
+ * (`workbench.summary`, `workbench.gitPreview`, `workbench.visualPreview`,
+ * `metric.token`, `taskMarker`, `runMarker`, `traceLink`).
+ *
+ * Every event keeps a back-reference to the raw log range that produced it
+ * so the Trace fallback stays one click away. The compact chat is allowed
+ * to hide noise; it is not allowed to delete traceability.
+ */
+
+/** 1-based, inclusive line range into the source CLI log. */
+export interface RawLineRange {
+  /** Logical key for the source log (e.g. job id or `cli-output.log`). */
+  source: string;
+  /** First line index, 1-based, inclusive. */
+  start: number;
+  /** Last line index, 1-based, inclusive. */
+  end: number;
+}
+
+export interface TraceLink {
+  /** Linked source range — the chat row's "open in Trace" target. */
+  range: RawLineRange;
+  /** Optional human label for the link ("Open run 4 in Trace"). */
+  label?: string;
+}
+
+/** Tool families recognised by the projection. */
+export type ToolFamily =
+  | 'read'
+  | 'search'
+  | 'command'
+  | 'edit'
+  | 'task'
+  | 'todo'
+  | 'other';
+
+export interface ToolBurstSamples {
+  /** A short representative label per family ("Read prompt.md", "Run npm test"). */
+  readonly [family: string]: string | undefined;
+}
+
+export type ConversationEventSeverity = 'info' | 'warn' | 'error';
+
+/** Stable kind list. New kinds must be appended; existing values must not be reused. */
+export type ConversationEventKind =
+  // Message stream
+  | 'message.user'
+  | 'message.taskAgent'
+  | 'message.orchestrator'
+  | 'message.supervisor'
+  | 'message.supportingAgent'
+  // Activity-log edge cases (see activity-log-edge-cases.md)
+  | 'toolBurst'
+  | 'supervisor.wait'
+  | 'decision.orchestrator'
+  | 'agent.needsInput'
+  | 'system.captureFail'
+  | 'system.parserWarning'
+  | 'artifact.image'
+  | 'metric.token'
+  // V7 workbench events
+  | 'workbench.summary'
+  | 'workbench.gitPreview'
+  | 'workbench.visualPreview'
+  | 'taskMarker'
+  | 'runMarker'
+  | 'traceLink';
+
+interface ConversationEventBase {
+  /** Stable id, deterministic per source range so renderers can dedupe. */
+  id: string;
+  kind: ConversationEventKind;
+  /** ISO timestamp from the originating evidence row. */
+  timestamp: string;
+  /** Optional severity for renderers that style by level. */
+  severity?: ConversationEventSeverity;
+  /** Run index from the run timeline, when known. */
+  runId?: number;
+  /** Job id when the host has cross-task context (project side sheet). */
+  jobId?: string;
+  /** Back-reference to raw log lines. Required so Trace stays one click away. */
+  rawRange: RawLineRange;
+  /**
+   * Hint to the renderer that the event should start collapsed even though
+   * its body may be long. Tool bursts and parser warnings default to true.
+   */
+  collapsedByDefault?: boolean;
+}
+
+export interface MessageEvent extends ConversationEventBase {
+  kind:
+    | 'message.user'
+    | 'message.taskAgent'
+    | 'message.orchestrator'
+    | 'message.supervisor'
+    | 'message.supportingAgent';
+  /** Plain or markdown text. The renderer decides how to format. */
+  body: string;
+  /** Display name for the actor (e.g. `Orchestrator`, `Agent`, `You`). */
+  actor: string;
+  /** Optional target chip ("→ task: foo") used by user steering messages. */
+  target?: string;
+  /** Attachment paths or URIs the host already resolved. */
+  attachments?: ReadonlyArray<string>;
+}
+
+export interface ToolBurstEvent extends ConversationEventBase {
+  kind: 'toolBurst';
+  /** Total number of tool calls across families. */
+  count: number;
+  /** Per-family counts. Missing families are treated as zero. */
+  families: Partial<Record<ToolFamily, number>>;
+  /** Number of calls that ended in error. */
+  failures: number;
+  /** Wall-clock span in milliseconds, from first to last call. */
+  durationMs: number;
+  /** Files touched (edit / write / delete). */
+  files?: ReadonlyArray<string>;
+  /** Test commands and final pass/fail status, when detected. */
+  tests?: ReadonlyArray<{ command: string; status: 'pass' | 'fail' | 'unknown' }>;
+  /** Artifact paths produced (screenshots, reports, etc.). */
+  artifacts?: ReadonlyArray<string>;
+  /** Representative example per family for the collapsed badge. */
+  samples?: ToolBurstSamples;
+}
+
+export interface SupervisorWaitEvent extends ConversationEventBase {
+  kind: 'supervisor.wait';
+  /** `quiet` for ongoing silence, `resumed` after the agent talked again, `killed` on watchdog kill. */
+  state: 'quiet' | 'resumed' | 'killed';
+  quietSeconds: number;
+  /** Last raw output line range before the wait window started. */
+  lastOutputRange?: RawLineRange;
+  /** Reason the watchdog gave when emitting the line. */
+  reason?: string;
+}
+
+export interface OrchestratorDecisionEvent extends ConversationEventBase {
+  kind: 'decision.orchestrator';
+  /** `decision`, `reissue`, `heuristic`, `giveup`. */
+  decisionType: string;
+  reason: string;
+  /** Short evidence snippet (a sentence or two). */
+  evidence?: string;
+  /** Action the orchestrator took next: `continue`, `reissue`, `escalate`, `complete`. */
+  action?: string;
+  /** Retry budget remaining for this lane / loop. */
+  retryBudget?: { used: number; max: number };
+  /** Token usage attributed to the decision call. */
+  tokenUsage?: { inputTokens: number; outputTokens: number };
+}
+
+export interface AgentNeedsInputEvent extends ConversationEventBase {
+  kind: 'agent.needsInput';
+  question: string;
+  loopIndex: number;
+  loopLimit: number;
+  /** `auto-orchestrator`, `human`, or null when no answer source resolved yet. */
+  answerSource?: string | null;
+  /** What happens next: `await-human`, `auto-answer`, `circuit-break`. */
+  nextAction?: string;
+}
+
+export interface SystemCaptureFailEvent extends ConversationEventBase {
+  kind: 'system.captureFail';
+  cliType: string;
+  sessionName?: string | null;
+  /** Fallback action chosen ("rebuild from disk on next follow-up"). */
+  fallback?: string;
+}
+
+export interface SystemParserWarningEvent extends ConversationEventBase {
+  kind: 'system.parserWarning';
+  /** What the parser was looking for (sentinel name, schema kind, etc.). */
+  expectedKind: string;
+  message: string;
+  /** Key used to dedupe identical warnings within a single chat. */
+  dedupeKey: string;
+}
+
+export interface ArtifactImageEvent extends ConversationEventBase {
+  kind: 'artifact.image';
+  caption: string;
+  /** Scratch path the agent first emitted (Playwright temp, /tmp, etc.). */
+  sourcePath: string;
+  /** Durable copy under `results/` after the host curated it; null if not copied. */
+  durablePath?: string | null;
+  /** Tool that produced the image (`playwright`, `screenshot`, `agent`). */
+  sourceTool?: string;
+  /** Linked task id for cross-task referencing. */
+  taskLink?: string;
+}
+
+export interface MetricTokenEvent extends ConversationEventBase {
+  kind: 'metric.token';
+  /** `run`, `task`, `project`, `orchestrator`, `supporting-agent`. */
+  scope: string;
+  inputTokens: number;
+  outputTokens: number;
+  reasoningTokens?: number;
+  /** Cost in USD when the host has model pricing; otherwise omit. */
+  cost?: number;
+  /** Window label (`five_hour`, `weekly`, `month-to-date`). */
+  window?: string;
+}
+
+export interface WorkbenchSummaryEvent extends ConversationEventBase {
+  kind: 'workbench.summary';
+  /** Headline shown in the summary strip ("12 reads · 3 edits · tests passing"). */
+  headline: string;
+  /** Optional bullets the strip can expand into. */
+  bullets?: ReadonlyArray<string>;
+  /** Linked drill-down events the right pane can open. */
+  drillDowns?: ReadonlyArray<TraceLink>;
+}
+
+export interface WorkbenchGitPreviewEvent extends ConversationEventBase {
+  kind: 'workbench.gitPreview';
+  /** Files touched within the run that anchors this preview. */
+  files: ReadonlyArray<{ status: string; path: string; added: number; removed: number }>;
+  /** SHA range that the Git split should default to. */
+  headShaBefore?: string | null;
+  headShaAfter?: string | null;
+}
+
+export interface WorkbenchVisualPreviewEvent extends ConversationEventBase {
+  kind: 'workbench.visualPreview';
+  /** Image set the preview pane should show by default. */
+  images: ReadonlyArray<{ caption: string; path: string }>;
+  /** Optional caption above the strip. */
+  groupCaption?: string;
+}
+
+export interface TaskMarkerEvent extends ConversationEventBase {
+  kind: 'taskMarker';
+  /** `start`, `complete`, `review`, `archived`, `noop`, `blocked`, `needs-input`. */
+  marker: string;
+  jobId: string;
+  /** Lane id (`3-progress`, `4-review`, ...). */
+  lane?: string;
+  title: string;
+  /** Total run duration aggregated for the task, when finalised. */
+  durationSeconds?: number;
+  tokens?: { inputTokens: number; outputTokens: number };
+  evidenceLinks?: ReadonlyArray<TraceLink>;
+}
+
+export interface RunMarkerEvent extends ConversationEventBase {
+  kind: 'runMarker';
+  /** `start`, `continue`, `recovery`, `restart`, `complete`, `failed`, `cancelled`. */
+  marker: string;
+  cli?: string | null;
+  model?: string | null;
+  sessionId?: string | null;
+  durationSeconds?: number | null;
+  exitCode?: number | null;
+  /** Aggregated token use for the run. */
+  tokens?: { inputTokens: number; outputTokens: number };
+  /** Trace range that scopes this run for the activity log. */
+  traceRange?: RawLineRange;
+}
+
+export interface TraceLinkEvent extends ConversationEventBase {
+  kind: 'traceLink';
+  /** What the row is linking to: `raw-log`, `verbose-debug`, `run`, `screenshots`, `commits`. */
+  target: string;
+  label: string;
+  /** Range or anchor the host should jump to. */
+  link: TraceLink;
+}
+
+export type ConversationEvent =
+  | MessageEvent
+  | ToolBurstEvent
+  | SupervisorWaitEvent
+  | OrchestratorDecisionEvent
+  | AgentNeedsInputEvent
+  | SystemCaptureFailEvent
+  | SystemParserWarningEvent
+  | ArtifactImageEvent
+  | MetricTokenEvent
+  | WorkbenchSummaryEvent
+  | WorkbenchGitPreviewEvent
+  | WorkbenchVisualPreviewEvent
+  | TaskMarkerEvent
+  | RunMarkerEvent
+  | TraceLinkEvent;
+
+/** Stable list of all known kinds — used by tests to assert exhaustiveness. */
+export const CONVERSATION_EVENT_KINDS: ReadonlyArray<ConversationEventKind> = [
+  'message.user',
+  'message.taskAgent',
+  'message.orchestrator',
+  'message.supervisor',
+  'message.supportingAgent',
+  'toolBurst',
+  'supervisor.wait',
+  'decision.orchestrator',
+  'agent.needsInput',
+  'system.captureFail',
+  'system.parserWarning',
+  'artifact.image',
+  'metric.token',
+  'workbench.summary',
+  'workbench.gitPreview',
+  'workbench.visualPreview',
+  'taskMarker',
+  'runMarker',
+  'traceLink'
+];

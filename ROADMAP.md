@@ -141,7 +141,7 @@ The Drift report JSON should support both dimension-level scores and architectur
 First implementation order:
 
 1. Extend `drift-report.schema.json` with an optional architecture model: max ten elements, per-element expected role, source refs, score, severity, source coverage, evidence refs, and follow-up suggestions.
-2. Define a Markdown architecture-model authoring contract so projects can write the high-level system map without a drawing tool.
+2. Define a Markdown architecture-model authoring contract so projects can write the high-level system map without a drawing tool. Contract lives in [`docs/architecture-model.md`](docs/architecture-model.md), validated by [`docs/schemas/architecture-model.schema.json`](docs/schemas/architecture-model.schema.json).
 3. Add the Drift surface marble view with per-element scores and drill-down.
 4. Implement **Software / Architecture Drift** analysis: compare architecture model and ADRs against source tree, schemas, runtime events, tests, and recent job evidence.
 5. Let each architecture element create normal follow-up tasks for code cleanup, ADR updates, missing tests, missing runtime signals, or documentation sync.

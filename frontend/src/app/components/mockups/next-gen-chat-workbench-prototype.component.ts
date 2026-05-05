@@ -9,6 +9,7 @@ type DebugTab = 'overview' | 'actors' | 'tools' | 'tokens' | 'trace';
 type ComposeMode = 'continue' | 'extend' | 'steer' | 'followup';
 type ActivityTarget = 'projects' | 'tasks' | 'search' | 'git' | 'qa' | 'tokens';
 type StatusPanel = 'health' | 'queue' | 'tokens' | 'evidence' | 'model';
+type TaskTabId = 'prompt' | 'log' | 'chat' | 'files' | 'commits' | 'shots';
 
 interface SummaryChip {
   label: string;
@@ -65,7 +66,7 @@ interface ChatTurn {
       <header class="topbar">
         <div class="topbar__title">
           <strong>Agent Task Processor</strong>
-          <span>Next-gen task chat workbench prototype</span>
+          <span>Task workbench</span>
         </div>
         <nav class="topbar__nav detail-chrome__panes" aria-label="Workbench quick navigation" data-testid="prototype-topbar-nav">
           <button [class.detail-chrome__pane--active]="chatOpen()"
@@ -76,7 +77,7 @@ interface ChatTurn {
                 <path [attr.d]="path"></path>
               }
             </svg>
-            <span>Task Chat</span>
+            <span>{{ chatOpen() ? 'Hide Chat' : 'Show Chat' }}</span>
           </button>
           <button [class.detail-chrome__pane--active]="contextOpen() && pane() === 'git'"
                   (click)="togglePane('git')"
@@ -86,7 +87,7 @@ interface ChatTurn {
                 <path [attr.d]="path"></path>
               }
             </svg>
-            <span>Git Split</span>
+            <span>Git Review</span>
           </button>
           <button [class.detail-chrome__pane--active]="sideSheetOpen()"
                   (click)="sideSheetOpen.set(!sideSheetOpen())"
@@ -187,9 +188,9 @@ interface ChatTurn {
             <span class="detail-chrome__state">2-ready</span>
             <nav class="detail-chrome__panes" aria-label="Existing task panes">
               @for (panel of detailPanels; track panel.label) {
-                <button [class.detail-chrome__pane--active]="panel.pane ? contextOpen() && pane() === panel.pane : panel.active"
+                <button [class.detail-chrome__pane--active]="isPaneButtonActive(panel.pane)"
                         [attr.title]="panel.title"
-                        (click)="panel.pane ? togglePane(panel.pane) : null">
+                        (click)="togglePane(panel.pane)">
                   <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
                     @for (path of iconPath(panel.icon); track path) {
                       <path [attr.d]="path"></path>
@@ -211,14 +212,15 @@ interface ChatTurn {
                   }
                 </svg>
                 <span>Workbench</span>
-                <small>controls live here</small>
+                <small>pane tools</small>
               </button>
               <nav class="inspector-rail__tabs" aria-label="Task detail tabs">
                 <b>Task</b>
                 @for (tab of taskTabs; track tab.label) {
-                  <button [class.inspector-rail__active]="tab.active"
+                  <button [class.inspector-rail__active]="isTaskTabActive(tab.id)"
                           [attr.title]="tab.title"
-                          [attr.aria-label]="tab.title">
+                          [attr.aria-label]="tab.title"
+                          (click)="activateTaskTab(tab.id, tab.pane)">
                     <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
                       @for (path of iconPath(tab.icon); track path) {
                         <path [attr.d]="path"></path>
@@ -246,7 +248,7 @@ interface ChatTurn {
                 }
               </div>
               <div class="inspector-rail__modes" data-testid="prototype-layout-buttons">
-                <b>Split</b>
+                <b>Views</b>
                 @for (mode of paneButtons; track mode.id) {
                   <button class="rail-action"
                           [class.icon-btn--active]="mode.id === 'chat' ? chatOpen() : contextOpen() && pane() === mode.id"
@@ -284,7 +286,8 @@ interface ChatTurn {
             <div class="workbench__body"
                  [style.gridTemplateColumns]="workbenchColumns()"
                  [attr.data-chat-open]="chatOpen()"
-                 [attr.data-context-open]="contextOpen()">
+                 [attr.data-context-open]="contextOpen()"
+                 [attr.data-split-dragging]="splitDragging()">
               @if (chatOpen()) {
               <section class="conversation" aria-label="Conversation" data-testid="prototype-conversation">
                 <div class="conversation__topline">
@@ -468,6 +471,22 @@ interface ChatTurn {
               </section>
               }
 
+              @if (chatOpen() && contextOpen()) {
+                <div class="workbench-splitter"
+                     role="separator"
+                     tabindex="0"
+                     aria-orientation="vertical"
+                     aria-label="Resize chat and review panes"
+                     aria-valuemin="34"
+                     aria-valuemax="72"
+                     [attr.aria-valuenow]="splitRatio()"
+                     (pointerdown)="startSplitResize($event)"
+                     (keydown)="resizeSplitFromKeyboard($event)"
+                     data-testid="prototype-splitter">
+                  <span aria-hidden="true"></span>
+                </div>
+              }
+
               @if (contextOpen()) {
                 <aside class="context" aria-label="Workbench context pane" data-testid="prototype-context-pane">
                   <header class="context__head">
@@ -476,17 +495,6 @@ interface ChatTurn {
                       <span>{{ contextSubtitle() }}</span>
                     </div>
                     <div>
-                      @if (chatOpen() && contextOpen()) {
-                        <label class="chip" style="display:inline-flex;align-items:center;gap:6px;min-height:26px">
-                          <span>{{ splitRatio() }}%</span>
-                          <input data-testid="prototype-split-slider"
-                                 type="range"
-                                 min="34"
-                                 max="72"
-                                 [value]="splitRatio()"
-                                 (input)="setSplitRatio($event)" />
-                        </label>
-                      }
                       <button class="icon-btn"
                               (click)="toggleChat()"
                               [title]="chatOpen() ? 'Close chat' : 'Open chat'"
@@ -498,7 +506,7 @@ interface ChatTurn {
                           }
                         </svg>
                       </button>
-                      <button class="icon-btn" (click)="contextOpen.set(false)" title="Close pane" aria-label="Close pane" data-testid="prototype-context-close">
+                      <button class="icon-btn" (click)="closeContextPane()" title="Close pane" aria-label="Close pane" data-testid="prototype-context-close">
                         <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
                           @for (path of iconPath('close'); track path) {
                             <path [attr.d]="path"></path>
@@ -577,7 +585,7 @@ interface ChatTurn {
                             <pre style="white-space:pre-wrap;font:12px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace;margin:10px 0 0;color:var(--text)">@@ next-gen chat workbench
 + Chat can be closed as an optional pane.
 + Git changes own the source editor and diff preview.
-+ Split width is controlled by the workbench slider.</pre>
++ Split width is controlled by the vertical workbench splitter.</pre>
                           </article>
                         </div>
                       </section>
@@ -1498,6 +1506,46 @@ interface ChatTurn {
       background: var(--surface);
     }
 
+    .workbench-splitter {
+      min-width: 7px;
+      width: 7px;
+      min-height: 0;
+      border: 0;
+      border-left: 1px solid var(--line);
+      border-right: 1px solid var(--line);
+      background: var(--chrome);
+      cursor: col-resize;
+      padding: 0;
+      position: relative;
+      display: grid;
+      place-items: center;
+      touch-action: none;
+    }
+
+    .workbench-splitter span {
+      width: 1px;
+      height: 48px;
+      border-radius: 999px;
+      background: var(--line-strong);
+      box-shadow: -2px 0 0 var(--line), 2px 0 0 var(--line);
+      opacity: 0.82;
+    }
+
+    .workbench-splitter:hover,
+    .workbench-splitter:focus-visible,
+    .workbench__body[data-split-dragging="true"] .workbench-splitter {
+      background: color-mix(in srgb, var(--accent) 12%, var(--chrome));
+      outline: none;
+    }
+
+    .workbench-splitter:hover span,
+    .workbench-splitter:focus-visible span,
+    .workbench__body[data-split-dragging="true"] .workbench-splitter span {
+      background: var(--accent);
+      box-shadow: -2px 0 0 color-mix(in srgb, var(--accent) 32%, transparent),
+                  2px 0 0 color-mix(in srgb, var(--accent) 32%, transparent);
+    }
+
     .workbench__body--chat-only {
       grid-template-columns: minmax(0, 1fr);
     }
@@ -2347,7 +2395,8 @@ interface ChatTurn {
       .workbench,
       .ng-chat-prototype[data-density="compact"] .workbench { grid-template-columns: minmax(0, 1fr); }
       .inspector-rail { display: none; }
-      .workbench__body { grid-template-columns: minmax(0, 1fr); }
+      .workbench__body { grid-template-columns: minmax(0, 1fr) !important; }
+      .workbench-splitter { display: none; }
       .conversation__topline { grid-template-columns: minmax(0, 1fr) auto; }
       .conversation__topline .badge--ok,
       .conversation__topline button:last-child { display: none; }
@@ -2381,6 +2430,7 @@ export class NextGenChatWorkbenchPrototypeComponent {
   readonly chatOpen = signal(true);
   readonly contextOpen = signal(true);
   readonly splitRatio = signal(54);
+  readonly splitDragging = signal(false);
   readonly activeGitFile = signal('frontend/src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts');
   readonly debugTab = signal<DebugTab>('overview');
   readonly composerMode = signal<ComposeMode>('continue');
@@ -2428,18 +2478,18 @@ export class NextGenChatWorkbenchPrototypeComponent {
     { id: 'tokens', icon: 'tokens', label: 'Tokens', title: 'Token usage' },
   ];
 
-  readonly taskTabs = [
-    { icon: 'file', label: 'Prompt', title: 'Prompt tab' },
-    { icon: 'list', label: 'Log', title: 'Protocol and raw trace tab' },
-    { icon: 'chat', label: 'Chat', title: 'Chat tab', active: true },
-    { icon: 'fileDiff', label: 'Files', title: 'Files tab' },
-    { icon: 'git', label: 'Commits', title: 'Commits tab' },
-    { icon: 'image', label: 'Shots', title: 'Screenshots tab' },
+  readonly taskTabs: Array<{ icon: string; label: string; title: string; pane: WorkbenchPane }> = [
+    { icon: 'file', label: 'Prompt', title: 'Prompt tab', pane: 'result' },
+    { icon: 'list', label: 'Log', title: 'Protocol and raw trace tab', pane: 'debug' },
+    { icon: 'chat', label: 'Chat', title: 'Chat tab', pane: 'chat' },
+    { icon: 'fileDiff', label: 'Files', title: 'Files tab', pane: 'git' },
+    { icon: 'git', label: 'Commits', title: 'Commits tab', pane: 'git' },
+    { icon: 'image', label: 'Shots', title: 'Screenshots tab', pane: 'preview' },
   ];
 
-  readonly detailPanels: Array<{ icon: string; label: string; title: string; pane?: WorkbenchPane; active?: boolean }> = [
+  readonly detailPanels: Array<{ icon: string; label: string; title: string; pane: WorkbenchPane }> = [
     { icon: 'file', label: 'Task', title: 'Prompt and task history', pane: 'result' },
-    { icon: 'chat', label: 'Chat', title: 'Next generation chat tab', pane: 'result', active: true },
+    { icon: 'chat', label: 'Chat', title: 'Toggle task chat pane', pane: 'chat' },
     { icon: 'git', label: 'Git', title: 'Git pane beside the conversation', pane: 'git' },
     { icon: 'image', label: 'Shots', title: 'Screenshot evidence', pane: 'preview' },
     { icon: 'terminal', label: 'Trace', title: 'Activity and raw trace drill-down', pane: 'debug' },
@@ -2667,7 +2717,7 @@ export class NextGenChatWorkbenchPrototypeComponent {
 
   readonly workbenchColumns = computed(() => {
     if (this.chatOpen() && this.contextOpen()) {
-      return `minmax(320px, ${this.splitRatio()}fr) minmax(260px, ${100 - this.splitRatio()}fr)`;
+      return `minmax(320px, ${this.splitRatio()}fr) 7px minmax(260px, ${100 - this.splitRatio()}fr)`;
     }
     return 'minmax(0, 1fr)';
   });
@@ -2695,12 +2745,25 @@ export class NextGenChatWorkbenchPrototypeComponent {
     this.contextOpen.set(true);
   }
 
+  isPaneButtonActive(pane: WorkbenchPane): boolean {
+    if (pane === 'chat') return this.chatOpen();
+    return this.contextOpen() && this.pane() === pane;
+  }
+
+  isTaskTabActive(pane: WorkbenchPane): boolean {
+    return this.isPaneButtonActive(pane);
+  }
+
   togglePane(pane: WorkbenchPane): void {
     if (pane === 'chat') {
       this.toggleChat();
       return;
     }
     if (this.contextOpen() && this.pane() === pane) {
+      if (!this.chatOpen()) {
+        this.chatOpen.set(true);
+        return;
+      }
       this.contextOpen.set(false);
       return;
     }
@@ -2714,13 +2777,58 @@ export class NextGenChatWorkbenchPrototypeComponent {
     this.chatOpen.set(!this.chatOpen());
   }
 
-  setSplitRatio(event: Event): void {
-    const value = Number((event.target as HTMLInputElement).value);
-    this.setSplitRatioValue(value);
+  closeContextPane(): void {
+    if (!this.contextOpen()) return;
+    if (!this.chatOpen()) {
+      this.chatOpen.set(true);
+      return;
+    }
+    this.contextOpen.set(false);
   }
 
   setSplitRatioValue(value: number): void {
     this.splitRatio.set(Math.max(34, Math.min(72, Math.round(value))));
+  }
+
+  startSplitResize(event: PointerEvent): void {
+    if (!this.chatOpen() || !this.contextOpen()) return;
+
+    const host = (event.currentTarget as HTMLElement).parentElement;
+    if (!host) return;
+
+    event.preventDefault();
+    this.splitDragging.set(true);
+
+    const updateFromPointer = (rawEvent: Event) => {
+      const pointer = rawEvent as PointerEvent;
+      const rect = host.getBoundingClientRect();
+      if (rect.width <= 0) return;
+      const next = ((pointer.clientX - rect.left) / rect.width) * 100;
+      this.setSplitRatioValue(next);
+    };
+
+    const stopResize = () => {
+      this.splitDragging.set(false);
+      document.removeEventListener('pointermove', updateFromPointer);
+    };
+
+    updateFromPointer(event);
+    document.addEventListener('pointermove', updateFromPointer);
+    document.addEventListener('pointerup', stopResize, { once: true });
+  }
+
+  resizeSplitFromKeyboard(event: KeyboardEvent): void {
+    const step = event.shiftKey ? 10 : 4;
+    let next: number | null = null;
+
+    if (event.key === 'ArrowLeft') next = this.splitRatio() - step;
+    if (event.key === 'ArrowRight') next = this.splitRatio() + step;
+    if (event.key === 'Home') next = 34;
+    if (event.key === 'End') next = 72;
+
+    if (next === null) return;
+    event.preventDefault();
+    this.setSplitRatioValue(next);
   }
 
   handleActivity(target: ActivityTarget): void {
