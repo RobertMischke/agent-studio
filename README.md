@@ -6,7 +6,7 @@
 
 ![Board overview](docs/images/board-overview.png)
 
-> .NET 10 backend + Angular 21 PWA. Watches one or more project folders for `.orchestrator/jobs/` directories and runs them sequentially through Claude Code, Codex, GitHub Copilot, or Gemini.
+> .NET 10 backend + Angular 21 PWA. Job state lives in `.orchestrator/jobs/` folders on disk; the Task Access API fronts the filesystem so the runner, supervisor, frontend, and scripts read and mutate through one boundary. Runs tasks sequentially through Claude Code, Codex, GitHub Copilot, or Gemini.
 
 ---
 
@@ -163,6 +163,14 @@ The full concept lives in [docs/skills-architecture.md](docs/skills-architecture
 
 ## How it's wired
 
+All job operations flow through the API. Direct filesystem mutation is reserved for the API host process.
+
+The system is layered:
+
+1. **Filesystem on disk.** The watched project's `.orchestrator/jobs/<lane>/<job>/` folders hold `job.json`, `prompt.md`, `status.md`, `logs/`, and `results/`. Disk stays the source of truth on cold start.
+2. **Task Access API.** A typed software layer in the backend owns reads, lists, mutations, and lane transitions. It boots once, indexes every watched project's lane folders, watches the filesystem for external changes, serves cheap reads off the index, and accepts narrowly typed mutations. See [ADR-0024](docs/architecture-decisions.md) for the layer design and the queued `task-access-api-layer-extraction` work for the migration phasing.
+3. **Services and clients consume the API.** The runner, the supervisor, the frontend PWA, the meta-cycle, and external scripts go through the API. They do not touch the lane folders directly. The same boundary mirrors mutations onto the [agent message bus](docs/agent-message-bus.md) so every cross-cutting structured signal lands in one observable timeline.
+
 ```
 ┌─────────────────────────────┐     ┌──────────────────────────────────┐
 │  agent-taskboard/           │     │  Target project (e.g. C:\Proj\X) │
@@ -173,19 +181,57 @@ The full concept lives in [docs/skills-architecture.md](docs/skills-architecture
 │  - docs/                    │     │    └── jobs/                     │
 │  - .github/prompts/         │     │        ├── 1-preparation/        │
 │                             │────►│        ├── 2-ready/              │
-│  Reads / watches the        │     │        ├── 3-progress/           │
-│  target's jobs/ folder.     │     │        ├── 4-review/             │
-│  Stores no jobs of its own. │     │        ├── 5-completed/          │
-│                             │     │        └── 6-archive/            │
+│  Hosts the Task Access API. │     │        ├── 3-progress/           │
+│  Reads and mutates the      │     │        ├── 4-review/             │
+│  target's jobs/ folder      │     │        ├── 5-completed/          │
+│  through that one boundary. │     │        └── 6-archive/            │
 └─────────────────────────────┘     └──────────────────────────────────┘
 ```
 
 | Location | Contents |
 |----------|----------|
-| `agent-taskboard/` | App source, prompts, docs |
+| `agent-taskboard/` | App source, prompts, docs, Task Access API host |
 | `<target-project>/.orchestrator/jobs/` | `job.json`, `prompt.md`, `status.md`, `logs/` per task |
 
 One task processor, many targets. The board watches several projects in parallel; inside each project, work is strictly serial.
+
+---
+
+## Task Access API
+
+The Task Access API is the canonical reference for every job operation. Agents, scripts, the frontend, the supervisor, and the meta-cycle all go through it. Direct filesystem reads or mutations are reserved for the API host process and for migrations or recovery work that deliberately exercise the on-disk contract.
+
+Mutations require an `X-Client-Id` header so the layer can attribute the change to a registered client. Reads do not.
+
+Canonical endpoints:
+
+**Job lifecycle**
+
+- `POST /api/jobs` - create a job. `CreateJobRequest` accepts `targetState` to land directly in `1-preparation` or `2-ready`.
+- `POST /api/jobs/{id}/move?watchPath=...` - move a job to another lane.
+- `PUT /api/jobs/{id}/state` - drive a job through a typed state transition.
+- `POST /api/jobs/reorder` - reorder jobs within a lane.
+- `DELETE /api/jobs/{id}?watchPath=...` - delete a job.
+- `GET /api/jobs`, `GET /api/jobs/grouped`, `GET /api/jobs/{id}` - list and read.
+
+**Job runner and content**
+
+- `POST /api/jobs/{id}/start`, `POST /api/jobs/{id}/stop`, `POST /api/jobs/{id}/continue` - process lifecycle.
+- `PUT /api/jobs/{id}/title`, `PUT /api/jobs/{id}/model`, `PUT /api/jobs/{id}/cli-type` - typed field updates.
+- Git, attachments, run history, and per-run diff endpoints under the same `/api/jobs/{id}` group.
+
+**Clients**
+
+- `POST /api/clients/register` - register a client identity and obtain the `X-Client-Id` value.
+- `GET /api/clients`, `GET /api/clients/{id}`, `DELETE /api/clients/{id}` - list, inspect, and retire clients.
+
+**Supervisor and meta-cycle**
+
+- `POST /api/supervisor/{project}/intervene/cancel-run`, `POST /api/supervisor/{project}/intervene/pause-pickup`, `POST /api/supervisor/{project}/intervene/force-fail`, `POST /api/supervisor/{project}/intervene/resume` - supervisor interventions.
+- `GET /api/supervisor/{project}/meta-cycle` - meta-cycle status and recent reports.
+- `GET /api/supervisor/{project}/observation`, `GET /api/supervisor/{project}/recent-events` - advisories, interventions, and recent activity for the project.
+
+The wire shape for find / mutate is fixed in [`docs/schemas/task-find-result.schema.json`](docs/schemas/task-find-result.schema.json) and [`docs/schemas/task-mutation-request.schema.json`](docs/schemas/task-mutation-request.schema.json). The architectural decision is recorded in [ADR-0024](docs/architecture-decisions.md); the migration of the remaining direct-filesystem call sites is tracked under the queued task `task-access-api-layer-extraction`. Mutations are mirrored onto the [agent message bus](docs/agent-message-bus.md) as events.
 
 ---
 
