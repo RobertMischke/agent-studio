@@ -56,6 +56,38 @@ test.describe('@mockup next-gen chat Angular prototype', () => {
       fullPage: false,
     });
 
+    await page.getByTestId('prototype-topbar-queue').click();
+    await expect(page.getByTestId('prototype-status-popover')).toContainText('Queue and automation');
+    await page.screenshot({
+      path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-nav-queue.png'),
+      fullPage: false,
+    });
+    await page.getByTestId('prototype-status-popover').getByText('Close').click();
+
+    await page.getByTestId('prototype-status-token').click();
+    await expect(page.getByTestId('prototype-status-popover')).toContainText('Token usage heat');
+    await page.screenshot({
+      path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-status-tokens.png'),
+      fullPage: false,
+    });
+    await page.getByTestId('prototype-status-popover').getByText('Close').click();
+
+    await page.getByTestId('prototype-status-health').click();
+    await expect(page.getByTestId('prototype-status-popover')).toContainText('System health');
+    await page.screenshot({
+      path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-status-health.png'),
+      fullPage: false,
+    });
+    await page.getByTestId('prototype-status-popover').getByText('Close').click();
+
+    await page.getByTestId('prototype-status-model').click();
+    await expect(page.getByTestId('prototype-status-popover')).toContainText('CLI and model');
+    await page.screenshot({
+      path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-status-model.png'),
+      fullPage: false,
+    });
+    await page.getByTestId('prototype-status-popover').getByText('Close').click();
+
     await page.getByTestId('prototype-run-marker').click();
     await expect(page.getByTestId('prototype-run-popover')).toBeVisible();
     await page.screenshot({

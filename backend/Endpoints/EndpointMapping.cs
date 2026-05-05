@@ -36,5 +36,6 @@ public static class EndpointMapping
         app.MapBusEndpoints();
         app.MapClientEndpoints();
         app.MapAnalysisReportEndpoints();
+        app.MapDriftReportEndpoints();
     }
 }

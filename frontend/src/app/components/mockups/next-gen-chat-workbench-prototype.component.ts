@@ -7,6 +7,8 @@ type Theme = 'light' | 'dark';
 type Scenario = 'review' | 'tools' | 'wait' | 'visual' | 'drift';
 type DebugTab = 'overview' | 'actors' | 'tools' | 'tokens' | 'trace';
 type ComposeMode = 'continue' | 'extend' | 'steer' | 'followup';
+type ActivityTarget = 'projects' | 'tasks' | 'search' | 'git' | 'qa' | 'tokens';
+type StatusPanel = 'health' | 'queue' | 'tokens' | 'evidence' | 'model';
 
 interface SummaryChip {
   label: string;
@@ -35,12 +37,14 @@ interface ChatTurn {
              [attr.data-density]="density()"
              [attr.data-pane]="pane()"
              data-testid="next-gen-chat-angular-prototype">
-      <nav class="activity" aria-label="Prototype activity bar">
-        @for (item of activityItems; track item.label) {
+      <nav class="activity" aria-label="Prototype activity bar" data-testid="prototype-activity-bar">
+        @for (item of activityItems; track item.id) {
           <button class="activity__item"
-                  [class.activity__item--active]="item.active"
+                  [class.activity__item--active]="activeActivity() === item.id"
                   [attr.title]="item.title"
-                  [attr.aria-label]="item.title">
+                  [attr.aria-label]="item.title"
+                  [attr.data-testid]="'prototype-activity-' + item.id"
+                  (click)="handleActivity(item.id)">
             <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
               @for (path of iconPath(item.icon); track path) {
                 <path [attr.d]="path"></path>
@@ -63,6 +67,48 @@ interface ChatTurn {
           <strong>Agent Task Processor</strong>
           <span>Next-gen task chat workbench prototype</span>
         </div>
+        <nav class="topbar__nav" aria-label="Workbench quick navigation" data-testid="prototype-topbar-nav">
+          <button [class.topbar__nav-active]="pane() === 'result'"
+                  (click)="setPane('result')"
+                  data-testid="prototype-topbar-chat">
+            <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+              @for (path of iconPath('chat'); track path) {
+                <path [attr.d]="path"></path>
+              }
+            </svg>
+            <span>Task Chat</span>
+          </button>
+          <button [class.topbar__nav-active]="pane() === 'git'"
+                  (click)="setPane('git')"
+                  data-testid="prototype-topbar-git">
+            <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+              @for (path of iconPath('git'); track path) {
+                <path [attr.d]="path"></path>
+              }
+            </svg>
+            <span>Git Split</span>
+          </button>
+          <button [class.topbar__nav-active]="sideSheetOpen()"
+                  (click)="sideSheetOpen.set(!sideSheetOpen())"
+                  data-testid="prototype-topbar-sheet">
+            <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+              @for (path of iconPath(sideSheetOpen() ? 'panelClose' : 'panelOpen'); track path) {
+                <path [attr.d]="path"></path>
+              }
+            </svg>
+            <span>Project Sheet</span>
+          </button>
+          <button [class.topbar__nav-active]="statusPanel() === 'queue'"
+                  (click)="toggleStatusPanel('queue')"
+                  data-testid="prototype-topbar-queue">
+            <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+              @for (path of iconPath('columns'); track path) {
+                <path [attr.d]="path"></path>
+              }
+            </svg>
+            <span>Queue</span>
+          </button>
+        </nav>
         <div class="topbar__actions">
           <button class="icon-btn" title="Toggle density" aria-label="Toggle density" (click)="toggleDensity()" data-testid="prototype-density-toggle">
             <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -578,9 +624,157 @@ interface ChatTurn {
         </aside>
       </main>
 
-      <footer class="statusbar">
-        <span>main · NextGenChat prototype · {{ density() }} · {{ theme() }}</span>
-        <span>42k tokens · 3 commits · 4 screenshots · Ready</span>
+      @if (statusPanel()) {
+        <section class="status-popover modal__panel"
+                 [attr.data-panel]="statusPanel()"
+                 data-testid="prototype-status-popover">
+          <header>
+            <strong>{{ statusPanelTitle() }}</strong>
+            <button class="chip" (click)="statusPanel.set(null)">Close</button>
+          </header>
+          @switch (statusPanel()) {
+            @case ('tokens') {
+              <article>
+                <h3>Token usage heat</h3>
+                <div class="token-bars">
+                  @for (row of tokenRows; track row.name) {
+                    <div>
+                      <span>{{ row.name }}</span>
+                      <i><em [style.width.%]="row.percent"></em></i>
+                      <b>{{ row.value }}</b>
+                    </div>
+                  }
+                </div>
+              </article>
+              <article>
+                <h3>Drill-down path</h3>
+                <p>Job tokens, supporting-agent tokens, and orchestrator tokens stay visible in the bar. Clicking opens run-level heat and the Verbose Debug token tab.</p>
+                <div class="function-grid">
+                  <button (click)="debugTab.set('tokens'); debugOpen.set(true)">Open token debug</button>
+                  <button (click)="setPane('debug')">Pin token pane</button>
+                  <button>Export token report</button>
+                </div>
+              </article>
+            }
+            @case ('queue') {
+              <article>
+                <h3>Queue and automation</h3>
+                <div class="metric-grid">
+                  <div><b>2</b><span>running</span></div>
+                  <div><b>4/6</b><span>auto loops</span></div>
+                  <div><b>1</b><span>blocked</span></div>
+                  <div><b>6</b><span>chat jobs</span></div>
+                </div>
+              </article>
+              <article>
+                <h3>Dummy actions</h3>
+                <div class="function-grid">
+                  <button (click)="setPane('result')">Open active task</button>
+                  <button (click)="sideSheetOpen.set(true)">Open project sheet</button>
+                  <button (click)="commandOpen.set(true)">Create follow-up</button>
+                </div>
+              </article>
+            }
+            @case ('health') {
+              <article>
+                <h3>System health</h3>
+                <div class="metric-grid">
+                  <div><b>Ready</b><span>runner</span></div>
+                  <div><b>5031</b><span>stable API</span></div>
+                  <div><b>12m</b><span>last run</span></div>
+                  <div><b>0</b><span>fatal errors</span></div>
+                </div>
+              </article>
+              <article>
+                <h3>Observability shortcuts</h3>
+                <p>Status items should become the fastest route into health, logs, quotas, visual evidence, and stuck-loop diagnostics.</p>
+                <div class="function-grid">
+                  <button (click)="debugTab.set('trace'); debugOpen.set(true)">Open trace</button>
+                  <button (click)="toggleStatusPanel('queue')">Queue health</button>
+                  <button (click)="toggleStatusPanel('tokens')">Token health</button>
+                </div>
+              </article>
+            }
+            @case ('evidence') {
+              <article>
+                <h3>Visual evidence</h3>
+                <p>Four screenshots are attached to this job. The status bar keeps them one click away even while Git stays open beside chat.</p>
+                <div class="function-grid">
+                  <button (click)="setPane('preview')">Open preview</button>
+                  <button (click)="lightboxOpen.set(true)">Open lightbox</button>
+                  <button>Open evidence folder</button>
+                </div>
+              </article>
+              <article class="status-shot">
+                <b>Latest</b>
+                <span>Result split, light theme, 1440 x 900</span>
+              </article>
+            }
+            @case ('model') {
+              <article>
+                <h3>CLI and model</h3>
+                <div class="function-grid">
+                  <button class="function-grid__active">Codex</button>
+                  <button>Claude</button>
+                  <button>Gemini</button>
+                  <button>Copilot</button>
+                </div>
+              </article>
+              <article>
+                <h3>Run configuration</h3>
+                <div class="function-grid">
+                  <button class="function-grid__active">5.5 Extra High</button>
+                  <button>5.4 High</button>
+                  <button>Auto approve</button>
+                  <button>Stop current run</button>
+                </div>
+              </article>
+            }
+          }
+        </section>
+      }
+
+      <footer class="statusbar" data-testid="prototype-statusbar">
+        <div class="statusbar__group">
+          <button (click)="toggleStatusPanel('health')" data-testid="prototype-status-health">
+            <span class="statusbar__dot"></span>
+            <span>2 running</span>
+          </button>
+          <button (click)="toggleStatusPanel('queue')" data-testid="prototype-status-queue">
+            <span>4/6 auto</span>
+          </button>
+          <button (click)="setPane('result')">
+            <span>main</span>
+          </button>
+        </div>
+        <div class="statusbar__group statusbar__group--center">
+          <button (click)="toggleStatusPanel('tokens')" data-testid="prototype-status-token">
+            <span>42k tokens</span>
+          </button>
+          <button (click)="setPane('git')" data-testid="prototype-status-git">
+            <span>3 commits</span>
+          </button>
+          <button (click)="toggleStatusPanel('evidence')" data-testid="prototype-status-evidence">
+            <span>4 screenshots</span>
+          </button>
+          <button (click)="setPane('debug')">
+            <span>28 tools</span>
+          </button>
+        </div>
+        <div class="statusbar__group statusbar__group--right">
+          <button (click)="toggleStatusPanel('model')" data-testid="prototype-status-model">
+            <span>Codex · 5.5 Extra High</span>
+          </button>
+          <button (click)="toggleDensity()">
+            <span>{{ density() }}</span>
+          </button>
+          <button (click)="toggleTheme()">
+            <span>{{ theme() }}</span>
+          </button>
+          <button (click)="commandOpen.set(true)">
+            <span>Command</span>
+          </button>
+        </div>
       </footer>
 
       @if (debugOpen()) {
@@ -870,7 +1064,7 @@ interface ChatTurn {
     .topbar {
       grid-column: 2;
       display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-columns: minmax(160px, 1fr) auto auto;
       align-items: center;
       gap: 10px;
       padding: 0 10px 0 12px;
@@ -890,6 +1084,38 @@ interface ChatTurn {
     }
 
     .topbar__title span { color: var(--muted); }
+
+    .topbar__nav {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      overflow: hidden;
+    }
+
+    .topbar__nav button {
+      min-width: 0;
+      height: 26px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      background: transparent;
+      color: var(--muted);
+      padding: 0 7px;
+      font-size: 11px;
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .topbar__nav button:hover,
+    .topbar__nav-active {
+      background: var(--surface) !important;
+      border-color: var(--line) !important;
+      color: var(--text) !important;
+    }
+
     .topbar__actions { display: flex; gap: 5px; }
 
     .workspace {
@@ -1705,6 +1931,11 @@ interface ChatTurn {
       text-overflow: ellipsis;
     }
 
+    .function-grid__active {
+      color: var(--accent) !important;
+      border-color: var(--accent) !important;
+    }
+
     .context {
       min-width: 0;
       min-height: 0;
@@ -1905,17 +2136,92 @@ interface ChatTurn {
       background: var(--surface);
     }
 
+    .status-popover {
+      position: fixed;
+      left: 58px;
+      right: 10px;
+      bottom: 26px;
+      z-index: 19;
+      width: auto;
+      max-height: 280px;
+      display: grid;
+      grid-template-columns: 220px minmax(0, 1fr) minmax(180px, 0.45fr);
+      gap: 10px;
+      padding: 10px;
+      border-radius: 8px 8px 0 0;
+    }
+
+    .status-popover header {
+      display: grid;
+      gap: 6px;
+      align-content: start;
+      border-right: 1px solid var(--line);
+    }
+
+    .status-shot {
+      display: grid;
+      place-items: center;
+      text-align: center;
+      color: var(--muted);
+      background:
+        linear-gradient(135deg, rgba(122, 167, 255, 0.22), transparent 46%),
+        var(--surface-soft) !important;
+    }
+
     .statusbar {
       grid-column: 2;
       min-height: 22px;
       display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      gap: 10px;
+      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+      gap: 8px;
       align-items: center;
-      background: var(--accent);
+      background: #1f6feb;
       color: #fff;
-      padding: 0 8px;
+      padding: 0 7px;
       font-size: 11px;
+    }
+
+    .statusbar__group {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      overflow: hidden;
+    }
+
+    .statusbar__group--center {
+      justify-content: center;
+    }
+
+    .statusbar__group--right {
+      justify-content: flex-end;
+    }
+
+    .statusbar button {
+      min-width: 0;
+      height: 20px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      border: 0;
+      border-radius: 4px;
+      background: transparent;
+      color: inherit;
+      padding: 0 7px;
+      font-size: inherit;
+      white-space: nowrap;
+    }
+
+    .statusbar button:hover {
+      background: rgba(255, 255, 255, 0.18);
+    }
+
+    .statusbar__dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: #90ee90;
+      box-shadow: 0 0 0 3px rgba(144, 238, 144, 0.18);
     }
 
     .modal {
@@ -2118,7 +2424,17 @@ interface ChatTurn {
       .topbar,
       .workspace,
       .statusbar { grid-column: 1; }
+      .topbar { grid-template-columns: minmax(0, 1fr) auto auto; gap: 4px; }
       .topbar__title span { display: none; }
+      .topbar__nav span { display: none; }
+      .statusbar { grid-template-columns: minmax(0, 1fr) auto; }
+      .statusbar__group--center { display: none; }
+      .status-popover {
+        left: 8px;
+        right: 8px;
+        bottom: 24px;
+        grid-template-columns: 1fr;
+      }
       .detail { grid-template-rows: auto minmax(0, 1fr); }
       .detail-chrome {
         min-height: 34px;
@@ -2162,6 +2478,8 @@ export class NextGenChatWorkbenchPrototypeComponent {
   readonly commandOpen = signal(false);
   readonly guideOpen = signal(false);
   readonly markerOpen = signal(false);
+  readonly statusPanel = signal<StatusPanel | null>(null);
+  readonly activeActivity = signal<ActivityTarget>('projects');
   readonly debugTab = signal<DebugTab>('overview');
   readonly composerMode = signal<ComposeMode>('continue');
 
@@ -2199,13 +2517,13 @@ export class NextGenChatWorkbenchPrototypeComponent {
     warning: ['M12 3l10 18H2z', 'M12 9v5', 'M12 18h.01'],
   };
 
-  readonly activityItems = [
-    { icon: 'folder', label: 'Projects', title: 'Projects', active: true },
-    { icon: 'columns', label: 'Tasks', title: 'Tasks' },
-    { icon: 'search', label: 'Search', title: 'Search' },
-    { icon: 'git', label: 'Git', title: 'Git changes' },
-    { icon: 'check', label: 'QA', title: 'QA and tests' },
-    { icon: 'tokens', label: 'Tokens', title: 'Token usage' },
+  readonly activityItems: Array<{ id: ActivityTarget; icon: string; label: string; title: string }> = [
+    { id: 'projects', icon: 'folder', label: 'Projects', title: 'Projects and watched paths' },
+    { id: 'tasks', icon: 'columns', label: 'Tasks', title: 'Task board and queue' },
+    { id: 'search', icon: 'search', label: 'Search', title: 'Search chat and trace' },
+    { id: 'git', icon: 'git', label: 'Git', title: 'Git changes' },
+    { id: 'qa', icon: 'check', label: 'QA', title: 'QA, tests, and health' },
+    { id: 'tokens', icon: 'tokens', label: 'Tokens', title: 'Token usage' },
   ];
 
   readonly taskTabs = [
@@ -2468,6 +2786,30 @@ export class NextGenChatWorkbenchPrototypeComponent {
 
   setPane(pane: WorkbenchPane): void {
     this.pane.set(pane);
+  }
+
+  handleActivity(target: ActivityTarget): void {
+    this.activeActivity.set(target);
+    if (target === 'git') this.setPane('git');
+    if (target === 'qa') this.toggleStatusPanel('health');
+    if (target === 'tokens') this.toggleStatusPanel('tokens');
+    if (target === 'tasks') this.toggleStatusPanel('queue');
+    if (target === 'search') this.commandOpen.set(true);
+    if (target === 'projects') this.sideSheetOpen.set(true);
+  }
+
+  toggleStatusPanel(panel: StatusPanel): void {
+    this.statusPanel.set(this.statusPanel() === panel ? null : panel);
+  }
+
+  statusPanelTitle(): string {
+    switch (this.statusPanel()) {
+      case 'queue': return 'Queue and automation';
+      case 'tokens': return 'Token usage';
+      case 'evidence': return 'Visual evidence';
+      case 'model': return 'CLI and model controls';
+      default: return 'System health';
+    }
   }
 
   toggleDensity(): void {
