@@ -284,6 +284,28 @@ import { Density, StatusPanel, Theme } from './next-gen-chat-workbench-prototype
       background: var(--surface);
       border-color: var(--line);
     }
+
+    @media (max-width: 720px) {
+      .topbar {
+        grid-template-columns: minmax(0, 1fr) auto auto;
+        gap: 4px;
+      }
+
+      .topbar__title span,
+      .topbar__projects,
+      .topbar__runline span:nth-child(n+3),
+      .owner-switch span,
+      .topbar__actions button:nth-of-type(n+6) {
+        display: none;
+      }
+
+      .owner-switch {
+        width: 28px;
+        min-width: 28px;
+        padding: 0;
+        justify-content: center;
+      }
+    }
   `],
 })
 export class FoundNextTopbarComponent {

@@ -24,7 +24,11 @@ The normal dev app continues to run on its own port. Do not use `atp.flag.nextGe
 
 | File | Purpose |
 |------|---------|
-| `frontend/src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts` | Standalone Angular clickware component. |
+| `frontend/src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts` | Standalone Angular workbench host for task list, detail, transcript, panes, popovers, and modals. |
+| `frontend/src/app/components/mockups/found-next-topbar.component.ts` | Extracted shell top bar for project filter, owner switch, run summary, density/theme, command, debug, and side-sheet controls. |
+| `frontend/src/app/components/mockups/found-next-statusbar.component.ts` | Extracted shell status bar for run health, automation state, session continuity, usage, tokens, Git, visual evidence, and model defaults. |
+| `frontend/src/app/components/mockups/next-gen-chat-workbench-prototype.data.ts` | Shared dummy data and icon paths used by the shell components and host. |
+| `frontend/src/app/components/mockups/next-gen-chat-workbench-prototype.models.ts` | Shared type contracts for panes, actors, scenarios, decisions, status panels, density, theme, and transcript events. |
 | `frontend/src/mockups/next-gen-chat/main.ts` | Standalone Angular bootstrap for the mockup app. |
 | `frontend/src/mockups/next-gen-chat/index.html` | Dedicated mockup host document. |
 | `frontend/angular.json` | Defines the `next-gen-chat-mockup` app and serve target. |
@@ -76,6 +80,8 @@ The prototype currently covers:
 - Persistent actor rails for User, Task Agent, Orchestrator, Supervisor, Supporting Agent, Tool Runner, and System with non-color cues (icon, glyph, shape, label, accent stripe).
 - Compact decision rows for reissue, heuristic, needs-input, circuit breaker, capture fail, and schema drift, expandable to reason / evidence / action / retry budget / token usage / next step plus a Trace link.
 - Target-aware user intervention chips (current run, next run, orchestrator, follow-up task) on user turns.
+
+The current refactor iteration starts turning the clickware into a component reference. Topbar and statusbar are now standalone Angular components, while topbar/statusbar dummy data and shared icon paths live in a separate data module. The next extraction should continue downward into `ActivityRail`, `StatusPopover`, `ConversationTranscript`, `ComposerBar`, and `WorkbenchPaneHost`, keeping the implementation slice small enough to visually review after every step.
 
 ## Screenshots
 

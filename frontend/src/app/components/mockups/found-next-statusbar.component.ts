@@ -208,6 +208,28 @@ import { StatusPanel } from './next-gen-chat-workbench-prototype.models';
     .usage-pill span:first-child {
       color: rgba(255,255,255,0.56);
     }
+
+    @media (max-width: 720px) {
+      .statusbar {
+        grid-template-columns: minmax(0, 1fr) auto;
+      }
+
+      .statusbar__group--center {
+        display: none;
+      }
+
+      .statusbar__group:first-child button:nth-child(n+2),
+      .statusbar__group--right button:nth-child(2),
+      .statusbar__group--right button:nth-child(3) {
+        display: none;
+      }
+
+      .statusbar__group--right button:first-child span {
+        max-width: 136px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+    }
   `],
 })
 export class FoundNextStatusbarComponent {

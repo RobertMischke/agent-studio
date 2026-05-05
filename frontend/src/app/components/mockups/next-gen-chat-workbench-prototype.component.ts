@@ -1303,136 +1303,6 @@ import {
 
     .activity__spacer { min-height: 0; }
 
-    .topbar {
-      grid-column: 2;
-      display: grid;
-      grid-template-columns: minmax(148px, auto) minmax(320px, 1fr) auto auto;
-      align-items: center;
-      gap: 8px;
-      padding: 0 8px 0 10px;
-      background: var(--chrome);
-      border-bottom: 1px solid var(--line);
-    }
-
-    .topbar__title {
-      min-width: 0;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-size: 12px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .topbar__title span { color: var(--muted); }
-
-    .topbar__projects {
-      min-width: 0;
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      overflow: hidden;
-    }
-
-    .project-chip {
-      min-width: 0;
-      max-width: 176px;
-      min-height: 24px;
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      border: 1px solid var(--project-border, var(--line));
-      border-radius: 7px;
-      background: color-mix(in srgb, var(--project-soft, var(--surface-soft)) 58%, var(--surface));
-      color: var(--text);
-      padding: 1px 6px 1px 4px;
-      font-size: 11px;
-      font-weight: 700;
-    }
-
-    .project-chip--active {
-      background: var(--project-soft, var(--surface-soft));
-      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--project-border, var(--accent)) 48%, transparent);
-    }
-
-    .project-chip__disk {
-      width: 17px;
-      height: 17px;
-      display: grid;
-      place-items: center;
-      border-radius: 5px;
-      background: var(--project-color, var(--accent));
-      color: var(--project-on, #fff);
-      font-size: 10px;
-      font-weight: 850;
-      flex: 0 0 auto;
-    }
-
-    .project-chip__name {
-      min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .project-chip__auto {
-      color: var(--muted);
-      font-size: 10px;
-      font-weight: 650;
-      white-space: nowrap;
-    }
-
-    .topbar__runline {
-      min-width: 0;
-      display: flex;
-      align-items: center;
-      justify-content: flex-end;
-      gap: 5px;
-      overflow: hidden;
-    }
-
-    .topbar__runline span {
-      min-height: 20px;
-      display: inline-flex;
-      align-items: center;
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      padding: 1px 7px;
-      background: var(--surface);
-      color: var(--muted);
-      font-size: 11px;
-      font-weight: 650;
-      white-space: nowrap;
-    }
-
-    .topbar__actions {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
-
-    .owner-switch {
-      min-height: 28px;
-      max-width: 108px;
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      border: 1px solid var(--line);
-      border-radius: 7px;
-      background: var(--surface);
-      color: var(--text);
-      padding: 0 8px;
-      font-size: 11px;
-      font-weight: 750;
-      white-space: nowrap;
-    }
-
-    .owner-switch .svg-icon {
-      width: 13px;
-      height: 13px;
-    }
-
     .workspace {
       grid-column: 2;
       min-width: 0;
@@ -2788,131 +2658,6 @@ import {
       background: var(--surface);
     }
 
-    .statusbar {
-      grid-column: 2;
-      min-height: 28px;
-      display: grid;
-      grid-template-columns: minmax(230px, .75fr) minmax(460px, 1.25fr) auto;
-      gap: 6px;
-      align-items: center;
-      background: #11111b;
-      border-top: 1px solid rgba(255,255,255,0.08);
-      color: rgba(255,255,255,0.76);
-      padding: 0 8px;
-      font-size: 11px;
-      letter-spacing: 0;
-    }
-
-    .statusbar__group {
-      min-width: 0;
-      display: flex;
-      align-items: center;
-      gap: 3px;
-      overflow: hidden;
-    }
-
-    .statusbar__group--center {
-      justify-content: center;
-    }
-
-    .statusbar__group--right {
-      justify-content: flex-end;
-    }
-
-    .statusbar button {
-      min-width: 0;
-      height: 22px;
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      border: 0;
-      border-radius: 4px;
-      background: transparent;
-      color: inherit;
-      padding: 0 7px;
-      font-size: inherit;
-      white-space: nowrap;
-    }
-
-    .statusbar button:hover {
-      background: rgba(255,255,255,0.10);
-      color: #fff;
-    }
-
-    .statusbar__item {
-      color: rgba(255,255,255,0.76);
-    }
-
-    .statusbar__item--readonly {
-      color: rgba(255,255,255,0.58);
-    }
-
-    .statusbar__dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 999px;
-      background: #8bd17c;
-      box-shadow: 0 0 0 2px rgba(139, 209, 124, .14);
-    }
-
-    .statusbar__dot--live {
-      animation: statusbar-live 1.5s ease-in-out infinite;
-    }
-
-    @keyframes statusbar-live {
-      0%, 100% { opacity: 1; }
-      50% { opacity: .48; }
-    }
-
-    .statusbar__icon-text {
-      color: rgba(255,255,255,0.50);
-      font-weight: 750;
-      text-transform: uppercase;
-      font-size: 9px;
-    }
-
-    .statusbar__sep {
-      width: 1px;
-      height: 16px;
-      margin: 0 3px;
-      background: rgba(255,255,255,0.14);
-      flex: 0 0 auto;
-    }
-
-    .statusbar__picker {
-      border: 1px solid rgba(255,255,255,0.12) !important;
-      background: rgba(255,255,255,0.04) !important;
-    }
-
-    .statusbar__picker b,
-    .usage-pill b {
-      color: #fff;
-      font-weight: 760;
-    }
-
-    .statusbar__caret {
-      color: rgba(255,255,255,0.48);
-      font-size: 9px;
-    }
-
-    .statusbar__usage {
-      gap: 4px;
-    }
-
-    .usage-pill {
-      border: 1px solid rgba(255,255,255,0.10) !important;
-      background: rgba(255,255,255,0.035) !important;
-    }
-
-    .usage-pill[data-tone="ok"] b { color: #a6d189; }
-    .usage-pill[data-tone="warn"] b,
-    .usage-pill--tokens b { color: #e6b673; }
-    .usage-pill[data-tone="hot"] b { color: #f27d8a; }
-
-    .usage-pill span:first-child {
-      color: rgba(255,255,255,0.56);
-    }
-
     .usage-pop-grid,
     .project-pop-list {
       display: grid;
@@ -3124,7 +2869,6 @@ import {
     }
 
     .ng-chat-prototype[data-theme="dark"] .activity,
-    .ng-chat-prototype[data-theme="dark"] .topbar,
     .ng-chat-prototype[data-theme="dark"] .detail-chrome,
     .ng-chat-prototype[data-theme="dark"] .context__head,
     .ng-chat-prototype[data-theme="dark"] .sheet__head,
@@ -3264,22 +3008,9 @@ import {
       }
 
       .activity { display: none; }
-      .topbar,
+      app-found-next-topbar,
       .workspace,
-      .statusbar { grid-column: 1; }
-      .topbar { grid-template-columns: minmax(0, 1fr) auto auto; gap: 4px; }
-      .topbar__title span { display: none; }
-      .topbar__runline span:nth-child(n+3) { display: none; }
-      .statusbar { grid-template-columns: minmax(0, 1fr) auto; }
-      .statusbar__group--center { display: none; }
-      .statusbar__group:first-child button:nth-child(n+2),
-      .statusbar__group--right button:nth-child(2),
-      .statusbar__group--right button:nth-child(3) { display: none; }
-      .statusbar__group--right button:first-child span {
-        max-width: 136px;
-        overflow: hidden;
-        text-overflow: ellipsis;
-      }
+      app-found-next-statusbar { grid-column: 1; }
       .detail { grid-template-rows: auto minmax(0, 1fr); }
       .detail-chrome {
         min-height: 34px;
@@ -3340,89 +3071,9 @@ export class NextGenChatWorkbenchPrototypeComponent {
   readonly debugTab = signal<DebugTab>('overview');
   readonly composerMode = signal<ComposeMode>('continue');
 
-  readonly projectTabs = [
-    {
-      name: 'Taskboard',
-      initial: 'T',
-      active: true,
-      auto: 'auto 2',
-      tooltip: 'Agent Task Processor, active filter, 2 ready tasks',
-      color: '#7aa7ff',
-      soft: 'rgba(122, 167, 255, .22)',
-      border: 'rgba(122, 167, 255, .66)',
-      on: '#10141f',
-    },
-    {
-      name: 'Stable',
-      initial: 'S',
-      active: false,
-      auto: 'manual',
-      tooltip: 'Stable checkout reference, manual pickup',
-      color: '#a6d189',
-      soft: 'rgba(166, 209, 137, .18)',
-      border: 'rgba(166, 209, 137, .48)',
-      on: '#10170f',
-    },
-    {
-      name: 'Marketing',
-      initial: 'M',
-      active: true,
-      auto: 'auto 1',
-      tooltip: 'Marketing docs project, 1 ready task',
-      color: '#f3b263',
-      soft: 'rgba(243, 178, 99, .18)',
-      border: 'rgba(243, 178, 99, .52)',
-      on: '#1b1206',
-    },
-  ];
-
-  readonly usageStrip: Array<{ label: string; value: string; tone: 'ok' | 'warn' | 'hot'; detail: string; testId?: string }> = [
-    { label: 'Codex', value: '62%', tone: 'warn', detail: 'Subscription quota, 3h window, resets in 42m' },
-    { label: 'Claude', value: '18%', tone: 'ok', detail: 'Subscription quota, daily window healthy' },
-    { label: 'Gemini', value: 'idle', tone: 'ok', detail: 'No recent usage detected' },
-  ];
-
-  readonly iconPaths: Record<string, string[]> = {
-    back: ['M19 12H5', 'M12 19l-7-7 7-7'],
-    bug: ['M8 2l1.5 2h5L16 2', 'M7 8h10v9a5 5 0 0 1-10 0V8', 'M5 13H2', 'M22 13h-3', 'M5 19H3', 'M21 19h-2', 'M9 12h.01', 'M15 12h.01'],
-    chat: ['M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8'],
-    check: ['M20 6L9 17l-5-5'],
-    clock: ['M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20', 'M12 6v6l4 2'],
-    close: ['M18 6L6 18', 'M6 6l12 12'],
-    code: ['M8 9l-4 3 4 3', 'M16 9l4 3-4 3', 'M14 4l-4 16'],
-    columns: ['M4 4h6v16H4z', 'M14 4h6v16h-6z'],
-    command: ['M9 7H7a2 2 0 1 1 2-2v14a2 2 0 1 1-2-2h10a2 2 0 1 1-2 2V5a2 2 0 1 1 2 2H9'],
-    compress: ['M8 3v5H3', 'M16 3v5h5', 'M8 21v-5H3', 'M16 21v-5h5'],
-    copy: ['M8 8h11v11H8z', 'M5 15H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v1'],
-    edit: ['M12 20h9', 'M16.5 3.5a2.1 2.1 0 0 1 3 3L8 18l-4 1 1-4 11.5-11.5z'],
-    expand: ['M3 8V3h5', 'M21 8V3h-5', 'M3 16v5h5', 'M21 16v5h-5'],
-    file: ['M6 2h8l4 4v16H6z', 'M14 2v5h5'],
-    fileDiff: ['M6 2h8l4 4v16H6z', 'M14 2v5h5', 'M9 13h6', 'M12 10v6'],
-    folder: ['M3 6h7l2 2h9v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'],
-    git: ['M6 3v12', 'M18 9v12', 'M6 15a3 3 0 1 0 0 6 3 3 0 0 0 0-6', 'M18 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6', 'M6 7h7a5 5 0 0 1 5 5v3'],
-    image: ['M4 5h16v14H4z', 'M8 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4', 'M4 16l4-4 3 3 3-4 6 6'],
-    list: ['M8 6h13', 'M8 12h13', 'M8 18h13', 'M3 6h.01', 'M3 12h.01', 'M3 18h.01'],
-    moon: ['M21 12.8A8 8 0 1 1 11.2 3 6 6 0 0 0 21 12.8z'],
-    panel: ['M4 4h16v16H4z', 'M9 4v16', 'M9 9h11'],
-    panelClose: ['M4 4h16v16H4z', 'M15 4v16', 'M10 9l-3 3 3 3'],
-    panelOpen: ['M4 4h16v16H4z', 'M9 4v16', 'M14 9l3 3-3 3'],
-    pause: ['M8 5v14', 'M16 5v14'],
-    play: ['M7 5v14l11-7z'],
-    plus: ['M12 5v14', 'M5 12h14'],
-    search: ['M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16', 'M21 21l-4.3-4.3'],
-    sun: ['M12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12', 'M12 2v2', 'M12 20v2', 'M4.9 4.9l1.4 1.4', 'M17.7 17.7l1.4 1.4', 'M2 12h2', 'M20 12h2', 'M4.9 19.1l1.4-1.4', 'M17.7 6.3l1.4-1.4'],
-    terminal: ['M4 7l5 5-5 5', 'M11 17h9'],
-    tokens: ['M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20', 'M8 12h8', 'M12 8v8'],
-    warning: ['M12 3l10 18H2z', 'M12 9v5', 'M12 18h.01'],
-    user: ['M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8', 'M4 21a8 8 0 0 1 16 0'],
-    agent: ['M5 4h14v12H5z', 'M9 8h.01', 'M15 8h.01', 'M9 12h6', 'M9 20l3-4 3 4'],
-    compass: ['M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20', 'M16 8l-2 6-6 2 2-6 6-2z'],
-    shield: ['M12 3l8 4v6c0 4.5-3.5 8-8 9-4.5-1-8-4.5-8-9V7z', 'M9 12l2 2 4-4'],
-    helper: ['M9 4h6l3 4v8a3 3 0 0 1-3 3H9a3 3 0 0 1-3-3V8z', 'M9 12h6', 'M9 16h4'],
-    plug: ['M7 8V4', 'M11 8V4', 'M5 8h8v6a4 4 0 1 1-8 0z', 'M9 18v3'],
-    rerun: ['M4 12a8 8 0 0 1 14-5l3 3', 'M21 4v6h-6', 'M20 12a8 8 0 0 1-14 5l-3-3', 'M3 20v-6h6'],
-    help: ['M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20', 'M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.9.5-1 1-1 1.7', 'M12 17h.01'],
-  };
+  readonly projectTabs = PROJECT_TABS;
+  readonly usageStrip = USAGE_STRIP;
+  readonly iconPaths = ICON_PATHS;
 
   readonly activityItems: Array<{ id: ActivityTarget; icon: string; label: string; title: string }> = [
     { id: 'projects', icon: 'folder', label: 'Projects', title: 'Projects and watched paths' },
@@ -3840,12 +3491,20 @@ export class NextGenChatWorkbenchPrototypeComponent {
 
   readonly workbenchColumns = computed(() => {
     const columns: string[] = [];
+    const panes = this.contextPanes();
+    const manyPanes = panes.length > 1;
     if (this.chatOpen()) {
-      columns.push(`minmax(320px, ${this.splitRatio()}fr)`);
-      if (this.contextPanes().length > 0) columns.push('7px');
+      const chatMinimum = manyPanes ? 300 : 320;
+      const chatShare = manyPanes ? Math.min(this.splitRatio(), 48) : this.splitRatio();
+      columns.push(`minmax(${chatMinimum}px, ${chatShare}%)`);
+      if (panes.length > 0) columns.push('7px');
     }
-    for (const pane of this.contextPanes()) {
-      columns.push(pane === 'git' ? 'minmax(430px, 1.25fr)' : 'minmax(255px, .85fr)');
+    for (const pane of panes) {
+      if (manyPanes) {
+        columns.push(pane === 'git' ? 'minmax(360px, 1.25fr)' : 'minmax(220px, .85fr)');
+      } else {
+        columns.push(pane === 'git' ? 'minmax(430px, 1.25fr)' : 'minmax(255px, .85fr)');
+      }
     }
     return columns.length ? columns.join(' ') : 'minmax(0, 1fr)';
   });
@@ -3903,6 +3562,7 @@ export class NextGenChatWorkbenchPrototypeComponent {
   openAllContextPanes(): void {
     this.contextPanes.set(['result', 'git', 'preview', 'debug']);
     this.pane.set('debug');
+    this.sideSheetOpen.set(false);
   }
 
   paneTitle(pane: ContextPane): string {
@@ -3924,7 +3584,12 @@ export class NextGenChatWorkbenchPrototypeComponent {
   }
 
   private addContextPane(pane: ContextPane): void {
-    this.contextPanes.update((panes) => panes.includes(pane) ? panes : [...panes, pane]);
+    this.contextPanes.update((panes) => {
+      if (panes.includes(pane)) return panes;
+      const next = [...panes, pane];
+      if (next.length > 1) this.sideSheetOpen.set(false);
+      return next;
+    });
   }
 
   private removeContextPane(pane: ContextPane): void {
