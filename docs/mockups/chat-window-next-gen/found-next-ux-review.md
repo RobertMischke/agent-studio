@@ -47,7 +47,7 @@ The framework is not a new library yet. It is a rule set plus reusable Angular c
 - **Primitive density:** 28px status rows, 30 to 34px tool rows, 38px task chrome, 48px activity rail, 6 to 8px local padding, 1px borders, 6 to 8px radius only on controls and repeated cards.
 - **Theme tokens:** app-level CSS variables for `bg`, `chrome`, `surface`, `surface-soft`, `line`, `line-strong`, `text`, `muted`, `accent`, `ok`, `warn`, `danger`, `teal`, and `purple`.
 - **Interaction grammar:** visible labels in comfortable density, icon-first compact density, every icon button with title or aria-label, technical detail behind disclosure, and no stacked horizontal metadata bands above the transcript.
-- **Evidence rule:** every visual iteration must have light, compact, no-chat Git, all-panes, dark, status-popover, owner-popover, and mobile screenshots.
+- **Evidence rule:** every visual iteration must have light, compact, no-chat Git, all-tabs, dark, status-popover, owner-popover, and mobile screenshots.
 
 Decision: do not import `@vscode/webview-ui-toolkit`, shadcn, Material, or another heavy UI kit for this prototype. The app has specialized workbench requirements, already uses Angular standalone components, and needs tight control over density. A small internal framework gives better fit and avoids a deprecated VS Code dependency.
 
@@ -66,7 +66,7 @@ The prototype should now explore a VS-Code-like panel/document model:
 
 This is different from the older "chat plus adjacent panes" mental model. The old model treated every surface as a pane next to chat. The document model says chat is only one document. Git review can become the active document, Summary can remain the default dashboard, and Debug can be opened only when the user needs depth.
 
-Open question: whether production should keep one editor group only, or support two editor groups for side-by-side document review. The current prototype keeps the simpler path: one tab strip plus additive side-by-side documents inside the workbench.
+Open question: whether production should keep one editor group only, or support two editor groups for side-by-side document review. The current prototype keeps the simpler path: one tab strip, one active document, and full content per tab. Split review should be an explicit editor-group action later, not an accidental side effect of opening several tabs.
 
 ## Screenshot Evidence
 
@@ -78,7 +78,7 @@ Playwright regenerates these local files under `docs/mockups/chat-window-next-ge
 | `next-gen-chat-angular-prototype-document-tabs.png` | Future named capture for the panel/document model. | Summary is the default document; Chat, Git, Preview, and Debug are visible as opened workbench documents. |
 | `next-gen-chat-angular-prototype-status-tokens.png` | Token and quota popover. | Codex and Claude percentages plus 5h window and reset context are visible without turning the chat into a dashboard. |
 | `next-gen-chat-angular-prototype-project-owner.png` | Project and owner popover. | Owner is Robert, project tabs remain compact, and owner filtering does not steal transcript height. |
-| `next-gen-chat-angular-prototype-all-panes.png` | Multi-pane review mode. | Side sheet yields space, chat remains optional, Git/Result/Preview/Debug can coexist without top-heavy chrome. |
+| `next-gen-chat-angular-prototype-all-panes.png` | All review tabs open. | Summary, Chat, Git, Screenshots, and Debug are visible as tabs, but only the active document owns the content area. |
 | `next-gen-chat-angular-prototype-git-no-chat.png` | Git plus source diff with chat closed. | Git changes own the left list and source diff owns the right editor surface. |
 | `next-gen-chat-angular-prototype-dark-workbench.png` | Dark theme with multiple panes. | Primary states stay legible and no light-theme assumptions break contrast. |
 | `next-gen-chat-angular-prototype-mobile.png` | 390px mobile collapse. | No clipped primary actions; compact usage still shows Codex and Claude quota pressure. |
@@ -112,7 +112,7 @@ Scores: 1 means weak fit, 5 means production-reference fit.
 | Actor grammar | Icons, glyphs, labels, counts, and accents avoid color-only meaning. | Essential because user, agent, orchestrator, supervisor, support, tool, and system differ. | Strong and product-specific. | 5 | Keep this as a contract for production conversation projection. |
 | Decision rows | One-line summary plus expandable details. | Reissue, heuristic, needs-input, circuit breaker, capture fail, and drift all fit. | Good, but retry/evidence can compete visually. | 4 | Keep details collapsed by default; move dense evidence to debug. |
 | Composer | Context chips, CLI/model, start/pause/continue stay close to input. | Strong because model, permission, run controls, and follow-up mode are real workflow controls. | Useful, but many buttons have similar weight. | 3 | Group low-frequency controls behind a menu and keep one primary send action. |
-| Workbench document host | Document tabs, splitter, optional chat, additive documents, and all-panes mode work. | Directly supports side-by-side Git/result/debug work while keeping Summary as the default dashboard. | Strong, but not a full docking system, which is correct. | 4 | Extract host and decide whether production keeps one editor group or supports split editor groups. |
+| Workbench document host | Document tabs, optional chat, full-content active document, and all-tabs mode work. | Directly supports VS-Code-like task documents while keeping Summary as the default dashboard. | Strong, but split editor groups still need a separate design pass. | 4 | Extract host and decide whether production keeps one editor group or supports explicit split editor groups. |
 | Result pane | Metrics, human result, acceptance snapshot, function parity. | Useful after a run. | Current card density is still dashboard-like. | 3 | Convert to compact summary rows plus one expandable acceptance section. |
 | Git pane | Changed files plus source diff. | Very high value for reviewing agent output beside chat. | Strongest current pane. | 5 | Keep Git as source-review pane, not generic source browser. |
 | Preview pane | Evidence grid plus lightbox. | Useful when screenshots decide quality. | Sensible, but should appear only when visual evidence exists. | 4 | Bind to real result screenshots and hide empty preview pane by default. |
@@ -151,7 +151,7 @@ The composer correctly keeps model choice, permission scope, start/pause, and co
 
 ### Workbench Document Host
 
-The document host should model side-by-side expert review without implementing a full docking manager. Current behavior is right: Summary is the default document, chat can close, Git can own the work surface, and multi-document mode collapses the project side sheet. The next production decision is persistence: whether open documents are per-task, per-project, or session-only.
+The document host should model expert review without implementing a full docking manager. Current behavior is right: Summary is the default document, chat can close, Git can own the work surface, and multi-document mode opens tabs rather than rendering every document at once. The next production decision is persistence: whether open documents are per-task, per-project, or session-only. Explicit split editor groups can come later.
 
 ### Status Bar
 

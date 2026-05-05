@@ -26,6 +26,7 @@ test.describe('@mockup next-gen chat Angular prototype', () => {
     await expect(page.getByTestId('prototype-document-result')).toContainText('Summary');
     await expect(page.getByTestId('prototype-document-chat')).toContainText('Task Chat');
     await expect(page.getByTestId('prototype-summary-document')).toContainText('Review ready');
+    await expect(page.getByTestId('prototype-conversation')).toHaveCount(0);
     await expect(page.getByTestId('prototype-pane-result-view')).toContainText('Result summary');
     await page.screenshot({
       path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-document-tabs.png'),
@@ -44,6 +45,14 @@ test.describe('@mockup next-gen chat Angular prototype', () => {
     await page.waitForTimeout(250);
     await page.screenshot({
       path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-result.png'),
+      fullPage: false,
+    });
+
+    await page.getByTestId('prototype-document-chat').click();
+    await expect(page.getByTestId('prototype-conversation')).toBeVisible();
+    await expect(page.getByTestId('prototype-pane-result-view')).toHaveCount(0);
+    await page.screenshot({
+      path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-chat-document.png'),
       fullPage: false,
     });
 
@@ -126,43 +135,36 @@ test.describe('@mockup next-gen chat Angular prototype', () => {
     await clickExactClose(page.getByTestId('prototype-rail-guide-modal'));
 
     await page.getByTestId('prototype-pane-git').click();
-    await expect(page.getByTestId('prototype-pane-result-view')).toBeVisible();
+    await expect(page.getByTestId('prototype-pane-result-view')).toHaveCount(0);
     await expect(page.getByTestId('prototype-pane-git-view')).toContainText('Git changes');
     await expect(page.getByTestId('prototype-document-git')).toContainText('Git changes');
     await page.getByTestId('prototype-pane-all').click();
     await expect(page.getByTestId('prototype-pane-result-view')).toBeVisible();
-    await expect(page.getByTestId('prototype-pane-git-view')).toBeVisible();
-    await expect(page.getByTestId('prototype-pane-preview-view')).toBeVisible();
-    await expect(page.getByTestId('prototype-pane-debug-view')).toBeVisible();
+    await expect(page.getByTestId('prototype-pane-git-view')).toHaveCount(0);
+    await expect(page.getByTestId('prototype-pane-preview-view')).toHaveCount(0);
+    await expect(page.getByTestId('prototype-pane-debug-view')).toHaveCount(0);
+    await expect(page.getByTestId('prototype-document-git')).toContainText('Git changes');
+    await expect(page.getByTestId('prototype-document-preview')).toContainText('Screenshots');
     await expect(page.getByTestId('prototype-document-debug')).toContainText('Debug trace');
     await page.screenshot({
       path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-all-panes.png'),
       fullPage: false,
     });
-    await page.getByTestId('prototype-pane-preview-close').click();
-    await page.getByTestId('prototype-pane-debug-close').click();
-    await page.getByTestId('prototype-pane-result-close').click();
+    await page.getByTestId('prototype-document-git').click();
     await expect(page.getByTestId('prototype-git-editor')).toContainText('Source editor / diff');
     await page.getByTestId('prototype-topbar-sheet').click();
-    await expect(page.getByTestId('prototype-splitter')).toBeVisible();
-    await page.getByTestId('prototype-splitter').focus();
-    await page.keyboard.press('ArrowLeft');
-    await page.keyboard.press('ArrowLeft');
-    await page.keyboard.press('ArrowLeft');
-    await expect(page.getByTestId('prototype-splitter')).toHaveAttribute('aria-valuenow', '42');
     await page.screenshot({
-      path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-git-editor-split.png'),
+      path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-git-document.png'),
       fullPage: false,
     });
 
     await page.getByTestId('prototype-chat-toggle').click();
-    await expect(page.getByTestId('prototype-conversation')).toBeHidden();
     await expect(page.getByTestId('prototype-document-chat')).toHaveCount(0);
     await page.screenshot({
       path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-git-no-chat.png'),
       fullPage: false,
     });
-    await page.getByTestId('prototype-chat-toggle').click();
+    await page.getByTestId('prototype-pane-chat').click();
     await expect(page.getByTestId('prototype-conversation')).toBeVisible();
     await page.getByTestId('prototype-topbar-sheet').click();
 
@@ -187,6 +189,7 @@ test.describe('@mockup next-gen chat Angular prototype', () => {
     await expect(page.getByTestId('next-gen-chat-angular-prototype')).toHaveAttribute('data-density', 'comfortable');
     await page.getByTestId('prototype-theme-toggle').click();
     await expect(page.getByTestId('next-gen-chat-angular-prototype')).toHaveAttribute('data-theme', 'dark');
+    await page.getByTestId('prototype-pane-git').click();
     await page.screenshot({
       path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-dark-workbench.png'),
       fullPage: false,

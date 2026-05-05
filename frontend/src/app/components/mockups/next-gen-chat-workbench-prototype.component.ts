@@ -34,7 +34,7 @@ import {
       <section class="ng-chat-prototype"
                [attr.data-theme]="theme()"
                [attr.data-density]="density()"
-               [attr.data-pane]="pane()"
+               [attr.data-pane]="activeDocument()"
                [attr.data-queue-open]="queueOpen()"
                data-testid="next-gen-chat-angular-prototype">
       <nav class="activity" aria-label="Prototype activity bar" data-testid="prototype-activity-bar">
@@ -150,8 +150,8 @@ import {
               <div class="inspector-rail__modes" data-testid="prototype-layout-buttons">
                 <b>Documents</b>
                 <button class="rail-action rail-action--all"
-                        title="Open all review documents"
-                        aria-label="Open all review documents"
+                        title="Open all review documents as tabs"
+                        aria-label="Open all review documents as tabs"
                         data-testid="prototype-pane-all"
                         (click)="openAllContextPanes()">
                   <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -159,7 +159,7 @@ import {
                       <path [attr.d]="path"></path>
                     }
                   </svg>
-                  <span>All docs</span>
+                  <span>All tabs</span>
                   <em>{{ contextPanes().length + (chatOpen() ? 1 : 0) }}</em>
                 </button>
                 @for (mode of paneButtons; track mode.id) {
@@ -231,20 +231,22 @@ import {
                   <span>{{ doc.title }}</span>
                   <em>{{ doc.subtitle }}</em>
                   @if (doc.closable) {
-                    <i class="document-tab__close"
-                       title="Close document"
-                       aria-hidden="true"
-                       (click)="closeDocument(doc.id); $event.stopPropagation()">x</i>
+                    <span class="document-tab__close"
+                          title="Close document"
+                          aria-label="Close document"
+                          role="button"
+                          tabindex="-1"
+                          (click)="closeDocument(doc.id); $event.stopPropagation()">x</span>
                   }
                 </button>
               }
             </div>
             <div class="workbench__body"
-                 [style.gridTemplateColumns]="workbenchColumns()"
+                 style="grid-template-columns:minmax(0, 1fr)"
                  [attr.data-chat-open]="chatOpen()"
                  [attr.data-context-open]="contextOpen()"
                  [attr.data-split-dragging]="splitDragging()">
-              @if (chatOpen()) {
+              @if (activeDocument() === 'chat' && chatOpen()) {
               <section class="conversation" aria-label="Conversation" data-testid="prototype-conversation">
                 <div class="conversation__topline">
                   <span class="badge badge--ok">Task Chat</span>
@@ -531,23 +533,7 @@ import {
               </section>
               }
 
-              @if (chatOpen() && contextPanes().length > 0) {
-                <div class="workbench-splitter"
-                     role="separator"
-                     tabindex="0"
-                     aria-orientation="vertical"
-                     aria-label="Resize chat and review panes"
-                     aria-valuemin="34"
-                     aria-valuemax="72"
-                     [attr.aria-valuenow]="splitRatio()"
-                     (pointerdown)="startSplitResize($event)"
-                     (keydown)="resizeSplitFromKeyboard($event)"
-                     data-testid="prototype-splitter">
-                  <span aria-hidden="true"></span>
-                </div>
-              }
-
-              @for (openPane of contextPanes(); track openPane) {
+              @if (activeContextDocument(); as openPane) {
                 <aside class="context"
                        aria-label="Workbench context pane"
                        [attr.data-pane]="openPane"
@@ -569,17 +555,19 @@ import {
                           }
                         </svg>
                       </button>
-                      <button class="icon-btn"
-                              (click)="closeContextPane(openPane)"
-                              [title]="'Close ' + paneTitle(openPane)"
-                              [attr.aria-label]="'Close ' + paneTitle(openPane)"
-                              [attr.data-testid]="'prototype-pane-' + openPane + '-close'">
-                        <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
-                          @for (path of iconPath('close'); track path) {
-                            <path [attr.d]="path"></path>
-                          }
-                        </svg>
-                      </button>
+                      @if (openPane !== 'result') {
+                        <button class="icon-btn"
+                                (click)="closeContextPane(openPane)"
+                                [title]="'Close ' + paneTitle(openPane)"
+                                [attr.aria-label]="'Close ' + paneTitle(openPane)"
+                                [attr.data-testid]="'prototype-pane-' + openPane + '-close'">
+                          <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            @for (path of iconPath('close'); track path) {
+                              <path [attr.d]="path"></path>
+                            }
+                          </svg>
+                        </button>
+                      }
                       <button class="icon-btn" (click)="debugOpen.set(true)" title="Open Verbose Debug" aria-label="Open Verbose Debug">
                         <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
                           @for (path of iconPath('bug'); track path) {
@@ -595,9 +583,10 @@ import {
                         <article class="summary-callout" data-testid="prototype-summary-document">
                           <span>Default document</span>
                           <strong>Review ready</strong>
-                          <p>Start here for phase, risk, evidence, and the next useful document before opening raw logs.</p>
+                          <p>Start here for phase, risk, evidence, and the next useful document. Each tab owns a full document surface; split review is an explicit action, not the default layout.</p>
                           <div>
                             <button (click)="setPane('git')">Open Git document</button>
+                            <button (click)="setPane('chat')">Open Chat document</button>
                             <button (click)="setPane('debug')">Open debug document</button>
                           </div>
                         </article>
@@ -649,9 +638,9 @@ import {
                               </button>
                             }
                             <div class="git-actions">
-                              <button (click)="setSplitRatioValue(64)">Wider chat</button>
-                              <button (click)="setSplitRatioValue(42)">Wider editor</button>
-                              <button (click)="toggleChat()">{{ chatOpen() ? 'Hide chat' : 'Show chat' }}</button>
+                              <button (click)="setPane('chat')">Open Chat tab</button>
+                              <button (click)="setPane('result')">Open Summary tab</button>
+                              <button (click)="setPane('preview')">Open Screenshots tab</button>
                             </div>
                           </div>
                           <article class="source-card" data-testid="prototype-git-editor">
@@ -1728,7 +1717,7 @@ import {
       gap: 0;
       overflow-x: auto;
       overflow-y: hidden;
-      background: var(--chrome);
+      background: color-mix(in srgb, var(--chrome) 86%, var(--surface));
       border-bottom: 1px solid var(--line);
     }
 
@@ -1747,7 +1736,7 @@ import {
       border: 0;
       border-right: 1px solid var(--line);
       border-radius: 0;
-      background: var(--chrome);
+      background: color-mix(in srgb, var(--chrome) 92%, var(--surface));
       color: var(--muted);
       padding: 2px 7px;
       text-align: left;
@@ -1763,6 +1752,7 @@ import {
 
     .document-tab--active {
       box-shadow: inset 0 2px 0 var(--accent);
+      border-right-color: var(--line-strong);
     }
 
     .document-tab .svg-icon {
@@ -1825,8 +1815,7 @@ import {
       grid-template-columns: minmax(360px, 1fr) minmax(250px, 34%);
       border: 0;
       border-radius: 0;
-      overflow-x: auto;
-      overflow-y: hidden;
+      overflow: hidden;
       background: var(--surface);
     }
 
@@ -2622,15 +2611,15 @@ import {
       min-height: 0;
       display: grid;
       grid-template-rows: 30px minmax(0, 1fr);
-      border-left: 1px solid var(--line);
+      border-left: 0;
       background: var(--surface);
     }
 
     .git-split {
       min-height: 100%;
       display: grid;
-      grid-template-columns: minmax(165px, 34%) minmax(260px, 1fr);
-      gap: 8px;
+      grid-template-columns: minmax(230px, 30%) minmax(420px, 1fr);
+      gap: 10px;
     }
 
     .context__head,
@@ -2657,7 +2646,7 @@ import {
 
     .metric-grid {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 6px;
       margin-bottom: 9px;
     }
@@ -3300,6 +3289,11 @@ export class NextGenChatWorkbenchPrototypeComponent {
   readonly contextPanes = signal<readonly ContextPane[]>(['result']);
   readonly contextOpen = computed(() => this.contextPanes().length > 0);
   readonly activeDocument = signal<WorkbenchDocumentId>('result');
+  readonly activeContextDocument = computed<ContextPane | null>(() => {
+    const active = this.activeDocument();
+    if (active === 'chat') return null;
+    return active;
+  });
   readonly splitRatio = signal(54);
   readonly splitDragging = signal(false);
   readonly activeGitFile = signal('frontend/src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts');
@@ -3798,14 +3792,6 @@ export class NextGenChatWorkbenchPrototypeComponent {
   }
 
   togglePane(pane: WorkbenchPane): void {
-    if (pane === 'chat') {
-      this.toggleChat();
-      return;
-    }
-    if (this.contextPanes().includes(pane)) {
-      this.removeContextPane(pane);
-      return;
-    }
     this.setPane(pane);
   }
 
@@ -3813,8 +3799,14 @@ export class NextGenChatWorkbenchPrototypeComponent {
     if (this.chatOpen() && this.contextPanes().length === 0) {
       this.addContextPane('result');
     }
-    this.chatOpen.set(!this.chatOpen());
-    this.activeDocument.set(this.chatOpen() ? 'chat' : (this.contextPanes()[0] ?? 'result'));
+    const wasActiveChat = this.activeDocument() === 'chat';
+    const nextOpen = !this.chatOpen();
+    this.chatOpen.set(nextOpen);
+    if (nextOpen) {
+      this.activeDocument.set('chat');
+    } else if (wasActiveChat) {
+      this.activeDocument.set(this.contextPanes()[0] ?? 'result');
+    }
   }
 
   closeContextPane(pane: ContextPane): void {
@@ -3823,8 +3815,8 @@ export class NextGenChatWorkbenchPrototypeComponent {
 
   openAllContextPanes(): void {
     this.contextPanes.set(['result', 'git', 'preview', 'debug']);
-    this.pane.set('debug');
-    this.activeDocument.set('debug');
+    this.pane.set('result');
+    this.activeDocument.set('result');
     this.sideSheetOpen.set(false);
   }
 
@@ -3834,8 +3826,11 @@ export class NextGenChatWorkbenchPrototypeComponent {
 
   closeDocument(id: WorkbenchDocumentId): void {
     if (id === 'chat') {
+      const wasActiveChat = this.activeDocument() === 'chat';
       this.chatOpen.set(false);
-      this.activeDocument.set(this.contextPanes()[0] ?? 'result');
+      if (wasActiveChat) {
+        this.activeDocument.set(this.contextPanes()[0] ?? 'result');
+      }
       return;
     }
     if (id === 'result') return;

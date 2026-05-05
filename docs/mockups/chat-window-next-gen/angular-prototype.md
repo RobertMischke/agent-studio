@@ -54,7 +54,7 @@ The nav and status-bar iteration adds a more VS Code-like control model. The act
 
 The next iteration treats every workbench pane as optional and additive. Chat is no longer assumed to be permanent: it can be closed while Git review, Result, Preview, or Debug stays open. Git review now owns the source/editor preview, with a changes list on the left and the selected source diff on the right. The old range slider is gone; width is modeled by a real vertical splitter with keyboard support.
 
-The document-model iteration reframes those panes as opened workbench documents. The left rail behaves more like a VS Code view container: it exposes documents and run facts, while the center work area shows a tab strip for `Summary`, `Task Chat`, `Git changes`, `Screenshots`, and `Debug trace`. `Summary` is the default dashboard document and should quickly explain phase, risk, evidence, and the next useful drill-down without pretending to be the full detail view.
+The document-model iteration reframes those panes as opened workbench documents. The left rail behaves more like a VS Code view container: it exposes documents and run facts, while the center work area shows a tab strip for `Summary`, `Task Chat`, `Git changes`, `Screenshots`, and `Debug trace`. `Summary` is the default dashboard document and should quickly explain phase, risk, evidence, and the next useful drill-down without pretending to be the full detail view. Each tab now owns the full content for that surface. Opening Git shows the full Git review document, opening Chat shows the full transcript and composer, opening Screenshots shows the visual evidence document, and opening Debug shows diagnostics. Side-by-side review remains a future explicit split/editor-group action rather than the default meaning of an opened tab.
 
 The queue iteration applies the same module rule to the task list. Queue selection is no longer treated as permanent chrome: it is a `Tasks / Queue` activity module with an explicit close button, and the Activity Bar can reopen it when the user wants to switch tasks. When closed, the task detail, chat documents, Git review, and side sheet reclaim the width.
 
@@ -66,8 +66,8 @@ The prototype currently covers:
 
 - Task detail shell with project chip, editable-title affordance, state pill, Complete & Next, narrow queue list, optional chat, side sheet, and status bar.
 - Optional Queue module that can be closed from the queue header and reopened through the Activity Bar.
-- Workbench panes: Result, Git plus source diff, Preview, Debug, and optional Chat.
-- Workbench document tabs for Summary, Task Chat, Git changes, Screenshots, and Debug trace.
+- Workbench documents: Summary, Task Chat, Git plus source diff, Screenshots, and Debug trace.
+- Interactive document tabs that open, focus, and close documents while only the active tab owns the main content.
 - Left task rail with additive pane pinning, quick signal jumps, run state, tokens, commits, files, screenshots, failed retry, duration, and scenario switches.
 - Rail guide modal that explains the control model.
 - Clickable activity bar and top chrome for project side sheet, queue, run summary, density, theme, command palette, and debug.
@@ -103,4 +103,4 @@ Playwright can still generate screenshots under `docs/mockups/chat-window-next-g
 
 Use this prototype as a clickable handoff for the queued `Frontend:NextGenChat` implementation tasks. The production implementation should not copy the prototype wholesale. It should extract the proved interaction model and re-implement it against real `ConversationEvent` data, existing task evidence, and existing side-sheet behavior.
 
-The key layout rule from this iteration is vertical discipline: do not put task metadata, tokens, run state, or scenario controls into stacked horizontal bars above the transcript. Put them in the left rail, the pane header, the composer toolbar, the status bar, or a drill-down surface. The chat itself is also optional: professional review mode must support closing chat and using the available height for Git changes plus source editor/diff. Pane visibility is additive, but it is not a full docking system.
+The key layout rule from this iteration is vertical discipline: do not put task metadata, tokens, run state, or scenario controls into stacked horizontal bars above the transcript. Put them in the left rail, the active document header, the composer toolbar, the status bar, or a drill-down surface. The chat itself is also optional: professional review mode must support closing chat and using the available height for Git changes plus source editor/diff. Document visibility is tab-driven; split review should be added later as an explicit editor-group action, not as implicit "all opened documents render beside each other" behavior.
