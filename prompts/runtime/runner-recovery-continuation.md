@@ -30,4 +30,10 @@ Run context:
 
 Rules: same guardrails as a fresh run. Work on this task only; do not move the job folder; do not edit `state` in `job.json`; do not scan for or start another task. The application owns pickup, stop, continue, and state transitions.
 
+Build-time observability (when your change affects product behavior):
+
+- Preserve existing structured logs and event names; do not silently delete instrumentation while editing nearby code.
+- For new meaningful behavior, emit structured logs or domain events with stable event names and useful error context, and add timing around expensive or user-visible paths when it would help future debugging or review.
+- Skip instrumentation for tiny helpers, pure refactors, doc-only edits, and throwaway code. Observability is not a reason to bloat simple changes.
+
 When you finish, end your reply with one of these tokens on its own line: `[[TASK_DONE]]`, `[[TASK_BLOCKED:<short reason>]]`, `[[TASK_NEEDS_INPUT:<short reason>]]`, or `[[TASK_NOOP]]`.
