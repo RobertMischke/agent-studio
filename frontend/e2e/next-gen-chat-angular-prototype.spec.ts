@@ -1,4 +1,4 @@
-import { expect, Page, test } from '@playwright/test';
+import { expect, Locator, Page, test } from '@playwright/test';
 import * as path from 'path';
 
 const MOCKUP_BASE_URL = process.env.MOCKUP_BASE_URL ?? 'http://127.0.0.1:4022';
@@ -6,6 +6,10 @@ const evidenceDir = path.resolve(__dirname, '../../docs/mockups/chat-window-next
 
 async function openPrototype(page: Page): Promise<void> {
   await page.goto(MOCKUP_BASE_URL);
+}
+
+async function clickExactClose(scope: Locator): Promise<void> {
+  await scope.getByRole('button', { name: 'Close', exact: true }).click();
 }
 
 test.describe('@mockup next-gen chat Angular prototype', () => {
@@ -30,13 +34,13 @@ test.describe('@mockup next-gen chat Angular prototype', () => {
     const resultPane = page.getByTestId('prototype-pane-result-view');
     await resultPane.getByRole('button', { name: 'Prompt history' }).click();
     await expect(page.getByTestId('prototype-feature-modal')).toContainText('prompt.md');
-    await page.getByTestId('prototype-feature-modal').getByText('Close').click();
+    await clickExactClose(page.getByTestId('prototype-feature-modal'));
     await resultPane.getByRole('button', { name: 'Run timeline' }).click();
     await expect(page.getByTestId('prototype-feature-modal')).toContainText('Run 4');
-    await page.getByTestId('prototype-feature-modal').getByText('Close').click();
+    await clickExactClose(page.getByTestId('prototype-feature-modal'));
     await resultPane.getByRole('button', { name: 'Start/Stop' }).click();
     await expect(page.getByTestId('prototype-feature-modal')).toContainText('Run controls');
-    await page.getByTestId('prototype-feature-modal').getByText('Close').click();
+    await clickExactClose(page.getByTestId('prototype-feature-modal'));
     await page.waitForTimeout(250);
     await page.screenshot({
       path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-result.png'),
@@ -49,7 +53,7 @@ test.describe('@mockup next-gen chat Angular prototype', () => {
       path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-nav-queue.png'),
       fullPage: false,
     });
-    await page.getByTestId('prototype-status-popover').getByText('Close').click();
+    await clickExactClose(page.getByTestId('prototype-status-popover'));
 
     await expect(page.getByTestId('prototype-queue-module')).toBeVisible();
     await page.getByTestId('prototype-queue-close').click();
@@ -69,7 +73,7 @@ test.describe('@mockup next-gen chat Angular prototype', () => {
       path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-status-tokens.png'),
       fullPage: false,
     });
-    await page.getByTestId('prototype-status-popover').getByText('Close').click();
+    await clickExactClose(page.getByTestId('prototype-status-popover'));
 
     await page.getByTestId('prototype-status-health').click();
     await expect(page.getByTestId('prototype-status-popover')).toContainText('System health');
@@ -77,7 +81,7 @@ test.describe('@mockup next-gen chat Angular prototype', () => {
       path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-status-health.png'),
       fullPage: false,
     });
-    await page.getByTestId('prototype-status-popover').getByText('Close').click();
+    await clickExactClose(page.getByTestId('prototype-status-popover'));
 
     await page.getByTestId('prototype-status-session').click();
     await expect(page.getByTestId('prototype-status-popover')).toContainText('Session continuity');
@@ -86,7 +90,7 @@ test.describe('@mockup next-gen chat Angular prototype', () => {
       path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-status-session.png'),
       fullPage: false,
     });
-    await page.getByTestId('prototype-status-popover').getByText('Close').click();
+    await clickExactClose(page.getByTestId('prototype-status-popover'));
 
     await page.getByTestId('prototype-owner-switch').click();
     await expect(page.getByTestId('prototype-status-popover')).toContainText('Project filter and owner');
@@ -95,7 +99,7 @@ test.describe('@mockup next-gen chat Angular prototype', () => {
       path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-project-owner.png'),
       fullPage: false,
     });
-    await page.getByTestId('prototype-status-popover').getByText('Close').click();
+    await clickExactClose(page.getByTestId('prototype-status-popover'));
 
     await page.getByTestId('prototype-status-model').click();
     await expect(page.getByTestId('prototype-status-popover')).toContainText('CLI and model');
@@ -103,7 +107,7 @@ test.describe('@mockup next-gen chat Angular prototype', () => {
       path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-status-model.png'),
       fullPage: false,
     });
-    await page.getByTestId('prototype-status-popover').getByText('Close').click();
+    await clickExactClose(page.getByTestId('prototype-status-popover'));
 
     await page.getByTestId('prototype-run-marker').click();
     await expect(page.getByTestId('prototype-run-popover')).toBeVisible();
@@ -119,7 +123,7 @@ test.describe('@mockup next-gen chat Angular prototype', () => {
       path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-rail-guide.png'),
       fullPage: false,
     });
-    await page.getByTestId('prototype-rail-guide-modal').getByText('Close').click();
+    await clickExactClose(page.getByTestId('prototype-rail-guide-modal'));
 
     await page.getByTestId('prototype-pane-git').click();
     await expect(page.getByTestId('prototype-pane-result-view')).toBeVisible();
@@ -177,7 +181,7 @@ test.describe('@mockup next-gen chat Angular prototype', () => {
       path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-lightbox.png'),
       fullPage: false,
     });
-    await page.getByTestId('prototype-lightbox').getByText('Close').click();
+    await clickExactClose(page.getByTestId('prototype-lightbox'));
 
     await page.getByTestId('prototype-density-toggle').click();
     await expect(page.getByTestId('next-gen-chat-angular-prototype')).toHaveAttribute('data-density', 'comfortable');
@@ -196,7 +200,7 @@ test.describe('@mockup next-gen chat Angular prototype', () => {
       fullPage: false,
     });
 
-    await page.getByTestId('prototype-debug-modal').getByText('Close').click();
+    await clickExactClose(page.getByTestId('prototype-debug-modal'));
     await page.getByTestId('prototype-theme-toggle').click();
     await page.setViewportSize({ width: 390, height: 844 });
     await page.screenshot({

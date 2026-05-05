@@ -18,9 +18,32 @@ The missing workflow in v6 was side-by-side work. A reviewer often needs the tra
 | VS Code User Interface, https://code.visualstudio.com/docs/getstarted/userinterface | VS Code maximizes the editor area while keeping context in Primary Side Bar, Secondary Side Bar, Activity Bar, Panel, and Status Bar. It explicitly supports side-by-side editors and a Secondary Side Bar with Chat by default. |
 | VS Code Custom Layout, https://code.visualstudio.com/docs/configure/custom-layout | The workbench supports movable side bars, compact Activity Bar, layout toggles, panel positions, panel maximize, drag and drop of views, and editor groups. |
 | VS Code Extension UX Guidelines, https://code.visualstudio.com/api/ux-guidelines/overview | Views, view toolbars, sidebars, panels, editor actions, and status bar items are separate containers. This argues for scoped actions and compact toolbar placement. |
+| VS Code Activity Bar guidance, https://code.visualstudio.com/api/ux-guidelines/activity-bar | Activity Bar items are View Containers, not direct custom panels. They need clear names and matching product-icon style. |
+| VS Code Sidebars guidance, https://code.visualstudio.com/api/ux-guidelines/sidebars | Sidebars group related Views, should avoid excessive View Containers, and should keep View counts comfortable for screen size. |
+| VS Code Panel guidance, https://code.visualstudio.com/api/ux-guidelines/panel | Panels are for supporting Views that benefit from horizontal space, not for Views that must always be visible. |
+| VS Code Status Bar guidance, https://code.visualstudio.com/api/ux-guidelines/status-bar | Status Bar items are short, limited, and split into workspace-global left items and contextual right items. |
+| VS Code Editor Actions guidance, https://code.visualstudio.com/api/ux-guidelines/editor-actions | Editor toolbar actions should be contextual, use the product icon library, and send secondary actions to overflow. |
+| VS Code Quick Picks guidance, https://code.visualstudio.com/api/ux-guidelines/quick-picks | Quick Picks are good for selecting, filtering, and short multi-step inputs, but should not become long wizards. |
 | VS Code Views Guidelines, https://code.visualstudio.com/api/ux-guidelines/views | Views can move between containers, but extensions should keep view count and names minimal, use existing icons, and avoid unnecessary custom webviews. |
 | VS Code Webviews Guidelines, https://code.visualstudio.com/api/ux-guidelines/webviews | Custom webviews should be used only when necessary, be themeable and accessible, and not repeat existing functionality. |
 | VS Code Product Icon Reference, https://code.visualstudio.com/api/references/icons-in-labels | Product icons are the right visual grammar for tiny toolbar actions such as terminal, history, tests, warning, close, refresh, and configuration. |
+
+## VS Code Design Philosophy Distilled
+
+VS Code is useful here less as a visual skin and more as a containment philosophy. The workbench separates navigation, discovery, work, supporting diagnostics, and ambient state into different regions. The product should borrow that separation without cloning every layout feature.
+
+| VS Code idea | ATP interpretation | Rule for the next chat workbench |
+|--------------|--------------------|----------------------------------|
+| Activity Bar opens View Containers. | `Projects`, `Tasks / Queue`, `Search`, `Git`, `QA`, and `Tokens` are modules, not permanent panes. | Activity items toggle or focus modules. They do not directly open one-off webviews. |
+| Sidebars group a small number of related Views. | Queue and project context are Side Bar modules. | Queue can close. Keep 3 to 5 visible view groups, with overflow or command entry for rarer surfaces. |
+| Editor area owns documents. | `Summary`, `Task Chat`, `Git changes`, `Screenshots`, and `Debug trace` are task documents. | Default to Summary, let Chat close, and let Git own the center when the user is reviewing code. |
+| Panels are supporting horizontal space. | Verbose Debug, test output, and long trace tables are supporting panels or fullscreen debug, not always-on chrome. | Use panels for dense diagnostic reading; do not keep them permanently visible. |
+| Status Bar is terse ambient state. | Runner mode, quota pressure, tokens, Git count, visual evidence, tools, CLI, and model are ambient work state. | Keep items short. Global/run state belongs left or center; contextual model/config belongs right. |
+| Editor actions are contextual and sparse. | Pane headers show only actions for that document. | One or two icon actions in headers; secondary actions move to menus, popovers, or command palette. |
+| Quick Picks handle selection and filtering. | Model choice, owner/project filter, target scope, and jump-to-artifact can become compact command flows. | Use command/quick-pick style flows for choosing, not large permanent config panels. |
+| Product icons carry dense meaning. | Icons must be stable and familiar across rails, tabs, status, and buttons. | Prefer existing symbol metaphors, labels in comfortable mode, and icon-only compact mode with tooltips. |
+
+The consequence for the Queue decision is important: the Queue is not "the left column." It is the `Tasks / Queue` module. It may be visible by default because task switching is common, but it must be closable and restorable through the Activity Bar or command surface.
 
 ## VS Code Patterns To Borrow
 
@@ -29,7 +52,8 @@ The missing workflow in v6 was side-by-side work. A reviewer often needs the tra
 3. **Layout flexibility is constrained, not arbitrary.** VS Code has many layout moves, but they are bounded by workbench regions. The first implementation should use a few named split presets, not a full drag-and-drop window manager.
 4. **Actions live in toolbars and overflow.** Small icon buttons plus a `...` overflow are preferable to repeated text buttons inside the chat body.
 5. **Status belongs at the edge.** Tokens, state, duration, commits, warnings, and screenshots should be visible as small badges or status items. They should not become large inline cards unless opened.
-6. **Native surfaces should stay native.** Git changes still belong to Files and Commits, screenshots still belong to Screenshots, and raw output still belongs to Trace. The split pane is a fast adjacent preview, not a replacement.
+6. **Modules can close.** Sidebars, panels, and Activity Bar items are not permanent requirements. Queue, project sheet, debug, and status popovers should all be user-controlled.
+7. **Native surfaces should stay native.** Git changes still belong to Files and Commits, screenshots still belong to Screenshots, and raw output still belongs to Trace. The split pane is a fast adjacent preview, not a replacement.
 
 ## User Workflows
 

@@ -45,6 +45,7 @@ The pure chatflow remains the center, but it has two homes in the existing app:
 - Task-level chat lives in the task detail Chat tab, next to Prompt, Protocol, Files, Commits, and Screenshots.
 - Project-level chat lives in the resizable side sheet, where cross-task steering and project context already belong.
 - Task-level chat can open additive workbench panes for result, Git changes, screenshots, or debug summaries while the transcript remains visible.
+- Queue is a `Tasks / Queue` module, not permanent chrome. It may open by default, but the user can close it and reopen it through the Activity Bar.
 - Chat is optional. Each workbench pane is a toggle, and Git/source review must still work when chat is closed.
 - Sources are part of Git changes in this workbench. They are not a standalone source-browser mode.
 - Integration must start from the existing implementation, not from a pasted mockup. Preserve the Activity Log parser, Trace mode, run timeline, auto-eval banner, task composer, project side sheet, CLI Usage sheet, Status Bar quota, Workspace Token Timeline, and project token summaries unless an equivalent replacement is already implemented and tested.
@@ -72,6 +73,7 @@ The pure chatflow remains the center, but it has two homes in the existing app:
 10. **Overlays never block core chat controls.** Stable currently shows click interception around conversation/trace controls in some states. The next UI must reserve layout space for run timeline, auto-eval banners, and composer controls.
 11. **Side-by-side review is a first-class task workflow.** The user can keep chat open while inspecting result summary, Git changes, screenshot evidence, token risk, or debug context. The panes are additive toggles and can all be visible when the user needs a full review surface. Pane controls live in the task rail, not duplicated across the top chrome. This is still not a full docking window manager.
 12. **Chat can get out of the way.** Review mode must allow closing chat so Git changes and the selected source editor/diff can use the workbench. Panel visibility and width are user-controlled toggles, not fixed layout assumptions.
+13. **Every surface has a workbench container.** Activity Bar modules navigate; Side Bar views select; documents do the work; panels/debug explain; Status Bar items summarize; command/quick-pick flows choose.
 
 ## Information Architecture
 

@@ -58,6 +58,8 @@ The document-model iteration reframes those panes as opened workbench documents.
 
 The queue iteration applies the same module rule to the task list. Queue selection is no longer treated as permanent chrome: it is a `Tasks / Queue` activity module with an explicit close button, and the Activity Bar can reopen it when the user wants to switch tasks. When closed, the task detail, chat documents, Git review, and side sheet reclaim the width.
 
+The VS Code philosophy pass turns that into a container rule: navigation belongs in Activity Bar modules, discovery and selection belong in Side Bar views, work belongs in the document area, dense diagnostics belong in panels or Verbose Debug, ambient state belongs in the Status Bar, and selection/configuration belongs in command or quick-pick style flows. This keeps the prototype from becoming a pile of visible controls.
+
 The rail now has inline icons, visible labels in comfortable density, tooltip titles, a `Task rail` guide button, and an explicit open-pane count on the "All" pin action. Compact density collapses the same controls back to icons so the chat area stays large. The detail header and top bar no longer duplicate the pane switcher; the rail owns pane pinning, the top bar owns global sheet and queue toggles, and the status bar owns runtime controls. The task list is intentionally narrower and only carries queue selection, not pane controls. Because the prototype is a separate Angular app, the normal frontend does not pay for it and cannot accidentally show it.
 
 The prototype currently covers:
@@ -90,6 +92,8 @@ The prototype currently covers:
 The current refactor iteration starts turning the clickware into a component reference. Topbar and statusbar are now standalone Angular components, while topbar/statusbar dummy data and shared icon paths live in a separate data module. The next extraction should continue downward into `ActivityRail`, `StatusPopover`, `ConversationTranscript`, `ComposerBar`, and `WorkbenchPaneHost`, keeping the implementation slice small enough to visually review after every step.
 
 The UX review now names the target visual system as the internal Found Next Workbench Framework. This is a rule set and component boundary, not a third-party package: use VS Code workbench containers, local theme tokens, compact density primitives, screenshot-driven review, and reusable Angular components instead of importing a deprecated VS Code webview toolkit or a generic dashboard UI kit.
+
+The current source research lives in [workbench-layout-research.md](workbench-layout-research.md). When adding a new surface, first classify it as Activity Bar module, Sidebar View, Workbench Document, supporting Panel, Status Bar item, contextual editor action, or command/quick-pick flow.
 
 ## Screenshots
 

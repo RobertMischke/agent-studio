@@ -10,6 +10,11 @@ Primary sources:
 - VS Code Extending Workbench documentation: https://code.visualstudio.com/api/extension-capabilities/extending-workbench
 - VS Code Status Bar guidance: https://code.visualstudio.com/api/ux-guidelines/status-bar
 - VS Code Views guidance: https://code.visualstudio.com/api/ux-guidelines/views
+- VS Code Activity Bar guidance: https://code.visualstudio.com/api/ux-guidelines/activity-bar
+- VS Code Sidebars guidance: https://code.visualstudio.com/api/ux-guidelines/sidebars
+- VS Code Panel guidance: https://code.visualstudio.com/api/ux-guidelines/panel
+- VS Code Editor Actions guidance: https://code.visualstudio.com/api/ux-guidelines/editor-actions
+- VS Code Quick Picks guidance: https://code.visualstudio.com/api/ux-guidelines/quick-picks
 - VS Code Webviews guidance: https://code.visualstudio.com/api/ux-guidelines/webviews
 - VS Code Custom Layout documentation: https://code.visualstudio.com/docs/configure/custom-layout
 - VS Code User Interface documentation: https://code.visualstudio.com/docs/getstarted/userinterface
@@ -23,6 +28,10 @@ Research takeaways:
 4. Webviews are powerful but should be used only when necessary. For our app this means: custom Angular panes are fine because this is the app itself, but they should still behave like workbench surfaces, not like isolated marketing webviews.
 5. The VS Code Webview UI Toolkit has useful principles: themeability, accessibility, and consistent component language. It is deprecated, so it should not become a dependency. Use it as a reference, not as a framework.
 6. VS Code's document model is the better analogy for task artifacts: left-side views help users find things, while the editor area owns opened documents with tabs, split groups, and close behavior.
+7. The Activity Bar should open or focus View Containers. This confirms the latest Queue change: the Queue is a `Tasks / Queue` module, not a permanent left column.
+8. Sidebars should group related Views and avoid excessive View counts. The task workbench should keep only the task Queue and the task rail visible by default; rarer surfaces move to command, status popover, or debug.
+9. Editor actions should be contextual and sparse. Pane headers should keep one or two document actions visible and send rarer commands to overflow, command palette, or contextual popover.
+10. Quick Pick style interactions are the right pattern for model, owner/project, artifact jump, and target-scope choices. They should not become permanent config panels.
 
 ## Visual Framework Decision
 
@@ -151,7 +160,12 @@ Popovers should be short, not mini dashboards. The token popover is acceptable b
 | Reference | Useful rule | Prototype implication |
 |-----------|-------------|-----------------------|
 | VS Code Workbench | Use stable containers: Activity Bar, Side Bar, Editor Group, Panel, Status Bar. | Model the app as a workbench, not as one page with many cards. |
+| VS Code Activity Bar | Activity items represent View Containers with clear names and product-style icons. | Treat Queue, Search, Git, QA, Tokens, and Projects as modules that can be focused or hidden. |
+| VS Code Sidebars | Group related Views, avoid too many View Containers, and keep View counts modest. | Queue is optional Side Bar context. It is not permanent chrome. |
 | VS Code Editor Groups | Opened files and custom editors live as tabs in the editor area and can be split or closed. | Treat Summary, Task Chat, Git, Screenshots, and Debug as task documents rather than permanent panels. |
+| VS Code Panel | Use panels for supporting Views that benefit from horizontal space and can be minimized. | Verbose Debug and long trace/test output belong in supporting panels or fullscreen debug, not in the default transcript. |
+| VS Code Editor Actions | Contextual icon actions only; secondary actions go to overflow. | Pane headers stay sparse. Rare controls move to menus or the command palette. |
+| VS Code Quick Picks | Use for selecting, filtering, and short multi-step inputs. | Model, owner/project, artifact jump, and target scope should become compact pickers. |
 | VS Code Status Bar | Short labels, limited items, global left, contextual right. | Keep statusbar tight. Codex/Claude quota is the deliberate exception because it is operational state. |
 | VS Code Views | Prefer existing containers, descriptive labels, product icons, few actions. | Pane controls belong in rails and headers. Avoid turning every row into a command button. |
 | VS Code Webviews | Only use custom surfaces when necessary; keep them themeable and accessible. | Angular panes are allowed, but every pane must still obey theme tokens, keyboard access, and scoped actions. |

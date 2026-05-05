@@ -1056,20 +1056,20 @@ import {
             </header>
             <div class="guide-grid">
               <article>
-                <h3>Why it is here</h3>
-                <p>The rail keeps controls out of the transcript, so chat and Git or Result can use the full height.</p>
+                <h3>Container rule</h3>
+                <p>Activity Bar modules navigate. Side Bar views select. Workbench documents do the work. Status Bar items summarize.</p>
               </article>
               <article>
-                <h3>What it contains</h3>
-                <p>Task tabs, run signals, split presets, and scenario cases. Each item has a tooltip and visible label in comfortable density.</p>
+                <h3>Queue is optional</h3>
+                <p>The Queue is the Tasks module. It can open by default, close when review needs width, and return from the Activity Bar.</p>
               </article>
               <article>
-                <h3>How it should ship</h3>
-                <p>The production version should bind these controls to real task tabs, token data, commits, screenshots, and ConversationEvent projections.</p>
+                <h3>Document area</h3>
+                <p>Summary, Task Chat, Git changes, Screenshots, and Debug trace behave like opened documents, not permanent dashboard cards.</p>
               </article>
               <article>
-                <h3>What not to lose</h3>
-                <p>Start, Stop, model choice, permissions, prompt history, Activity, Trace, Files, Commits, Screenshots, quota, and project side-sheet steering all remain reachable from this workbench.</p>
+                <h3>Actions stay scoped</h3>
+                <p>Pane headers keep contextual actions sparse. Rare choices move to status popovers, command palette, or Verbose Debug.</p>
               </article>
             </div>
           </section>
