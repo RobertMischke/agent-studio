@@ -26,6 +26,7 @@ public static class EndpointMapping
         app.MapWorkspaceEndpoints();
         app.MapProjectSettingsEndpoints();
         app.MapProjectDocsEndpoints();
+        app.MapSecurityReviewEndpoints();
         app.MapReviewDecisionsEndpoints();
         app.MapSystemEndpoints();
         app.MapCliEndpoints();

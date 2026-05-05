@@ -57,18 +57,22 @@ import {
         <main class="proj-shell__panel"
               [attr.data-testid]="'project-shell-panel-' + activeRail()"
               [attr.data-rail-key]="activeRail()">
-          <header class="proj-shell__panel-head">
-            <h2 class="proj-shell__panel-title" data-testid="project-shell-panel-title">
-              <span aria-hidden="true">{{ activeItem().icon }}</span>
-              {{ activeItem().panelTitle }}
-            </h2>
-            <p class="proj-shell__panel-desc" data-testid="project-shell-panel-desc">
-              {{ activeItem().description }}
-            </p>
-          </header>
-          <div class="proj-shell__empty" data-testid="project-shell-panel-empty">
-            <p>{{ activeItem().empty }}</p>
-          </div>
+          @if (hasCustomPanel()) {
+            <ng-content></ng-content>
+          } @else {
+            <header class="proj-shell__panel-head">
+              <h2 class="proj-shell__panel-title" data-testid="project-shell-panel-title">
+                <span aria-hidden="true">{{ activeItem().icon }}</span>
+                {{ activeItem().panelTitle }}
+              </h2>
+              <p class="proj-shell__panel-desc" data-testid="project-shell-panel-desc">
+                {{ activeItem().description }}
+              </p>
+            </header>
+            <div class="proj-shell__empty" data-testid="project-shell-panel-empty">
+              <p>{{ activeItem().empty }}</p>
+            </div>
+          }
         </main>
       </div>
     </section>
@@ -226,6 +230,16 @@ import {
 export class ProjectShellComponent {
   readonly projectName = input.required<string>();
   readonly activeRail = input.required<ProjectRailKey>();
+  /**
+   * When true, the shell hides its built-in panel header + empty state and
+   * surfaces an `<ng-content>` slot in the panel body instead. The host
+   * (typically `app.ts`) projects a real panel component (Security panel,
+   * etc.) and owns the panel header so the slice can paint its own
+   * baseline badge / cards / actions per the mockup. When false, the
+   * generic placeholder + description still renders for rails that have
+   * not landed their content slice yet.
+   */
+  readonly hasCustomPanel = input<boolean>(false);
   readonly railChange = output<ProjectRailKey>();
   readonly openFeed = output<void>();
   readonly closeShell = output<void>();

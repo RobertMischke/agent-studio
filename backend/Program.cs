@@ -11,6 +11,7 @@ using OrchestratorApi.Services.Jobs;
 using OrchestratorApi.Services.Pty;
 using OrchestratorApi.Services.Quota;
 using OrchestratorApi.Services.Runner;
+using OrchestratorApi.Services.Security;
 using OrchestratorApi.Services.Supervisor;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.Diagnostics;
@@ -115,6 +116,7 @@ builder.Services.AddHostedService<ReviewDecisionOrchestrator>();
 builder.Services.AddSingleton<GitService>();
 builder.Services.AddSingleton<ProjectSettingsService>();
 builder.Services.AddSingleton<ProjectDocsService>();
+builder.Services.AddSingleton<SecurityReviewService>();
 // Quota probes: each CLI gets its own probe instance, all surfaced through QuotaService.
 builder.Services.AddSingleton<IQuotaProbe, CopilotQuotaProbe>();
 builder.Services.AddSingleton<IQuotaProbe, ClaudeQuotaProbe>();

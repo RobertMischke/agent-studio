@@ -22,6 +22,7 @@ Research takeaways:
 3. Views should usually be lists, trees, and scoped panes. They should not become buttons disguised as tree rows, and they should not repeat existing functionality.
 4. Webviews are powerful but should be used only when necessary. For our app this means: custom Angular panes are fine because this is the app itself, but they should still behave like workbench surfaces, not like isolated marketing webviews.
 5. The VS Code Webview UI Toolkit has useful principles: themeability, accessibility, and consistent component language. It is deprecated, so it should not become a dependency. Use it as a reference, not as a framework.
+6. VS Code's document model is the better analogy for task artifacts: left-side views help users find things, while the editor area owns opened documents with tabs, split groups, and close behavior.
 
 ## Visual Framework Decision
 
@@ -37,6 +38,21 @@ The framework is not a new library yet. It is a rule set plus reusable Angular c
 
 Decision: do not import `@vscode/webview-ui-toolkit`, shadcn, Material, or another heavy UI kit for this prototype. The app has specialized workbench requirements, already uses Angular standalone components, and needs tight control over density. A small internal framework gives better fit and avoids a deprecated VS Code dependency.
 
+## Panel And Document Model Trial
+
+The prototype should now explore a VS-Code-like panel/document model:
+
+- Activity Bar items open view containers.
+- The left task rail behaves like a contextual view, similar to Explorer, Source Control, or Chat.
+- Clicking a rail item opens or focuses a workbench document.
+- The center work area shows opened documents in a tab strip.
+- `Summary` is the default document and stays optimized for phase, risk, evidence, and next best action.
+- `Task Chat`, `Git changes`, `Screenshots`, and `Debug trace` are specialized documents that can be opened, focused, split visually, or closed.
+
+This is different from the older "chat plus adjacent panes" mental model. The old model treated every surface as a pane next to chat. The document model says chat is only one document. Git review can become the active document, Summary can remain the default dashboard, and Debug can be opened only when the user needs depth.
+
+Open question: whether production should keep one editor group only, or support two editor groups for side-by-side document review. The current prototype keeps the simpler path: one tab strip plus additive side-by-side documents inside the workbench.
+
 ## Screenshot Evidence
 
 Playwright regenerates these local files under `docs/mockups/chat-window-next-gen/evidence/`. The folder is review output and is gitignored.
@@ -44,6 +60,7 @@ Playwright regenerates these local files under `docs/mockups/chat-window-next-ge
 | Screenshot | Purpose | Pass criteria |
 |------------|---------|---------------|
 | `next-gen-chat-angular-prototype-result.png` | Default light workbench with chat, result pane, side sheet, topbar, and statusbar. | Chat starts high, result pane is readable, side sheet is supportive, statusbar carries runtime state. |
+| `next-gen-chat-angular-prototype-document-tabs.png` | Future named capture for the panel/document model. | Summary is the default document; Chat, Git, Preview, and Debug are visible as opened workbench documents. |
 | `next-gen-chat-angular-prototype-status-tokens.png` | Token and quota popover. | Codex and Claude percentages plus 5h window and reset context are visible without turning the chat into a dashboard. |
 | `next-gen-chat-angular-prototype-project-owner.png` | Project and owner popover. | Owner is Robert, project tabs remain compact, and owner filtering does not steal transcript height. |
 | `next-gen-chat-angular-prototype-all-panes.png` | Multi-pane review mode. | Side sheet yields space, chat remains optional, Git/Result/Preview/Debug can coexist without top-heavy chrome. |
@@ -80,7 +97,7 @@ Scores: 1 means weak fit, 5 means production-reference fit.
 | Actor grammar | Icons, glyphs, labels, counts, and accents avoid color-only meaning. | Essential because user, agent, orchestrator, supervisor, support, tool, and system differ. | Strong and product-specific. | 5 | Keep this as a contract for production conversation projection. |
 | Decision rows | One-line summary plus expandable details. | Reissue, heuristic, needs-input, circuit breaker, capture fail, and drift all fit. | Good, but retry/evidence can compete visually. | 4 | Keep details collapsed by default; move dense evidence to debug. |
 | Composer | Context chips, CLI/model, start/pause/continue stay close to input. | Strong because model, permission, run controls, and follow-up mode are real workflow controls. | Useful, but many buttons have similar weight. | 3 | Group low-frequency controls behind a menu and keep one primary send action. |
-| Workbench pane host | Splitter, optional chat, additive panes, and all-panes mode work. | Directly supports side-by-side Git/result/debug work. | Strong, but not a full docking system, which is correct. | 4 | Extract host and make pane persistence explicit. |
+| Workbench document host | Document tabs, splitter, optional chat, additive documents, and all-panes mode work. | Directly supports side-by-side Git/result/debug work while keeping Summary as the default dashboard. | Strong, but not a full docking system, which is correct. | 4 | Extract host and decide whether production keeps one editor group or supports split editor groups. |
 | Result pane | Metrics, human result, acceptance snapshot, function parity. | Useful after a run. | Current card density is still dashboard-like. | 3 | Convert to compact summary rows plus one expandable acceptance section. |
 | Git pane | Changed files plus source diff. | Very high value for reviewing agent output beside chat. | Strongest current pane. | 5 | Keep Git as source-review pane, not generic source browser. |
 | Preview pane | Evidence grid plus lightbox. | Useful when screenshots decide quality. | Sensible, but should appear only when visual evidence exists. | 4 | Bind to real result screenshots and hide empty preview pane by default. |
@@ -117,9 +134,9 @@ The transcript should be the humane layer. It should show what happened, who act
 
 The composer correctly keeps model choice, permission scope, start/pause, and continuation together. This is important because the chat is not just text. It starts and steers agents. The risk is visual equivalence: too many buttons look equally important. The primary button should be the only dark/high-weight action; lower-frequency controls should become a small menu.
 
-### Workbench Pane Host
+### Workbench Document Host
 
-The pane host should model side-by-side expert review without implementing a full docking manager. Current behavior is right: chat can close, panes are additive, Git can own the work surface, and multi-pane mode collapses the project side sheet. The next production decision is persistence: whether open panes are per-task, per-project, or session-only.
+The document host should model side-by-side expert review without implementing a full docking manager. Current behavior is right: Summary is the default document, chat can close, Git can own the work surface, and multi-document mode collapses the project side sheet. The next production decision is persistence: whether open documents are per-task, per-project, or session-only.
 
 ### Status Bar
 
@@ -134,6 +151,7 @@ Popovers should be short, not mini dashboards. The token popover is acceptable b
 | Reference | Useful rule | Prototype implication |
 |-----------|-------------|-----------------------|
 | VS Code Workbench | Use stable containers: Activity Bar, Side Bar, Editor Group, Panel, Status Bar. | Model the app as a workbench, not as one page with many cards. |
+| VS Code Editor Groups | Opened files and custom editors live as tabs in the editor area and can be split or closed. | Treat Summary, Task Chat, Git, Screenshots, and Debug as task documents rather than permanent panels. |
 | VS Code Status Bar | Short labels, limited items, global left, contextual right. | Keep statusbar tight. Codex/Claude quota is the deliberate exception because it is operational state. |
 | VS Code Views | Prefer existing containers, descriptive labels, product icons, few actions. | Pane controls belong in rails and headers. Avoid turning every row into a command button. |
 | VS Code Webviews | Only use custom surfaces when necessary; keep them themeable and accessible. | Angular panes are allowed, but every pane must still obey theme tokens, keyboard access, and scoped actions. |

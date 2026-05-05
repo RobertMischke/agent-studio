@@ -20,6 +20,8 @@ import {
   SummaryChip,
   Theme,
   TranscriptEntry,
+  WorkbenchDocument,
+  WorkbenchDocumentId,
   WorkbenchPane,
 } from './next-gen-chat-workbench-prototype.models';
 
@@ -123,13 +125,13 @@ import {
                   }
                 </svg>
                 <span>Views</span>
-                <small>pins + run facts</small>
+                <small>open docs + facts</small>
               </button>
               <div class="inspector-rail__modes" data-testid="prototype-layout-buttons">
-                <b>Panes</b>
+                <b>Documents</b>
                 <button class="rail-action rail-action--all"
-                        title="Pin all review panes"
-                        aria-label="Pin all review panes"
+                        title="Open all review documents"
+                        aria-label="Open all review documents"
                         data-testid="prototype-pane-all"
                         (click)="openAllContextPanes()">
                   <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -137,7 +139,7 @@ import {
                       <path [attr.d]="path"></path>
                     }
                   </svg>
-                  <span>All</span>
+                  <span>All docs</span>
                   <em>{{ contextPanes().length + (chatOpen() ? 1 : 0) }}</em>
                 </button>
                 @for (mode of paneButtons; track mode.id) {
@@ -192,6 +194,31 @@ import {
             </aside>
 
             <div class="workbench__main">
+            <div class="document-tabs" data-testid="prototype-document-tabs" role="tablist" aria-label="Open workbench documents">
+              @for (doc of openDocuments(); track doc.id) {
+                <button class="document-tab"
+                        type="button"
+                        role="tab"
+                        [class.document-tab--active]="activeDocument() === doc.id"
+                        [attr.aria-selected]="activeDocument() === doc.id"
+                        [attr.data-testid]="'prototype-document-' + doc.id"
+                        (click)="activateDocument(doc.id)">
+                  <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    @for (path of iconPath(doc.icon); track path) {
+                      <path [attr.d]="path"></path>
+                    }
+                  </svg>
+                  <span>{{ doc.title }}</span>
+                  <em>{{ doc.subtitle }}</em>
+                  @if (doc.closable) {
+                    <i class="document-tab__close"
+                       title="Close document"
+                       aria-hidden="true"
+                       (click)="closeDocument(doc.id); $event.stopPropagation()">x</i>
+                  }
+                </button>
+              }
+            </div>
             <div class="workbench__body"
                  [style.gridTemplateColumns]="workbenchColumns()"
                  [attr.data-chat-open]="chatOpen()"
@@ -545,6 +572,15 @@ import {
                   @switch (openPane) {
                     @case ('result') {
                       <section class="context__body">
+                        <article class="summary-callout" data-testid="prototype-summary-document">
+                          <span>Default document</span>
+                          <strong>Review ready</strong>
+                          <p>Start here for phase, risk, evidence, and the next useful document before opening raw logs.</p>
+                          <div>
+                            <button (click)="setPane('git')">Open Git document</button>
+                            <button (click)="setPane('debug')">Open debug document</button>
+                          </div>
+                        </article>
                         <div class="metric-grid">
                           <div><b>Review</b><span>current state</span></div>
                           <div><b>3</b><span>commits</span></div>
@@ -1647,7 +1683,99 @@ import {
       min-width: 0;
       min-height: 0;
       display: grid;
-      grid-template-rows: minmax(0, 1fr);
+      grid-template-rows: 30px minmax(0, 1fr);
+    }
+
+    .document-tabs {
+      min-width: 0;
+      min-height: 30px;
+      display: flex;
+      align-items: stretch;
+      gap: 0;
+      overflow-x: auto;
+      overflow-y: hidden;
+      background: var(--chrome);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .document-tab {
+      min-width: 116px;
+      max-width: 196px;
+      height: 30px;
+      display: grid;
+      grid-template-columns: 15px minmax(0, 1fr) auto;
+      grid-template-areas:
+        "icon title close"
+        "icon subtitle close";
+      align-items: center;
+      column-gap: 6px;
+      row-gap: 0;
+      border: 0;
+      border-right: 1px solid var(--line);
+      border-radius: 0;
+      background: var(--chrome);
+      color: var(--muted);
+      padding: 2px 7px;
+      text-align: left;
+      font: inherit;
+      cursor: pointer;
+    }
+
+    .document-tab:hover,
+    .document-tab--active {
+      background: var(--surface);
+      color: var(--text);
+    }
+
+    .document-tab--active {
+      box-shadow: inset 0 2px 0 var(--accent);
+    }
+
+    .document-tab .svg-icon {
+      grid-area: icon;
+      width: 14px;
+      height: 14px;
+    }
+
+    .document-tab span,
+    .document-tab em {
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .document-tab span {
+      grid-area: title;
+      font-size: 11px;
+      font-weight: 750;
+      line-height: 1.1;
+    }
+
+    .document-tab em {
+      grid-area: subtitle;
+      color: var(--muted);
+      font-size: 9px;
+      font-style: normal;
+      line-height: 1.1;
+    }
+
+    .document-tab__close {
+      grid-area: close;
+      width: 16px;
+      height: 16px;
+      display: grid;
+      place-items: center;
+      border-radius: 4px;
+      color: var(--muted);
+      font-size: 11px;
+      font-style: normal;
+      line-height: 1;
+    }
+
+    .document-tab__close:hover {
+      background: var(--surface-soft);
+      color: var(--text);
     }
 
     .badge--ok {
@@ -2500,6 +2628,55 @@ import {
       margin-bottom: 9px;
     }
 
+    .summary-callout {
+      display: grid;
+      gap: 5px;
+      margin-bottom: 9px;
+      border: 1px solid color-mix(in srgb, var(--accent) 36%, var(--line));
+      border-radius: 8px;
+      background:
+        linear-gradient(90deg, color-mix(in srgb, var(--accent) 10%, transparent), transparent 72%),
+        var(--surface);
+      padding: 10px;
+    }
+
+    .summary-callout span {
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 760;
+      text-transform: uppercase;
+    }
+
+    .summary-callout strong {
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.25;
+    }
+
+    .summary-callout p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+
+    .summary-callout div {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+      margin-top: 2px;
+    }
+
+    .summary-callout button {
+      min-height: 24px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--surface-soft);
+      color: var(--text);
+      padding: 2px 8px;
+      font-size: 11px;
+    }
+
     .metric-grid div,
     .context-card,
     .source-card,
@@ -2987,6 +3164,18 @@ import {
     }
     .ng-chat-prototype[data-density="compact"] .inspector-rail__summary .summary-chip { min-height: 31px; }
     .ng-chat-prototype[data-density="compact"] .context__body { padding: 7px; }
+    .ng-chat-prototype[data-density="compact"] .document-tab {
+      min-width: 44px;
+      grid-template-columns: 1fr;
+      grid-template-areas: "icon";
+      justify-items: center;
+      padding: 0;
+    }
+    .ng-chat-prototype[data-density="compact"] .document-tab span,
+    .ng-chat-prototype[data-density="compact"] .document-tab em,
+    .ng-chat-prototype[data-density="compact"] .document-tab__close {
+      display: none;
+    }
     .ng-chat-prototype[data-density="compact"] .turn { margin: 7px 0; }
     .ng-chat-prototype[data-density="compact"] .turn__body { padding: 8px 10px; }
     .ng-chat-prototype[data-density="compact"] .turn__body p { font-size: 14px; line-height: 1.38; }
@@ -3075,6 +3264,7 @@ export class NextGenChatWorkbenchPrototypeComponent {
   readonly chatOpen = signal(true);
   readonly contextPanes = signal<readonly ContextPane[]>(['result']);
   readonly contextOpen = computed(() => this.contextPanes().length > 0);
+  readonly activeDocument = signal<WorkbenchDocumentId>('result');
   readonly splitRatio = signal(54);
   readonly splitDragging = signal(false);
   readonly activeGitFile = signal('frontend/src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts');
@@ -3095,11 +3285,11 @@ export class NextGenChatWorkbenchPrototypeComponent {
   ];
 
   readonly paneButtons: Array<{ id: WorkbenchPane; label: string; short: string; icon: string }> = [
-    { id: 'chat', label: 'Toggle chat pane', short: 'Chat', icon: 'chat' },
-    { id: 'result', label: 'Result summary', short: 'Result', icon: 'check' },
-    { id: 'git', label: 'Git changes', short: 'Git', icon: 'git' },
-    { id: 'preview', label: 'Screenshot preview', short: 'Preview', icon: 'image' },
-    { id: 'debug', label: 'Debug summary', short: 'Debug', icon: 'bug' },
+    { id: 'chat', label: 'Open chat document', short: 'Chat', icon: 'chat' },
+    { id: 'result', label: 'Open summary document', short: 'Summary', icon: 'check' },
+    { id: 'git', label: 'Open Git document', short: 'Git', icon: 'git' },
+    { id: 'preview', label: 'Open screenshot document', short: 'Preview', icon: 'image' },
+    { id: 'debug', label: 'Open debug document', short: 'Debug', icon: 'bug' },
   ];
 
   readonly scenarios: Array<{ id: Scenario; label: string; icon: string }> = [
@@ -3499,6 +3689,30 @@ export class NextGenChatWorkbenchPrototypeComponent {
     return this.interventionTargets[target];
   }
 
+  readonly openDocuments = computed<WorkbenchDocument[]>(() => {
+    const docs: WorkbenchDocument[] = [];
+    if (this.contextPanes().includes('result')) {
+      docs.push({ id: 'result', title: 'Summary', subtitle: 'default dashboard', icon: 'check', closable: false });
+    }
+    if (this.chatOpen()) {
+      docs.push({ id: 'chat', title: 'Task Chat', subtitle: 'conversation', icon: 'chat', closable: true });
+    }
+    for (const pane of this.contextPanes()) {
+      if (pane === 'result') continue;
+      docs.push({
+        id: pane,
+        title: this.documentTitle(pane),
+        subtitle: this.documentSubtitle(pane),
+        icon: this.documentIcon(pane),
+        closable: true,
+      });
+    }
+    if (docs.length === 0) {
+      docs.push({ id: 'result', title: 'Summary', subtitle: 'default dashboard', icon: 'check', closable: false });
+    }
+    return docs;
+  });
+
   readonly workbenchColumns = computed(() => {
     const columns: string[] = [];
     const panes = this.contextPanes();
@@ -3535,9 +3749,11 @@ export class NextGenChatWorkbenchPrototypeComponent {
   setPane(pane: WorkbenchPane): void {
     if (pane === 'chat') {
       this.chatOpen.set(true);
+      this.activeDocument.set('chat');
       return;
     }
     this.pane.set(pane);
+    this.activeDocument.set(pane);
     this.addContextPane(pane);
   }
 
@@ -3563,6 +3779,7 @@ export class NextGenChatWorkbenchPrototypeComponent {
       this.addContextPane('result');
     }
     this.chatOpen.set(!this.chatOpen());
+    this.activeDocument.set(this.chatOpen() ? 'chat' : (this.contextPanes()[0] ?? 'result'));
   }
 
   closeContextPane(pane: ContextPane): void {
@@ -3572,7 +3789,52 @@ export class NextGenChatWorkbenchPrototypeComponent {
   openAllContextPanes(): void {
     this.contextPanes.set(['result', 'git', 'preview', 'debug']);
     this.pane.set('debug');
+    this.activeDocument.set('debug');
     this.sideSheetOpen.set(false);
+  }
+
+  activateDocument(id: WorkbenchDocumentId): void {
+    this.setPane(id);
+  }
+
+  closeDocument(id: WorkbenchDocumentId): void {
+    if (id === 'chat') {
+      this.chatOpen.set(false);
+      this.activeDocument.set(this.contextPanes()[0] ?? 'result');
+      return;
+    }
+    if (id === 'result') return;
+    this.removeContextPane(id);
+  }
+
+  documentTitle(pane: WorkbenchPane): string {
+    switch (pane) {
+      case 'chat': return 'Task Chat';
+      case 'git': return 'Git changes';
+      case 'preview': return 'Screenshots';
+      case 'debug': return 'Debug trace';
+      default: return 'Summary';
+    }
+  }
+
+  documentSubtitle(pane: WorkbenchPane): string {
+    switch (pane) {
+      case 'chat': return 'conversation';
+      case 'git': return 'source diff';
+      case 'preview': return 'visual evidence';
+      case 'debug': return 'diagnostics';
+      default: return 'default dashboard';
+    }
+  }
+
+  documentIcon(pane: WorkbenchPane): string {
+    switch (pane) {
+      case 'chat': return 'chat';
+      case 'git': return 'git';
+      case 'preview': return 'image';
+      case 'debug': return 'bug';
+      default: return 'check';
+    }
   }
 
   paneTitle(pane: ContextPane): string {
@@ -3604,8 +3866,12 @@ export class NextGenChatWorkbenchPrototypeComponent {
 
   private removeContextPane(pane: ContextPane): void {
     this.contextPanes.update((panes) => panes.filter((openPane) => openPane !== pane));
+    if (this.activeDocument() === pane) {
+      this.activeDocument.set(this.chatOpen() ? 'chat' : (this.contextPanes()[0] ?? 'result'));
+    }
     if (!this.chatOpen() && this.contextPanes().length === 0) {
       this.chatOpen.set(true);
+      this.activeDocument.set('chat');
     }
   }
 

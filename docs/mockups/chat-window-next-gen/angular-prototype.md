@@ -54,12 +54,15 @@ The nav and status-bar iteration adds a more VS Code-like control model. The act
 
 The next iteration treats every workbench pane as optional and additive. Chat is no longer assumed to be permanent: it can be closed while Git review, Result, Preview, or Debug stays open. Git review now owns the source/editor preview, with a changes list on the left and the selected source diff on the right. The old range slider is gone; width is modeled by a real vertical splitter with keyboard support.
 
+The document-model iteration reframes those panes as opened workbench documents. The left rail behaves more like a VS Code view container: it exposes documents and run facts, while the center work area shows a tab strip for `Summary`, `Task Chat`, `Git changes`, `Screenshots`, and `Debug trace`. `Summary` is the default dashboard document and should quickly explain phase, risk, evidence, and the next useful drill-down without pretending to be the full detail view.
+
 The rail now has inline icons, visible labels in comfortable density, tooltip titles, a `Task rail` guide button, and an explicit open-pane count on the "All" pin action. Compact density collapses the same controls back to icons so the chat area stays large. The detail header and top bar no longer duplicate the pane switcher; the rail owns pane pinning, the top bar owns global sheet and queue toggles, and the status bar owns runtime controls. The task list is intentionally narrower and only carries queue selection, not pane controls. Because the prototype is a separate Angular app, the normal frontend does not pay for it and cannot accidentally show it.
 
 The prototype currently covers:
 
 - Task detail shell with project chip, editable-title affordance, state pill, Complete & Next, narrow queue list, optional chat, side sheet, and status bar.
 - Workbench panes: Result, Git plus source diff, Preview, Debug, and optional Chat.
+- Workbench document tabs for Summary, Task Chat, Git changes, Screenshots, and Debug trace.
 - Left task rail with additive pane pinning, quick signal jumps, run state, tokens, commits, files, screenshots, failed retry, duration, and scenario switches.
 - Rail guide modal that explains the control model.
 - Clickable activity bar and top chrome for project side sheet, queue, run summary, density, theme, command palette, and debug.

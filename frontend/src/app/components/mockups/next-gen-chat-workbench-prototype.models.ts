@@ -1,5 +1,6 @@
 export type WorkbenchPane = 'result' | 'git' | 'preview' | 'debug' | 'chat';
 export type ContextPane = Exclude<WorkbenchPane, 'chat'>;
+export type WorkbenchDocumentId = WorkbenchPane;
 export type Density = 'comfortable' | 'compact';
 export type Theme = 'light' | 'dark';
 export type Scenario = 'review' | 'tools' | 'wait' | 'visual' | 'drift' | 'decisions';
@@ -79,4 +80,12 @@ export interface UsageStripItem {
   window?: string;
   reset?: string;
   testId?: string;
+}
+
+export interface WorkbenchDocument {
+  id: WorkbenchDocumentId;
+  title: string;
+  subtitle: string;
+  icon: string;
+  closable: boolean;
 }

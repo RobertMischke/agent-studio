@@ -8,6 +8,7 @@ import { OrchestratorFeedComponent } from './components/orchestrator-feed';
 import { OrchestratorSideSheetComponent } from './components/orchestrator-side-sheet/orchestrator-side-sheet.component';
 import { ProjectDetailComponent } from './components/project-detail';
 import { ProjectShellComponent } from './components/project-shell/project-shell.component';
+import { SecurityPanelComponent } from './components/security-panel/security-panel.component';
 import {
   DEFAULT_PROJECT_RAIL_KEY,
   isProjectRailKey,
@@ -46,7 +47,7 @@ interface VerboseDebugContext {
 
 @Component({
   selector: 'app-root',
-  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, ProjectShellComponent, AnalysisReportDrilldownComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceTokenTimelineComponent, WorkspaceScreenshotsComponent, WorkspaceBannerComponent, VerboseDebugOverlayComponent],
+  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, ProjectShellComponent, SecurityPanelComponent, AnalysisReportDrilldownComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceTokenTimelineComponent, WorkspaceScreenshotsComponent, WorkspaceBannerComponent, VerboseDebugOverlayComponent],
   // Keep styles global to this subtree — the App shell still owns the
   // .header*, .filter-chip*, .overlay*, .create-dialog*, .error-dialog*
   // class rules used by the extracted dialogs and project-tabs.
@@ -293,9 +294,18 @@ interface VerboseDebugContext {
             <app-project-shell
               [projectName]="projShell"
               [activeRail]="projectShellRail()"
+              [hasCustomPanel]="projectShellRail() === 'security'"
               (railChange)="onProjectShellRailChange($event)"
               (openFeed)="onOpenFeedFromShell()"
-              (closeShell)="closeProjectShell()" />
+              (closeShell)="closeProjectShell()">
+              @if (projectShellRail() === 'security') {
+                <app-security-panel
+                  [projectName]="projShell"
+                  (createFollowUp)="onSecurityFollowUp($event)"
+                  (openEvidence)="onSecurityOpenEvidence($event)"
+                  (auditQueuedEvent)="onSecurityAuditQueued($event)" />
+              }
+            </app-project-shell>
           </div>
         </div>
       }
@@ -2182,6 +2192,43 @@ export class App implements OnInit {
 
   closeVerboseDebug(): void {
     this.verboseDebugContext.set(null);
+  }
+
+  /**
+   * Project Security panel "Create follow-up task" action (slice 1 of the
+   * quality-system mockup). Opens the existing create-job dialog
+   * pre-filled with the prompt body the panel composed from the most
+   * recent review. The user picks model / target-state / title overrides
+   * before submitting; the panel never queues a job behind the user's back.
+   */
+  onSecurityFollowUp(event: { projectName: string; prefill: string }): void {
+    const watchEntry = this.watchPaths().find((wp) => wp.name === event.projectName);
+    if (!watchEntry) return;
+    this.newTargetState = '1-preparation';
+    this.newWatchPath = watchEntry.path;
+    this.newPrompt = event.prefill;
+    this.newTitle = `Security follow-up (${event.projectName})`;
+    this.loadCreateModels(this.newCliType);
+    this.showCreate.set(true);
+  }
+
+  /**
+   * "Open evidence" action: refresh the kanban so the freshly written
+   * review is visible at the top of the history list. Slice 1 keeps this
+   * deliberately minimal - a true file viewer overlay belongs in a later
+   * slice. Today the project's `security/reviews/` folder is the canonical
+   * pointer; the panel already shows the rel path next to each row.
+   */
+  onSecurityOpenEvidence(_event: { projectName: string; relPath: string }): void {
+    // The relPath is rendered in the panel row itself; refresh the kanban
+    // so a freshly-queued audit's eventual completion is visible without
+    // a manual reload.
+    this.refresh();
+  }
+
+  /** Refresh the kanban after a security audit was queued so the new job appears. */
+  onSecurityAuditQueued(_event: { projectName: string; jobId: string }): void {
+    this.refresh();
   }
 
   onCreateTaskFromOrchestratorDraft(event: { projectName: string; promptText: string }): void {
