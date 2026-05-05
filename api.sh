@@ -17,7 +17,16 @@
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-PORT="${PORT:-5030}"
+# Default port differs per checkout so calling api.sh directly inside one
+# checkout does not collide with the other. Stable runs on 5031, dev on
+# 5030. The env var `PORT` overrides this for both. The parent
+# start-stable.sh / start-dev.sh scripts set PORT explicitly; this default
+# matches the same convention for direct local invocations.
+case "$(basename "${SCRIPT_DIR}")" in
+  *-stable) DEFAULT_PORT=5031 ;;
+  *)        DEFAULT_PORT=5030 ;;
+esac
+PORT="${PORT:-${DEFAULT_PORT}}"
 BASE_URL="http://127.0.0.1:${PORT}"
 HEALTH_URL="${BASE_URL}/healthz"
 PROJECT_FILE="${SCRIPT_DIR}/backend/OrchestratorApi.csproj"
