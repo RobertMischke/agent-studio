@@ -67,8 +67,8 @@ interface ChatTurn {
           <strong>Agent Task Processor</strong>
           <span>Next-gen task chat workbench prototype</span>
         </div>
-        <nav class="topbar__nav" aria-label="Workbench quick navigation" data-testid="prototype-topbar-nav">
-          <button [class.topbar__nav-active]="pane() === 'result'"
+        <nav class="topbar__nav detail-chrome__panes" aria-label="Workbench quick navigation" data-testid="prototype-topbar-nav">
+          <button [class.detail-chrome__pane--active]="pane() === 'result'"
                   (click)="setPane('result')"
                   data-testid="prototype-topbar-chat">
             <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -78,7 +78,7 @@ interface ChatTurn {
             </svg>
             <span>Task Chat</span>
           </button>
-          <button [class.topbar__nav-active]="pane() === 'git'"
+          <button [class.detail-chrome__pane--active]="pane() === 'git'"
                   (click)="setPane('git')"
                   data-testid="prototype-topbar-git">
             <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -88,7 +88,7 @@ interface ChatTurn {
             </svg>
             <span>Git Split</span>
           </button>
-          <button [class.topbar__nav-active]="sideSheetOpen()"
+          <button [class.detail-chrome__pane--active]="sideSheetOpen()"
                   (click)="sideSheetOpen.set(!sideSheetOpen())"
                   data-testid="prototype-topbar-sheet">
             <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -98,7 +98,7 @@ interface ChatTurn {
             </svg>
             <span>Project Sheet</span>
           </button>
-          <button [class.topbar__nav-active]="statusPanel() === 'queue'"
+          <button [class.detail-chrome__pane--active]="statusPanel() === 'queue'"
                   (click)="toggleStatusPanel('queue')"
                   data-testid="prototype-topbar-queue">
             <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -626,9 +626,10 @@ interface ChatTurn {
 
       @if (statusPanel()) {
         <section class="status-popover modal__panel"
+                 style="position:fixed;left:58px;right:10px;bottom:26px;z-index:19;width:auto;max-height:280px;display:grid;grid-template-columns:220px minmax(0,1fr) minmax(180px,.45fr);gap:10px;padding:10px;border-radius:8px 8px 0 0;"
                  [attr.data-panel]="statusPanel()"
                  data-testid="prototype-status-popover">
-          <header>
+          <header style="display:grid;gap:6px;align-content:start;border-right:1px solid var(--line)">
             <strong>{{ statusPanelTitle() }}</strong>
             <button class="chip" (click)="statusPanel.set(null)">Close</button>
           </header>
@@ -705,7 +706,7 @@ interface ChatTurn {
                   <button>Open evidence folder</button>
                 </div>
               </article>
-              <article class="status-shot">
+              <article style="display:grid;place-items:center;text-align:center;color:var(--muted);background:linear-gradient(135deg, rgba(122,167,255,.22), transparent 46%), var(--surface-soft)">
                 <b>Latest</b>
                 <span>Result split, light theme, 1440 x 900</span>
               </article>
@@ -1084,37 +1085,6 @@ interface ChatTurn {
     }
 
     .topbar__title span { color: var(--muted); }
-
-    .topbar__nav {
-      min-width: 0;
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      overflow: hidden;
-    }
-
-    .topbar__nav button {
-      min-width: 0;
-      height: 26px;
-      display: inline-flex;
-      align-items: center;
-      gap: 5px;
-      border: 1px solid transparent;
-      border-radius: 6px;
-      background: transparent;
-      color: var(--muted);
-      padding: 0 7px;
-      font-size: 11px;
-      font-weight: 700;
-      white-space: nowrap;
-    }
-
-    .topbar__nav button:hover,
-    .topbar__nav-active {
-      background: var(--surface) !important;
-      border-color: var(--line) !important;
-      color: var(--text) !important;
-    }
 
     .topbar__actions { display: flex; gap: 5px; }
 
@@ -1931,11 +1901,6 @@ interface ChatTurn {
       text-overflow: ellipsis;
     }
 
-    .function-grid__active {
-      color: var(--accent) !important;
-      border-color: var(--accent) !important;
-    }
-
     .context {
       min-width: 0;
       min-height: 0;
@@ -2136,38 +2101,6 @@ interface ChatTurn {
       background: var(--surface);
     }
 
-    .status-popover {
-      position: fixed;
-      left: 58px;
-      right: 10px;
-      bottom: 26px;
-      z-index: 19;
-      width: auto;
-      max-height: 280px;
-      display: grid;
-      grid-template-columns: 220px minmax(0, 1fr) minmax(180px, 0.45fr);
-      gap: 10px;
-      padding: 10px;
-      border-radius: 8px 8px 0 0;
-    }
-
-    .status-popover header {
-      display: grid;
-      gap: 6px;
-      align-content: start;
-      border-right: 1px solid var(--line);
-    }
-
-    .status-shot {
-      display: grid;
-      place-items: center;
-      text-align: center;
-      color: var(--muted);
-      background:
-        linear-gradient(135deg, rgba(122, 167, 255, 0.22), transparent 46%),
-        var(--surface-soft) !important;
-    }
-
     .statusbar {
       grid-column: 2;
       min-height: 22px;
@@ -2221,7 +2154,6 @@ interface ChatTurn {
       height: 7px;
       border-radius: 999px;
       background: #90ee90;
-      box-shadow: 0 0 0 3px rgba(144, 238, 144, 0.18);
     }
 
     .modal {
@@ -2293,64 +2225,8 @@ interface ChatTurn {
     .debug-grid h3 { margin: 0 0 10px; font-size: 14px; }
     .debug-grid p { color: var(--muted); line-height: 1.45; margin: 0; }
 
-    .guide-grid {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 10px;
-      padding: 12px;
-    }
-
-    .guide-grid article {
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: var(--surface);
-      padding: 12px;
-    }
-
-    .guide-grid h3 {
-      margin: 0 0 8px;
-      font-size: 14px;
-    }
-
-    .guide-grid p {
-      margin: 0;
-      color: var(--muted);
-      font-size: 13px;
-      line-height: 1.45;
-    }
-
-    .image-box {
-      min-height: 420px;
-      display: grid;
-      place-items: center;
-      text-align: center;
-      background:
-        repeating-linear-gradient(90deg, color-mix(in srgb, var(--line) 50%, transparent) 0 1px, transparent 1px 88px),
-        var(--bg);
-      margin: 14px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-    }
-
-    .image-box strong,
-    .image-box code { display: block; margin: 4px; }
-
-    .command {
-      width: min(680px, 92vw);
-      padding: 10px;
-      display: grid;
-      gap: 8px;
-    }
-
-    .command input {
-      min-height: 42px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: var(--surface-soft);
-      color: var(--text);
-      padding: 0 12px;
-      font: inherit;
-    }
+    .guide-grid { display: grid; gap: 10px; padding: 12px; }
+    .image-box { min-height: 420px; display: grid; place-items: center; text-align: center; }
 
     .ng-chat-prototype[data-density="compact"] .workspace {
       grid-template-columns: 184px minmax(590px, 1fr) minmax(260px, 28vw);
@@ -2429,12 +2305,6 @@ interface ChatTurn {
       .topbar__nav span { display: none; }
       .statusbar { grid-template-columns: minmax(0, 1fr) auto; }
       .statusbar__group--center { display: none; }
-      .status-popover {
-        left: 8px;
-        right: 8px;
-        bottom: 24px;
-        grid-template-columns: 1fr;
-      }
       .detail { grid-template-rows: auto minmax(0, 1fr); }
       .detail-chrome {
         min-height: 34px;
