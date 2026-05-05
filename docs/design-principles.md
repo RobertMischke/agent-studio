@@ -100,6 +100,26 @@ The user must always have a confident, current picture of what the agents and th
 - **Show errors plainly.** If a run errored, say so in the spot the user is looking at. Hidden failures, silent fallbacks, or "everything is fine" states draped over a real failure are worse than a red banner.
 - **One signal per fact.** A failed run produces one explanation, not three. The orchestrator's deterministic decision messages, the system error, and the heuristic fallback should not all narrate the same event redundantly.
 
+## Chat is a multi-actor conversation
+
+The task chat is not a simple user/assistant transcript. It is a project conversation where several actors can speak:
+
+- The user provides intent, steering, interruption, and review decisions.
+- The task agent performs the implementation work.
+- The orchestrator interprets outcome, reissues work, answers bounded needs-input loops, and explains deterministic policy decisions.
+- The supervisor adds advisory health and risk signals.
+- Supporting agents produce explicit QA, security, design, drift, and meta-analysis reports.
+- Tool runners create low-level evidence such as reads, searches, edits, shell commands, browser runs, tests, and screenshots.
+- System rows explain parser warnings, missing structured output, or artifact handling.
+
+The UI must make those actors recognizable without relying on color alone. Labels, actor rails, badges, and typed cards are part of the evidence model.
+
+Tool calls are especially dense. Conversation mode should collapse contiguous tool activity into tool bursts with counts, failures, duration, touched files, and artifact links. Trace mode keeps every raw entry available. A failed tool burst must show its failure count even while collapsed.
+
+Orchestrator and supervisor output should render as decision or advisory cards, not as ordinary model prose. Each card should answer: what was decided, why, which evidence was used, what action follows, and which budget or retry limit applies.
+
+The next-generation chat mockup lives at [mockups/chat-window-next-gen](mockups/chat-window-next-gen/README.md).
+
 ## Continuous over batch
 
 The agent runs continuously; so does our view of it. We summarize as we go, not just at the end:

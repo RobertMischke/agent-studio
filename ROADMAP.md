@@ -36,6 +36,7 @@ Today the application provides:
 - Early project-level planning tasks for Security, Architecture, and Drift dimensions.
 - Supervisor, system-review, and meta-cycle concepts for recurring "is this on track?" inspection, with Markdown reports and structured JSON contracts where the app needs to parse results.
 - An integrated design mockup for project-level Security, Architecture, Drift, UX/UI, Test Quality, Token Usage, Steering Docs, Audits and Checks, and Skills under `docs/mockups/quality-system/`. This is exploratory, not product behavior yet.
+- A next-generation chat-window mockup under `docs/mockups/chat-window-next-gen/` that treats user, task agent, orchestrator, supervisor, supporting agents, tools, and system warnings as distinct actors in one run-based conversation.
 - Early product planning for a project-level steering-documentation surface: the app should show the README, AGENTS, task contracts, skills lookup, and other agent-facing instructions together with a shorter human summary and drift warnings.
 
 ## Roadmap Themes
@@ -193,6 +194,30 @@ Make each watched project easier to inspect and operate:
 - Safer locking once a task has started, so completed or running work does not drift to another project by accident.
 - Better visibility into active CLI sessions that may already be working in the same project.
 - Repository hygiene for accepted tasks: surface dirty and unpushed work, support prompt commits of accepted task changes and task evidence, and prevent completed work from quietly piling up on disk.
+
+### Next-Generation Chat Window
+
+Make the task chat the primary human review surface for long-running, multi-actor agent work. The current Activity Log is valuable evidence, but real Stable jobs already produce hundreds of conversation entries and more than a hundred tool chips. The next surface should keep the raw trace available while making the default view readable.
+
+The chat should render:
+
+- The user, task agent, project orchestrator, supervisor, supporting agents, tool runner, and system warnings as distinct actors.
+- Runs as the unit of conversation, with run headers for CLI, model, duration, token usage, tool count, tests, commits, and outcome.
+- Tool use as collapsed bursts by default, with counts by family, failure count, duration, touched files, artifacts, and one-click raw detail.
+- Orchestrator and supervisor output as typed decision cards with reason, evidence, action, budget, and next step.
+- User intervention as explicit steering: continue, interrupt, stop, accept, or create follow-up.
+- Conversation mode as the default, trace mode as the debugging view, and artifacts as a dedicated evidence view.
+
+First implementation order:
+
+1. Add a `ConversationEvent` projection above the existing Activity Log parser.
+2. Group tool calls into compact `ToolBurst` events in conversation mode while preserving raw trace mode.
+3. Add persistent actor rails and labels for all participant types.
+4. Add typed `DecisionCard` rendering for orchestrator and supervisor events.
+5. Fix layout reservations so auto-eval banners, run timeline, mode controls, stream, and composer cannot overlap.
+6. Add Playwright coverage using Stable evidence cases: tool-heavy archive, review job with orchestrator output, analysis report job, empty run, failed tool retry, and user intervention.
+
+Queued at `agent-taskboard/2-ready/chat-conversation-event-projection/`, `agent-taskboard/2-ready/chat-tool-burst-collapsing/`, `agent-taskboard/2-ready/chat-actor-decision-cards/`, and `agent-taskboard/2-ready/chat-window-playwright-regression-suite/`.
 
 ### Expanded Lifecycle Lanes
 
