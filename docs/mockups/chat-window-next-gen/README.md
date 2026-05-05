@@ -64,6 +64,15 @@ This folder is not existing product behavior. It is the target surface for the n
 - [evidence/next-gen-chat-angular-prototype-lightbox.png](evidence/next-gen-chat-angular-prototype-lightbox.png) - Angular prototype screenshot lightbox.
 - [evidence/next-gen-chat-angular-prototype-debug-dark.png](evidence/next-gen-chat-angular-prototype-debug-dark.png) - Angular prototype dark Verbose Debug.
 - [evidence/next-gen-chat-angular-prototype-mobile.png](evidence/next-gen-chat-angular-prototype-mobile.png) - Angular prototype mobile collapse.
+- [evidence/regression/](evidence/regression/) - durable evidence captured by `next-gen-chat-workbench-regression.spec.ts`. Each image is regenerated on every Playwright run and locks a v7 invariant:
+  - `workbench-result.png`, `workbench-git.png`, `workbench-preview.png`, `workbench-debug.png`, `workbench-all-panes.png` - Result, Git, Preview, Debug, and combined pinned states.
+  - `workbench-chat-only.png`, `workbench-git-no-chat.png` - Chat-only reclaims space; Git/source review remains usable when chat is closed.
+  - `workbench-compact.png`, `workbench-dark.png`, `workbench-light-side-sheet-wide.png`, `workbench-mobile.png` - Compact density, dark theme, light theme with the side sheet wide, mobile collapse.
+  - `workbench-splitter-extremes.png` - Keyboard-driven splitter at min and max keeps both panes visible.
+  - `edge-tool-burst.png`, `edge-wait-loop.png`, `edge-schema-drift.png`, `edge-decision-showcase.png`, `edge-image-lightbox.png` - Tool burst expansion, wait/circuit decision, schema drift decision, full decision showcase (reissue, heuristic, needs-input, capture-fail, drift, intervention chips), image lightbox.
+  - `drilldown-tokens.png`, `drilldown-verbose-debug-trace.png` - Token heat popover and Verbose Debug trace tab stay reachable.
+  - `guard-composer-reachable.png` - Click-interception guard: composer remains operable after panes, popovers, and tool burst overlays close.
+  - `workbench-side-sheet-restored.png` - Project side sheet toggles independently of the workbench.
 - [evidence/tool-heavy-archive-full.png](evidence/tool-heavy-archive-full.png) - Stable screenshot for a tool-heavy archived job.
 - [evidence/review-chat-project-switch-full.png](evidence/review-chat-project-switch-full.png) - Stable screenshot for a review job.
 - [evidence/analysis-report-review-full.png](evidence/analysis-report-review-full.png) - Stable screenshot for an analysis-report job.

@@ -82,30 +82,42 @@ function setMetaThemeColor(color: string): void {
 }
 
 function injectDevBanner(): void {
-  // Top-fixed orange stripe + "DEV" pill — unmistakable but out of the way of
-  // the existing header. Body padding shifts the app down so nothing is hidden.
+  // Keep the dev checkout unmistakable without stealing vertical workspace.
+  // The marker is intentionally fixed to the left edge and does not mutate
+  // body padding, so screenshots and dense workbench views keep their height.
   const style = document.createElement('style');
   style.textContent = `
-    body { padding-top: 22px; }
-    .dev-banner {
+    body::before {
+      content: "";
       position: fixed;
       top: 0;
+      bottom: 0;
       left: 0;
-      right: 0;
-      height: 22px;
-      background: repeating-linear-gradient(
-        45deg,
-        #f59e0b 0 12px,
-        #b45309 12px 24px
-      );
+      width: 3px;
+      background: linear-gradient(180deg, #f59e0b, #dc2626);
+      z-index: 9998;
+      pointer-events: none;
+    }
+    .dev-banner {
+      position: fixed;
+      left: 0;
+      top: 96px;
+      width: 18px;
+      height: 70px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 0 6px 6px 0;
+      background: rgba(245, 158, 11, 0.82);
       color: #1a1208;
-      font: 700 11px/22px 'Segoe UI', system-ui, sans-serif;
-      letter-spacing: 0.18em;
-      text-align: center;
+      font: 800 10px/1 'Segoe UI', system-ui, sans-serif;
+      letter-spacing: 0.14em;
       z-index: 9999;
       pointer-events: none;
-      box-shadow: 0 1px 6px rgba(0,0,0,0.4);
+      box-shadow: 0 2px 10px rgba(0,0,0,0.22);
       text-transform: uppercase;
+      writing-mode: vertical-rl;
+      transform: rotate(180deg);
     }
   `;
   document.head.appendChild(style);
@@ -113,6 +125,7 @@ function injectDevBanner(): void {
   const banner = document.createElement('div');
   banner.className = 'dev-banner';
   banner.setAttribute('data-testid', 'dev-banner');
-  banner.textContent = 'DEV — local development checkout';
+  banner.setAttribute('aria-label', 'DEV local development checkout');
+  banner.textContent = 'DEV';
   document.body.appendChild(banner);
 }

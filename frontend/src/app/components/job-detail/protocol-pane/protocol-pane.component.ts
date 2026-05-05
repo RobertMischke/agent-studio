@@ -23,6 +23,8 @@ import { RunTimelineComponent } from './run-timeline.component';
 import { RunGitViewerComponent } from './run-git-viewer.component';
 import { CommonModule } from '@angular/common';
 import { FeatureFlagsService } from '../../../services/feature-flags.service';
+import { VerboseDebugOverlayComponent } from '../../verbose-debug/verbose-debug-overlay.component';
+import type { RawLineRange } from '../../chat/conversation-event';
 
 export type InspectorTab = 'protocol' | 'activity';
 
@@ -36,7 +38,7 @@ export type InspectorTab = 'protocol' | 'activity';
   selector: 'app-protocol-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, ActivityLogViewComponent, RunTimelineComponent, RunGitViewerComponent, ScreenshotStripComponent],
+  imports: [CommonModule, ActivityLogViewComponent, RunTimelineComponent, RunGitViewerComponent, ScreenshotStripComponent, VerboseDebugOverlayComponent],
   templateUrl: './protocol-pane.component.html',
   styleUrls: ['./protocol-pane.component.scss']
 })
@@ -355,6 +357,21 @@ export class ProtocolPaneComponent implements OnDestroy {
 
   readonly copyState = signal<'idle' | 'copied' | 'failed'>('idle');
   private copyResetTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * Drives the read-only Verbose Debug overlay. Opened from the activity-log
+   * header; closed via the overlay's own close button. Trace links route to
+   * the existing log overlay so the raw activity log remains one click away.
+   */
+  readonly verboseDebugOpen = signal(false);
+
+  onVerboseDebugOpenTrace(_range: RawLineRange): void {
+    // Route trace links to the existing activity-log maximized view so the
+    // raw activity log stays the single source of truth for line-level
+    // inspection. Closing Verbose Debug first keeps focus deterministic.
+    this.verboseDebugOpen.set(false);
+    this.openLogOverlay.emit();
+  }
 
   ngOnDestroy(): void {
     if (this.copyResetTimer !== null) {

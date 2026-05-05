@@ -46,6 +46,13 @@ import { RoadmapIntakePanelComponent } from '../roadmap-intake/roadmap-intake-pa
           <h2 class="sheet__title">Project chat</h2>
         </div>
         <div class="sheet__header-actions">
+          @if (activeJobId() && activeWatchPath()) {
+            <button class="sheet__btn"
+                    type="button"
+                    (click)="onOpenVerboseDebug()"
+                    [title]="'Open the read-only Verbose Debug view for ' + (activeJobTitle() ?? 'the active task')"
+                    data-testid="orch-side-sheet-verbose-debug">🐞</button>
+          }
           <button class="sheet__btn"
                   (click)="refresh()"
                   [disabled]="loading()"
@@ -528,6 +535,15 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
    */
   readonly createTaskFromDraft = output<{ projectName: string; promptText: string }>();
 
+  /**
+   * Phase: Verbose Debug. Emitted when the user clicks the bug icon in the
+   * sheet header while a task tab is in scope. The host (app shell) opens
+   * the read-only Verbose Debug overlay against the active task by fetching
+   * its evidence (cli output, run timeline, screenshots) and feeding the
+   * shared `<app-verbose-debug-overlay>` component.
+   */
+  readonly openVerboseDebug = output<{ jobId: string; watchPath: string; jobTitle: string | null }>();
+
   readonly open = signal(false);
   readonly activeProject = signal<string | null>(null);
   readonly turns = signal<OrchestratorChatTurn[]>([]);
@@ -789,6 +805,13 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   selectIntakeTab(): void {
     if (!this.activeProject()) return;
     this.mode.set('intake');
+  }
+
+  onOpenVerboseDebug(): void {
+    const jobId = this.activeJobId();
+    const watchPath = this.activeWatchPath();
+    if (!jobId || !watchPath) return;
+    this.openVerboseDebug.emit({ jobId, watchPath, jobTitle: this.activeJobTitle() });
   }
 
   /**

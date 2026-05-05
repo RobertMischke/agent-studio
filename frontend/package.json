@@ -5,6 +5,8 @@
     "ng": "ng",
     "start": "ng serve --proxy-config proxy.conf.json",
     "build": "ng build",
+    "mockup:chat": "ng serve next-gen-chat-mockup --port 4022 --host 127.0.0.1",
+    "build:mockup:chat": "ng build next-gen-chat-mockup",
     "test": "vitest run",
     "watch": "ng build --watch --configuration development",
     "e2e": "playwright test",

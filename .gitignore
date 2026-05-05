@@ -18,6 +18,11 @@ frontend/e2e/_baselines*
 frontend/screenshots/
 test-results/
 
+# Local mockup screenshot evidence is useful during review, but it is generated
+# output. Keep it on disk for inspection, not in the source repository.
+docs/mockups/**/evidence/*.png
+docs/mockups/**/evidence/**/*.png
+
 # Per-checkout local config overrides (e.g. Environment:IsDev for the dev banner)
 backend/appsettings.Local.json
 .frontend.pid

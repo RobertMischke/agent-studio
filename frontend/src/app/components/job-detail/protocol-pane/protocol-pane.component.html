@@ -192,6 +192,11 @@
                 @if (cliOutput().length > 0 || detail().log.length > 0 || isRunning()) {
                   <button class="btn-sm" (click)="openLogOverlay.emit()">⤢ Maximize log</button>
                 }
+                <button type="button"
+                        class="btn-sm"
+                        data-testid="protocol-open-verbose-debug"
+                        title="Open the read-only Verbose Debug view for this run"
+                        (click)="verboseDebugOpen.set(true)">🐞 Verbose Debug</button>
               </div>
 
               <app-run-timeline
@@ -314,3 +319,16 @@
     </section>
   </div>
 </section>
+
+@if (verboseDebugOpen()) {
+  <app-verbose-debug-overlay
+    data-testid="protocol-verbose-debug"
+    [lines]="cliOutput()"
+    [runTimeline]="runTimeline()"
+    [screenshots]="screenshots()"
+    [tokenSummary]="detail().info.tokenSummary ?? null"
+    [job]="detail().info"
+    [source]="detail().info.id"
+    (close)="verboseDebugOpen.set(false)"
+    (openTrace)="onVerboseDebugOpenTrace($event)" />
+}

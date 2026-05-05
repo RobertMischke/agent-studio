@@ -5,7 +5,7 @@ import { test, expect } from '@playwright/test';
  * the stable checkout. Activation is driven by GET /api/environment, which
  * the backend derives from a gitignored appsettings.Local.json. With the
  * flag on the page must:
- *   - render a fixed orange "DEV" banner (data-testid="dev-banner")
+ *   - render a fixed orange "DEV" marker (data-testid="dev-banner")
  *   - swap the SVG favicon to icons-dev/icon.svg
  *   - point the manifest link at manifest-dev.webmanifest
  *   - set the document title to "Agent Task Processor (DEV)"
@@ -18,12 +18,17 @@ test.describe('DEV-mode visual markers', () => {
     test.skip(body.isDev !== true, 'DEV flag is off — banner cannot render');
   });
 
-  test('shows DEV banner, dev manifest, dev favicon, dev title', async ({ page }) => {
+  test('shows DEV marker, dev manifest, dev favicon, dev title', async ({ page }) => {
     await page.goto('/');
 
     const banner = page.getByTestId('dev-banner');
     await expect(banner).toBeVisible();
     await expect(banner).toHaveText(/DEV/);
+    const box = await banner.boundingBox();
+    expect(box?.width, 'dev marker should not be a full-width top bar').toBeLessThanOrEqual(24);
+    expect(box?.height, 'dev marker stays compact on the left edge').toBeLessThanOrEqual(80);
+    const bodyPaddingTop = await page.evaluate(() => getComputedStyle(document.body).paddingTop);
+    expect(parseFloat(bodyPaddingTop), 'dev marker must not push the app down').toBeLessThanOrEqual(1);
 
     await expect(page).toHaveTitle('Agent Task Processor (DEV)');
 

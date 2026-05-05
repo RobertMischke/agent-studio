@@ -26,12 +26,20 @@ import { E2ECleanupDialogComponent } from './components/dev-tools/e2e-cleanup-di
 import { WorkspaceTokenTimelineComponent } from './components/workspace-token-timeline';
 import { WorkspaceScreenshotsComponent } from './components/workspace-screenshots';
 import { WorkspaceBannerComponent } from './components/workspace-banner';
-import { JobScreenshot } from './models/job.model';
-import { NextGenChatWorkbenchPrototypeComponent } from './components/mockups/next-gen-chat-workbench-prototype.component';
+import { JobScreenshot, RunTimeline, JobTokenSummary, CliOutputLine } from './models/job.model'; // verbose-debug overlay context types
+import { VerboseDebugOverlayComponent } from './components/verbose-debug/verbose-debug-overlay.component';
+
+interface VerboseDebugContext {
+  lines: CliOutputLine[];
+  runTimeline: RunTimeline | null;
+  screenshots: JobScreenshot[];
+  tokenSummary: JobTokenSummary | null;
+  job: JobInfo | null;
+}
 
 @Component({
   selector: 'app-root',
-  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, AnalysisReportDrilldownComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceTokenTimelineComponent, WorkspaceScreenshotsComponent, WorkspaceBannerComponent, NextGenChatWorkbenchPrototypeComponent],
+  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, AnalysisReportDrilldownComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceTokenTimelineComponent, WorkspaceScreenshotsComponent, WorkspaceBannerComponent, VerboseDebugOverlayComponent],
   // Keep styles global to this subtree — the App shell still owns the
   // .header*, .filter-chip*, .overlay*, .create-dialog*, .error-dialog*
   // class rules used by the extracted dialogs and project-tabs.
@@ -43,11 +51,6 @@ import { NextGenChatWorkbenchPrototypeComponent } from './components/mockups/nex
          [class.app--kanban-spec-v1]="featureFlags.kanbanDesignSpecV1()"
          [class.app--task-open]="!!selectedJob()"
          data-testid="app-root">
-      @if (featureFlags.nextGenChatPrototype()) {
-        @defer (when featureFlags.nextGenChatPrototype()) {
-          <app-next-gen-chat-workbench-prototype />
-        }
-      }
       <header class="header">
         <div class="header__brand">
           <img class="header__icon" src="icons/icon.svg" alt="Agent Task Processor" width="20" height="20" />
@@ -242,7 +245,8 @@ import { NextGenChatWorkbenchPrototypeComponent } from './components/mockups/nex
           [activeJobId]="selectedJob()?.info?.id ?? null"
           [activeJobTitle]="selectedJob()?.info?.title ?? null"
           [activeWatchPath]="selectedJob()?.info?.watchPath ?? null"
-          (createTaskFromDraft)="onCreateTaskFromOrchestratorDraft($event)" />
+          (createTaskFromDraft)="onCreateTaskFromOrchestratorDraft($event)"
+          (openVerboseDebug)="onOpenVerboseDebugFromSheet($event)" />
       </div>
 
       <app-status-bar
@@ -339,6 +343,18 @@ import { NextGenChatWorkbenchPrototypeComponent } from './components/mockups/nex
           (close)="closeErrorDialog()"
           (copy)="copyErrorDetails()"
           (openCliConfig)="openCliConfigFromError()" />
+      }
+
+      @if (verboseDebugContext(); as ctx) {
+        <app-verbose-debug-overlay
+          data-testid="app-verbose-debug-overlay"
+          [lines]="ctx.lines"
+          [runTimeline]="ctx.runTimeline"
+          [screenshots]="ctx.screenshots"
+          [tokenSummary]="ctx.tokenSummary"
+          [job]="ctx.job"
+          [source]="ctx.job?.id ?? 'cli-output.log'"
+          (close)="closeVerboseDebug()" />
       }
     </div>
   `,
@@ -1536,6 +1552,15 @@ import { NextGenChatWorkbenchPrototypeComponent } from './components/mockups/nex
 })
 export class App implements OnInit {
   readonly selectedJob = signal<JobDetail | null>(null);
+  /**
+   * Read-only "Verbose Debug" overlay state opened from the orchestrator
+   * side sheet's bug button. The protocol pane has its own copy that lives
+   * inside the task chat workbench and reuses the live polling services;
+   * this app-shell instance is the lazy-fetched escape hatch for the
+   * project side sheet's "🐞" affordance, which is reachable even when the
+   * task detail isn't currently displayed.
+   */
+  readonly verboseDebugContext = signal<VerboseDebugContext | null>(null);
   readonly showCreate = signal(false);
   /**
    * When non-null, names the project whose orchestrator feed is currently
@@ -2060,6 +2085,43 @@ export class App implements OnInit {
    * the prompt, and lets a short heuristic title fall out of the first
    * non-empty line.
    */
+  /**
+   * Phase: Verbose Debug. The orchestrator side sheet's "🐞" header button
+   * fires this with the active task's id + watch path. We fetch the
+   * evidence (cli output, run timeline, screenshots, plus the latest job
+   * detail for token summary) in parallel and feed it to the shared
+   * `<app-verbose-debug-overlay>`. The overlay is read-only; it never
+   * mutates state and never starts a run.
+   */
+  onOpenVerboseDebugFromSheet(event: { jobId: string; watchPath: string; jobTitle: string | null }): void {
+    forkJoin({
+      detail: this.jobService.getDetail(event.jobId, event.watchPath),
+      lines: this.jobService.getJobOutput(event.jobId, event.watchPath),
+      runs: this.jobService.getRunTimeline(event.jobId, event.watchPath),
+      screenshots: this.jobService.getJobScreenshots(event.jobId, event.watchPath)
+    }).subscribe({
+      next: ({ detail, lines, runs, screenshots }) => {
+        this.verboseDebugContext.set({
+          lines: lines ?? [],
+          runTimeline: runs ?? null,
+          screenshots: screenshots?.screenshots ?? [],
+          tokenSummary: detail?.info?.tokenSummary ?? null,
+          job: detail?.info ?? null
+        });
+      },
+      error: (err) => {
+        this.errorDialog.show(err, {
+          title: 'Verbose Debug failed to load',
+          source: `task ${event.jobTitle ?? event.jobId}`
+        });
+      }
+    });
+  }
+
+  closeVerboseDebug(): void {
+    this.verboseDebugContext.set(null);
+  }
+
   onCreateTaskFromOrchestratorDraft(event: { projectName: string; promptText: string }): void {
     const watchEntry = this.watchPaths().find((wp) => wp.name === event.projectName);
     if (!watchEntry) return;
