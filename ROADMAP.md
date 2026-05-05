@@ -124,6 +124,34 @@ Make each watched project easier to inspect and operate:
 - Better visibility into active CLI sessions that may already be working in the same project.
 - Repository hygiene for accepted tasks: surface dirty and unpushed work, support prompt commits of accepted task changes and task evidence, and prevent completed work from quietly piling up on disk.
 
+### Expanded Lifecycle Lanes
+
+Separate human intent from orchestrator and AI processing without breaking the sequential per-project execution model. Today a task in `2-ready` means both "the human says this can run" and "the runner may pick it up". That is too coarse once the app starts doing intake checks, duplicate detection, prompt shaping, post-processing, security feedback, QA checks, and orchestrator review.
+
+The board should make these phases visible:
+
+- Human Ready: the user dragged or created a task as ready from their point of view.
+- Orchestrator Intake: an AI or orchestrator lane checks whether the task already exists, is understandable, has enough context, has obvious questions, and can be executed safely.
+- Task Execution: the main coding CLI works on the core task.
+- Orchestrator Post Processing: a different orchestrator, supporting, or review CLI checks the result, runs requested post-processing, creates findings, asks follow-up questions, or triggers explicit QA, security, design, or runtime-observability checks.
+- Human Review: the user reviews the final task evidence and accepts, continues, or sends it back.
+
+V1 should probably implement this as virtual lanes or substates on top of the existing folder states, not as an immediate filesystem-contract explosion. For example, `2-ready` can contain Human Ready and Orchestrator Intake substages; `3-progress` can contain Task Execution and Orchestrator Post Processing substages; `4-review` remains the human-facing review lane. The concept task must decide whether substates belong in `job.json`, a sidecar status file, or a new typed lifecycle event stream.
+
+The UI should support lane grouping and collapse. Users should be able to collapse orchestration-only lanes into a slim left-side rail or compact group, while keeping the main human decision lanes visible. The board should preserve scanability when there are many lanes: group headers, counters, active-run badges, CLI badges, post-processing indicators, and a quick way to expand only the lanes that currently need attention.
+
+Hard boundary: expanded lanes do not permit parallel coding work inside one project. Intake and post-processing are sequential phases in the same project pipeline. If a post-processing check uses another CLI, it must be visible as a distinct supporting or orchestrator run and must not edit the same code concurrently with the main task execution run.
+
+First implementation order:
+
+1. Write the lifecycle-lane concept and state model, including virtual lane vs filesystem state tradeoffs.
+2. Add Orchestrator Intake after Human Ready, with duplicate, clarity, missing-context, and executable-shape checks.
+3. Add Orchestrator Post Processing after Task Execution, with explicit support for different CLI identity and typed findings.
+4. Add grouped and collapsible Kanban lanes with active counters and compact left-rail collapsed state.
+5. Add migration and compatibility tests so existing job folders keep rendering correctly.
+
+Queued at `agent-taskboard/2-ready/expanded-lifecycle-lanes-concept/`, `agent-taskboard/2-ready/ready-orchestrator-intake-lane/`, `agent-taskboard/2-ready/post-processing-orchestrator-lane/`, `agent-taskboard/2-ready/kanban-lane-grouping-collapse/`, and `agent-taskboard/2-ready/lifecycle-substate-migration-compatibility/`.
+
 ### Task Finding And Shape
 
 Make large boards easier to understand:
