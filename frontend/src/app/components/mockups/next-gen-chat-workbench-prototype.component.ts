@@ -1,7 +1,7 @@
 import { Component, computed, inject, signal } from '@angular/core';
 import { FeatureFlagsService } from '../../services/feature-flags.service';
 
-type WorkbenchPane = 'result' | 'git' | 'preview' | 'debug' | 'source' | 'chat';
+type WorkbenchPane = 'result' | 'git' | 'preview' | 'debug' | 'chat';
 type Density = 'comfortable' | 'compact';
 type Theme = 'light' | 'dark';
 type Scenario = 'review' | 'tools' | 'wait' | 'visual' | 'drift';
@@ -68,8 +68,8 @@ interface ChatTurn {
           <span>Next-gen task chat workbench prototype</span>
         </div>
         <nav class="topbar__nav detail-chrome__panes" aria-label="Workbench quick navigation" data-testid="prototype-topbar-nav">
-          <button [class.detail-chrome__pane--active]="pane() === 'result'"
-                  (click)="setPane('result')"
+          <button [class.detail-chrome__pane--active]="chatOpen()"
+                  (click)="toggleChat()"
                   data-testid="prototype-topbar-chat">
             <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
               @for (path of iconPath('chat'); track path) {
@@ -78,8 +78,8 @@ interface ChatTurn {
             </svg>
             <span>Task Chat</span>
           </button>
-          <button [class.detail-chrome__pane--active]="pane() === 'git'"
-                  (click)="setPane('git')"
+          <button [class.detail-chrome__pane--active]="contextOpen() && pane() === 'git'"
+                  (click)="togglePane('git')"
                   data-testid="prototype-topbar-git">
             <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
               @for (path of iconPath('git'); track path) {
@@ -187,9 +187,9 @@ interface ChatTurn {
             <span class="detail-chrome__state">2-ready</span>
             <nav class="detail-chrome__panes" aria-label="Existing task panes">
               @for (panel of detailPanels; track panel.label) {
-                <button [class.detail-chrome__pane--active]="panel.active"
+                <button [class.detail-chrome__pane--active]="panel.pane ? contextOpen() && pane() === panel.pane : panel.active"
                         [attr.title]="panel.title"
-                        (click)="panel.pane ? setPane(panel.pane) : null">
+                        (click)="panel.pane ? togglePane(panel.pane) : null">
                   <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
                     @for (path of iconPath(panel.icon); track path) {
                       <path [attr.d]="path"></path>
@@ -249,10 +249,10 @@ interface ChatTurn {
                 <b>Split</b>
                 @for (mode of paneButtons; track mode.id) {
                   <button class="rail-action"
-                          [class.icon-btn--active]="pane() === mode.id"
+                          [class.icon-btn--active]="mode.id === 'chat' ? chatOpen() : contextOpen() && pane() === mode.id"
                           [attr.title]="mode.label"
                           [attr.data-testid]="'prototype-pane-' + mode.id"
-                          (click)="setPane(mode.id)">
+                          (click)="togglePane(mode.id)">
                     <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
                       @for (path of iconPath(mode.icon); track path) {
                         <path [attr.d]="path"></path>
@@ -281,18 +281,30 @@ interface ChatTurn {
             </aside>
 
             <div class="workbench__main">
-            <div class="workbench__body" [class.workbench__body--chat-only]="pane() === 'chat'">
-              <section class="conversation" aria-label="Conversation">
+            <div class="workbench__body"
+                 [style.gridTemplateColumns]="workbenchColumns()"
+                 [attr.data-chat-open]="chatOpen()"
+                 [attr.data-context-open]="contextOpen()">
+              @if (chatOpen()) {
+              <section class="conversation" aria-label="Conversation" data-testid="prototype-conversation">
                 <div class="conversation__topline">
                   <span class="badge badge--ok">Task Chat</span>
                   <span>{{ scenarioText() }}</span>
-                  <button (click)="setPane('source')">
+                  <button (click)="setPane('git')">
                     <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
-                      @for (path of iconPath('code'); track path) {
+                      @for (path of iconPath('fileDiff'); track path) {
                         <path [attr.d]="path"></path>
                       }
                     </svg>
-                    Source map
+                    Changes
+                  </button>
+                  <button (click)="toggleChat()" data-testid="prototype-chat-close">
+                    <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      @for (path of iconPath('panelClose'); track path) {
+                        <path [attr.d]="path"></path>
+                      }
+                    </svg>
+                    Close chat
                   </button>
                   <button (click)="debugOpen.set(true)">
                     <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -391,7 +403,7 @@ interface ChatTurn {
                       <button (click)="setPane('git')">#git</button>
                       <button (click)="setPane('preview')">#screenshot</button>
                       <button (click)="setPane('debug')">#latest-run</button>
-                      <button (click)="setPane('source')">#source-map</button>
+                      <button (click)="setPane('git')">#change-source</button>
                     </div>
                   </div>
                   <div class="composer__quick" aria-label="Chat mode">
@@ -454,8 +466,9 @@ interface ChatTurn {
                   </div>
                 </div>
               </section>
+              }
 
-              @if (pane() !== 'chat') {
+              @if (contextOpen()) {
                 <aside class="context" aria-label="Workbench context pane" data-testid="prototype-context-pane">
                   <header class="context__head">
                     <div>
@@ -463,7 +476,29 @@ interface ChatTurn {
                       <span>{{ contextSubtitle() }}</span>
                     </div>
                     <div>
-                      <button class="icon-btn" (click)="setPane('chat')" title="Close pane" aria-label="Close pane">
+                      @if (chatOpen() && contextOpen()) {
+                        <label class="chip" style="display:inline-flex;align-items:center;gap:6px;min-height:26px">
+                          <span>{{ splitRatio() }}%</span>
+                          <input data-testid="prototype-split-slider"
+                                 type="range"
+                                 min="34"
+                                 max="72"
+                                 [value]="splitRatio()"
+                                 (input)="setSplitRatio($event)" />
+                        </label>
+                      }
+                      <button class="icon-btn"
+                              (click)="toggleChat()"
+                              [title]="chatOpen() ? 'Close chat' : 'Open chat'"
+                              [attr.aria-label]="chatOpen() ? 'Close chat' : 'Open chat'"
+                              data-testid="prototype-chat-toggle">
+                        <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                          @for (path of iconPath(chatOpen() ? 'panelClose' : 'panelOpen'); track path) {
+                            <path [attr.d]="path"></path>
+                          }
+                        </svg>
+                      </button>
+                      <button class="icon-btn" (click)="contextOpen.set(false)" title="Close pane" aria-label="Close pane" data-testid="prototype-context-close">
                         <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
                           @for (path of iconPath('close'); track path) {
                             <path [attr.d]="path"></path>
@@ -515,25 +550,35 @@ interface ChatTurn {
                     }
                     @case ('git') {
                       <section class="context__body">
-                        <div class="git-summary">
-                          <b>3 commits</b>
-                          <span>8 files · +624 -91 · no unreviewed conflict</span>
-                        </div>
-                        @for (file of gitFiles; track file.path) {
-                          <button class="file-row">
-                            <code>{{ file.path }}</code>
-                            <span>{{ file.delta }}</span>
-                          </button>
-                        }
-                        <article class="context-card">
-                          <h3>Review rule</h3>
-                          <p>This pane previews changes beside chat. The existing Files and Commits tabs remain the canonical deep review surfaces.</p>
-                        </article>
-                        <div class="git-actions">
-                          <button>Refresh</button>
-                          <button>Generate commit message</button>
-                          <button>Commit all</button>
-                          <button (click)="setPane('source')">Open source map</button>
+                        <div style="display:grid;grid-template-columns:minmax(190px,34%) minmax(0,1fr);gap:8px;min-height:100%">
+                          <div>
+                            <div class="git-summary">
+                              <b>3 commits</b>
+                              <span>8 files · +624 -91 · no unreviewed conflict</span>
+                            </div>
+                            @for (file of gitFiles; track file.path) {
+                              <button class="file-row"
+                                      [class.task-card--active]="activeGitFile() === file.path"
+                                      (click)="activeGitFile.set(file.path)">
+                                <code>{{ file.path }}</code>
+                                <span>{{ file.delta }}</span>
+                              </button>
+                            }
+                            <div class="git-actions">
+                              <button (click)="setSplitRatioValue(64)">Wider chat</button>
+                              <button (click)="setSplitRatioValue(42)">Wider editor</button>
+                              <button (click)="toggleChat()">{{ chatOpen() ? 'Hide chat' : 'Show chat' }}</button>
+                            </div>
+                          </div>
+                          <article class="source-card" data-testid="prototype-git-editor">
+                            <strong>Source editor / diff</strong>
+                            <span>{{ activeGitFile() }}</span>
+                            <code>{{ selectedGitFile().delta }} · staged preview</code>
+                            <pre style="white-space:pre-wrap;font:12px/1.45 ui-monospace,SFMono-Regular,Consolas,monospace;margin:10px 0 0;color:var(--text)">@@ next-gen chat workbench
++ Chat can be closed as an optional pane.
++ Git changes own the source editor and diff preview.
++ Split width is controlled by the workbench slider.</pre>
+                          </article>
                         </div>
                       </section>
                     }
@@ -568,17 +613,6 @@ interface ChatTurn {
                           <h3>Actor activity</h3>
                           <p>Agent 7 turns, Orchestrator 2 decisions, QA 1 report, Supervisor 1 wait advisory. Full causality opens in Verbose Debug.</p>
                         </article>
-                      </section>
-                    }
-                    @case ('source') {
-                      <section class="context__body">
-                        @for (source of sources; track source.name) {
-                          <article class="source-card">
-                            <strong>{{ source.name }}</strong>
-                            <span>{{ source.role }}</span>
-                            <code>{{ source.path }}</code>
-                          </article>
-                        }
                       </section>
                     }
                   }
@@ -2344,6 +2378,10 @@ export class NextGenChatWorkbenchPrototypeComponent {
   readonly markerOpen = signal(false);
   readonly statusPanel = signal<StatusPanel | null>(null);
   readonly activeActivity = signal<ActivityTarget>('projects');
+  readonly chatOpen = signal(true);
+  readonly contextOpen = signal(true);
+  readonly splitRatio = signal(54);
+  readonly activeGitFile = signal('frontend/src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts');
   readonly debugTab = signal<DebugTab>('overview');
   readonly composerMode = signal<ComposeMode>('continue');
 
@@ -2400,7 +2438,7 @@ export class NextGenChatWorkbenchPrototypeComponent {
   ];
 
   readonly detailPanels: Array<{ icon: string; label: string; title: string; pane?: WorkbenchPane; active?: boolean }> = [
-    { icon: 'file', label: 'Task', title: 'Prompt and task history', pane: 'source' },
+    { icon: 'file', label: 'Task', title: 'Prompt and task history', pane: 'result' },
     { icon: 'chat', label: 'Chat', title: 'Next generation chat tab', pane: 'result', active: true },
     { icon: 'git', label: 'Git', title: 'Git pane beside the conversation', pane: 'git' },
     { icon: 'image', label: 'Shots', title: 'Screenshot evidence', pane: 'preview' },
@@ -2408,12 +2446,11 @@ export class NextGenChatWorkbenchPrototypeComponent {
   ];
 
   readonly paneButtons: Array<{ id: WorkbenchPane; label: string; short: string; icon: string }> = [
-    { id: 'chat', label: 'Chat only', short: 'Chat', icon: 'chat' },
+    { id: 'chat', label: 'Toggle chat pane', short: 'Chat', icon: 'chat' },
     { id: 'result', label: 'Result summary', short: 'Result', icon: 'check' },
     { id: 'git', label: 'Git changes', short: 'Git', icon: 'git' },
     { id: 'preview', label: 'Screenshot preview', short: 'Preview', icon: 'image' },
     { id: 'debug', label: 'Debug summary', short: 'Debug', icon: 'bug' },
-    { id: 'source', label: 'Source map', short: 'Source', icon: 'code' },
   ];
 
   readonly scenarios: Array<{ id: Scenario; label: string; icon: string }> = [
@@ -2469,7 +2506,7 @@ export class NextGenChatWorkbenchPrototypeComponent {
   ];
 
   readonly featureParity: Array<{ label: string; icon: string; note: string; pane?: WorkbenchPane }> = [
-    { label: 'Prompt history', icon: 'file', note: 'Original prompt plus task extensions remain visible.', pane: 'source' },
+    { label: 'Prompt history', icon: 'file', note: 'Original prompt plus task extensions remain visible.', pane: 'result' },
     { label: 'Activity and Trace', icon: 'terminal', note: 'Raw CLI output stays available through the debug lens.', pane: 'debug' },
     { label: 'Run timeline', icon: 'clock', note: 'Run cards become thin chat markers with popover metadata.', pane: 'debug' },
     { label: 'Git review', icon: 'git', note: 'Files, commits, diff, commit message, and commit action remain accessible.', pane: 'git' },
@@ -2544,14 +2581,6 @@ export class NextGenChatWorkbenchPrototypeComponent {
     { name: 'Images', value: '4 files', percent: 52 },
   ];
 
-  readonly sources = [
-    { name: 'Existing Activity parser', role: 'Raw log to events', path: 'frontend/src/app/components/activity-log.parser.ts' },
-    { name: 'Protocol pane host', role: 'Current task Activity and composer', path: 'frontend/src/app/components/job-detail/protocol-pane/' },
-    { name: 'Git pane', role: 'Canonical file and commit review', path: 'frontend/src/app/components/job-detail/git-pane/' },
-    { name: 'Side sheet', role: 'Project-level steering', path: 'frontend/src/app/components/orchestrator-side-sheet/' },
-    { name: 'Token surfaces', role: 'Quota and cost context', path: 'frontend/src/app/components/workspace-token-timeline.ts' },
-  ];
-
   readonly visibleTurns = computed(() => {
     const scenario = this.activeScenario();
     if (scenario === 'tools') return this.turns;
@@ -2586,7 +2615,7 @@ export class NextGenChatWorkbenchPrototypeComponent {
           title: 'Schema drift warning',
           meta: 'recoverable',
           body: 'The structured report did not match the JSON contract. The row stays human-readable by default and exposes raw Markdown in Trace.',
-          actions: ['Source map'],
+          actions: ['Open changes'],
         } satisfies ChatTurn,
       ];
     }
@@ -2614,7 +2643,6 @@ export class NextGenChatWorkbenchPrototypeComponent {
       case 'git': return 'Conversation plus Git changes, without leaving the task.';
       case 'preview': return 'Conversation plus screenshot evidence.';
       case 'debug': return 'Conversation plus token and actor summary.';
-      case 'source': return 'Conversation plus implementation source map.';
       default: return 'Conversation plus human-readable result summary.';
     }
   });
@@ -2624,7 +2652,6 @@ export class NextGenChatWorkbenchPrototypeComponent {
       case 'git': return 'Git changes';
       case 'preview': return 'Screenshot preview';
       case 'debug': return 'Debug summary';
-      case 'source': return 'Source map';
       default: return 'Result summary';
     }
   });
@@ -2634,10 +2661,20 @@ export class NextGenChatWorkbenchPrototypeComponent {
       case 'git': return 'Changed files and commits beside chat';
       case 'preview': return 'Durable visual evidence and lightbox';
       case 'debug': return 'Tokens, actors, waits, and raw links';
-      case 'source': return 'Where this becomes real Angular code';
       default: return 'Human-readable outcome and risk signals';
     }
   });
+
+  readonly workbenchColumns = computed(() => {
+    if (this.chatOpen() && this.contextOpen()) {
+      return `minmax(320px, ${this.splitRatio()}fr) minmax(260px, ${100 - this.splitRatio()}fr)`;
+    }
+    return 'minmax(0, 1fr)';
+  });
+
+  readonly selectedGitFile = computed(() =>
+    this.gitFiles.find((file) => file.path === this.activeGitFile()) ?? this.gitFiles[0]
+  );
 
   readonly composerModeLabel = computed(() => {
     switch (this.composerMode()) {
@@ -2649,7 +2686,41 @@ export class NextGenChatWorkbenchPrototypeComponent {
   });
 
   setPane(pane: WorkbenchPane): void {
+    if (pane === 'chat') {
+      this.chatOpen.set(true);
+      this.contextOpen.set(false);
+      return;
+    }
     this.pane.set(pane);
+    this.contextOpen.set(true);
+  }
+
+  togglePane(pane: WorkbenchPane): void {
+    if (pane === 'chat') {
+      this.toggleChat();
+      return;
+    }
+    if (this.contextOpen() && this.pane() === pane) {
+      this.contextOpen.set(false);
+      return;
+    }
+    this.setPane(pane);
+  }
+
+  toggleChat(): void {
+    if (this.chatOpen() && !this.contextOpen()) {
+      this.contextOpen.set(true);
+    }
+    this.chatOpen.set(!this.chatOpen());
+  }
+
+  setSplitRatio(event: Event): void {
+    const value = Number((event.target as HTMLInputElement).value);
+    this.setSplitRatioValue(value);
+  }
+
+  setSplitRatioValue(value: number): void {
+    this.splitRatio.set(Math.max(34, Math.min(72, Math.round(value))));
   }
 
   handleActivity(target: ActivityTarget): void {
@@ -2688,7 +2759,7 @@ export class NextGenChatWorkbenchPrototypeComponent {
     if (action === 'Open Verbose Debug' || action === 'Debug pane') this.debugOpen.set(true);
     if (action === 'Git split') this.setPane('git');
     if (action === 'Open screenshots') this.setPane('preview');
-    if (action === 'Source map') this.setPane('source');
+    if (action === 'Open changes') this.setPane('git');
     if (action === 'Show technical layer') this.toolOpen.set(true);
   }
 
