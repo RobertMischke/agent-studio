@@ -118,6 +118,61 @@ public class JobStateMachine
         return ordered.FindIndex(j => j.Id == jobId) + 1;
     }
 
+    /// <summary>
+    /// Archive a job folder by absolute source path under <c>6-archive/</c>
+    /// with a new folder slug. Used by the boot-time stale-progress sweep
+    /// (ADR-0020 follow-up): a folder that has been wedged in <c>3-progress</c>
+    /// past the resume window with no completion sentinel is archived as
+    /// <c>6-archive/&lt;original-slug&gt;-orphan-&lt;utc-date&gt;/</c> (or
+    /// <c>-empty-&lt;utc-date&gt;</c> when the folder lacks both a job.json
+    /// and a cli-output.log) so the lane visibly returns to one job per project.
+    /// </summary>
+    /// <remarks>
+    /// Takes a folder path rather than a jobId because empty stale folders have
+    /// no job.json and therefore are not visible to <see cref="JobScannerService"/>.
+    /// Still routes the move + state-field update through this state machine so
+    /// callers never write to the state folders directly.
+    /// </remarks>
+    public MoveJobOutcome ArchiveFolder(string sourceFolder, string newSlug)
+    {
+        if (string.IsNullOrWhiteSpace(newSlug))
+            return new MoveJobOutcome(MoveJobStatus.Failure, "Archive slug must not be empty");
+        if (!Directory.Exists(sourceFolder))
+            return new MoveJobOutcome(MoveJobStatus.NotFound);
+
+        var stateDir = Path.GetDirectoryName(sourceFolder);
+        var watchPath = stateDir != null ? Path.GetDirectoryName(stateDir) : null;
+        if (string.IsNullOrEmpty(watchPath))
+            return new MoveJobOutcome(MoveJobStatus.Failure, "Source folder is not under a state directory");
+
+        var targetDir = Path.Combine(watchPath, JobStates.Archive, newSlug);
+        if (Directory.Exists(targetDir))
+        {
+            _logger.LogWarning(
+                "Cannot archive {Source} as {Slug}: target folder already exists at {Target}",
+                sourceFolder, newSlug, targetDir);
+            return new MoveJobOutcome(
+                MoveJobStatus.TargetFolderExists,
+                $"A folder named '{newSlug}' already exists in {JobStates.Archive}.");
+        }
+
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(targetDir)!);
+            Directory.Move(sourceFolder, targetDir);
+            if (File.Exists(Path.Combine(targetDir, "job.json")))
+            {
+                JobJsonFile.UpdateField(targetDir, "state", JobStates.Archive, _logger);
+            }
+            return new MoveJobOutcome(MoveJobStatus.Success);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to archive {Source} as {Slug}", sourceFolder, newSlug);
+            return new MoveJobOutcome(MoveJobStatus.Failure, ex.Message);
+        }
+    }
+
     public bool DeleteJob(string jobId, string? watchPath = null)
     {
         var info = _scanner.FindJob(jobId, watchPath);
