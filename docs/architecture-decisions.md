@@ -465,3 +465,24 @@ The reference clones at `c:/Projects/agent-taskboard-devspace/cli-source-referen
 **Implementation pointers.** [`backend/Services/Runner/CrashRecoveryService.cs`](../backend/Services/Runner/CrashRecoveryService.cs) (boot scan, two-phase recovery, JSONL audit); [`backend/Services/Runner/CompletionMarker.cs`](../backend/Services/Runner/CompletionMarker.cs) (marker schema and lifecycle helpers); [`backend/Services/Runner/ProjectRunner.cs`](../backend/Services/Runner/ProjectRunner.cs) `OnCliFinishedAsync` (writes marker before `_transitions.MoveAsync`, bumps `lastProgressAt` on flush); [`backend/Services/Jobs/JobMutationService.cs`](../backend/Services/Jobs/JobMutationService.cs) `SetJobLastProgressAt`; [`backend/Services/GitService.cs`](../backend/Services/GitService.cs) `CrashRecoveryCommit` / `RepoHasUncommittedChanges` / `ResolveRepoRootForProject`; [`backend/Program.cs`](../backend/Program.cs) (sync boot call before `TaskRunnerService` starts, with crash-recorder fallback); locked by [`backend.Tests/CrashRecoveryServiceTests.cs`](../backend.Tests/CrashRecoveryServiceTests.cs).
 
 **Status.** Accepted.
+
+---
+
+## ADR-0021 - Stable does not restart itself; an external watcher does it at quiet boundaries (2026-05-05)
+
+**Decision.** The stable instance never stops or restarts itself. A separate, sh-only watcher running outside the stable process polls for batch boundaries and, when stable is idle and at least N (default 3) new jobs have arrived in `4-review` since the last restart, delegates to the existing `update-stable.sh` in the parent devspace folder. The watcher lives at [`scripts/supervisor/restart-stable-after-batch.sh`](../scripts/supervisor/restart-stable-after-batch.sh) and its loop wrapper [`scripts/supervisor/run-stable-restart-watcher.sh`](../scripts/supervisor/run-stable-restart-watcher.sh).
+
+**Context.** Stable serves the very source the orchestrated tasks edit. Two silent crashes traced back to a job touching `agent-taskboard-stable/` while stable was running it; ADR-0020 added recovery doctrine but did not address the *trigger* that produced the inconsistency. The user's framing was that stable runs "until the end of all days" through the queue and an external loop is responsible for stopping it, pulling new source, and starting it again at quiet boundaries. Putting that loop inside stable would re-create the original failure mode.
+
+**Non-goals.**
+- A daemon or hosted service. The watcher is a sh while-true wrapper, started by the user or a host scheduler. Same convention as Layer 3 system review.
+- A second authority over job state. The watcher only reads `<workspace>/projects/<project>/4-review/` directory listings and `GET /api/runner/status`. It never mutates `job.json`, never calls a state-changing endpoint.
+- A bypass for the existing update preflight. The watcher always invokes `update-stable.sh`, which gates on a clean worktree and a fast-forward pull. Direct `git pull` from the watcher is forbidden.
+- Auto-push. Push remains the user's gate (AGENTS.md "Stable update policy"); the watcher only pulls.
+- Restarts driven from inside stable. Any future "I should restart now" signal stable wants to emit goes through this external watcher, not through a self-call.
+
+**Reasoning style.** The runtime that edits its own source must not also be the runtime that decides when to swap that source. Treat the swap boundary as an external concern — the same pattern as supervised processes elsewhere — and pick the boundary by observing both the workload (jobs settling into `4-review`) and the runner's idleness (`activeJobId == null`). When in doubt, skip the tick: a missed restart costs nothing, a mid-job restart costs work.
+
+**Implementation pointers.** [`scripts/supervisor/restart-stable-after-batch.sh`](../scripts/supervisor/restart-stable-after-batch.sh) (single-tick decision logic, JSONL audit at `<workspace>/logs/stable-restarts.jsonl`, snapshot state at `<workspace>/logs/stable-restart-watcher/snapshot.txt`); [`scripts/supervisor/run-stable-restart-watcher.sh`](../scripts/supervisor/run-stable-restart-watcher.sh) (sleep-tick wrapper, default 60 s); [`update-stable.sh`](../../update-stable.sh) (the existing preflight + stop + pull + start chain the watcher reuses unchanged); [`scripts/supervisor/README.md`](../scripts/supervisor/README.md) (operator docs alongside `run-system-review.sh`).
+
+**Status.** Accepted.
