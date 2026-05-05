@@ -184,6 +184,130 @@ public static class DriftReportEndpoints
         });
 
         // -----------------------------------------------------------------
+        // Docs / Marketing Drift action.
+        // GET /prompt returns the assembled prompt + scope summary so an
+        // operator (or future inline runner) can hand the prompt to a CLI
+        // agent. POST runs the action: without `agentResponse` it produces
+        // an Unstructured "evidence + prompt" report; with `agentResponse`
+        // it parses the agent's reply and produces the typed verdict.
+        //
+        // Marketing repository path is never hardcoded: it is read from
+        // configuration (`Drift:MarketingRepoPath`). When the path is
+        // missing, the scope records "not configured" and the prompt
+        // renders the absence explicitly so the agent does not invent
+        // marketing findings.
+        // -----------------------------------------------------------------
+
+        group.MapGet("/{project}/actions/docs-marketing-drift/prompt", (
+            string project,
+            IConfiguration config,
+            DriftReportStore driftStore,
+            AnalysisReportStore analysisStore,
+            RuntimePromptService prompts,
+            DocsMarketingDriftAnalysisService action) =>
+        {
+            if (string.IsNullOrWhiteSpace(project))
+                return Results.BadRequest(new { error = "project required" });
+            var workspace = config["TaskRepository"];
+            if (string.IsNullOrWhiteSpace(workspace))
+                return Results.BadRequest(new { error = "TaskRepository not configured" });
+
+            var projectRoot = Path.Combine(workspace!, "projects", project);
+            if (!Directory.Exists(projectRoot))
+                return Results.NotFound(new { error = $"project root not found: {projectRoot}" });
+
+            var repoRoot = ResolveRepoRoot();
+            var marketingRepo = config["Drift:MarketingRepoPath"];
+            var scope = action.SelectScope(project, projectRoot, repoRoot, marketingRepo, driftStore, analysisStore, workspace);
+            var template = prompts.Render(
+                "docs-marketing-drift.md",
+                new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase));
+            var renderedPrompt = action.BuildPrompt(scope, template);
+            return Results.Ok(new DocsMarketingDriftPromptResponse(
+                Project: project,
+                CapturedAt: scope.CapturedAt,
+                CanonicalDocs: scope.CanonicalDocs.Select(d => d.Path).ToArray(),
+                MockupDocs: scope.MockupDocs.Select(d => d.Path).ToArray(),
+                QueueJobs: scope.QueueJobs.Select(t => $"{t.Lane}/{t.JobId}").ToArray(),
+                RecentCompleted: scope.RecentCompleted.Select(t => $"{t.Lane}/{t.JobId}").ToArray(),
+                MarketingConfigured: scope.Marketing.Configured,
+                MarketingExists: scope.Marketing.Exists,
+                MarketingRoot: scope.Marketing.Root,
+                MarketingDocs: scope.Marketing.Docs.Select(d => d.Path).ToArray(),
+                RecentDriftReports: scope.RecentDriftReports.Select(r => r.ReportId).ToArray(),
+                RecentAnalysisReports: scope.RecentAnalysisReports.Select(r => r.ReportId).ToArray(),
+                Prompt: renderedPrompt));
+        });
+
+        group.MapPost("/{project}/actions/docs-marketing-drift", async (
+            string project,
+            DocsMarketingDriftRunRequest? body,
+            IConfiguration config,
+            DriftReportStore driftStore,
+            AnalysisReportStore analysisStore,
+            RuntimePromptService prompts,
+            DocsMarketingDriftAnalysisService action,
+            CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(project))
+                return Results.BadRequest(new { error = "project required" });
+            var workspace = config["TaskRepository"];
+            if (string.IsNullOrWhiteSpace(workspace))
+                return Results.BadRequest(new { error = "TaskRepository not configured" });
+
+            var projectRoot = Path.Combine(workspace!, "projects", project);
+            if (!Directory.Exists(projectRoot))
+                return Results.NotFound(new { error = $"project root not found: {projectRoot}" });
+
+            var repoRoot = ResolveRepoRoot();
+            var marketingRepo = config["Drift:MarketingRepoPath"];
+            var scope = action.SelectScope(project, projectRoot, repoRoot, marketingRepo, driftStore, analysisStore, workspace);
+            var template = prompts.Render(
+                "docs-marketing-drift.md",
+                new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase));
+            var renderedPrompt = action.BuildPrompt(scope, template);
+
+            var agentResponse = body?.AgentResponse;
+            string markdown;
+            DocsMarketingDriftParseResult parse;
+            if (string.IsNullOrWhiteSpace(agentResponse))
+            {
+                parse = new DocsMarketingDriftParseResult(
+                    Status: DocsMarketingDriftParseStatus.Unstructured,
+                    ScoreBand: DriftScoreBand.Unknown,
+                    OverallScore: 0,
+                    Summary: "Evidence assembled; no agent narrative supplied. Run the embedded prompt against a CLI agent to produce the verdict.",
+                    Dimensions: null,
+                    FollowUps: new[]
+                    {
+                        new DriftFollowUpSuggestion(
+                            Title: "Run Docs / Marketing Drift against a CLI agent",
+                            Summary: "Hand the embedded prompt to Claude / Codex / Copilot / Gemini and POST the reply back to /api/drift/{project}/actions/docs-marketing-drift to produce the structured verdict.",
+                            Priority: DriftFollowUpPriority.Normal,
+                            RelatedDimension: DriftDimensionType.Documentation),
+                    },
+                    ParseError: null);
+                markdown = BuildDocsMarketingEvidenceOnlyMarkdown(scope, renderedPrompt);
+            }
+            else
+            {
+                parse = action.TryParseAgentResponse(agentResponse);
+                markdown = agentResponse;
+            }
+
+            var reportId = "01" + DateTime.UtcNow.ToString("yyyyMMddHHmmssfff") + Guid.NewGuid().ToString("N").Substring(0, 8);
+            var report = action.BuildReport(
+                scope: scope,
+                parse: parse,
+                reportId: reportId,
+                createdAt: DateTime.UtcNow,
+                trigger: DriftReportTrigger.Manual);
+
+            await driftStore.AppendAsync(workspace!, project, report, markdown, ct).ConfigureAwait(false);
+            return Results.Ok(new DriftReportDetailResponse(report, markdown));
+        });
+
+        // -----------------------------------------------------------------
         // Architecture marble surface.
         //
         // The Drift project view renders an architecture map (max ten
@@ -279,6 +403,40 @@ public static class DriftReportEndpoints
         return Directory.GetCurrentDirectory();
     }
 
+    private static string BuildDocsMarketingEvidenceOnlyMarkdown(
+        DocsMarketingDriftScope scope,
+        string renderedPrompt)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("# Docs / Marketing Drift - evidence only");
+        sb.AppendLine();
+        sb.Append("**Verdict:** evidence assembled at ")
+            .Append(scope.CapturedAt.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ"))
+            .AppendLine("; no agent narrative supplied. Run the embedded prompt against a CLI agent and POST the reply back to produce the structured verdict.");
+        sb.AppendLine();
+        sb.Append("**Project:** `").Append(scope.Project).AppendLine("`");
+        sb.AppendLine();
+        sb.AppendLine("## Snapshot");
+        sb.AppendLine();
+        sb.Append("- Canonical project docs found: ").Append(scope.CanonicalDocs.Count).AppendLine();
+        sb.Append("- Mockup folders: ").Append(scope.MockupDocs.Count).AppendLine();
+        sb.Append("- Queued jobs (active lanes): ").Append(scope.QueueJobs.Count).AppendLine();
+        sb.Append("- Recent completed evidence entries: ").Append(scope.RecentCompleted.Count).AppendLine();
+        sb.Append("- Marketing repository: ");
+        if (!scope.Marketing.Configured) sb.AppendLine("not configured");
+        else if (!scope.Marketing.Exists) sb.AppendLine($"configured but missing on disk (`{scope.Marketing.Root}`)");
+        else sb.AppendLine($"available at `{scope.Marketing.Root}` ({scope.Marketing.Docs.Count} docs)");
+        sb.AppendLine();
+        sb.AppendLine("## Embedded prompt");
+        sb.AppendLine();
+        sb.AppendLine("Copy the block below into a Claude / Codex / Copilot / Gemini session, then POST the reply back to `/api/drift/{project}/actions/docs-marketing-drift` with `agentResponse` set to produce the structured verdict.");
+        sb.AppendLine();
+        sb.AppendLine("```markdown");
+        sb.AppendLine(renderedPrompt);
+        sb.AppendLine("```");
+        return sb.ToString();
+    }
+
     private static string BuildEvidenceOnlyMarkdown(
         AdrCodeDriftScope scope,
         string renderedPrompt)
@@ -344,6 +502,32 @@ public sealed record DriftArchitectureSurfaceResponse(
 
 /// <summary>Body for setting an architecture element's tracking-state override.</summary>
 public sealed record ElementStatusRequest(string Status, string? Note);
+
+/// <summary>
+/// Body for <c>POST /api/drift/{project}/actions/docs-marketing-drift</c>.
+/// Same envelope as the ADR / Code Drift action: an empty
+/// <see cref="AgentResponse"/> emits an Unstructured "evidence only" report
+/// carrying the rendered prompt; a populated value parses the agent's reply
+/// and emits the typed verdict.
+/// </summary>
+public sealed record DocsMarketingDriftRunRequest(string? AgentResponse);
+
+/// <summary>Response for
+/// <c>GET /api/drift/{project}/actions/docs-marketing-drift/prompt</c>.</summary>
+public sealed record DocsMarketingDriftPromptResponse(
+    string Project,
+    DateTime CapturedAt,
+    IReadOnlyList<string> CanonicalDocs,
+    IReadOnlyList<string> MockupDocs,
+    IReadOnlyList<string> QueueJobs,
+    IReadOnlyList<string> RecentCompleted,
+    bool MarketingConfigured,
+    bool MarketingExists,
+    string? MarketingRoot,
+    IReadOnlyList<string> MarketingDocs,
+    IReadOnlyList<string> RecentDriftReports,
+    IReadOnlyList<string> RecentAnalysisReports,
+    string Prompt);
 
 public sealed record AdrCodeDriftPromptResponse(
     string Project,

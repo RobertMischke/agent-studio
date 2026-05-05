@@ -8,7 +8,7 @@ type Scenario = 'review' | 'tools' | 'wait' | 'visual' | 'drift' | 'decisions';
 type DebugTab = 'overview' | 'actors' | 'tools' | 'tokens' | 'trace';
 type ComposeMode = 'continue' | 'extend' | 'steer' | 'followup';
 type ActivityTarget = 'projects' | 'tasks' | 'search' | 'git' | 'qa' | 'tokens';
-type StatusPanel = 'health' | 'queue' | 'tokens' | 'evidence' | 'model';
+type StatusPanel = 'health' | 'queue' | 'tokens' | 'evidence' | 'model' | 'session' | 'projects';
 type ActorKind = 'user' | 'agent' | 'orchestrator' | 'supervisor' | 'support' | 'tool' | 'system';
 type InterventionTarget = 'currentRun' | 'nextRun' | 'orchestrator' | 'followUp';
 type DecisionKind = 'reissue' | 'heuristic' | 'needsInput' | 'circuit' | 'captureFail' | 'drift';
@@ -101,6 +101,22 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
           <strong>Agent Task Processor</strong>
           <span>Task workbench</span>
         </div>
+        <div class="topbar__projects" aria-label="Project filter" data-testid="prototype-project-switcher">
+          @for (project of projectTabs; track project.name) {
+            <button class="project-chip"
+                    [class.project-chip--active]="project.active"
+                    [style.--project-color]="project.color"
+                    [style.--project-soft]="project.soft"
+                    [style.--project-border]="project.border"
+                    [style.--project-on]="project.on"
+                    [attr.title]="project.tooltip"
+                    (click)="toggleStatusPanel('projects')">
+              <span class="project-chip__disk">{{ project.initial }}</span>
+              <span class="project-chip__name">{{ project.name }}</span>
+              <span class="project-chip__auto">{{ project.auto }}</span>
+            </button>
+          }
+        </div>
         <div class="topbar__runline" aria-label="Current run summary" data-testid="prototype-topbar-runline">
           <span>Run 4</span>
           <span>12m</span>
@@ -109,6 +125,18 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
           <span>3 commits</span>
         </div>
         <div class="topbar__actions">
+          <button class="owner-switch"
+                  title="Owner filter: Robin"
+                  aria-label="Owner filter Robin"
+                  data-testid="prototype-owner-switch"
+                  (click)="toggleStatusPanel('projects')">
+            <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+              @for (path of iconPath('user'); track path) {
+                <path [attr.d]="path"></path>
+              }
+            </svg>
+            <span>Robin</span>
+          </button>
           <button class="icon-btn"
                   [class.icon-btn--active]="sideSheetOpen()"
                   title="Toggle project sheet"
@@ -785,7 +813,7 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
 
       @if (statusPanel()) {
         <section class="status-popover modal__panel"
-                 style="position:fixed;left:58px;right:10px;bottom:26px;z-index:19;width:auto;max-height:280px;display:grid;grid-template-columns:220px minmax(0,1fr) minmax(180px,.45fr);gap:10px;padding:10px;border-radius:8px 8px 0 0;"
+                 style="position:fixed;left:58px;right:10px;bottom:32px;z-index:19;width:auto;max-height:340px;display:grid;grid-template-columns:220px minmax(0,1fr) minmax(180px,.45fr);gap:10px;padding:10px;border-radius:8px 8px 0 0;"
                  [attr.data-panel]="statusPanel()"
                  data-testid="prototype-status-popover">
           <header style="display:grid;gap:6px;align-content:start;border-right:1px solid var(--line)">
@@ -807,12 +835,24 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
                 </div>
               </article>
               <article>
-                <h3>Drill-down path</h3>
-                <p>Job tokens, supporting-agent tokens, and orchestrator tokens stay visible in the bar. Clicking opens run-level heat and the Verbose Debug token tab.</p>
+                <h3>Usage hover contract</h3>
+                <p>Status bar usage keeps quota, token totals, refresh, timeline, and per-project/model drill-down in one compact hover surface.</p>
                 <div class="function-grid">
+                  <button>Refresh all CLIs</button>
+                  <button>Open token timeline</button>
                   <button (click)="debugTab.set('tokens'); debugOpen.set(true)">Open token debug</button>
                   <button (click)="setPane('debug')">Pin token pane</button>
-                  <button>Export token report</button>
+                </div>
+              </article>
+              <article>
+                <h3>Quota strip</h3>
+                <div class="usage-pop-grid">
+                  @for (item of usageStrip; track item.label) {
+                    <div [attr.data-tone]="item.tone">
+                      <b>{{ item.value }}</b>
+                      <span>{{ item.label }}</span>
+                    </div>
+                  }
                 </div>
               </article>
             }
@@ -870,6 +910,52 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
                 <span>Result split, light theme, 1440 x 900</span>
               </article>
             }
+            @case ('session') {
+              <article>
+                <h3>Session continuity</h3>
+                <div class="metric-grid">
+                  <div><b>3</b><span>session chain</span></div>
+                  <div><b>0</b><span>recoveries</span></div>
+                  <div><b>run 4</b><span>active segment</span></div>
+                  <div><b>ok</b><span>capture state</span></div>
+                </div>
+              </article>
+              <article>
+                <h3>Why it matters</h3>
+                <p>The next version must show whether a continuation reused the vendor session, rebuilt context from disk, or lost capture. That state belongs in the status bar and verbose debug.</p>
+                <div class="function-grid">
+                  <button (click)="markerOpen.set(true)">Open run marker</button>
+                  <button (click)="debugTab.set('overview'); debugOpen.set(true)">Open session debug</button>
+                </div>
+              </article>
+            }
+            @case ('projects') {
+              <article>
+                <h3>Project filter and owner</h3>
+                <div class="project-pop-list">
+                  @for (project of projectTabs; track project.name) {
+                    <button [class.project-pop-list__active]="project.active"
+                            [style.--project-color]="project.color"
+                            [style.--project-soft]="project.soft"
+                            [style.--project-border]="project.border">
+                      <span>{{ project.initial }}</span>
+                      <b>{{ project.name }}</b>
+                      <em>{{ project.auto }}</em>
+                    </button>
+                  }
+                </div>
+              </article>
+              <article>
+                <h3>Owner switch</h3>
+                <p>The header keeps owner filtering first-class. Found-next should preserve the fast switch for Robin, Orchestrator, QA, and Unassigned without pushing task content down.</p>
+                <div class="function-grid">
+                  <button class="function-grid__active">Robin</button>
+                  <button>Orchestrator</button>
+                  <button>QA</button>
+                  <button>Unassigned</button>
+                </div>
+              </article>
+            }
             @case ('model') {
               <article>
                 <h3>CLI and model</h3>
@@ -896,42 +982,78 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
 
       <footer class="statusbar" data-testid="prototype-statusbar">
         <div class="statusbar__group">
-          <button (click)="toggleStatusPanel('health')" data-testid="prototype-status-health">
-            <span style="width:7px;height:7px;border-radius:999px;background:#90ee90"></span>
+          <button class="statusbar__item statusbar__item--readonly" (click)="toggleStatusPanel('health')" data-testid="prototype-status-health">
+            <span class="statusbar__dot statusbar__dot--live"></span>
             <span>2 running</span>
           </button>
-          <button (click)="toggleStatusPanel('queue')" data-testid="prototype-status-queue">
-            <span>4/6 auto</span>
+          <button class="statusbar__item statusbar__item--readonly" (click)="toggleStatusPanel('queue')" data-testid="prototype-status-queue">
+            <span class="statusbar__icon-text">auto</span>
+            <span>4/6</span>
           </button>
-          <button (click)="setPane('result')">
-            <span>main</span>
+          <button class="statusbar__item" (click)="toggleStatusPanel('session')" data-testid="prototype-status-session">
+            <span class="statusbar__icon-text">session</span>
+            <span>preserved chain 3</span>
           </button>
         </div>
-        <div class="statusbar__group statusbar__group--center">
-          <button (click)="toggleStatusPanel('tokens')" data-testid="prototype-status-token">
-            <span>42k tokens</span>
+        <div class="statusbar__group statusbar__group--center statusbar__usage">
+          @for (item of usageStrip; track item.label) {
+            <button class="usage-pill"
+                    [attr.data-tone]="item.tone"
+                    [attr.title]="item.detail"
+                    (click)="toggleStatusPanel('tokens')"
+                    [attr.data-testid]="item.testId">
+              <span>{{ item.label }}</span>
+              <b>{{ item.value }}</b>
+            </button>
+          }
+          <button class="usage-pill usage-pill--tokens" (click)="toggleStatusPanel('tokens')" data-testid="prototype-status-token">
+            <span>Tokens</span>
+            <b>42k</b>
           </button>
-          <button (click)="setPane('git')" data-testid="prototype-status-git">
-            <span>3 commits</span>
+          <button class="usage-pill" (click)="setPane('git')" data-testid="prototype-status-git">
+            <span>Git</span>
+            <b>3 commits</b>
           </button>
-          <button (click)="toggleStatusPanel('evidence')" data-testid="prototype-status-evidence">
-            <span>4 screenshots</span>
+          <button class="usage-pill" (click)="toggleStatusPanel('evidence')" data-testid="prototype-status-evidence">
+            <span>Visual</span>
+            <b>4 shots</b>
           </button>
-          <button (click)="setPane('debug')">
-            <span>28 tools</span>
+          <button class="usage-pill" (click)="setPane('debug')">
+            <span>Tools</span>
+            <b>28</b>
           </button>
         </div>
         <div class="statusbar__group statusbar__group--right">
-          <button (click)="toggleStatusPanel('model')" data-testid="prototype-status-model">
-            <span>Codex · 5.5 Extra High</span>
+          <button class="statusbar__item" (click)="toggleStatusPanel('tokens')">
+            <span>Usage</span>
           </button>
-          <button (click)="toggleDensity()">
+          <button class="statusbar__item" (click)="sideSheetOpen.set(true)">
+            <span>Orchestrator</span>
+          </button>
+          <button class="statusbar__item" (click)="debugTab.set('trace'); debugOpen.set(true)">
+            <span>Feed</span>
+          </button>
+          <button class="statusbar__item" (click)="toggleStatusPanel('evidence')">
+            <span>Visual evidence</span>
+          </button>
+          <span class="statusbar__sep"></span>
+          <button class="statusbar__item statusbar__picker" (click)="toggleStatusPanel('model')" data-testid="prototype-status-model">
+            <span>Default CLI</span>
+            <b>Codex</b>
+            <span class="statusbar__caret">v</span>
+          </button>
+          <button class="statusbar__item statusbar__picker" (click)="toggleStatusPanel('model')">
+            <span>Model</span>
+            <b>5.5 Extra High</b>
+            <span class="statusbar__caret">v</span>
+          </button>
+          <button class="statusbar__item" (click)="toggleDensity()">
             <span>{{ density() }}</span>
           </button>
-          <button (click)="toggleTheme()">
+          <button class="statusbar__item" (click)="toggleTheme()">
             <span>{{ theme() }}</span>
           </button>
-          <button (click)="commandOpen.set(true)">
+          <button class="statusbar__item" (click)="commandOpen.set(true)">
             <span>Command</span>
           </button>
         </div>
@@ -1237,7 +1359,7 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
       height: 100vh;
       display: grid;
       grid-template-columns: 48px minmax(0, 1fr);
-      grid-template-rows: 32px minmax(0, 1fr) 22px;
+      grid-template-rows: 34px minmax(0, 1fr) 28px;
       color: var(--text);
       background: var(--bg);
       overflow: hidden;
@@ -1372,10 +1494,10 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
     .topbar {
       grid-column: 2;
       display: grid;
-      grid-template-columns: minmax(160px, 1fr) auto auto;
+      grid-template-columns: minmax(148px, auto) minmax(320px, 1fr) auto auto;
       align-items: center;
-      gap: 10px;
-      padding: 0 10px 0 12px;
+      gap: 8px;
+      padding: 0 8px 0 10px;
       background: var(--chrome);
       border-bottom: 1px solid var(--line);
     }
@@ -1392,6 +1514,62 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
     }
 
     .topbar__title span { color: var(--muted); }
+
+    .topbar__projects {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      overflow: hidden;
+    }
+
+    .project-chip {
+      min-width: 0;
+      max-width: 176px;
+      min-height: 24px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      border: 1px solid var(--project-border, var(--line));
+      border-radius: 7px;
+      background: color-mix(in srgb, var(--project-soft, var(--surface-soft)) 58%, var(--surface));
+      color: var(--text);
+      padding: 1px 6px 1px 4px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .project-chip--active {
+      background: var(--project-soft, var(--surface-soft));
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--project-border, var(--accent)) 48%, transparent);
+    }
+
+    .project-chip__disk {
+      width: 17px;
+      height: 17px;
+      display: grid;
+      place-items: center;
+      border-radius: 5px;
+      background: var(--project-color, var(--accent));
+      color: var(--project-on, #fff);
+      font-size: 10px;
+      font-weight: 850;
+      flex: 0 0 auto;
+    }
+
+    .project-chip__name {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .project-chip__auto {
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 650;
+      white-space: nowrap;
+    }
 
     .topbar__runline {
       min-width: 0;
@@ -1416,7 +1594,32 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
       white-space: nowrap;
     }
 
-    .topbar__actions { display: flex; gap: 5px; }
+    .topbar__actions {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .owner-switch {
+      min-height: 28px;
+      max-width: 108px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--surface);
+      color: var(--text);
+      padding: 0 8px;
+      font-size: 11px;
+      font-weight: 750;
+      white-space: nowrap;
+    }
+
+    .owner-switch .svg-icon {
+      width: 13px;
+      height: 13px;
+    }
 
     .workspace {
       grid-column: 2;
@@ -2775,22 +2978,24 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
 
     .statusbar {
       grid-column: 2;
-      min-height: 22px;
+      min-height: 28px;
       display: grid;
-      grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-      gap: 8px;
+      grid-template-columns: minmax(240px, .85fr) minmax(360px, 1.2fr) minmax(360px, 1fr);
+      gap: 6px;
       align-items: center;
-      background: #1f6feb;
-      color: #fff;
-      padding: 0 7px;
+      background: #11111b;
+      border-top: 1px solid rgba(255,255,255,0.08);
+      color: rgba(255,255,255,0.76);
+      padding: 0 8px;
       font-size: 11px;
+      letter-spacing: 0;
     }
 
     .statusbar__group {
       min-width: 0;
       display: flex;
       align-items: center;
-      gap: 2px;
+      gap: 3px;
       overflow: hidden;
     }
 
@@ -2804,10 +3009,10 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
 
     .statusbar button {
       min-width: 0;
-      height: 20px;
+      height: 22px;
       display: inline-flex;
       align-items: center;
-      gap: 4px;
+      gap: 5px;
       border: 0;
       border-radius: 4px;
       background: transparent;
@@ -2815,6 +3020,155 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
       padding: 0 7px;
       font-size: inherit;
       white-space: nowrap;
+    }
+
+    .statusbar button:hover {
+      background: rgba(255,255,255,0.10);
+      color: #fff;
+    }
+
+    .statusbar__item {
+      color: rgba(255,255,255,0.76);
+    }
+
+    .statusbar__item--readonly {
+      color: rgba(255,255,255,0.58);
+    }
+
+    .statusbar__dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: #8bd17c;
+      box-shadow: 0 0 0 2px rgba(139, 209, 124, .14);
+    }
+
+    .statusbar__dot--live {
+      animation: statusbar-live 1.5s ease-in-out infinite;
+    }
+
+    @keyframes statusbar-live {
+      0%, 100% { opacity: 1; }
+      50% { opacity: .48; }
+    }
+
+    .statusbar__icon-text {
+      color: rgba(255,255,255,0.50);
+      font-weight: 750;
+      text-transform: uppercase;
+      font-size: 9px;
+    }
+
+    .statusbar__sep {
+      width: 1px;
+      height: 16px;
+      margin: 0 3px;
+      background: rgba(255,255,255,0.14);
+      flex: 0 0 auto;
+    }
+
+    .statusbar__picker {
+      border: 1px solid rgba(255,255,255,0.12) !important;
+      background: rgba(255,255,255,0.04) !important;
+    }
+
+    .statusbar__picker b,
+    .usage-pill b {
+      color: #fff;
+      font-weight: 760;
+    }
+
+    .statusbar__caret {
+      color: rgba(255,255,255,0.48);
+      font-size: 9px;
+    }
+
+    .statusbar__usage {
+      gap: 4px;
+    }
+
+    .usage-pill {
+      border: 1px solid rgba(255,255,255,0.10) !important;
+      background: rgba(255,255,255,0.035) !important;
+    }
+
+    .usage-pill[data-tone="ok"] b { color: #a6d189; }
+    .usage-pill[data-tone="warn"] b,
+    .usage-pill--tokens b { color: #e6b673; }
+    .usage-pill[data-tone="hot"] b { color: #f27d8a; }
+
+    .usage-pill span:first-child {
+      color: rgba(255,255,255,0.56);
+    }
+
+    .usage-pop-grid,
+    .project-pop-list {
+      display: grid;
+      gap: 7px;
+    }
+
+    .usage-pop-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .usage-pop-grid div {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface-soft);
+      padding: 8px;
+      display: grid;
+      gap: 2px;
+    }
+
+    .usage-pop-grid b {
+      font-size: 18px;
+    }
+
+    .usage-pop-grid span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .project-pop-list button {
+      min-height: 34px;
+      display: grid;
+      grid-template-columns: 22px minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+      border: 1px solid var(--project-border, var(--line));
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--text);
+      padding: 0 8px;
+      text-align: left;
+    }
+
+    .project-pop-list__active {
+      background: var(--project-soft, var(--surface-soft)) !important;
+    }
+
+    .project-pop-list span {
+      width: 22px;
+      height: 22px;
+      display: grid;
+      place-items: center;
+      border-radius: 6px;
+      background: var(--project-color, var(--accent));
+      color: #10141f;
+      font-weight: 850;
+    }
+
+    .project-pop-list b {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .project-pop-list em {
+      color: var(--muted);
+      font-style: normal;
+      font-size: 11px;
     }
 
     .modal {
@@ -3149,6 +3503,48 @@ export class NextGenChatWorkbenchPrototypeComponent {
   readonly activeGitFile = signal('frontend/src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts');
   readonly debugTab = signal<DebugTab>('overview');
   readonly composerMode = signal<ComposeMode>('continue');
+
+  readonly projectTabs = [
+    {
+      name: 'Taskboard',
+      initial: 'T',
+      active: true,
+      auto: 'auto 2',
+      tooltip: 'Agent Task Processor, active filter, 2 ready tasks',
+      color: '#7aa7ff',
+      soft: 'rgba(122, 167, 255, .22)',
+      border: 'rgba(122, 167, 255, .66)',
+      on: '#10141f',
+    },
+    {
+      name: 'Stable',
+      initial: 'S',
+      active: false,
+      auto: 'manual',
+      tooltip: 'Stable checkout reference, manual pickup',
+      color: '#a6d189',
+      soft: 'rgba(166, 209, 137, .18)',
+      border: 'rgba(166, 209, 137, .48)',
+      on: '#10170f',
+    },
+    {
+      name: 'Marketing',
+      initial: 'M',
+      active: true,
+      auto: 'auto 1',
+      tooltip: 'Marketing docs project, 1 ready task',
+      color: '#f3b263',
+      soft: 'rgba(243, 178, 99, .18)',
+      border: 'rgba(243, 178, 99, .52)',
+      on: '#1b1206',
+    },
+  ];
+
+  readonly usageStrip: Array<{ label: string; value: string; tone: 'ok' | 'warn' | 'hot'; detail: string; testId?: string }> = [
+    { label: 'Codex', value: '62%', tone: 'warn', detail: 'Subscription quota, 3h window, resets in 42m' },
+    { label: 'Claude', value: '18%', tone: 'ok', detail: 'Subscription quota, daily window healthy' },
+    { label: 'Gemini', value: 'idle', tone: 'ok', detail: 'No recent usage detected' },
+  ];
 
   readonly iconPaths: Record<string, string[]> = {
     back: ['M19 12H5', 'M12 19l-7-7 7-7'],
@@ -3802,8 +4198,10 @@ export class NextGenChatWorkbenchPrototypeComponent {
   statusPanelTitle(): string {
     switch (this.statusPanel()) {
       case 'queue': return 'Queue and automation';
-      case 'tokens': return 'Token usage';
+      case 'tokens': return 'CLI usage and tokens';
       case 'evidence': return 'Visual evidence';
+      case 'session': return 'Session continuity';
+      case 'projects': return 'Project and owner filters';
       case 'model': return 'CLI and model controls';
       default: return 'System health';
     }
