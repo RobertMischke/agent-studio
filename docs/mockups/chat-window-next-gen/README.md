@@ -6,7 +6,7 @@ This folder is not existing product behavior. It is the target surface for the n
 
 ## Files
 
-- [ui.html](ui.html) - static visual mockup for the next-generation chat window.
+- [ui.html](ui.html) - interactive v4 visual mockup for the next-generation chat window. This is the current reference.
 - [scenarios.md](scenarios.md) - typical cases the UI must render well.
 - [research.md](research.md) - Stable observations and external product research.
 - [best-practices-comparison.md](best-practices-comparison.md) - focused comparison with VS Code Copilot Chat, Claude Code, Gemini Code Assist, and Codex.
@@ -23,13 +23,17 @@ This folder is not existing product behavior. It is the target surface for the n
 - [evidence/next-gen-chat-inspector-collapsed.png](evidence/next-gen-chat-inspector-collapsed.png) - compact chat with inspector collapsed.
 - [evidence/next-gen-chat-verbose-debug.png](evidence/next-gen-chat-verbose-debug.png) - fullscreen desktop Verbose Debug view.
 - [evidence/next-gen-chat-verbose-debug-mobile.png](evidence/next-gen-chat-verbose-debug-mobile.png) - mobile Verbose Debug view.
+- [evidence/next-gen-chat-v4-default.png](evidence/next-gen-chat-v4-default.png) - current v4 default chat reference.
+- [evidence/next-gen-chat-v4-expanded.png](evidence/next-gen-chat-v4-expanded.png) - current v4 with technical details expanded.
+- [evidence/next-gen-chat-v4-debug.png](evidence/next-gen-chat-v4-debug.png) - current v4 Verbose Debug view.
+- [evidence/next-gen-chat-v4-mobile.png](evidence/next-gen-chat-v4-mobile.png) - current v4 mobile reference.
 - [evidence/tool-heavy-archive-full.png](evidence/tool-heavy-archive-full.png) - Stable screenshot for a tool-heavy archived job.
 - [evidence/review-chat-project-switch-full.png](evidence/review-chat-project-switch-full.png) - Stable screenshot for a review job.
 - [evidence/analysis-report-review-full.png](evidence/analysis-report-review-full.png) - Stable screenshot for an analysis-report job.
 
 ## Recommendation
 
-The current Activity Log is useful evidence but not yet a great conversation surface. It exposes the raw stream too directly, and the first mockup overcorrected toward an operations dashboard. The next direction is a **compact developer chat** with an optional inspector and a fullscreen verbose debug view, closer to GitHub Copilot Chat in VS Code.
+The current Activity Log is useful evidence but not yet a great conversation surface. It exposes the raw stream too directly, and the first mockup overcorrected toward an operations dashboard. The current v4 direction is a **compact developer chat**: centered transcript, readable markdown, subtle status rows, collapsed file/tool rows, a bottom composer, and a fullscreen verbose debug view. This should feel closer to Codex, Claude Code, and GitHub Copilot Chat than to an operations dashboard.
 
 In Stable, tool-heavy jobs already reach this density:
 
@@ -45,7 +49,7 @@ The pure chatflow remains the center:
 
 - User and agent messages alternate like a normal chat.
 - Orchestrator, supervisor, tool, QA, and artifact events appear as compact inline rows.
-- Run metadata, tokens, commits, tests, screenshots, and raw trace filters dock into a side inspector that can collapse.
+- Run metadata, tokens, commits, tests, screenshots, and raw trace filters are available through collapsed rows, modals, or Verbose Debug. They are not a visible side dashboard by default.
 - Model selection, chat selection, agent mode, permission level, start, stop, configuration, and context chips live in the bottom composer/control bar.
 - New tasks and task continuations appear as subtle timeline markers inside the continuous chat. Hover or click reveals task metadata.
 - Large operational cards are expansion states, not the default.
@@ -72,7 +76,7 @@ The chat window should have four layers:
 |-------|---------|-----------------|
 | Compact header | Current task, state, active run, mode, latest warning | One slim row |
 | Message stream | Normal back-and-forth chat with inline events | Conversation mode |
-| Inspector | Runs, tokens, tools, commits, tests, screenshots, raw trace filters | Docked or collapsed |
+| Trace and debug overlays | Runs, tokens, tools, commits, tests, screenshots, raw trace filters | Opened from compact rows or menu |
 | Composer | Continue, steer, stop, accept, create follow-up, slash actions, context chips | Sticky, mode-aware |
 | Verbose Debug | Fullscreen read-only history analysis, actor counts, timing, tool density, task markers, explanations | Opened from chat menu |
 
@@ -161,7 +165,7 @@ See [research.md](research.md) for sources.
 2. Replace per-tool chips in conversation mode with collapsed `ToolBurstCard` groups. Keep full trace mode for raw entries.
 3. Add persistent actor rails and labels for User, Task Agent, Orchestrator, Supervisor, Supporting Agent, Tool Runner, and System.
 4. Add compact decision/advisory rows for orchestrator and supervisor events, with expandable `DecisionCard` details.
-5. Add bottom composer controls for current chat, model, agent mode, permission level, start, stop, configuration, jobs, debug view, and context chips.
+5. Add bottom composer controls for current chat, model, agent mode, permission level, start, stop, configuration, jobs, debug view, attachments, and context chips.
 6. Add subtle task markers in the continuous chat with hover/click metadata popovers.
 7. Add the fullscreen read-only Verbose Debug view.
 8. Fix layout reservations so banners, inspector, popovers, mode controls, stream, and composer cannot overlap or intercept each other.

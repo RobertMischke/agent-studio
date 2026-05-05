@@ -3,43 +3,44 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Interactive Compact Chat Mockup</title>
+  <title>Next-Generation Chat Window, v4 Reference</title>
   <style>
     :root {
-      color-scheme: dark;
-      --bg: #0c1017;
-      --surface: #121722;
-      --surface-2: #171e2b;
-      --surface-3: #202838;
-      --line: #2f394d;
-      --line-soft: rgba(47,57,77,0.62);
-      --text: #edf3fb;
-      --muted: #98a5ba;
-      --soft: #c8d2e2;
-      --user: #f0b56d;
-      --agent: #7cc7ff;
-      --orch: #8aadf4;
-      --supervisor: #f5c470;
-      --support: #8bd5ca;
-      --tool: #a6adc8;
-      --danger: #ed8796;
-      --success: #a6da95;
-      --warning: #eed49f;
-      --focus: #f0b56d;
+      color-scheme: light;
+      --bg: #f5f6f8;
+      --surface: #ffffff;
+      --surface-soft: #f0f2f5;
+      --surface-hover: #e9edf2;
+      --line: #dde2ea;
+      --line-strong: #c8d0dc;
+      --text: #20242c;
+      --soft: #4f5867;
+      --muted: #8a93a3;
+      --faint: #b6bfcc;
+      --blue: #3367d6;
+      --orange: #f4a21f;
+      --green: #4a9a24;
+      --red: #d11515;
+      --purple: #6f55d9;
+      --teal: #188f8a;
+      --shadow: 0 18px 48px rgba(26, 33, 44, 0.12);
     }
 
     * { box-sizing: border-box; }
 
     body {
       margin: 0;
-      min-height: 100vh;
+      height: 100vh;
+      overflow: hidden;
       background: var(--bg);
       color: var(--text);
       font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       letter-spacing: 0;
     }
 
-    button, input, select, textarea {
+    button,
+    select,
+    textarea {
       font: inherit;
       letter-spacing: 0;
     }
@@ -49,622 +50,494 @@
     }
 
     .app {
-      min-height: 100vh;
+      height: 100vh;
       display: grid;
-      grid-template-rows: minmax(0, 1fr) auto;
+      grid-template-rows: 56px minmax(0, 1fr) auto;
     }
 
-    .workspace {
-      min-height: 0;
+    .topbar {
+      height: 56px;
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 342px;
-      transition: grid-template-columns 160ms ease;
-    }
-
-    body.inspector-collapsed .workspace {
-      grid-template-columns: minmax(0, 1fr) 0;
-    }
-
-    .chat {
-      min-width: 0;
-      min-height: 0;
-      display: grid;
-      grid-template-rows: auto minmax(0, 1fr);
-      border-right: 1px solid var(--line);
-    }
-
-    body.inspector-collapsed .chat {
-      border-right: 0;
-    }
-
-    .top-strip {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-columns: auto minmax(0, 1fr) auto;
       align-items: center;
       gap: 14px;
-      padding: 8px 12px;
+      padding: 0 22px;
       border-bottom: 1px solid var(--line);
-      background: #10151f;
+      background: rgba(250, 251, 253, 0.9);
+      backdrop-filter: blur(14px);
+      position: sticky;
+      top: 0;
+      z-index: 8;
+    }
+
+    .back {
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      font-size: 24px;
+      line-height: 1;
+      padding: 4px 6px;
     }
 
     .title {
       min-width: 0;
-    }
-
-    .title small {
-      display: block;
-      color: var(--muted);
-      font-size: 11px;
-      line-height: 1.2;
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
     }
 
     .title h1 {
-      margin: 2px 0 0;
+      margin: 0;
       font-size: 15px;
-      line-height: 1.25;
+      font-weight: 600;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+    }
+
+    .title span {
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
     }
 
     .top-actions,
+    .composer-actions,
     .chips,
-    .bottom-group {
+    .row-actions {
       display: flex;
-      flex-wrap: wrap;
       align-items: center;
-      gap: 6px;
+      gap: 8px;
       min-width: 0;
     }
 
-    .chip,
-    .mini-button {
-      min-height: 22px;
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      background: rgba(255,255,255,0.025);
+    .icon,
+    .small-button {
+      min-width: 32px;
+      min-height: 32px;
+      border: 1px solid transparent;
+      border-radius: 8px;
+      background: transparent;
       color: var(--soft);
-      padding: 3px 8px;
-      font-size: 11px;
-      line-height: 1.2;
-      white-space: nowrap;
+      display: inline-grid;
+      place-items: center;
+      padding: 0 8px;
+      font-size: 13px;
     }
 
-    .mini-button {
-      border-radius: 7px;
+    .icon:hover,
+    .small-button:hover,
+    .collapse-row:hover {
+      background: var(--surface-hover);
+      border-color: var(--line);
     }
 
-    .chip.warning { color: var(--warning); border-color: rgba(238,212,159,0.36); }
-    .chip.success { color: var(--success); border-color: rgba(166,218,149,0.36); }
-    .chip.live { color: var(--agent); border-color: rgba(124,199,255,0.42); }
+    .small-button {
+      min-width: auto;
+      min-height: 28px;
+      gap: 6px;
+    }
 
-    .transcript {
+    .main {
       min-height: 0;
       overflow: auto;
-      padding: 14px 18px 22px;
+      padding: 18px 18px 22px;
     }
 
-    .day-divider {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      color: var(--muted);
-      font-size: 11px;
-      margin: 2px 0 14px;
+    .chat {
+      width: min(984px, 100%);
+      margin: 0 auto;
     }
 
-    .day-divider::before,
-    .day-divider::after {
-      content: "";
-      flex: 1;
-      border-top: 1px solid var(--line-soft);
-    }
-
-    .task-marker {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-      justify-content: center;
-      max-width: 980px;
-      margin: 8px auto 10px;
-      color: var(--muted);
-      font-size: 11px;
-      position: relative;
-    }
-
-    .task-marker::before,
-    .task-marker::after {
-      content: "";
-      flex: 1;
-      min-width: 34px;
-      height: 1px;
-      background: var(--line-soft);
-    }
-
-    .task-marker > span {
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      max-width: min(520px, 62vw);
-    }
-
-    .task-dot {
-      width: 20px;
-      height: 20px;
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      display: grid;
-      place-items: center;
-      color: var(--soft);
-      background: var(--surface-2);
-      font-weight: 700;
-      cursor: pointer;
-    }
-
-    .task-popover {
-      position: absolute;
-      left: 50%;
-      top: 26px;
-      transform: translateX(-50%);
-      width: min(420px, 88vw);
+    .file-stack {
       border: 1px solid var(--line);
       border-radius: 8px;
-      background: #111724;
-      padding: 10px;
-      box-shadow: 0 20px 46px rgba(0,0,0,0.36);
-      opacity: 0;
-      pointer-events: none;
-      z-index: 8;
-      transition: opacity 130ms ease;
+      background: rgba(255, 255, 255, 0.55);
+      overflow: hidden;
+      margin: 2px 0 30px;
     }
 
-    .task-marker:hover .task-popover,
-    .task-marker.open .task-popover {
-      opacity: 1;
-      pointer-events: auto;
-    }
-
-    .task-popover h3 {
-      margin: 0 0 6px;
-      font-size: 12px;
-    }
-
-    .task-popover p {
-      margin: 0;
-      color: var(--soft);
-      font-size: 12px;
-      line-height: 1.35;
-    }
-
-    .message {
+    .file-row {
       display: grid;
-      grid-template-columns: 30px minmax(0, 1fr);
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      align-items: center;
       gap: 10px;
-      max-width: 980px;
-      margin: 8px auto;
+      min-height: 55px;
+      padding: 0 18px;
+      border-bottom: 1px solid var(--line);
+      color: var(--soft);
+      font-size: 18px;
     }
 
-    .message.user {
-      grid-template-columns: minmax(0, 1fr) 30px;
-      max-width: 760px;
-      margin-right: calc((100% - min(980px, 100%)) / 2);
+    .file-row:last-child {
+      border-bottom: 0;
+    }
+
+    .file-row code {
+      color: var(--soft);
+      font-family: inherit;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .delta {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      white-space: nowrap;
+      font-size: 16px;
+    }
+
+    .delta .add { color: var(--green); }
+    .delta .del { color: var(--red); }
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--red);
+      display: inline-block;
+    }
+
+    .chevron {
+      color: var(--soft);
+      font-size: 18px;
+    }
+
+    .turn {
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr);
+      gap: 12px;
+      margin: 16px 0;
+    }
+
+    .turn.user {
+      grid-template-columns: minmax(0, 660px);
+      justify-content: end;
+      margin: 22px 0 36px;
     }
 
     .avatar {
-      width: 28px;
-      height: 28px;
-      border: 1px solid var(--line);
+      width: 30px;
+      height: 30px;
       border-radius: 50%;
       display: grid;
       place-items: center;
       font-size: 11px;
-      font-weight: 800;
-      color: #0b0f16;
-      background: var(--tool);
+      font-weight: 700;
+      color: #fff;
+      background: var(--blue);
       margin-top: 2px;
     }
 
-    .avatar.user { background: var(--user); }
-    .avatar.agent { background: var(--agent); }
-    .avatar.support { background: var(--support); }
+    .avatar.orchestrator { background: var(--purple); }
+    .avatar.qa { background: var(--teal); }
 
     .bubble {
-      min-width: 0;
-      border: 1px solid var(--line-soft);
+      border: 1px solid var(--line);
       border-radius: 8px;
       background: var(--surface);
-      padding: 8px 10px;
+      padding: 14px 18px;
+      box-shadow: 0 1px 0 rgba(26, 33, 44, 0.03);
+      min-width: 0;
     }
 
-    .message.user .bubble {
-      background: rgba(240,181,109,0.105);
-      border-color: rgba(240,181,109,0.38);
+    .turn.user .bubble {
+      background: #f0f2f5;
+      border-color: #edf0f4;
+      padding: 16px 18px;
     }
 
-    .message-head {
+    .speaker {
       display: flex;
-      flex-wrap: wrap;
       align-items: center;
-      gap: 6px;
+      gap: 8px;
       color: var(--muted);
-      font-size: 11px;
-      line-height: 1.2;
-      margin-bottom: 4px;
+      font-size: 12px;
+      margin-bottom: 6px;
     }
 
-    .message-head b {
+    .speaker b {
       color: var(--text);
-      font-size: 12px;
+      font-size: 13px;
     }
 
     .bubble p {
       margin: 0;
       color: var(--text);
-      font-size: 13px;
-      line-height: 1.44;
+      font-size: 18px;
+      line-height: 1.5;
     }
 
     .bubble p + p {
+      margin-top: 12px;
+    }
+
+    .bubble ul,
+    .bubble ol {
+      margin: 12px 0 0;
+      padding-left: 28px;
+      font-size: 18px;
+      line-height: 1.52;
+    }
+
+    .bubble li + li {
       margin-top: 6px;
     }
 
-    .human-summary {
-      color: var(--text);
-    }
-
-    .technical {
-      margin-top: 8px;
-      border-top: 1px solid var(--line-soft);
-      padding-top: 8px;
-      display: none;
-      color: var(--muted);
+    .bubble code,
+    .code-chip {
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 11px;
-      line-height: 1.45;
-      white-space: pre-wrap;
+      font-size: 0.92em;
+      background: #f0f1f3;
+      border-radius: 6px;
+      padding: 1px 5px;
+      color: #596273;
     }
 
-    body.show-technical .technical,
-    .bubble.details-open .technical {
-      display: block;
+    .attachment {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--surface-soft);
+      color: var(--text);
+      padding: 7px 9px;
+      margin-bottom: 12px;
+      font-size: 15px;
+      max-width: 100%;
     }
 
-    .inline-event {
-      display: grid;
-      grid-template-columns: 30px minmax(0, 1fr);
+    .attachment span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .status-line {
+      color: var(--muted);
+      font-size: 18px;
+      margin: 0 0 14px 0;
+    }
+
+    .thin-rule {
+      border-top: 1px solid var(--line);
+      margin: 0 0 22px 0;
+    }
+
+    .thinking {
+      color: var(--faint);
+      font-size: 18px;
+      margin: 18px 0;
+    }
+
+    .collapsed-line {
+      margin: 14px 0 18px;
+      display: flex;
+      align-items: center;
       gap: 10px;
-      max-width: 980px;
-      margin: 6px auto;
-    }
-
-    .event-icon {
-      width: 24px;
-      height: 24px;
-      border-radius: 7px;
-      display: grid;
-      place-items: center;
-      font-size: 10px;
-      font-weight: 800;
-      color: #0b0f16;
-      background: var(--tool);
-      margin-top: 1px;
-    }
-
-    .event-icon.orch { background: var(--orch); }
-    .event-icon.supervisor { background: var(--supervisor); }
-    .event-icon.support { background: var(--support); }
-    .event-icon.system { background: var(--muted); }
-
-    .event-row {
+      color: #c6ccd6;
+      font-size: 16px;
       min-width: 0;
-      border: 1px solid var(--line-soft);
-      border-radius: 7px;
-      background: rgba(255,255,255,0.024);
+    }
+
+    .collapsed-line code {
+      min-width: 0;
+      overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
+    }
+
+    .terminal-icon {
+      width: 18px;
+      height: 18px;
+      border: 1px solid var(--line-strong);
+      border-radius: 4px;
+      display: inline-grid;
+      place-items: center;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 10px;
+    }
+
+    .collapse-row {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.54);
       display: grid;
       grid-template-columns: auto minmax(0, 1fr) auto;
       align-items: center;
-      gap: 8px;
-      padding: 6px 8px;
-      color: var(--soft);
-      font-size: 12px;
-    }
-
-    .event-row strong {
-      color: var(--text);
-      font-size: 12px;
-      white-space: nowrap;
-    }
-
-    .event-row span {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-    }
-
-    .event-row.orch {
-      border-color: rgba(138,173,244,0.42);
-      background: rgba(36,45,70,0.42);
-    }
-
-    .event-row.supervisor {
-      border-color: rgba(245,196,112,0.42);
-      background: rgba(245,196,112,0.08);
-    }
-
-    .event-row.support {
-      border-color: rgba(139,213,202,0.38);
-      background: rgba(139,213,202,0.055);
-    }
-
-    .link-button {
-      border: 0;
-      background: transparent;
-      color: var(--agent);
-      padding: 0;
-      font-size: 12px;
-      white-space: nowrap;
-    }
-
-    .details-panel {
-      max-width: 980px;
-      margin: -2px auto 7px;
-      display: none;
-      grid-template-columns: 30px minmax(0, 1fr);
       gap: 10px;
+      min-height: 42px;
+      padding: 8px 10px;
+      color: var(--soft);
+      text-align: left;
+      margin: 12px 0;
     }
 
-    .details-panel.open {
-      display: grid;
-    }
-
-    .details-card {
-      border: 1px solid var(--line-soft);
-      border-radius: 8px;
-      background: var(--surface);
-      padding: 9px;
-    }
-
-    .detail-grid {
-      display: grid;
-      grid-template-columns: repeat(6, minmax(0, 1fr));
-      gap: 5px;
-    }
-
-    .detail-cell {
-      border: 1px solid var(--line-soft);
-      border-radius: 7px;
-      padding: 6px;
-      text-align: center;
-      color: var(--muted);
-      font-size: 10px;
-      min-width: 0;
-    }
-
-    .detail-cell b {
-      display: block;
+    .collapse-row strong {
       color: var(--text);
-      font-size: 13px;
-      margin-bottom: 1px;
     }
 
-    .kv {
-      display: grid;
-      grid-template-columns: 92px minmax(0, 1fr);
-      gap: 6px 10px;
-      color: var(--soft);
-      font-size: 12px;
-    }
-
-    .kv span:nth-child(odd) {
-      color: var(--muted);
-    }
-
-    .artifact-strip {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 7px;
-      margin-top: 7px;
-    }
-
-    .thumb {
-      min-height: 72px;
-      border: 1px solid var(--line-soft);
-      border-radius: 7px;
-      background:
-        linear-gradient(135deg, rgba(124,199,255,0.22), transparent 38%),
-        linear-gradient(180deg, #1f2737, #121722);
-      padding: 7px;
-      display: grid;
-      align-content: end;
-      color: var(--soft);
-      font-size: 11px;
-    }
-
-    .inspector {
-      min-width: 0;
-      min-height: 0;
-      overflow: auto;
-      background: #0a0e15;
-      padding: 12px;
-      transition: opacity 160ms ease;
-    }
-
-    body.inspector-collapsed .inspector {
-      opacity: 0;
-      pointer-events: none;
-      padding: 0;
+    .collapse-row span {
       overflow: hidden;
+      white-space: nowrap;
+      text-overflow: ellipsis;
     }
 
-    .inspector-head {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 10px;
-    }
-
-    .inspector h2,
-    .panel h3 {
-      margin: 0;
-      font-size: 13px;
-    }
-
-    .panel {
+    .collapse-content {
+      display: none;
       border: 1px solid var(--line);
       border-radius: 8px;
       background: var(--surface);
-      padding: 10px;
-      margin-bottom: 10px;
-    }
-
-    .panel h3 {
-      margin-bottom: 8px;
-      font-size: 12px;
-    }
-
-    .metric-list {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 6px;
-    }
-
-    .metric {
-      border: 1px solid var(--line-soft);
-      border-radius: 7px;
-      padding: 7px;
-      min-width: 0;
-    }
-
-    .metric b {
-      display: block;
+      padding: 12px;
+      margin-top: -6px;
+      margin-bottom: 12px;
+      color: var(--soft);
       font-size: 14px;
-      line-height: 1.1;
+      line-height: 1.45;
     }
 
-    .metric span {
+    .collapse-content.open {
       display: block;
+    }
+
+    .task-marker {
+      display: flex;
+      align-items: center;
+      gap: 10px;
       color: var(--muted);
-      font-size: 10px;
-      margin-top: 2px;
-      overflow-wrap: anywhere;
+      font-size: 13px;
+      margin: 24px 0 18px;
     }
 
-    .chat-list {
-      display: grid;
-      gap: 6px;
+    .task-marker::before,
+    .task-marker::after {
+      content: "";
+      height: 1px;
+      background: var(--line);
+      flex: 1;
     }
 
-    .chat-item,
-    .run-item {
-      border: 1px solid var(--line-soft);
-      border-radius: 7px;
-      padding: 7px;
-      font-size: 11px;
-      color: var(--muted);
-    }
-
-    .chat-item.active {
-      border-color: rgba(240,181,109,0.52);
-      background: rgba(240,181,109,0.08);
-    }
-
-    .chat-item b,
-    .run-item b {
-      display: block;
-      color: var(--text);
-      font-size: 12px;
-      margin-bottom: 2px;
-    }
-
-    .bar {
-      height: 6px;
+    .task-chip {
+      border: 1px solid var(--line);
       border-radius: 999px;
-      background: #0d121b;
-      overflow: hidden;
-      margin-top: 6px;
+      background: var(--surface);
+      padding: 4px 10px;
+      white-space: nowrap;
     }
 
-    .bar span {
-      display: block;
-      height: 100%;
-      width: var(--w, 50%);
-      background: linear-gradient(90deg, var(--agent), var(--user));
+    .markdown-card {
+      margin-top: 16px;
+      padding-left: 28px;
     }
 
-    .bottom {
+    .markdown-card h2 {
+      margin: 0 0 18px;
+      font-size: 28px;
+      line-height: 1.18;
+    }
+
+    .markdown-card h3 {
+      margin: 24px 0 8px;
+      font-size: 18px;
+    }
+
+    .queue {
+      margin-top: 22px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      color: #6a7280;
+      font-size: 16px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+    }
+
+    .composer {
       border-top: 1px solid var(--line);
-      background: #10151f;
-      padding: 8px 12px 10px;
-      display: grid;
-      gap: 7px;
+      background: rgba(245, 246, 248, 0.94);
+      padding: 12px 42px 16px;
+      z-index: 9;
     }
 
-    .control-row {
+    .composer-box {
+      width: min(984px, 100%);
+      margin: 0 auto;
+      border: 1px solid var(--line-strong);
+      border-radius: 8px;
+      background: var(--surface);
+      box-shadow: 0 8px 28px rgba(26, 33, 44, 0.08);
+      overflow: hidden;
+    }
+
+    .input-area {
+      min-height: 66px;
+      padding: 16px 18px 8px;
+      color: var(--faint);
+      font-size: 18px;
+      outline: none;
+    }
+
+    .composer-bottom {
+      min-height: 48px;
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
-      gap: 8px;
       align-items: center;
-    }
-
-    .control-select {
-      min-height: 28px;
-      border: 1px solid var(--line);
-      border-radius: 7px;
-      background: var(--surface-2);
-      color: var(--soft);
-      padding: 4px 8px;
-      font-size: 12px;
-      max-width: 190px;
-    }
-
-    .composer-row {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto auto;
-      gap: 8px;
-      align-items: end;
-    }
-
-    .input {
-      min-height: 44px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      background: #0d121b;
-      color: var(--muted);
+      gap: 10px;
       padding: 8px 10px;
-      font-size: 13px;
-      line-height: 1.35;
     }
 
-    .primary,
-    .secondary {
-      min-height: 36px;
-      border-radius: 8px;
-      padding: 0 13px;
-      font-weight: 700;
-      font-size: 12px;
+    .select-like {
+      border: 0;
+      background: transparent;
+      color: var(--soft);
+      min-height: 30px;
+      padding: 0 4px;
+      font-size: 14px;
     }
 
-    .primary {
-      border: 1px solid var(--user);
-      background: var(--user);
-      color: #20140a;
+    .access {
+      color: var(--orange);
     }
 
-    .secondary {
-      border: 1px solid var(--line);
-      background: var(--surface-2);
+    .model {
       color: var(--soft);
     }
+
+    .send {
+      width: 42px;
+      height: 42px;
+      border: 0;
+      border-radius: 50%;
+      background: #303236;
+      color: #fff;
+      font-size: 15px;
+      display: grid;
+      place-items: center;
+    }
+
+    .stop {
+      width: 42px;
+      height: 42px;
+      border: 0;
+      border-radius: 50%;
+      background: #303236;
+      color: #fff;
+      font-size: 15px;
+      display: none;
+      place-items: center;
+    }
+
+    body.running .send { display: none; }
+    body.running .stop { display: grid; }
 
     .modal-backdrop {
       position: fixed;
       inset: 0;
-      background: rgba(0,0,0,0.45);
+      background: rgba(19, 23, 31, 0.52);
       display: none;
       place-items: center;
-      z-index: 30;
-      padding: 18px;
+      padding: 20px;
+      z-index: 40;
     }
 
     .modal-backdrop.open {
@@ -672,18 +545,18 @@
     }
 
     .modal {
-      width: min(760px, 96vw);
+      width: min(980px, 96vw);
       max-height: 88vh;
       overflow: auto;
       border: 1px solid var(--line);
-      border-radius: 10px;
-      background: #111724;
-      box-shadow: 0 24px 70px rgba(0,0,0,0.48);
+      border-radius: 8px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
     }
 
-    .modal.debug-modal {
-      width: min(1240px, 98vw);
-      height: min(860px, 92vh);
+    .debug-modal {
+      width: min(1260px, 98vw);
+      height: min(850px, 92vh);
       display: grid;
       grid-template-rows: auto minmax(0, 1fr);
     }
@@ -692,138 +565,113 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
-      gap: 10px;
-      padding: 12px 14px;
+      gap: 12px;
+      padding: 14px 16px;
       border-bottom: 1px solid var(--line);
     }
 
     .modal h2 {
       margin: 0;
-      font-size: 15px;
+      font-size: 18px;
     }
 
     .modal-content {
+      min-height: 0;
+      overflow: auto;
+      padding: 16px;
+    }
+
+    .debug-grid {
+      display: grid;
+      grid-template-columns: 260px minmax(0, 1fr) 300px;
+      gap: 14px;
+      min-height: 0;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfd;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+
+    .panel h3 {
+      margin: 0 0 10px;
+      font-size: 14px;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 9px;
+      background: var(--surface);
+    }
+
+    .metric b {
+      display: block;
+      font-size: 22px;
+      line-height: 1;
+    }
+
+    .metric span {
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .timeline {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfd;
       padding: 14px;
       display: grid;
       gap: 10px;
     }
 
-    .settings-grid {
+    .band {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: 110px minmax(0, 1fr) auto;
       gap: 10px;
-    }
-
-    .debug-layout {
-      min-height: 0;
-      display: grid;
-      grid-template-columns: 280px minmax(0, 1fr) 300px;
-      gap: 10px;
-    }
-
-    .debug-column,
-    .debug-main,
-    .debug-side {
-      min-height: 0;
-      overflow: auto;
-      display: grid;
-      align-content: start;
-      gap: 10px;
-    }
-
-    .debug-map {
-      min-height: 240px;
-      border: 1px solid var(--line-soft);
-      border-radius: 8px;
-      background:
-        linear-gradient(90deg, rgba(124,199,255,0.09), transparent 30%),
-        linear-gradient(180deg, #171f2d, #111724);
-      padding: 12px;
-      display: grid;
-      gap: 8px;
-    }
-
-    .debug-band {
-      display: grid;
-      grid-template-columns: 86px minmax(0, 1fr) auto;
-      gap: 8px;
       align-items: center;
-      border: 1px solid var(--line-soft);
-      border-radius: 7px;
-      padding: 7px;
-      font-size: 12px;
+      font-size: 13px;
       color: var(--soft);
-      background: rgba(255,255,255,0.025);
-    }
-
-    .debug-band b {
-      color: var(--text);
     }
 
     .heat {
-      height: 14px;
+      height: 15px;
       border-radius: 999px;
+      background: var(--surface-soft);
       overflow: hidden;
-      background: #0d121b;
     }
 
     .heat span {
       display: block;
       height: 100%;
       width: var(--w, 50%);
-      background: linear-gradient(90deg, var(--support), var(--agent), var(--user));
-    }
-
-    .debug-event {
-      border: 1px solid var(--line-soft);
-      border-radius: 7px;
-      padding: 8px;
-      background: var(--surface);
-      color: var(--soft);
-      font-size: 12px;
-      line-height: 1.35;
-    }
-
-    .debug-event b {
-      color: var(--text);
-    }
-
-    .setting {
-      border: 1px solid var(--line-soft);
-      border-radius: 8px;
-      padding: 10px;
-      background: var(--surface);
-    }
-
-    .setting b {
-      display: block;
-      font-size: 12px;
-      margin-bottom: 4px;
-    }
-
-    .setting p {
-      margin: 0;
-      color: var(--muted);
-      font-size: 12px;
-      line-height: 1.35;
+      background: linear-gradient(90deg, var(--blue), var(--teal), var(--orange));
     }
 
     .toast {
       position: fixed;
-      right: 16px;
-      bottom: 90px;
+      right: 22px;
+      bottom: 118px;
       border: 1px solid var(--line);
       border-radius: 8px;
-      background: #111724;
-      padding: 9px 11px;
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      padding: 10px 12px;
       color: var(--soft);
-      font-size: 12px;
-      box-shadow: 0 16px 40px rgba(0,0,0,0.32);
+      font-size: 13px;
       opacity: 0;
       transform: translateY(8px);
-      pointer-events: none;
-      transition: opacity 130ms ease, transform 130ms ease;
-      z-index: 40;
+      transition: opacity 140ms ease, transform 140ms ease;
+      z-index: 50;
     }
 
     .toast.show {
@@ -831,554 +679,378 @@
       transform: translateY(0);
     }
 
-    @media (max-width: 1080px) {
-      .workspace { grid-template-columns: minmax(0, 1fr); }
-      .inspector { display: none; }
-      .chat { border-right: 0; }
-      .top-strip { grid-template-columns: 1fr; }
-      body.inspector-collapsed .workspace { grid-template-columns: minmax(0, 1fr); }
-    }
-
-    @media (max-width: 680px) {
-      .top-strip { padding: 8px 10px; }
-      .transcript { padding: 10px 10px 16px; }
-      .message,
-      .message.user,
-      .inline-event,
-      .details-panel {
-        grid-template-columns: 28px minmax(0, 1fr);
-        max-width: none;
-        margin-left: 0;
-        margin-right: 0;
+    @media (max-width: 820px) {
+      .topbar {
+        padding: 0 12px;
+        grid-template-columns: auto minmax(0, 1fr) auto;
       }
-      .message.user .bubble { grid-column: 2; grid-row: 1; }
-      .message.user .avatar { grid-column: 1; grid-row: 1; }
-      .task-marker { justify-content: stretch; }
-      .task-marker > span { max-width: 260px; }
-      .event-row { grid-template-columns: auto minmax(0, 1fr); }
-      .event-row .link-button { grid-column: 2; justify-self: start; }
-      .detail-grid,
-      .artifact-strip,
-      .debug-layout,
-      .settings-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .control-row,
-      .composer-row { grid-template-columns: 1fr; }
-      .bottom-group { gap: 5px; }
-      .control-select { max-width: none; width: 100%; }
-      .primary, .secondary { width: 100%; }
+
+      .title span {
+        display: none;
+      }
+
+      .app {
+        grid-template-rows: auto minmax(0, 1fr) auto;
+      }
+
+      .main {
+        padding: 12px 10px 16px;
+      }
+
+      .file-row {
+        font-size: 14px;
+        min-height: 46px;
+        padding: 0 10px;
+      }
+
+      .turn,
+      .turn.user {
+        grid-template-columns: minmax(0, 1fr);
+        justify-content: stretch;
+      }
+
+      .avatar {
+        display: none;
+      }
+
+      .bubble p,
+      .bubble ul,
+      .bubble ol,
+      .status-line,
+      .thinking {
+        font-size: 16px;
+      }
+
+      .markdown-card {
+        padding-left: 0;
+      }
+
+      .composer {
+        padding: 10px;
+      }
+
+      .composer-bottom {
+        grid-template-columns: 1fr;
+      }
+
+      .composer-actions {
+        flex-wrap: wrap;
+      }
+
+      .debug-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .band {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
 <body>
   <div class="app">
-    <main class="workspace">
-      <section class="chat" aria-label="Continuous project chat">
-        <header class="top-strip">
-          <div class="title">
-            <small>Agent Task Processor / Project Chat / Continuous Conversation</small>
-            <h1>Compact multi-actor chat with subtle task events</h1>
-          </div>
-          <div class="top-actions">
-            <button class="mini-button" data-action="toggle-inspector">Inspector</button>
-            <button class="mini-button" data-modal="debug">Verbose Debug</button>
-            <button class="mini-button" data-action="toggle-technical">Technical layer</button>
-            <button class="mini-button" data-modal="artifacts">Artifacts</button>
-            <span class="chip live" id="runState">Ready to start</span>
-          </div>
-        </header>
+    <header class="topbar">
+      <button class="back" title="Back">&lt;</button>
+      <div class="title">
+        <h1>Check latest logs for errors</h1>
+        <span>Project chat, compact transcript</span>
+      </div>
+      <div class="top-actions">
+        <button class="small-button" title="History" data-modal="history">History</button>
+        <button class="small-button" title="Settings" data-modal="settings">Config</button>
+        <button class="small-button" title="Verbose debug" data-modal="debug">Debug</button>
+      </div>
+    </header>
 
-        <div class="transcript" id="transcript">
-          <div class="day-divider">Today, project conversation</div>
+    <main class="main">
+      <section class="chat" aria-label="Compact continuous project chat">
+        <div class="file-stack" aria-label="Recent changed files">
+          <div class="file-row">
+            <code>docs/design-principles.md</code>
+            <div class="delta"><span class="add">+0</span><span class="del">-155</span><span class="dot"></span></div>
+            <span class="chevron">v</span>
+          </div>
+          <div class="file-row">
+            <code>docs/mockups/chat-window-next-gen/README.md</code>
+            <div class="delta"><span class="add">+0</span><span class="del">-142</span><span class="dot"></span></div>
+            <span class="chevron">v</span>
+          </div>
+          <div class="file-row">
+            <code>docs/mockups/chat-window-next-gen/ui.html</code>
+            <div class="delta"><span class="add">+0</span><span class="del">-746</span><span class="dot"></span></div>
+            <span class="chevron">v</span>
+          </div>
+        </div>
 
-          <div class="task-marker" data-task-marker>
-            <div></div>
-            <button class="task-dot" aria-label="Task metadata">T</button>
-            <span>Task started, Next-gen chat event projection</span>
-            <div class="task-popover">
-              <h3>Task event, compact by default</h3>
-              <p>Task metadata is available on hover or click: job id, lane, model, token budget, linked prompt, related commits, and task evidence. It stays subtle because the continuous chat is the primary debugging surface.</p>
-              <div class="chips" style="margin-top: 8px;">
-                <span class="chip">2-ready</span>
-                <span class="chip">Claude</span>
-                <span class="chip">Run 1</span>
-                <span class="chip">Prompt v2</span>
+        <article class="turn user">
+          <div class="bubble">
+            <p>I still do not see a chat that matches what I expect.</p>
+            <p><code>chat-window-next-gen/ui.html</code></p>
+          </div>
+        </article>
+
+        <section class="status-line">Working for 22s</section>
+        <div class="thin-rule"></div>
+
+        <article class="turn">
+          <div class="avatar">A</div>
+          <div>
+            <p class="collapsed-line"><span class="terminal-icon">&gt;_</span> Running <code>git log --oneline -5 -- docs/mockups/chat-window-next-gen/ui.html</code></p>
+            <div class="thinking">Thinking</div>
+            <div class="bubble">
+              <div class="speaker"><b>Task Agent</b><span>Mockup revision</span></div>
+              <p>You are right. The previous version was still too much observability console and too little chat. The default surface now follows the examples you pointed at: quiet transcript, readable prose, compact file and tool rows, and a composer that feels like a real working area.</p>
+              <div class="row-actions">
+                <button class="small-button" data-collapse="agent-details">Show technical details</button>
+                <button class="small-button" data-modal="debug">Open Verbose Debug</button>
               </div>
             </div>
-          </div>
-
-          <article class="message user">
-            <div class="bubble">
-              <div class="message-head"><b>You</b><span>Steering</span></div>
-              <p class="human-summary">Make the chat feel like a real developer conversation. Keep task and run metadata available, but do not let it dominate the transcript.</p>
-              <div class="technical">rawInput.kind = "user-steering"
-target = "project-chat"
-attachments = ["mockup-v1.png", "stable-chat-evidence.json"]</div>
-            </div>
-            <div class="avatar user" aria-label="You">Y</div>
-          </article>
-
-          <article class="message">
-            <div class="avatar agent" aria-label="Task Agent">A</div>
-            <div class="bubble">
-              <div class="message-head"><b>Task Agent</b><span>Claude</span><span class="chip">planning</span></div>
-              <p class="human-summary">I will keep the readable story in the chat, then tuck commands, paths, JSON, and tool payloads behind expanders. The default view should answer: what changed, who acted, and what needs attention.</p>
-              <div class="technical">stdout[18..24]: rg "activity-log"
-tool.read: frontend/src/app/components/activity-log.ts
-tool.search: "conversation projection"
-decision.surface = "human-summary-first"</div>
-            </div>
-          </article>
-
-          <div class="inline-event">
-            <div class="event-icon">T</div>
-            <div class="event-row">
-              <strong>Tools 96</strong>
-              <span>Mostly read/search/edit, one failed test, screenshots captured</span>
-              <button class="link-button" data-details="tools">Details</button>
+            <div class="collapse-content" id="agent-details">
+              Raw layer: local file `ui.html`, source docs, Playwright screenshots, changed-file projection, task markers, tool burst summaries, and API job prompts. This stays hidden by default.
             </div>
           </div>
-          <div class="details-panel" id="details-tools">
-            <div></div>
-            <div class="details-card">
-              <div class="message-head"><b>Tool details</b><span>expanded technical layer</span></div>
-              <div class="detail-grid">
-                <div class="detail-cell"><b>44</b>Read</div>
-                <div class="detail-cell"><b>22</b>Search</div>
-                <div class="detail-cell"><b>12</b>Edit</div>
-                <div class="detail-cell"><b>9</b>Shell</div>
-                <div class="detail-cell"><b>4</b>Tests</div>
-                <div class="detail-cell"><b style="color: var(--danger);">1</b>Failed</div>
-              </div>
-              <div class="technical" style="display: block;">failed: npm test, exit 1, fixed on retry
-files: activity-log.ts, parser.ts, chat-window-next-gen/ui.html
-artifacts: desktop.png, mobile.png, config-overlay.png</div>
-            </div>
+        </article>
+
+        <div class="task-marker">
+          <span class="task-chip">Task started: chat-window-v4-reference</span>
+        </div>
+
+        <article class="turn user">
+          <div class="bubble">
+            <div class="attachment">image.png <span>2880 x 1509</span></div>
+            <p>Another topic needs to be planned too: the visual space I have for reading the chat and the project README is very small. Please research how Visual Studio Code handles this density.</p>
           </div>
+        </article>
 
-          <article class="message">
-            <div class="avatar agent" aria-label="Task Agent">A</div>
-            <div class="bubble">
-              <div class="message-head"><b>Task Agent</b><span>Claude</span><span class="chip success">implemented mockup</span></div>
-              <p class="human-summary">The transcript now uses compact participant turns. Task starts are timeline markers, tool bursts are one-line summaries, and detailed evidence opens only when requested.</p>
-            </div>
-          </article>
-
-          <div class="task-marker" data-task-marker>
-            <div></div>
-            <button class="task-dot" aria-label="Task metadata">T</button>
-            <span>Task continued, Chat tool-burst collapsing</span>
-            <div class="task-popover">
-              <h3>Continuation marker</h3>
-              <p>A new task or run can enter the continuous chat without creating a giant card. Click through only when task-level debugging matters.</p>
-              <div class="chips" style="margin-top: 8px;">
-                <span class="chip">Run 2</span>
-                <span class="chip">21 tools</span>
-                <span class="chip">1 commit</span>
-              </div>
-            </div>
-          </div>
-
-          <article class="message user">
-            <div class="bubble">
-              <div class="message-head"><b>You</b><span>Correction</span></div>
-              <p class="human-summary">The bottom area should carry model selection, start and stop, and configuration. The chat itself has room and should use it elegantly.</p>
-            </div>
-            <div class="avatar user" aria-label="You">Y</div>
-          </article>
-
-          <div class="inline-event">
-            <div class="event-icon orch">O</div>
-            <div class="event-row orch">
+        <article class="turn">
+          <div class="avatar orchestrator">O</div>
+          <div>
+            <button class="collapse-row" data-collapse="orchestrator-detail">
               <strong>Orchestrator</strong>
-              <span>Updated UI direction: controls move to bottom composer, meta stays inspectable</span>
-              <button class="link-button" data-details="decision">Why</button>
+              <span>Converted the steering into two implementation jobs via API, kept the visible answer as markdown.</span>
+              <span>v</span>
+            </button>
+            <div class="collapse-content" id="orchestrator-detail">
+              Decision: use the user's chat references as primary visual target. Implementation jobs must not build the earlier dashboard-like concept as default. Debug remains a secondary fullscreen surface.
             </div>
           </div>
-          <div class="details-panel" id="details-decision">
-            <div></div>
-            <div class="details-card">
-              <div class="kv">
-                <span>Decision</span><span>Revise the mockup before implementation jobs start.</span>
-                <span>Reason</span><span>Previous version over-weighted the dashboard and under-modeled interactive controls.</span>
-                <span>Action</span><span>Update prompts through API, add interactive controls and overlays.</span>
-                <span>Budget</span><span>Keep raw technical detail one click away.</span>
-              </div>
-            </div>
-          </div>
+        </article>
 
-          <article class="message">
-            <div class="avatar agent" aria-label="Task Agent">A</div>
-            <div class="bubble">
-              <div class="message-head"><b>Task Agent</b><span>Claude</span><span class="chip">revision</span></div>
-              <p class="human-summary">Done. The composer now owns model, agent mode, permission level, start, stop, and configuration. The chat column remains calm and spacious.</p>
-            </div>
-          </article>
+        <article class="turn">
+          <div class="avatar qa">QA</div>
+          <div class="bubble">
+            <div class="speaker"><b>Assistant</b><span>Markdown answer</span></div>
+            <div class="markdown-card">
+              <h2>2 new jobs created via API</h2>
+              <h3><code>vscode-style-layout-density-and-tabs</code> <span class="code-chip">order=1</span>:</h3>
+              <ul>
+                <li>VS Code research instructions directly in the prompt: activity bar, compact tabs, status bar, 13/14px density, 6px padding cap, and persistent resize handles.</li>
+                <li>Mockup under <code>docs/mockups/vscode-layout/</code> with README, taxonomy, and two interactive states.</li>
+                <li>First slice behind feature flag <code>Frontend:VsCodeLayout</code>, default off.</li>
+              </ul>
 
-          <div class="inline-event">
-            <div class="event-icon support">QA</div>
-            <div class="event-row support">
-              <strong>Visual QA</strong>
-              <span>Desktop, mobile, config overlay, artifact overlay, technical details, inspector collapsed</span>
-              <button class="link-button" data-modal="artifacts">Images</button>
+              <h3><code>visual-evidence-priority-screenshots-clickable</code> <span class="code-chip">order=1</span>:</h3>
+              <ul>
+                <li>Per-task horizontal thumbnail strip above chat, sourced from job results and frontend test results.</li>
+                <li>Lightbox with previous/next, pass/fail badge, and open-in-folder action.</li>
+                <li>Workspace feed with a visual evidence lane and hour buckets.</li>
+              </ul>
+
+              <h3>Queue order now:</h3>
+              <div class="queue">active=kanban-lane-grouping-collapse
+1. noop-as-decision-trigger
+2. orchestrator-review-lane-and-bubble-up
+3. visual-evidence-priority-screenshots-clickable
+4. vscode-style-layout-density-and-tabs
+5. readme-points-to-task-access-api
+6. lifecycle-substate-migration-compatibility</div>
             </div>
           </div>
+        </article>
 
-          <div class="inline-event">
-            <div class="event-icon supervisor">SV</div>
-            <div class="event-row supervisor">
-              <strong>Supervisor</strong>
-              <span>Reminder: implementation jobs must point to this interactive v3 mockup, not the earlier dashboard version</span>
-              <button class="link-button" data-modal="jobs">Jobs</button>
+        <article class="turn">
+          <div class="avatar">A</div>
+          <div>
+            <button class="collapse-row" data-collapse="tool-burst">
+              <strong>Tool use 17</strong>
+              <span>Read docs, updated ui.html, rendered desktop/mobile/debug screenshots, verified compact spacing.</span>
+              <span>v</span>
+            </button>
+            <div class="collapse-content" id="tool-burst">
+              <ul>
+                <li>Read: existing mockup, roadmap, scenarios, design principles.</li>
+                <li>Edit: replaced dashboard-first UI with transcript-first reference.</li>
+                <li>Verify: Playwright screenshots for default, expanded details, composer, and debug modal.</li>
+              </ul>
             </div>
           </div>
-        </div>
+        </article>
       </section>
-
-      <aside class="inspector" aria-label="Inspector">
-        <div class="inspector-head">
-          <h2>Inspector</h2>
-          <button class="mini-button" data-action="toggle-inspector">Collapse</button>
-        </div>
-
-        <section class="panel">
-          <h3>Current chats</h3>
-          <div class="chat-list">
-            <div class="chat-item active"><b>Project chat</b>Continuous thread, 3 tasks, 245 turns</div>
-            <div class="chat-item"><b>Implementation chat</b>Run 2, tool burst focus</div>
-            <div class="chat-item"><b>QA chat</b>Screenshots and regression states</div>
-          </div>
-        </section>
-
-        <section class="panel">
-          <h3>Session summary</h3>
-          <div class="metric-list">
-            <div class="metric"><b>3</b><span>Tasks in thread</span></div>
-            <div class="metric"><b>245</b><span>Human-level turns</span></div>
-            <div class="metric"><b>148</b><span>Tools collapsed</span></div>
-            <div class="metric"><b>482k</b><span>Tokens</span></div>
-          </div>
-        </section>
-
-        <section class="panel">
-          <h3>Evidence</h3>
-          <div class="chips">
-            <span class="chip">7 screenshots</span>
-            <span class="chip">4 reports</span>
-            <span class="chip">6 commits</span>
-            <span class="chip warning">1 warning</span>
-          </div>
-          <div class="artifact-strip">
-            <div class="thumb">Desktop chat</div>
-            <div class="thumb">Config overlay</div>
-            <div class="thumb">Mobile compact</div>
-          </div>
-        </section>
-
-        <section class="panel">
-          <h3>Run and task markers</h3>
-          <div class="chat-list">
-            <div class="run-item"><b>Task 1</b>Conversation projection<div class="bar"><span style="--w: 76%;"></span></div></div>
-            <div class="run-item"><b>Task 2</b>Tool burst collapsing<div class="bar"><span style="--w: 54%;"></span></div></div>
-            <div class="run-item"><b>Task 3</b>Actor decision cards<div class="bar"><span style="--w: 38%;"></span></div></div>
-          </div>
-        </section>
-
-        <section class="panel">
-          <h3>Best-practice mapping</h3>
-          <div class="chat-list">
-            <div class="run-item"><b>VS Code Copilot</b>Chat remains central; tools, artifacts, diffs, and debug logs are inspectable.</div>
-            <div class="run-item"><b>Claude Code</b>Slash commands and usage controls belong near the input edge.</div>
-            <div class="run-item"><b>Gemini</b>Context files, tool inventory, and approvals are visible controls.</div>
-          </div>
-        </section>
-      </aside>
     </main>
 
-    <footer class="bottom" aria-label="Composer and run controls">
-      <div class="control-row">
-        <div class="bottom-group">
-          <select class="control-select" aria-label="Current chat">
-            <option>Project chat</option>
-            <option>Implementation chat</option>
-            <option>QA chat</option>
-          </select>
-          <select class="control-select" aria-label="Model">
-            <option>Claude Opus 4.7</option>
-            <option>Codex GPT-5.5</option>
-            <option>Copilot GPT-5.5</option>
-            <option>Gemini 3 Pro</option>
-          </select>
-          <select class="control-select" aria-label="Agent mode">
-            <option>Agent: Implement</option>
-            <option>Agent: Plan</option>
-            <option>Agent: Review</option>
-            <option>Agent: QA</option>
-          </select>
-          <select class="control-select" aria-label="Permissions">
-            <option>Approvals: default</option>
-            <option>Approvals: ask first</option>
-            <option>Approvals: trusted tools</option>
-          </select>
-          <button class="mini-button" data-modal="config">Configuration</button>
-          <button class="mini-button" data-modal="jobs">Jobs</button>
-          <button class="mini-button" data-modal="debug">Debug view</button>
+    <footer class="composer" aria-label="Chat composer">
+      <div class="composer-box">
+        <div class="input-area" contenteditable="true" aria-label="Message input">Ask for follow-up changes</div>
+        <div class="composer-bottom">
+          <div class="composer-actions">
+            <button class="icon" title="Attach">+</button>
+            <button class="small-button" data-modal="settings">Edit automatically</button>
+            <button class="small-button access">Full access v</button>
+            <button class="small-button" data-modal="history">ui.html</button>
+          </div>
+          <div class="composer-actions">
+            <select class="select-like" aria-label="Current chat">
+              <option>Project chat</option>
+              <option>QA chat</option>
+              <option>Implementation chat</option>
+            </select>
+            <select class="select-like model" aria-label="Model">
+              <option>5.5 Extra High</option>
+              <option>Claude Opus 4.7</option>
+              <option>Gemini 3 Pro</option>
+            </select>
+            <button class="send" data-action="start" title="Send">^</button>
+            <button class="stop" data-action="stop" title="Stop">Stop</button>
+          </div>
         </div>
-        <div class="bottom-group">
-          <button class="secondary" data-action="start">Start</button>
-          <button class="secondary" data-action="stop">Stop</button>
-        </div>
-      </div>
-      <div class="composer-row">
-        <div class="input">Write a human instruction. Use #file, #task, #screenshot, @orchestrator, or /review for structured actions...</div>
-        <button class="secondary" data-action="toggle-technical">Technical</button>
-        <button class="primary" data-action="send">Send</button>
-      </div>
-      <div class="chips">
-        <span class="chip">#currentTask</span>
-        <span class="chip">#latestScreenshot</span>
-        <span class="chip">#toolSummary</span>
-        <span class="chip">@orchestrator</span>
-        <span class="chip">/create-follow-up</span>
       </div>
     </footer>
   </div>
 
-  <div class="modal-backdrop" id="modal-config" aria-hidden="true">
-    <section class="modal" role="dialog" aria-label="Configuration">
+  <div class="modal-backdrop" id="modal-settings" aria-hidden="true">
+    <section class="modal" role="dialog" aria-label="Settings">
       <header>
-        <h2>Chat configuration</h2>
-        <button class="mini-button" data-close>Close</button>
+        <h2>Run configuration</h2>
+        <button class="small-button" data-close>Close</button>
       </header>
       <div class="modal-content">
-        <div class="settings-grid">
-          <div class="setting"><b>Model</b><p>Choose the model for the next run without adding noise to the transcript.</p></div>
-          <div class="setting"><b>Agent mode</b><p>Implement, Plan, Review, QA, or Supporting Agent. Mode changes are logged as subtle events.</p></div>
-          <div class="setting"><b>Permission level</b><p>Default approvals, ask first, trusted tools, or project-specific allowlist.</p></div>
-          <div class="setting"><b>Context</b><p>Active task, screenshots, tool summary, selected files, and project steering docs.</p></div>
-          <div class="setting"><b>Technical visibility</b><p>Default hides raw paths, JSON, tool payloads, command logs, and stack traces until expanded.</p></div>
-          <div class="setting"><b>Task events</b><p>New tasks appear as small timeline markers with hover/click metadata.</p></div>
+        <div class="panel">
+          <h3>Default behavior</h3>
+          <p>Human-readable chat is primary. Raw logs, paths, JSON contracts, tool payloads, task metadata, and queue state are always available behind expanders or the debug view.</p>
+        </div>
+        <div class="panel">
+          <h3>Composer controls</h3>
+          <p>Model, permission mode, current chat, attachment context, start, stop, and edit mode live at the bottom so the transcript can stay focused.</p>
         </div>
       </div>
     </section>
   </div>
 
-  <div class="modal-backdrop" id="modal-artifacts" aria-hidden="true">
-    <section class="modal" role="dialog" aria-label="Artifacts">
+  <div class="modal-backdrop" id="modal-history" aria-hidden="true">
+    <section class="modal" role="dialog" aria-label="History">
       <header>
-        <h2>Artifacts and screenshots</h2>
-        <button class="mini-button" data-close>Close</button>
+        <h2>Conversation history</h2>
+        <button class="small-button" data-close>Close</button>
       </header>
       <div class="modal-content">
-        <p style="margin:0;color:var(--soft);font-size:13px;">Visual evidence should be browsable without filling the transcript. This mirrors the VS Code artifacts panel pattern.</p>
-        <div class="artifact-strip">
-          <div class="thumb">Default chat</div>
-          <div class="thumb">Tool expanded</div>
-          <div class="thumb">Config overlay</div>
-          <div class="thumb">Jobs overlay</div>
-          <div class="thumb">Inspector collapsed</div>
-          <div class="thumb">Mobile composer</div>
-        </div>
-      </div>
-    </section>
-  </div>
-
-  <div class="modal-backdrop" id="modal-jobs" aria-hidden="true">
-    <section class="modal" role="dialog" aria-label="Jobs">
-      <header>
-        <h2>Implementation jobs</h2>
-        <button class="mini-button" data-close>Close</button>
-      </header>
-      <div class="modal-content">
-        <div class="settings-grid">
-          <div class="setting"><b>conversation-event-projection</b><p>Must consume the interactive v3 mockup and produce a human-first chat projection.</p></div>
-          <div class="setting"><b>tool-burst-collapsing</b><p>Default is compact inline burst. Raw tool list is trace or expansion only.</p></div>
-          <div class="setting"><b>actor-decision-cards</b><p>Use terse inline decisions, with expanded reason/evidence/action on demand.</p></div>
-          <div class="setting"><b>playwright-regression-suite</b><p>Verify bottom controls, overlays, task markers, technical details, inspector states, desktop, and mobile.</p></div>
-          <div class="setting"><b>chat-verbose-debug-view</b><p>Add the fullscreen developer debug surface for actor activity, run duration, task markers, tool bursts, and orchestrator explanations.</p></div>
-        </div>
+        <div class="panel"><h3>Current thread</h3><p>7 human-visible turns, 2 task markers, 1 orchestrator intervention, 17 collapsed tool calls.</p></div>
+        <div class="panel"><h3>Files</h3><p><code>chat-window-next-gen/ui.html</code>, <code>README.md</code>, <code>scenarios.md</code>, screenshot evidence.</p></div>
       </div>
     </section>
   </div>
 
   <div class="modal-backdrop" id="modal-debug" aria-hidden="true">
-    <section class="modal debug-modal" role="dialog" aria-label="Verbose debug view">
+    <section class="modal debug-modal" role="dialog" aria-label="Verbose debug">
       <header>
-        <h2>Verbose Debug, conversation history</h2>
-        <div class="chips">
-          <span class="chip">Read-only</span>
-          <span class="chip">3 tasks</span>
-          <span class="chip">31 min</span>
-          <span class="chip">148 tools</span>
-          <button class="mini-button" data-close>Close</button>
+        <h2>Verbose Debug, read-only developer view</h2>
+        <div class="row-actions">
+          <button class="small-button">Agent</button>
+          <button class="small-button">Orchestrator</button>
+          <button class="small-button">Tools</button>
+          <button class="small-button">Warnings</button>
+          <button class="small-button" data-close>Close</button>
         </div>
       </header>
       <div class="modal-content">
-        <div class="debug-layout">
-          <aside class="debug-column">
-            <section class="panel">
+        <div class="debug-grid">
+          <aside>
+            <div class="panel">
               <h3>Actor activity</h3>
-              <div class="metric-list">
+              <div class="metric-grid">
                 <div class="metric"><b>4</b><span>Agent turns</span></div>
-                <div class="metric"><b>2</b><span>User turns</span></div>
+                <div class="metric"><b>3</b><span>User turns</span></div>
                 <div class="metric"><b>2</b><span>Orchestrator events</span></div>
-                <div class="metric"><b>1</b><span>Supervisor event</span></div>
-              </div>
-            </section>
-            <section class="panel">
-              <h3>Timing</h3>
-              <div class="chat-list">
-                <div class="run-item"><b>Total duration</b>31 min active, 6 min waiting</div>
-                <div class="run-item"><b>Slowest segment</b>Tool burst, 14 min</div>
-                <div class="run-item"><b>Decision latency</b>Orchestrator reissue, 19 s</div>
-              </div>
-            </section>
-            <section class="panel">
-              <h3>Filters</h3>
-              <div class="chips">
-                <button class="mini-button">Agent</button>
-                <button class="mini-button">Orchestrator</button>
-                <button class="mini-button">Tools</button>
-                <button class="mini-button">Warnings</button>
-                <button class="mini-button">Tasks</button>
-              </div>
-            </section>
-          </aside>
-
-          <section class="debug-main">
-            <div class="debug-map">
-              <div class="debug-band">
-                <b>Task 1</b>
-                <div class="heat"><span style="--w: 82%;"></span></div>
-                <span>18 min, 96 tools</span>
-              </div>
-              <div class="debug-band">
-                <b>Agent</b>
-                <div class="heat"><span style="--w: 70%;"></span></div>
-                <span>planning, edit, summary</span>
-              </div>
-              <div class="debug-band">
-                <b>Tools</b>
-                <div class="heat"><span style="--w: 92%;"></span></div>
-                <span>read/search/edit/shell/test</span>
-              </div>
-              <div class="debug-band">
-                <b>Task 2</b>
-                <div class="heat"><span style="--w: 48%;"></span></div>
-                <span>6 min, reissue</span>
-              </div>
-              <div class="debug-band">
-                <b>Orch</b>
-                <div class="heat"><span style="--w: 36%;"></span></div>
-                <span>decision, evidence, action</span>
-              </div>
-              <div class="debug-band">
-                <b>Task 3</b>
-                <div class="heat"><span style="--w: 40%;"></span></div>
-                <span>QA, screenshots</span>
+                <div class="metric"><b>1</b><span>QA event</span></div>
               </div>
             </div>
-            <div class="debug-event"><b>Explanation:</b> The first task consumed most of the time in tool use. The orchestrator appeared only after user steering, then reissued the plan because the prior answer did not satisfy the updated chat-density requirement.</div>
-            <div class="debug-event"><b>Human-readable trace:</b> user asked for compactness, agent over-indexed on dashboarding, user corrected, orchestrator redirected, agent revised the composer and inspector model.</div>
-            <div class="debug-event"><b>Technical trace:</b> click `Tools`, `Orchestrator`, or `Warnings` to reveal raw command lines, JSON payloads, sentinels, prompt IDs, token usage, and screenshot paths.</div>
+            <div class="panel">
+              <h3>Timing</h3>
+              <p>Total duration: 31 min. Active tool time: 14 min. Waiting: 6 min. Longest review gap: 4 min.</p>
+            </div>
+          </aside>
+          <section class="timeline">
+            <div class="band"><b>User</b><div class="heat"><span style="--w: 48%;"></span></div><span>3 turns</span></div>
+            <div class="band"><b>Agent</b><div class="heat"><span style="--w: 88%;"></span></div><span>4 turns</span></div>
+            <div class="band"><b>Tools</b><div class="heat"><span style="--w: 76%;"></span></div><span>17 calls</span></div>
+            <div class="band"><b>Orchestrator</b><div class="heat"><span style="--w: 34%;"></span></div><span>2 decisions</span></div>
+            <div class="panel">
+              <h3>Explanation</h3>
+              <p>The first visual direction was too dashboard-heavy. The user supplied two chat references. The orchestrator converted that into a v4 chat-first mockup: transcript first, compact tool/change rows, bottom composer, debug as a secondary fullscreen view.</p>
+            </div>
+            <div class="panel">
+              <h3>Raw trace links</h3>
+              <p><code>logs/cli-output.log</code>, <code>session-events.jsonl</code>, Playwright screenshots, changed files, prompt snapshots, and API job updates.</p>
+            </div>
           </section>
-
-          <aside class="debug-side">
-            <section class="panel">
-              <h3>Why this view exists</h3>
-              <p style="margin:0;color:var(--soft);font-size:12px;line-height:1.35;">The primary chat hides technical noise. This fullscreen view restores the rich debugging power of the original dashboard when a developer wants to understand history, causality, time, actor frequency, tool density, and orchestrator behavior.</p>
-            </section>
-            <section class="panel">
-              <h3>Key questions</h3>
-              <div class="chat-list">
-                <div class="run-item"><b>How often was the agent active?</b>4 visible turns, 3 tool phases.</div>
-                <div class="run-item"><b>How often did the orchestrator act?</b>2 events, 1 reissue.</div>
-                <div class="run-item"><b>How long did it take?</b>31 min total, 24 min active work.</div>
-                <div class="run-item"><b>Where did it fail?</b>One test failed inside the first tool burst, fixed on retry.</div>
-              </div>
-            </section>
-            <section class="panel">
-              <h3>Drill-down actions</h3>
-              <div class="chips">
-                <button class="mini-button" data-details="tools">Open tool burst</button>
-                <button class="mini-button" data-details="decision">Open decision</button>
-                <button class="mini-button" data-modal="artifacts">Open artifacts</button>
-              </div>
-            </section>
+          <aside>
+            <div class="panel">
+              <h3>Warnings</h3>
+              <p>One design mismatch: the prior mockup over-prioritized metadata. Fixed in the default view by moving metadata behind expanders.</p>
+            </div>
+            <div class="panel">
+              <h3>Drill-down</h3>
+              <p>Click actor filters, task markers, changed files, or tool bursts to inspect causality without polluting the normal chat.</p>
+            </div>
           </aside>
         </div>
       </div>
     </section>
   </div>
 
-  <div class="toast" id="toast">Action applied.</div>
+  <div class="toast" id="toast">Ready.</div>
 
   <script>
     const body = document.body;
     const toast = document.getElementById('toast');
 
-    function showToast(text) {
-      toast.textContent = text;
+    function showToast(message) {
+      toast.textContent = message;
       toast.classList.add('show');
-      window.clearTimeout(showToast.timer);
-      showToast.timer = window.setTimeout(() => toast.classList.remove('show'), 1400);
+      clearTimeout(window.toastTimer);
+      window.toastTimer = setTimeout(() => toast.classList.remove('show'), 1500);
     }
 
     document.addEventListener('click', (event) => {
-      const button = event.target.closest('button');
-      if (!button) return;
-
-      const action = button.dataset.action;
-      const modal = button.dataset.modal;
-      const details = button.dataset.details;
-
-      if (action === 'toggle-inspector') {
-        body.classList.toggle('inspector-collapsed');
-        showToast(body.classList.contains('inspector-collapsed') ? 'Inspector collapsed.' : 'Inspector docked.');
+      const modalButton = event.target.closest('[data-modal]');
+      if (modalButton) {
+        const modal = document.getElementById(`modal-${modalButton.dataset.modal}`);
+        modal?.classList.add('open');
+        showToast(`${modalButton.dataset.modal} opened.`);
       }
 
-      if (action === 'toggle-technical') {
-        body.classList.toggle('show-technical');
-        showToast(body.classList.contains('show-technical') ? 'Technical layer visible.' : 'Human layer only.');
+      const closeButton = event.target.closest('[data-close]');
+      if (closeButton) {
+        closeButton.closest('.modal-backdrop')?.classList.remove('open');
       }
 
-      if (action === 'start') {
-        document.getElementById('runState').textContent = 'Running';
-        document.getElementById('runState').classList.add('live');
-        showToast('Run started in mockup.');
+      const collapseButton = event.target.closest('[data-collapse]');
+      if (collapseButton) {
+        const panel = document.getElementById(collapseButton.dataset.collapse);
+        panel?.classList.toggle('open');
       }
 
-      if (action === 'stop') {
-        document.getElementById('runState').textContent = 'Stopped';
-        showToast('Run stopped in mockup.');
+      const actionButton = event.target.closest('[data-action]');
+      if (actionButton?.dataset.action === 'start') {
+        body.classList.add('running');
+        showToast('Run started.');
+      }
+      if (actionButton?.dataset.action === 'stop') {
+        body.classList.remove('running');
+        showToast('Run stopped.');
       }
 
-      if (action === 'send') {
-        showToast('Message queued for selected chat.');
-      }
-
-      if (modal) {
-        const target = document.getElementById(`modal-${modal}`);
-        if (target) target.classList.add('open');
-      }
-
-      if (details) {
-        const target = document.getElementById(`details-${details}`);
-        if (target) target.classList.toggle('open');
-      }
-
-      if (button.matches('[data-close]')) {
-        button.closest('.modal-backdrop')?.classList.remove('open');
-      }
-
-      if (button.classList.contains('task-dot')) {
-        button.closest('[data-task-marker]')?.classList.toggle('open');
-      }
-    });
-
-    document.addEventListener('keydown', (event) => {
-      if (event.key === 'Escape') {
-        document.querySelectorAll('.modal-backdrop.open').forEach((modal) => modal.classList.remove('open'));
-        document.querySelectorAll('.task-marker.open').forEach((marker) => marker.classList.remove('open'));
+      if (event.target.classList.contains('modal-backdrop')) {
+        event.target.classList.remove('open');
       }
     });
   </script>

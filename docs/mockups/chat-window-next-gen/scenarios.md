@@ -186,3 +186,15 @@ Expected UI:
 - It explains the history: actor activity counts, orchestrator activity, supervisor activity, task markers, tool density, duration, token usage, warnings, artifacts, and decision evidence.
 - It keeps the dashboard-like diagnostic value from the first mockup while improving the visual hierarchy.
 - It can filter or drill down by Agent, Orchestrator, Tools, Warnings, and Tasks.
+
+## 19. Chat-First Reference Layout
+
+The user compares the mockup to modern Codex, Claude Code, and Copilot-style chat surfaces.
+
+Expected UI:
+
+- The default viewport reads as a chat transcript first, not as a dashboard.
+- Changed files, tool execution, task transitions, and orchestrator decisions appear as compact collapsible rows.
+- Markdown answers are rendered directly in the transcript with readable spacing, code chips, lists, and headings.
+- The bottom composer remains visible and contains attachments, permission mode, file context, current chat, model, send, and stop.
+- Verbose Debug remains accessible, but it is not the first thing the user sees.
