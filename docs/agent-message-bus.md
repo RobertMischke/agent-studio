@@ -174,6 +174,23 @@ Three-phase migration:
 
 **Phase A - bridge writers.** Add bus emit calls beside each existing writer. The supervisor writes the existing JSONL plus a bus message. The orchestrator chat log writes both `cli-output.log` and a bus message. No reader changes; the bus accumulates a complete duplicate of structured signals while consumers stay on the legacy paths. This is the slice in `agent-taskboard/2-ready/bridge-existing-events-to-message-bus/`.
 
+**Phase A canonical-source decision (V1, 2026-05-05).** The legacy raw streams remain canonical; the bus is a derived, append-only projection on top. Every bridged source still writes to the raw stream first; the bus emit fires after, best-effort. A bus failure never breaks the producer, and the bus never claims to be the only copy. Concretely:
+
+| Signal | Canonical writer | Bus mirror |
+|--------|------------------|------------|
+| User prompts and continuations | `cli-output.log` `[user]` line in `TaskRunnerService.AppendUserPromptToCliLog` | `kind:question`, participant `user` |
+| Orchestrator chat (Decision / Reissue / HeuristicFallback / GiveUp) | `cli-output.log` `[orchestrator]` line in `OrchestratorChatLog.Append` | `kind:decision`, participant `orchestrator:<project>`, severity per kind |
+| Supervisor chat notes (cancel-run, force-fail, chat-note, escalate, cycle-resume-failed) | `cli-output.log` `[supervisor]` line in `OrchestratorChatLog.AppendSupervisor` | `kind:advisory` or `kind:intervention`, participant `supervisor:<project>` |
+| Supervisor advisories (hard health, soft reasoning) | `logs/meta/<project>/observations.jsonl` via `HardHealthCheckHostedService.AppendObservationRecord` | `kind:advisory`, participant `supervisor:<project>`, artifact ref to the JSONL line |
+| Supervisor interventions (CancelRun, PausePickup, ForceFail, Resume) | `logs/meta/<project>/interventions.jsonl` via `SupervisorInterventionService.AppendInterventionRecord` | `kind:intervention`, participant `supervisor:<project>`, artifact ref to the JSONL line |
+| Run lifecycle (RunStarted, RunFinished, RunStopRequested) | `session-events.jsonl` + `[taskboard] Started/exited` markers in `cli-output.log` | `kind:lifecycle`, participant `runtime:taskboard`, shared `runId` derived from `(jobId, startedAtUtc)` |
+| Job state lane moves | Folder rename + `job.json` `state` field | `kind:lifecycle`, topic `JobStateMoved`, participant `runtime:taskboard` (emitted only at the explicit `EmitJobLifecycleAsync` call sites; folder watching does not emit) |
+| Token usage (orchestrator boot / decision turns) | `orchestrator.jsonl` `OrchestratorLogEntry.TokenUsage` | `kind:token-usage`, participant `orchestrator:<project>`, populated `tokens` block |
+
+The bridge is a single service - `AgentMessageBusBridge` - that the producers call with typed helpers. None of the producers depend on the bridge succeeding; an empty workspace config or a write failure logs at debug and lets the canonical path proceed. Tests in `backend.Tests/AgentMessageBusBridgeTests.cs` lock the mapping for every bridged source plus an end-to-end check that `OrchestratorChatLog.Append` produces both a `cli-output.log` line and a bus message.
+
+The CLI agent's free-form stdout is **not** parsed line-by-line into the bus. Per the constraint at the top of this section, individual agent lines stay in `cli-output.log` and are referenced via `artifact:log-slice` from the typed bus messages around them (the run lifecycle pair, the orchestrator decisions, the user prompts). When the project screen wants the full transcript, it follows the artifact.
+
 **Phase B - move readers.** New surfaces (Project Screen Observability panel, system-review monitor) read the bus. Legacy surfaces (frontend activity log, supervisor protocol panel) keep reading their original sources. Both stay green.
 
 **Phase C - drop duplicate writers.** Once readers are stable and a workspace-hygiene pass has converted historical legacy files into bus form, the supervisor writes only the bus. The orchestrator chat log keeps writing `cli-output.log` because the activity-log parser is the user-facing transcript and the bus does not duplicate raw transcripts. The bus message for an orchestrator decision references the corresponding `cli-output.log` slice via an `artifact:log-slice`.
