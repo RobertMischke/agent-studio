@@ -39,6 +39,7 @@ import { JobScreenshot } from './models/job.model';
     <div class="app"
          [class.app--vscode-layout]="featureFlags.vsCodeLayout()"
          [class.app--vscode-meta-open]="featureFlags.vsCodeLayout() && featureFlags.vsCodeMetaOpen()"
+         [class.app--kanban-spec-v1]="featureFlags.kanbanDesignSpecV1()"
          [class.app--task-open]="!!selectedJob()"
          data-testid="app-root">
       <header class="header">
@@ -1454,6 +1455,64 @@ import { JobScreenshot } from './models/job.model';
     }
     .app--vscode-layout .inspector__tabs {
       gap: 0;
+    }
+
+    /*
+     * Kanban board design spec V1 (flag: Frontend:KanbanDesignSpecV1, default off)
+     * Spec: docs/mockups/kanban-board-design/. Slice 1 lands the locked
+     * grid template, the lane spacing rhythm, and the card sizing rules.
+     * Off keeps the legacy flex layout untouched.
+     */
+    .app--kanban-spec-v1 .dashboard {
+      display: grid;
+      /* repeat(N, minmax(220px, 1fr)) - N is hard-coded at 7 for the
+         current ADR-0025 lane vocabulary. Slice 4 reads N from the
+         visible-lane count when failed-pickup gains a body. */
+      grid-template-columns: repeat(7, minmax(220px, 1fr));
+      gap: 4px;
+      padding: 16px;
+      background: var(--surface-2, #1e1e2e);
+      align-items: stretch;
+    }
+    .app--kanban-spec-v1 .lane-group {
+      display: contents;
+      background: transparent;
+      border: 0;
+      padding: 0;
+    }
+    .app--kanban-spec-v1 .lane-group__head {
+      display: none;
+    }
+    .app--kanban-spec-v1 .lane-group__lanes {
+      display: contents;
+      gap: 0;
+    }
+    .app--kanban-spec-v1 .column {
+      background: var(--surface-1, #181825);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 6px;
+      padding: 4px 8px 8px;
+      min-width: 0;
+      flex: initial;
+      gap: 8px;
+    }
+    .app--kanban-spec-v1 .column__header {
+      height: 36px;
+      padding-bottom: 0;
+      gap: 8px;
+    }
+    .app--kanban-spec-v1 .column__title {
+      font-size: 13px;
+    }
+    .app--kanban-spec-v1 .column__count {
+      font-size: 12px;
+    }
+    .app--kanban-spec-v1 .column-rail {
+      width: 48px;
+      min-width: 48px;
+      flex: 0 0 48px;
+      border-radius: 6px;
+      padding: 8px 4px;
     }
   `]
 })

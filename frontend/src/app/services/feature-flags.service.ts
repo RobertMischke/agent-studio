@@ -16,12 +16,21 @@ import { Injectable, signal } from '@angular/core';
 export class FeatureFlagsService {
   private static readonly KEY_VS_CODE_LAYOUT = 'atp.flag.vsCodeLayout';
   private static readonly KEY_VS_CODE_META_OPEN = 'atp.flag.vsCodeLayout.metaOpen';
+  private static readonly KEY_KANBAN_DESIGN_SPEC_V1 = 'atp.flag.kanbanDesignSpecV1';
 
   /** `Frontend:VsCodeLayout` — VS Code-style chrome with status bar + collapsible meta. */
   readonly vsCodeLayout = signal<boolean>(this.read(FeatureFlagsService.KEY_VS_CODE_LAYOUT));
 
   /** Meta-pane open state for the VS Code layout. Persisted independently. */
   readonly vsCodeMetaOpen = signal<boolean>(this.read(FeatureFlagsService.KEY_VS_CODE_META_OPEN));
+
+  /**
+   * `Frontend:KanbanDesignSpecV1` — slice 1 of the Kanban board design
+   * spec at docs/mockups/kanban-board-design/. Lands the locked grid
+   * template and the spacing/sizing rhythm. Off keeps the legacy flex
+   * layout untouched.
+   */
+  readonly kanbanDesignSpecV1 = signal<boolean>(this.read(FeatureFlagsService.KEY_KANBAN_DESIGN_SPEC_V1));
 
   setVsCodeLayout(on: boolean): void {
     this.vsCodeLayout.set(on);
@@ -31,6 +40,11 @@ export class FeatureFlagsService {
   setVsCodeMetaOpen(open: boolean): void {
     this.vsCodeMetaOpen.set(open);
     this.write(FeatureFlagsService.KEY_VS_CODE_META_OPEN, open);
+  }
+
+  setKanbanDesignSpecV1(on: boolean): void {
+    this.kanbanDesignSpecV1.set(on);
+    this.write(FeatureFlagsService.KEY_KANBAN_DESIGN_SPEC_V1, on);
   }
 
   private read(key: string): boolean {

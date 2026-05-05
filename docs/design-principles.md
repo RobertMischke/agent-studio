@@ -177,3 +177,18 @@ The rules:
 - **Persisted layout state survives reloads.** Pane widths, side-bar widths, meta-pane open state, and the active tab are all in `localStorage` because the user expects their workspace to look the same when they come back.
 
 The first slice ships behind the `Frontend:VsCodeLayout` feature flag, default off; the spec is [mockups/vscode-layout/](mockups/vscode-layout/README.md) and the per-element migration map is [mockups/vscode-layout/taxonomy.md](mockups/vscode-layout/taxonomy.md). When you add a new chrome element, check both: (a) does it survive the density rule, and (b) is there already a taxonomy entry for the destination it belongs in.
+
+## Kanban board
+
+The project Kanban board has a single visual specification. Every layout change to the board must reconcile with it before touching CSS, components, or grid math. The spec lives at [mockups/kanban-board-design/](mockups/kanban-board-design/README.md), with the locked decisions in [mockups/kanban-board-design/taxonomy.md](mockups/kanban-board-design/taxonomy.md), the interactive reference at [mockups/kanban-board-design/ui.html](mockups/kanban-board-design/ui.html), and the reconciliation table for the in-flight layout tasks at [mockups/kanban-board-design/reconciliation.md](mockups/kanban-board-design/reconciliation.md). The first-slice CSS lands behind `Frontend:KanbanDesignSpecV1`, default off.
+
+The non-negotiables that govern board work:
+
+- The lane row uses `grid-template-columns: repeat(N, minmax(220px, 1fr))`. `N` is the count of currently visible lanes. The optional `failed-pickup` lane increments `N` only when its task count is non-zero.
+- Lane headers are 36 px tall, 13 px chrome text, never carry a background fill. Phase color shows as a 1 px outline tint.
+- Cards are 56-200 px, 6 px radius, 10 px padding, `--surface-2` background. Selection uses a 2 px `--accent` outline; the brightness never changes.
+- Spacing is on the 4 / 8 / 12 / 16 px scale. The single recorded amendment is the 10 px card padding (carry-over).
+- Drag uses `transform` and `opacity` only. Drop animates over 180 ms; lane reorder over 200 ms. Cards never transition `background-color`.
+- Per-project collapse persistence (`atp.kanban.collapsed.<project>`); `7-archive` is collapsed by default for new projects.
+
+When you add a new lane, change a column width, or adjust the card stack, check both: (a) does the change survive the locked rules above, and (b) does it require an amendment in the taxonomy. A change without an amendment is a regression.

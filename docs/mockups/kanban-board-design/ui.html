@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Kanban board design spec - mockup</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --surface-0: #0f0f1a;
+      --surface-1: #181825;
+      --surface-2: #1e1e2e;
+      --border-1: rgba(255,255,255,0.06);
+      --accent: #a5b4fc;
+      --accent-blue: #38bdf8;
+      --accent-amber: #f59e0b;
+      --accent-green: #34d399;
+      --text-primary: #e2e8f0;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #0a0a14;
+      color: var(--text-primary);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px;
+    }
+    body { padding: 24px; }
+    h1 { font-size: 18px; margin: 0 0 4px; }
+    .page__intro {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin: 0 0 24px;
+      max-width: 880px;
+    }
+    .controls {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      margin: 0 0 16px;
+      font-size: 13px;
+    }
+    .controls label { color: var(--text-muted); cursor: pointer; }
+    .controls input[type=checkbox] { accent-color: var(--accent); }
+
+    /* Each viewport sample is a fixed-width frame so the screenshot
+       reflects the real grid math at the named viewport. */
+    .frame-stack { display: flex; flex-direction: column; gap: 32px; }
+    .frame {
+      border: 1px solid var(--border-1);
+      border-radius: 8px;
+      background: var(--surface-2);
+      box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+      overflow: hidden;
+    }
+    .frame__caption {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      background: var(--surface-1);
+      border-bottom: 1px solid var(--border-1);
+      font-size: 12px;
+      color: var(--text-muted);
+      letter-spacing: 0.04em;
+    }
+    .frame__caption strong { color: var(--text-primary); font-weight: 600; }
+    .frame__viewport { background: var(--surface-2); }
+    .frame--w1280 .frame__viewport { width: 1280px; }
+    .frame--w1440 .frame__viewport { width: 1440px; }
+    .frame--w1920 .frame__viewport { width: 1920px; }
+
+    /* Dashboard: the locked grid. */
+    .dashboard {
+      display: grid;
+      grid-template-columns: repeat(var(--lane-count, 7), minmax(220px, 1fr));
+      gap: 4px;
+      padding: 16px;
+      background: var(--surface-2);
+      overflow-x: auto;
+    }
+    .dashboard.dashboard--with-failed { --lane-count: 8; }
+
+    /* The phase group is presentation only. We render its label as a
+       pseudo-row above the lanes via CSS grid spans. The lanes
+       themselves stay in one continuous grid row (so the grid math is
+       per-lane, not per-group). */
+    .phase-label {
+      grid-row: 1;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      padding: 0 4px 4px;
+      align-self: end;
+    }
+    .phase-label__owner { color: var(--text-dim); font-weight: 500; margin-left: 6px; }
+    .lane {
+      grid-row: 2;
+      background: var(--surface-1);
+      border: 1px solid var(--border-1);
+      border-radius: 6px;
+      padding: 4px 8px 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      min-width: 0;
+    }
+    .lane--active { border-color: rgba(56, 189, 248, 0.30); }
+    .lane--done { border-color: rgba(52, 211, 153, 0.22); }
+    .lane--failed-pickup { border-color: rgba(245, 158, 11, 0.55); }
+
+    .lane__header {
+      height: 36px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0;
+      border-bottom: 1px solid var(--border-1);
+      min-width: 0;
+    }
+    .lane__icon { font-size: 14px; flex-shrink: 0; line-height: 1; }
+    .lane__title {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-primary);
+      flex: 1 1 0;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .lane__count {
+      background: rgba(255,255,255,0.08);
+      border-radius: 8px;
+      padding: 2px 8px;
+      font-size: 12px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      color: var(--text-muted);
+    }
+    .lane__chevron {
+      width: 22px;
+      height: 22px;
+      border-radius: 6px;
+      border: 1px solid var(--border-1);
+      background: rgba(255,255,255,0.04);
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 12px;
+      line-height: 1;
+      display: grid;
+      place-items: center;
+    }
+    .lane__amber-dot {
+      width: 12px; height: 12px;
+      border-radius: 999px;
+      background: var(--accent-amber);
+      flex-shrink: 0;
+    }
+
+    .lane__body {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex: 1;
+    }
+
+    .card {
+      background: var(--surface-2);
+      border: 1px solid var(--border-1);
+      border-radius: 6px;
+      padding: 10px;
+      min-height: 56px;
+      max-height: 200px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .card--selected { outline: 2px solid var(--accent); outline-offset: -2px; }
+    .card__title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-primary);
+      line-height: 1.3;
+      overflow: hidden;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+    }
+    .card__meta {
+      font-size: 13px;
+      color: var(--text-muted);
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      min-height: 18px;
+    }
+    .card__chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: auto; }
+    .chip {
+      font-size: 13px;
+      font-weight: 500;
+      padding: 1px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--border-1);
+      color: var(--text-muted);
+      background: rgba(255,255,255,0.03);
+    }
+    .chip--running { color: #7dd3fc; border-color: rgba(56,189,248,0.4); }
+    .chip--needs-input { color: #fcd34d; border-color: rgba(252,211,77,0.4); }
+    .chip--error { color: #fda4af; border-color: rgba(244,63,94,0.4); }
+    .chip--copilot { color: #c4b5fd; border-color: rgba(139,92,246,0.4); }
+
+    /* Collapsed rail */
+    .lane--rail {
+      grid-row: 2;
+      width: 48px;
+      min-width: 48px;
+      max-width: 48px;
+      padding: 8px 4px;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+    }
+    .lane--rail .lane__title {
+      writing-mode: vertical-rl;
+      transform: rotate(180deg);
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+    .lane--rail .lane__header { flex-direction: column; height: auto; border: 0; padding: 0; }
+    .lane--rail .lane__count { padding: 1px 6px; }
+
+    .legend {
+      display: flex;
+      gap: 16px;
+      font-size: 12px;
+      color: var(--text-muted);
+      padding: 8px 16px;
+      border-top: 1px solid var(--border-1);
+      background: var(--surface-1);
+    }
+    .legend strong { color: var(--text-primary); font-weight: 600; }
+  </style>
+</head>
+<body>
+  <h1>Kanban board design spec - interactive reference</h1>
+  <p class="page__intro">
+    Three viewport widths in one page. Each frame uses the locked grid
+    template <code>repeat(N, minmax(220px, 1fr))</code>. The toggles
+    show what the grid does when lanes collapse to rails or the optional
+    <code>failed-pickup</code> lane appears. Numbers come from the
+    spec; deviations require an amendment in <code>taxonomy.md</code>.
+  </p>
+
+  <div class="controls">
+    <label><input type="checkbox" id="ck-collapse-archive" checked /> Archive collapsed (default)</label>
+    <label><input type="checkbox" id="ck-collapse-completed" /> Collapse Completed</label>
+    <label><input type="checkbox" id="ck-show-failed" /> Show optional failed-pickup lane</label>
+    <label><input type="checkbox" id="ck-select-card" /> Show selected card</label>
+  </div>
+
+  <div class="frame-stack">
+
+    <!-- 1280 px -->
+    <section class="frame frame--w1280">
+      <header class="frame__caption">
+        <strong>1280 px viewport</strong>
+        <span>seven lanes, archive + completed collapsed (the recommended default at this width)</span>
+      </header>
+      <div class="frame__viewport">
+        <div class="dashboard" data-board data-collapse="6-completed,7-archive">
+          <span class="phase-label" style="grid-column: span 2;">Backlog<span class="phase-label__owner">human</span></span>
+          <span class="phase-label" style="grid-column: span 3;">Active<span class="phase-label__owner">agent</span></span>
+          <span class="phase-label" style="grid-column: span 2;">Done<span class="phase-label__owner">human</span></span>
+          <!-- lanes inserted by JS so collapse toggles work uniformly -->
+        </div>
+      </div>
+      <div class="legend">
+        <span>grid: <strong>repeat(7, minmax(220px, 1fr))</strong></span>
+        <span>lane padding: <strong>8 / 4 px</strong></span>
+        <span>card: <strong>56-200 px</strong></span>
+        <span>chrome text: <strong>13 px</strong></span>
+      </div>
+    </section>
+
+    <!-- 1440 px -->
+    <section class="frame frame--w1440">
+      <header class="frame__caption">
+        <strong>1440 px viewport</strong>
+        <span>seven lanes, all expanded</span>
+      </header>
+      <div class="frame__viewport">
+        <div class="dashboard" data-board>
+          <span class="phase-label" style="grid-column: span 2;">Backlog<span class="phase-label__owner">human</span></span>
+          <span class="phase-label" style="grid-column: span 3;">Active<span class="phase-label__owner">agent</span></span>
+          <span class="phase-label" style="grid-column: span 2;">Done<span class="phase-label__owner">human</span></span>
+        </div>
+      </div>
+      <div class="legend">
+        <span>lane min: <strong>220 px</strong></span>
+        <span>card padding: <strong>10 px</strong> (amendment)</span>
+        <span>card radius: <strong>6 px</strong></span>
+      </div>
+    </section>
+
+    <!-- 1920 px -->
+    <section class="frame frame--w1920">
+      <header class="frame__caption">
+        <strong>1920 px viewport</strong>
+        <span>eight lanes (failed-pickup forced on), nothing collapsed</span>
+      </header>
+      <div class="frame__viewport">
+        <div class="dashboard dashboard--with-failed" data-board data-force-failed>
+          <span class="phase-label" style="grid-column: span 2;">Backlog<span class="phase-label__owner">human</span></span>
+          <span class="phase-label" style="grid-column: span 4;">Active<span class="phase-label__owner">agent</span></span>
+          <span class="phase-label" style="grid-column: span 2;">Done<span class="phase-label__owner">human</span></span>
+        </div>
+      </div>
+      <div class="legend">
+        <span>failed-pickup outline: <strong>1 px amber</strong></span>
+        <span>amber dot: <strong>12 px</strong></span>
+        <span>not collapsible while non-empty</span>
+      </div>
+    </section>
+
+  </div>
+
+  <script>
+    // The lanes are data-driven so the toggles re-render every frame
+    // identically. This is presentation-only code; the implementation
+    // lives in Angular components in the app.
+    const LANES = [
+      { state: '1-preparation',  title: 'In Preparation', icon: '📋', phase: 'backlog', count: 4,
+        cards: [
+          { title: 'tags-for-tasks',                                      meta: 'preparation' },
+          { title: 'roadmap-view',                                         meta: 'preparation' },
+          { title: 'docs-marketing-drift-analysis-action',                 meta: 'preparation' },
+          { title: 'fix-auto-cycle-respects-active-job',                   meta: 'preparation' }
+        ]},
+      { state: '2-ready',        title: 'Ready',           icon: '📦', phase: 'backlog', count: 3,
+        cards: [
+          { title: 'chat-layout-integration-bridge',                       meta: 'ready · copilot', chips: ['copilot'] },
+          { title: 'improve-layout-of-the-details-page',                   meta: 'ready' },
+          { title: 'fix-kanban-lane-layout-overflow',                      meta: 'ready' }
+        ]},
+      { state: '3-progress',     title: 'In Progress',     icon: '🔵', phase: 'active', count: 1,
+        cards: [
+          { title: 'kanban-board-design-spec-mockup-first',                meta: 'opus 4.7 · running 02:14', chips: ['running','copilot'], selected: true }
+        ]},
+      { state: 'failed-pickup',  title: 'Failed Pickup',   icon: '⚠️', phase: 'active', count: 2, optional: true,
+        cards: [
+          { title: 'pickup-retry: claude-cli timeout',                     meta: 'auto-pickup · 1 retry', chips: ['error'] },
+          { title: 'pickup-retry: copilot rate limit',                     meta: 'auto-pickup · waiting', chips: ['error','copilot'] }
+        ]},
+      { state: '4-auto-review',  title: 'Auto Review',     icon: '🤖', phase: 'active', count: 2,
+        cards: [
+          { title: 'kanban-lane-grouping-collapse',                        meta: 'orchestrator · pending', chips: ['running'] },
+          { title: 'lanes-with-explicit-human-review-step',                meta: 'orchestrator · pending' }
+        ]},
+      { state: '5-human-review', title: 'Human Review',    icon: '👁️', phase: 'active', count: 2,
+        cards: [
+          { title: 'expanded-lifecycle-lanes-concept',                     meta: 'awaiting your review', chips: ['needs-input'] },
+          { title: 'vscode-style-layout-density-and-tabs',                 meta: 'awaiting your review' }
+        ]},
+      { state: '6-completed',    title: 'Completed',       icon: '🟢', phase: 'done', count: 5,
+        cards: [
+          { title: 'crash-recovery-doctrine',                              meta: '2026-05-04' },
+          { title: 'cli-usage-models',                                     meta: '2026-05-04' },
+          { title: 'json-schemas-and-in-memory-layer',                     meta: '2026-05-03' },
+          { title: 'workspace-token-timeline-view',                        meta: '2026-05-03' },
+          { title: 'visual-evidence-priority-screenshots-clickable',       meta: '2026-05-03' }
+        ]},
+      { state: '7-archive',      title: 'Archive',         icon: '🗄️', phase: 'done', count: 47,
+        cards: [
+          { title: 'commit-push-doctrine-docs',                            meta: '2026-04-29' },
+          { title: 'companion-app',                                        meta: '2026-04-28' },
+          { title: 'das-sortieren-ist-buggy',                              meta: '2026-04-27' }
+        ]}
+    ];
+
+    function laneEl(lane, opts) {
+      const collapsed = opts.collapsedStates.has(lane.state);
+      const root = document.createElement('div');
+      root.className = 'lane';
+      if (lane.phase === 'active') root.classList.add('lane--active');
+      if (lane.phase === 'done') root.classList.add('lane--done');
+      if (lane.state === 'failed-pickup') root.classList.add('lane--failed-pickup');
+      if (collapsed) root.classList.add('lane--rail');
+
+      const header = document.createElement('div');
+      header.className = 'lane__header';
+      const icon = document.createElement('span');
+      icon.className = 'lane__icon';
+      icon.textContent = lane.icon;
+      const title = document.createElement('h3');
+      title.className = 'lane__title';
+      title.textContent = lane.title;
+      const count = document.createElement('span');
+      count.className = 'lane__count';
+      count.textContent = lane.count;
+
+      header.appendChild(icon);
+      header.appendChild(title);
+      header.appendChild(count);
+
+      if (lane.state === 'failed-pickup') {
+        const dot = document.createElement('span');
+        dot.className = 'lane__amber-dot';
+        header.insertBefore(dot, icon.nextSibling);
+      }
+      if (!collapsed && lane.state !== 'failed-pickup') {
+        const chev = document.createElement('button');
+        chev.className = 'lane__chevron';
+        chev.textContent = '‹';
+        chev.title = 'Collapse';
+        header.appendChild(chev);
+      }
+
+      root.appendChild(header);
+
+      if (!collapsed) {
+        const body = document.createElement('div');
+        body.className = 'lane__body';
+        for (const c of lane.cards) {
+          const card = document.createElement('div');
+          card.className = 'card';
+          if (c.selected && opts.showSelected) card.classList.add('card--selected');
+          const t = document.createElement('div');
+          t.className = 'card__title';
+          t.textContent = c.title;
+          const m = document.createElement('div');
+          m.className = 'card__meta';
+          m.textContent = c.meta;
+          card.appendChild(t);
+          card.appendChild(m);
+          if (c.chips) {
+            const chips = document.createElement('div');
+            chips.className = 'card__chips';
+            for (const k of c.chips) {
+              const chip = document.createElement('span');
+              chip.className = 'chip chip--' + k;
+              chip.textContent = k;
+              chips.appendChild(chip);
+            }
+            card.appendChild(chips);
+          }
+          body.appendChild(card);
+        }
+        root.appendChild(body);
+      }
+
+      return root;
+    }
+
+    function render() {
+      const collapsed = new Set();
+      if (document.getElementById('ck-collapse-archive').checked) collapsed.add('7-archive');
+      if (document.getElementById('ck-collapse-completed').checked) collapsed.add('6-completed');
+      const showFailedToggle = document.getElementById('ck-show-failed').checked;
+      const showSelected = document.getElementById('ck-select-card').checked;
+
+      for (const board of document.querySelectorAll('[data-board]')) {
+        // wipe lanes (keep phase labels)
+        for (const lane of board.querySelectorAll('.lane')) lane.remove();
+
+        const forceFailed = board.hasAttribute('data-force-failed');
+        const showFailed = forceFailed || showFailedToggle;
+
+        // Per-frame collapse override so each viewport sample can show
+        // a different recommended default (e.g. 1280 collapses two
+        // lanes; 1440 only the archive; 1920 nothing).
+        const localCollapsed = new Set(collapsed);
+        const dataCollapse = board.getAttribute('data-collapse');
+        if (dataCollapse) {
+          for (const s of dataCollapse.split(',')) localCollapsed.add(s.trim());
+        }
+
+        for (const l of LANES) {
+          if (l.state === 'failed-pickup' && !showFailed) continue;
+          board.appendChild(laneEl(l, { collapsedStates: localCollapsed, showSelected }));
+        }
+
+        // Update grid track count to match visible lanes (collapsed
+        // rails still occupy a track but use a fixed 48 px width via
+        // the .lane--rail rule; the grid still allocates 1fr, which the
+        // rail ignores because of its fixed width). For visual fidelity
+        // we keep the track count equal to visible lane count.
+        const visibleLanes = LANES.filter(l => l.state !== 'failed-pickup' || showFailed).length;
+        board.style.setProperty('--lane-count', visibleLanes);
+      }
+    }
+
+    document.querySelectorAll('input[type=checkbox]').forEach(el => el.addEventListener('change', render));
+    render();
+  </script>
+</body>
+</html>
