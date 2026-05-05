@@ -57,7 +57,8 @@ import { markdownToHtml } from './markdown-utils';
         (startTitleEdit)="startTitleEdit()"
         (cancelTitleEdit)="cancelTitleEdit()"
         (saveTitle)="saveTitle()"
-        (completeAndNext)="completeAndNext()" />
+        (completeAndNext)="completeAndNext()"
+        (deleteRequested)="deleteRequested.emit()" />
 
       <app-command-deck
         [currentWatchPath]="detail().info.watchPath"
@@ -1288,6 +1289,7 @@ export class JobDetailComponent implements OnDestroy {
   readonly fileSaved = output<void>();
   readonly projectChanged = output<string>();
   readonly completeAndNextReview = output<void>();
+  readonly deleteRequested = output<void>();
 
   readonly editingPrompt = signal(false);
 

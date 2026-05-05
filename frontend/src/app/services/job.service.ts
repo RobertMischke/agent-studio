@@ -243,6 +243,10 @@ export class JobService {
     return this.http.post(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/change-project`, { targetWatchPath }, this.withWatchPath(watchPath));
   }
 
+  deleteJob(jobId: string, watchPath?: string) {
+    return this.http.delete(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}`, this.withWatchPath(watchPath));
+  }
+
   // Git
   getGitStatus(jobId: string, watchPath?: string) {
     return this.http.get<GitStatus>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/git/status`, this.withWatchPath(watchPath));

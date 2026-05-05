@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, computed, inject, input, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, inject, input, output, signal } from '@angular/core';
 import { AutoLoopSnapshot, JobInfo, JobTokenSummary, PendingIntent } from '../models/job.model';
 import { GitSummaryService } from '../services/git-summary.service';
 import { ClientService } from '../services/client.service';
@@ -44,6 +44,12 @@ if (typeof window !== 'undefined') {
           </span>
         }
         <span class="job-card__order">#{{ job().order }}</span>
+        <button type="button"
+                class="job-card__delete"
+                data-testid="job-card-delete"
+                title="Delete task"
+                aria-label="Delete task"
+                (click)="onDeleteClick($event)">🗑</button>
       </div>
       <h3 class="job-card__title">{{ job().title || job().id }}</h3>
       <div class="job-card__badges">
@@ -313,6 +319,35 @@ if (typeof window !== 'undefined') {
       color: #94a3b8;
       font-weight: 600;
       font-variant-numeric: tabular-nums;
+    }
+    /* Delete affordance: hidden until card hover so the cards stay calm in
+       the default board view. The button stops propagation so clicking it
+       never opens the detail panel. The confirmation prompt itself lives
+       in the parent component. */
+    .job-card__delete {
+      background: transparent;
+      border: 1px solid transparent;
+      color: #64748b;
+      width: 22px;
+      height: 22px;
+      padding: 0;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      line-height: 1;
+      display: grid;
+      place-items: center;
+      opacity: 0;
+      transition: opacity 0.15s, background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .job-card:hover .job-card__delete,
+    .job-card__delete:focus-visible {
+      opacity: 1;
+    }
+    .job-card__delete:hover {
+      background: rgba(244, 63, 94, 0.15);
+      border-color: rgba(244, 63, 94, 0.40);
+      color: #fda4af;
     }
 
     .job-card__title {
@@ -624,9 +659,15 @@ if (typeof window !== 'undefined') {
 })
 export class JobCardComponent implements OnInit, OnDestroy {
   readonly job = input.required<JobInfo>();
+  readonly deleteRequested = output<JobInfo>();
   private readonly gitSummary = inject(GitSummaryService);
   private readonly clients = inject(ClientService);
   private stopPolling: (() => void) | null = null;
+
+  onDeleteClick(event: MouseEvent) {
+    event.stopPropagation();
+    this.deleteRequested.emit(this.job());
+  }
 
   /**
    * Owner-attribution chip on every card. Resolves the job's

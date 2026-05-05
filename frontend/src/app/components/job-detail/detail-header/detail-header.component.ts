@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, ElementRef, ViewChild, computed, effect, inject, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, HostListener, ViewChild, computed, effect, inject, input, output, signal } from '@angular/core';
 import { JobInfo } from '../../../models/job.model';
 import {
   formatDateTime as fmtDateTime,
@@ -49,6 +49,57 @@ import { projectIdentity } from '../../../services/project-identity.util';
       font-size: 11px;
       font-weight: 800;
     }
+    :host .detail__menu-wrap { position: relative; display: inline-block; }
+    :host .detail__menu-btn {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      color: #cbd5e1;
+      width: 30px;
+      height: 30px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+      display: grid;
+      place-items: center;
+    }
+    :host .detail__menu-btn:hover {
+      background: rgba(255,255,255,0.10);
+      color: #f1f5f9;
+    }
+    :host .detail__menu {
+      position: absolute;
+      top: calc(100% + 6px);
+      right: 0;
+      z-index: 50;
+      min-width: 180px;
+      background: #11131a;
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 8px;
+      box-shadow: 0 8px 28px rgba(0,0,0,0.45);
+      padding: 4px;
+      display: flex;
+      flex-direction: column;
+    }
+    :host .detail__menu-item {
+      background: transparent;
+      border: 0;
+      color: #e2e8f0;
+      text-align: left;
+      padding: 8px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    :host .detail__menu-item:hover { background: rgba(255,255,255,0.06); }
+    :host .detail__menu-item--danger { color: #fda4af; }
+    :host .detail__menu-item--danger:hover {
+      background: rgba(244, 63, 94, 0.15);
+      color: #fecdd3;
+    }
   `]
 })
 export class DetailHeaderComponent {
@@ -65,6 +116,34 @@ export class DetailHeaderComponent {
   readonly saveTitle = output<void>();
   readonly titleDraftChange = output<string>();
   readonly completeAndNext = output<void>();
+  readonly deleteRequested = output<void>();
+
+  readonly menuOpen = signal(false);
+
+  toggleMenu(event: MouseEvent) {
+    event.stopPropagation();
+    this.menuOpen.update(v => !v);
+  }
+
+  closeMenu() {
+    this.menuOpen.set(false);
+  }
+
+  onDeleteClick(event: MouseEvent) {
+    event.stopPropagation();
+    this.menuOpen.set(false);
+    this.deleteRequested.emit();
+  }
+
+  @HostListener('document:click')
+  onDocumentClick() {
+    if (this.menuOpen()) this.menuOpen.set(false);
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscape() {
+    if (this.menuOpen()) this.menuOpen.set(false);
+  }
 
   @ViewChild('titleInput') private titleInputEl?: ElementRef<HTMLInputElement>;
 

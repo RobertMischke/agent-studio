@@ -210,7 +210,7 @@ interface VerboseDebugContext {
             }
 
             <main class="workspace__main">
-              <app-job-detail [detail]="detail" [watchPaths]="watchPaths()" (back)="closeDetail()" (fileSaved)="onFileSaved()" (projectChanged)="onProjectChanged($event)" (completeAndNextReview)="onCompleteAndNextReview()" />
+              <app-job-detail [detail]="detail" [watchPaths]="watchPaths()" (back)="closeDetail()" (fileSaved)="onFileSaved()" (projectChanged)="onProjectChanged($event)" (completeAndNextReview)="onCompleteAndNextReview()" (deleteRequested)="onDeleteFromDetail(detail.info)" />
             </main>
           </div>
         } @else {
@@ -235,6 +235,7 @@ interface VerboseDebugContext {
                       (jobClick)="openDetail($event)"
                       (jobDrop)="onJobDrop($event)"
                       (jobReorder)="onJobReorder($event)"
+                      (jobDeleteRequest)="onDeleteFromBoard($event)"
                       (addTask)="openCreate($event)"
                       (archiveAll)="onArchiveAll()" />
                   }
@@ -2084,6 +2085,36 @@ export class App implements OnInit {
           source: `Column ${event.state}`
         });
       },
+    });
+  }
+
+  onDeleteFromBoard(job: JobInfo) {
+    this.confirmAndDeleteJob(job, false);
+  }
+
+  onDeleteFromDetail(info: JobInfo) {
+    this.confirmAndDeleteJob(info, true);
+  }
+
+  private confirmAndDeleteJob(job: JobInfo, closeDetailOnSuccess: boolean) {
+    const label = job.title || job.id;
+    const message =
+      `Delete this task?\n\n"${label}"\n\nThis removes the job folder and all its files (prompt, logs, results). Do you really want this?`;
+    if (typeof window === 'undefined' || !window.confirm(message)) return;
+
+    this.jobService.deleteJob(job.id, job.watchPath).subscribe({
+      next: () => {
+        if (closeDetailOnSuccess) this.closeDetail();
+        this.refresh();
+      },
+      error: (err) => {
+        this.errorDialog.show(err, {
+          title: 'Failed to delete task',
+          fallbackMessage: 'Failed to delete task',
+          source: `Task ${job.id}`
+        });
+        this.refresh();
+      }
     });
   }
 

@@ -114,6 +114,7 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
                 <app-job-card
                   [job]="job"
                   (click)="jobClick.emit(job)"
+                  (deleteRequested)="jobDeleteRequest.emit($event)"
                   draggable="true"
                   (dragstart)="onDragStart($event, job)" />
               }
@@ -565,6 +566,7 @@ export class JobColumnComponent {
   readonly jobClick = output<JobInfo>();
   readonly jobDrop = output<{ jobId: string; watchPath: string; targetState: string }>();
   readonly jobReorder = output<{ state: string; jobs: JobOrderItem[] }>();
+  readonly jobDeleteRequest = output<JobInfo>();
   readonly addTask = output<string>();
   readonly archiveAll = output<void>();
   readonly collapseToggle = output<void>();

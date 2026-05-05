@@ -63,4 +63,21 @@
       {{ completingAndNext() ? '⏳' : '✓ Complete & Next' }}
     </button>
   }
+  <div class="detail__menu-wrap" (click)="$event.stopPropagation()">
+    <button type="button"
+            class="detail__menu-btn"
+            data-testid="detail-menu-btn"
+            aria-label="Task actions"
+            [attr.aria-expanded]="menuOpen()"
+            (click)="toggleMenu($event)">⋯</button>
+    @if (menuOpen()) {
+      <div class="detail__menu" role="menu" data-testid="detail-menu">
+        <button type="button"
+                class="detail__menu-item detail__menu-item--danger"
+                data-testid="detail-menu-delete"
+                role="menuitem"
+                (click)="onDeleteClick($event)">🗑 Delete task…</button>
+      </div>
+    }
+  </div>
 </header>
