@@ -138,7 +138,14 @@ test.describe('@mockup next-gen chat Angular prototype', () => {
     });
     await page.getByTestId('prototype-lightbox').getByText('Close').click();
 
+    await page.getByTestId('prototype-density-toggle').click();
+    await expect(page.getByTestId('next-gen-chat-angular-prototype')).toHaveAttribute('data-density', 'comfortable');
     await page.getByTestId('prototype-theme-toggle').click();
+    await expect(page.getByTestId('next-gen-chat-angular-prototype')).toHaveAttribute('data-theme', 'dark');
+    await page.screenshot({
+      path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-dark-workbench.png'),
+      fullPage: false,
+    });
     await page.getByTestId('prototype-pane-debug').click();
     await page.getByTestId('prototype-debug-open').click();
     await expect(page.getByTestId('prototype-debug-modal')).toBeVisible();

@@ -1230,6 +1230,10 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
       --danger: #d21f2b;
       --purple: #7457d9;
       --teal: #157e80;
+      --shadow-soft: rgba(15, 23, 42, 0.10);
+      --primary: var(--text);
+      --primary-text: var(--surface);
+      --scrollbar-thumb: #aeb9ca;
       height: 100vh;
       display: grid;
       grid-template-columns: 48px minmax(0, 1fr);
@@ -1241,27 +1245,64 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
     }
 
     .ng-chat-prototype[data-theme="dark"] {
-      --bg: #11151d;
-      --chrome: #171c26;
-      --surface: #1d2430;
-      --surface-soft: #151b25;
-      --line: #30394a;
-      --line-strong: #455268;
-      --text: #eef3fb;
-      --muted: #a3afc2;
-      --faint: #727e93;
-      --accent: #7aa7ff;
-      --ok: #8bd17c;
-      --warn: #f3b263;
-      --danger: #ff7180;
-      --purple: #a990ff;
-      --teal: #73d6cc;
+      --bg: #1f2026;
+      --chrome: #24262f;
+      --surface: #2b2e38;
+      --surface-soft: #343844;
+      --line: #4b5160;
+      --line-strong: #687184;
+      --text: #f4f0e8;
+      --muted: #c7c0b3;
+      --faint: #9ea39b;
+      --accent: #8fb8ff;
+      --ok: #a6d189;
+      --warn: #e6b673;
+      --danger: #f27d8a;
+      --purple: #c5a4ff;
+      --teal: #8bd5ca;
+      --shadow-soft: rgba(0, 0, 0, 0.28);
+      --primary: #8fb8ff;
+      --primary-text: #11141a;
+      --scrollbar-thumb: #626a7a;
     }
 
     .ng-chat-prototype--closed {
       grid-template-columns: 1fr;
       grid-template-rows: 1fr;
       place-items: center;
+    }
+
+    .inspector-rail,
+    .conversation__scroll,
+    .context__body,
+    .sheet__body,
+    .modal__panel,
+    .command {
+      scrollbar-width: thin;
+      scrollbar-color: var(--scrollbar-thumb) transparent;
+      scrollbar-gutter: stable;
+    }
+
+    .inspector-rail::-webkit-scrollbar,
+    .conversation__scroll::-webkit-scrollbar,
+    .context__body::-webkit-scrollbar,
+    .sheet__body::-webkit-scrollbar,
+    .modal__panel::-webkit-scrollbar,
+    .command::-webkit-scrollbar {
+      width: 9px;
+      height: 9px;
+    }
+
+    .inspector-rail::-webkit-scrollbar-thumb,
+    .conversation__scroll::-webkit-scrollbar-thumb,
+    .context__body::-webkit-scrollbar-thumb,
+    .sheet__body::-webkit-scrollbar-thumb,
+    .modal__panel::-webkit-scrollbar-thumb,
+    .command::-webkit-scrollbar-thumb {
+      border: 2px solid transparent;
+      border-radius: 999px;
+      background: var(--scrollbar-thumb);
+      background-clip: padding-box;
     }
 
     .prototype-closed {
@@ -2479,8 +2520,9 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
     }
 
     .composer__send {
-      background: var(--text) !important;
-      color: var(--surface) !important;
+      background: var(--primary) !important;
+      color: var(--primary-text) !important;
+      border-color: var(--primary) !important;
       display: inline-flex;
       align-items: center;
       gap: 5px;
@@ -2882,6 +2924,84 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
 
     .debug-grid h3 { margin: 0 0 10px; font-size: 14px; }
     .debug-grid p { color: var(--muted); line-height: 1.45; margin: 0; }
+
+    .ng-chat-prototype[data-theme="dark"] .workspace,
+    .ng-chat-prototype[data-theme="dark"] .conversation,
+    .ng-chat-prototype[data-theme="dark"] .context__body {
+      background:
+        linear-gradient(180deg, color-mix(in srgb, var(--chrome) 24%, transparent), transparent 160px),
+        var(--bg);
+    }
+
+    .ng-chat-prototype[data-theme="dark"] .activity,
+    .ng-chat-prototype[data-theme="dark"] .topbar,
+    .ng-chat-prototype[data-theme="dark"] .detail-chrome,
+    .ng-chat-prototype[data-theme="dark"] .context__head,
+    .ng-chat-prototype[data-theme="dark"] .sheet__head,
+    .ng-chat-prototype[data-theme="dark"] .conversation__topline {
+      background: color-mix(in srgb, var(--chrome) 86%, var(--surface));
+    }
+
+    .ng-chat-prototype[data-theme="dark"] .rail-guide,
+    .ng-chat-prototype[data-theme="dark"] .task-card,
+    .ng-chat-prototype[data-theme="dark"] .turn__body,
+    .ng-chat-prototype[data-theme="dark"] .decision,
+    .ng-chat-prototype[data-theme="dark"] .actor-key,
+    .ng-chat-prototype[data-theme="dark"] .run-popover,
+    .ng-chat-prototype[data-theme="dark"] .tool-burst,
+    .ng-chat-prototype[data-theme="dark"] .tool-details,
+    .ng-chat-prototype[data-theme="dark"] .composer,
+    .ng-chat-prototype[data-theme="dark"] .metric-grid div,
+    .ng-chat-prototype[data-theme="dark"] .context-card,
+    .ng-chat-prototype[data-theme="dark"] .source-card,
+    .ng-chat-prototype[data-theme="dark"] .git-summary,
+    .ng-chat-prototype[data-theme="dark"] .sheet__body article,
+    .ng-chat-prototype[data-theme="dark"] .sheet__summary,
+    .ng-chat-prototype[data-theme="dark"] .modal__panel,
+    .ng-chat-prototype[data-theme="dark"] .command {
+      background: var(--surface);
+      box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 4%, transparent);
+    }
+
+    .ng-chat-prototype[data-theme="dark"] .task-card--active,
+    .ng-chat-prototype[data-theme="dark"] .rail-action.icon-btn--active,
+    .ng-chat-prototype[data-theme="dark"] .scenario-row__active {
+      background: color-mix(in srgb, var(--accent) 12%, var(--surface)) !important;
+    }
+
+    .ng-chat-prototype[data-theme="dark"] .turn[data-actor="user"] .turn__body,
+    .ng-chat-prototype[data-theme="dark"] .actor-key__chip,
+    .ng-chat-prototype[data-theme="dark"] .composer__input,
+    .ng-chat-prototype[data-theme="dark"] .preview-grid button,
+    .ng-chat-prototype[data-theme="dark"] .function-grid button,
+    .ng-chat-prototype[data-theme="dark"] .git-actions button,
+    .ng-chat-prototype[data-theme="dark"] code {
+      background: var(--surface-soft);
+    }
+
+    .ng-chat-prototype[data-theme="dark"] .turn[data-actor="user"] .turn__role {
+      background: color-mix(in srgb, var(--accent) 24%, var(--surface-soft));
+      border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+      color: var(--text);
+    }
+
+    .ng-chat-prototype[data-theme="dark"] .actor-key__chip[data-actor="user"] .actor-avatar {
+      background: var(--surface-soft);
+      color: var(--text);
+      border: 1px solid var(--line-strong);
+    }
+
+    .ng-chat-prototype[data-theme="dark"] .actor-key__chip[data-actor="user"] .actor-avatar .svg-icon {
+      color: var(--text);
+    }
+
+    .ng-chat-prototype[data-theme="dark"] .composer__send {
+      box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent), 0 6px 18px color-mix(in srgb, var(--accent) 18%, transparent);
+    }
+
+    .ng-chat-prototype[data-theme="dark"] .sheet__composer {
+      background: color-mix(in srgb, var(--chrome) 82%, var(--surface));
+    }
 
     .ng-chat-prototype[data-density="compact"] .workspace {
       grid-template-columns: 144px minmax(590px, 1fr) minmax(272px, 28vw);
