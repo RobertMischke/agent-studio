@@ -2506,3 +2506,279 @@ AggregateError [ECONNREFUSED]:
 AggregateError [ECONNREFUSED]: 
     at internalConnectMultiple (node:net:1139:18)
     at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:40:04[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/copilot/models[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:40:04[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:40:04[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate/cached[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:40:04[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:40:04[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:40:04[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:40:34[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:40:34[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:41:04[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:41:04[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:41:04[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:41:04[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:41:34[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:41:34[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:42:04[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:42:04[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:42:04[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:42:04[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:42:34[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:42:34[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:43:04[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:43:04[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:43:04[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:43:04[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:44:04[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:44:04[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:44:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:44:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:45:04[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:45:04[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:45:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:45:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:46:04[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:46:04[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:46:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:46:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:47:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:47:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:47:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:47:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:48:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:48:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:48:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:48:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:48:40[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/jobs[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:49:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:49:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:49:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:49:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:50:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:50:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:50:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:50:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:51:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:51:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:51:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:51:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:52:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:52:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:52:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:52:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:53:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:53:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:53:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:53:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:54:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:54:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:54:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m16:54:29[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
