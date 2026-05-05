@@ -33,9 +33,9 @@ Today the application provides:
 - Live task output, protocol summaries, screenshots, and review evidence.
 - CLI quota and session visibility where the underlying tools expose enough data.
 - Recovery after session loss via job-folder evidence and deterministic continuation planning.
-- Early project-level planning tasks for Security and Architecture dimensions.
+- Early project-level planning tasks for Security, Architecture, and Drift dimensions.
 - Supervisor, system-review, and meta-cycle concepts for recurring "is this on track?" inspection, with Markdown reports and structured JSON contracts where the app needs to parse results.
-- An integrated design mockup for project-level Security, Architecture, UX/UI, Test Quality, Token Usage, Steering Docs, Audits and Checks, and Skills under `docs/mockups/quality-system/`. This is exploratory, not product behavior yet.
+- An integrated design mockup for project-level Security, Architecture, Drift, UX/UI, Test Quality, Token Usage, Steering Docs, Audits and Checks, and Skills under `docs/mockups/quality-system/`. This is exploratory, not product behavior yet.
 - Early product planning for a project-level steering-documentation surface: the app should show the README, AGENTS, task contracts, skills lookup, and other agent-facing instructions together with a shorter human summary and drift warnings.
 
 ## Roadmap Themes
@@ -98,6 +98,54 @@ First implementation order:
 4. Finding chips in task review and a follow-up-task action.
 5. Skills catalog for installed local skills and built-in audit/check definitions.
 6. Performance Probe slots after the audit/check loop is stable.
+
+### Drift Control
+
+Make Drift a first-class project dimension beside Architecture. The most important drift is not document-to-document drift; it is when the actual software no longer follows the documented intent, architecture, guidelines, tests, runtime expectations, or product promises.
+
+The Drift surface should answer:
+
+- Does the software still do what the specs, README, roadmap, task prompts, and acceptance criteria say?
+- Does the source tree still match the ADRs, architecture notes, module boundaries, and high-level system architecture?
+- Do the tests and QA history still cover the areas the docs call risky?
+- Does runtime behavior match the expected domain behavior and performance signals?
+- Do marketing and website claims still match what the product actually does?
+
+Architecture Drift needs a special model. A project can define a compact high-level architecture map, represented in UI as a marble-style diagram or architecture board. The model should have a hard readability limit of at most ten elements per map. Each element records its role, ownership boundary, allowed dependencies, important guidelines, evidence sources, and current drift score.
+
+Example elements:
+
+- Frontend app shell.
+- Backend API.
+- Task Access layer.
+- Runner / CLI execution layer.
+- Agent Message Bus.
+- Project organization store.
+- Analysis Reports.
+- Drift Control.
+- Runtime Observability.
+- Schema-backed in-memory layer.
+
+Each architecture element can then accumulate drift:
+
+- Expected role vs current code responsibility.
+- Allowed dependencies vs actual dependencies.
+- Documented data contracts vs current JSON schemas and DTOs.
+- Expected runtime behavior vs logs and tests.
+- Ownership boundary vs files touched by recent jobs.
+- Evidence freshness: last analysis, last test, last architecture review.
+
+The Drift report JSON should support both dimension-level scores and architecture-element-level scores. The UI should show the marble diagram as a scan surface: green/yellow/red elements, score trend, latest finding, source coverage, and a drill-down to evidence. Clicking an element opens its current contract, files, docs, reports, and follow-up tasks.
+
+First implementation order:
+
+1. Extend `drift-report.schema.json` with an optional architecture model: max ten elements, per-element expected role, source refs, score, severity, source coverage, evidence refs, and follow-up suggestions.
+2. Define a Markdown architecture-model authoring contract so projects can write the high-level system map without a drawing tool.
+3. Add the Drift surface marble view with per-element scores and drill-down.
+4. Implement **Software / Architecture Drift** analysis: compare architecture model and ADRs against source tree, schemas, runtime events, tests, and recent job evidence.
+5. Let each architecture element create normal follow-up tasks for code cleanup, ADR updates, missing tests, missing runtime signals, or documentation sync.
+
+Queued at `agent-taskboard/2-ready/architecture-model-drift-contract/`, `agent-taskboard/2-ready/architecture-marble-drift-surface/`, and `agent-taskboard/2-ready/software-architecture-drift-analysis-action/`.
 
 ### Creativity And Design
 

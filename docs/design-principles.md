@@ -79,6 +79,8 @@ Drift scores are triage, not authority:
 - A drift finding can suggest a task, patch, or documentation update, but it must not silently edit project state.
 - The user must be able to see whether a drift item is new, accepted, ignored, already tracked, or resolved.
 
+Architecture drift needs a visual scan surface. A project may define a compact high-level architecture model with at most ten elements. The Drift view can render those elements as a marble-style architecture map: each element has a role, guidelines, allowed dependencies, source refs, and a current drift score. The user should be able to click from a red or yellow element directly into the source files, ADRs, schemas, tests, runtime evidence, and follow-up tasks that explain the score.
+
 ## Agent-facing steering context is visible
 
 The instructions that shape agent behavior are part of the product experience. README files, AGENTS files, task contracts, runtime prompts, project settings, skills lookup sections, ADR indexes, and project-specific steering notes are not just repository plumbing. They explain why agents keep making certain choices.

@@ -93,12 +93,14 @@ This keeps the app aligned with the sequential queue. The user reviews and decid
 
 ### Drift
 
-- Holds project-level drift history, current score, dimension scores, findings, trends, and follow-up status.
+- Holds project-level drift history, current score, dimension scores, architecture-element scores, findings, trends, and follow-up status.
 - Compares intent, specifications, tasks, jobs, ADRs, source code, README, AGENTS, roadmap, marketing docs, design references, tests, runtime behavior, process rules, report schemas, and token usage.
-- Offers explicit actions such as Analyze Project Drift, Compare Specs to Tasks and Jobs, Compare ADRs to Code, Compare Docs and Marketing to Product Behavior, Compare Design to Screenshots, Compare Tests to Risk, and Create Follow-up Task.
+- Includes a high-level architecture model with at most ten elements. Each element can show expected role, guidelines, allowed dependencies, source refs, score, severity, evidence freshness, and follow-up tasks.
+- Offers explicit actions such as Analyze Project Drift, Compare Specs to Tasks and Jobs, Compare ADRs to Code, Compare Architecture Map to Software, Compare Docs and Marketing to Product Behavior, Compare Design to Screenshots, Compare Tests to Risk, and Create Follow-up Task.
 - Uses Markdown plus structured JSON. Invalid JSON does not hide the report.
 - Stores score inputs: severity, confidence, source coverage, age, affected surfaces, recurrence, and tracking state.
 - Shows whether a finding is new, accepted, ignored, already tracked, or resolved.
+- Uses a marble-style architecture map as a visual scan surface for software drift. Green elements align with their architecture contract; yellow or red elements need evidence review.
 
 Suggested dimension vocabulary:
 

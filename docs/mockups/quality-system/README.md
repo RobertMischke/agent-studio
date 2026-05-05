@@ -14,8 +14,8 @@ This folder is the only active mockup for this product direction. The earlier cr
 Use concrete project surfaces instead of a vague top-level Quality product:
 
 - **Security** on the project page, visually promoted.
-- **Architecture** for ADRs and architecture review.
-- **Drift** for project-level divergence between specs, tasks, jobs, ADRs, source code, README, AGENTS, marketing, tests, runtime behavior, and design references.
+- **Architecture** for ADRs, high-level architecture maps, and architecture review.
+- **Drift** for project-level divergence between specs, tasks, jobs, ADRs, source code, README, AGENTS, marketing, tests, runtime behavior, and design references. The Drift view should include a marble-style architecture map with at most ten elements and per-element software drift.
 - **UX/UI** for design references, screenshots, markdown briefs, accepted and rejected variants, council critique, and next-version actions.
 - **Test Quality** for backend tests, end-to-end tests, tuning tests, coverage, source-code maps, module organization, and QA report history.
 - **Token Usage** for project totals, category splits, job heatmaps, timelines, expensive jobs, and drill-down into job, supporting job, and orchestrator spend.
@@ -43,6 +43,7 @@ Examples:
 - Analyze project drift.
 - Compare specs to tasks and jobs.
 - Compare ADRs to source code.
+- Compare architecture map elements to source code, tests, schemas, runtime behavior, and recent job evidence.
 - Compare marketing and README to product behavior.
 - Summarize steering docs.
 - Check steering docs drift.
@@ -81,12 +82,13 @@ This design must not turn the app into a workflow engine.
 6. Design evidence format for screenshot variants, references, council notes, and next-version decisions.
 7. QA run history for backend tests, end-to-end tests, tuning tests, coverage, and source metrics.
 8. Token usage aggregation with Job Tokens, Supporting Jobs Tokens, Orchestrator Tokens, heatmap, timeline, and job drill-down.
-9. Drift report schema and scoring for intent, spec, task, job, architecture, documentation, marketing, design, test, runtime, process, schema, and token drift.
-10. Drift project surface with score cards, dimension history, action buttons, and follow-up-task creation.
-11. Steering Docs surface with raw agent-facing documents, human summaries, drift warnings, and evidence-backed update proposals.
-12. Orchestrator output-pattern analysis that detects repeated failures across jobs and proposes steering-documentation improvements.
-13. Findings visible on the task review surface with a "create follow-up task" action.
-14. Local Skills catalog for installed workflow skills.
+9. Drift report schema and scoring for intent, spec, task, job, architecture, documentation, marketing, design, test, runtime, process, schema, token, and per-architecture-element software drift.
+10. Architecture model contract for a high-level map with at most ten elements.
+11. Drift project surface with score cards, dimension history, marble architecture map, action buttons, and follow-up-task creation.
+12. Steering Docs surface with raw agent-facing documents, human summaries, drift warnings, and evidence-backed update proposals.
+13. Orchestrator output-pattern analysis that detects repeated failures across jobs and proposes steering-documentation improvements.
+14. Findings visible on the task review surface with a "create follow-up task" action.
+15. Local Skills catalog for installed workflow skills.
 
 ## What This Mockup Is For
 

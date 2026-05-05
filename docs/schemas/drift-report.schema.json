@@ -150,6 +150,113 @@
         }
       }
     },
+    "architectureModel": {
+      "type": ["object", "null"],
+      "description": "Optional high-level architecture model used for software-to-architecture drift. Intended for a marble-style project view. Keep the model small enough for humans to scan.",
+      "additionalProperties": false,
+      "required": ["modelId", "title", "elements"],
+      "properties": {
+        "modelId": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Stable id for the architecture model used by this report."
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Human-readable model title."
+        },
+        "sourceRef": {
+          "type": ["string", "null"],
+          "description": "Path or id of the source architecture document that defined this model."
+        },
+        "elements": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10,
+          "description": "High-level architecture elements. Hard limit of ten keeps the map reviewable.",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "elementId",
+              "label",
+              "expectedRole",
+              "score",
+              "severity",
+              "sourceCoverage",
+              "status",
+              "evidenceRefs"
+            ],
+            "properties": {
+              "elementId": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Stable id for the architecture element."
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "description": "Short display label for the marble."
+              },
+              "expectedRole": {
+                "type": "string",
+                "description": "What this element is supposed to own or do."
+              },
+              "guidelines": {
+                "type": "array",
+                "description": "Important rules this element should follow.",
+                "items": { "type": "string", "minLength": 1 }
+              },
+              "allowedDependencies": {
+                "type": "array",
+                "description": "Element ids or external systems this element may depend on.",
+                "items": { "type": "string", "minLength": 1 }
+              },
+              "sourceRefs": {
+                "type": "array",
+                "description": "Docs, folders, schemas, tests, runtime streams, or reports used to assess this element.",
+                "items": { "type": "string", "minLength": 1 }
+              },
+              "score": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100,
+                "description": "Per-element drift score. Higher is healthier."
+              },
+              "severity": {
+                "enum": ["Info", "Warn", "High", "Critical"],
+                "description": "Worst current finding severity for this element."
+              },
+              "sourceCoverage": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "How much of the expected source set for this element was inspected."
+              },
+              "status": {
+                "enum": ["New", "Accepted", "Ignored", "Tracked", "Resolved"],
+                "description": "Tracking state for this element's current drift."
+              },
+              "summary": {
+                "type": ["string", "null"],
+                "description": "Short explanation of this element's drift state."
+              },
+              "evidenceRefs": {
+                "type": "array",
+                "description": "Evidence paths or ids that explain this element's score.",
+                "items": { "type": "string", "minLength": 1 }
+              },
+              "followUpTaskSuggestions": {
+                "type": "array",
+                "description": "Element-specific follow-up suggestions.",
+                "items": { "type": "string", "minLength": 1 }
+              }
+            }
+          }
+        }
+      }
+    },
     "followUpTaskSuggestions": {
       "type": "array",
       "description": "Normal queued tasks that could reduce drift.",
