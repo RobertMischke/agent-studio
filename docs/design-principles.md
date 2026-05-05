@@ -65,6 +65,20 @@ The output still follows the same evidence rule:
 
 The UI should give analysis reports their own place at project level. They are not buried inside one task unless the analysis was explicitly task-scoped.
 
+## Drift is a scored project dimension
+
+Drift is the gap between what the project says and what the project does. It can happen between specs and tasks, tasks and jobs, ADRs and source code, README and product behavior, marketing and shipped reality, design references and screenshots, tests and risk areas, or runtime logs and expected behavior.
+
+The project page should treat Drift as its own destination, not only as a filter inside Analysis Reports. A user should be able to trigger a Drift analysis, see a score, understand which dimensions contributed to it, and create normal follow-up tasks from the findings.
+
+Drift scores are triage, not authority:
+
+- Every score must link to evidence.
+- Every dimension must show confidence and source coverage.
+- A failed JSON parse must leave the Markdown report visible.
+- A drift finding can suggest a task, patch, or documentation update, but it must not silently edit project state.
+- The user must be able to see whether a drift item is new, accepted, ignored, already tracked, or resolved.
+
 ## Agent-facing steering context is visible
 
 The instructions that shape agent behavior are part of the product experience. README files, AGENTS files, task contracts, runtime prompts, project settings, skills lookup sections, ADR indexes, and project-specific steering notes are not just repository plumbing. They explain why agents keep making certain choices.

@@ -14,7 +14,8 @@ This folder is the only active mockup for this product direction. The earlier cr
 Use concrete project surfaces instead of a vague top-level Quality product:
 
 - **Security** on the project page, visually promoted.
-- **Architecture** for ADRs and drift review.
+- **Architecture** for ADRs and architecture review.
+- **Drift** for project-level divergence between specs, tasks, jobs, ADRs, source code, README, AGENTS, marketing, tests, runtime behavior, and design references.
 - **UX/UI** for design references, screenshots, markdown briefs, accepted and rejected variants, council critique, and next-version actions.
 - **Test Quality** for backend tests, end-to-end tests, tuning tests, coverage, source-code maps, module organization, and QA report history.
 - **Token Usage** for project totals, category splits, job heatmaps, timelines, expensive jobs, and drill-down into job, supporting job, and orchestrator spend.
@@ -39,6 +40,10 @@ Examples:
 - Run tuning tests.
 - Generate source map.
 - Open token heatmap.
+- Analyze project drift.
+- Compare specs to tasks and jobs.
+- Compare ADRs to source code.
+- Compare marketing and README to product behavior.
 - Summarize steering docs.
 - Check steering docs drift.
 - Propose README or AGENTS update.
@@ -62,23 +67,26 @@ This design must not turn the app into a workflow engine.
 - Design councils are advisory evidence, not automatic mandates.
 - QA actions are explicit unless a project later opts into a specific safe automation.
 - Token usage is visibility and accountability, not a scheduling policy by itself.
+- Drift scores are triage signals with evidence links, not automatic decisions.
 - Steering-doc analysis produces reviewable proposals, not hidden instruction edits.
 - Follow-up work becomes a normal queued task.
 
 ## First Implementation Slice
 
 1. Project Security panel with baseline state and review history.
-2. UX/UI, Test Quality, and Token Usage as project-level menu surfaces beside Security and Architecture.
+2. Drift, UX/UI, Test Quality, and Token Usage as project-level menu surfaces beside Security and Architecture.
 3. Review definition model for Audits and Task Checks, stored as Markdown with frontmatter.
 4. Per-project Task Check defaults.
 5. One spawned Task Check after a main task finishes, writing structured findings into the job folder.
 6. Design evidence format for screenshot variants, references, council notes, and next-version decisions.
 7. QA run history for backend tests, end-to-end tests, tuning tests, coverage, and source metrics.
 8. Token usage aggregation with Job Tokens, Supporting Jobs Tokens, Orchestrator Tokens, heatmap, timeline, and job drill-down.
-9. Steering Docs surface with raw agent-facing documents, human summaries, drift warnings, and evidence-backed update proposals.
-10. Orchestrator output-pattern analysis that detects repeated failures across jobs and proposes steering-documentation improvements.
-11. Findings visible on the task review surface with a "create follow-up task" action.
-12. Local Skills catalog for installed workflow skills.
+9. Drift report schema and scoring for intent, spec, task, job, architecture, documentation, marketing, design, test, runtime, process, schema, and token drift.
+10. Drift project surface with score cards, dimension history, action buttons, and follow-up-task creation.
+11. Steering Docs surface with raw agent-facing documents, human summaries, drift warnings, and evidence-backed update proposals.
+12. Orchestrator output-pattern analysis that detects repeated failures across jobs and proposes steering-documentation improvements.
+13. Findings visible on the task review surface with a "create follow-up task" action.
+14. Local Skills catalog for installed workflow skills.
 
 ## What This Mockup Is For
 

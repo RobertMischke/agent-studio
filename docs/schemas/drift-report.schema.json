@@ -1,0 +1,189 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-taskboard.local/schemas/drift-report.schema.json",
+  "title": "DriftReport",
+  "description": "One project-level drift analysis report. Drift compares two or more project surfaces such as specs, tasks, jobs, ADRs, source code, README, AGENTS, marketing, design, tests, runtime behavior, process rules, report schemas, and token usage.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "reportId",
+    "project",
+    "createdAt",
+    "trigger",
+    "scope",
+    "overallScore",
+    "scoreBand",
+    "dimensions",
+    "summary",
+    "followUpTaskSuggestions",
+    "schemaVersion"
+  ],
+  "properties": {
+    "reportId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Stable id for this drift report. Prefer ULID or UUID v7."
+    },
+    "project": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Project name as shown in the project organization layer."
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp at which the report was created."
+    },
+    "trigger": {
+      "enum": ["Manual", "Scheduled", "MetaCycle", "SupportingAgent", "ExternalMonitor"],
+      "description": "What caused the drift analysis to run."
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "enum": ["Project", "Workspace", "Task", "Run", "TimeWindow"],
+          "description": "Primary scope for this report."
+        },
+        "taskId": { "type": ["string", "null"] },
+        "runId": { "type": ["string", "null"] },
+        "timeWindow": { "type": ["string", "null"] },
+        "sourceRefs": {
+          "type": "array",
+          "description": "Documents, folders, reports, or event streams that were included.",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      }
+    },
+    "overallScore": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Triage score. Higher is healthier, lower means more drift risk."
+    },
+    "scoreBand": {
+      "enum": ["Healthy", "Watch", "Warn", "Critical", "Unknown"],
+      "description": "Human-facing score band derived from overallScore and high-severity findings."
+    },
+    "summary": {
+      "type": "string",
+      "description": "Short human summary of the drift state."
+    },
+    "dimensions": {
+      "type": "array",
+      "minItems": 1,
+      "description": "Per-dimension drift findings and scores.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "type",
+          "score",
+          "severity",
+          "confidence",
+          "sourceCoverage",
+          "status",
+          "summary",
+          "evidenceRefs",
+          "recommendedActions"
+        ],
+        "properties": {
+          "type": {
+            "enum": [
+              "Intent",
+              "Spec",
+              "TaskJob",
+              "Architecture",
+              "Documentation",
+              "Marketing",
+              "Design",
+              "Test",
+              "Runtime",
+              "Process",
+              "Schema",
+              "Token"
+            ],
+            "description": "Drift dimension."
+          },
+          "score": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100,
+            "description": "Per-dimension triage score. Higher is healthier."
+          },
+          "severity": {
+            "enum": ["Info", "Warn", "High", "Critical"],
+            "description": "Worst current finding severity for this dimension."
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "Model or analyzer confidence in the dimension assessment."
+          },
+          "sourceCoverage": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1,
+            "description": "How much of the expected source set was actually inspected."
+          },
+          "status": {
+            "enum": ["New", "Accepted", "Ignored", "Tracked", "Resolved"],
+            "description": "User or system tracking state for the dimension's current findings."
+          },
+          "summary": {
+            "type": "string",
+            "description": "Short explanation of the drift finding."
+          },
+          "evidenceRefs": {
+            "type": "array",
+            "description": "Paths or ids for evidence used by this dimension.",
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "recommendedActions": {
+            "type": "array",
+            "description": "Human-readable action suggestions.",
+            "items": { "type": "string", "minLength": 1 }
+          }
+        }
+      }
+    },
+    "followUpTaskSuggestions": {
+      "type": "array",
+      "description": "Normal queued tasks that could reduce drift.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title", "summary", "priority"],
+        "properties": {
+          "title": { "type": "string", "minLength": 1 },
+          "summary": { "type": "string" },
+          "priority": { "enum": ["Low", "Normal", "High", "Critical"] },
+          "relatedDimension": {
+            "enum": [
+              "Intent",
+              "Spec",
+              "TaskJob",
+              "Architecture",
+              "Documentation",
+              "Marketing",
+              "Design",
+              "Test",
+              "Runtime",
+              "Process",
+              "Schema",
+              "Token"
+            ]
+          }
+        }
+      }
+    },
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1,
+      "description": "Schema version for this record."
+    }
+  }
+}

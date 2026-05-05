@@ -20,16 +20,17 @@ Everything mentioned in the conversation that examines, measures, designs, or re
 | 8 | Backend / E2E / Tuning Tests | Project and Task | Manual | Test report, metrics, artifacts | Test Quality |
 | 9 | Source-code Metrics | Project | Manual | LOC, modules, coverage, hotspots | Test Quality |
 | 10 | Token Usage | Project, job, run | Observed and opened manually | Totals, heatmap, timeline | Token Usage |
-| 11 | Steering Docs / Project Knowledge | Project | Manual or scheduled analysis | Human summary, drift warning, proposed doc update | Steering Docs |
-| 12 | Recurring Output Pattern Analysis | Project and workspace | Manual, scheduled, or meta-cycle | Failure-pattern report, evidence links, proposed process update | Analysis Reports and Steering Docs |
-| 13 | Skill, for example "generate tasks" | n/a | Manual action | New work or evidence | Skills |
+| 11 | Drift Control | Project | Manual or scheduled analysis | Drift report, score, findings, follow-up tasks | Drift |
+| 12 | Steering Docs / Project Knowledge | Project | Manual or scheduled analysis | Human summary, drift warning, proposed doc update | Steering Docs |
+| 13 | Recurring Output Pattern Analysis | Project and workspace | Manual, scheduled, or meta-cycle | Failure-pattern report, evidence links, proposed process update | Analysis Reports and Steering Docs |
+| 14 | Skill, for example "generate tasks" | n/a | Manual action | New work or evidence | Skills |
 
 ## 2. Clean Axes
 
 | | Examines artifacts | Exercises running system | Produces work or direction | Measures spend |
 |---|---|---|---|---|
 | Task scope | Code Check, Security Check on diff, Traceability Check | E2E run for task, tuning repro | Design next version, generate follow-up task | Job token drill-down |
-| Project scope | Security Audit, Architecture Audit, Traceability Audit, Steering Docs drift check | Performance Probe, QA suite | Council review, design memory update, source map, proposed README or AGENTS update | Project token heatmap |
+| Project scope | Security Audit, Architecture Audit, Traceability Audit, Drift Analysis, Steering Docs drift check | Performance Probe, QA suite | Council review, design memory update, source map, proposed README or AGENTS update | Project token heatmap |
 
 Skills are the action mechanism. They do not replace the surfaces. A Skill may power a UX/UI action, a QA action, an audit, or a source-map action, but the user finds the result on the relevant project surface.
 
@@ -37,6 +38,7 @@ Skills are the action mechanism. They do not replace the surfaces. A Skill may p
 
 - **Security** - project baseline, review history, active security risks.
 - **Architecture** - ADRs, architecture notes, drift status.
+- **Drift** - scored divergence between specs, tasks, jobs, ADRs, source code, README, AGENTS, marketing, tests, runtime behavior, design references, and process rules.
 - **UX/UI** - design references, screenshots, markdown briefs, images, accepted examples, rejected alternatives, council critique, design memory, next-version actions.
 - **Test Quality** - backend tests, end-to-end tests, tuning tests, coverage, run history, source maps, lines of code, modules, dependencies, ownership areas, hotspots.
 - **Token Usage** - total token spend, Job Tokens, Supporting Jobs Tokens, Orchestrator Tokens, heatmap, timeline, expensive jobs, job drill-down.
@@ -49,6 +51,7 @@ Avoid "Quality" as a primary UI destination for now. It is acceptable as an inte
 ## 4. Vocabulary
 
 - **Project Audits** - project-scope, read-only, holistic. Examples: Security Audit, Architecture Drift Audit, Traceability Audit.
+- **Drift Analyses** - project-scope alignment checks that compare two or more source surfaces and score divergence. Examples: Spec / Task / Job Drift, ADR / Code Drift, Docs / Marketing Drift.
 - **Task Checks** - task-scope, read-only, diff-focused. Examples: Code Check, Security Check on diff, Test Coverage Delta.
 - **Performance Probes** - runtime measurements that exercise the app or backend. Examples: Startup Latency, Board Poll Roundtrip, Longtask Budget.
 - **Design Loops** - explicit iterations that compare references, screenshots, critique, and next-version decisions.
@@ -56,6 +59,7 @@ Avoid "Quality" as a primary UI destination for now. It is acceptable as an inte
 - **QA Runs** - backend, end-to-end, tuning, coverage, and code-metric actions with artifacts and history.
 - **Source-code Perspective** - a generated map of modules, lines of code, dependencies, ownership areas, coverage, and hotspots.
 - **Token Usage** - observed inference spend, split into Job Tokens, Supporting Jobs Tokens, and Orchestrator Tokens.
+- **Drift Score** - a transparent triage number derived from findings, severity, confidence, source coverage, age, affected surfaces, and tracking state.
 - **Steering Docs** - the project instructions agents actually see, plus a human abstraction layer that explains current guidance and flags stale, conflicting, or missing rules.
 - **Output Pattern Analysis** - a meta-analysis that reads job outputs across a project or workspace, detects recurring failures, and proposes steering-documentation or process changes.
 - **Skills** - reusable workflows that produce work, evidence, reports, or analysis when explicitly invoked.
@@ -71,6 +75,7 @@ The first version is evidence-first, not enforcement-first.
 - Design councils are advisory. The orchestrator or user decides whether to accept, iterate, or create follow-up tasks.
 - QA and source-map actions are explicit. The app may suggest them, but the user triggers them unless a later project setting opts into safe automation.
 - Token usage must be visible enough to change behavior, especially on large boards, but it is not an automatic scheduler.
+- Drift is a first-class project dimension. Scores guide attention, but evidence and human review remain load-bearing.
 - Steering-doc proposals are evidence-backed and reviewable. The app can suggest README, AGENTS, skill, prompt, task-contract, or process changes, but it should not silently rewrite the steering layer.
 
 This keeps the app aligned with the sequential queue. The user reviews and decides. The board does not become a hidden workflow engine.
@@ -85,6 +90,30 @@ This keeps the app aligned with the sequential queue. The user reviews and decid
 - Output is a Markdown report plus structured findings.
 - Findings can become normal queued tasks.
 - Examples: `SEC-OVERVIEW`, `ARCH-DRIFT`, `TRACEABILITY-COVERAGE`.
+
+### Drift
+
+- Holds project-level drift history, current score, dimension scores, findings, trends, and follow-up status.
+- Compares intent, specifications, tasks, jobs, ADRs, source code, README, AGENTS, roadmap, marketing docs, design references, tests, runtime behavior, process rules, report schemas, and token usage.
+- Offers explicit actions such as Analyze Project Drift, Compare Specs to Tasks and Jobs, Compare ADRs to Code, Compare Docs and Marketing to Product Behavior, Compare Design to Screenshots, Compare Tests to Risk, and Create Follow-up Task.
+- Uses Markdown plus structured JSON. Invalid JSON does not hide the report.
+- Stores score inputs: severity, confidence, source coverage, age, affected surfaces, recurrence, and tracking state.
+- Shows whether a finding is new, accepted, ignored, already tracked, or resolved.
+
+Suggested dimension vocabulary:
+
+- `intent`
+- `spec`
+- `task-job`
+- `architecture`
+- `documentation`
+- `marketing`
+- `design`
+- `test`
+- `runtime`
+- `process`
+- `schema`
+- `token`
 
 ### Task Checks
 
@@ -157,6 +186,32 @@ Human-facing reports can be Markdown, but they should also contain structured JS
 }
 ```
 
+Drift reports use a separate contract because the UI needs scoring and trends:
+
+```json
+{
+  "kind": "drift-report",
+  "schemaVersion": 1,
+  "scope": { "project": "agent-taskboard", "timeWindow": "last-30-days" },
+  "overallScore": 72,
+  "scoreBand": "warn",
+  "dimensions": [
+    {
+      "type": "architecture",
+      "score": 64,
+      "severity": "warn",
+      "confidence": 0.78,
+      "sourceCoverage": 0.7,
+      "summary": "Two ADR assumptions are not reflected in the current source layout.",
+      "evidenceRefs": ["docs/architecture-decisions.md", "backend/Services/..."],
+      "status": "new",
+      "recommendedActions": ["Create architecture follow-up task"]
+    }
+  ],
+  "followUpTaskSuggestions": []
+}
+```
+
 If parsing fails:
 
 - Show an "unstructured report" warning.
@@ -175,6 +230,7 @@ Runtime results live where the evidence belongs:
 - Probe and QA results belong with project diagnostics or a project evidence history.
 - UX/UI references and screenshots belong as project evidence or task evidence, depending on scope.
 - Token usage is observed runtime metadata, stored in a queryable project/job/run history.
+- Drift reports belong in project-level analysis evidence and should be indexed by the project organization / Task Access layer.
 - Steering-doc summaries, drift checks, and output-pattern reports belong in project-level analysis evidence and link back to the source docs they reviewed.
 
 Proposed definition library:
@@ -300,7 +356,7 @@ The mockup may show repository entries as a future preview, but installation sho
 ## 12. Implementation Order
 
 1. Security baseline panel and review history.
-2. UX/UI, Test Quality, and Token Usage project menu surfaces beside Security and Architecture.
+2. Drift, UX/UI, Test Quality, and Token Usage project menu surfaces beside Security and Architecture.
 3. Review definition model for Project Audits and Task Checks.
 4. Per-project Task Check defaults.
 5. One spawned Task Check after task completion, writing findings into the job folder.
@@ -308,10 +364,13 @@ The mockup may show repository entries as a future preview, but installation sho
 7. QA run history for backend tests, end-to-end tests, tuning tests, coverage, and code metrics.
 8. Source-code map action that visualizes modules, lines of code, ownership areas, coverage, dependencies, and organization concerns.
 9. Token Usage surface with totals, category split, heatmap, timeline, expensive-job list, and drill-down.
-10. Steering Docs project surface with raw instructions, human summary, drift warnings, and proposed documentation updates.
-11. Recurring output-pattern analysis that proposes steering-documentation or process changes from repeated job failures.
-12. Findings on the review surface plus follow-up-task creation.
-13. Local Skills catalog for installed workflows.
+10. Drift report schema and scoring model.
+11. Drift project surface with dimension scores, report history, trends, and explicit action buttons.
+12. Drift actions for Spec / Task / Job, ADR / Code, and Docs / Marketing alignment.
+13. Steering Docs project surface with raw instructions, human summary, drift warnings, and proposed documentation updates.
+14. Recurring output-pattern analysis that proposes steering-documentation or process changes from repeated job failures.
+15. Findings on the review surface plus follow-up-task creation.
+16. Local Skills catalog for installed workflows.
 
 ## 13. Open Questions
 
@@ -323,3 +382,5 @@ The mockup may show repository entries as a future preview, but installation sho
 6. Which source-code metrics are computed by scripts and which are judged by an LLM after the structured report exists?
 7. Which steering documents are first-class in the UI for every project, and which are project-specific extensions?
 8. Whether proposed README or AGENTS updates should be displayed as patches, generated tasks, or both.
+9. Which Drift score weights should be fixed defaults and which should be project-configurable?
+10. Whether Marketing Drift is shown inside Drift only, or also as a dedicated public-positioning report under Analysis Reports.

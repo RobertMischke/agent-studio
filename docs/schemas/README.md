@@ -22,6 +22,7 @@ Schemas in this folder are the single contract. C# records, TypeScript interface
 - `agent-artifact-ref.schema.json` - typed pointer from a bus message to evidence on disk or another structured stream.
 - `client-identity.schema.json` - one client of the Task Access Layer (human, agent instance, external tool, service). Stored under `<workspace>/identities/<id>.json`.
 - `token-aggregate-by-client.schema.json` - per-client variant of `token-aggregate.schema.json`, additionally keyed by `clientId` for per-client legends in the workspace timeline.
+- `drift-report.schema.json` - one project-level drift analysis report with scores, dimensions, evidence references, and follow-up task suggestions.
 
 More schemas land here as concepts get formalised (audit findings, performance probes, companion snapshots). Keep one concept per file. Filename is `<concept-kebab>.schema.json`.
 
