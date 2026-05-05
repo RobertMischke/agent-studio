@@ -18,6 +18,7 @@ Use concrete project surfaces instead of a vague top-level Quality product:
 - **UX/UI** for design references, screenshots, markdown briefs, accepted and rejected variants, council critique, and next-version actions.
 - **Test Quality** for backend tests, end-to-end tests, tuning tests, coverage, source-code maps, module organization, and QA report history.
 - **Token Usage** for project totals, category splits, job heatmaps, timelines, expensive jobs, and drill-down into job, supporting job, and orchestrator spend.
+- **Steering Docs** for the README, AGENTS, task contract, skills lookup, ADR index, runtime prompt references, project-specific notes, human summaries, and drift warnings.
 - **Audits and Checks** for configured review definitions and per-task evidence rules.
 - **Skills** as reusable, explicitly triggered workflows that power actions on the surfaces above.
 
@@ -38,6 +39,10 @@ Examples:
 - Run tuning tests.
 - Generate source map.
 - Open token heatmap.
+- Summarize steering docs.
+- Check steering docs drift.
+- Propose README or AGENTS update.
+- Analyze recurring job-output failures.
 
 Each action may invoke a Skill, prompt trigger, or script-backed workflow. The action writes evidence back to the project or task. The user sees the button, chooses the action, and can inspect the resulting report.
 
@@ -57,6 +62,7 @@ This design must not turn the app into a workflow engine.
 - Design councils are advisory evidence, not automatic mandates.
 - QA actions are explicit unless a project later opts into a specific safe automation.
 - Token usage is visibility and accountability, not a scheduling policy by itself.
+- Steering-doc analysis produces reviewable proposals, not hidden instruction edits.
 - Follow-up work becomes a normal queued task.
 
 ## First Implementation Slice
@@ -69,8 +75,10 @@ This design must not turn the app into a workflow engine.
 6. Design evidence format for screenshot variants, references, council notes, and next-version decisions.
 7. QA run history for backend tests, end-to-end tests, tuning tests, coverage, and source metrics.
 8. Token usage aggregation with Job Tokens, Supporting Jobs Tokens, Orchestrator Tokens, heatmap, timeline, and job drill-down.
-9. Findings visible on the task review surface with a "create follow-up task" action.
-10. Local Skills catalog for installed workflow skills.
+9. Steering Docs surface with raw agent-facing documents, human summaries, drift warnings, and evidence-backed update proposals.
+10. Orchestrator output-pattern analysis that detects repeated failures across jobs and proposes steering-documentation improvements.
+11. Findings visible on the task review surface with a "create follow-up task" action.
+12. Local Skills catalog for installed workflow skills.
 
 ## What This Mockup Is For
 

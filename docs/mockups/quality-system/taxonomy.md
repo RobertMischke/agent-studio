@@ -20,14 +20,16 @@ Everything mentioned in the conversation that examines, measures, designs, or re
 | 8 | Backend / E2E / Tuning Tests | Project and Task | Manual | Test report, metrics, artifacts | Test Quality |
 | 9 | Source-code Metrics | Project | Manual | LOC, modules, coverage, hotspots | Test Quality |
 | 10 | Token Usage | Project, job, run | Observed and opened manually | Totals, heatmap, timeline | Token Usage |
-| 11 | Skill, for example "generate tasks" | n/a | Manual action | New work or evidence | Skills |
+| 11 | Steering Docs / Project Knowledge | Project | Manual or scheduled analysis | Human summary, drift warning, proposed doc update | Steering Docs |
+| 12 | Recurring Output Pattern Analysis | Project and workspace | Manual, scheduled, or meta-cycle | Failure-pattern report, evidence links, proposed process update | Analysis Reports and Steering Docs |
+| 13 | Skill, for example "generate tasks" | n/a | Manual action | New work or evidence | Skills |
 
 ## 2. Clean Axes
 
 | | Examines artifacts | Exercises running system | Produces work or direction | Measures spend |
 |---|---|---|---|---|
 | Task scope | Code Check, Security Check on diff, Traceability Check | E2E run for task, tuning repro | Design next version, generate follow-up task | Job token drill-down |
-| Project scope | Security Audit, Architecture Audit, Traceability Audit | Performance Probe, QA suite | Council review, design memory update, source map | Project token heatmap |
+| Project scope | Security Audit, Architecture Audit, Traceability Audit, Steering Docs drift check | Performance Probe, QA suite | Council review, design memory update, source map, proposed README or AGENTS update | Project token heatmap |
 
 Skills are the action mechanism. They do not replace the surfaces. A Skill may power a UX/UI action, a QA action, an audit, or a source-map action, but the user finds the result on the relevant project surface.
 
@@ -38,6 +40,7 @@ Skills are the action mechanism. They do not replace the surfaces. A Skill may p
 - **UX/UI** - design references, screenshots, markdown briefs, images, accepted examples, rejected alternatives, council critique, design memory, next-version actions.
 - **Test Quality** - backend tests, end-to-end tests, tuning tests, coverage, run history, source maps, lines of code, modules, dependencies, ownership areas, hotspots.
 - **Token Usage** - total token spend, Job Tokens, Supporting Jobs Tokens, Orchestrator Tokens, heatmap, timeline, expensive jobs, job drill-down.
+- **Steering Docs** - raw agent-facing instructions, human summaries, drift warnings, recurring-failure evidence, and proposed README, AGENTS, skill, prompt, or process updates.
 - **Audits and Checks** - review definitions, project audits, task checks, runtime probe slots.
 - **Skills** - reusable workflows that are invoked by buttons from the surfaces above.
 
@@ -53,6 +56,8 @@ Avoid "Quality" as a primary UI destination for now. It is acceptable as an inte
 - **QA Runs** - backend, end-to-end, tuning, coverage, and code-metric actions with artifacts and history.
 - **Source-code Perspective** - a generated map of modules, lines of code, dependencies, ownership areas, coverage, and hotspots.
 - **Token Usage** - observed inference spend, split into Job Tokens, Supporting Jobs Tokens, and Orchestrator Tokens.
+- **Steering Docs** - the project instructions agents actually see, plus a human abstraction layer that explains current guidance and flags stale, conflicting, or missing rules.
+- **Output Pattern Analysis** - a meta-analysis that reads job outputs across a project or workspace, detects recurring failures, and proposes steering-documentation or process changes.
 - **Skills** - reusable workflows that produce work, evidence, reports, or analysis when explicitly invoked.
 
 ## 5. Product Stance
@@ -66,6 +71,7 @@ The first version is evidence-first, not enforcement-first.
 - Design councils are advisory. The orchestrator or user decides whether to accept, iterate, or create follow-up tasks.
 - QA and source-map actions are explicit. The app may suggest them, but the user triggers them unless a later project setting opts into safe automation.
 - Token usage must be visible enough to change behavior, especially on large boards, but it is not an automatic scheduler.
+- Steering-doc proposals are evidence-backed and reviewable. The app can suggest README, AGENTS, skill, prompt, task-contract, or process changes, but it should not silently rewrite the steering layer.
 
 This keeps the app aligned with the sequential queue. The user reviews and decides. The board does not become a hidden workflow engine.
 
@@ -118,6 +124,15 @@ This keeps the app aligned with the sequential queue. The user reviews and decid
 - Uses totals, heatmaps, timelines, expensive-job lists, and drill-down.
 - Makes supporting analysis loops visible, including QA, council, security, source map, and audit runs.
 
+### Steering Docs
+
+- Shows README, AGENTS, task contract, skills lookup, ADR index, runtime prompt references, project settings, and project-specific steering notes from one project-level surface.
+- Adds a shorter human summary that explains what agents are currently told and which rules matter most.
+- Flags stale, contradictory, missing, or overly implicit guidance.
+- Links drift warnings to evidence from job outputs, Analysis Reports, Agent Message Bus records, test reports, blocked reasons, and previous follow-up tasks.
+- Offers explicit actions such as Summarize Steering Docs, Check Docs Drift, Analyze Recurring Job Failures, Propose README Update, Propose AGENTS Update, and Create Follow-up Task.
+- Keeps raw technical docs visible. The summary layer is for human trust and navigation, not a replacement for source files.
+
 ### Skills
 
 - Reusable workflows that produce work, evidence, reports, or analysis.
@@ -160,6 +175,7 @@ Runtime results live where the evidence belongs:
 - Probe and QA results belong with project diagnostics or a project evidence history.
 - UX/UI references and screenshots belong as project evidence or task evidence, depending on scope.
 - Token usage is observed runtime metadata, stored in a queryable project/job/run history.
+- Steering-doc summaries, drift checks, and output-pattern reports belong in project-level analysis evidence and link back to the source docs they reviewed.
 
 Proposed definition library:
 
@@ -292,8 +308,10 @@ The mockup may show repository entries as a future preview, but installation sho
 7. QA run history for backend tests, end-to-end tests, tuning tests, coverage, and code metrics.
 8. Source-code map action that visualizes modules, lines of code, ownership areas, coverage, dependencies, and organization concerns.
 9. Token Usage surface with totals, category split, heatmap, timeline, expensive-job list, and drill-down.
-10. Findings on the review surface plus follow-up-task creation.
-11. Local Skills catalog for installed workflows.
+10. Steering Docs project surface with raw instructions, human summary, drift warnings, and proposed documentation updates.
+11. Recurring output-pattern analysis that proposes steering-documentation or process changes from repeated job failures.
+12. Findings on the review surface plus follow-up-task creation.
+13. Local Skills catalog for installed workflows.
 
 ## 13. Open Questions
 
@@ -303,3 +321,5 @@ The mockup may show repository entries as a future preview, but installation sho
 4. Whether injected checks are worth shipping at all in the first version.
 5. Which token source is authoritative per CLI, and how much should be inferred when a CLI only exposes partial data?
 6. Which source-code metrics are computed by scripts and which are judged by an LLM after the structured report exists?
+7. Which steering documents are first-class in the UI for every project, and which are project-specific extensions?
+8. Whether proposed README or AGENTS updates should be displayed as patches, generated tasks, or both.

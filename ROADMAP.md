@@ -35,7 +35,8 @@ Today the application provides:
 - Recovery after session loss via job-folder evidence and deterministic continuation planning.
 - Early project-level planning tasks for Security and Architecture dimensions.
 - Supervisor, system-review, and meta-cycle concepts for recurring "is this on track?" inspection, with Markdown reports and structured JSON contracts where the app needs to parse results.
-- An integrated design mockup for project-level Security, Architecture, UX/UI, Test Quality, Token Usage, Audits and Checks, and Skills under `docs/mockups/quality-system/`. This is exploratory, not product behavior yet.
+- An integrated design mockup for project-level Security, Architecture, UX/UI, Test Quality, Token Usage, Steering Docs, Audits and Checks, and Skills under `docs/mockups/quality-system/`. This is exploratory, not product behavior yet.
+- Early product planning for a project-level steering-documentation surface: the app should show the README, AGENTS, task contracts, skills lookup, and other agent-facing instructions together with a shorter human summary and drift warnings.
 
 ## Roadmap Themes
 
@@ -254,7 +255,17 @@ The UI should expose a project-level **Analysis Reports** area:
 - Drill-down to Markdown, structured JSON, raw artifacts, and referenced jobs or bus messages.
 - A clear split between project-scoped reports and task-scoped reports. Task reports stay beside task evidence; project reports live at project level.
 
-Queued at `agent-taskboard/2-ready/analysis-report-contract-and-storage/`, `agent-taskboard/2-ready/project-analysis-reports-surface/`, and `agent-taskboard/2-ready/roadmap-alignment-analysis-action/`.
+The orchestrator should also use this layer to learn from repeated failure patterns across jobs. A meta-analysis can read recent job outputs, status files, Agent Message Bus records, test reports, and previous findings, then say: "this class of error keeps happening; the steering docs or process are missing guidance." The result is a report with evidence links and proposed README, AGENTS, task-contract, skill, or process updates. The first version should not silently rewrite those files. It should create a reviewable documentation task or proposed patch so the user can see exactly what steering change is being suggested.
+
+This needs a project-level **Steering Docs / Project Knowledge** surface beside Analysis Reports:
+
+- Show the agent-facing documents that shape work: README, AGENTS, ADR index, task contract, runtime prompts, skills lookup, project settings, and project-specific steering notes.
+- Add a human summary layer on top: "what the agents are currently told", "what matters for this project", "what looks stale or contradictory", and "what recent failures suggest should change".
+- Link every warning to evidence: repeated CLI errors, failed tests, recurring blocked reasons, ambiguous prompts, stale instructions, or reports that disagree with current docs.
+- Offer explicit actions: summarize steering docs, check docs drift, compare queue to docs, propose README update, propose AGENTS update, and create follow-up task.
+- Keep raw technical docs visible. The summary is an abstraction layer, not a replacement for the source files.
+
+Queued at `agent-taskboard/2-ready/analysis-report-contract-and-storage/`, `agent-taskboard/2-ready/project-analysis-reports-surface/`, `agent-taskboard/2-ready/roadmap-alignment-analysis-action/`, `agent-taskboard/2-ready/orchestrator-output-pattern-learning/`, `agent-taskboard/2-ready/project-steering-docs-surface/`, and `agent-taskboard/2-ready/steering-docs-summary-and-drift-action/`.
 
 ### Agent Message Bus and Observability
 

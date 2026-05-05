@@ -65,6 +65,17 @@ The output still follows the same evidence rule:
 
 The UI should give analysis reports their own place at project level. They are not buried inside one task unless the analysis was explicitly task-scoped.
 
+## Agent-facing steering context is visible
+
+The instructions that shape agent behavior are part of the product experience. README files, AGENTS files, task contracts, runtime prompts, project settings, skills lookup sections, ADR indexes, and project-specific steering notes are not just repository plumbing. They explain why agents keep making certain choices.
+
+The project page should therefore expose two layers:
+
+- The raw technical documents, linked to their repository location and current revision.
+- A shorter human summary that explains what agents are currently told, which rules matter most, which documents look stale or contradictory, and which recent failures suggest a documentation or process change.
+
+When a meta-analysis finds a recurring failure pattern across jobs, the UI should connect the dots: evidence first, then the suspected steering gap, then the proposed README, AGENTS, skill, prompt, task-contract, or process update. The user can inspect the raw reports and create a normal follow-up task. The app should not silently change steering documents behind the user's back.
+
 ## See What Happened With Confidence
 
 The user must always have a confident, current picture of what the agents and the software did. Three rules follow:
