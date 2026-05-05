@@ -20,7 +20,9 @@ public enum RunStopReason
     /// <summary>Silence watchdog killed the process tree.</summary>
     Watchdog,
     /// <summary>Host is shutting down or the run's cancellation token fired.</summary>
-    Cancelled
+    Cancelled,
+    /// <summary>The CLI's user-configured quota cap was exceeded mid-run.</summary>
+    QuotaCapExceeded
 }
 
 /// <summary>String constants for <see cref="Models.CliExecution.Status"/>. Persisted; keep stable.</summary>

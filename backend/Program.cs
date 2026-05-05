@@ -135,6 +135,7 @@ builder.Services.AddSingleton<IQuotaProbe, CodexQuotaProbe>();
 builder.Services.AddSingleton<IQuotaProbe, GeminiQuotaProbe>();
 builder.Services.AddSingleton<QuotaCacheStore>();
 builder.Services.AddSingleton<QuotaService>();
+builder.Services.AddSingleton<CliQuotaCapsService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<JobWatcherService>());
 builder.Services.AddHostedService(sp => sp.GetRequiredService<TaskRunnerService>());
 // Companion app sync (ADR-0018). Default-off; the HostedService loop exits

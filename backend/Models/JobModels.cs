@@ -794,6 +794,18 @@ public record SetGitHubTokenRequest
     public string? Token { get; init; }
 }
 
+/// <summary>
+/// Body for <c>PUT /api/cli/quota/caps</c>. Sets one cap entry by
+/// <c>(cliType, windowLabel)</c>; the label matches what the per-CLI quota
+/// probe emits (e.g. "Current 5-hour session", "Weekly", "Premium requests").
+/// </summary>
+public record SetCliQuotaCapRequest
+{
+    public string CliType { get; init; } = "";
+    public string WindowLabel { get; init; } = "";
+    public int CapPct { get; init; }
+}
+
 public record CliOutputLine
 {
     public DateTime Timestamp { get; init; }

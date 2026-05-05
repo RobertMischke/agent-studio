@@ -71,6 +71,17 @@ public sealed class QuotaService
     }
 
     /// <summary>
+    /// Returns the in-memory snapshot for one CLI without triggering any
+    /// refresh. Used by the cap-enforcement code path which must be cheap and
+    /// non-blocking - it runs on every pickup tick.
+    /// </summary>
+    public QuotaSnapshot? GetCachedFor(string cliType)
+    {
+        if (string.IsNullOrWhiteSpace(cliType)) return null;
+        return _cache.TryGetValue(cliType, out var s) ? s : null;
+    }
+
+    /// <summary>
     /// Returns the cached snapshot for every probe immediately, kicking off a background
     /// re-probe for any entry that is missing or older than the TTL.
     /// </summary>

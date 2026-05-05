@@ -3,6 +3,7 @@ using OrchestratorApi.Services;
 using OrchestratorApi.Services.Bus;
 using OrchestratorApi.Services.Cli;
 using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.Quota;
 
 namespace OrchestratorApi.Services.Runner;
 
@@ -29,6 +30,8 @@ public class ProjectRunner
     private readonly OrchestratorRunner _orchestratorRunner;
     private readonly OrchestratorSessionStore _orchestratorSessions;
     private readonly ProjectSettingsService _projectSettings;
+    private readonly QuotaService _quotaService;
+    private readonly CliQuotaCapsService _quotaCaps;
     private readonly GitService _git;
     private readonly AgentMessageBusBridge? _bus;
     private string _mode = "manual";
@@ -106,6 +109,8 @@ public class ProjectRunner
         OrchestratorRunner orchestratorRunner,
         OrchestratorSessionStore orchestratorSessions,
         ProjectSettingsService projectSettings,
+        QuotaService quotaService,
+        CliQuotaCapsService quotaCaps,
         GitService git,
         AgentMessageBusBridge? bus = null)
     {
@@ -125,6 +130,8 @@ public class ProjectRunner
         _orchestratorRunner = orchestratorRunner;
         _orchestratorSessions = orchestratorSessions;
         _projectSettings = projectSettings;
+        _quotaService = quotaService;
+        _quotaCaps = quotaCaps;
         _git = git;
         _bus = bus;
 
@@ -155,6 +162,54 @@ public class ProjectRunner
     {
         _mode = mode;
         NotifyStatus();
+    }
+
+    /// <summary>
+    /// Cheap read-only check against the latest cached quota snapshot for
+    /// <paramref name="cliType"/>. Returns "not blocked" when no snapshot is
+    /// cached yet (the user hasn't loaded any quota in this session) - we
+    /// prefer "let the run start" over "stall the queue waiting for a probe".
+    /// </summary>
+    public CapEvaluation EvaluateQuotaCap(string? cliType)
+    {
+        if (string.IsNullOrWhiteSpace(cliType)) return CapEvaluation.NotBlocked;
+        var snap = _quotaService.GetCachedFor(cliType);
+        return _quotaCaps.Evaluate(snap);
+    }
+
+    /// <summary>
+    /// If a job is currently running on this project and its CLI has gone
+    /// past a configured cap, request a stop. Returns the cap evaluation that
+    /// triggered the stop (or "not blocked" when nothing was stopped) so the
+    /// caller can produce a single chat note instead of one per tick.
+    /// </summary>
+    public CapEvaluation EnforceQuotaCapsOnActiveJob(RunStopReason reason = RunStopReason.UserStop)
+    {
+        var jobId = _activeJobId;
+        var cliType = _activeCliType;
+        if (jobId == null || string.IsNullOrWhiteSpace(cliType)) return CapEvaluation.NotBlocked;
+        var ev = EvaluateQuotaCap(cliType);
+        if (!ev.Blocked) return CapEvaluation.NotBlocked;
+
+        _logger.LogWarning(
+            "[taskboard] stopping active job {JobId} on {Project}: quota cap exceeded ({Reason})",
+            jobId, ProjectName, ev.DescribeReason());
+
+        try
+        {
+            var info = _scanner.FindJob(jobId, Entry.Path);
+            if (info != null)
+            {
+                _router.Get(info.CliType).Stop(info.JobKey, reason);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "EnforceQuotaCapsOnActiveJob: stop failed for {JobId} on {Project}",
+                jobId, ProjectName);
+        }
+        return ev;
     }
 
     public ProjectRunnerStatus GetStatus()
@@ -262,6 +317,22 @@ public class ProjectRunner
         {
             var info = _scanner.FindJob(jobId, Entry.Path);
             if (info == null) return RunOutcome.Reject(new RunRejection(RunRejectReason.JobNotFound, "Job not found"));
+
+            // Quota cap gate: refuse to start when the CLI is past its
+            // configured per-window cap. Auto-pickup will retry on the next
+            // tick (and the next, ...) until the user lifts the cap or the
+            // window resets - this is intentional: the user wants the job
+            // queued, not failed.
+            var capBlock = EvaluateQuotaCap(info.CliType);
+            if (capBlock.Blocked)
+            {
+                _logger.LogInformation(
+                    "[taskboard] {Intent} for job {JobId} blocked by quota cap: {Reason}",
+                    intent, jobId, capBlock.DescribeReason());
+                return RunOutcome.Reject(new RunRejection(
+                    Reason: RunRejectReason.QuotaCapExceeded,
+                    Message: $"Quota cap exceeded: {capBlock.DescribeReason()}"));
+            }
 
             // Auto-pickup consumes a saved pending-intent if there is one,
             // turning what would have been a fresh-start run into a

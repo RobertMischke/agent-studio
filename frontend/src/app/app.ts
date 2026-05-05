@@ -35,6 +35,7 @@ import { E2ECleanupDialogComponent } from './components/dev-tools/e2e-cleanup-di
 import { WorkspaceTokenTimelineComponent } from './components/workspace-token-timeline';
 import { WorkspaceScreenshotsComponent } from './components/workspace-screenshots';
 import { WorkspaceBannerComponent } from './components/workspace-banner';
+import { CliAdminPanelComponent } from './components/cli-admin-panel';
 import { JobScreenshot, RunTimeline, JobTokenSummary, CliOutputLine } from './models/job.model'; // verbose-debug overlay context types
 import { VerboseDebugOverlayComponent } from './components/verbose-debug/verbose-debug-overlay.component';
 
@@ -48,7 +49,7 @@ interface VerboseDebugContext {
 
 @Component({
   selector: 'app-root',
-  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, ProjectShellComponent, SecurityPanelComponent, ProjectTokenUsagePanelComponent, AnalysisReportDrilldownComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceTokenTimelineComponent, WorkspaceScreenshotsComponent, WorkspaceBannerComponent, VerboseDebugOverlayComponent],
+  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, ProjectShellComponent, SecurityPanelComponent, ProjectTokenUsagePanelComponent, AnalysisReportDrilldownComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceTokenTimelineComponent, WorkspaceScreenshotsComponent, WorkspaceBannerComponent, VerboseDebugOverlayComponent, CliAdminPanelComponent],
   // Keep styles global to this subtree — the App shell still owns the
   // .header*, .filter-chip*, .overlay*, .create-dialog*, .error-dialog*
   // class rules used by the extracted dialogs and project-tabs.
@@ -276,6 +277,7 @@ interface VerboseDebugContext {
         (toggleOrchestrator)="orchSideSheet.toggle()"
         (toggleFeed)="toggleOrchFeed()"
         (toggleVisualEvidence)="toggleWorkspaceScreenshots()"
+        (toggleCliAdmin)="toggleCliAdmin()"
         (defaultCliChange)="onDefaultCliChange($event)"
         (defaultModelChange)="onDefaultModelChange($event)" />
 
@@ -356,6 +358,15 @@ interface VerboseDebugContext {
           <div class="overlay__panel overlay__panel--wtt" (click)="$event.stopPropagation()">
             <button class="overlay__close" (click)="closeWorkspaceScreenshots()" title="Close">×</button>
             <app-workspace-screenshots (openTask)="onOpenTaskFromReel($event)" />
+          </div>
+        </div>
+      }
+
+      @if (cliAdminOpen()) {
+        <div class="overlay" data-testid="cli-admin-overlay" (click)="closeCliAdmin()">
+          <div class="overlay__panel" (click)="$event.stopPropagation()">
+            <button class="overlay__close" (click)="closeCliAdmin()" title="Close">×</button>
+            <app-cli-admin-panel />
           </div>
         </div>
       }
@@ -2501,6 +2512,16 @@ export class App implements OnInit {
   toggleWorkspaceScreenshots(): void {
     if (this.workspaceScreenshotsOpen()) this.closeWorkspaceScreenshots();
     else this.openWorkspaceScreenshots();
+  }
+
+  /** CLI admin overlay: per-CLI usage caps + placeholder admin sections. */
+  readonly cliAdminOpen = signal<boolean>(false);
+
+  openCliAdmin(): void { this.cliAdminOpen.set(true); }
+  closeCliAdmin(): void { this.cliAdminOpen.set(false); }
+  toggleCliAdmin(): void {
+    if (this.cliAdminOpen()) this.closeCliAdmin();
+    else this.openCliAdmin();
   }
 
   /**

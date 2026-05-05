@@ -109,6 +109,37 @@ public static class CliEndpoints
             return snap == null ? Results.NotFound() : Results.Ok(snap);
         });
 
+        // ── Quota caps: per-CLI per-window usage ceilings ──
+        // The user uses Claude Code (and others) outside the orchestrator too;
+        // these caps stop the runner from burning the last few percent of a
+        // 5-hour window or the weekly budget so manual ad-hoc work still has
+        // headroom. Default 95% applied when no entry is configured.
+        cliGroup.MapGet("/quota/caps", (CliQuotaCapsService caps) =>
+        {
+            return Results.Ok(new
+            {
+                defaultCapPct = CliQuotaCapsService.DefaultCapPct,
+                caps = caps.GetAll()
+            });
+        });
+
+        cliGroup.MapPut("/quota/caps", (SetCliQuotaCapRequest req, CliQuotaCapsService caps) =>
+        {
+            if (string.IsNullOrWhiteSpace(req.CliType) || string.IsNullOrWhiteSpace(req.WindowLabel))
+                return Results.BadRequest(new { error = "cliType and windowLabel are required" });
+            if (!CliTypes.IsValid(req.CliType))
+                return Results.BadRequest(new { error = $"Unknown cliType '{req.CliType}'" });
+            if (req.CapPct < 1 || req.CapPct > 100)
+                return Results.BadRequest(new { error = "capPct must be between 1 and 100" });
+
+            caps.SetCap(req.CliType, req.WindowLabel, req.CapPct);
+            return Results.Ok(new
+            {
+                defaultCapPct = CliQuotaCapsService.DefaultCapPct,
+                caps = caps.GetAll()
+            });
+        });
+
         // ── TEMPORARY: PTY slash-command probe for parser development ──
         // Spawns the requested CLI in a scratch dir, sends a slash command,
         // waits for output to settle, returns the ANSI-stripped snapshot.

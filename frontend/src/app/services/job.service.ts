@@ -386,6 +386,22 @@ export class JobService {
     return this.http.post<QuotaSnapshot>(`${this.baseUrl}/cli/quota/refresh/${cliType}`, {});
   }
 
+  // ── Quota caps: per-CLI per-window usage ceilings. The runner blocks
+  // pickup and stops in-flight runs when usage crosses these caps so the
+  // user keeps a buffer for ad-hoc work outside the orchestrator.
+  getQuotaCaps() {
+    return this.http.get<{ defaultCapPct: number; caps: Record<string, Record<string, number>> }>(
+      `${this.baseUrl}/cli/quota/caps`
+    );
+  }
+
+  setQuotaCap(cliType: CliType, windowLabel: string, capPct: number) {
+    return this.http.put<{ defaultCapPct: number; caps: Record<string, Record<string, number>> }>(
+      `${this.baseUrl}/cli/quota/caps`,
+      { cliType, windowLabel, capPct }
+    );
+  }
+
   setJobTitle(jobId: string, title: string, watchPath?: string) {
     return this.http.put(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/title`, { title }, this.withWatchPath(watchPath));
   }

@@ -83,6 +83,12 @@ const STORAGE_DEFAULT_MODEL_PREFIX = 'defaultModel:';
                 (click)="toggleVisualEvidence.emit()">
           <span class="statusbar__icon">📷</span><span>Visual evidence</span>
         </button>
+        <button class="statusbar__item statusbar__item--btn"
+                data-testid="status-bar-cli-admin"
+                title="Manage CLIs (usage caps, admin)"
+                (click)="toggleCliAdmin.emit()">
+          <span class="statusbar__icon">⚙</span><span>Manage CLIs</span>
+        </button>
 
         <span class="statusbar__sep" aria-hidden="true"></span>
 
@@ -335,6 +341,7 @@ export class StatusBarComponent implements OnInit {
   @Output() readonly toggleOrchestrator = new EventEmitter<void>();
   @Output() readonly toggleFeed = new EventEmitter<void>();
   @Output() readonly toggleVisualEvidence = new EventEmitter<void>();
+  @Output() readonly toggleCliAdmin = new EventEmitter<void>();
   @Output() readonly defaultCliChange = new EventEmitter<CliType>();
   @Output() readonly defaultModelChange = new EventEmitter<{ cliType: CliType; model: string }>();
 

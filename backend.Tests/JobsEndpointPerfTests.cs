@@ -7,6 +7,7 @@ using OrchestratorApi.Services;
 using OrchestratorApi.Services.Cli;
 using OrchestratorApi.Services.Jobs;
 using OrchestratorApi.Services.Pty;
+using OrchestratorApi.Services.Quota;
 using OrchestratorApi.Services.Runner;
 using Xunit;
 
@@ -144,9 +145,14 @@ public class JobsEndpointPerfTests : IDisposable
         var globalStore = new GlobalOrchestratorSessionStore(config, NullLogger<GlobalOrchestratorSessionStore>.Instance);
         var globalBoot = new GlobalOrchestratorBootstrap(NullLogger<GlobalOrchestratorBootstrap>.Instance, globalStore, orchestratorRunner, scanner, config);
 
+        var quotaCacheStore = new QuotaCacheStore(config, NullLogger<QuotaCacheStore>.Instance);
+        var quotaService = new QuotaService(NullLogger<QuotaService>.Instance, Array.Empty<IQuotaProbe>(), config, quotaCacheStore);
+        var quotaCaps = new CliQuotaCapsService(NullLogger<CliQuotaCapsService>.Instance, config);
+
         var runners = new TaskRunnerService(
             config, NullLogger<TaskRunnerService>.Instance, scanner, states, mutations, sessions,
             copilot, router, contextUsageParser, summary, prompts, transitions, projectSettings,
+            quotaService, quotaCaps,
             chatLog, orchestratorLog, orchestratorRunner, orchestratorSessions, globalBoot, git);
         return (router, runners);
     }

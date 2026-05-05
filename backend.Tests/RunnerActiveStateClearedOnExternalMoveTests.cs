@@ -5,6 +5,7 @@ using OrchestratorApi.Services;
 using OrchestratorApi.Services.Cli;
 using OrchestratorApi.Services.Jobs;
 using OrchestratorApi.Services.Pty;
+using OrchestratorApi.Services.Quota;
 using OrchestratorApi.Services.Runner;
 using Xunit;
 
@@ -284,12 +285,16 @@ public sealed class RunnerActiveStateClearedOnExternalMoveTests : IDisposable
             RepositoryPath = _watchPath
         };
 
+        var quotaCacheStore = new QuotaCacheStore(d.Config, NullLogger<QuotaCacheStore>.Instance);
+        var quotaService = new QuotaService(NullLogger<QuotaService>.Instance, Array.Empty<IQuotaProbe>(), d.Config, quotaCacheStore);
+        var quotaCaps = new CliQuotaCapsService(NullLogger<CliQuotaCapsService>.Instance, d.Config);
+
         return new ProjectRunner(
             ProjectName, entry,
             NullLogger<ProjectRunner>.Instance,
             d.Scanner, d.States, d.Sessions, d.Router,
             d.Summary, d.Prompts, d.Transitions, d.ChatLog, d.Mutations,
             d.OrchestratorLog, d.OrchestratorRunner, d.OrchestratorSessions,
-            d.Settings, d.Git, bus: null);
+            d.Settings, quotaService, quotaCaps, d.Git, bus: null);
     }
 }

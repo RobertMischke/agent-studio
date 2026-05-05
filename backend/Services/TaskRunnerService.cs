@@ -3,6 +3,7 @@ using OrchestratorApi.Models;
 using OrchestratorApi.Services.Bus;
 using OrchestratorApi.Services.Cli;
 using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.Quota;
 using OrchestratorApi.Services.Runner;
 
 namespace OrchestratorApi.Services;
@@ -31,6 +32,8 @@ public class TaskRunnerService : BackgroundService
     private readonly RuntimePromptService _prompts;
     private readonly JobTransitionService _transitions;
     private readonly ProjectSettingsService _projectSettings;
+    private readonly QuotaService _quotaService;
+    private readonly CliQuotaCapsService _quotaCaps;
     private readonly OrchestratorChatLog _chatLog;
     private readonly OrchestratorLog _orchestratorLog;
     private readonly OrchestratorRunner _orchestratorRunner;
@@ -55,6 +58,8 @@ public class TaskRunnerService : BackgroundService
         RuntimePromptService prompts,
         JobTransitionService transitions,
         ProjectSettingsService projectSettings,
+        QuotaService quotaService,
+        CliQuotaCapsService quotaCaps,
         OrchestratorChatLog chatLog,
         OrchestratorLog orchestratorLog,
         OrchestratorRunner orchestratorRunner,
@@ -76,6 +81,8 @@ public class TaskRunnerService : BackgroundService
         _prompts = prompts;
         _transitions = transitions;
         _projectSettings = projectSettings;
+        _quotaService = quotaService;
+        _quotaCaps = quotaCaps;
         _chatLog = chatLog;
         _orchestratorLog = orchestratorLog;
         _orchestratorRunner = orchestratorRunner;
@@ -117,7 +124,7 @@ public class TaskRunnerService : BackgroundService
                 continue;
             }
 
-            var runner = new ProjectRunner(entry.Name, entry, _logger, _scanner, _states, _sessions, _router, _summaryService, _prompts, _transitions, _chatLog, _mutations, _orchestratorLog, _orchestratorRunner, _orchestratorSessions, _projectSettings, _git, _bus);
+            var runner = new ProjectRunner(entry.Name, entry, _logger, _scanner, _states, _sessions, _router, _summaryService, _prompts, _transitions, _chatLog, _mutations, _orchestratorLog, _orchestratorRunner, _orchestratorSessions, _projectSettings, _quotaService, _quotaCaps, _git, _bus);
             runner.ConfigureWatchdog(LoadWatchdogConfig(_config));
             _stuckLoopBudget = LoadStuckLoopBudget(_config);
             runner.ConfigureStuckLoopBudget(_stuckLoopBudget);
@@ -194,6 +201,18 @@ public class TaskRunnerService : BackgroundService
                 if (stoppingToken.IsCancellationRequested) break;
                 try
                 {
+                    // Quota cap watchdog: if the active job's CLI has gone past
+                    // the configured cap since it started (e.g. usage rolled
+                    // over after a probe refresh), terminate it. We do this
+                    // before the pickup tick so the slot frees up immediately.
+                    var capStop = runner.EnforceQuotaCapsOnActiveJob(RunStopReason.QuotaCapExceeded);
+                    if (capStop.Blocked)
+                    {
+                        _logger.LogInformation(
+                            "[taskboard] cap watchdog stopped active job for {Project}: {Reason}",
+                            runner.ProjectName, capStop.DescribeReason());
+                    }
+
                     await runner.TickAsync(stoppingToken);
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
@@ -396,6 +415,9 @@ public class TaskRunnerService : BackgroundService
 
         if (rej.Reason == RunRejectReason.JobNotFound)
             throw new JobOperationException(rej.Message ?? "Job not found", 404);
+
+        if (rej.Reason == RunRejectReason.QuotaCapExceeded)
+            throw new JobOperationException(rej.Message ?? "Quota cap exceeded", 429);
 
         // CliUnavailable, None, or anything else: 400 with the message.
         throw new JobOperationException(rej.Message ?? "Cannot start job", 400);

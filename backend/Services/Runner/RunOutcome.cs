@@ -14,7 +14,14 @@ public enum RunRejectReason
     None,
     JobNotFound,
     CliUnavailable,
-    ProjectBusy
+    ProjectBusy,
+    /// <summary>
+    /// The CLI for this job is past its user-configured usage cap on at
+    /// least one of its quota windows. Auto-pickup re-tries on the next
+    /// tick (after quota resets); manual start surfaces as a 4xx so the
+    /// user knows why the click did nothing.
+    /// </summary>
+    QuotaCapExceeded
 }
 
 /// <summary>
