@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport, QuotaReport, QuotaSnapshot, GitStatus, ClaudeSessionResponse, JobCommitDetail, SessionEventsResponse, ContinueMode, ContinueJobResponse, OrchestratorLogResponse, TokenSummary, TokenSummaryAggregate, TokenTimeline, OrchestratorSessionResponse, OrchestratorChatResponse, OrchestratorChatTurn, RunTimeline, RunCommitsResponse, RunFilesResponse, RunDiffResponse, RoadmapIntakeCandidate, RoadmapIntakeResponse, RoadmapIntakeConfirmResponse, JobScreenshotsResponse, WorkspaceScreenshotsResponse } from '../models/job.model';
+import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport, QuotaReport, QuotaSnapshot, GitStatus, ClaudeSessionResponse, JobCommitDetail, SessionEventsResponse, ContinueMode, ContinueJobResponse, OrchestratorLogResponse, TokenSummary, TokenSummaryAggregate, TokenTimeline, OrchestratorSessionResponse, OrchestratorChatResponse, OrchestratorChatTurn, RunTimeline, RunCommitsResponse, RunFilesResponse, RunDiffResponse, RoadmapIntakeCandidate, RoadmapIntakeResponse, RoadmapIntakeConfirmResponse, JobScreenshotsResponse, WorkspaceScreenshotsResponse, ProjectTokenUsageSummary, ProjectTokenHeatmap, ProjectExpensiveJobsResponse, ProjectJobTokenDetail } from '../models/job.model';
 import { ErrorDialogService } from './error-dialog.service';
 
 type LaneKey = keyof GroupedJobs;
@@ -534,6 +534,51 @@ export class JobService {
     return this.http.get<TokenTimeline>(
       `${this.baseUrl}/workspace/tokens/timeline`,
       { params }
+    );
+  }
+
+  /**
+   * Project Token Usage panel (slice 8 of the quality-system mockup).
+   * Lifetime + last-24h totals plus the Job / Supporting / Orchestrator
+   * category split.
+   */
+  getProjectTokenUsageSummary(projectName: string) {
+    return this.http.get<ProjectTokenUsageSummary>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/token-usage/summary`,
+    );
+  }
+
+  /**
+   * Per-job × per-day heatmap. `days` accepts up to 90; the backend
+   * silently snaps out-of-range values to {1..90}.
+   */
+  getProjectTokenUsageHeatmap(projectName: string, days = 30) {
+    const params = new HttpParams().set('days', String(days));
+    return this.http.get<ProjectTokenHeatmap>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/token-usage/heatmap`,
+      { params },
+    );
+  }
+
+  /**
+   * Top N jobs by total tokens for the panel's "expensive jobs" list.
+   * `limit` defaults to 10, capped at 50.
+   */
+  getProjectExpensiveJobs(projectName: string, limit = 10) {
+    const params = new HttpParams().set('limit', String(limit));
+    return this.http.get<ProjectExpensiveJobsResponse>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/token-usage/expensive`,
+      { params },
+    );
+  }
+
+  /**
+   * Per-run breakdown for one job: every orchestrator call attributed to
+   * the job, with deltas vs. the previous call. Drives the drill-down.
+   */
+  getProjectJobTokenDetail(projectName: string, jobId: string) {
+    return this.http.get<ProjectJobTokenDetail>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/token-usage/job/${encodeURIComponent(jobId)}`,
     );
   }
 

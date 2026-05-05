@@ -170,6 +170,7 @@ test.describe('@mockup next-gen chat Angular prototype', () => {
 
     await page.getByTestId('prototype-density-toggle').click();
     await expect(page.getByTestId('next-gen-chat-angular-prototype')).toHaveAttribute('data-density', 'compact');
+    await expect(page.getByTestId('prototype-side-sheet')).toBeHidden();
     await page.screenshot({
       path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-compact.png'),
       fullPage: false,
@@ -206,6 +207,9 @@ test.describe('@mockup next-gen chat Angular prototype', () => {
     await clickExactClose(page.getByTestId('prototype-debug-modal'));
     await page.getByTestId('prototype-theme-toggle').click();
     await page.setViewportSize({ width: 390, height: 844 });
+    await expect(page.getByTestId('prototype-document-tabs')).toBeVisible();
+    await expect(page.getByTestId('prototype-detail-chrome')).toContainText('Next-gen chat conversation event projection');
+    await expect(page.getByTestId('prototype-pane-debug-view')).toBeVisible();
     await page.screenshot({
       path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-mobile.png'),
       fullPage: false,

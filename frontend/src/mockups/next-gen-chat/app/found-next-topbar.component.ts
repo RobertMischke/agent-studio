@@ -286,6 +286,10 @@ import { Density, StatusPanel, Theme } from './next-gen-chat-workbench-prototype
     }
 
     @media (max-width: 720px) {
+      :host {
+        grid-column: 1;
+      }
+
       .topbar {
         grid-template-columns: minmax(0, 1fr) auto auto;
         gap: 4px;

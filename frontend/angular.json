@@ -122,7 +122,7 @@
               }
             ],
             "styles": [
-              "src/styles.scss"
+              "src/mockups/next-gen-chat/styles.scss"
             ]
           },
           "configurations": {

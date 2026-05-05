@@ -1,0 +1,117 @@
+import { Component, input, output } from '@angular/core';
+
+import { ICON_PATHS } from './next-gen-chat-workbench-prototype.data';
+import {
+  PaneButton,
+  Scenario,
+  ScenarioOption,
+  SummaryChip,
+  WorkbenchPane,
+} from './next-gen-chat-workbench-prototype.models';
+
+@Component({
+  selector: 'mockup-next-gen-chat-rail',
+  standalone: true,
+  template: `
+    <aside class="inspector-rail" aria-label="Task inspector rail">
+      <button class="rail-guide" type="button" title="Explain this rail" (click)="guideRequested.emit()" data-testid="prototype-rail-guide">
+        <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+          @for (path of iconPath('panel'); track path) {
+            <path [attr.d]="path"></path>
+          }
+        </svg>
+        <span>Views</span>
+        <small>open docs + facts</small>
+      </button>
+
+      <div class="inspector-rail__modes" data-testid="prototype-layout-buttons">
+        <b>Documents</b>
+        <button class="rail-action rail-action--all"
+                title="Open all review documents as tabs"
+                aria-label="Open all review documents as tabs"
+                data-testid="prototype-pane-all"
+                (click)="allDocumentsRequested.emit()">
+          <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+            @for (path of iconPath('columns'); track path) {
+              <path [attr.d]="path"></path>
+            }
+          </svg>
+          <span>All tabs</span>
+          <em>{{ openCount() }}</em>
+        </button>
+        @for (mode of paneButtons(); track mode.id) {
+          <button class="rail-action"
+                  [class.icon-btn--active]="isPaneActive(mode.id)"
+                  [attr.title]="mode.label"
+                  [attr.data-testid]="'prototype-pane-' + mode.id"
+                  (click)="paneSelected.emit(mode.id)">
+            <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+              @for (path of iconPath(mode.icon); track path) {
+                <path [attr.d]="path"></path>
+              }
+            </svg>
+            <span>{{ mode.short }}</span>
+          </button>
+        }
+      </div>
+
+      <div class="inspector-rail__scenarios" data-testid="prototype-scenarios">
+        <b>Cases</b>
+        @for (scenario of scenarios(); track scenario.id) {
+          <button [class.scenario-row__active]="activeScenario() === scenario.id"
+                  [attr.title]="scenario.label"
+                  [attr.aria-label]="scenario.label"
+                  [attr.data-testid]="'prototype-scenario-' + scenario.id"
+                  (click)="scenarioSelected.emit(scenario.id)">
+            <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+              @for (path of iconPath(scenario.icon); track path) {
+                <path [attr.d]="path"></path>
+              }
+            </svg>
+            <span>{{ scenario.label }}</span>
+          </button>
+        }
+      </div>
+
+      <div class="inspector-rail__summary" data-testid="prototype-summary-strip">
+        <b>Signals</b>
+        @for (chip of summaryChips(); track chip.label) {
+          <button class="summary-chip"
+                  [attr.data-tone]="chip.tone || 'neutral'"
+                  [attr.title]="chip.value + ' ' + chip.label"
+                  (click)="summaryPaneSelected.emit(chip.pane)">
+            <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+              @for (path of iconPath(chip.icon); track path) {
+                <path [attr.d]="path"></path>
+              }
+            </svg>
+            <strong>{{ chip.value }}</strong>
+            <span>{{ chip.label }}</span>
+          </button>
+        }
+      </div>
+    </aside>
+  `,
+})
+export class NextGenChatRailComponent {
+  readonly paneButtons = input.required<readonly PaneButton[]>();
+  readonly scenarios = input.required<readonly ScenarioOption[]>();
+  readonly activeScenario = input.required<Scenario>();
+  readonly summaryChips = input.required<readonly SummaryChip[]>();
+  readonly activePanes = input.required<readonly WorkbenchPane[]>();
+  readonly openCount = input.required<number>();
+
+  readonly guideRequested = output<void>();
+  readonly allDocumentsRequested = output<void>();
+  readonly paneSelected = output<WorkbenchPane>();
+  readonly scenarioSelected = output<Scenario>();
+  readonly summaryPaneSelected = output<WorkbenchPane>();
+
+  isPaneActive(pane: WorkbenchPane): boolean {
+    return this.activePanes().includes(pane);
+  }
+
+  iconPath(name: string): string[] {
+    return ICON_PATHS[name] ?? ICON_PATHS['help'];
+  }
+}

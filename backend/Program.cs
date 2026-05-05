@@ -73,6 +73,7 @@ builder.Services.AddSingleton<GlobalOrchestratorSessionStore>();
 builder.Services.AddSingleton<GlobalOrchestratorBootstrap>();
 builder.Services.AddSingleton<TokenSummaryCacheStore>();
 builder.Services.AddSingleton<TokenSummaryService>();
+builder.Services.AddSingleton<ProjectTokenUsageService>();
 builder.Services.AddSingleton<WorkspaceTokensTimelineService>();
 builder.Services.AddSingleton<WorkspaceSummaryService>();
 builder.Services.AddSingleton<JobTransitionService>();

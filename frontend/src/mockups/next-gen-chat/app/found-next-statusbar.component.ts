@@ -225,6 +225,10 @@ import { StatusPanel } from './next-gen-chat-workbench-prototype.models';
     }
 
     @media (max-width: 720px) {
+      :host {
+        grid-column: 1;
+      }
+
       .statusbar {
         grid-template-columns: minmax(0, 1fr) auto;
       }

@@ -89,3 +89,52 @@ export interface WorkbenchDocument {
   icon: string;
   closable: boolean;
 }
+
+export interface ActivityItem {
+  id: ActivityTarget;
+  icon: string;
+  label: string;
+  title: string;
+}
+
+export interface PaneButton {
+  id: WorkbenchPane;
+  label: string;
+  short: string;
+  icon: string;
+}
+
+export interface ScenarioOption {
+  id: Scenario;
+  label: string;
+  icon: string;
+}
+
+export interface TaskQueueCard {
+  id: string;
+  title: string;
+  state: string;
+  lane: string;
+  order: string;
+  agent: string;
+  meta: string;
+  active: boolean;
+}
+
+export interface FeatureParityItem {
+  label: string;
+  icon: string;
+  note: string;
+  action: FeatureAction;
+}
+
+export interface GitFileRow {
+  path: string;
+  delta: string;
+}
+
+export interface TokenUsageRow {
+  name: string;
+  value: string;
+  percent: number;
+}

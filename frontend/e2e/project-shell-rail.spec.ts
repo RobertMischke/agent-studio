@@ -27,6 +27,15 @@ import { startLongTaskRecorder } from './helpers/timing';
 
 interface WatchPath { name: string; path: string }
 
+/**
+ * Rail items that ship a real custom panel (their slice has landed) and
+ * therefore replace the placeholder header + empty state with a
+ * dedicated component. The shell hides `project-shell-panel-title`,
+ * `project-shell-panel-desc`, and `project-shell-panel-empty` for these
+ * keys; the per-slice spec asserts the real content instead.
+ */
+const RAILS_WITH_CUSTOM_PANEL = new Set<string>(['security', 'token-usage']);
+
 const RAIL_ITEMS: ReadonlyArray<{ key: string; label: string; title: string; descriptionFragment: string }> = [
   { key: 'overview',     label: 'Overview',        title: 'Overview',        descriptionFragment: 'Snapshot of project health' },
   { key: 'security',     label: 'Security',        title: 'Security',        descriptionFragment: 'Baseline, reviews, and active findings' },
@@ -101,9 +110,16 @@ test('every rail entry routes to its placeholder panel', async ({ page }) => {
     const panel = page.getByTestId(`project-shell-panel-${item.key}`);
     await expect(panel).toBeVisible();
     await expect(panel).toHaveAttribute('data-rail-key', item.key);
-    await expect(panel.getByTestId('project-shell-panel-title')).toContainText(item.title);
-    await expect(panel.getByTestId('project-shell-panel-desc')).toContainText(item.descriptionFragment);
-    await expect(panel.getByTestId('project-shell-panel-empty')).toBeVisible();
+
+    // Rails whose slice has shipped a custom panel replace the
+    // placeholder header + empty state with a dedicated component;
+    // their per-slice spec asserts the real content. The other rails
+    // still surface the generic placeholder copy from the rail config.
+    if (!RAILS_WITH_CUSTOM_PANEL.has(item.key)) {
+      await expect(panel.getByTestId('project-shell-panel-title')).toContainText(item.title);
+      await expect(panel.getByTestId('project-shell-panel-desc')).toContainText(item.descriptionFragment);
+      await expect(panel.getByTestId('project-shell-panel-empty')).toBeVisible();
+    }
 
     expect(page.url()).toContain(`#/projects/${slugFor(projectName)}`);
     if (item.key !== 'overview') {
