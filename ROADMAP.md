@@ -215,11 +215,11 @@ The chat should render:
 - Bottom composer controls for current chat, model, agent mode, permission level, start, stop, configuration, jobs, debug view, context chips, and slash actions.
 - Conversation mode as the default, trace mode as the raw debugging view, artifacts as a dedicated evidence view, the meta layer as a docked or collapsed inspector, and Verbose Debug as a fullscreen read-only history analysis.
 
-First implementation order:
+First implementation order (plan: [docs/research/embedded-chat-integration-2026-05.md](docs/research/embedded-chat-integration-2026-05.md)):
 
-1. Add the `Frontend:NextGenChat` integration bridge. It inventories and preserves the current Activity Log parser, Trace mode, run timeline, auto-eval banner, task composer, reusable `app-chat`, project side sheet, Status Bar quota, CLI Usage sheet, Workspace Token Timeline, and project token summaries.
-2. Add a `ConversationEvent` projection above the existing Activity Log parser.
-3. Render the projection in the existing Protocol pane Activity tab behind the flag while preserving raw trace access and current task controls.
+1. Add the `Frontend:NextGenChat` integration bridge. It inventories and preserves the current Activity Log parser, Trace mode, run timeline, auto-eval banner, task composer, reusable `app-chat`, project side sheet, Status Bar quota, CLI Usage sheet, Workspace Token Timeline, and project token summaries. **Done**: flag, `ConversationEvent` data contract, pure `projectConversation()` projection, fixtures and unit tests, `app-tool-burst-chip` presentational component, and `app-verbose-debug-overlay` are in. Hosts still render the legacy Activity Log when the flag is on; the renderer wiring is the next slice.
+2. Add a `ConversationEvent` projection above the existing Activity Log parser. **Done**: `frontend/src/app/components/chat/conversation-projection.ts` with watchdog/capture-fail/schema-drift classification, run-aware tool-burst collapsing, and workbench summary/debug aggregates.
+3. Render the projection in the existing Protocol pane Activity tab behind the flag while preserving raw trace access and current task controls. **Next slice** (`chat-conversation-event-projection` host adapter); see plan doc for scope and acceptance gate.
 4. Group tool calls into compact inline `ToolBurst` events in conversation mode while preserving raw trace mode.
 5. Add persistent actor rails and labels for all participant types.
 6. Add compact decision/advisory rows for orchestrator and supervisor events, with expandable `DecisionCard` details.
