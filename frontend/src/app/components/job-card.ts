@@ -177,8 +177,14 @@ if (typeof window !== 'undefined') {
     .job-card--1-preparation { --state-color: #8b5cf6; }
     .job-card--2-ready { --state-color: #06b6d4; }
     .job-card--3-progress { --state-color: #3b82f6; }
+    /* ADR-0025: distinct accents for the two review lanes - amber for the
+       orchestrator's machine pass, sky for human-attention. The legacy
+       4-review class is kept for any data still rendering the old name. */
     .job-card--4-review { --state-color: #f59e0b; }
+    .job-card--4-auto-review { --state-color: #f59e0b; }
+    .job-card--5-human-review { --state-color: #38bdf8; }
     .job-card--5-completed { --state-color: #10b981; }
+    .job-card--6-completed { --state-color: #10b981; }
 
     /* Running tasks should jump out of the column. We brighten the surface,
        widen the state accent, and add a slow breathing glow so the eye is
@@ -647,7 +653,10 @@ export class JobCardComponent implements OnInit, OnDestroy {
   // about to review — pre-work lanes (preparation/ready) and post-review
   // lanes (completed/archive) carry no useful per-task git context, so we
   // skip the pill there to keep the board calm.
-  private static readonly LANES_WITH_GIT = new Set(['3-progress', '4-review']);
+  // ADR-0025: pill stays in both review lanes (auto + human).
+  private static readonly LANES_WITH_GIT = new Set([
+    '3-progress', '4-auto-review', '5-human-review', '4-review',
+  ]);
 
   readonly gitPill = computed(() => {
     if (!JobCardComponent.LANES_WITH_GIT.has(this.job().state)) return null;
@@ -703,8 +712,8 @@ export class JobCardComponent implements OnInit, OnDestroy {
 
   /**
    * Review-pill descriptor: shows the auto-review (Haiku summarizer)
-   * status on a card that landed in 4-review. Returns null when there
-   * is nothing to show (no run, or the user already moved on).
+   * status on a card that landed in 4-auto-review. Returns null when
+   * there is nothing to show (no run, or the user already moved on).
    */
   readonly reviewBadge = computed<{ label: string; tone: 'generating' | 'ready' | 'failed'; tooltip: string } | null>(() => {
     const s = this.job().summaryState;

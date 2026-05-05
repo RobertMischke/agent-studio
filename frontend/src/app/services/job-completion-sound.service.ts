@@ -15,7 +15,7 @@ import { JobInfo } from '../models/job.model';
  *   E2E spec runs flood the queue and would create noise.
  * - Skip the very first poll after mount; the initial snapshot is not a
  *   "transition", just an observation. Otherwise refreshing the app while
- *   a job sits in 4-review would beep on every reload.
+ *   a job sits in 4-auto-review would beep on every reload.
  *
  * Mute via `localStorage.setItem('atp.muteCompletionSound', '1')`.
  */
@@ -37,12 +37,13 @@ export class JobCompletionSoundService {
         return;
       }
 
-      const review = new Set((grouped.review ?? []).map((j: JobInfo) => j.id));
+      const autoReview = new Set((grouped.autoReview ?? grouped.review ?? []).map((j: JobInfo) => j.id));
+      const humanReview = new Set((grouped.humanReview ?? []).map((j: JobInfo) => j.id));
       const completed = new Set((grouped.completed ?? []).map((j: JobInfo) => j.id));
       const completedJobs: JobInfo[] = [];
       for (const id of this.previousProgressIds) {
         if (inProgress.has(id)) continue;
-        if (review.has(id) || completed.has(id)) {
+        if (autoReview.has(id) || humanReview.has(id) || completed.has(id)) {
           const j = this.findJob(grouped, id);
           if (j) completedJobs.push(j);
         }
@@ -64,8 +65,13 @@ export class JobCompletionSoundService {
     return false;
   }
 
-  private findJob(grouped: { review?: JobInfo[]; completed?: JobInfo[] }, id: string): JobInfo | undefined {
-    return (grouped.review ?? []).find(j => j.id === id) ?? (grouped.completed ?? []).find(j => j.id === id);
+  private findJob(
+    grouped: { autoReview?: JobInfo[]; humanReview?: JobInfo[]; review?: JobInfo[]; completed?: JobInfo[] },
+    id: string,
+  ): JobInfo | undefined {
+    return (grouped.autoReview ?? grouped.review ?? []).find(j => j.id === id)
+      ?? (grouped.humanReview ?? []).find(j => j.id === id)
+      ?? (grouped.completed ?? []).find(j => j.id === id);
   }
 
   private beep(): void {

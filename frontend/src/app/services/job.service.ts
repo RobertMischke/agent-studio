@@ -4,13 +4,15 @@ import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliE
 import { ErrorDialogService } from './error-dialog.service';
 
 type LaneKey = keyof GroupedJobs;
+// ADR-0025: state strings use the new seven-lane order.
 const STATE_TO_LANE: Record<string, LaneKey> = {
   '1-preparation': 'preparation',
   '2-ready': 'ready',
   '3-progress': 'progress',
-  '4-review': 'review',
-  '5-completed': 'completed',
-  '6-archive': 'archive'
+  '4-auto-review': 'autoReview',
+  '5-human-review': 'humanReview',
+  '6-completed': 'completed',
+  '7-archive': 'archive'
 };
 
 @Injectable({ providedIn: 'root' })

@@ -23,7 +23,7 @@ public sealed record CompletionMarker
 {
     [JsonPropertyName("kind")] public string Kind { get; init; } = "ready-to-transition";
     [JsonPropertyName("writtenAt")] public DateTime WrittenAt { get; init; } = DateTime.UtcNow;
-    [JsonPropertyName("targetState")] public string TargetState { get; init; } = JobStates.Review;
+    [JsonPropertyName("targetState")] public string TargetState { get; init; } = JobStates.AutoReview;
     [JsonPropertyName("executionStatus")] public string? ExecutionStatus { get; init; }
     [JsonPropertyName("agentOutcome")] public string? AgentOutcome { get; init; }
 

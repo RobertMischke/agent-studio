@@ -34,8 +34,11 @@ public sealed class JobTransitionService
 
     /// <summary>
     /// Moves a job between states. When auto-commit is enabled and the
-    /// transition is <c>3-progress -> 4-review</c>, commits the target working
-    /// tree first and stamps the produced SHA onto the moved job.
+    /// transition is <c>3-progress -> 4-auto-review</c>, commits the target
+    /// working tree first and stamps the produced SHA onto the moved job.
+    /// (Post-ADR-0025 the lane is 4-auto-review; the orchestrator's
+    /// review-decision pass then decides whether to promote to
+    /// 5-human-review.)
     /// </summary>
     public async Task<MoveJobOutcome> MoveAsync(
         string jobId,
@@ -48,7 +51,7 @@ public sealed class JobTransitionService
 
         var shouldAutoCommit =
             info.State == JobStates.Progress &&
-            targetState == JobStates.Review &&
+            targetState == JobStates.AutoReview &&
             _settings.Get(info.ProjectName).AutoCommit;
 
         JobCommitInfo? commitToStamp = null;

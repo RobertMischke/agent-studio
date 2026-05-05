@@ -228,8 +228,90 @@ public class JobStateMachine
             CopyDirectory(dir, Path.Combine(targetDir, Path.GetFileName(dir)));
     }
 
+    /// <summary>
+    /// One-shot migration step for ADR-0025: if <paramref name="oldName"/>
+    /// exists in the workspace, move every job folder under it to
+    /// <paramref name="newName"/>, rewrite each job.json's <c>state</c>
+    /// field, and remove the now-empty old folder. Idempotent: on the
+    /// next boot the old folder no longer exists and the call is a no-op.
+    /// </summary>
+    private void MigrateNumberedLane(string watchPath, string oldName, string newName)
+    {
+        var oldDir = Path.Combine(watchPath, oldName);
+        if (!Directory.Exists(oldDir)) return;
+
+        var newDir = Path.Combine(watchPath, newName);
+        Directory.CreateDirectory(newDir);
+
+        var jobFolders = Directory.GetDirectories(oldDir);
+        var movedJobs = 0;
+        foreach (var jobFolder in jobFolders)
+        {
+            var folderName = Path.GetFileName(jobFolder);
+            var targetFolder = Path.Combine(newDir, folderName);
+            if (Directory.Exists(targetFolder))
+            {
+                _logger.LogWarning(
+                    "ADR-0025 migration: target {Target} already exists; leaving source {Source} in place for manual reconciliation",
+                    targetFolder, jobFolder);
+                continue;
+            }
+            try
+            {
+                Directory.Move(jobFolder, targetFolder);
+                if (File.Exists(Path.Combine(targetFolder, "job.json")))
+                {
+                    JobJsonFile.UpdateField(targetFolder, "state", newName, _logger);
+                }
+                movedJobs++;
+                LastNumberedLaneMigrationCount++;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex,
+                    "ADR-0025 migration: failed to move {Source} to {Target}",
+                    jobFolder, targetFolder);
+            }
+        }
+
+        // Try to remove the old (now-empty) lane folder so the next boot has
+        // nothing to do. Leftover non-job items (loose files, hidden state)
+        // keep it around; that's fine, the migration is still idempotent
+        // because we only act on directories with a job.json shape.
+        try
+        {
+            if (!Directory.EnumerateFileSystemEntries(oldDir).Any())
+            {
+                Directory.Delete(oldDir);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "ADR-0025 migration: could not remove emptied lane {OldDir}",
+                oldDir);
+        }
+
+        _logger.LogInformation(
+            "ADR-0025 migration: moved {Count} job(s) from {Old} to {New} in {Workspace}",
+            movedJobs, oldName, newName, watchPath);
+    }
+
+    /// <summary>
+    /// Total number of jobs whose <c>state</c> field was rewritten by the
+    /// most recent ADR-0025 numbered-lane migration sweep
+    /// (<c>4-review → 4-auto-review</c>, <c>5-completed → 6-completed</c>,
+    /// <c>6-archive → 7-archive</c>). Useful for reporting back on the
+    /// migration without mining the logs. Reset at the start of every
+    /// <see cref="EnsureStateFoldersAndMigrate"/> call so the value
+    /// reflects this boot's work and not cumulative startups.
+    /// </summary>
+    public int LastNumberedLaneMigrationCount { get; private set; }
+
     public void EnsureStateFoldersAndMigrate()
     {
+        LastNumberedLaneMigrationCount = 0;
+
         foreach (var entry in _scanner.GetWatchPaths())
         {
             var watchPath = entry.Path;
@@ -249,6 +331,16 @@ public class JobStateMachine
                     _logger.LogInformation("Renamed state folder {Old} → {New}", oldName, newName);
                 }
             }
+
+            // ADR-0025: rename pre-three-stage-review numbered lanes to the
+            // new layout. Order matters: free 6- before reusing it for
+            // completed, free 5- before completed could overwrite a stray
+            // 5-human-review someone tried to seed by hand. The check is
+            // idempotent - on the second boot the old names no longer
+            // exist so each branch is a no-op.
+            MigrateNumberedLane(watchPath, "6-archive", JobStates.Archive);
+            MigrateNumberedLane(watchPath, "5-completed", JobStates.Completed);
+            MigrateNumberedLane(watchPath, "4-review", JobStates.AutoReview);
 
             // Create state folders
             foreach (var state in JobStates.All)

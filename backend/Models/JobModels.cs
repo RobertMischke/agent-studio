@@ -625,11 +625,19 @@ public static class JobStates
     public const string Preparation = "1-preparation";
     public const string Ready = "2-ready";
     public const string Progress = "3-progress";
-    public const string Review = "4-review";
-    public const string Completed = "5-completed";
-    public const string Archive = "6-archive";
+    // 4-auto-review is the orchestrator's lane: ReviewDecisionOrchestrator
+    // can reissue, accept-as-done, or escalate. Anything that has crossed
+    // the "ready for the user" line lives in 5-human-review instead, so
+    // the kanban can split "machine still chewing" from "waiting on you".
+    // The legacy single 4-review lane is migrated on backend boot via
+    // JobStateMachine.EnsureStateFoldersAndMigrate. See ADR-0025.
+    public const string AutoReview = "4-auto-review";
+    public const string HumanReview = "5-human-review";
+    public const string Completed = "6-completed";
+    public const string Archive = "7-archive";
 
-    public static readonly string[] All = [Preparation, Ready, Progress, Review, Completed, Archive];
+    public static readonly string[] All =
+        [Preparation, Ready, Progress, AutoReview, HumanReview, Completed, Archive];
 
     /// <summary>Maps old unnumbered folder names to new numbered ones.</summary>
     public static readonly Dictionary<string, string> LegacyFolderMap = new()
@@ -637,18 +645,37 @@ public static class JobStates
         ["preparation"] = Preparation,
         ["ready"] = Ready,
         ["progress"] = Progress,
-        ["review"] = Review,
+        // The pre-ADR-0025 lane shape mapped one "review" lane to the
+        // orchestrator's pass; preserve that meaning by funnelling unnumbered
+        // legacy folders into 4-auto-review.
+        ["review"] = AutoReview,
         ["completed"] = Completed,
+    };
+
+    /// <summary>
+    /// Numbered legacy lane names that pre-date ADR-0025 (three-stage review
+    /// pipeline). The boot-time migration in
+    /// <see cref="OrchestratorApi.Services.Jobs.JobStateMachine.EnsureStateFoldersAndMigrate"/>
+    /// uses this to rename folders and rewrite job.json state fields.
+    /// </summary>
+    public static readonly Dictionary<string, string> NumberedLegacyMap = new()
+    {
+        ["4-review"] = AutoReview,
+        ["5-completed"] = Completed,
+        ["6-archive"] = Archive,
     };
 
     public static string MapLegacyState(string state) => state switch
     {
         "draft" => Preparation,
         "running" => Progress,
-        "review-needed" => Review,
+        "review-needed" => AutoReview,
         "accepted" => Completed,
         "rejected" => Completed,
         "archived" => Completed,
+        "4-review" => AutoReview,
+        "5-completed" => Completed,
+        "6-archive" => Archive,
         _ => Preparation
     };
 

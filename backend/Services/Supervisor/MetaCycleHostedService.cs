@@ -270,7 +270,10 @@ public sealed class MetaCycleHostedService : BackgroundService
     }
 
     private static bool IsClosedForCycle(string state)
-        => state == JobStates.Review || state == JobStates.Completed || state == JobStates.Archive;
+        => state == JobStates.AutoReview
+        || state == JobStates.HumanReview
+        || state == JobStates.Completed
+        || state == JobStates.Archive;
 
     private static bool HasArtefacts(JobInfo job)
     {

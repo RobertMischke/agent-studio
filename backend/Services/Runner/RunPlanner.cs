@@ -103,7 +103,7 @@ public static class RunPlanner
                 : !compatible ? $"recorded id is not a valid {cliType} session"
                 : placeholder ? "recorded id is a legacy placeholder slug"
                 : null;
-            var moveToProgress = initialState is JobStates.Review or JobStates.Completed or JobStates.Ready;
+            var moveToProgress = initialState is JobStates.AutoReview or JobStates.HumanReview or JobStates.Completed or JobStates.Ready;
 
             if (canResume)
             {
@@ -155,7 +155,7 @@ public static class RunPlanner
         // matches the actual situation (a process is working on it).
         var moveStartToProgress =
             initialState == JobStates.Ready
-            || initialState is JobStates.Review or JobStates.Completed;
+            || initialState is JobStates.AutoReview or JobStates.HumanReview or JobStates.Completed;
         var startSession = sessionName;
         var sessionDropped = false;
         var clearStale = false;
@@ -194,7 +194,7 @@ public static class RunPlanner
             evtKind = "recovery";
             evtReason = "previous session was for another CLI. Files reconstructed.";
         }
-        else if (resume && initialState is JobStates.Review or JobStates.Completed)
+        else if (resume && initialState is JobStates.AutoReview or JobStates.HumanReview or JobStates.Completed)
         {
             // Re-starting an already-finished task with the same session is
             // almost always a "user updated the prompt and wants the agent to
@@ -267,7 +267,7 @@ public static class RunPlanner
     {
         if (ShouldUseResumePrompt(initialState, resume, sessionDropped))
             return RuntimePromptService.RunnerResumeInterrupted;
-        if (resume && initialState is JobStates.Review or JobStates.Completed)
+        if (resume && initialState is JobStates.AutoReview or JobStates.HumanReview or JobStates.Completed)
             return RuntimePromptService.RunnerResumeRestart;
         return RuntimePromptService.RunnerFreshStart;
     }

@@ -6,9 +6,14 @@ using OrchestratorApi.Services.Jobs;
 namespace OrchestratorApi.Services.Runner;
 
 /// <summary>
-/// Background loop that reads the 4-review lane and acts on tasks that
-/// ended in <c>[[TASK_NEEDS_INPUT]]</c>, <c>[[TASK_NOOP]]</c>, or
-/// <c>[[TASK_BLOCKED]]</c>.
+/// Background loop that reads the <c>4-auto-review</c> lane (ADR-0025) and
+/// acts on tasks that ended in <c>[[TASK_NEEDS_INPUT]]</c>,
+/// <c>[[TASK_NOOP]]</c>, or <c>[[TASK_BLOCKED]]</c>. Reissue moves the
+/// task back to <c>3-progress</c>; accept-as-done moves it forward to
+/// <c>5-human-review</c> (the user always gets the final say on
+/// completion); escalate also moves it to <c>5-human-review</c> with a
+/// <c>[supervisor]</c> chat-note explaining why the orchestrator could
+/// not decide.
 ///
 /// <para>
 /// The user framing: when a job lands in 4-review with an unanswered
@@ -377,9 +382,19 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
 
         _chatLog.AppendSupervisor(current, "escalate",
-            $"Orchestrator could not auto-recover NOOP. Reason: {reason}");
+            $"Orchestrator could not auto-recover NOOP. Reason: {reason}. Promoted to 5-human-review.");
 
         var verdict = new OrchestratorDecisionVerdict(OrchestratorDecisionAction.Escalate, reason);
+
+        // ADR-0025: NOOP escalations also move the task to 5-human-review.
+        var move = _stateMachine.MoveJob(current.Id, JobStates.HumanReview, entry.Path);
+        if (move.Status != MoveJobStatus.Success)
+        {
+            _logger.LogWarning(
+                "ReviewDecisionOrchestrator: failed to move {JobId} to human-review after NOOP escalate: {Status} {Message}",
+                current.Id, move.Status, move.Message);
+        }
+
         await CreateHumanDecisionIntakeAsync(entry, pending, verdict, ct);
 
         ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
@@ -405,9 +420,19 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             : $"Agent emitted [[TASK_BLOCKED]]: {pending.Reason}";
 
         _chatLog.AppendSupervisor(current, "escalate",
-            $"Orchestrator escalated BLOCKED to human review. Reason: {reason}");
+            $"Orchestrator escalated BLOCKED to human review. Reason: {reason}. Promoted to 5-human-review.");
 
         var verdict = new OrchestratorDecisionVerdict(OrchestratorDecisionAction.Escalate, reason);
+
+        // ADR-0025: BLOCKED escalations move the task to 5-human-review.
+        var move = _stateMachine.MoveJob(current.Id, JobStates.HumanReview, entry.Path);
+        if (move.Status != MoveJobStatus.Success)
+        {
+            _logger.LogWarning(
+                "ReviewDecisionOrchestrator: failed to move {JobId} to human-review after BLOCKED: {Status} {Message}",
+                current.Id, move.Status, move.Message);
+        }
+
         await CreateHumanDecisionIntakeAsync(entry, pending, verdict, ct);
 
         ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
@@ -544,12 +569,21 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     {
         var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
 
-        // Stay in 4-review; write a [supervisor] banner so the user sees the
-        // escalation in the activity log. The chat-log line also acts as the
-        // "decision recorded" marker that prevents re-processing on the next
-        // tick.
+        // ADR-0025: escalate moves the job from 4-auto-review to
+        // 5-human-review and writes a [supervisor] chat-note so the user
+        // sees one concise reason for the handover. The intake under
+        // 1-preparation is kept for now as an extra surface, but the
+        // primary signal is the lane move itself.
         _chatLog.AppendSupervisor(current, "escalate",
-            $"Orchestrator could not decide unattended. Reason: {verdict.Reason}");
+            $"Orchestrator could not decide unattended. Reason: {verdict.Reason}. Promoted to 5-human-review for human attention.");
+
+        var move = _stateMachine.MoveJob(current.Id, JobStates.HumanReview, entry.Path);
+        if (move.Status != MoveJobStatus.Success)
+        {
+            _logger.LogWarning(
+                "ReviewDecisionOrchestrator: failed to move {JobId} to human-review after escalate: {Status} {Message}",
+                current.Id, move.Status, move.Message);
+        }
 
         await CreateHumanDecisionIntakeAsync(entry, pending, verdict, ct);
 
@@ -574,14 +608,18 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     {
         var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
 
+        // ADR-0025: accept-as-done routes to 5-human-review, NOT directly
+        // to 6-completed. The user always gets the final say on whether a
+        // task is done; the orchestrator's accept signal is "the agent's
+        // answer looks complete to me, please confirm."
         _chatLog.Append(current, OrchestratorMessageKind.Decision,
-            $"Decision: accept-as-done. Reason: {verdict.Reason}");
+            $"Decision: accept-as-done. Reason: {verdict.Reason}. Promoting to 5-human-review for confirmation.");
 
-        var move = _stateMachine.MoveJob(current.Id, JobStates.Completed, entry.Path);
+        var move = _stateMachine.MoveJob(current.Id, JobStates.HumanReview, entry.Path);
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
-                "ReviewDecisionOrchestrator: failed to move {JobId} to completed: {Status} {Message}",
+                "ReviewDecisionOrchestrator: failed to move {JobId} to human-review after accept: {Status} {Message}",
                 current.Id, move.Status, move.Message);
         }
 
@@ -734,7 +772,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
     private IEnumerable<PendingDecision> EnumeratePending(WatchPathEntry entry)
     {
-        var reviewDir = Path.Combine(entry.Path, JobStates.Review);
+        var reviewDir = Path.Combine(entry.Path, JobStates.AutoReview);
         if (!Directory.Exists(reviewDir)) yield break;
 
         foreach (var jobDir in Directory.GetDirectories(reviewDir))

@@ -267,7 +267,9 @@ public sealed class ChatNoteHostedService : BackgroundService
         var count = 0;
         foreach (var job in projectJobs)
         {
-            if (job.State != JobStates.Review) continue;
+            // ADR-0025: a job that has reached either review lane (auto or
+            // human) counts as "reached review" for the cycle counter.
+            if (job.State != JobStates.AutoReview && job.State != JobStates.HumanReview) continue;
             if (job.LastActivity <= from || job.LastActivity > to) continue;
             count++;
         }
@@ -292,7 +294,8 @@ public sealed class ChatNoteHostedService : BackgroundService
         return projectJobs
             .Where(j => j.State == JobStates.Progress
                      || j.State == JobStates.Ready
-                     || j.State == JobStates.Review
+                     || j.State == JobStates.AutoReview
+                     || j.State == JobStates.HumanReview
                      || j.State == JobStates.Completed)
             .OrderByDescending(j => j.LastActivity)
             .FirstOrDefault()

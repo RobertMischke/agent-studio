@@ -45,15 +45,15 @@ Agents must not:
 
 ## State Model
 
-The visible task states are:
+The visible task states are (ADR-0025: three-stage review pipeline):
 
 ```text
-1-preparation -> 2-ready -> 3-progress -> 4-review -> 5-completed -> 6-archive
+1-preparation -> 2-ready -> 3-progress -> 4-auto-review -> 5-human-review -> 6-completed -> 7-archive
 ```
 
 State transitions are application-controlled. A task can sit in `3-progress` without a live CLI process after a stop, crash, or backend restart. Treat the live CLI execution state as the real signal for whether work is currently running.
 
-Only successful CLI runs move automatically from `3-progress` to `4-review`. Failed or stopped runs stay in `3-progress` so the user can inspect the log, restart, or continue the task.
+Only successful CLI runs move automatically from `3-progress` to `4-auto-review`. The orchestrator's review-decision pass then reissues (back to `3-progress`), accepts-as-done (forward to `5-human-review`), or escalates (also forward to `5-human-review`). The user always confirms the move from `5-human-review` to `6-completed`. Failed or stopped runs stay in `3-progress` so the user can inspect the log, restart, or continue the task.
 
 ## Task Files
 
@@ -91,10 +91,10 @@ End every run with exactly one of these tokens on its own line:
 
 Do not paraphrase the tokens or wrap them in code fences. Multiple tokens in a single run are not allowed; the orchestrator treats only the last one as authoritative.
 
-`[[TASK_NOOP]]` is a **recoverable signal, not a terminal state**. When a job lands in `4-review` ending in NOOP, the orchestrator inspects the task and decides deterministically:
+`[[TASK_NOOP]]` is a **recoverable signal, not a terminal state**. When a job lands in `4-auto-review` ending in NOOP, the orchestrator inspects the task and decides deterministically:
 
 - If the task title and prompt body are real (non-empty, non-placeholder) and the per-job reissue budget has not been exhausted, the orchestrator reissues the task back to `3-progress` with a sharpened framing built from `RunOutcomePolicy.BuildReissueFollowupPrompt` and writes it as `orchestrator-follow-up.md`.
-- If the title or prompt is empty / placeholder, the orchestrator escalates by creating a `human-decision-needed-<slug>` task in `1-preparation` and leaves the original in `4-review` with a `[supervisor] [escalate]` banner.
+- If the title or prompt is empty / placeholder, the orchestrator promotes the task to `5-human-review` with a `[supervisor] [escalate]` chat-note and creates a `human-decision-needed-<slug>` intake in `1-preparation`.
 - If the task has already passed the reissue budget (default 2, shared with NEEDS_INPUT-driven reissues so the agent never sees double-spend), the orchestrator escalates the same way.
 
 The NOOP branch is fully deterministic - no fast-model CLI call, no per-hour rate consumption.

@@ -267,15 +267,17 @@ Each job folder contains:
 - `status.md`: generated review protocol.
 - `logs/`: optional log files (CLI stdout/stderr lives here as `cli-output.log`).
 
-States:
+States (ADR-0025: three-stage review pipeline):
 
 ```text
-1-preparation -> 2-ready -> 3-progress -> 4-review -> 5-completed -> 6-archive
+1-preparation -> 2-ready -> 3-progress -> 4-auto-review -> 5-human-review -> 6-completed -> 7-archive
 ```
+
+`4-auto-review` is the orchestrator's lane (machine icon in the kanban): the `ReviewDecisionOrchestrator` decides reissue / accept-as-done / escalate. `5-human-review` is the lane that waits for the user (eye icon). The user always gets the final say on completion - the orchestrator never moves a job directly from `4-auto-review` to `6-completed`.
 
 Only jobs in `2-ready` or `3-progress` can be started via `/api/jobs/{id}/start`. New jobs default to `1-preparation`; the create endpoint accepts an optional `targetState` to land directly in `2-ready`.
 
-Successful CLI runs move from `3-progress` to `4-review` through application code. Failed or stopped runs stay in `3-progress` for inspection, restart, or continuation.
+Successful CLI runs move from `3-progress` to `4-auto-review` through application code. Failed or stopped runs stay in `3-progress` for inspection, restart, or continuation. The pre-ADR-0025 single `4-review` lane is migrated automatically on backend boot via `JobStateMachine.EnsureStateFoldersAndMigrate`.
 
 ### Job organization rule: API first
 

@@ -597,9 +597,19 @@ export class JobColumnComponent {
   }
 
   isArchive(): boolean {
-    return this.state() === '6-archive';
+    // Accept both ADR-0025 and legacy archive lane names so a transitional
+    // payload (legacy backend, new frontend) keeps rendering correctly.
+    return this.state() === '7-archive' || this.state() === '6-archive';
   }
 
+  /**
+   * The ADR-0025 swim-lanes are now real columns; the in-column
+   * subdivision only triggers for the legacy `4-review` payload (older
+   * backend, newer frontend, or until the migration runs). The new
+   * `4-auto-review` lane is itself the "machine" pass and the new
+   * `5-human-review` lane is itself the "you" pass; they don't need an
+   * extra in-column split.
+   */
   isReview(): boolean {
     return this.state() === '4-review';
   }
@@ -619,7 +629,7 @@ export class JobColumnComponent {
   readonly reviewGroups = computed(() => groupReviewJobs(this.jobs()));
 
   canArchiveAll(): boolean {
-    return this.state() === '5-completed';
+    return this.state() === '6-completed' || this.state() === '5-completed';
   }
 
   readonly archiveVisible = computed(() => {

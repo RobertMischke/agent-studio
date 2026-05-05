@@ -284,7 +284,7 @@ public sealed class StaleProgressArchiver
         var jobId = TryReadJobId(jobFolder) ?? slug;
         try
         {
-            var outcome = await _transitions.MoveAsync(jobId, JobStates.Review, entry.Path, ct);
+            var outcome = await _transitions.MoveAsync(jobId, JobStates.AutoReview, entry.Path, ct);
             if (outcome.Status != MoveJobStatus.Success)
             {
                 return new StaleProgressDecision
@@ -295,7 +295,7 @@ public sealed class StaleProgressArchiver
                     Slug = slug,
                     JobId = jobId,
                     SentinelKeyword = keyword,
-                    Reason = $"transition to {JobStates.Review} refused: {outcome.Status} {outcome.Message}"
+                    Reason = $"transition to {JobStates.AutoReview} refused: {outcome.Status} {outcome.Message}"
                 };
             }
 
@@ -308,7 +308,7 @@ public sealed class StaleProgressArchiver
                     movedInfo,
                     "recovered-from-stuck-progress",
                     $"Boot sweep finished a missed transition: agent had emitted [[TASK_{keyword}]] " +
-                    "in 3-progress and the orchestrator never moved the folder. Promoted to 4-review.");
+                    "in 3-progress and the orchestrator never moved the folder. Promoted to 4-auto-review.");
             }
 
             return new StaleProgressDecision
@@ -319,7 +319,7 @@ public sealed class StaleProgressArchiver
                 Slug = slug,
                 JobId = jobId,
                 SentinelKeyword = keyword,
-                TargetState = JobStates.Review,
+                TargetState = JobStates.AutoReview,
                 Reason = $"sentinel TASK_{keyword} survived; finished missed transition"
             };
         }

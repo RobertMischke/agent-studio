@@ -518,9 +518,16 @@ import { markdownToHtml } from './markdown-utils';
     .state--1-preparation { background: rgba(139,92,246,0.15); color: #8b5cf6; }
     .state--2-ready { background: rgba(6,182,212,0.15); color: #06b6d4; }
     .state--3-progress { background: rgba(59,130,246,0.15); color: #3b82f6; }
+    /* ADR-0025 lanes (auto-review = amber, human-review = sky); legacy
+       4-review and 5/6-completed selectors retained so older payloads
+       keep matching during the transition. */
     .state--4-review { background: rgba(245,158,11,0.15); color: #f59e0b; }
+    .state--4-auto-review { background: rgba(245,158,11,0.15); color: #f59e0b; }
+    .state--5-human-review { background: rgba(56,189,248,0.15); color: #38bdf8; }
     .state--5-completed { background: rgba(16,185,129,0.15); color: #10b981; }
+    .state--6-completed { background: rgba(16,185,129,0.15); color: #10b981; }
     .state--6-archive { background: rgba(100,116,139,0.15); color: #94a3b8; }
+    .state--7-archive { background: rgba(100,116,139,0.15); color: #94a3b8; }
     .detail__complete-next {
       background: rgba(16,185,129,0.12);
       border: 1px solid rgba(16,185,129,0.35);
@@ -1831,14 +1838,18 @@ export class JobDetailComponent implements OnDestroy {
   }
 
   isReview(): boolean {
-    return this.detail().info.state === '4-review';
+    const s = this.detail().info.state;
+    // ADR-0025: any review lane (auto or human) counts as "in review" for
+    // the detail-pane affordances. Legacy 4-review supported during
+    // transition.
+    return s === '4-auto-review' || s === '5-human-review' || s === '4-review';
   }
 
   completeAndNext() {
     if (this.completingAndNext()) return;
     this.completingAndNext.set(true);
     const { id, watchPath } = this.detail().info;
-    this.jobService.moveJob(id, '5-completed', watchPath).subscribe({
+    this.jobService.moveJob(id, '6-completed', watchPath).subscribe({
       next: () => {
         this.completingAndNext.set(false);
         this.completeAndNextReview.emit();

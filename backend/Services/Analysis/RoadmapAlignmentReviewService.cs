@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using OrchestratorApi.Models;
 using OrchestratorApi.Services.State;
 
 namespace OrchestratorApi.Services.Analysis;
@@ -18,9 +19,10 @@ namespace OrchestratorApi.Services.Analysis;
 /// </para>
 /// <list type="number">
 ///   <item><description><see cref="SelectScope"/> walks the inspected lanes
-///   (<c>1-preparation</c>, <c>2-ready</c>, <c>3-progress</c>, <c>4-review</c>)
-///   and the canonical doc set, then returns a typed
-///   <see cref="RoadmapAlignmentReviewScope"/>. No agent calls happen here.</description></item>
+///   (<c>1-preparation</c>, <c>2-ready</c>, <c>3-progress</c>,
+///   <c>4-auto-review</c>, <c>5-human-review</c>) and the canonical doc set,
+///   then returns a typed <see cref="RoadmapAlignmentReviewScope"/>. No agent
+///   calls happen here.</description></item>
 ///   <item><description><see cref="BuildPrompt"/> renders the runtime prompt
 ///   template with the assembled scope. The template lives at
 ///   <c>prompts/runtime/roadmap-alignment-review.md</c> so the wording is
@@ -43,14 +45,15 @@ public sealed class RoadmapAlignmentReviewService
     public const int CurrentSchemaVersion = 1;
 
     /// <summary>The fixed lane catalogue this action inspects. Out-of-band lanes
-    /// (<c>5-completed</c>, <c>6-archive</c>) are excluded by design: the action
+    /// (<c>6-completed</c>, <c>7-archive</c>) are excluded by design: the action
     /// asks "are we on track?" against the active queue.</summary>
     public static readonly IReadOnlyList<string> InspectedLanes = new[]
     {
-        "1-preparation",
-        "2-ready",
-        "3-progress",
-        "4-review",
+        JobStates.Preparation,
+        JobStates.Ready,
+        JobStates.Progress,
+        JobStates.AutoReview,
+        JobStates.HumanReview,
     };
 
     /// <summary>Canonical topic slug the UI uses for this producer.</summary>

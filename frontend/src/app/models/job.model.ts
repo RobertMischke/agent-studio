@@ -705,6 +705,11 @@ export interface GroupedJobs {
   preparation: JobInfo[];
   ready: JobInfo[];
   progress: JobInfo[];
+  /** ADR-0025 lane: orchestrator's review pass (4-auto-review). */
+  autoReview: JobInfo[];
+  /** ADR-0025 lane: waiting for the user (5-human-review). */
+  humanReview: JobInfo[];
+  /** Legacy alias for pre-ADR-0025 clients; equal to `autoReview`. */
   review: JobInfo[];
   completed: JobInfo[];
   archive: JobInfo[];

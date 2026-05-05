@@ -44,10 +44,13 @@ Each visible state is a folder, and each job is a subfolder inside one state:
 1-preparation/
 2-ready/
 3-progress/
-4-review/
-5-completed/
-6-archive/
+4-auto-review/
+5-human-review/
+6-completed/
+7-archive/
 ```
+
+The two review lanes are explicit (ADR-0025): `4-auto-review` is the orchestrator's machine pass; `5-human-review` is the lane that actually waits for the user. The pre-ADR-0025 numbered lanes (`4-review`, `5-completed`, `6-archive`) are migrated automatically on backend boot.
 
 Each job folder uses this structure:
 
@@ -77,9 +80,9 @@ Each job folder uses this structure:
 }
 ```
 
-**States:** `1-preparation` -> `2-ready` -> `3-progress` -> `4-review` -> `5-completed` -> `6-archive`
+**States:** `1-preparation` -> `2-ready` -> `3-progress` -> `4-auto-review` -> `5-human-review` -> `6-completed` -> `7-archive`
 
-The application owns transitions between these states. Successful CLI runs move from `3-progress` to `4-review`; failed or stopped runs stay in `3-progress` for inspection, restart, or continuation.
+The application owns transitions between these states. Successful CLI runs move from `3-progress` to `4-auto-review`; the orchestrator's review pass then either reissues (back to `3-progress`), accepts-as-done (forward to `5-human-review`), or escalates (also forward to `5-human-review` with a `[supervisor]` chat-note). The user always confirms the move from `5-human-review` to `6-completed`. Failed or stopped runs stay in `3-progress` for inspection, restart, or continuation.
 
 ### prompt.md
 

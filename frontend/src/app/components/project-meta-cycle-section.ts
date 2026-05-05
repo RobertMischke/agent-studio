@@ -49,7 +49,7 @@ import {
         <p class="proj-detail__empty">
           No cycles yet. The next pause + inspection runs after
           <code>{{ config()?.cycleLengthN ?? 2 }}</code> jobs reach
-          <code>4-review</code>.
+          <code>4-auto-review</code> or <code>5-human-review</code>.
         </p>
       } @else {
         <dl class="pmc__meta">

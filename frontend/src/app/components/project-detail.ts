@@ -69,7 +69,7 @@ interface ProjectSettingsRow {
             }
           </ul>
           <p class="proj-detail__hint">
-            One or more 4-review tasks ended in <code>[[TASK_NEEDS_INPUT]]</code>. The orchestrator will pick them up on the next tick (≈ 30 s) and either reissue, escalate, or accept-as-done.
+            One or more 4-auto-review tasks ended in <code>[[TASK_NEEDS_INPUT]]</code>. The orchestrator will pick them up on the next tick (≈ 30 s) and either reissue, accept-as-done (promotes to 5-human-review), or escalate (also to 5-human-review).
           </p>
         </section>
       }
@@ -120,7 +120,7 @@ interface ProjectSettingsRow {
                  data-testid="project-detail-auto-commit"
                  [(ngModel)]="autoCommitDraft"
                  (ngModelChange)="onAutoCommitChange()">
-          <span>Auto-commit on transition <code>3-progress → 4-review</code></span>
+          <span>Auto-commit on transition <code>3-progress → 4-auto-review</code></span>
         </label>
       </section>
 
@@ -487,9 +487,10 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
       { state: '1-preparation', label: 'Preparation', count: c(grouped.preparation) },
       { state: '2-ready',       label: 'Ready',       count: c(grouped.ready) },
       { state: '3-progress',    label: 'Progress',    count: c(grouped.progress) },
-      { state: '4-review',      label: 'Review',      count: c(grouped.review) },
-      { state: '5-completed',   label: 'Completed',   count: c(grouped.completed) },
-      { state: '6-archive',     label: 'Archive',     count: c(grouped.archive) }
+      { state: '4-auto-review', label: 'Auto Review', count: c(grouped.autoReview ?? grouped.review) },
+      { state: '5-human-review',label: 'Human Review',count: c(grouped.humanReview ?? []) },
+      { state: '6-completed',   label: 'Completed',   count: c(grouped.completed) },
+      { state: '7-archive',     label: 'Archive',     count: c(grouped.archive) }
     ];
   });
 

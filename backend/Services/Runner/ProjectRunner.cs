@@ -1229,18 +1229,20 @@ public class ProjectRunner
                 // here and the folder-rename leaves enough state on disk for
                 // CrashRecoveryService to finish the transition on next boot.
                 // Cleared after a successful move (no point keeping a marker
-                // in 4-review). See ADR-0020.
+                // in 4-auto-review). See ADR-0020 + ADR-0025 (post-CLI lane
+                // is 4-auto-review now; the orchestrator decides whether to
+                // promote to 5-human-review).
                 if (activeInfo != null)
                 {
                     CompletionMarker.Write(activeInfo.FolderPath, new CompletionMarker
                     {
-                        TargetState = JobStates.Review,
+                        TargetState = JobStates.AutoReview,
                         ExecutionStatus = execution.Status,
                         AgentOutcome = outcome.Kind.ToString()
                     }, _logger);
                 }
 
-                var moveOutcome = await _transitions.MoveAsync(jobId, JobStates.Review, Entry.Path, CancellationToken.None);
+                var moveOutcome = await _transitions.MoveAsync(jobId, JobStates.AutoReview, Entry.Path, CancellationToken.None);
                 if (moveOutcome.Status == MoveJobStatus.Success)
                 {
                     var movedInfo = _scanner.FindJob(jobId, Entry.Path);

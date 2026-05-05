@@ -46,6 +46,21 @@ function jobInfo(over: Partial<Record<string, unknown>>): Record<string, unknown
 }
 
 function fixtureGrouped(): Record<string, unknown[]> {
+  // ADR-0025 lane shape: separate auto-review (orchestrator) and
+  // human-review (user). The legacy `review` key is kept as an alias of
+  // `autoReview` for any frontend code path that has not been migrated.
+  const autoReview = [
+    jobInfo({ id: 'fx-auto-review-1', title: 'Failed run waiting', state: '4-auto-review',
+      execution: {
+        jobId: 'fx-auto-review-1', jobKey: `${FIXTURE_WATCH}::fx-auto-review-1`,
+        processId: 9002, startedAt: '2026-05-05T08:30:00Z',
+        status: 'failed', exitCode: 1, durationSeconds: 60, model: 'claude-opus-4-7'
+      }
+    })
+  ];
+  const humanReview = [
+    jobInfo({ id: 'fx-human-review-1', title: 'Awaiting your accept', state: '5-human-review' })
+  ];
   return {
     preparation: [jobInfo({ id: 'fx-prep-1', title: 'Drafting next thing', state: '1-preparation' })],
     ready: [
@@ -67,17 +82,11 @@ function fixtureGrouped(): Record<string, unknown[]> {
         }
       })
     ],
-    review: [
-      jobInfo({ id: 'fx-review-1', title: 'Failed run waiting', state: '4-review',
-        execution: {
-          jobId: 'fx-review-1', jobKey: `${FIXTURE_WATCH}::fx-review-1`,
-          processId: 9002, startedAt: '2026-05-05T08:30:00Z',
-          status: 'failed', exitCode: 1, durationSeconds: 60, model: 'claude-opus-4-7'
-        }
-      })
-    ],
-    completed: [jobInfo({ id: 'fx-done-1', title: 'Wrapped up', state: '5-completed' })],
-    archive: [jobInfo({ id: 'fx-arch-1', title: 'Old work', state: '6-archive' })]
+    autoReview,
+    humanReview,
+    review: autoReview,
+    completed: [jobInfo({ id: 'fx-done-1', title: 'Wrapped up', state: '6-completed' })],
+    archive: [jobInfo({ id: 'fx-arch-1', title: 'Old work', state: '7-archive' })]
   };
 }
 
@@ -85,7 +94,7 @@ async function installBoardMocks(page: Page): Promise<void> {
   const grouped = fixtureGrouped();
   const allJobs = [
     ...grouped.preparation, ...grouped.ready, ...grouped.progress,
-    ...grouped.review, ...grouped.completed, ...grouped.archive
+    ...grouped.autoReview, ...grouped.humanReview, ...grouped.completed, ...grouped.archive
   ];
 
   // Routes are matched LIFO in Playwright — register the catch-all FIRST so
@@ -194,10 +203,10 @@ test.describe('Kanban lane grouping and collapse', () => {
     // Wait for the running job card to appear so we know /api/jobs/grouped has resolved.
     await expect(page.locator('[data-running="true"]')).toHaveCount(1);
 
-    // Collapse Preparation, Ready, Completed, Archive. That leaves Progress
-    // (running) and Review (failed) expanded so neither active nor blocked
-    // work is hidden by the default user gesture.
-    for (const state of ['1-preparation', '2-ready', '5-completed', '6-archive']) {
+    // Collapse Preparation, Ready, Completed, Archive. That leaves
+    // Progress (running) and the two ADR-0025 review lanes expanded so
+    // neither active nor blocked work is hidden by the default gesture.
+    for (const state of ['1-preparation', '2-ready', '6-completed', '7-archive']) {
       await page.getByTestId(`lane-collapse-${state}`).click();
     }
 
@@ -210,16 +219,18 @@ test.describe('Kanban lane grouping and collapse', () => {
 
     // Active group lanes stay expanded so running / failed work is visible.
     await expect(page.getByTestId('lane-collapse-3-progress')).toBeVisible();
-    await expect(page.getByTestId('lane-collapse-4-review')).toBeVisible();
+    await expect(page.getByTestId('lane-collapse-4-auto-review')).toBeVisible();
+    await expect(page.getByTestId('lane-collapse-5-human-review')).toBeVisible();
 
     // Now collapse the active lanes too; the rails must surface running + error indicators
     // and the CLI badge so nothing important is silently hidden.
     await page.getByTestId('lane-collapse-3-progress').click();
-    await page.getByTestId('lane-collapse-4-review').click();
+    await page.getByTestId('lane-collapse-4-auto-review').click();
+    await page.getByTestId('lane-collapse-5-human-review').click();
 
     await expect(page.getByTestId('lane-rail-running-3-progress')).toBeVisible();
     await expect(page.getByTestId('lane-rail-cli-3-progress')).toBeVisible();
-    await expect(page.getByTestId('lane-rail-error-4-review')).toBeVisible();
+    await expect(page.getByTestId('lane-rail-error-4-auto-review')).toBeVisible();
 
     await page.screenshot({ path: 'test-results/kanban-board-collapsed.png', fullPage: true });
 
@@ -227,7 +238,7 @@ test.describe('Kanban lane grouping and collapse', () => {
     const stored = await page.evaluate(() => window.localStorage.getItem('collapsedLanes'));
     expect(stored).not.toBeNull();
     const storedSet = new Set(JSON.parse(stored as string) as string[]);
-    for (const s of ['1-preparation', '2-ready', '3-progress', '4-review', '5-completed', '6-archive']) {
+    for (const s of ['1-preparation', '2-ready', '3-progress', '4-auto-review', '5-human-review', '6-completed', '7-archive']) {
       expect(storedSet.has(s)).toBe(true);
     }
 

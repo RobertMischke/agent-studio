@@ -7,7 +7,7 @@ namespace OrchestratorApi.Endpoints;
 
 /// <summary>
 /// Read-side surface for the <see cref="ReviewDecisionOrchestrator"/>:
-/// per-project list of jobs in <c>4-review</c> whose latest CLI output
+/// per-project list of jobs in <c>4-auto-review</c> whose latest CLI output
 /// carries an unresolved <c>[[TASK_NEEDS_INPUT]]</c> sentinel. Drives the
 /// project-view banner that signals "the orchestrator owes a decision
 /// here" so the user can either let auto-decide work or step in.
@@ -25,7 +25,7 @@ public static class ReviewDecisionsEndpoints
             if (entry == null) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
 
             var pending = new List<PendingDecisionDto>();
-            var reviewDir = Path.Combine(entry.Path, JobStates.Review);
+            var reviewDir = Path.Combine(entry.Path, JobStates.AutoReview);
             if (Directory.Exists(reviewDir))
             {
                 foreach (var jobDir in Directory.GetDirectories(reviewDir))

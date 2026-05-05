@@ -32,12 +32,20 @@ public static class JobCrudEndpoints
             var tokenLookup = BuildTokenLookup(raw, tokens);
             var verdictLookup = BuildOrchestratorVerdictLookup(raw, configuration);
             var jobs = raw.Select(job => WithRuntime(job, router, runners, tokenLookup, verdictLookup)).ToList();
+            // ADR-0025: explicit AutoReview + HumanReview lanes. The legacy
+            // "Review" key is kept (auto-review only) so older clients that
+            // only know the four pre-ADR-0025 lane names keep getting a
+            // populated bucket and don't crash on a missing field.
+            var autoReview = jobs.Where(j => j.State == JobStates.AutoReview).OrderBy(j => j.Order).ToList();
+            var humanReview = jobs.Where(j => j.State == JobStates.HumanReview).OrderBy(j => j.Order).ToList();
             var grouped = new
             {
                 Preparation = jobs.Where(j => j.State == JobStates.Preparation).OrderBy(j => j.Order).ToList(),
                 Ready = jobs.Where(j => j.State == JobStates.Ready).OrderBy(j => j.Order).ToList(),
                 Progress = jobs.Where(j => j.State == JobStates.Progress).OrderBy(j => j.Order).ToList(),
-                Review = jobs.Where(j => j.State == JobStates.Review).OrderBy(j => j.Order).ToList(),
+                AutoReview = autoReview,
+                HumanReview = humanReview,
+                Review = autoReview, // legacy alias for pre-ADR-0025 clients
                 Completed = jobs.Where(j => j.State == JobStates.Completed).OrderBy(j => j.Order).ToList(),
                 Archive = jobs.Where(j => j.State == JobStates.Archive).OrderBy(j => j.Order).ToList()
             };
@@ -57,8 +65,8 @@ public static class JobCrudEndpoints
             JobTransitionService transitions,
             CancellationToken ct) =>
         {
-            if (!JobStates.All.Contains(req.TargetState))
-                return Results.BadRequest($"Invalid state. Allowed: {string.Join(", ", JobStates.All)}");
+            var validation = ValidateTargetState(req.TargetState);
+            if (validation != null) return validation;
 
             return MoveResult(await transitions.MoveAsync(jobId, req.TargetState, watchPath, ct));
         });
@@ -67,8 +75,8 @@ public static class JobCrudEndpoints
             JobTransitionService transitions,
             CancellationToken ct) =>
         {
-            if (!JobStates.All.Contains(req.TargetState))
-                return Results.BadRequest($"Invalid state. Allowed: {string.Join(", ", JobStates.All)}");
+            var validation = ValidateTargetState(req.TargetState);
+            if (validation != null) return validation;
 
             return MoveResult(await transitions.MoveAsync(jobId, req.TargetState, watchPath, ct));
         });
@@ -140,5 +148,25 @@ public static class JobCrudEndpoints
             var success = mutations.SetJobTitle(jobId, req.Title, watchPath);
             return success ? Results.Ok() : Results.NotFound();
         });
+    }
+
+    /// <summary>
+    /// Validates the target state for move/state endpoints. Returns null on
+    /// success. Surfaces a directed error when the caller used a pre-ADR-0025
+    /// numbered lane name (<c>4-review</c>, <c>5-completed</c>,
+    /// <c>6-archive</c>) so client code can be migrated without guessing.
+    /// </summary>
+    private static IResult? ValidateTargetState(string targetState)
+    {
+        if (JobStates.All.Contains(targetState)) return null;
+
+        if (JobStates.NumberedLegacyMap.TryGetValue(targetState, out var newName))
+        {
+            return Results.BadRequest(
+                $"Lane '{targetState}' was renamed in ADR-0025. " +
+                $"Use '{newName}' instead. Full lane order: {string.Join(", ", JobStates.All)}.");
+        }
+
+        return Results.BadRequest($"Invalid state. Allowed: {string.Join(", ", JobStates.All)}");
     }
 }

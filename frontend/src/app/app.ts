@@ -1493,7 +1493,7 @@ export class App implements OnInit {
   readonly collapsedGroups = signal<Set<string>>(new Set(JSON.parse(localStorage.getItem('collapsedGroups') ?? '[]')));
   /**
    * Per-lane collapse preference for the main board. Values are state ids
-   * (`1-preparation` … `6-archive`); a state present here renders as a
+   * (`1-preparation` … `7-archive`); a state present here renders as a
    * narrow rail instead of a full column. Persisted in localStorage so the
    * user's layout survives reloads. Default is empty (everything expanded)
    * to keep the first-run board useful before any customisation.
@@ -1516,11 +1516,14 @@ export class App implements OnInit {
     const filterJobs = (jobs: JobInfo[]) => jobs.filter(j =>
       (active.size === 0 || active.has(j.projectName))
       && (!ownerId || j.ownerClientId === ownerId));
+    const autoReviewFiltered = filterJobs(grouped.autoReview ?? grouped.review);
     return {
       preparation: filterJobs(grouped.preparation),
       ready: filterJobs(grouped.ready),
       progress: filterJobs(grouped.progress),
-      review: filterJobs(grouped.review),
+      autoReview: autoReviewFiltered,
+      humanReview: filterJobs(grouped.humanReview ?? []),
+      review: autoReviewFiltered,
       completed: filterJobs(grouped.completed),
       archive: filterJobs(grouped.archive ?? []),
     } as GroupedJobs;
@@ -1546,13 +1549,16 @@ export class App implements OnInit {
 
   readonly focusGroups = computed(() => {
     const grouped = this.displayGrouped();
+    // ADR-0025: seven lanes. The robot icon is the orchestrator's machine
+    // pass; the eye icon is the user's "needs me" lane.
     return [
       { state: '1-preparation', title: 'In Preparation', icon: '📋', jobs: grouped.preparation },
       { state: '2-ready', title: 'Ready', icon: '📦', jobs: grouped.ready },
       { state: '3-progress', title: 'In Progress', icon: '🔵', jobs: grouped.progress },
-      { state: '4-review', title: 'Review', icon: '🟡', jobs: grouped.review },
-      { state: '5-completed', title: 'Completed', icon: '🟢', jobs: grouped.completed },
-      { state: '6-archive', title: 'Archive', icon: '🗄️', jobs: grouped.archive ?? [] }
+      { state: '4-auto-review', title: 'Auto Review', icon: '🤖', jobs: grouped.autoReview },
+      { state: '5-human-review', title: 'Human Review', icon: '👁️', jobs: grouped.humanReview },
+      { state: '6-completed', title: 'Completed', icon: '🟢', jobs: grouped.completed },
+      { state: '7-archive', title: 'Archive', icon: '🗄️', jobs: grouped.archive ?? [] }
     ];
   });
 
@@ -1586,7 +1592,10 @@ export class App implements OnInit {
         axis: 'agent',
         lanes: [
           { state: '3-progress', title: 'In Progress', icon: '🔵', jobs: grouped.progress },
-          { state: '4-review', title: 'Review', icon: '🟡', jobs: grouped.review }
+          // ADR-0025: explicit auto-review (orchestrator-managed) and
+          // human-review (waiting on the user) lanes.
+          { state: '4-auto-review', title: 'Auto Review', icon: '🤖', jobs: grouped.autoReview },
+          { state: '5-human-review', title: 'Human Review', icon: '👁️', jobs: grouped.humanReview }
         ]
       },
       {
@@ -1594,8 +1603,8 @@ export class App implements OnInit {
         label: 'Done',
         axis: 'human',
         lanes: [
-          { state: '5-completed', title: 'Completed', icon: '🟢', jobs: grouped.completed },
-          { state: '6-archive', title: 'Archive', icon: '🗄️', jobs: grouped.archive ?? [] }
+          { state: '6-completed', title: 'Completed', icon: '🟢', jobs: grouped.completed },
+          { state: '7-archive', title: 'Archive', icon: '🗄️', jobs: grouped.archive ?? [] }
         ]
       }
     ];
@@ -1880,7 +1889,7 @@ export class App implements OnInit {
   onArchiveAll() {
     const completed = this.filteredGrouped().completed;
     if (completed.length === 0) return;
-    const moves = completed.map(job => this.jobService.moveJob(job.id, '6-archive', job.watchPath));
+    const moves = completed.map(job => this.jobService.moveJob(job.id, '7-archive', job.watchPath));
     forkJoin(moves).subscribe({
       next: () => this.refresh(),
       error: (err) => {
