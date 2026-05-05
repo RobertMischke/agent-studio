@@ -158,7 +158,9 @@ The board should make these phases visible:
 - Orchestrator Post Processing: a different orchestrator, supporting, or review CLI checks the result, runs requested post-processing, creates findings, asks follow-up questions, or triggers explicit QA, security, design, or runtime-observability checks.
 - Human Review: the user reviews the final task evidence and accepts, continues, or sends it back.
 
-V1 should probably implement this as virtual lanes or substates on top of the existing folder states, not as an immediate filesystem-contract explosion. For example, `2-ready` can contain Human Ready and Orchestrator Intake substages; `3-progress` can contain Task Execution and Orchestrator Post Processing substages; `4-review` remains the human-facing review lane. The concept task must decide whether substates belong in `job.json`, a sidecar status file, or a new typed lifecycle event stream.
+Column labels on the board are the shorter forms `Human Ready`, `Intake`, `Execution`, `Post Processing`, and `Human Review`; the longer phrasing above appears in the in-product help and in the concept doc.
+
+V1 implements this as virtual lanes derived from a hybrid model: the six existing folder states stay the durable skeleton, a new optional `phase` field on `JobInfo` (backed by a sidecar `lifecycle.json` in the job folder when richer data is needed) carries the orchestrator-driven substate, and the kanban projection computes the visible lane from `(state, phase, execution.status, summaryState)`. No new filesystem states. Existing jobs with no `phase` render in the default lane of their state. The Agent Message Bus, once it lands, can subsume the sidecar by emitting `lifecycle` kind messages. The full plan lives in [docs/research/expanded-lifecycle-lanes-plan-2026-05.md](docs/research/expanded-lifecycle-lanes-plan-2026-05.md).
 
 The UI should support lane grouping and collapse. Users should be able to collapse orchestration-only lanes into a slim left-side rail or compact group, while keeping the main human decision lanes visible. The board should preserve scanability when there are many lanes: group headers, counters, active-run badges, CLI badges, post-processing indicators, and a quick way to expand only the lanes that currently need attention.
 
@@ -166,13 +168,13 @@ Hard boundary: expanded lanes do not permit parallel coding work inside one proj
 
 First implementation order:
 
-1. Write the lifecycle-lane concept and state model, including virtual lane vs filesystem state tradeoffs.
-2. Add Orchestrator Intake after Human Ready, with duplicate, clarity, missing-context, and executable-shape checks.
-3. Add Orchestrator Post Processing after Task Execution, with explicit support for different CLI identity and typed findings.
-4. Add grouped and collapsible Kanban lanes with active counters and compact left-rail collapsed state.
-5. Add migration and compatibility tests so existing job folders keep rendering correctly.
+1. Write the lifecycle-lane concept and state model, including virtual lane vs filesystem state tradeoffs. Done; see [docs/research/expanded-lifecycle-lanes-plan-2026-05.md](docs/research/expanded-lifecycle-lanes-plan-2026-05.md).
+2. Land the wire-level `phase` field plus sidecar `lifecycle.json` and a backend test that confirms an existing job renders in the right default lane (no UI lanes yet). This is the migration-and-compatibility step; do it before any UI lane changes so step 3 has data to render.
+3. Add grouped and collapsible Kanban lanes with active counters and compact left-rail collapsed state, driven off the `phase` field landed in step 2.
+4. Add Orchestrator Intake after Human Ready, with duplicate, clarity, missing-context, and executable-shape checks. Default off per project; pass-through when no checks are configured.
+5. Add Orchestrator Post Processing after Task Execution, with explicit support for different CLI identity and typed findings. Auto-commit and Haiku summary become built-in post-processing kinds.
 
-Queued at `agent-taskboard/2-ready/expanded-lifecycle-lanes-concept/`, `agent-taskboard/2-ready/ready-orchestrator-intake-lane/`, `agent-taskboard/2-ready/post-processing-orchestrator-lane/`, `agent-taskboard/2-ready/kanban-lane-grouping-collapse/`, and `agent-taskboard/2-ready/lifecycle-substate-migration-compatibility/`.
+Queued at `agent-taskboard/2-ready/expanded-lifecycle-lanes-concept/`, `agent-taskboard/2-ready/lifecycle-substate-migration-compatibility/`, `agent-taskboard/2-ready/kanban-lane-grouping-collapse/`, `agent-taskboard/2-ready/ready-orchestrator-intake-lane/`, and `agent-taskboard/2-ready/post-processing-orchestrator-lane/`.
 
 ### Task Finding And Shape
 
