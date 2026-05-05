@@ -393,6 +393,34 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             FollowUp: string.Empty));
     }
 
+    private async Task ProcessBlockedAsync(
+        string workspace,
+        WatchPathEntry entry,
+        PendingDecision pending,
+        CancellationToken ct)
+    {
+        var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
+        var reason = string.IsNullOrWhiteSpace(pending.Reason)
+            ? "Agent emitted [[TASK_BLOCKED]] without further detail; user attention required."
+            : $"Agent emitted [[TASK_BLOCKED]]: {pending.Reason}";
+
+        _chatLog.AppendSupervisor(current, "escalate",
+            $"Orchestrator escalated BLOCKED to human review. Reason: {reason}");
+
+        var verdict = new OrchestratorDecisionVerdict(OrchestratorDecisionAction.Escalate, reason);
+        await CreateHumanDecisionIntakeAsync(entry, pending, verdict, ct);
+
+        ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+            CreatedAt: DateTime.UtcNow,
+            JobId: current.Id,
+            Project: entry.Name,
+            Kind: ReviewDecisionKind.Escalate,
+            Reason: reason,
+            Prompt: "(deterministic BLOCKED branch)",
+            Response: "(no fast-model call)",
+            FollowUp: string.Empty));
+    }
+
     private static int CountPriorReissues(string workspace, string project, string jobId)
     {
         return ReviewDecisionLog.ReadAll(workspace, project)
@@ -602,7 +630,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             var promptBody = $"# Human decision needed for `{pending.Job.Id}`\n\n" +
                              $"The orchestrator could not decide on this 4-review task unattended.\n\n" +
                              $"**Reason from orchestrator:** {verdict.Reason}\n\n" +
-                             $"**Original signal:** {(pending.Kind == ReviewSignalKind.NoOp ? "[[TASK_NOOP]]" : "[[TASK_NEEDS_INPUT]]")}\n\n" +
+                             $"**Original signal:** {OriginalSignalLabel(pending.Kind)}\n\n" +
                              $"**Original reason:** {pending.Reason ?? "(none provided)"}\n\n" +
                              $"Please review the task in 4-review (`{pending.Job.FolderPath}`) and either answer the agent or change scope.\n";
             await File.WriteAllTextAsync(Path.Combine(preparationDir, "prompt.md"), promptBody, ct);
@@ -735,17 +763,23 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
             // The agent contract guarantees only one terminal sentinel per
             // run, but a job folder may have been continued and accumulated
-            // both kinds across runs. Pick the latest unresolved one so we
-            // act on the most recent state.
+            // multiple kinds across runs. Pick the latest unresolved one so
+            // we act on the most recent state.
             var needs = ReviewDecisionParsing.FindUnresolvedNeedsInput(log);
             var noop = ReviewDecisionParsing.FindUnresolvedNoOp(log);
+            var blocked = ReviewDecisionParsing.FindUnresolvedBlocked(log);
 
-            if (needs == null && noop == null) continue;
+            if (needs == null && noop == null && blocked == null) continue;
 
             int needsLine = needs?.LineNumber ?? -1;
             int noopLine = noop?.LineNumber ?? -1;
+            int blockedLine = blocked?.LineNumber ?? -1;
 
-            if (noopLine > needsLine && noop != null)
+            if (blockedLine >= needsLine && blockedLine >= noopLine && blocked != null)
+            {
+                yield return new PendingDecision(info, ReviewSignalKind.Blocked, blocked.LineNumber, blocked.Reason, NeedsInput: null);
+            }
+            else if (noopLine > needsLine && noop != null)
             {
                 yield return new PendingDecision(info, ReviewSignalKind.NoOp, noop.LineNumber, noop.Reason, NeedsInput: null);
             }
@@ -759,6 +793,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     private static string BuildReissueFollowUp(OrchestratorDecisionVerdict verdict) =>
         $"The orchestrator answered your NEEDS_INPUT request. Decision: {verdict.Reason}. " +
         "Apply this decision and continue the task. End with [[TASK_DONE]] when complete.";
+
+    private static string OriginalSignalLabel(ReviewSignalKind kind) => kind switch
+    {
+        ReviewSignalKind.NoOp     => "[[TASK_NOOP]]",
+        ReviewSignalKind.Blocked  => "[[TASK_BLOCKED]]",
+        _                         => "[[TASK_NEEDS_INPUT]]"
+    };
 
     private static string Slugify(string id)
     {
@@ -838,7 +879,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     private enum ReviewSignalKind
     {
         NeedsInput,
-        NoOp
+        NoOp,
+        Blocked
     }
 
     private sealed record PendingDecision(
