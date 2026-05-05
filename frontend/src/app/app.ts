@@ -345,16 +345,18 @@ interface VerboseDebugContext {
           (openCliConfig)="openCliConfigFromError()" />
       }
 
-      @if (verboseDebugContext(); as ctx) {
-        <app-verbose-debug-overlay
-          data-testid="app-verbose-debug-overlay"
-          [lines]="ctx.lines"
-          [runTimeline]="ctx.runTimeline"
-          [screenshots]="ctx.screenshots"
-          [tokenSummary]="ctx.tokenSummary"
-          [job]="ctx.job"
-          [source]="ctx.job?.id ?? 'cli-output.log'"
-          (close)="closeVerboseDebug()" />
+      @defer (when verboseDebugContext() !== null) {
+        @if (verboseDebugContext(); as ctx) {
+          <app-verbose-debug-overlay
+            data-testid="app-verbose-debug-overlay"
+            [lines]="ctx.lines"
+            [runTimeline]="ctx.runTimeline"
+            [screenshots]="ctx.screenshots"
+            [tokenSummary]="ctx.tokenSummary"
+            [job]="ctx.job"
+            [source]="ctx.job?.id ?? 'cli-output.log'"
+            (close)="closeVerboseDebug()" />
+        }
       }
     </div>
   `,

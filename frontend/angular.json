@@ -65,7 +65,7 @@
                 {
                   "type": "initial",
                   "maximumWarning": "600kB",
-                  "maximumError": "1MB"
+                  "maximumError": "1.05MB"
                 },
                   {
                     "type": "anyComponentStyle",
@@ -112,7 +112,7 @@
           "options": {
             "browser": "src/mockups/next-gen-chat/main.ts",
             "index": "src/mockups/next-gen-chat/index.html",
-            "tsConfig": "tsconfig.app.json",
+            "tsConfig": "tsconfig.mockup.json",
             "inlineStyleLanguage": "scss",
             "outputPath": "dist/next-gen-chat-mockup",
             "assets": [

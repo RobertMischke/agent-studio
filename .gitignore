@@ -37,6 +37,8 @@ logs/
 frontend/.ng-serve-*.log
 frontend/.ng-serve-*.out.log
 frontend/.ng-serve-*.err.log
+frontend/.ng-serve-*.pid
 .ng-serve-*.log
 .ng-serve-*.out.log
 .ng-serve-*.err.log
+.ng-serve-*.pid
