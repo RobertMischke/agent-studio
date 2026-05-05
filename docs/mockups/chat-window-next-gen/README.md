@@ -6,7 +6,7 @@ This folder is not existing product behavior. It is the target surface for the n
 
 ## Files
 
-- [ui.html](ui.html) - interactive v4 visual mockup for the next-generation chat window. This is the current reference.
+- [ui.html](ui.html) - interactive v5 visual mockup for the next-generation chat surfaces. This is the current reference.
 - [scenarios.md](scenarios.md) - typical cases the UI must render well.
 - [research.md](research.md) - Stable observations and external product research.
 - [best-practices-comparison.md](best-practices-comparison.md) - focused comparison with VS Code Copilot Chat, Claude Code, Gemini Code Assist, and Codex.
@@ -27,13 +27,18 @@ This folder is not existing product behavior. It is the target surface for the n
 - [evidence/next-gen-chat-v4-expanded.png](evidence/next-gen-chat-v4-expanded.png) - current v4 with technical details expanded.
 - [evidence/next-gen-chat-v4-debug.png](evidence/next-gen-chat-v4-debug.png) - current v4 Verbose Debug view.
 - [evidence/next-gen-chat-v4-mobile.png](evidence/next-gen-chat-v4-mobile.png) - current v4 mobile reference.
+- [evidence/next-gen-chat-v5-task-light.png](evidence/next-gen-chat-v5-task-light.png) - current v5 task-detail Chat tab in light theme.
+- [evidence/next-gen-chat-v5-task-dark.png](evidence/next-gen-chat-v5-task-dark.png) - current v5 task-detail Chat tab in dark theme.
+- [evidence/next-gen-chat-v5-wide-sidesheet.png](evidence/next-gen-chat-v5-wide-sidesheet.png) - current v5 with widened side-sheet project chat.
+- [evidence/next-gen-chat-v5-debug.png](evidence/next-gen-chat-v5-debug.png) - current v5 Verbose Debug from the embedded app context.
+- [evidence/next-gen-chat-v5-mobile.png](evidence/next-gen-chat-v5-mobile.png) - current v5 mobile task-chat reference.
 - [evidence/tool-heavy-archive-full.png](evidence/tool-heavy-archive-full.png) - Stable screenshot for a tool-heavy archived job.
 - [evidence/review-chat-project-switch-full.png](evidence/review-chat-project-switch-full.png) - Stable screenshot for a review job.
 - [evidence/analysis-report-review-full.png](evidence/analysis-report-review-full.png) - Stable screenshot for an analysis-report job.
 
 ## Recommendation
 
-The current Activity Log is useful evidence but not yet a great conversation surface. It exposes the raw stream too directly, and the first mockup overcorrected toward an operations dashboard. The current v4 direction is a **compact developer chat**: centered transcript, readable markdown, subtle status rows, collapsed file/tool rows, a bottom composer, and a fullscreen verbose debug view. This should feel closer to Codex, Claude Code, and GitHub Copilot Chat than to an operations dashboard.
+The current Activity Log is useful evidence but not yet a great conversation surface. It exposes the raw stream too directly, and the first mockup overcorrected toward an operations dashboard. The current v5 direction is a **compact embedded developer chat**: the same message grammar is placed into the existing task-detail Chat tab and the existing project side sheet. There is no new global chat window. The visual direction is light-first, dark-capable, VS Code-inspired, and compact without turning into an operations dashboard.
 
 In Stable, tool-heavy jobs already reach this density:
 
@@ -45,15 +50,18 @@ In Stable, tool-heavy jobs already reach this density:
 
 At that size, the UI has to summarize by default and reveal details on demand. The important next step is not "make the log prettier"; it is to define the conversation grammar.
 
-The pure chatflow remains the center:
+The pure chatflow remains the center, but it has two homes in the existing app:
 
-- User and agent messages alternate like a normal chat.
+- Task-level chat lives in the task detail Chat tab, next to Prompt, Protocol, Files, Commits, and Screenshots.
+- Project-level chat lives in the resizable side sheet, where cross-task steering and project context already belong.
+- User and agent messages alternate like a normal chat in both places.
 - Orchestrator, supervisor, tool, QA, and artifact events appear as compact inline rows.
 - Run metadata, tokens, commits, tests, screenshots, and raw trace filters are available through collapsed rows, modals, or Verbose Debug. They are not a visible side dashboard by default.
-- Model selection, chat selection, agent mode, permission level, start, stop, configuration, and context chips live in the bottom composer/control bar.
+- Model selection, chat selection, agent mode, permission level, start, stop, configuration, and context chips live in the relevant composer/control bar.
 - New tasks and task continuations appear as subtle timeline markers inside the continuous chat. Hover or click reveals task metadata.
 - Large operational cards are expansion states, not the default.
 - The original dashboard-style analysis is preserved as `Verbose Debug`: a read-only fullscreen developer view for history, causality, timing, actor counts, tool density, task markers, and orchestrator explanations.
+- Light theme is a first-class default. Dark theme must use the same spacing, hierarchy, and component grammar, not a separate design.
 
 ## Design Goals
 
@@ -74,10 +82,11 @@ The chat window should have four layers:
 
 | Layer | Purpose | Default density |
 |-------|---------|-----------------|
-| Compact header | Current task, state, active run, mode, latest warning | One slim row |
-| Message stream | Normal back-and-forth chat with inline events | Conversation mode |
+| Existing app chrome | Activity bar, tabs, status bar, task detail, resizable side sheet | Always visible |
+| Task Chat tab | Task-scoped conversation, run evidence, follow-up, artifacts | Active task detail surface |
+| Side sheet chat | Project-scoped steering, current project context, cross-task notes | Resizable project surface |
 | Trace and debug overlays | Runs, tokens, tools, commits, tests, screenshots, raw trace filters | Opened from compact rows or menu |
-| Composer | Continue, steer, stop, accept, create follow-up, slash actions, context chips | Sticky, mode-aware |
+| Composer | Continue, steer, stop, accept, create follow-up, slash actions, context chips | Surface-specific |
 | Verbose Debug | Fullscreen read-only history analysis, actor counts, timing, tool density, task markers, explanations | Opened from chat menu |
 
 ## Actor Model

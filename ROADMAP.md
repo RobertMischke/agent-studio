@@ -195,9 +195,13 @@ Make each watched project easier to inspect and operate:
 - Better visibility into active CLI sessions that may already be working in the same project.
 - Repository hygiene for accepted tasks: surface dirty and unpushed work, support prompt commits of accepted task changes and task evidence, and prevent completed work from quietly piling up on disk.
 
-### Next-Generation Chat Window
+### Next-Generation Embedded Chat Surfaces
 
-Make the task chat the primary human review surface for long-running, multi-actor agent work. The current Activity Log is valuable evidence, but real Stable jobs already produce hundreds of conversation entries and more than a hundred tool chips. The next surface should keep the raw trace available while making the default view a compact developer chat, closer to GitHub Copilot Chat in VS Code than to an operations dashboard. The richer dashboard-style view from the first mockup remains valuable as a read-only fullscreen developer debugging view.
+Make chat the primary human review surface for long-running, multi-actor agent work, but keep it inside the existing application. There are two homes: the task detail Chat tab for task-scoped evidence and follow-up, and the resizable side sheet for project-scoped steering and cross-task context. There is no new global chat window.
+
+The current Activity Log is valuable evidence, but real Stable jobs already produce hundreds of conversation entries and more than a hundred tool chips. The next surface should keep the raw trace available while making the default view a compact developer chat, closer to GitHub Copilot Chat in VS Code than to an operations dashboard. The richer dashboard-style view from the first mockup remains valuable as a read-only fullscreen developer debugging view.
+
+Light theme is a first-class default because it is the user's primary working mode. Dark theme remains supported, but both themes share the same spacing, actor grammar, compact rows, warning treatment, and debug affordances. This work should also align with the VS Code-style layout direction: activity bar, compact tabs, resizable panels, status bar, low padding, and high information density.
 
 The chat should render:
 

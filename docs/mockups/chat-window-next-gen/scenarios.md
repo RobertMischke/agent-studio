@@ -198,3 +198,27 @@ Expected UI:
 - Markdown answers are rendered directly in the transcript with readable spacing, code chips, lists, and headings.
 - The bottom composer remains visible and contains attachments, permission mode, file context, current chat, model, send, and stop.
 - Verbose Debug remains accessible, but it is not the first thing the user sees.
+
+## 20. Existing Application Embedding
+
+The chat design is implemented inside the current Agent Task Processor UI.
+
+Expected UI:
+
+- Task-scoped conversation lives in the existing task-detail Chat tab. It must not require a new global chat window.
+- Project-scoped conversation lives in the existing side sheet and can be resized wider for long reading sessions.
+- Both surfaces use the same message grammar: user bubbles, agent turns, compact orchestrator rows, collapsed tool rows, subtle task markers, and hidden technical details.
+- The side sheet keeps project steering separate from task evidence and task follow-up.
+- The task Chat tab keeps prompt, protocol, commits, files, screenshots, and run evidence close to the task.
+- The layout remains compatible with the upcoming VS Code-style app chrome: activity bar, tab row, compact panels, status bar, and low padding.
+
+## 21. Light And Dark Theme
+
+The user primarily works in light mode, but the app still supports dark mode.
+
+Expected UI:
+
+- Light theme is treated as a first-class default, not as an afterthought.
+- Dark theme uses the same spacing, hierarchy, borders, actor labels, and component behavior.
+- Theme changes do not change the conversation grammar or hide status, warning, or failure signals.
+- Playwright evidence covers task chat in light, task chat in dark, widened side sheet, and mobile.
