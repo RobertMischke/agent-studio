@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-taskboard.local/schemas/task-find-result.schema.json",
+  "title": "TaskFindResult",
+  "description": "Wire shape returned by the Task Access Layer for find / list / snapshot calls. One job record plus an optimistic-concurrency token so a later mutate or transition can be rejected when the underlying disk record has moved on. Mirrors backend/Services/TaskAccess/TaskAccessRecords.cs and the existing JobInfo wire shape from backend/Models/JobModels.cs. Phase 1 schema; the layer's read API is implemented in phase 2.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["jobId", "watchPath", "lane", "version", "job"],
+  "properties": {
+    "jobId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Job folder slug, unique per watchPath. Matches JobInfo.id."
+    },
+    "watchPath": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Resolved watch path that owns this job. Matches JobInfo.watchPath."
+    },
+    "lane": {
+      "type": "string",
+      "enum": [
+        "1-preparation",
+        "2-ready",
+        "3-progress",
+        "4-review",
+        "5-completed",
+        "6-archive"
+      ],
+      "description": "Current lane folder. Mirrors JobStates.All."
+    },
+    "version": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "mtime"],
+      "properties": {
+        "version": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Monotonic per-record counter. Bumped on every mutation that the layer itself applied."
+        },
+        "mtime": {
+          "type": "string",
+          "format": "date-time",
+          "description": "UTC mtime of job.json at the moment the version counter was bumped. The (version, mtime) pair is the optimistic-concurrency token."
+        }
+      },
+      "description": "Optimistic-concurrency token for this record. Consumers hand it back on the next mutate / transition call so the layer can reject stale writes with status Conflict."
+    },
+    "job": {
+      "type": "object",
+      "description": "Full JobInfo wire shape as defined by backend/Models/JobModels.cs. Phase 1 leaves the shape additive; the round-trip test is added when phase 2 lands the in-memory store."
+    }
+  }
+}

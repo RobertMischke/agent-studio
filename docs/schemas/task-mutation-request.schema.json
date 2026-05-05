@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-taskboard.local/schemas/task-mutation-request.schema.json",
+  "title": "TaskMutationRequest",
+  "description": "Wire shape consumed by the Task Access Layer's mutation API. One narrowly-typed mutation per call so the layer can enforce single-state-machine authority on lane moves separately from field edits and timeline appends. Mirrors backend/Services/TaskAccess/TaskAccessRecords.cs. Phase 1 schema; mutations are implemented in phase 3.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["jobId", "kind"],
+  "properties": {
+    "jobId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Target job slug. Combined with watchPath this addresses exactly one record in the index."
+    },
+    "watchPath": {
+      "type": ["string", "null"],
+      "description": "Resolved watch path that owns the job. Optional when jobId is unique across all watched projects; required to disambiguate otherwise."
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["UpdateField", "AttachPrompt", "AppendLogLine", "Create"],
+      "description": "Mutation discriminator. Lane transitions are a separate request shape (TaskTransitionRequest) so the state machine has its own typed entry point."
+    },
+    "fieldName": {
+      "type": ["string", "null"],
+      "description": "Field name when kind is UpdateField. Matches one of the writable JobInfo fields (model, cliType, title, useOwnSession, commit, contextUsage, ...)."
+    },
+    "fieldValue": {
+      "type": ["string", "null"],
+      "description": "New field value when kind is UpdateField. Always passed as a JSON-encoded string so the wire shape stays uniform across primitive and complex fields; the layer parses according to fieldName."
+    },
+    "promptMarkdown": {
+      "type": ["string", "null"],
+      "description": "Markdown body when kind is AttachPrompt. Extends the prompt-N.md timeline (ADR-0003); never overwrites prompt.md."
+    },
+    "logLine": {
+      "type": ["string", "null"],
+      "description": "One line to append to the job's session-events.jsonl when kind is AppendLogLine."
+    },
+    "expectedVersion": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["version", "mtime"],
+      "properties": {
+        "version": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "mtime": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "description": "Optimistic-concurrency token previously handed out by a find / list / snapshot call. When set, the layer rejects the mutation with status Conflict if the indexed version has moved on."
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "kind": { "const": "UpdateField" } }, "required": ["kind"] },
+      "then": { "required": ["fieldName", "fieldValue"] }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "AttachPrompt" } }, "required": ["kind"] },
+      "then": { "required": ["promptMarkdown"] }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "AppendLogLine" } }, "required": ["kind"] },
+      "then": { "required": ["logLine"] }
+    }
+  ]
+}

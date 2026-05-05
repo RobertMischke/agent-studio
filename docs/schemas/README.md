@@ -23,6 +23,8 @@ Schemas in this folder are the single contract. C# records, TypeScript interface
 - `client-identity.schema.json` - one client of the Task Access Layer (human, agent instance, external tool, service). Stored under `<workspace>/identities/<id>.json`.
 - `token-aggregate-by-client.schema.json` - per-client variant of `token-aggregate.schema.json`, additionally keyed by `clientId` for per-client legends in the workspace timeline.
 - `drift-report.schema.json` - one project-level drift analysis report with scores, dimensions, evidence references, and follow-up task suggestions.
+- `task-find-result.schema.json` - one job record plus the optimistic-concurrency token returned by the Task Access Layer's find / list / snapshot calls. ADR-0024.
+- `task-mutation-request.schema.json` - one narrowly-typed mutation request consumed by the Task Access Layer (field update, prompt attach, log-line append, create). Lane transitions have their own typed entry point inside the layer. ADR-0024.
 
 More schemas land here as concepts get formalised (audit findings, performance probes, companion snapshots). Keep one concept per file. Filename is `<concept-kebab>.schema.json`.
 
