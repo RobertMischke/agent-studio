@@ -174,9 +174,11 @@ test.describe('ADR-0025 seven-lane kanban', () => {
     }
 
     // Auto Review and Human Review carry the distinct icons that
-    // identify their audience (machine vs you).
-    await expect(page.getByText('Auto Review')).toBeVisible();
-    await expect(page.getByText('Human Review')).toBeVisible();
+    // identify their audience (machine vs you). Pin to the column
+    // heading so we don't also match the lowercase state-pill on each
+    // job card.
+    await expect(page.getByRole('heading', { name: 'Auto Review' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Human Review' })).toBeVisible();
 
     // Horizontal overflow guard: the kanban dashboard must fit inside
     // the 1440px viewport without producing a horizontal scroll bar.

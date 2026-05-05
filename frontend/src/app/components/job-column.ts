@@ -165,8 +165,19 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
       background: var(--column-bg, #181825);
       border-radius: 16px;
       padding: 16px;
-      min-width: 280px;
-      flex: 1;
+      /*
+       * 200px floor keeps the seven ADR-0025 lanes within a 1440px
+       * viewport once two are collapsed to rails (the default
+       * collapse the kanban-seven-lanes spec captures). Pre-ADR-0025
+       * this was 280px; that worked for six lanes but spills past the
+       * viewport with seven. flex: 0 1 200px starts every column at
+       * its 200px basis and lets the dashboard's row flex shrink
+       * lanes proportionally when the seven do not fit; the
+       * dashboard's overflow-x: auto is the graceful fallback when
+       * even the floor is too wide.
+       */
+      min-width: 200px;
+      flex: 0 1 200px;
       display: flex;
       flex-direction: column;
       gap: 12px;
@@ -183,14 +194,30 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
       gap: 8px;
       padding-bottom: 8px;
       border-bottom: 1px solid rgba(255,255,255,0.06);
+      /*
+       * Clip header content to the column. With min-width: 200 on
+       * .column the header's natural fixed-size children (icon, count,
+       * Archive-all, collapse) sum close to 170px, leaving little room
+       * for the title. Without this clamp the trailing collapse button
+       * overflows into the neighbouring lane and intercepts pointer
+       * events meant for that lane (caught by kanban-lane-grouping
+       * spec). Pair with min-width: 0 + ellipsis on the title so it
+       * shrinks instead.
+       */
+      min-width: 0;
+      overflow: hidden;
     }
-    .column__icon { font-size: 18px; }
+    .column__icon { font-size: 18px; flex-shrink: 0; }
     .column__title {
       margin: 0;
       font-size: 14px;
       font-weight: 600;
       color: #e2e8f0;
-      flex: 1;
+      flex: 1 1 0;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     .column__count {
       background: rgba(255,255,255,0.08);
