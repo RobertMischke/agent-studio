@@ -47,6 +47,7 @@ test.describe('@mockup next-gen chat Angular prototype', () => {
     await page.goto('/');
 
     await expect(page.getByTestId('next-gen-chat-angular-prototype')).toBeVisible();
+    await expect(page.getByTestId('prototype-detail-chrome')).toContainText('Complete & Next');
     await expect(page.getByTestId('prototype-summary-strip')).toBeVisible();
     await expect(page.getByTestId('prototype-context-pane')).toContainText('Result summary');
     await page.waitForTimeout(250);
@@ -54,6 +55,14 @@ test.describe('@mockup next-gen chat Angular prototype', () => {
       path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-result.png'),
       fullPage: false,
     });
+
+    await page.getByTestId('prototype-run-marker').click();
+    await expect(page.getByTestId('prototype-run-popover')).toBeVisible();
+    await page.screenshot({
+      path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-run-popover.png'),
+      fullPage: false,
+    });
+    await page.getByTestId('prototype-run-marker').click();
 
     await page.getByTestId('prototype-rail-guide').click();
     await expect(page.getByTestId('prototype-rail-guide-modal')).toBeVisible();
@@ -91,6 +100,7 @@ test.describe('@mockup next-gen chat Angular prototype', () => {
     await page.getByTestId('prototype-pane-debug').click();
     await page.getByTestId('prototype-debug-open').click();
     await expect(page.getByTestId('prototype-debug-modal')).toBeVisible();
+    await page.getByTestId('prototype-debug-tab-tokens').click();
     await page.screenshot({
       path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-debug-dark.png'),
       fullPage: false,

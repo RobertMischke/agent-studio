@@ -373,8 +373,8 @@ interface ChatTurn {
                         </svg>
                         Attach
                       </button>
-                      <button title="Scope follow-up to the active task">Task context</button>
-                      <button title="Permission mode for the next CLI run">Full access</button>
+                      <button title="Scope follow-up to the active task">Task</button>
+                      <button title="Permission mode for the next CLI run">Access</button>
                       <button title="Selected file context">ui.html</button>
                     </div>
                     <div class="composer__runtime">
@@ -1001,25 +1001,16 @@ interface ChatTurn {
     }
 
     .project-pill {
-      width: fit-content;
-      max-width: 100%;
       display: inline-flex;
       align-items: center;
       gap: 5px;
       color: var(--muted);
       font-size: 10px;
       text-transform: uppercase;
-      letter-spacing: 0;
-      overflow: hidden;
-      white-space: nowrap;
-      text-overflow: ellipsis;
     }
 
     .project-pill b {
-      display: inline-grid;
-      place-items: center;
-      width: 18px;
-      height: 18px;
+      padding: 2px 5px;
       border-radius: 999px;
       background: var(--accent);
       color: #fff;
@@ -1029,11 +1020,11 @@ interface ChatTurn {
     .detail-chrome__state,
     .detail-chrome__complete {
       min-height: 26px;
-      border: 1px solid color-mix(in srgb, var(--ok) 45%, var(--line));
+      border: 1px solid var(--line);
       border-radius: 999px;
       padding: 3px 9px;
       color: var(--ok);
-      background: color-mix(in srgb, var(--ok) 10%, var(--surface));
+      background: var(--surface-soft);
       font-size: 11px;
       font-weight: 750;
       white-space: nowrap;
@@ -1068,15 +1059,9 @@ interface ChatTurn {
       white-space: nowrap;
     }
 
-    .detail-chrome__panes .svg-icon {
-      width: 13px;
-      height: 13px;
-    }
-
     .detail-chrome__pane--active {
       color: var(--accent) !important;
-      border-color: color-mix(in srgb, var(--accent) 46%, var(--line)) !important;
-      background: color-mix(in srgb, var(--accent) 8%, var(--surface)) !important;
+      border-color: var(--accent) !important;
     }
 
     .composer__bar > div,
@@ -1397,10 +1382,9 @@ interface ChatTurn {
     .run-popover {
       margin: -2px auto 10px;
       width: min(620px, 100%);
-      border: 1px solid color-mix(in srgb, var(--accent) 36%, var(--line));
+      border: 1px solid var(--line);
       border-radius: 8px;
       background: var(--surface);
-      box-shadow: 0 18px 44px rgba(20, 27, 40, 0.13);
       overflow: hidden;
     }
 
@@ -1439,7 +1423,7 @@ interface ChatTurn {
 
     .run-popover__grid {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 1px;
       background: var(--line);
     }
@@ -1460,11 +1444,7 @@ interface ChatTurn {
     }
 
     .run-popover__grid b {
-      min-width: 0;
       overflow: hidden;
-      white-space: nowrap;
-      text-overflow: ellipsis;
-      font-size: 12px;
     }
 
     .turn {
@@ -1638,7 +1618,7 @@ interface ChatTurn {
       border: 1px solid var(--line);
       border-radius: 999px;
       color: var(--accent);
-      background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+      background: var(--surface);
       padding: 1px 7px;
       font-size: 11px;
     }
@@ -1665,15 +1645,15 @@ interface ChatTurn {
 
     .composer__mode--active {
       color: var(--accent) !important;
-      border-color: color-mix(in srgb, var(--accent) 48%, var(--line)) !important;
-      background: color-mix(in srgb, var(--accent) 8%, var(--surface)) !important;
+      border-color: var(--accent) !important;
     }
 
     .composer__bar {
       min-height: 40px;
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
+      display: flex;
       align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
       gap: 8px;
       padding: 6px;
     }
@@ -1978,8 +1958,7 @@ interface ChatTurn {
 
     .modal__tab--active {
       color: var(--accent) !important;
-      border-color: color-mix(in srgb, var(--accent) 50%, var(--line)) !important;
-      background: color-mix(in srgb, var(--accent) 10%, var(--surface)) !important;
+      border-color: var(--accent) !important;
     }
 
     .modal__panel--debug {
@@ -2007,9 +1986,6 @@ interface ChatTurn {
 
     .debug-grid h3 { margin: 0 0 10px; font-size: 14px; }
     .debug-grid p { color: var(--muted); line-height: 1.45; margin: 0; }
-
-    .modal__panel--image { width: min(980px, 90vw); }
-    .modal__panel--guide { width: min(760px, 90vw); }
 
     .guide-grid {
       display: grid;

@@ -45,21 +45,23 @@ This follows the repo's product boundary: the app itself should not grow branch/
 
 ## Interaction Coverage
 
-The latest iteration is a tall workbench. Task tabs, summary metrics, split presets, and scenario switches moved out of horizontal top bands into a narrow left inspector rail. Chat and the adjacent Result, Git, Preview, Debug, or Source pane now start directly under the 32px app topbar and run down to the status bar. This is the working target for the production handoff: normal chat and adjacent review panes should use roughly the full available task height.
+The latest iteration is a tall workbench. Task tabs, summary metrics, split presets, and scenario switches moved out of horizontal top bands into a narrow left inspector rail. Chat and the adjacent Result, Git, Preview, Debug, or Source pane now start directly under a compact task-detail chrome and run down to the status bar. This is the working target for the production handoff: normal chat and adjacent review panes should use roughly the full available task height.
 
-The rail now has inline icons, visible labels in comfortable density, tooltip titles, and a `Workbench` guide button that explains why the controls live there. Compact density collapses the same controls back to icons so the chat area stays large.
+The rail now has inline icons, visible labels in comfortable density, tooltip titles, and a `Workbench` guide button that explains why the controls live there. Compact density collapses the same controls back to icons so the chat area stays large. The prototype is also deferred behind the feature flag, so the normal app does not pay the prototype bundle cost when the flag is off.
 
 The prototype currently covers:
 
-- Task detail shell with task list, Chat tab, side sheet, and status bar.
+- Task detail shell with project chip, editable-title affordance, state pill, existing pane toggles, Complete & Next, task list, Chat tab, side sheet, and status bar.
 - Workbench panes: Result, Git, Preview, Debug, Source, and Chat-only.
 - Left inspector rail with task tabs, run state, tokens, commits, files, screenshots, failed retry, duration, split presets, and scenario switches.
 - Rail guide modal that explains the control model.
+- Clickable run marker popover with CLI, model, session, trace range, outcome, token budget, and artifact counts.
 - Scenario controls: Review, Tool burst, Wait loop, Images, Drift.
 - Tool-burst expansion.
+- Composer command deck with Continue, Extend task, Steer, Follow-up job, attachments, context chips, permissions, CLI, model, Start, Pause, and send action.
 - Git change preview next to chat.
 - Screenshot lightbox.
-- Verbose Debug modal.
+- Verbose Debug modal with Overview, Actors, Tools, Tokens, and Trace filters.
 - Light and dark theme.
 - Comfortable and compact density.
 - Mobile collapse.
@@ -69,6 +71,7 @@ The prototype currently covers:
 The durable screenshots live in `docs/mockups/chat-window-next-gen/evidence/`:
 
 - `next-gen-chat-angular-prototype-result.png`
+- `next-gen-chat-angular-prototype-run-popover.png`
 - `next-gen-chat-angular-prototype-rail-guide.png`
 - `next-gen-chat-angular-prototype-git.png`
 - `next-gen-chat-angular-prototype-compact.png`
