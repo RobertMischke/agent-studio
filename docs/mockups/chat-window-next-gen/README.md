@@ -7,6 +7,7 @@ This folder is not existing product behavior. It is the target surface for the n
 ## Files
 
 - [ui.html](ui.html) - interactive v7 visual mockup for the next-generation chat workbench. This is the current reference.
+- [angular-prototype.md](angular-prototype.md) - Angular-hosted clickware prototype, feature flag, evidence, and handoff notes.
 - [scenarios.md](scenarios.md) - typical cases the UI must render well.
 - [activity-log-edge-cases.md](activity-log-edge-cases.md) - real Activity Log edge-case taxonomy from 136 sampled logs.
 - [workbench-layout-research.md](workbench-layout-research.md) - VS Code-inspired layout research for side-by-side chat, Git, result, preview, token, and debug workflows.
@@ -48,6 +49,12 @@ This folder is not existing product behavior. It is the target surface for the n
 - [evidence/next-gen-chat-v7-image-lightbox.png](evidence/next-gen-chat-v7-image-lightbox.png) - current v7 image evidence lightbox from the workbench preview.
 - [evidence/next-gen-chat-v7-debug-dark.png](evidence/next-gen-chat-v7-debug-dark.png) - current v7 dark Verbose Debug view.
 - [evidence/next-gen-chat-v7-mobile.png](evidence/next-gen-chat-v7-mobile.png) - current v7 mobile chat reference.
+- [evidence/next-gen-chat-angular-prototype-result.png](evidence/next-gen-chat-angular-prototype-result.png) - Angular prototype Result split.
+- [evidence/next-gen-chat-angular-prototype-git.png](evidence/next-gen-chat-angular-prototype-git.png) - Angular prototype Git split.
+- [evidence/next-gen-chat-angular-prototype-compact.png](evidence/next-gen-chat-angular-prototype-compact.png) - Angular prototype compact density.
+- [evidence/next-gen-chat-angular-prototype-lightbox.png](evidence/next-gen-chat-angular-prototype-lightbox.png) - Angular prototype screenshot lightbox.
+- [evidence/next-gen-chat-angular-prototype-debug-dark.png](evidence/next-gen-chat-angular-prototype-debug-dark.png) - Angular prototype dark Verbose Debug.
+- [evidence/next-gen-chat-angular-prototype-mobile.png](evidence/next-gen-chat-angular-prototype-mobile.png) - Angular prototype mobile collapse.
 - [evidence/tool-heavy-archive-full.png](evidence/tool-heavy-archive-full.png) - Stable screenshot for a tool-heavy archived job.
 - [evidence/review-chat-project-switch-full.png](evidence/review-chat-project-switch-full.png) - Stable screenshot for a review job.
 - [evidence/analysis-report-review-full.png](evidence/analysis-report-review-full.png) - Stable screenshot for an analysis-report job.
@@ -59,6 +66,8 @@ The current Activity Log is useful evidence but not yet a great conversation sur
 The v6 iteration added a log-grounded edge-case taxonomy. A local sweep scanned 136 `cli-output.log` files with 27,634 lines and found recurring cases that must be explicit in the projection contract: tool-heavy bursts, watchdog wait and kill events, needs-input loops, orchestrator reissues, heuristic outcomes, capture-fail/session-rebuild cases, duplicate sentinels, image evidence, test fail/retry/pass runs, token spikes, parser/schema drift, user interventions, and cross-task side-sheet steering.
 
 The v7 iteration adds the workbench layout contract. The task Chat tab keeps the conversation primary while offering explicit split presets: Chat only, Chat plus Result, Chat plus Git, Chat plus Preview, and Chat plus Debug. A compact summary strip surfaces state, tokens, commits, changed files, screenshots, retry warnings, and duration without pushing the transcript down. The adjacent pane is a fast preview and drill-down launcher; full evidence remains in the existing task tabs and Verbose Debug.
+
+The Angular prototype makes the same direction clickable inside the real frontend shell behind `atp.flag.nextGenChatPrototype`. It is intentionally full-screen and self-contained, so production chat remains untouched while the flag is off. The newest iteration is the tall workbench: task metadata, split controls, scenario switches, and run metrics sit in a left inspector rail or status bar so the transcript and adjacent Git, Result, Preview, Debug, or Source pane can use almost the full task height. See [angular-prototype.md](angular-prototype.md).
 
 In Stable, tool-heavy jobs already reach this density:
 

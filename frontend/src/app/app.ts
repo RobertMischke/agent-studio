@@ -27,10 +27,11 @@ import { WorkspaceTokenTimelineComponent } from './components/workspace-token-ti
 import { WorkspaceScreenshotsComponent } from './components/workspace-screenshots';
 import { WorkspaceBannerComponent } from './components/workspace-banner';
 import { JobScreenshot } from './models/job.model';
+import { NextGenChatWorkbenchPrototypeComponent } from './components/mockups/next-gen-chat-workbench-prototype.component';
 
 @Component({
   selector: 'app-root',
-  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, AnalysisReportDrilldownComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceTokenTimelineComponent, WorkspaceScreenshotsComponent, WorkspaceBannerComponent],
+  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, AnalysisReportDrilldownComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceTokenTimelineComponent, WorkspaceScreenshotsComponent, WorkspaceBannerComponent, NextGenChatWorkbenchPrototypeComponent],
   // Keep styles global to this subtree — the App shell still owns the
   // .header*, .filter-chip*, .overlay*, .create-dialog*, .error-dialog*
   // class rules used by the extracted dialogs and project-tabs.
@@ -42,6 +43,9 @@ import { JobScreenshot } from './models/job.model';
          [class.app--kanban-spec-v1]="featureFlags.kanbanDesignSpecV1()"
          [class.app--task-open]="!!selectedJob()"
          data-testid="app-root">
+      @if (featureFlags.nextGenChatPrototype()) {
+        <app-next-gen-chat-workbench-prototype />
+      }
       <header class="header">
         <div class="header__brand">
           <img class="header__icon" src="icons/icon.svg" alt="Agent Task Processor" width="20" height="20" />

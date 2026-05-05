@@ -11,12 +11,14 @@ import { Injectable, signal } from '@angular/core';
  * To enable from the browser console:
  *
  *   localStorage.setItem('atp.flag.vsCodeLayout', '1'); location.reload();
+ *   localStorage.setItem('atp.flag.nextGenChatPrototype', '1'); location.reload();
  */
 @Injectable({ providedIn: 'root' })
 export class FeatureFlagsService {
   private static readonly KEY_VS_CODE_LAYOUT = 'atp.flag.vsCodeLayout';
   private static readonly KEY_VS_CODE_META_OPEN = 'atp.flag.vsCodeLayout.metaOpen';
   private static readonly KEY_KANBAN_DESIGN_SPEC_V1 = 'atp.flag.kanbanDesignSpecV1';
+  private static readonly KEY_NEXT_GEN_CHAT_PROTOTYPE = 'atp.flag.nextGenChatPrototype';
 
   /** `Frontend:VsCodeLayout` — VS Code-style chrome with status bar + collapsible meta. */
   readonly vsCodeLayout = signal<boolean>(this.read(FeatureFlagsService.KEY_VS_CODE_LAYOUT));
@@ -32,6 +34,12 @@ export class FeatureFlagsService {
    */
   readonly kanbanDesignSpecV1 = signal<boolean>(this.read(FeatureFlagsService.KEY_KANBAN_DESIGN_SPEC_V1));
 
+  /**
+   * `Frontend:NextGenChatPrototype` - clickware Angular prototype for the
+   * next-generation task chat workbench. Off keeps the real app untouched.
+   */
+  readonly nextGenChatPrototype = signal<boolean>(this.read(FeatureFlagsService.KEY_NEXT_GEN_CHAT_PROTOTYPE));
+
   setVsCodeLayout(on: boolean): void {
     this.vsCodeLayout.set(on);
     this.write(FeatureFlagsService.KEY_VS_CODE_LAYOUT, on);
@@ -45,6 +53,11 @@ export class FeatureFlagsService {
   setKanbanDesignSpecV1(on: boolean): void {
     this.kanbanDesignSpecV1.set(on);
     this.write(FeatureFlagsService.KEY_KANBAN_DESIGN_SPEC_V1, on);
+  }
+
+  setNextGenChatPrototype(on: boolean): void {
+    this.nextGenChatPrototype.set(on);
+    this.write(FeatureFlagsService.KEY_NEXT_GEN_CHAT_PROTOTYPE, on);
   }
 
   private read(key: string): boolean {

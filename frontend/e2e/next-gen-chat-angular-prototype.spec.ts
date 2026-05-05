@@ -1,0 +1,99 @@
+import { expect, Page, test } from '@playwright/test';
+import * as path from 'path';
+
+const FLAG_KEY = 'atp.flag.nextGenChatPrototype';
+const evidenceDir = path.resolve(__dirname, '../../docs/mockups/chat-window-next-gen/evidence');
+
+async function enablePrototype(page: Page): Promise<void> {
+  await page.addInitScript((key) => {
+    localStorage.setItem(key, '1');
+  }, FLAG_KEY);
+}
+
+async function stubApi(page: Page): Promise<void> {
+  await page.route('**/api/**', async (route) => {
+    const url = route.request().url();
+    if (url.includes('/watch-paths')) {
+      await route.fulfill({ json: [] });
+      return;
+    }
+    if (url.includes('/jobs/grouped')) {
+      await route.fulfill({
+        json: { preparation: [], ready: [], progress: [], review: [], autoReview: [], humanReview: [], completed: [], archive: [] }
+      });
+      return;
+    }
+    if (url.includes('/runner/status')) {
+      await route.fulfill({ json: { projects: {} } });
+      return;
+    }
+    if (url.includes('/cli/quota')) {
+      await route.fulfill({ json: { snapshots: [] } });
+      return;
+    }
+    if (url.includes('/cli/usage')) {
+      await route.fulfill({ json: { sessions: [], versions: [] } });
+      return;
+    }
+    await route.fulfill({ json: [] });
+  });
+}
+
+test.describe('@mockup next-gen chat Angular prototype', () => {
+  test('captures the interactive Angular workbench prototype', async ({ page }) => {
+    await stubApi(page);
+    await enablePrototype(page);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+
+    await expect(page.getByTestId('next-gen-chat-angular-prototype')).toBeVisible();
+    await expect(page.getByTestId('prototype-summary-strip')).toBeVisible();
+    await expect(page.getByTestId('prototype-context-pane')).toContainText('Result summary');
+    await page.waitForTimeout(250);
+    await page.screenshot({
+      path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-result.png'),
+      fullPage: false,
+    });
+
+    await page.getByTestId('prototype-pane-git').click();
+    await expect(page.getByTestId('prototype-context-pane')).toContainText('Git changes');
+    await page.screenshot({
+      path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-git.png'),
+      fullPage: false,
+    });
+
+    await page.getByTestId('prototype-density-toggle').click();
+    await expect(page.getByTestId('next-gen-chat-angular-prototype')).toHaveAttribute('data-density', 'compact');
+    await page.screenshot({
+      path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-compact.png'),
+      fullPage: false,
+    });
+
+    await page.getByTestId('prototype-pane-preview').click();
+    await expect(page.getByTestId('prototype-context-pane')).toContainText('Screenshot preview');
+    await page.getByTestId('prototype-context-pane').getByRole('button', { name: 'Git split' }).click();
+    await expect(page.getByTestId('prototype-lightbox')).toBeVisible();
+    await page.screenshot({
+      path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-lightbox.png'),
+      fullPage: false,
+    });
+    await page.getByTestId('prototype-lightbox').getByText('Close').click();
+
+    await page.getByTestId('prototype-theme-toggle').click();
+    await page.getByTestId('prototype-pane-debug').click();
+    await page.getByTestId('prototype-debug-open').click();
+    await expect(page.getByTestId('prototype-debug-modal')).toBeVisible();
+    await page.screenshot({
+      path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-debug-dark.png'),
+      fullPage: false,
+    });
+
+    await page.getByTestId('prototype-debug-modal').getByText('Close').click();
+    await page.getByTestId('prototype-theme-toggle').click();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.screenshot({
+      path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-mobile.png'),
+      fullPage: false,
+    });
+  });
+});
