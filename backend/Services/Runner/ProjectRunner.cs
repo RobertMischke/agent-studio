@@ -1057,6 +1057,14 @@ public class ProjectRunner
                 cli.DiscardPersistedOutput(jobKey);
             }
 
+            // Bump lastProgressAt so CrashRecoveryService can attribute orphan
+            // working-tree changes to the most-recently-active job per project
+            // on next boot. Cheap (single field write); see ADR-0020.
+            if (activeInfo != null)
+            {
+                _mutations.SetJobLastProgressAt(activeInfo.FolderPath, DateTime.UtcNow);
+            }
+
             // Apply the orchestrator's post-run policy. The policy is pure;
             // we apply its decision here. The activeInfo lookup may fail
             // (job folder moved between completion and lookup), in which
@@ -1156,9 +1164,26 @@ public class ProjectRunner
             var movedToReview = RunCompletionPolicy.ShouldMoveToReview(execution.Status);
             if (movedToReview)
             {
+                // Drop a completion marker BEFORE the move so a crash between
+                // here and the folder-rename leaves enough state on disk for
+                // CrashRecoveryService to finish the transition on next boot.
+                // Cleared after a successful move (no point keeping a marker
+                // in 4-review). See ADR-0020.
+                if (activeInfo != null)
+                {
+                    CompletionMarker.Write(activeInfo.FolderPath, new CompletionMarker
+                    {
+                        TargetState = JobStates.Review,
+                        ExecutionStatus = execution.Status,
+                        AgentOutcome = outcome.Kind.ToString()
+                    }, _logger);
+                }
+
                 var moveOutcome = await _transitions.MoveAsync(jobId, JobStates.Review, Entry.Path, CancellationToken.None);
                 if (moveOutcome.Status == MoveJobStatus.Success)
                 {
+                    var movedInfo = _scanner.FindJob(jobId, Entry.Path);
+                    if (movedInfo != null) CompletionMarker.Clear(movedInfo.FolderPath, _logger);
                     // Fire-and-forget Haiku summary on successful completion.
                     _ = Task.Run(async () =>
                     {

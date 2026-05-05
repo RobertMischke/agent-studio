@@ -75,6 +75,20 @@ public class JobMutationService
         return true;
     }
 
+    /// <summary>
+    /// Stamp a UTC progress heartbeat onto the job's <c>job.json</c>. Written
+    /// on every CLI-output flush so <see cref="OrchestratorApi.Services.Runner.CrashRecoveryService"/>
+    /// can attribute orphan working-tree changes to the most-recently-active
+    /// job in <c>3-progress</c> on the next backend boot. ADR-0020.
+    /// </summary>
+    public bool SetJobLastProgressAt(string folderPath, DateTime utcNow)
+    {
+        if (!Directory.Exists(folderPath)) return false;
+        JobJsonFile.UpdateField(folderPath, "lastProgressAt",
+            utcNow.ToString("o", System.Globalization.CultureInfo.InvariantCulture), _logger);
+        return true;
+    }
+
     public bool SetJobTitle(string jobId, string title, string? watchPath = null)
     {
         if (string.IsNullOrWhiteSpace(title)) return false;

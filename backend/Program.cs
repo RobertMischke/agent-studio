@@ -81,7 +81,9 @@ builder.Services.AddSingleton<SessionRegistry>();
 builder.Services.AddSingleton<ContextUsageParser>();
 builder.Services.AddSingleton<SummaryGenerationService>();
 builder.Services.AddSingleton<RuntimePromptService>();
+builder.Services.AddSingleton<RoadmapIntakeService>();
 builder.Services.AddSingleton<TaskRunnerService>();
+builder.Services.AddSingleton<CrashRecoveryService>();
 builder.Services.AddSingleton<ProjectObservationService>();
 builder.Services.AddSingleton<SupervisorInterventionService>();
 builder.Services.AddHostedService<HardHealthCheckHostedService>();
@@ -161,6 +163,23 @@ app.UseCors();
 
 // Ensure state folders exist and migrate legacy flat jobs
 app.Services.GetRequiredService<JobStateMachine>().EnsureStateFoldersAndMigrate();
+
+// ADR-0020: run the crash-recovery sweep BEFORE the first runner tick. Any
+// surviving completion-marker.json finishes its 3-progress -> 4-review move
+// here, and any orphan working-tree changes get committed under a
+// crash-recovery author tag so a second crash mid-recovery is itself
+// recoverable on the next boot. Sync wait is intentional: we want the
+// runner to see the recovered state on its first scan.
+try
+{
+    app.Services.GetRequiredService<CrashRecoveryService>().RecoverAsync().GetAwaiter().GetResult();
+}
+catch (Exception ex)
+{
+    // Recovery never blocks boot; a failure here is logged and surfaced
+    // through the crash recorder so the operator can find it.
+    crashRecorder.Record("CrashRecoveryService", ex);
+}
 
 // Wire up FileSystemWatcher → SignalR push
 var watcher = app.Services.GetRequiredService<JobWatcherService>();

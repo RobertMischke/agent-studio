@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport, QuotaReport, QuotaSnapshot, GitStatus, ClaudeSessionResponse, JobCommitDetail, SessionEventsResponse, ContinueMode, ContinueJobResponse, OrchestratorLogResponse, TokenSummary, TokenSummaryAggregate, OrchestratorSessionResponse, OrchestratorChatResponse, OrchestratorChatTurn, RunTimeline, RunCommitsResponse, RunFilesResponse, RunDiffResponse } from '../models/job.model';
+import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport, QuotaReport, QuotaSnapshot, GitStatus, ClaudeSessionResponse, JobCommitDetail, SessionEventsResponse, ContinueMode, ContinueJobResponse, OrchestratorLogResponse, TokenSummary, TokenSummaryAggregate, OrchestratorSessionResponse, OrchestratorChatResponse, OrchestratorChatTurn, RunTimeline, RunCommitsResponse, RunFilesResponse, RunDiffResponse, RoadmapIntakeCandidate, RoadmapIntakeResponse, RoadmapIntakeConfirmResponse } from '../models/job.model';
 import { ErrorDialogService } from './error-dialog.service';
 
 type LaneKey = keyof GroupedJobs;
@@ -528,6 +528,29 @@ export class JobService {
     return this.http.post<{ fileName: string; relativePath: string; url: string }>(
       `${this.baseUrl}/runner/${encodeURIComponent(projectName)}/orchestrator-chat/attachments`,
       form
+    );
+  }
+
+  /**
+   * Run the roadmap-intake splitter against a free-text dump. Returns a
+   * candidate list with no side effects; the user reviews them before
+   * confirming.
+   */
+  splitRoadmapIntake(text: string, watchPath: string) {
+    return this.http.post<RoadmapIntakeResponse>(
+      `${this.baseUrl}/roadmap/intake`,
+      { text, watchPath }
+    );
+  }
+
+  /**
+   * Materialise reviewed roadmap-intake candidates as job folders in
+   * <c>1-preparation</c>. Intake never lands jobs in <c>2-ready</c>.
+   */
+  confirmRoadmapIntake(watchPath: string, candidates: RoadmapIntakeCandidate[]) {
+    return this.http.post<RoadmapIntakeConfirmResponse>(
+      `${this.baseUrl}/roadmap/intake/confirm`,
+      { watchPath, candidates }
     );
   }
 

@@ -30,5 +30,6 @@ public static class EndpointMapping
         app.MapDevToolsEndpoints();
         app.MapSupervisorEndpoints();
         app.MapDiagnosticsEndpoints();
+        app.MapRoadmapIntakeEndpoints();
     }
 }

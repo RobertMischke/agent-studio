@@ -144,6 +144,34 @@ public class GitService
         return ResolveGitToplevel(configured) ?? configured;
     }
 
+    /// <summary>
+    /// Resolve the repository root for a project by name without needing a
+    /// job context. Used by <see cref="OrchestratorApi.Services.Runner.CrashRecoveryService"/>
+    /// at boot time to inspect the working tree before any job has been
+    /// loaded into the runtime.
+    /// </summary>
+    public string? ResolveRepoRootForProject(string projectName)
+    {
+        var entry = _scanner.GetWatchPaths().FirstOrDefault(e => e.Name == projectName);
+        if (entry == null) return null;
+        var configured = ResolveConfiguredRepositoryPath(entry);
+        if (string.IsNullOrWhiteSpace(configured)) return null;
+        return ResolveGitToplevel(configured) ?? configured;
+    }
+
+    /// <summary>
+    /// True when the repo at <paramref name="repoRoot"/> has any uncommitted
+    /// modifications (staged, unstaged, or untracked). Cheap-by-design helper
+    /// for <see cref="OrchestratorApi.Services.Runner.CrashRecoveryService"/>.
+    /// </summary>
+    public bool RepoHasUncommittedChanges(string repoRoot)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot)) return false;
+        var (output, _, code) = RunGit(repoRoot, "status --porcelain=v1");
+        if (code != 0) return false;
+        return output.Split('\n').Any(l => !string.IsNullOrWhiteSpace(l));
+    }
+
     public GitStatusResult GetStatus(string jobId, string? watchPath)
     {
         var configured = ResolveRepoRoot(jobId, watchPath);
@@ -238,6 +266,41 @@ public class GitService
             }
         }
         return string.IsNullOrWhiteSpace(output) ? err : output;
+    }
+
+    /// <summary>
+    /// Commits the working tree with a fixed <c>crash-recovery</c> author tag.
+    /// Used by <see cref="OrchestratorApi.Services.Runner.CrashRecoveryService"/>
+    /// to rescue uncommitted work that survived a backend crash; the distinctive
+    /// author makes the commit easy to find in <c>git log</c> later (ADR-0020).
+    /// Returns a clean <c>"Nothing to commit"</c> result when the tree is empty;
+    /// callers treat that as success-with-info.
+    /// </summary>
+    public GitCommitResult CrashRecoveryCommit(string projectName, string repoRoot, string message)
+    {
+        if (string.IsNullOrWhiteSpace(repoRoot) || !Directory.Exists(repoRoot))
+            return new GitCommitResult(false, null, $"Repo root missing: {repoRoot}");
+
+        var (_, addErr, addCode) = RunGit(repoRoot, "add -A");
+        if (addCode != 0) return new GitCommitResult(false, null, $"git add failed: {addErr.Trim()}");
+
+        var (stagedOut, _, _) = RunGit(repoRoot, "diff --cached --name-only");
+        if (string.IsNullOrWhiteSpace(stagedOut))
+            return new GitCommitResult(false, null, "Nothing to commit. Working tree is clean.");
+
+        const string author = "Crash Recovery <crash-recovery@agent-taskboard>";
+        var (_, commitErr, commitCode) = RunGit(
+            repoRoot,
+            $"commit --author=\"{author}\" -F -",
+            stdin: message);
+        if (commitCode != 0)
+        {
+            if (commitErr.Contains("nothing to commit", StringComparison.OrdinalIgnoreCase))
+                return new GitCommitResult(false, null, "Nothing to commit. Working tree is clean.");
+            return new GitCommitResult(false, null, commitErr.Trim());
+        }
+        var (sha, _, _) = RunGit(repoRoot, "rev-parse HEAD");
+        return new GitCommitResult(true, sha.Trim(), null);
     }
 
     public GitCommitResult Commit(string jobId, string? watchPath, string message)

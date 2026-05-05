@@ -465,6 +465,30 @@ export interface OrchestratorChatResponse {
   turns: OrchestratorChatTurn[];
 }
 
+/**
+ * One candidate task produced by the roadmap-intake splitter. The user
+ * reviews and edits these in place before confirming; the confirm step
+ * materialises them as job folders in <c>1-preparation</c>.
+ */
+export interface RoadmapIntakeCandidate {
+  title: string;
+  promptBody: string;
+  kind: 'feature' | 'bug' | 'adr' | 'chore' | 'research' | string;
+  suggestedOrder: number;
+  suggestedCliType: string;
+  rationale: string;
+}
+
+export interface RoadmapIntakeResponse {
+  candidates: RoadmapIntakeCandidate[];
+  notes: string;
+}
+
+export interface RoadmapIntakeConfirmResponse {
+  created: { jobId: string; title: string; state: string }[];
+  skipped: string[];
+}
+
 export interface TokenSummaryByModel {
   model: string;
   calls: number;

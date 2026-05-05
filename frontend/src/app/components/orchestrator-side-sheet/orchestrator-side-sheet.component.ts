@@ -12,9 +12,10 @@ import {
   untracked
 } from '@angular/core';
 import { JobService } from '../../services/job.service';
-import { OrchestratorChatTurn } from '../../models/job.model';
+import { OrchestratorChatTurn, WatchPathEntry } from '../../models/job.model';
 import { ChatComponent } from '../chat/chat.component';
 import { ChatMessage, ChatSubmitEvent } from '../chat/chat-types';
+import { RoadmapIntakePanelComponent } from '../roadmap-intake/roadmap-intake-panel.component';
 
 /**
  * Right-hand side sheet that hosts the orchestrator chat. Shell follows
@@ -35,7 +36,7 @@ import { ChatMessage, ChatSubmitEvent } from '../chat/chat-types';
 @Component({
   selector: 'app-orchestrator-side-sheet',
   standalone: true,
-  imports: [ChatComponent],
+  imports: [ChatComponent, RoadmapIntakePanelComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <aside class="sheet" [class.sheet--open]="open()" data-testid="orch-side-sheet">
@@ -104,6 +105,14 @@ import { ChatMessage, ChatSubmitEvent } from '../chat/chat-types';
             🎯 {{ activeJobTitle() }}
           </button>
         }
+        <button class="sheet__tab sheet__tab--intake"
+                [class.sheet__tab--active]="mode() === 'intake'"
+                data-testid="orch-side-sheet-tab-intake"
+                (click)="selectIntakeTab()"
+                [disabled]="!activeProject()"
+                title="Send a long dump to the roadmap splitter">
+          🗺 Roadmap
+        </button>
       </nav>
       <select hidden
               data-testid="orch-side-sheet-project-select"
@@ -119,7 +128,12 @@ import { ChatMessage, ChatSubmitEvent } from '../chat/chat-types';
       }
 
       <div class="sheet__chat">
-        @if (mode() === 'task' && activeJobId()) {
+        @if (mode() === 'intake' && activeProject()) {
+          <app-roadmap-intake-panel
+            [activeWatchPath]="activeWatchPathForIntake()"
+            [projectName]="activeProject()"
+            (created)="onIntakeCreated($event)" />
+        } @else if (mode() === 'task' && activeJobId()) {
           <app-chat
             variant="embedded"
             [messages]="taskMessages()"
@@ -408,6 +422,21 @@ import { ChatMessage, ChatSubmitEvent } from '../chat/chat-types';
       color: #ffffff;
       box-shadow: 0 0 0 1px rgba(94,234,212,0.35), 0 1px 4px rgba(13,148,136,0.35);
     }
+    .sheet__tab--intake {
+      background: rgba(217,119,6,0.10);
+      border-color: rgba(252,211,77,0.30);
+      color: #fde68a;
+    }
+    .sheet__tab--intake.sheet__tab--active {
+      background: linear-gradient(135deg, rgba(234,88,12,0.55), rgba(217,119,6,0.55));
+      border-color: rgba(252,211,77,0.95);
+      color: #ffffff;
+      box-shadow: 0 0 0 1px rgba(252,211,77,0.35), 0 1px 4px rgba(217,119,6,0.35);
+    }
+    .sheet__tab--intake:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
     .sheet__only-project {
       padding: 6px 14px;
       border-bottom: 1px solid rgba(255,255,255,0.06);
@@ -474,6 +503,11 @@ import { ChatMessage, ChatSubmitEvent } from '../chat/chat-types';
 export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly projects = input<string[]>([]);
   readonly preferredProject = input<string | null>(null);
+  /**
+   * Full watch path entries so the roadmap-intake panel can resolve the
+   * active project name to the on-disk path the backend needs.
+   */
+  readonly watchPaths = input<WatchPathEntry[]>([]);
 
   /**
    * Phase 6 inputs: when a task detail is open, the host passes the
@@ -502,10 +536,23 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly errorMsg = signal<string | null>(null);
 
   /**
-   * Which conversation surface is in front: the project orchestrator
-   * thread, or the active task's Continue-mode follow-up chat.
+   * Which surface is in front: the project orchestrator thread, the
+   * active task's Continue-mode follow-up chat, or the roadmap intake
+   * panel that splits a long dump into reviewable task drafts.
    */
-  readonly mode = signal<'project' | 'task'>('project');
+  readonly mode = signal<'project' | 'task' | 'intake'>('project');
+
+  /**
+   * Resolve the active project name to its on-disk watch path so the
+   * roadmap-intake panel can call the backend without re-fetching the
+   * watch-paths list on its own.
+   */
+  readonly activeWatchPathForIntake = computed<string | null>(() => {
+    const name = this.activeProject();
+    if (!name) return null;
+    const entry = this.watchPaths().find((wp) => wp.name === name);
+    return entry?.path ?? null;
+  });
 
   /**
    * Per-task Continue-mode chat state. The history here is local-only
@@ -737,6 +784,20 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   selectTaskTab(): void {
     if (!this.activeJobId()) return;
     this.mode.set('task');
+  }
+
+  selectIntakeTab(): void {
+    if (!this.activeProject()) return;
+    this.mode.set('intake');
+  }
+
+  /**
+   * Refresh the board so the newly-created drafts appear in
+   * `1-preparation`. We don't switch tabs - the intake panel surfaces
+   * its own "drafts created" confirmation.
+   */
+  onIntakeCreated(_event: { count: number }): void {
+    this.jobService.refresh(true);
   }
 
   /**

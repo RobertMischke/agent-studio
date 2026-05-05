@@ -186,6 +186,7 @@ import { E2ECleanupDialogComponent } from './components/dev-tools/e2e-cleanup-di
           class="app__sidesheet"
           [projects]="projectNames()"
           [preferredProject]="orchSideSheetPreferredProject()"
+          [watchPaths]="watchPaths()"
           [activeJobId]="selectedJob()?.info?.id ?? null"
           [activeJobTitle]="selectedJob()?.info?.title ?? null"
           [activeWatchPath]="selectedJob()?.info?.watchPath ?? null"
