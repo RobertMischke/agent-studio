@@ -183,6 +183,43 @@ Hard boundary: supervision is advice-first, force-rare. The deterministic post-r
 
 The full conceptual analysis - loop-to-loop control options, communication contract sketch, execution-model tradeoffs (in-process vs sidecar vs CLI-driven), open conceptual problems, and recommended task spinout - lives in [docs/research/orchestrator-meta-loop-analysis-2026-05-04.md](docs/research/orchestrator-meta-loop-analysis-2026-05-04.md). The recommended first slice is the system review monitor (Layer 3) because it ships value immediately on stable without touching the runtime.
 
+### Agent Message Bus and Observability
+
+Use a central, append-only Agent Message Bus as the product's communication spine. The bus is not a workflow engine and does not relax the one-coding-task-per-project boundary. It is a schema-first event log that records who observed, asked, decided, answered, intervened, spent tokens, and produced evidence.
+
+The useful mental model is "many agents, one visible conversation layer":
+
+- A per-project orchestrator owns queue movement and project context.
+- A per-task coding agent is the active Claude, Codex, Copilot, or Gemini run that edits the repository.
+- Supporting agents run explicit user-triggered meta work such as QA, security audit, architecture review, source map generation, UX/UI critique, design council feedback, and token analysis.
+- Supervisor agents observe health, quota, progress, and stuck loops. The deterministic runner policy remains authoritative for routine outcomes.
+- A Layer 3 system health agent, working title "Master of Disaster", periodically reviews the bus and reports whether the whole system looks healthy after hours of work.
+- The app runtime also writes messages when it creates jobs, starts runs, stops runs, moves states, parses sentinels, or bridges token usage into the project view.
+
+Message records are small JSON documents, preferably JSONL on disk. The first schema should be `agent-message.schema.json` with stable fields for ids, timestamp, project, optional job/run/session, participant, role, message kind, severity, references, token usage, payload, and schema version. Expected message kinds include `observation`, `question`, `decision`, `advisory`, `intervention`, `artifact`, `token-usage`, `lifecycle`, `error`, and `heartbeat`.
+
+The Project Screen should make the bus visible:
+
+- A communication timeline showing user, task agent, project orchestrator, supporting agents, supervisors, and system review as separate participants.
+- A participant graph that answers "who talked to whom" and "which job or run caused this".
+- Heatmaps and counters for message volume, intervention rate, expensive token events, error bursts, and long silent periods.
+- Drill-down from any aggregate to the raw JSON message, linked job, run, artifact, screenshot, diff, or markdown report.
+- Filters by participant, message kind, severity, time window, job, run, skill, and CLI.
+
+Storage stays deliberately simple: many small documents on disk as source of truth, backed by a strongly typed in-memory projection for query, aggregation, and UI speed. No SQL, SQLite, LiteDB, or EF until the file-backed model is proven insufficient. If the bus grows into tens of thousands of documents, the next optimization is indexing and snapshotting inside the in-memory layer, not a premature database migration.
+
+First implementation order:
+
+1. Document the contract in `docs/agent-message-bus.md` and add JSON schemas under `docs/schemas/`.
+2. Extend the planned in-memory layer with an Agent Message Bus projection over JSONL on disk.
+3. Bridge existing streams into the bus: `cli-output.log`, orchestrator chat messages, supervisor advisories and interventions, lifecycle moves, and token usage summaries.
+4. Add the Project Screen Observability surface with timeline, participant graph, filters, and raw JSON drill-down.
+5. Teach supporting agents and project-level skill actions to emit bus messages and token usage records.
+6. Let the Layer 3 system health agent read the bus and produce health reports from the same evidence the user can inspect.
+7. Consider external Agent-to-Agent protocol adapters later, only when there is a concrete CLI or tool integration that benefits from them.
+
+Queued at `agent-taskboard/2-ready/agent-message-bus-contract/`, `agent-taskboard/2-ready/agent-message-bus-store/`, `agent-taskboard/2-ready/bridge-existing-events-to-message-bus/`, `agent-taskboard/2-ready/project-observability-message-bus-panel/`, `agent-taskboard/2-ready/supporting-agents-message-bus-events/`, and `agent-taskboard/2-ready/system-health-agent-message-bus-review/`.
+
 ### Companion App
 
 Make the running task board reachable from a phone without exposing the local processor to the internet:
@@ -198,14 +235,14 @@ The full V1 contract (endpoints, snapshot shape, command shape, sync cadence, fi
 
 ### Schema-First Communication and In-Memory Data Layer
 
-The product is accumulating cross-cutting structured data: token aggregates per project, supervisor advisories and interventions, audit findings, architecture-quality scores, componentisation metrics. None of this should sit in a database. It should be many small JSON-schema-validated documents on disk, plus a strongly-typed in-memory layer that loads them at boot, supports query and aggregation, and writes back changes the same way the job system already does.
+The product is accumulating cross-cutting structured data: agent messages, participant records, token aggregates per project, supervisor advisories and interventions, audit findings, architecture-quality scores, componentisation metrics. None of this should sit in a database. It should be many small JSON-schema-validated documents on disk, plus a strongly-typed in-memory layer that loads them at boot, supports query and aggregation, and writes back changes the same way the job system already does.
 
 - One schema per concept, named `<concept>.schema.json`, under `docs/schemas/`. Draft 2020-12. English. No em dashes.
 - An in-memory store is a typed view over disk; the file is always the source of truth.
 - No SQL. No SQLite, no LiteDB, no EF. The repo deliberately avoids a database engine.
-- First slice: schemas for supervisor advisory, supervisor intervention, token aggregate, plus an `InMemoryStore` consumed by `AutoInterventionHostedService` to replace its direct file reads.
+- First slice: schemas for supervisor advisory, supervisor intervention, token aggregate, and agent message records, plus an `InMemoryStore` consumed by `AutoInterventionHostedService` and the Agent Message Bus projection to replace direct file reads.
 
-Queued at `agent-taskboard/2-ready/json-schemas-and-in-memory-layer/`.
+Queued at `agent-taskboard/2-ready/json-schemas-and-in-memory-layer/` and extended by the Agent Message Bus jobs.
 
 ### Continuous Decision Visibility
 
