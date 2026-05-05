@@ -13,11 +13,30 @@ namespace OrchestratorApi.Services.Quota;
 /// Business=300/mo) to derive absolute used/limit numbers. The reset date is
 /// the first of the next month at 00:00 UTC (GitHub Copilot premium-request
 /// counter rolls over monthly).
+///
+/// Copilot MAX plans additionally show a Sonnet-model budget in the /usage
+/// output. The parser checks for that line intelligently and adds a second
+/// QuotaWindow when present so the UI can render an extra bar.
 /// </summary>
 public sealed class CopilotQuotaProbe : QuotaProbeBase
 {
     private static readonly Regex RemainingPctRegex = new(
         @"Remaining\s+reqs\.?\s*[:\-]?\s*([\-+]?\d+(?:\.\d+)?)\s*%",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    /// <summary>
+    /// Matches a Sonnet Maximum/Max usage line in any of its likely formats:
+    ///   "Sonnet Maximum Usage: 45%"
+    ///   "Sonnet Maximum: remaining 45.0%"
+    ///   "Claude Sonnet Max: 45%"
+    ///   "Maximum Sonnet: remaining 45%"
+    /// Group 1 captures the optional "remaining" qualifier; group 2 captures the number.
+    /// When group 1 is present the number is remaining%, so usedPct = 100 - number.
+    /// When absent the number is already usedPct.
+    /// </summary>
+    private static readonly Regex SonnetMaximumPctRegex = new(
+        @"(?:(?:claude\s+)?sonnet\s+max(?:imum)?(?:\s+usage)?|max(?:imum)?\s+(?:claude\s+)?sonnet)" +
+        @"\s*[:\-]?\s*(remaining\s+)?([\-+]?\d+(?:\.\d+)?)\s*%",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     private readonly IConfiguration _configuration;
@@ -67,25 +86,31 @@ public sealed class CopilotQuotaProbe : QuotaProbeBase
 
             var resetAt = NextMonthStartUtc(DateTime.UtcNow);
 
+            var windows = new List<QuotaWindow>
+            {
+                new QuotaWindow
+                {
+                    Label = "Premium requests (monthly)",
+                    UsedPct = usedPct,
+                    Used = used,
+                    Limit = limit,
+                    Unit = "requests",
+                    ResetAt = resetAt,
+                    ResetLabel = resetAt.ToString("MMM 1", CultureInfo.InvariantCulture)
+                }
+            };
+
+            var sonnetWindow = TryParseSonnetMaximum(snap, resetAt);
+            if (sonnetWindow != null)
+                windows.Add(sonnetWindow);
+
             return new QuotaSnapshot
             {
                 CliType = CliType,
                 Plan = plan,
                 Source = "/usage",
                 RawSample = TruncateForDebug(snap, 600),
-                Windows =
-                [
-                    new QuotaWindow
-                    {
-                        Label = "Premium requests (monthly)",
-                        UsedPct = usedPct,
-                        Used = used,
-                        Limit = limit,
-                        Unit = "requests",
-                        ResetAt = resetAt,
-                        ResetLabel = resetAt.ToString("MMM 1", CultureInfo.InvariantCulture)
-                    }
-                ]
+                Windows = windows
             };
         }
         catch (Exception ex)
@@ -98,6 +123,30 @@ public sealed class CopilotQuotaProbe : QuotaProbeBase
                 Error = ex.Message
             };
         }
+    }
+
+    /// <summary>
+    /// Attempts to parse a Sonnet Maximum budget line from the /usage snapshot.
+    /// Returns a populated QuotaWindow when the line is found, null otherwise.
+    /// Public so unit tests can call it directly without a live PTY.
+    /// </summary>
+    public static QuotaWindow? TryParseSonnetMaximum(string snap, DateTime resetAt)
+    {
+        var m = SonnetMaximumPctRegex.Match(snap);
+        if (!m.Success) return null;
+
+        var isRemaining = m.Groups[1].Length > 0;
+        var pct = double.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture);
+        var usedPct = isRemaining ? Math.Round(100.0 - pct, 1) : Math.Round(pct, 1);
+
+        return new QuotaWindow
+        {
+            Label = "Sonnet Maximum (monthly)",
+            UsedPct = usedPct,
+            Unit = "%",
+            ResetAt = resetAt,
+            ResetLabel = resetAt.ToString("MMM 1", CultureInfo.InvariantCulture)
+        };
     }
 
     private static double? PlanToLimit(string plan) => plan.ToLowerInvariant() switch
