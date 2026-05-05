@@ -520,6 +520,40 @@ export interface TokenTimelineProject {
 }
 
 /**
+ * Mirrors backend `JobScreenshot`. One screenshot file produced during
+ * a job's runs and harvested into `<job>/results/`. The strip in the
+ * protocol pane and the workspace visual evidence reel both render
+ * arrays of these.
+ */
+export interface JobScreenshot {
+  jobId: string;
+  jobTitle: string;
+  projectName: string;
+  watchPath: string;
+  fileName: string;
+  /** Always begins with `results/`. */
+  relativePath: string;
+  /** Routable URL that serves this file (sub-path aware). */
+  url: string;
+  caption: string;
+  /** `passed` | `failed` | `skipped` | `unknown` | null. */
+  status: string | null;
+  localPath: string;
+  timestampUtc: string;
+}
+
+export interface JobScreenshotsResponse {
+  jobId: string;
+  screenshots: JobScreenshot[];
+}
+
+export interface WorkspaceScreenshotsResponse {
+  windowHours: number;
+  projectFilter: string | null;
+  screenshots: JobScreenshot[];
+}
+
+/**
  * Long-lived orchestrator session record. The orchestrator boots one of
  * these per project at app start; subsequent decisions resume the same
  * Claude session via `-r <sessionId>`, so the orchestrator carries

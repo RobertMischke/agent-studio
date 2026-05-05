@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport, QuotaReport, QuotaSnapshot, GitStatus, ClaudeSessionResponse, JobCommitDetail, SessionEventsResponse, ContinueMode, ContinueJobResponse, OrchestratorLogResponse, TokenSummary, TokenSummaryAggregate, TokenTimeline, OrchestratorSessionResponse, OrchestratorChatResponse, OrchestratorChatTurn, RunTimeline, RunCommitsResponse, RunFilesResponse, RunDiffResponse, RoadmapIntakeCandidate, RoadmapIntakeResponse, RoadmapIntakeConfirmResponse } from '../models/job.model';
+import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport, QuotaReport, QuotaSnapshot, GitStatus, ClaudeSessionResponse, JobCommitDetail, SessionEventsResponse, ContinueMode, ContinueJobResponse, OrchestratorLogResponse, TokenSummary, TokenSummaryAggregate, TokenTimeline, OrchestratorSessionResponse, OrchestratorChatResponse, OrchestratorChatTurn, RunTimeline, RunCommitsResponse, RunFilesResponse, RunDiffResponse, RoadmapIntakeCandidate, RoadmapIntakeResponse, RoadmapIntakeConfirmResponse, JobScreenshotsResponse, WorkspaceScreenshotsResponse } from '../models/job.model';
 import { ErrorDialogService } from './error-dialog.service';
 
 type LaneKey = keyof GroupedJobs;
@@ -515,6 +515,35 @@ export class JobService {
       .set('bucketMinutes', String(bucketMinutes));
     return this.http.get<TokenTimeline>(
       `${this.baseUrl}/workspace/tokens/timeline`,
+      { params }
+    );
+  }
+
+  /**
+   * Per-job screenshot listing. Walks `<job>/results/` (recursive),
+   * captioned by spec/folder, with pass/fail status from the
+   * Playwright harvest index when available. Drives the protocol
+   * pane's screenshot strip.
+   */
+  getJobScreenshots(jobId: string, watchPath?: string | null) {
+    let params = new HttpParams();
+    if (watchPath) params = params.set('watchPath', watchPath);
+    return this.http.get<JobScreenshotsResponse>(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/screenshots`,
+      { params }
+    );
+  }
+
+  /**
+   * Workspace-wide visual evidence reel: every `<job>/results/`
+   * screenshot whose mtime falls inside the requested window,
+   * newest-first. Optionally narrowed to a single project name.
+   */
+  getWorkspaceScreenshots(windowHours: number, projectFilter?: string | null) {
+    let params = new HttpParams().set('windowHours', String(windowHours));
+    if (projectFilter) params = params.set('projectFilter', projectFilter);
+    return this.http.get<WorkspaceScreenshotsResponse>(
+      `${this.baseUrl}/workspace/screenshots`,
       { params }
     );
   }

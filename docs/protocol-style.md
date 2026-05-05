@@ -122,6 +122,21 @@ Bare filenames in `status.md` (e.g. `![](foo.png)` with no folder prefix) are re
 
 **The retention rule, restated:** If a screenshot matters for the protocol, it must end up under `<job>/results/`. When running under the orchestrator, `JobArtifactReporter` copies Playwright artifacts automatically; otherwise manually `cp`/`mv`. Anywhere else is treated as scratch and may disappear on the next test run, the next CI cleanup, or a `git clean`. Do not reference `test-results/<...>.png` from `status.md`; it works locally for ten minutes and breaks for the reviewer.
 
+### 4.1.5 Screenshot strip and workspace reel
+
+Two endpoints expose the harvested files for the inline strip in the
+protocol pane and the workspace-wide visual evidence reel:
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /api/jobs/{id}/screenshots?watchPath=...` | Recursive walk over `<job>/results/`, ordered oldest-first, captioned by spec/folder name with optional pass-fail status from `results/playwright/index.json`. Drives the per-task strip + lightbox above the protocol body. |
+| `GET /api/jobs/{id}/screenshot?path=<rel>&watchPath=...` | Sub-path aware file server. Path-traversal-guarded; only image content types are served. Used by the strip for nested artefacts under `results/playwright/<spec>/...` (the existing flat `/results/{name}` endpoint stays for top-level files). |
+| `GET /api/workspace/screenshots?windowHours=N&projectFilter=...` | Newest-first reel across every watched job whose `results/` folder was touched inside the window. Drives the workspace "Visual evidence" overlay (`#/workspace/screenshots`). |
+
+The retention rule from §4.1 still applies: only files that already
+live under `<job>/results/` are surfaced. There is no separate index
+or upload path, and no CDN.
+
 ### 4.2 Local rendering
 
 The protocol pane renders `status.md` through [`markdownToHtml`](../frontend/src/app/components/markdown-utils.ts) with a `resolveImageSrc` that maps:

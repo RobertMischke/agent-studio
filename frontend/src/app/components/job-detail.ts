@@ -19,6 +19,7 @@ import { LayoutPanesService } from './job-detail/layout-panes.service';
 import { ClaudeSessionPollService } from './job-detail/claude-session-poll.service';
 import { SessionEventsPollService } from './job-detail/session-events-poll.service';
 import { RunTimelinePollService } from './job-detail/run-timeline-poll.service';
+import { ScreenshotsPollService } from './job-detail/screenshots-poll.service';
 import { GitPaneService } from './job-detail/git-pane.service';
 import { GitPaneComponent } from './job-detail/git-pane/git-pane.component';
 import { CliOutputPollService } from './job-detail/cli-output-poll.service';
@@ -35,7 +36,7 @@ import { markdownToHtml } from './markdown-utils';
   selector: 'app-job-detail',
   standalone: true,
   imports: [FormsModule, GitPaneComponent, CommandDeckComponent, PromptPaneComponent, LogOverlayComponent, ProtocolPaneComponent, DetailHeaderComponent, CliConfigCardComponent, PaneToggleBarComponent],
-  providers: [LayoutPanesService, ClaudeSessionPollService, SessionEventsPollService, RunTimelinePollService, GitPaneService, CliOutputPollService],
+  providers: [LayoutPanesService, ClaudeSessionPollService, SessionEventsPollService, RunTimelinePollService, ScreenshotsPollService, GitPaneService, CliOutputPollService],
   // Keep styles global to this subtree so the still-inline class rules
   // (.pane*, .detail*, .inspector*, .notes-panel*, .sidebar-card*, …)
   // continue to reach the now-extracted sub-components without having
@@ -1622,6 +1623,13 @@ export class JobDetailComponent implements OnDestroy {
   // ...and for the run-timeline poller (5 s cadence).
   private readonly runTimelineEffect = effect(() => {
     this.runTimelinePoll.syncTo(this.detail()?.info ?? null);
+  });
+
+  // ...and for the per-job screenshots poller (10 s cadence). The
+  // protocol pane reads its signal directly via inject().
+  private readonly screenshotsPoll = inject(ScreenshotsPollService);
+  private readonly screenshotsEffect = effect(() => {
+    this.screenshotsPoll.syncTo(this.detail()?.info ?? null);
   });
 
   canStartJob(): boolean {

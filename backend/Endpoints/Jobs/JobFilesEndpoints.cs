@@ -85,5 +85,31 @@ public static class JobFilesEndpoints
             var (path, contentType) = scanner.ResolveResult(jobId, fileName, watchPath);
             return path is null ? Results.NotFound() : Results.File(path, contentType);
         });
+
+        // Ordered listing of every image under <job>/results/ (recursive),
+        // captioned per spec/folder, with pass-fail status pulled from the
+        // Playwright harvest index when available. Drives the protocol-pane
+        // screenshot strip and the lightbox prev/next navigation.
+        group.MapGet("/{jobId}/screenshots", (string jobId, string? watchPath, ScreenshotIndexService screenshots) =>
+        {
+            var entries = screenshots.ListJobScreenshots(jobId, watchPath);
+            return Results.Ok(new JobScreenshotsResponse
+            {
+                JobId = jobId,
+                Screenshots = entries.ToList()
+            });
+        });
+
+        // Sub-path aware companion to /results/{fileName}. The flat endpoint
+        // above rejects path separators by design (see JobScannerService);
+        // the screenshot listing returns nested paths under
+        // results/playwright/<spec>/... which need this dedicated server.
+        // Path traversal is rejected inside ResolveScreenshotFile.
+        group.MapGet("/{jobId}/screenshot", (string jobId, string? path, string? watchPath, ScreenshotIndexService screenshots) =>
+        {
+            if (string.IsNullOrWhiteSpace(path)) return Results.BadRequest(new { error = "path is required" });
+            var (resolved, contentType) = screenshots.ResolveScreenshotFile(jobId, path, watchPath);
+            return resolved is null ? Results.NotFound() : Results.File(resolved, contentType);
+        });
     }
 }

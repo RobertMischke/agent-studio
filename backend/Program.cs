@@ -56,6 +56,7 @@ AppDomain.CurrentDomain.UnhandledException += (_, e) =>
 
 builder.Services.AddSingleton<ClientIdentityStore>();
 builder.Services.AddSingleton<JobScannerService>();
+builder.Services.AddSingleton<ScreenshotIndexService>();
 builder.Services.AddSingleton<JobStateMachine>();
 builder.Services.AddSingleton<JobMutationService>();
 builder.Services.AddSingleton<JobSessionLog>();

@@ -16,6 +16,8 @@ import { ClaudeSessionPollService } from '../claude-session-poll.service';
 import { CliOutputPollService } from '../cli-output-poll.service';
 import { SessionEventsPollService } from '../session-events-poll.service';
 import { RunTimelinePollService } from '../run-timeline-poll.service';
+import { ScreenshotsPollService } from '../screenshots-poll.service';
+import { ScreenshotStripComponent } from '../../screenshot-strip/screenshot-strip.component';
 import { NowTickService } from '../../../services/now-tick.service';
 import { RunTimelineComponent } from './run-timeline.component';
 import { RunGitViewerComponent } from './run-git-viewer.component';
@@ -33,7 +35,7 @@ export type InspectorTab = 'protocol' | 'activity';
   selector: 'app-protocol-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, ActivityLogViewComponent, RunTimelineComponent, RunGitViewerComponent],
+  imports: [CommonModule, ActivityLogViewComponent, RunTimelineComponent, RunGitViewerComponent, ScreenshotStripComponent],
   templateUrl: './protocol-pane.component.html',
   styleUrls: ['./protocol-pane.component.scss']
 })
@@ -68,12 +70,14 @@ export class ProtocolPaneComponent implements OnDestroy {
   private readonly cliPoll = inject(CliOutputPollService);
   private readonly sessionEventsPoll = inject(SessionEventsPollService);
   private readonly runTimelinePoll = inject(RunTimelinePollService);
+  private readonly screenshotsPoll = inject(ScreenshotsPollService);
   private readonly nowTick = inject(NowTickService).now;
 
   readonly claudeSession = this.claudePoll.session;
   readonly claudeRateLimit = this.claudePoll.rateLimit;
   readonly cliOutput = this.cliPoll.output;
   readonly runTimeline = this.runTimelinePoll.timeline;
+  readonly screenshots = this.screenshotsPoll.screenshots;
 
   /**
    * Active run filter for the activity log. Set when the user clicks

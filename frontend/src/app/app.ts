@@ -23,11 +23,13 @@ import { JobCompletionSoundService } from './services/job-completion-sound.servi
 import { UpdateStableConsoleComponent } from './components/dev-tools/update-stable-console.component';
 import { E2ECleanupDialogComponent } from './components/dev-tools/e2e-cleanup-dialog.component';
 import { WorkspaceTokenTimelineComponent } from './components/workspace-token-timeline';
+import { WorkspaceScreenshotsComponent } from './components/workspace-screenshots';
 import { WorkspaceBannerComponent } from './components/workspace-banner';
+import { JobScreenshot } from './models/job.model';
 
 @Component({
   selector: 'app-root',
-  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, AnalysisReportDrilldownComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceTokenTimelineComponent, WorkspaceBannerComponent],
+  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, AnalysisReportDrilldownComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceTokenTimelineComponent, WorkspaceScreenshotsComponent, WorkspaceBannerComponent],
   // Keep styles global to this subtree — the App shell still owns the
   // .header*, .filter-chip*, .overlay*, .create-dialog*, .error-dialog*
   // class rules used by the extracted dialogs and project-tabs.
@@ -236,6 +238,7 @@ import { WorkspaceBannerComponent } from './components/workspace-banner';
         (toggleUsage)="usageSheet.toggle()"
         (toggleOrchestrator)="orchSideSheet.toggle()"
         (toggleFeed)="toggleOrchFeed()"
+        (toggleVisualEvidence)="toggleWorkspaceScreenshots()"
         (defaultCliChange)="onDefaultCliChange($event)"
         (defaultModelChange)="onDefaultModelChange($event)" />
 
@@ -277,6 +280,15 @@ import { WorkspaceBannerComponent } from './components/workspace-banner';
           <div class="overlay__panel overlay__panel--wtt" (click)="$event.stopPropagation()">
             <button class="overlay__close" (click)="closeWorkspaceTokens()" title="Close">×</button>
             <app-workspace-token-timeline />
+          </div>
+        </div>
+      }
+
+      @if (workspaceScreenshotsOpen()) {
+        <div class="overlay" data-testid="workspace-screenshots-overlay" (click)="closeWorkspaceScreenshots()">
+          <div class="overlay__panel overlay__panel--wtt" (click)="$event.stopPropagation()">
+            <button class="overlay__close" (click)="closeWorkspaceScreenshots()" title="Close">×</button>
+            <app-workspace-screenshots (openTask)="onOpenTaskFromReel($event)" />
           </div>
         </div>
       }
@@ -1367,6 +1379,10 @@ export class App implements OnInit {
    *  another tab or a bookmark. */
   readonly workspaceTokensOpen = signal<boolean>(false);
   private readonly workspaceTokensHash = '#/workspace/tokens';
+  /** Workspace visual evidence reel overlay. Triggered from the status
+   *  bar entry and from the deep-link `#/workspace/screenshots`. */
+  readonly workspaceScreenshotsOpen = signal<boolean>(false);
+  private readonly workspaceScreenshotsHash = '#/workspace/screenshots';
   private hashListener: (() => void) | null = null;
   readonly watchPaths = signal<WatchPathEntry[]>([]);
   readonly activeProjects = signal<Set<string>>(new Set(JSON.parse(localStorage.getItem('activeProjects') ?? '[]')));
@@ -1644,6 +1660,10 @@ export class App implements OnInit {
     const applyHash = () => {
       const open = window.location.hash === this.workspaceTokensHash;
       if (open !== this.workspaceTokensOpen()) this.workspaceTokensOpen.set(open);
+      const screenshotsOpen = window.location.hash === this.workspaceScreenshotsHash;
+      if (screenshotsOpen !== this.workspaceScreenshotsOpen()) {
+        this.workspaceScreenshotsOpen.set(screenshotsOpen);
+      }
     };
     applyHash();
     this.hashListener = applyHash;
@@ -1886,6 +1906,41 @@ export class App implements OnInit {
     if (window.location.hash === this.workspaceTokensHash) {
       try { history.replaceState(null, '', window.location.pathname + window.location.search); } catch { /* ignore */ }
     }
+  }
+
+  openWorkspaceScreenshots(): void {
+    this.workspaceScreenshotsOpen.set(true);
+    if (window.location.hash !== this.workspaceScreenshotsHash) {
+      try { history.replaceState(null, '', window.location.pathname + window.location.search + this.workspaceScreenshotsHash); } catch { /* ignore */ }
+    }
+  }
+
+  closeWorkspaceScreenshots(): void {
+    this.workspaceScreenshotsOpen.set(false);
+    if (window.location.hash === this.workspaceScreenshotsHash) {
+      try { history.replaceState(null, '', window.location.pathname + window.location.search); } catch { /* ignore */ }
+    }
+  }
+
+  toggleWorkspaceScreenshots(): void {
+    if (this.workspaceScreenshotsOpen()) this.closeWorkspaceScreenshots();
+    else this.openWorkspaceScreenshots();
+  }
+
+  /**
+   * "Open task" link inside the workspace reel lightbox: close the
+   * reel overlay, navigate the side panel to the screenshot's
+   * originating job. Mirrors the open-task pattern used by the
+   * orchestrator feed.
+   */
+  onOpenTaskFromReel(s: JobScreenshot): void {
+    this.closeWorkspaceScreenshots();
+    if (!s?.jobId || !s?.watchPath) return;
+    history.replaceState(null, '', `?job=${encodeURIComponent(s.jobId)}&watchPath=${encodeURIComponent(s.watchPath)}`);
+    this.jobService.getDetail(s.jobId, s.watchPath).subscribe({
+      next: (detail) => this.selectedJob.set(detail),
+      error: () => { /* keep the user where they were */ }
+    });
   }
 
   /**

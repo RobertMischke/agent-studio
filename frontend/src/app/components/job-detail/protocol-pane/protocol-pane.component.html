@@ -78,6 +78,12 @@
     <button class="pane__hide" (click)="hide.emit()" title="Hide panel">×</button>
   </header>
   <div class="pane__body">
+    @if (screenshots().length > 0) {
+      <app-screenshot-strip
+        data-testid="protocol-screenshot-strip"
+        [screenshots]="screenshots()"
+        variant="task" />
+    }
     <section class="inspector">
       <div class="inspector__header">
         <div class="inspector__tabs inspector__tabs--pill"

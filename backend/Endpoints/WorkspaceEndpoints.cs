@@ -1,3 +1,4 @@
+using OrchestratorApi.Models;
 using OrchestratorApi.Services.Jobs;
 using OrchestratorApi.Services.Runner;
 
@@ -34,6 +35,25 @@ public static class WorkspaceEndpoints
                     windowHours ?? WorkspaceTokensTimelineService.DefaultWindowHours,
                     bucketMinutes ?? WorkspaceTokensTimelineService.DefaultBucketMinutes);
                 return Results.Ok(result);
+            });
+
+        // Workspace-wide visual evidence reel. Folds the per-job
+        // results/ scan over every watched job touched in the
+        // requested window, ordered newest-first. windowHours
+        // defaults to 72 (three days) and is clamped to >= 1; an
+        // optional projectFilter (project display name) narrows the
+        // result. Drives the "Visual evidence" reel overlay.
+        group.MapGet("/screenshots",
+            (int? windowHours, string? projectFilter, ScreenshotIndexService screenshots) =>
+            {
+                var hours = Math.Max(1, windowHours ?? 72);
+                var entries = screenshots.ListWorkspaceScreenshots(hours, projectFilter);
+                return Results.Ok(new WorkspaceScreenshotsResponse
+                {
+                    WindowHours = hours,
+                    ProjectFilter = projectFilter,
+                    Screenshots = entries.ToList()
+                });
             });
 
         // Workspace executive summary. Folds per-project activity

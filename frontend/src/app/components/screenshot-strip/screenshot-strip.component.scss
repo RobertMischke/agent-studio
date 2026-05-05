@@ -1,0 +1,241 @@
+/*
+ * Visual evidence strip + lightbox.
+ * Two variants share the layout: 'task' is the per-task strip;
+ * 'reel' is the workspace-wide reel that adds a project tag and an
+ * "Open task" link in the lightbox caption.
+ */
+
+.strip {
+  display: block;
+  padding: 8px 4px 6px;
+  border-bottom: 1px solid rgba(99, 102, 241, 0.15);
+  background: linear-gradient(180deg, rgba(99, 102, 241, 0.06), transparent 80%);
+}
+
+.strip__rail {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: thin;
+}
+
+.strip__thumb {
+  position: relative;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  background: rgba(30, 30, 46, 0.6);
+  border: 1px solid rgba(180, 190, 254, 0.2);
+  border-radius: 8px;
+  padding: 0;
+  overflow: hidden;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  transition: border-color 100ms ease, transform 100ms ease;
+  width: 180px;
+
+  &:hover {
+    border-color: rgba(180, 190, 254, 0.55);
+    transform: translateY(-1px);
+  }
+
+  &:focus-visible {
+    outline: 2px solid #89b4fa;
+    outline-offset: 2px;
+  }
+}
+
+.strip__img {
+  display: block;
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+  background: #11111b;
+}
+
+.strip__badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  padding: 0 6px;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.4;
+  color: #1e1e2e;
+
+  &--ok   { background: #a6e3a1; }
+  &--bad  { background: #f38ba8; color: #1e1e2e; }
+  &--skip { background: #cdd6f4; }
+}
+
+.strip__caption {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 5px 8px 7px;
+  background: rgba(17, 17, 27, 0.85);
+  font-size: 0.78rem;
+  line-height: 1.25;
+}
+
+.strip__caption-spec {
+  font-weight: 600;
+  color: #cdd6f4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.strip__caption-ts {
+  color: #a6adc8;
+  font-variant-numeric: tabular-nums;
+}
+
+.strip__caption-project {
+  color: #89b4fa;
+  font-size: 0.72rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Lightbox */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.82);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9000;
+  padding: 32px;
+}
+
+.lightbox__close {
+  position: absolute;
+  top: 16px;
+  right: 20px;
+  background: transparent;
+  border: 0;
+  color: #cdd6f4;
+  font-size: 32px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 6px;
+
+  &:hover { background: rgba(255, 255, 255, 0.08); }
+}
+
+.lightbox__nav {
+  background: rgba(30, 30, 46, 0.7);
+  border: 1px solid rgba(180, 190, 254, 0.25);
+  color: #cdd6f4;
+  font-size: 32px;
+  line-height: 1;
+  width: 48px;
+  height: 64px;
+  border-radius: 6px;
+  cursor: pointer;
+  flex: 0 0 auto;
+
+  &:hover { background: rgba(45, 45, 70, 0.85); border-color: rgba(180, 190, 254, 0.55); }
+}
+
+.lightbox__figure {
+  margin: 0 16px;
+  max-width: calc(100vw - 192px);
+  max-height: calc(100vh - 96px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.lightbox__img {
+  max-width: 100%;
+  max-height: calc(100vh - 196px);
+  object-fit: contain;
+  border-radius: 6px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  background: #11111b;
+}
+
+.lightbox__caption {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #cdd6f4;
+  font-size: 0.92rem;
+  text-align: center;
+  max-width: 100%;
+}
+
+.lightbox__caption-main {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.lightbox__caption-spec {
+  font-weight: 600;
+}
+
+.lightbox__status {
+  padding: 2px 8px;
+  border-radius: 9999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.1);
+
+  &[data-status="passed"]  { background: #a6e3a1; color: #1e1e2e; }
+  &[data-status="failed"]  { background: #f38ba8; color: #1e1e2e; }
+  &[data-status="skipped"] { background: #cdd6f4; color: #1e1e2e; }
+}
+
+.lightbox__index {
+  color: #a6adc8;
+  font-variant-numeric: tabular-nums;
+}
+
+.lightbox__caption-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  color: #a6adc8;
+  font-size: 0.84rem;
+}
+
+.lightbox__task-link {
+  color: #89b4fa;
+  cursor: pointer;
+  text-decoration: underline;
+
+  &:hover { color: #b4befe; }
+}
+
+.lightbox__path-btn {
+  background: transparent;
+  border: 1px solid rgba(180, 190, 254, 0.3);
+  color: #cdd6f4;
+  padding: 2px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.84rem;
+
+  &:hover {
+    border-color: rgba(180, 190, 254, 0.6);
+    background: rgba(180, 190, 254, 0.1);
+  }
+}
