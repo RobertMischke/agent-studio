@@ -83,6 +83,8 @@ The prototype currently covers:
 
 The current refactor iteration starts turning the clickware into a component reference. Topbar and statusbar are now standalone Angular components, while topbar/statusbar dummy data and shared icon paths live in a separate data module. The next extraction should continue downward into `ActivityRail`, `StatusPopover`, `ConversationTranscript`, `ComposerBar`, and `WorkbenchPaneHost`, keeping the implementation slice small enough to visually review after every step.
 
+The UX review now names the target visual system as the internal Found Next Workbench Framework. This is a rule set and component boundary, not a third-party package: use VS Code workbench containers, local theme tokens, compact density primitives, screenshot-driven review, and reusable Angular components instead of importing a deprecated VS Code webview toolkit or a generic dashboard UI kit.
+
 ## Screenshots
 
 Playwright can still generate screenshots under `docs/mockups/chat-window-next-gen/evidence/`, but those PNG files are local review output and are gitignored. Do not commit regenerated screenshots from this mockup folder.

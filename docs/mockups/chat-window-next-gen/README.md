@@ -8,7 +8,7 @@ This folder is not existing product behavior. It is the target surface for the n
 
 - [ui.html](ui.html) - interactive v7 visual mockup for the next-generation chat workbench. This is the current reference.
 - [angular-prototype.md](angular-prototype.md) - standalone Angular clickware prototype, local evidence rules, and handoff notes.
-- [found-next-ux-review.md](found-next-ux-review.md) - component-level UX review loop for the Angular reference prototype.
+- [found-next-ux-review.md](found-next-ux-review.md) - internal Found Next Workbench Framework decision, component-level scorecard, screenshot matrix, and UX review loop for the Angular reference prototype.
 - [scenarios.md](scenarios.md) - typical cases the UI must render well.
 - [activity-log-edge-cases.md](activity-log-edge-cases.md) - real Activity Log edge-case taxonomy from 136 sampled logs.
 - [workbench-layout-research.md](workbench-layout-research.md) - VS Code-inspired layout research for side-by-side chat, Git, result, preview, token, and debug workflows.
