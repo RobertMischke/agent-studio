@@ -59,6 +59,7 @@ Each job folder uses this structure:
   job.json          # Metadata owned by the application
   prompt.md         # Task description for the CLI agent
   status.md         # Generated review protocol
+  lifecycle.json    # Optional: richer phase history (intake / post-processing checks)
   attachments/      # Input files supplied with the task
   results/          # Output evidence such as screenshots
   logs/             # CLI output, including logs/cli-output.log
@@ -83,6 +84,34 @@ Each job folder uses this structure:
 **States:** `1-preparation` -> `2-ready` -> `3-progress` -> `4-auto-review` -> `5-human-review` -> `6-completed` -> `7-archive`
 
 The application owns transitions between these states. Successful CLI runs move from `3-progress` to `4-auto-review`; the orchestrator's review pass then either reissues (back to `3-progress`), accepts-as-done (forward to `5-human-review`), or escalates (also forward to `5-human-review` with a `[supervisor]` chat-note). The user always confirms the move from `5-human-review` to `6-completed`. Failed or stopped runs stay in `3-progress` for inspection, restart, or continuation.
+
+**Optional substate:** `job.json` may also carry a `"phase"` string that distinguishes orchestrator-driven substates within the same folder-level state. The hybrid V1 model (see `docs/research/expanded-lifecycle-lanes-plan-2026-05.md`) keeps the seven folder-level states above as the durable skeleton and uses `phase` plus the optional sidecar `lifecycle.json` for the Intake / Post Processing lanes the kanban projects on top.
+
+| State          | Allowed phase values                                                                                                                |
+|----------------|-------------------------------------------------------------------------------------------------------------------------------------|
+| `2-ready`      | `human-ready` (default), `intake-running`, `intake-blocked`                                                                          |
+| `3-progress`   | `execution-running`, `execution-stalled`, `post-processing-running`, `post-processing-blocked`, `awaiting-review`                    |
+| other states   | none (the state already says enough; the field should be absent or `null`)                                                          |
+
+`phase` is **application-owned and optional**. Existing job folders that predate the field continue to render in the default lane of their state without any rewrite: `2-ready` falls back to `human-ready`, `3-progress` with a running CLI falls back to `execution-running`, `3-progress` with a generating summary falls back to `post-processing-running`, and stopped or failed runs in `3-progress` keep rendering as the execution lane. Unknown or out-of-state values are dropped on read with a warning. Boot-time scans never rewrite a phase-less `job.json` to add a default; lazy defaulting happens in code.
+
+### lifecycle.json (optional)
+
+```json
+{
+  "version": 1,
+  "phase": "intake-running",
+  "phaseEnteredAt": "2026-05-06T10:12:00Z",
+  "blockingReason": null,
+  "intakeChecks": [
+    { "name": "duplicate-detection", "status": "passed", "startedAt": "...", "finishedAt": "..." },
+    { "name": "clarity-probe",       "status": "running" }
+  ],
+  "postProcessingChecks": []
+}
+```
+
+Optional sidecar carrying the richer phase history that does not fit on the wire-level `phase` field: which intake or post-processing checks were scheduled, when the current phase was entered, and the last blocking reason. Absent on legacy job folders; the wire-level `phase` field is the source of truth. The follow-up tasks `ready-orchestrator-intake-lane` and `post-processing-orchestrator-lane` populate this file.
 
 ### prompt.md
 

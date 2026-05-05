@@ -39,7 +39,7 @@ Agents must not:
 - Scan for other ready tasks.
 - Pick another task.
 - Move task folders between state lanes.
-- Edit the state field in job.json.
+- Edit the `state` or `phase` fields in job.json, or write to `lifecycle.json`. These are application-owned.
 - Start or continue another task on their own.
 - Create branches, switch branches, merge branches, or manage worktrees unless the user explicitly changes the product boundary.
 
@@ -59,9 +59,10 @@ Only successful CLI runs move automatically from `3-progress` to `4-auto-review`
 
 Each task folder may contain:
 
-- `job.json`: metadata owned by the application.
+- `job.json`: metadata owned by the application. The optional `phase` field carries an orchestrator-driven substate (Intake, Post Processing); agents do not write it.
 - `prompt.md`: task description and follow-up notes.
 - `status.md`: generated review protocol owned by the application.
+- `lifecycle.json` (optional): application-owned sidecar with richer phase history. Absent on legacy folders.
 - `logs/cli-output.log`: durable CLI output.
 - `attachments/`: input images or files supplied with the task.
 - `results/`: output screenshots or files produced during the task.

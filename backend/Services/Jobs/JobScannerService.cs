@@ -189,7 +189,8 @@ public class JobScannerService
                 SessionChain = ReadSessionChain(raw),
                 PendingIntent = ReadPendingIntent(jobDir),
                 Fixture = raw.TryGetProperty("fixture", out var fix)
-                    && fix.ValueKind is JsonValueKind.True
+                    && fix.ValueKind is JsonValueKind.True,
+                Phase = ReadPhase(raw, state, jobDir)
             };
         }
         catch (Exception ex)
@@ -314,6 +315,37 @@ public class JobScannerService
         JobJsonFile.UpdateField(jobDir, "ownerClientId", DefaultClientIdentity.Id, _logger);
         _logger.LogInformation("Migrated job folder '{Dir}' to ownerClientId='{Owner}'", jobDir, DefaultClientIdentity.Id);
         return DefaultClientIdentity.Id;
+    }
+
+    /// <summary>
+    /// Reads the optional <c>phase</c> field from <c>job.json</c>. The wire
+    /// field stays null when absent on disk; the frontend's lane projection
+    /// then falls back to <see cref="LifecyclePhases.DefaultFor"/>. This is
+    /// the compatibility contract from
+    /// <c>docs/research/expanded-lifecycle-lanes-plan-2026-05.md</c>: existing
+    /// job folders that predate the field continue to render in the default
+    /// lane of their state without a one-shot migration that rewrites every
+    /// <c>job.json</c>. Unknown phase strings, or phase strings that do not
+    /// belong to <paramref name="state"/>, are dropped with a warning so a
+    /// hand-edited / corrupted file cannot wedge the board.
+    /// </summary>
+    private string? ReadPhase(JsonElement raw, string state, string jobDir)
+    {
+        if (!raw.TryGetProperty("phase", out var phaseEl)) return null;
+        if (phaseEl.ValueKind != JsonValueKind.String) return null;
+        var value = phaseEl.GetString();
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        if (!LifecyclePhases.All.Contains(value))
+        {
+            _logger.LogWarning("Unknown phase '{Phase}' in {Dir}; ignoring", value, jobDir);
+            return null;
+        }
+        if (!LifecyclePhases.IsAllowed(state, value))
+        {
+            _logger.LogWarning("Phase '{Phase}' is not allowed for state '{State}' in {Dir}; ignoring", value, state, jobDir);
+            return null;
+        }
+        return value;
     }
 
     /// <summary>

@@ -112,6 +112,150 @@ public record JobInfo
     /// <c>?includeFixtures=true</c> exposes them for debugging.
     /// </summary>
     public bool Fixture { get; init; }
+
+    /// <summary>
+    /// Optional lifecycle substate, read from the <c>"phase"</c> field in
+    /// <c>job.json</c>. Drives the kanban board's lane projection in the
+    /// expanded-lifecycle-lanes model (see
+    /// <c>docs/research/expanded-lifecycle-lanes-plan-2026-05.md</c>).
+    /// Application-owned: agents must not write to this field. Values come
+    /// from <see cref="LifecyclePhases"/> and are constrained per state by
+    /// <see cref="LifecyclePhases.AllowedByState"/>. Null means "no explicit
+    /// phase on disk"; the frontend then falls back to
+    /// <see cref="LifecyclePhases.DefaultFor"/> to pick a default lane. This
+    /// keeps existing job folders that predate the field rendering correctly
+    /// without rewriting every <c>job.json</c>.
+    /// </summary>
+    public string? Phase { get; init; }
+}
+
+/// <summary>
+/// String constants and helpers for the optional <c>phase</c> substate on
+/// <see cref="JobInfo"/>. The hybrid V1 model picked in
+/// <c>docs/research/expanded-lifecycle-lanes-plan-2026-05.md</c> keeps the
+/// existing six folder-level states as the durable skeleton and adds this
+/// optional substate so the orchestrator-driven lanes (Intake, Post
+/// Processing) can be projected by the UI without a filesystem-state
+/// explosion.
+///
+/// Phase values are stored in <c>job.json</c> as plain strings; the wire
+/// format is the literal string so hand-edited JSON stays readable. The
+/// richer lifecycle history (which intake checks ran, when each phase was
+/// entered, last blocking reason) lives in the optional sidecar file
+/// <c>lifecycle.json</c> described by <see cref="LifecycleSnapshot"/>.
+/// </summary>
+public static class LifecyclePhases
+{
+    // 2-ready substates: which seat in the Ready group a card sits in.
+    public const string HumanReady = "human-ready";
+    public const string IntakeRunning = "intake-running";
+    public const string IntakeBlocked = "intake-blocked";
+
+    // 3-progress substates: distinguishes "coding CLI is working" from
+    // "post-processing pipeline (auto-commit, summary, future checks) is
+    // working" without a new filesystem state.
+    public const string ExecutionRunning = "execution-running";
+    public const string ExecutionStalled = "execution-stalled";
+    public const string PostProcessingRunning = "post-processing-running";
+    public const string PostProcessingBlocked = "post-processing-blocked";
+    public const string AwaitingReview = "awaiting-review";
+
+    public static readonly string[] All =
+    [
+        HumanReady, IntakeRunning, IntakeBlocked,
+        ExecutionRunning, ExecutionStalled,
+        PostProcessingRunning, PostProcessingBlocked, AwaitingReview
+    ];
+
+    /// <summary>
+    /// The phases each filesystem state is allowed to carry. States not in
+    /// this map (preparation, the orchestrator-prep / needs-human-review
+    /// lanes, the two review lanes, completed, archive) carry no phase: the
+    /// state already says enough. Keeping this small dictionary avoids a
+    /// scatter of <c>switch</c> statements when the migration tests and
+    /// future frontend lane projection both need to know "is this phase
+    /// legal here".
+    /// </summary>
+    public static readonly Dictionary<string, string[]> AllowedByState = new()
+    {
+        [JobStates.Ready] = [HumanReady, IntakeRunning, IntakeBlocked],
+        [JobStates.Progress] = [ExecutionRunning, ExecutionStalled, PostProcessingRunning, PostProcessingBlocked, AwaitingReview],
+    };
+
+    /// <summary>
+    /// Pure default-derivation for jobs whose <c>phase</c> is null on disk.
+    /// Implements the compatibility contract from
+    /// <c>docs/research/expanded-lifecycle-lanes-plan-2026-05.md</c>
+    /// section 10: a job with no <c>phase</c> renders in the default lane of
+    /// its state. Returns null for states that carry no phase (preparation,
+    /// the orchestrator-prep / needs-human-review lanes, the review lanes,
+    /// completed, archive).
+    /// </summary>
+    public static string? DefaultFor(string state, string? executionStatus, JobSummaryStatus summaryStatus)
+    {
+        return state switch
+        {
+            JobStates.Ready => HumanReady,
+            JobStates.Progress when string.Equals(executionStatus, "running", StringComparison.OrdinalIgnoreCase) => ExecutionRunning,
+            JobStates.Progress when summaryStatus == JobSummaryStatus.Generating => PostProcessingRunning,
+            // Stopped / failed / unfinished runs still live in 3-progress;
+            // the existing UI treats them as the execution lane today, so
+            // the lane projection keeps that behavior under the new model.
+            JobStates.Progress => ExecutionRunning,
+            _ => null,
+        };
+    }
+
+    /// <summary>
+    /// True when <paramref name="phase"/> is empty or in the allowed set for
+    /// <paramref name="state"/>. Permissive on a null phase (the state's
+    /// default lane covers it) and on unknown states (no constraint
+    /// declared); strict only when both are populated.
+    /// </summary>
+    public static bool IsAllowed(string state, string? phase)
+    {
+        if (string.IsNullOrWhiteSpace(phase)) return true;
+        if (!AllowedByState.TryGetValue(state, out var allowed)) return true;
+        return allowed.Contains(phase);
+    }
+}
+
+/// <summary>
+/// Optional sidecar file written next to <c>job.json</c> as
+/// <c>lifecycle.json</c>. Carries the richer phase history that does not
+/// fit on the wire-level <see cref="JobInfo.Phase"/> field: which intake
+/// or post-processing checks were scheduled, when the current phase was
+/// entered, and the last blocking reason if any.
+///
+/// This file is optional; absence means "default phase for the state, no
+/// history". The follow-up tasks <c>ready-orchestrator-intake-lane</c>
+/// and <c>post-processing-orchestrator-lane</c> populate it. The shape is
+/// version-tagged so it can grow without breaking older readers.
+/// </summary>
+public record LifecycleSnapshot
+{
+    public int Version { get; init; } = 1;
+    /// <summary>The current phase. Mirrors <see cref="JobInfo.Phase"/>; the wire field is the source of truth.</summary>
+    public string? Phase { get; init; }
+    /// <summary>UTC time the current phase was entered.</summary>
+    public DateTime? PhaseEnteredAt { get; init; }
+    /// <summary>Free-form blocking reason when the phase is <see cref="LifecyclePhases.IntakeBlocked"/> or <see cref="LifecyclePhases.PostProcessingBlocked"/>.</summary>
+    public string? BlockingReason { get; init; }
+    /// <summary>Intake checks scheduled or run for this job, in pipeline order.</summary>
+    public List<LifecycleCheck> IntakeChecks { get; init; } = [];
+    /// <summary>Post-processing checks scheduled or run for this job, in pipeline order.</summary>
+    public List<LifecycleCheck> PostProcessingChecks { get; init; } = [];
+}
+
+/// <summary>One scheduled or completed check inside a <see cref="LifecycleSnapshot"/>.</summary>
+public record LifecycleCheck
+{
+    public string Name { get; init; } = "";
+    /// <summary>One of: <c>pending</c>, <c>running</c>, <c>passed</c>, <c>failed</c>, <c>skipped</c>.</summary>
+    public string Status { get; init; } = "pending";
+    public DateTime? StartedAt { get; init; }
+    public DateTime? FinishedAt { get; init; }
+    public string? Detail { get; init; }
 }
 
 /// <summary>

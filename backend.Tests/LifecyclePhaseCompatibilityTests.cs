@@ -1,0 +1,268 @@
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
+using OrchestratorApi.Models;
+using OrchestratorApi.Services;
+using OrchestratorApi.Services.Jobs;
+using Xunit;
+
+namespace OrchestratorApi.Tests;
+
+/// <summary>
+/// Backwards-compatibility coverage for the optional <c>phase</c> field added
+/// by the expanded-lifecycle-lanes hybrid V1 model
+/// (<c>docs/research/expanded-lifecycle-lanes-plan-2026-05.md</c>).
+///
+/// The compatibility contract: existing job folders that predate the
+/// <c>phase</c> field must keep parsing and must render in the default lane
+/// of their state. Mixed boards (some jobs with <c>phase</c>, some without)
+/// must coexist. A hand-edited / corrupt phase value must be ignored, never
+/// surfaced as a fatal scan error.
+/// </summary>
+public class LifecyclePhaseCompatibilityTests : IDisposable
+{
+    private readonly string _watchPath;
+
+    public LifecyclePhaseCompatibilityTests()
+    {
+        _watchPath = Path.Combine(Path.GetTempPath(), "rdo-phase-tests-" + Guid.NewGuid().ToString("N"));
+        foreach (var state in JobStates.All)
+        {
+            Directory.CreateDirectory(Path.Combine(_watchPath, state));
+        }
+    }
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_watchPath, recursive: true); } catch { /* best-effort */ }
+    }
+
+    // ---- DefaultFor: pure mapping -------------------------------------------
+
+    [Fact]
+    public void DefaultFor_Ready_IsHumanReady()
+    {
+        Assert.Equal(LifecyclePhases.HumanReady,
+            LifecyclePhases.DefaultFor(JobStates.Ready, executionStatus: null, JobSummaryStatus.None));
+    }
+
+    [Fact]
+    public void DefaultFor_ProgressWithRunningExecution_IsExecutionRunning()
+    {
+        Assert.Equal(LifecyclePhases.ExecutionRunning,
+            LifecyclePhases.DefaultFor(JobStates.Progress, "running", JobSummaryStatus.None));
+    }
+
+    [Fact]
+    public void DefaultFor_ProgressWithGeneratingSummary_IsPostProcessingRunning()
+    {
+        Assert.Equal(LifecyclePhases.PostProcessingRunning,
+            LifecyclePhases.DefaultFor(JobStates.Progress, executionStatus: null, JobSummaryStatus.Generating));
+    }
+
+    [Fact]
+    public void DefaultFor_ProgressWithStoppedRun_FallsBackToExecution()
+    {
+        // Today's UI treats a stopped / failed card in 3-progress as the
+        // execution lane. The lane projection preserves that.
+        Assert.Equal(LifecyclePhases.ExecutionRunning,
+            LifecyclePhases.DefaultFor(JobStates.Progress, executionStatus: null, JobSummaryStatus.None));
+    }
+
+    [Theory]
+    [InlineData(JobStates.Preparation)]
+    [InlineData(JobStates.OrchestratorPrep)]
+    [InlineData(JobStates.NeedsHumanReview)]
+    [InlineData(JobStates.AutoReview)]
+    [InlineData(JobStates.HumanReview)]
+    [InlineData(JobStates.Completed)]
+    [InlineData(JobStates.Archive)]
+    public void DefaultFor_StatesWithoutSubstates_ReturnNull(string state)
+    {
+        Assert.Null(LifecyclePhases.DefaultFor(state, executionStatus: null, JobSummaryStatus.None));
+    }
+
+    // ---- IsAllowed -----------------------------------------------------------
+
+    [Fact]
+    public void IsAllowed_NullPhase_AlwaysOk()
+    {
+        Assert.True(LifecyclePhases.IsAllowed(JobStates.Ready, null));
+        Assert.True(LifecyclePhases.IsAllowed(JobStates.AutoReview, null));
+    }
+
+    [Fact]
+    public void IsAllowed_StateMismatch_RejectsPhase()
+    {
+        Assert.False(LifecyclePhases.IsAllowed(JobStates.Ready, LifecyclePhases.ExecutionRunning));
+        Assert.False(LifecyclePhases.IsAllowed(JobStates.Progress, LifecyclePhases.IntakeBlocked));
+    }
+
+    [Fact]
+    public void IsAllowed_PermissiveOnUnconstrainedStates()
+    {
+        // Preparation and review lanes have no entry in AllowedByState; a
+        // sidecar that stamps a phase there should be tolerated rather than
+        // wedge the board, mirroring the wire field's lazy-defaulting model.
+        Assert.True(LifecyclePhases.IsAllowed(JobStates.Preparation, LifecyclePhases.HumanReady));
+    }
+
+    // ---- Scanner: existing jobs without phase --------------------------------
+
+    [Fact]
+    public void Scanner_LegacyJob_NoPhaseField_ParsesWithNullPhase()
+    {
+        WriteJob(JobStates.Ready, "alpha", phase: null);
+
+        var info = BuildScanner().FindJob("alpha");
+
+        Assert.NotNull(info);
+        Assert.Null(info!.Phase);
+        // Default-lane fallback covers the legacy folder.
+        Assert.Equal(LifecyclePhases.HumanReady,
+            LifecyclePhases.DefaultFor(info.State, info.Execution?.Status, JobSummaryStatus.None));
+    }
+
+    [Fact]
+    public void Scanner_LegacyJobInProgress_NoPhase_DefaultsToExecutionLane()
+    {
+        WriteJob(JobStates.Progress, "stopped-run", phase: null);
+
+        var info = BuildScanner().FindJob("stopped-run");
+
+        Assert.NotNull(info);
+        Assert.Null(info!.Phase);
+        Assert.Equal(LifecyclePhases.ExecutionRunning,
+            LifecyclePhases.DefaultFor(info.State, info.Execution?.Status, JobSummaryStatus.None));
+    }
+
+    // ---- Scanner: jobs with explicit phase -----------------------------------
+
+    [Fact]
+    public void Scanner_JobWithIntakePhase_RoundTrips()
+    {
+        WriteJob(JobStates.Ready, "intake-card", phase: LifecyclePhases.IntakeRunning);
+
+        var info = BuildScanner().FindJob("intake-card");
+
+        Assert.NotNull(info);
+        Assert.Equal(LifecyclePhases.IntakeRunning, info!.Phase);
+    }
+
+    [Fact]
+    public void Scanner_JobWithPostProcessingPhase_RoundTrips()
+    {
+        WriteJob(JobStates.Progress, "post-card", phase: LifecyclePhases.PostProcessingRunning);
+
+        var info = BuildScanner().FindJob("post-card");
+
+        Assert.NotNull(info);
+        Assert.Equal(LifecyclePhases.PostProcessingRunning, info!.Phase);
+    }
+
+    [Fact]
+    public void Scanner_PhaseFromWrongState_IsDroppedNotFatal()
+    {
+        // Hand-edited job.json puts an execution phase on a 2-ready card.
+        // The scanner must drop it (logging a warning) rather than wedge the
+        // board or echo nonsense back to the UI.
+        WriteJob(JobStates.Ready, "bad-phase", phase: LifecyclePhases.ExecutionRunning);
+
+        var info = BuildScanner().FindJob("bad-phase");
+
+        Assert.NotNull(info);
+        Assert.Null(info!.Phase);
+    }
+
+    [Fact]
+    public void Scanner_UnknownPhaseString_IsDroppedNotFatal()
+    {
+        WriteJob(JobStates.Ready, "garbled", phase: "totally-made-up");
+
+        var info = BuildScanner().FindJob("garbled");
+
+        Assert.NotNull(info);
+        Assert.Null(info!.Phase);
+    }
+
+    // ---- Scanner: mixed boards -----------------------------------------------
+
+    [Fact]
+    public void Scanner_MixedBoard_LegacyAndPhased_AllParse()
+    {
+        // Legacy cards (no phase) and phased cards coexist across multiple
+        // states. The scan must surface every one with its expected phase
+        // value, and every legacy card must default-resolve to the right
+        // lane via DefaultFor.
+        WriteJob(JobStates.Preparation, "draft-1",  phase: null);
+        WriteJob(JobStates.Ready,       "ready-legacy", phase: null);
+        WriteJob(JobStates.Ready,       "ready-intake", phase: LifecyclePhases.IntakeRunning);
+        WriteJob(JobStates.Progress,    "exec-legacy",  phase: null);
+        WriteJob(JobStates.Progress,    "exec-post",    phase: LifecyclePhases.PostProcessingRunning);
+        WriteJob(JobStates.AutoReview,  "review-card",  phase: null);
+        WriteJob(JobStates.Completed,   "done-card",    phase: null);
+
+        var jobs = BuildScanner().ScanAllJobs().ToDictionary(j => j.Id);
+
+        Assert.Equal(7, jobs.Count);
+
+        Assert.Null(jobs["draft-1"].Phase);
+        Assert.Null(jobs["ready-legacy"].Phase);
+        Assert.Equal(LifecyclePhases.IntakeRunning, jobs["ready-intake"].Phase);
+        Assert.Null(jobs["exec-legacy"].Phase);
+        Assert.Equal(LifecyclePhases.PostProcessingRunning, jobs["exec-post"].Phase);
+        Assert.Null(jobs["review-card"].Phase);
+        Assert.Null(jobs["done-card"].Phase);
+
+        // Default-lane projection: legacy cards land in the right lane.
+        Assert.Equal(LifecyclePhases.HumanReady,
+            LifecyclePhases.DefaultFor(jobs["ready-legacy"].State, null, JobSummaryStatus.None));
+        Assert.Equal(LifecyclePhases.ExecutionRunning,
+            LifecyclePhases.DefaultFor(jobs["exec-legacy"].State, null, JobSummaryStatus.None));
+        Assert.Null(LifecyclePhases.DefaultFor(jobs["review-card"].State, null, JobSummaryStatus.None));
+    }
+
+    [Fact]
+    public void Scanner_DoesNotRewriteJobJsonForLegacyJobs()
+    {
+        // The compatibility constraint from the task prompt: do not rewrite
+        // every job folder just to add default metadata. The scan path must
+        // leave a phase-less job.json alone so an idle backend boot does not
+        // touch every card on the board.
+        WriteJob(JobStates.Ready, "untouched", phase: null);
+        var path = Path.Combine(_watchPath, JobStates.Ready, "untouched", "job.json");
+        var before = File.ReadAllText(path);
+        var beforeMtime = File.GetLastWriteTimeUtc(path);
+
+        // Run a couple of full scans.
+        var scanner = BuildScanner();
+        scanner.ScanAllJobs();
+        scanner.ScanAllJobs();
+
+        Assert.Equal(before, File.ReadAllText(path));
+        Assert.Equal(beforeMtime, File.GetLastWriteTimeUtc(path));
+    }
+
+    // ---- helpers -------------------------------------------------------------
+
+    private void WriteJob(string state, string slug, string? phase)
+    {
+        var dir = Path.Combine(_watchPath, state, slug);
+        Directory.CreateDirectory(dir);
+        var phaseField = phase is null ? "" : $",\"phase\":\"{phase}\"";
+        File.WriteAllText(Path.Combine(dir, "job.json"),
+            $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{state}\",\"order\":1,\"agent\":\"claude\",\"ownerClientId\":\"default\"{phaseField}}}");
+    }
+
+    private JobScannerService BuildScanner()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["WatchPaths:0:Name"] = "test",
+                ["WatchPaths:0:Path"] = _watchPath
+            })
+            .Build();
+        var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
+        return new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
+    }
+}
