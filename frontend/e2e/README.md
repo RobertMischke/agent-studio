@@ -70,6 +70,34 @@ Do **not** select by CSS class names; they belong to styling and change often.
 - `quota.ts` — fetches `/api/cli/usage` and asserts the Claude section is
   available and has spare quota.
 
+## Fixtures
+
+`e2e/fixtures/`
+- `dev-backend.ts` — Playwright fixture that brings the **dev backend** up
+  on port 5030 before a spec runs and tears it down after. Use this when a
+  spec runs from stable and needs to drive dev as a regression-test target.
+  The fixture calls `scripts/supervisor/dev-lifecycle.sh start` / `stop` and
+  is idempotent: if the dev backend was already healthy when the fixture
+  loaded, the fixture leaves it alone on teardown. Set
+  `KEEP_DEV_ON_FAIL=1` to keep dev up after a failure for inspection. The
+  fixture exposes `{ port, baseUrl, workspace }` to the test; resolve the
+  workspace path from `DEV_CHECKOUT` env, the backend's `/api/watch-paths`,
+  or fall back to the script default — never hard-code the path in a spec.
+
+  ```ts
+  import { test, expect } from './fixtures/dev-backend';
+
+  test('something against dev', async ({ devBackend }) => {
+    const res = await fetch(`${devBackend.baseUrl}/api/jobs`);
+    // ...
+  });
+  ```
+
+  **Convention:** dev's backend is offline by default. Only Playwright specs
+  that need it should bring it up, via this fixture. Specs that just hit the
+  same target the user is on (dev or stable) do not need the fixture; use
+  the `PW_TARGET` env var instead.
+
 ## Authoring guidelines
 
 - One spec = one user-visible feature. Keep specs small.

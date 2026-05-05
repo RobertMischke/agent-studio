@@ -19,6 +19,22 @@ Keep the product boundary clear:
 - Job folders live in watched target projects under `.orchestrator/jobs/`.
 - The app observes external jobs; it should not store runtime job artifacts in this repository.
 
+### Dev backend lifecycle: Playwright-only
+
+Dev's backend (port 5030) is **offline by default**. The only path that may
+bring it up is a Playwright spec running from stable that uses the
+`dev-backend` fixture in [frontend/e2e/fixtures/dev-backend.ts](frontend/e2e/fixtures/dev-backend.ts).
+That fixture calls [scripts/supervisor/dev-lifecycle.sh](scripts/supervisor/dev-lifecycle.sh)
+(`start` / `stop` / `status`) and is idempotent: if dev was already up when
+the spec loaded, the fixture leaves it running on teardown. Set
+`KEEP_DEV_ON_FAIL=1` to keep dev up after a failure for inspection.
+
+Do **not** start dev's backend from a supervisor session, an auto-mode loop,
+or any background watcher. The parent `start-dev.sh` / `stop-dev.sh` scripts
+in `agent-taskboard-devspace/` remain available for direct human invocation
+when debugging dev itself; agents should not call them as part of routine
+runs.
+
 ## Architecture Decisions Archive
 
 [docs/architecture-decisions.md](docs/architecture-decisions.md) holds the durable archive of **load-bearing** decisions: product boundaries, architectural philosophies, hard non-goals, and reasoning styles. The bar is high. Bug fixes, defensive guards, individual feature choices, and policy tweaks belong in commits and code comments, not in this file. If an entry would read like a changelog line, it does not belong there.
@@ -57,6 +73,7 @@ When to update stable:
 - **Before a long unattended run.** If you are about to leave the orchestrator working on a board for hours, update stable first so the running version matches the documented behaviour. The Layer 3 system review monitor watches stable; running it against an out-of-date stable wastes the run.
 - **After a load-bearing change to runner / supervisor / outcome-policy / agent contract.** These are observation surfaces; if dev and stable diverge on them, the activity log and supervisor logs disagree on what the system is actually doing.
 - **Never mid-run.** `update-stable.sh` stops stable. If a job is in `3-progress` on stable, finish or stop it explicitly first.
+- **Dev stays offline outside Playwright.** Stable is the supervisor seat; dev is the regression-test target. Only Playwright specs running from stable may bring dev's backend up, via the `dev-backend` fixture. Don't add supervisor or auto-mode code paths that start dev as a side effect.
 
 When NOT to update stable:
 
