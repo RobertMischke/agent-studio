@@ -366,7 +366,9 @@ interface VerboseDebugContext {
         <div class="overlay" data-testid="cli-admin-overlay" (click)="closeCliAdmin()">
           <div class="overlay__panel" (click)="$event.stopPropagation()">
             <button class="overlay__close" (click)="closeCliAdmin()" title="Close">×</button>
-            <app-cli-admin-panel />
+            @defer {
+              <app-cli-admin-panel />
+            }
           </div>
         </div>
       }
