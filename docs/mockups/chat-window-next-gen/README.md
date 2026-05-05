@@ -50,6 +50,7 @@ This folder is not existing product behavior. It is the target surface for the n
 - [evidence/next-gen-chat-v7-debug-dark.png](evidence/next-gen-chat-v7-debug-dark.png) - current v7 dark Verbose Debug view.
 - [evidence/next-gen-chat-v7-mobile.png](evidence/next-gen-chat-v7-mobile.png) - current v7 mobile chat reference.
 - [evidence/next-gen-chat-angular-prototype-result.png](evidence/next-gen-chat-angular-prototype-result.png) - Angular prototype Result split.
+- [evidence/next-gen-chat-angular-prototype-rail-guide.png](evidence/next-gen-chat-angular-prototype-rail-guide.png) - Angular prototype Workbench rail guide.
 - [evidence/next-gen-chat-angular-prototype-git.png](evidence/next-gen-chat-angular-prototype-git.png) - Angular prototype Git split.
 - [evidence/next-gen-chat-angular-prototype-compact.png](evidence/next-gen-chat-angular-prototype-compact.png) - Angular prototype compact density.
 - [evidence/next-gen-chat-angular-prototype-lightbox.png](evidence/next-gen-chat-angular-prototype-lightbox.png) - Angular prototype screenshot lightbox.
@@ -67,7 +68,7 @@ The v6 iteration added a log-grounded edge-case taxonomy. A local sweep scanned 
 
 The v7 iteration adds the workbench layout contract. The task Chat tab keeps the conversation primary while offering explicit split presets: Chat only, Chat plus Result, Chat plus Git, Chat plus Preview, and Chat plus Debug. A compact summary strip surfaces state, tokens, commits, changed files, screenshots, retry warnings, and duration without pushing the transcript down. The adjacent pane is a fast preview and drill-down launcher; full evidence remains in the existing task tabs and Verbose Debug.
 
-The Angular prototype makes the same direction clickable inside the real frontend shell behind `atp.flag.nextGenChatPrototype`. It is intentionally full-screen and self-contained, so production chat remains untouched while the flag is off. The newest iteration is the tall workbench: task metadata, split controls, scenario switches, and run metrics sit in a left inspector rail or status bar so the transcript and adjacent Git, Result, Preview, Debug, or Source pane can use almost the full task height. See [angular-prototype.md](angular-prototype.md).
+The Angular prototype makes the same direction clickable inside the real frontend shell behind `atp.flag.nextGenChatPrototype`. It is intentionally full-screen and self-contained, so production chat remains untouched while the flag is off. The newest iteration is the tall workbench: task metadata, split controls, scenario switches, and run metrics sit in a left inspector rail or status bar so the transcript and adjacent Git, Result, Preview, Debug, or Source pane can use almost the full task height. The rail now uses inline icons, readable labels in comfortable density, compact icon-only mode, and an explanatory guide modal. See [angular-prototype.md](angular-prototype.md).
 
 In Stable, tool-heavy jobs already reach this density:
 

@@ -1098,6 +1098,14 @@ interface ChatTurn {
       color: var(--text);
       padding: 0 7px;
       font-size: 11px;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .conversation__topline button .svg-icon {
+      width: 13px;
+      height: 13px;
     }
 
     .conversation__scroll {
@@ -1321,6 +1329,9 @@ interface ChatTurn {
     .composer__send {
       background: var(--text) !important;
       color: var(--surface) !important;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
     }
 
     .context {
@@ -1594,6 +1605,34 @@ interface ChatTurn {
     .debug-grid p { color: var(--muted); line-height: 1.45; margin: 0; }
 
     .modal__panel--image { width: min(980px, 90vw); }
+    .modal__panel--guide { width: min(760px, 90vw); }
+
+    .guide-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      padding: 12px;
+    }
+
+    .guide-grid article {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      padding: 12px;
+    }
+
+    .guide-grid h3 {
+      margin: 0 0 8px;
+      font-size: 14px;
+    }
+
+    .guide-grid p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
     .image-box {
       min-height: 420px;
       display: grid;
@@ -1631,9 +1670,42 @@ interface ChatTurn {
       grid-template-columns: 184px minmax(590px, 1fr) minmax(260px, 28vw);
     }
 
-    .ng-chat-prototype[data-density="compact"] .workbench { grid-template-columns: 62px minmax(0, 1fr); }
+    .ng-chat-prototype[data-density="compact"] .workbench { grid-template-columns: 70px minmax(0, 1fr); }
     .ng-chat-prototype[data-density="compact"] .inspector-rail { padding: 5px 4px; gap: 5px; }
-    .ng-chat-prototype[data-density="compact"] .inspector-rail__task strong { display: none; }
+    .ng-chat-prototype[data-density="compact"] .rail-guide {
+      min-height: 34px;
+      grid-template-columns: 1fr;
+      grid-template-areas: "icon";
+      place-items: center;
+      padding: 4px;
+    }
+    .ng-chat-prototype[data-density="compact"] .rail-guide span,
+    .ng-chat-prototype[data-density="compact"] .rail-guide small,
+    .ng-chat-prototype[data-density="compact"] .inspector-rail__tabs b,
+    .ng-chat-prototype[data-density="compact"] .inspector-rail__modes b,
+    .ng-chat-prototype[data-density="compact"] .inspector-rail__scenarios b,
+    .ng-chat-prototype[data-density="compact"] .inspector-rail__summary b,
+    .ng-chat-prototype[data-density="compact"] .inspector-rail__tabs button span,
+    .ng-chat-prototype[data-density="compact"] .inspector-rail__scenarios button span,
+    .ng-chat-prototype[data-density="compact"] .rail-action span,
+    .ng-chat-prototype[data-density="compact"] .summary-chip span {
+      display: none;
+    }
+    .ng-chat-prototype[data-density="compact"] .inspector-rail__tabs button,
+    .ng-chat-prototype[data-density="compact"] .inspector-rail__scenarios button,
+    .ng-chat-prototype[data-density="compact"] .rail-action {
+      grid-template-columns: 1fr;
+      justify-items: center;
+      padding: 0;
+    }
+    .ng-chat-prototype[data-density="compact"] .inspector-rail__summary .summary-chip {
+      grid-template-columns: 1fr;
+      grid-template-areas:
+        "icon"
+        "value";
+      justify-items: center;
+      text-align: center;
+    }
     .ng-chat-prototype[data-density="compact"] .inspector-rail__summary .summary-chip { min-height: 31px; }
     .ng-chat-prototype[data-density="compact"] .context__body { padding: 7px; }
     .ng-chat-prototype[data-density="compact"] .turn { margin: 7px 0; }
@@ -1678,6 +1750,7 @@ interface ChatTurn {
       .turn__avatar { display: none; }
       .summary-strip { scrollbar-width: thin; }
       .debug-grid { grid-template-columns: 1fr; }
+      .guide-grid { grid-template-columns: 1fr; }
     }
   `]
 })
@@ -1693,32 +1766,81 @@ export class NextGenChatWorkbenchPrototypeComponent {
   readonly debugOpen = signal(false);
   readonly lightboxOpen = signal(false);
   readonly commandOpen = signal(false);
+  readonly guideOpen = signal(false);
 
-  readonly paneButtons: Array<{ id: WorkbenchPane; label: string; short: string }> = [
-    { id: 'chat', label: 'Chat only', short: 'C' },
-    { id: 'result', label: 'Result summary', short: 'R' },
-    { id: 'git', label: 'Git changes', short: 'G' },
-    { id: 'preview', label: 'Screenshot preview', short: 'P' },
-    { id: 'debug', label: 'Debug summary', short: 'D' },
-    { id: 'source', label: 'Source map', short: 'S' },
+  readonly iconPaths: Record<string, string[]> = {
+    bug: ['M8 2l1.5 2h5L16 2', 'M7 8h10v9a5 5 0 0 1-10 0V8', 'M5 13H2', 'M22 13h-3', 'M5 19H3', 'M21 19h-2', 'M9 12h.01', 'M15 12h.01'],
+    chat: ['M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4v8'],
+    check: ['M20 6L9 17l-5-5'],
+    clock: ['M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20', 'M12 6v6l4 2'],
+    close: ['M18 6L6 18', 'M6 6l12 12'],
+    code: ['M8 9l-4 3 4 3', 'M16 9l4 3-4 3', 'M14 4l-4 16'],
+    columns: ['M4 4h6v16H4z', 'M14 4h6v16h-6z'],
+    command: ['M9 7H7a2 2 0 1 1 2-2v14a2 2 0 1 1-2-2h10a2 2 0 1 1-2 2V5a2 2 0 1 1 2 2H9'],
+    compress: ['M8 3v5H3', 'M16 3v5h5', 'M8 21v-5H3', 'M16 21v-5h5'],
+    expand: ['M3 8V3h5', 'M21 8V3h-5', 'M3 16v5h5', 'M21 16v5h-5'],
+    file: ['M6 2h8l4 4v16H6z', 'M14 2v5h5'],
+    fileDiff: ['M6 2h8l4 4v16H6z', 'M14 2v5h5', 'M9 13h6', 'M12 10v6'],
+    folder: ['M3 6h7l2 2h9v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z'],
+    git: ['M6 3v12', 'M18 9v12', 'M6 15a3 3 0 1 0 0 6 3 3 0 0 0 0-6', 'M18 3a3 3 0 1 0 0 6 3 3 0 0 0 0-6', 'M6 7h7a5 5 0 0 1 5 5v3'],
+    image: ['M4 5h16v14H4z', 'M8 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4', 'M4 16l4-4 3 3 3-4 6 6'],
+    list: ['M8 6h13', 'M8 12h13', 'M8 18h13', 'M3 6h.01', 'M3 12h.01', 'M3 18h.01'],
+    moon: ['M21 12.8A8 8 0 1 1 11.2 3 6 6 0 0 0 21 12.8z'],
+    panel: ['M4 4h16v16H4z', 'M9 4v16', 'M9 9h11'],
+    panelClose: ['M4 4h16v16H4z', 'M15 4v16', 'M10 9l-3 3 3 3'],
+    panelOpen: ['M4 4h16v16H4z', 'M9 4v16', 'M14 9l3 3-3 3'],
+    play: ['M7 5v14l11-7z'],
+    plus: ['M12 5v14', 'M5 12h14'],
+    search: ['M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16', 'M21 21l-4.3-4.3'],
+    sun: ['M12 18a6 6 0 1 0 0-12 6 6 0 0 0 0 12', 'M12 2v2', 'M12 20v2', 'M4.9 4.9l1.4 1.4', 'M17.7 17.7l1.4 1.4', 'M2 12h2', 'M20 12h2', 'M4.9 19.1l1.4-1.4', 'M17.7 6.3l1.4-1.4'],
+    terminal: ['M4 7l5 5-5 5', 'M11 17h9'],
+    tokens: ['M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20', 'M8 12h8', 'M12 8v8'],
+    warning: ['M12 3l10 18H2z', 'M12 9v5', 'M12 18h.01'],
+  };
+
+  readonly activityItems = [
+    { icon: 'folder', label: 'Projects', title: 'Projects', active: true },
+    { icon: 'columns', label: 'Tasks', title: 'Tasks' },
+    { icon: 'search', label: 'Search', title: 'Search' },
+    { icon: 'git', label: 'Git', title: 'Git changes' },
+    { icon: 'check', label: 'QA', title: 'QA and tests' },
+    { icon: 'tokens', label: 'Tokens', title: 'Token usage' },
   ];
 
-  readonly scenarios: Array<{ id: Scenario; label: string }> = [
-    { id: 'review', label: 'Review' },
-    { id: 'tools', label: 'Tool burst' },
-    { id: 'wait', label: 'Wait loop' },
-    { id: 'visual', label: 'Images' },
-    { id: 'drift', label: 'Drift' },
+  readonly taskTabs = [
+    { icon: 'file', label: 'Prompt', title: 'Prompt tab' },
+    { icon: 'list', label: 'Log', title: 'Protocol and raw trace tab' },
+    { icon: 'chat', label: 'Chat', title: 'Chat tab', active: true },
+    { icon: 'fileDiff', label: 'Files', title: 'Files tab' },
+    { icon: 'git', label: 'Commits', title: 'Commits tab' },
+    { icon: 'image', label: 'Shots', title: 'Screenshots tab' },
+  ];
+
+  readonly paneButtons: Array<{ id: WorkbenchPane; label: string; short: string; icon: string }> = [
+    { id: 'chat', label: 'Chat only', short: 'Chat', icon: 'chat' },
+    { id: 'result', label: 'Result summary', short: 'Result', icon: 'check' },
+    { id: 'git', label: 'Git changes', short: 'Git', icon: 'git' },
+    { id: 'preview', label: 'Screenshot preview', short: 'Preview', icon: 'image' },
+    { id: 'debug', label: 'Debug summary', short: 'Debug', icon: 'bug' },
+    { id: 'source', label: 'Source map', short: 'Source', icon: 'code' },
+  ];
+
+  readonly scenarios: Array<{ id: Scenario; label: string; icon: string }> = [
+    { id: 'review', label: 'Review', icon: 'check' },
+    { id: 'tools', label: 'Tools', icon: 'terminal' },
+    { id: 'wait', label: 'Wait', icon: 'clock' },
+    { id: 'visual', label: 'Images', icon: 'image' },
+    { id: 'drift', label: 'Drift', icon: 'warning' },
   ];
 
   readonly summaryChips: SummaryChip[] = [
-    { value: 'Review', label: 'run 4', pane: 'result', tone: 'ok' },
-    { value: '42k', label: 'tokens', pane: 'debug', tone: 'warn' },
-    { value: '3', label: 'commits', pane: 'git' },
-    { value: '8', label: 'files', pane: 'git' },
-    { value: '4', label: 'images', pane: 'preview' },
-    { value: '1', label: 'failed retry', pane: 'debug', tone: 'danger' },
-    { value: '12m', label: 'active', pane: 'result' },
+    { value: 'Review', label: 'run 4', icon: 'check', pane: 'result', tone: 'ok' },
+    { value: '42k', label: 'tokens', icon: 'tokens', pane: 'debug', tone: 'warn' },
+    { value: '3', label: 'commits', icon: 'git', pane: 'git' },
+    { value: '8', label: 'files', icon: 'fileDiff', pane: 'git' },
+    { value: '4', label: 'images', icon: 'image', pane: 'preview' },
+    { value: '1', label: 'failed retry', icon: 'warning', pane: 'debug', tone: 'danger' },
+    { value: '12m', label: 'active', icon: 'clock', pane: 'result' },
   ];
 
   readonly taskCards = [
@@ -1907,6 +2029,10 @@ export class NextGenChatWorkbenchPrototypeComponent {
     if (action === 'Open screenshots') this.setPane('preview');
     if (action === 'Source map') this.setPane('source');
     if (action === 'Show technical layer') this.toolOpen.set(true);
+  }
+
+  iconPath(name: string): string[] {
+    return this.iconPaths[name] ?? this.iconPaths['panel'];
   }
 
   close(): void {

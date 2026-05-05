@@ -55,6 +55,14 @@ test.describe('@mockup next-gen chat Angular prototype', () => {
       fullPage: false,
     });
 
+    await page.getByTestId('prototype-rail-guide').click();
+    await expect(page.getByTestId('prototype-rail-guide-modal')).toBeVisible();
+    await page.screenshot({
+      path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-rail-guide.png'),
+      fullPage: false,
+    });
+    await page.getByTestId('prototype-rail-guide-modal').getByText('Close').click();
+
     await page.getByTestId('prototype-pane-git').click();
     await expect(page.getByTestId('prototype-context-pane')).toContainText('Git changes');
     await page.screenshot({

@@ -47,11 +47,14 @@ This follows the repo's product boundary: the app itself should not grow branch/
 
 The latest iteration is a tall workbench. Task tabs, summary metrics, split presets, and scenario switches moved out of horizontal top bands into a narrow left inspector rail. Chat and the adjacent Result, Git, Preview, Debug, or Source pane now start directly under the 32px app topbar and run down to the status bar. This is the working target for the production handoff: normal chat and adjacent review panes should use roughly the full available task height.
 
+The rail now has inline icons, visible labels in comfortable density, tooltip titles, and a `Workbench` guide button that explains why the controls live there. Compact density collapses the same controls back to icons so the chat area stays large.
+
 The prototype currently covers:
 
 - Task detail shell with task list, Chat tab, side sheet, and status bar.
 - Workbench panes: Result, Git, Preview, Debug, Source, and Chat-only.
 - Left inspector rail with task tabs, run state, tokens, commits, files, screenshots, failed retry, duration, split presets, and scenario switches.
+- Rail guide modal that explains the control model.
 - Scenario controls: Review, Tool burst, Wait loop, Images, Drift.
 - Tool-burst expansion.
 - Git change preview next to chat.
@@ -66,6 +69,7 @@ The prototype currently covers:
 The durable screenshots live in `docs/mockups/chat-window-next-gen/evidence/`:
 
 - `next-gen-chat-angular-prototype-result.png`
+- `next-gen-chat-angular-prototype-rail-guide.png`
 - `next-gen-chat-angular-prototype-git.png`
 - `next-gen-chat-angular-prototype-compact.png`
 - `next-gen-chat-angular-prototype-lightbox.png`
