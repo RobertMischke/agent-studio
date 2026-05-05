@@ -298,12 +298,14 @@ interface VerboseDebugContext {
               (railChange)="onProjectShellRailChange($event)"
               (openFeed)="onOpenFeedFromShell()"
               (closeShell)="closeProjectShell()">
-              @if (projectShellRail() === 'security') {
-                <app-security-panel
-                  [projectName]="projShell"
-                  (createFollowUp)="onSecurityFollowUp($event)"
-                  (openEvidence)="onSecurityOpenEvidence($event)"
-                  (auditQueuedEvent)="onSecurityAuditQueued($event)" />
+              @defer (when projectShellRail() === 'security') {
+                @if (projectShellRail() === 'security') {
+                  <app-security-panel
+                    [projectName]="projShell"
+                    (createFollowUp)="onSecurityFollowUp($event)"
+                    (openEvidence)="onSecurityOpenEvidence($event)"
+                    (auditQueuedEvent)="onSecurityAuditQueued($event)" />
+                }
               }
             </app-project-shell>
           </div>

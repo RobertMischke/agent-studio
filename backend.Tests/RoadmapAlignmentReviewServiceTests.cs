@@ -6,7 +6,7 @@ namespace OrchestratorApi.Tests;
 
 /// <summary>
 /// Locks the contract of <see cref="RoadmapAlignmentReviewService"/>: scope
-/// selection only walks the four inspected lanes, flags stray folders, the
+/// selection only walks the inspected active lanes, flags stray folders, the
 /// rendered prompt carries every load-bearing section the agent needs, and
 /// the JSON parse fallback distinguishes Structured / Unstructured /
 /// MalformedJson without ever hiding the Markdown body.
@@ -41,31 +41,33 @@ public class RoadmapAlignmentReviewServiceTests : IDisposable
     // ------------------------------------------------------------------
 
     [Fact]
-    public void SelectScope_OnlyWalksTheFourInspectedLanes_AndIgnoresCompletedAndArchive()
+    public void SelectScope_OnlyWalksTheInspectedActiveLanes_AndIgnoresCompletedAndArchive()
     {
         // Each of the inspected lanes plus the two excluded ones gets one
-        // job. The action must report jobs only from 1-preparation,
-        // 2-ready, 3-progress, 4-review; 5-completed and 6-archive are out of
+        // job. The action must report jobs only from the active queue;
+        // 6-completed and 7-archive are out of
         // scope by design ("are we on track" looks at the active queue).
         WriteJob("1-preparation", "draft-task", "Draft a task");
         WriteJob("2-ready", "ready-task", "Ready to start");
         WriteJob("3-progress", "in-flight-task", "In progress");
-        WriteJob("4-review", "review-task", "Awaiting review");
-        WriteJob("5-completed", "shipped-task", "Already shipped");
-        WriteJob("6-archive", "old-task", "Archived");
+        WriteJob("4-auto-review", "auto-review-task", "Awaiting orchestrator review");
+        WriteJob("5-human-review", "human-review-task", "Awaiting human review");
+        WriteJob("6-completed", "shipped-task", "Already shipped");
+        WriteJob("7-archive", "old-task", "Archived");
 
         var svc = new RoadmapAlignmentReviewService();
         var scope = svc.SelectScope("agent-taskboard", _projectRoot, _repoRoot);
 
-        Assert.Equal(new[] { "1-preparation", "2-ready", "3-progress", "4-review" },
+        Assert.Equal(new[] { "1-preparation", "2-ready", "3-progress", "4-auto-review", "5-human-review" },
             scope.JobsByLane.Keys.ToArray());
         Assert.Single(scope.JobsByLane["1-preparation"]);
         Assert.Single(scope.JobsByLane["2-ready"]);
         Assert.Single(scope.JobsByLane["3-progress"]);
-        Assert.Single(scope.JobsByLane["4-review"]);
+        Assert.Single(scope.JobsByLane["4-auto-review"]);
+        Assert.Single(scope.JobsByLane["5-human-review"]);
         // The two excluded lanes do not appear at all.
-        Assert.False(scope.JobsByLane.ContainsKey("5-completed"));
-        Assert.False(scope.JobsByLane.ContainsKey("6-archive"));
+        Assert.False(scope.JobsByLane.ContainsKey("6-completed"));
+        Assert.False(scope.JobsByLane.ContainsKey("7-archive"));
     }
 
     [Fact]
@@ -164,7 +166,8 @@ public class RoadmapAlignmentReviewServiceTests : IDisposable
         Assert.Contains("`1-preparation` | 0", rendered);
         Assert.Contains("`2-ready` | 1", rendered);
         Assert.Contains("`3-progress` | 1", rendered);
-        Assert.Contains("`4-review` | 0", rendered);
+        Assert.Contains("`4-auto-review` | 0", rendered);
+        Assert.Contains("`5-human-review` | 0", rendered);
         // Job ids land in the jobs-by-lane section.
         Assert.Contains("task-access-api-layer-extraction", rendered);
         Assert.Contains("client-identity-and-task-attribution", rendered);
