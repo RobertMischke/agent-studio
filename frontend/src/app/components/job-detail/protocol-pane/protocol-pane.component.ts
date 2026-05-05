@@ -439,6 +439,51 @@ export class ProtocolPaneComponent implements OnDestroy {
     this.followupPromptChange.emit(reply.prompt);
   }
 
+  /**
+   * The activity-log view raises this when the user clicks an option button
+   * on a steer card. We mirror the quick-reply behavior: pre-fill the
+   * compose box so the user can edit and confirm, never auto-send.
+   */
+  onSteerOptionApply(option: string): void {
+    if (!option) return;
+    this.followupPromptChange.emit(option);
+  }
+
+  /**
+   * The activity-log view raises this when the user clicks "Send screenshot"
+   * on a steer card whose Need line mentions a screenshot. We open the job's
+   * attachment uploader (a hidden &lt;input type=file&gt; in the template).
+   */
+  onSteerUploadRequest(): void {
+    const input = document.querySelector<HTMLInputElement>(
+      '[data-testid="orchestrator-steer-upload-input"]'
+    );
+    input?.click();
+  }
+
+  /**
+   * Posts the chosen file to the job's attachments endpoint. Mirrors the
+   * upload path used by the prompt editor (`/api/jobs/{id}/attachments`)
+   * so the screenshot lands next to other task attachments where the
+   * orchestrator can reference it on the next decision call.
+   */
+  async onSteerFileSelected(file: File | undefined | null): Promise<void> {
+    if (!file) return;
+    const job = this.detail()?.info;
+    if (!job?.id) return;
+    const watchPath = job.watchPath ?? '';
+    const url = `/api/jobs/${encodeURIComponent(job.id)}/attachments`
+      + (watchPath ? `?watchPath=${encodeURIComponent(watchPath)}` : '');
+    const form = new FormData();
+    form.append('file', file, file.name || 'steer-screenshot.png');
+    try {
+      await fetch(url, { method: 'POST', body: form });
+    } catch {
+      /* upload failure is best-effort; the user retains the steer card
+         so they can try again or send a follow-up message instead */
+    }
+  }
+
   rateLimitTooltip(): string {
     const rl = this.claudeRateLimit();
     if (!rl) return '';

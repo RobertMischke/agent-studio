@@ -749,10 +749,12 @@ public class ProjectRunner
         }
 
         sb.AppendLine("Your role:");
-        sb.AppendLine("- When the runner sends you a NEEDS_INPUT decision request, reply with the user-style follow-up to send back to the agent.");
+        sb.AppendLine("- When the runner sends you a NEEDS_INPUT decision request, you have three reply shapes:");
+        sb.AppendLine("  1) REPLY: plain text, the user-style follow-up to send back to the agent (default).");
+        sb.AppendLine("  2) STEER: when you cannot decide alone but a small piece of evidence (a screenshot, a choice between options, a link to a doc) would unblock the user. Format: a leading STEER line, then Need: <one sentence>, Why: <one sentence>, optional Options: list with A) / B) bullets. Prefer STEER over BLOCK whenever a concrete unblocking ask exists.");
+        sb.AppendLine("  3) BLOCK: last resort, when you cannot even formulate a steering message. Reply exactly: BLOCK");
         sb.AppendLine("- When the runner sends you a status query, summarize concisely.");
         sb.AppendLine("- The conversation history accumulated in this session is your memory across decisions; you do not need to be re-briefed each turn.");
-        sb.AppendLine("- If you genuinely cannot decide without user knowledge that you do not have, reply with exactly: BLOCK");
         sb.AppendLine();
         sb.AppendLine("Acknowledge readiness with a single short sentence describing which docs you saw on boot. The first real decision request will follow.");
         return sb.ToString();
@@ -882,15 +884,14 @@ public class ProjectRunner
                     orchestratorPrompt, modelToUse, Entry.RootPath, CancellationToken.None);
             }
 
-            if (!result.Success || string.IsNullOrWhiteSpace(result.ReplyText)
-                || result.ReplyText.Trim().Equals("BLOCK", StringComparison.OrdinalIgnoreCase))
+            if (!result.Success || string.IsNullOrWhiteSpace(result.ReplyText))
             {
-                // Orchestrator declined or errored. Surface the question to
-                // the user the same way the manual path does, plus a meta
-                // line explaining why the orchestrator could not decide.
-                // Update the loop counter so a series of declines also
-                // hits the circuit breaker; the iteration is the "we
-                // tried" event, not "we succeeded".
+                // Orchestrator errored. Surface the question to the user the
+                // same way the manual path does, plus a meta line explaining
+                // why the orchestrator could not decide. Update the loop
+                // counter so a series of declines also hits the circuit
+                // breaker; the iteration is the "we tried" event, not "we
+                // succeeded".
                 _stuckLoops[jobId] = StuckLoopGuard.Next(
                     existingLoop, result.TokenUsage,
                     question: outcome.Summary, reply: null,
@@ -912,7 +913,81 @@ public class ProjectRunner
                 return;
             }
 
-            var reply = result.ReplyText.Trim();
+            // Three-way classification on the orchestrator's reply. STEER is
+            // the productive escalation: the orchestrator could not pick a
+            // path on its own but identified a concrete unblocking ask
+            // (screenshot, choice between options, missing doc). REPLY is
+            // the existing happy path - feed it back as a Continue. BLOCK
+            // is the silent deferral preserved as a last resort.
+            var parsed = OrchestratorReplyParser.Parse(result.ReplyText);
+
+            if (parsed.Kind == OrchestratorReplyKind.Block)
+            {
+                _stuckLoops[jobId] = StuckLoopGuard.Next(
+                    existingLoop, result.TokenUsage,
+                    question: outcome.Summary, reply: null,
+                    error: parsed.ParseWarning,
+                    now: DateTime.UtcNow);
+
+                var why = parsed.ParseWarning ?? "the orchestrator chose to defer this decision";
+                _chatLog.Append(info, OrchestratorMessageKind.Decision,
+                    $"[orchestrator] Declined to auto-decide on agent's NEEDS_INPUT: {why}. Leaving the question for you.");
+                _orchestratorLog.Append(info.WatchPath, new OrchestratorLogEntry
+                {
+                    Kind = OrchestratorLogKinds.Observation,
+                    Topic = "agent-needs-input",
+                    JobId = jobId,
+                    Summary = $"Orchestrator declined to decide for \"{info.Title}\".",
+                    Reasoning = why,
+                    TokenUsage = result.TokenUsage
+                });
+                return;
+            }
+
+            if (parsed.Kind == OrchestratorReplyKind.Steer)
+            {
+                // Productive escalation: write a typed Steer chat message so
+                // the frontend renders it distinctly (question-mark glyph,
+                // option buttons, screenshot affordance). The job stays in
+                // NeedsInput - we never re-issue on Steer; the user answers
+                // and that becomes the next Continue.
+                var nextLoopSteer = StuckLoopGuard.Next(
+                    existingLoop, result.TokenUsage,
+                    question: outcome.Summary, reply: parsed.ReplyText,
+                    error: null,
+                    now: DateTime.UtcNow);
+                _stuckLoops[jobId] = nextLoopSteer;
+
+                var formatted = OrchestratorReplyParser.FormatSteerForChat(parsed);
+                _chatLog.Append(info, OrchestratorMessageKind.Steer,
+                    $"[orchestrator] {formatted}");
+
+                _orchestratorLog.Append(info.WatchPath, new OrchestratorLogEntry
+                {
+                    Kind = OrchestratorLogKinds.Decision,
+                    Topic = "agent-needs-input",
+                    JobId = jobId,
+                    Summary = $"Steered for \"{info.Title}\" (loop {nextLoopSteer.IterationCount}/{_stuckLoopBudget.MaxIterations}): {Truncate(parsed.Need ?? "", 140)}",
+                    Reasoning = $"Orchestrator could not pick a path alone but identified a concrete unblocking ask. Need: {parsed.Need}. Why: {parsed.Why ?? "(not given)"}. Options: {(parsed.Options is { Count: > 0 } ? string.Join(" | ", parsed.Options) : "(none)")}. Job left in NeedsInput; the user's answer will become the next Continue.",
+                    TokenUsage = result.TokenUsage
+                });
+
+                if (result.TokenUsage != null)
+                {
+                    try
+                    {
+                        _ = _bus?.EmitTokenUsageAsync(
+                            info.ProjectName, info.Id,
+                            AgentMessageBusBridge.ParticipantOrchestratorFor(info.ProjectName),
+                            topic: "orchestrator-steer",
+                            usage: result.TokenUsage);
+                    }
+                    catch (Exception ex) { _logger.LogDebug(ex, "Bus mirror of orchestrator steer token usage failed for {JobId}", jobId); }
+                }
+                return;
+            }
+
+            var reply = parsed.ReplyText;
 
             // Successful decision. Advance the loop counter so we know how
             // many auto-decisions this job has burned and bail through the
@@ -996,9 +1071,18 @@ public class ProjectRunner
             attachmentsBlock +
             "\n\nThe agent's last message you need to answer:\n" +
             lastAgentText +
-            "\n\nReply with the user-style follow-up to send back to the agent. " +
-            "Reply with exactly BLOCK if you cannot decide without user knowledge you do not have. " +
-            "Plain text, no markdown headings.";
+            "\n\nYou have three reply shapes:\n" +
+            "1) REPLY (default): plain text, the user-style follow-up to send back to the agent.\n" +
+            "2) STEER: when you cannot decide alone but a small piece of evidence (a screenshot, a choice between options, a link to a doc) would unblock. Use this format exactly:\n" +
+            "STEER\n" +
+            "Need: <one-sentence specific ask>\n" +
+            "Why: <one-sentence reasoning>\n" +
+            "Options: (optional)\n" +
+            "  A) ...\n" +
+            "  B) ...\n" +
+            "Prefer STEER over BLOCK whenever a screenshot or a choice would unblock the run.\n" +
+            "3) BLOCK (last resort): reply with exactly BLOCK only when you have no idea what is going on and cannot even formulate a steering message.\n\n" +
+            "Reply now. No markdown headings other than the STEER block above.";
     }
 
     /// <summary>
@@ -1034,11 +1118,21 @@ public class ProjectRunner
             "\n\nThe agent's last message you need to answer:\n" +
             lastAgentText +
             "\n\nReasoning style:\n" +
-            "- If the agent's question has an obvious right answer in context, give it directly.\n" +
-            "- If the question is ambiguous and multiple paths are reasonable, pick the simpler path and say why in one short sentence.\n" +
-            "- Before answering BLOCK, check whether reading an attached file (e.g. a screenshot) would resolve the ambiguity; if yes, read it and decide.\n" +
-            "- If you genuinely cannot decide without user knowledge that you do not have, reply with exactly: BLOCK\n\n" +
-            "Reply now with the user-style follow-up directly. Do not preface with \"I would say\" or similar. Plain text, no markdown headings.";
+            "- If the agent's question has an obvious right answer in context, give it directly (REPLY).\n" +
+            "- If the question is ambiguous and multiple paths are reasonable, pick the simpler path and say why in one short sentence (REPLY).\n" +
+            "- Before deferring, check whether reading an attached file (e.g. a screenshot) would resolve the ambiguity; if yes, read it and decide.\n" +
+            "- When you cannot decide alone but a small piece of evidence would unblock the user, prefer STEER over BLOCK. STEER is a productive escalation: a one-sentence ask, a one-sentence reason, optionally a small set of labelled options.\n" +
+            "- BLOCK is the last resort, only when you cannot even formulate a steering message.\n\n" +
+            "Reply shapes:\n" +
+            "1) REPLY (default): plain text, the user-style follow-up directly. Do not preface with \"I would say\" or similar. No markdown headings.\n" +
+            "2) STEER: use exactly this format:\n" +
+            "STEER\n" +
+            "Need: <one-sentence specific ask, e.g. \"screenshot of the affected column\" or \"pick option A vs B\">\n" +
+            "Why: <one-sentence reasoning>\n" +
+            "Options: (optional)\n" +
+            "  A) ...\n" +
+            "  B) ...\n" +
+            "3) BLOCK: reply with exactly the single word BLOCK on its own.";
     }
 
     private static bool AttachmentsHasFiles(string attachmentsList)

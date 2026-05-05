@@ -126,7 +126,9 @@ public enum OrchestratorMessageKind
     /// <summary>The deterministic contract did not match; classification is a heuristic best-effort.</summary>
     HeuristicFallback,
     /// <summary>The orchestrator gave up after a retry budget; user attention required.</summary>
-    GiveUp
+    GiveUp,
+    /// <summary>The orchestrator could not pick a path on its own but identified a concrete unblocking ask the user can resolve. Renders distinctly so the user sees a productive escalation, not a silent deferral.</summary>
+    Steer
 }
 
 internal static class OrchestratorMessageKindExtensions
@@ -137,6 +139,7 @@ internal static class OrchestratorMessageKindExtensions
         OrchestratorMessageKind.Reissue           => "reissue",
         OrchestratorMessageKind.HeuristicFallback => "heuristic",
         OrchestratorMessageKind.GiveUp            => "giveup",
+        OrchestratorMessageKind.Steer             => "steer",
         _ => "info"
     };
 }

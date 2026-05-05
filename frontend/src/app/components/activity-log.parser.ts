@@ -787,3 +787,71 @@ function cleanContinuation(text: string): string {
 function isBlank(text: string): boolean {
   return text.trim().length === 0;
 }
+
+/**
+ * Parsed shape of a `[steer]` orchestrator chat line.
+ *
+ * The backend writes the orchestrator's STEER reply as one Markdown line
+ * with `**Need:** ... **Why:** ... **Options:** A) ... | B) ...` segments
+ * (see `OrchestratorReplyParser.FormatSteerForChat`). The frontend's
+ * conversation view recovers the structure so it can render distinct
+ * controls (option buttons, screenshot affordance) instead of dumping the
+ * raw line into a generic orchestrator pill.
+ *
+ * Returns `null` when the line is not a steer line. A line counts as a
+ * steer line when it carries the leading `[steer]` tag the chat-log
+ * persisted; the leading bracket may be preceded by a stream prefix
+ * `[orchestrator]` from the persisted log shape.
+ */
+export interface ParsedSteer {
+  need: string;
+  why: string;
+  options: string[];
+  /** True when the parsed Need text mentions a screenshot - drives the upload affordance. */
+  needsScreenshot: boolean;
+}
+
+const STEER_TAG_RE = /\[steer\]\s*/i;
+const STEER_NEED_RE = /\*\*Need:\*\*\s*([^*]+?)(?=\s*\*\*|$)/i;
+const STEER_WHY_RE = /\*\*Why:\*\*\s*([^*]+?)(?=\s*\*\*|$)/i;
+const STEER_OPTIONS_RE = /\*\*Options:\*\*\s*(.+?)$/i;
+const STEER_OPTION_ITEM_RE = /(?:^|\|)\s*(?:[A-Za-z][\)\.]|\d+[\)\.]|-)\s*([^|]+)/g;
+
+export function parseOrchestratorSteer(text: string): ParsedSteer | null {
+  if (!text || !STEER_TAG_RE.test(text)) return null;
+  // The persisted log line carries a redundant `[orchestrator]` segment
+  // because the chat-log call site prefixes its own message with
+  // `[orchestrator]` and the writer adds a stream tag of the same name.
+  // Strip any occurrences of either tag before pulling fields.
+  const body = text
+    .replace(STEER_TAG_RE, ' ')
+    .replace(/\[orchestrator\]/gi, ' ')
+    .trim();
+  if (!body) return null;
+
+  const needMatch = STEER_NEED_RE.exec(body);
+  const need = needMatch ? needMatch[1].trim() : '';
+  if (!need) return null;
+
+  const whyMatch = STEER_WHY_RE.exec(body);
+  const why = whyMatch ? whyMatch[1].trim() : '';
+
+  const optionsBlock = STEER_OPTIONS_RE.exec(body);
+  const options: string[] = [];
+  if (optionsBlock) {
+    const block = optionsBlock[1];
+    let m: RegExpExecArray | null;
+    STEER_OPTION_ITEM_RE.lastIndex = 0;
+    while ((m = STEER_OPTION_ITEM_RE.exec(block)) !== null) {
+      const opt = m[1].trim();
+      if (opt) options.push(opt);
+    }
+  }
+
+  return {
+    need,
+    why,
+    options,
+    needsScreenshot: /screenshot|screen\s*shot|image|picture/i.test(need)
+  };
+}

@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, ElementRef, OnDestroy, computed, effect, input, signal, viewChild, inject } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, OnDestroy, computed, effect, input, output, signal, viewChild, inject } from '@angular/core';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { CliOutputLine } from '../models/job.model';
 import { copyTextToClipboard } from '../services/clipboard.util';
@@ -7,6 +7,7 @@ import {
   ActivityLogKind,
   ConversationTurn,
   LiveStatus,
+  ParsedSteer,
   ToolBurstBin,
   activityKindLabel,
   binToolBurstByKind,
@@ -14,7 +15,8 @@ import {
   deriveLiveStatus,
   formatBurstDuration,
   formatLiveSince,
-  parseActivityLog
+  parseActivityLog,
+  parseOrchestratorSteer
 } from './activity-log.parser';
 import { markdownToHtml } from './markdown-utils';
 
@@ -40,6 +42,14 @@ interface RenderedTurn {
   toolDuration: string;
   /** Per-kind bins for the expanded detail (lazily consumed by the template). */
   toolBins: ToolBurstBin[];
+  /**
+   * Set when this orchestrator turn is a [steer] message. Drives a
+   * dedicated card in the conversation view: question-mark icon, the
+   * one-line Need / Why ask, optional option buttons that pre-fill the
+   * compose box, and a "Send screenshot" affordance when the Need
+   * mentions a screenshot.
+   */
+  steer?: ParsedSteer;
 }
 
 /**
@@ -152,12 +162,57 @@ interface RenderedTurn {
                          [innerHTML]="item.bodyHtml"></div>
                   }
                   @case ('orchestrator') {
-                    <header class="convo-turn__head">
-                      <span class="convo-turn__role">⚙ Orchestrator</span>
-                      <span class="convo-turn__time">{{ formatTime(item.turn.timestamp) }}</span>
-                    </header>
-                    <div class="convo-turn__body convo-turn__body--orchestrator"
-                         [innerHTML]="item.bodyHtml"></div>
+                    @if (item.steer; as s) {
+                      <article class="steer-card"
+                               data-testid="orchestrator-steer-card">
+                        <header class="steer-card__head">
+                          <span class="steer-card__icon" aria-hidden="true">?</span>
+                          <span class="steer-card__role">Orchestrator needs your input</span>
+                          <span class="convo-turn__time">{{ formatTime(item.turn.timestamp) }}</span>
+                        </header>
+                        <dl class="steer-card__fields">
+                          <dt>Need</dt>
+                          <dd data-testid="orchestrator-steer-need">{{ s.need }}</dd>
+                          @if (s.why) {
+                            <dt>Why</dt>
+                            <dd data-testid="orchestrator-steer-why">{{ s.why }}</dd>
+                          }
+                        </dl>
+                        @if (s.options.length > 0) {
+                          <div class="steer-card__options"
+                               role="group"
+                               aria-label="Suggested replies"
+                               data-testid="orchestrator-steer-options">
+                            @for (opt of s.options; track $index; let idx = $index) {
+                              <button type="button"
+                                      class="steer-card__option"
+                                      [attr.data-testid]="'orchestrator-steer-option-' + idx"
+                                      (click)="onSteerOptionClick(opt, idx)">
+                                <span class="steer-card__option-label">{{ steerOptionLabel(idx) }}</span>
+                                <span class="steer-card__option-text">{{ opt }}</span>
+                              </button>
+                            }
+                          </div>
+                        }
+                        @if (s.needsScreenshot) {
+                          <div class="steer-card__upload">
+                            <button type="button"
+                                    class="steer-card__upload-btn"
+                                    data-testid="orchestrator-steer-upload"
+                                    (click)="onSteerUploadClick()">
+                              📎 Send screenshot
+                            </button>
+                          </div>
+                        }
+                      </article>
+                    } @else {
+                      <header class="convo-turn__head">
+                        <span class="convo-turn__role">⚙ Orchestrator</span>
+                        <span class="convo-turn__time">{{ formatTime(item.turn.timestamp) }}</span>
+                      </header>
+                      <div class="convo-turn__body convo-turn__body--orchestrator"
+                           [innerHTML]="item.bodyHtml"></div>
+                    }
                   }
                   @case ('tools') {
                     <button type="button"
@@ -421,6 +476,129 @@ interface RenderedTurn {
     .convo-turn--orchestrator {
       background: rgba(120,113,108,0.18);
       border-color: rgba(217,119,6,0.45);
+    }
+
+    /* Steer card: distinct visual treatment so the user immediately sees
+       the orchestrator handed back a concrete unblocking ask, not a generic
+       decision line. Question-mark glyph plus a left-edge accent border. */
+    .steer-card {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      padding: 12px 14px 14px 16px;
+      border-radius: 12px;
+      border: 1px solid rgba(217,119,6,0.55);
+      border-left: 4px solid #f59e0b;
+      background: linear-gradient(180deg, rgba(120,53,15,0.22), rgba(120,53,15,0.10));
+      box-shadow: 0 0 0 1px rgba(245,158,11,0.10) inset;
+    }
+    .steer-card__head {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 11.5px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: #fde68a;
+    }
+    .steer-card__icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      border-radius: 999px;
+      background: #f59e0b;
+      color: #1c1917;
+      font-weight: 800;
+      font-size: 13px;
+      line-height: 1;
+    }
+    .steer-card__role { letter-spacing: 0.05em; }
+    .steer-card__fields {
+      margin: 0;
+      display: grid;
+      grid-template-columns: max-content 1fr;
+      gap: 4px 12px;
+      font-size: 13.5px;
+      color: #fef3c7;
+    }
+    .steer-card__fields dt {
+      font-size: 11px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: #fbbf24;
+      align-self: baseline;
+      padding-top: 2px;
+    }
+    .steer-card__fields dd {
+      margin: 0;
+      color: #fef3c7;
+      line-height: 1.5;
+    }
+    .steer-card__options {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding-top: 4px;
+    }
+    .steer-card__option {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      padding: 8px 12px;
+      background: rgba(15,23,42,0.45);
+      border: 1px solid rgba(245,158,11,0.35);
+      border-radius: 8px;
+      color: #fef3c7;
+      font: inherit;
+      font-size: 13px;
+      text-align: left;
+      cursor: pointer;
+      transition: background-color 80ms ease, border-color 80ms ease;
+    }
+    .steer-card__option:hover,
+    .steer-card__option:focus-visible {
+      background: rgba(245,158,11,0.15);
+      border-color: rgba(245,158,11,0.6);
+      outline: none;
+    }
+    .steer-card__option-label {
+      flex: 0 0 auto;
+      width: 22px;
+      height: 22px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      background: rgba(245,158,11,0.25);
+      color: #fde68a;
+      font-weight: 700;
+      font-size: 11.5px;
+    }
+    .steer-card__option-text { flex: 1 1 auto; }
+    .steer-card__upload {
+      display: flex;
+      justify-content: flex-start;
+      padding-top: 2px;
+    }
+    .steer-card__upload-btn {
+      padding: 6px 12px;
+      background: rgba(15,23,42,0.45);
+      border: 1px dashed rgba(245,158,11,0.45);
+      border-radius: 8px;
+      color: #fde68a;
+      font: inherit;
+      font-size: 12.5px;
+      cursor: pointer;
+    }
+    .steer-card__upload-btn:hover,
+    .steer-card__upload-btn:focus-visible {
+      background: rgba(245,158,11,0.18);
+      border-style: solid;
+      outline: none;
     }
     .convo-turn--tools {
       padding: 0;
@@ -859,6 +1037,19 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
    */
   readonly isRunning = input(false);
 
+  /**
+   * Emitted when the user picks a suggested reply from a steer card. The
+   * parent (typically the protocol pane) is expected to pre-fill its
+   * compose box with the option text so the user can edit and send.
+   */
+  readonly applyComposeSuggestion = output<string>();
+  /**
+   * Emitted when the user clicks "Send screenshot" on a steer card whose
+   * Need line mentions a screenshot. The parent owns the attachment
+   * uploader (it knows the job id) and opens it in response.
+   */
+  readonly requestUploadScreenshot = output<void>();
+
   readonly mode = signal<ViewMode>('conversation');
   readonly showTools = signal(false);
   readonly showDebug = signal(false);
@@ -1103,6 +1294,20 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
         toolBins: binToolBurstByKind(turn.groups)
       };
     }
+    if (turn.kind === 'orchestrator') {
+      const firstLine = turn.groups[0]?.lines[0];
+      const steer = firstLine ? parseOrchestratorSteer(firstLine.text) : null;
+      if (steer) {
+        return {
+          turn,
+          bodyHtml: null,
+          toolChips: [],
+          toolDuration: '',
+          toolBins: [],
+          steer
+        };
+      }
+    }
     const html = turn.kind === 'agent'
       ? this.sanitizer.bypassSecurityTrustHtml(markdownToHtml(turn.text))
       // For user/system we keep plain text but still need SafeHtml in the
@@ -1110,6 +1315,26 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
       // template binding doesn't double-escape.
       : this.sanitizer.bypassSecurityTrustHtml(escapeForPlain(turn.text));
     return { turn, bodyHtml: html, toolChips: [], toolDuration: '', toolBins: [] };
+  }
+
+  /**
+   * One-letter label for a steer option ("A", "B", "C", ...). Mirrors the
+   * grammar the orchestrator emits, so the chat row reads naturally
+   * regardless of which marker style the model chose (`A)`, `1)`, `-`).
+   */
+  steerOptionLabel(index: number): string {
+    if (index < 0) return '';
+    if (index < 26) return String.fromCharCode('A'.charCodeAt(0) + index);
+    return `${index + 1}`;
+  }
+
+  onSteerOptionClick(option: string, _index: number): void {
+    if (!option) return;
+    this.applyComposeSuggestion.emit(option);
+  }
+
+  onSteerUploadClick(): void {
+    this.requestUploadScreenshot.emit();
   }
 }
 

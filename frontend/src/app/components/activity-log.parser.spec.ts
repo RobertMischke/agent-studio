@@ -10,6 +10,7 @@ import {
   formatBurstDuration,
   formatLiveSince,
   parseActivityLog,
+  parseOrchestratorSteer,
   summarizeToolBurst
 } from './activity-log.parser';
 import { CliOutputLine } from '../models/job.model';
@@ -111,6 +112,40 @@ describe('parseActivityLog', () => {
     expect(messages[0].role).toBe('user');
     expect(messages[0].author).toBe('You');
     expect(messages[0].title).toBe('please switch to dark mode');
+  });
+
+  it('parseOrchestratorSteer recovers Need / Why / Options from a [steer] line', () => {
+    // The backend writes the steer line as
+    //   "[steer] [orchestrator] **Need:** X **Why:** Y **Options:** A) ... | B) ..."
+    // The parser strips both bracketed tags and pulls out structured fields
+    // so the chat row can render dedicated controls.
+    const text = '[steer] [orchestrator] **Need:** screenshot of the affected column **Why:** the agent referenced an image we cannot see **Options:** A) rerun the build | B) check the dev console';
+    const parsed = parseOrchestratorSteer(text);
+    expect(parsed).not.toBeNull();
+    expect(parsed!.need).toBe('screenshot of the affected column');
+    expect(parsed!.why).toBe('the agent referenced an image we cannot see');
+    expect(parsed!.options).toEqual(['rerun the build', 'check the dev console']);
+    expect(parsed!.needsScreenshot).toBe(true);
+  });
+
+  it('parseOrchestratorSteer returns null for non-steer orchestrator lines', () => {
+    expect(parseOrchestratorSteer('[reissue] something')).toBeNull();
+    expect(parseOrchestratorSteer('[decision] [orchestrator] Auto-mode decision: do X')).toBeNull();
+    expect(parseOrchestratorSteer('')).toBeNull();
+  });
+
+  it('parseOrchestratorSteer returns null when Need is missing', () => {
+    // Malformed steer (no Need:) is treated as not-a-steer so the caller
+    // falls back to the generic orchestrator pill rather than rendering
+    // an empty card.
+    const parsed = parseOrchestratorSteer('[steer] **Why:** some reason');
+    expect(parsed).toBeNull();
+  });
+
+  it('parseOrchestratorSteer needsScreenshot toggles on screenshot keywords', () => {
+    expect(parseOrchestratorSteer('[steer] **Need:** a screenshot of the modal')!.needsScreenshot).toBe(true);
+    expect(parseOrchestratorSteer('[steer] **Need:** an image of the page')!.needsScreenshot).toBe(true);
+    expect(parseOrchestratorSteer('[steer] **Need:** pick option A or B')!.needsScreenshot).toBe(false);
   });
 
   it('keeps [orchestrator] stream lines as their own group with role "orchestrator"', () => {

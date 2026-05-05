@@ -215,7 +215,15 @@
                 <app-activity-log-view [lines]="filteredCliOutput()"
                                        [bodyMaxHeight]="'none'"
                                        [isRunning]="isRunning()"
-                                       variant="embedded" />
+                                       variant="embedded"
+                                       (applyComposeSuggestion)="onSteerOptionApply($event)"
+                                       (requestUploadScreenshot)="onSteerUploadRequest()" />
+                <input type="file"
+                       #steerUpload
+                       accept="image/*"
+                       data-testid="orchestrator-steer-upload-input"
+                       hidden
+                       (change)="onSteerFileSelected($any($event.target).files?.[0])" />
               } @else {
                 <div class="activity-panel__empty">Start the task to follow the agent output live.</div>
               }

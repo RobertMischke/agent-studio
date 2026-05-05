@@ -125,6 +125,7 @@ public sealed class AgentMessageBusBridge
             OrchestratorMessageKind.GiveUp            => "High",
             OrchestratorMessageKind.Reissue           => "Warn",
             OrchestratorMessageKind.HeuristicFallback => "Warn",
+            OrchestratorMessageKind.Steer             => "Warn",
             _                                         => "Info"
         };
         var topic = kind.ToString().ToLowerInvariant();
