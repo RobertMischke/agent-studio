@@ -39,8 +39,22 @@ export const PROJECT_TABS: readonly ProjectTab[] = [
 export const TOPBAR_RUN_STATS = ['Run 4', '12m', '28 tools', '42k tokens', '3 commits'] as const;
 
 export const USAGE_STRIP: readonly UsageStripItem[] = [
-  { label: 'Codex', value: '62%', tone: 'warn', detail: 'Subscription quota, 3h window, resets in 42m' },
-  { label: 'Claude', value: '18%', tone: 'ok', detail: 'Subscription quota, daily window healthy' },
+  {
+    label: 'Codex',
+    value: '62%',
+    tone: 'warn',
+    detail: 'Codex quota pressure in the 5-hour rolling window. Resets in 42m.',
+    window: '5h',
+    reset: '42m',
+  },
+  {
+    label: 'Claude',
+    value: '18%',
+    tone: 'ok',
+    detail: 'Claude quota pressure in the 5-hour rolling window. Resets in 3h 12m.',
+    window: '5h',
+    reset: '3h 12m',
+  },
   { label: 'Gemini', value: 'idle', tone: 'ok', detail: 'No recent usage detected' },
 ];
 

@@ -76,5 +76,7 @@ export interface UsageStripItem {
   value: string;
   tone: 'ok' | 'warn' | 'hot';
   detail: string;
+  window?: string;
+  reset?: string;
   testId?: string;
 }

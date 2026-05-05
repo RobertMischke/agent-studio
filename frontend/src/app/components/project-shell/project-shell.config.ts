@@ -1,0 +1,161 @@
+/**
+ * Project page shell rail configuration. Drives both the left-rail nav
+ * order and the placeholder-panel headers. Slice 2 of the quality-system
+ * mockup (docs/mockups/quality-system/) is the source of truth for the
+ * inventory and copy below; per-panel real content lands in follow-up
+ * slices listed in that mockup's README.
+ */
+
+export type ProjectRailGroup = 'project' | 'configuration';
+
+export type ProjectRailKey =
+  | 'overview'
+  | 'security'
+  | 'architecture'
+  | 'uxui'
+  | 'test-quality'
+  | 'token-usage'
+  | 'audits'
+  | 'jobs'
+  | 'settings'
+  | 'orchestrator'
+  | 'activity';
+
+export interface ProjectRailItem {
+  key: ProjectRailKey;
+  group: ProjectRailGroup;
+  /** Visible label in the rail. */
+  label: string;
+  /** Title shown at the top of the panel; may include the leading glyph. */
+  panelTitle: string;
+  /** Single-line panel description, lifted from the mockup's section-head. */
+  description: string;
+  /** Empty-state copy for the placeholder body. */
+  empty: string;
+  /** Glyph used both in the rail and the panel header. */
+  icon: string;
+}
+
+export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
+  {
+    key: 'overview',
+    group: 'project',
+    label: 'Overview',
+    panelTitle: 'Overview',
+    description: 'Snapshot of project health and quick actions',
+    empty: 'Overview placeholder. Health snapshot and quick actions will land in a later slice.',
+    icon: '📊',
+  },
+  {
+    key: 'security',
+    group: 'project',
+    label: 'Security',
+    panelTitle: 'Security',
+    description: 'Baseline, reviews, and active findings for this project',
+    empty: 'No security baseline yet. The Security slice ships the baseline action and review history.',
+    icon: '🔒',
+  },
+  {
+    key: 'architecture',
+    group: 'project',
+    label: 'Architecture',
+    panelTitle: 'Architecture',
+    description: 'Architectural decisions and drift status',
+    empty: 'Architecture placeholder. ADR list and high-level map land in the architecture slice.',
+    icon: '📐',
+  },
+  {
+    key: 'uxui',
+    group: 'project',
+    label: 'UX/UI',
+    panelTitle: 'UX/UI',
+    description: 'Design references, screenshots, council critique, and next-version actions',
+    empty: 'UX/UI placeholder. Design surfaces and council critique arrive in a later slice.',
+    icon: '🎨',
+  },
+  {
+    key: 'test-quality',
+    group: 'project',
+    label: 'Test Quality',
+    panelTitle: 'Test Quality',
+    description: 'Backend tests, end-to-end tests, tuning runs, coverage, and source-code perspective',
+    empty: 'Test Quality placeholder. Run history and coverage views land in a later slice.',
+    icon: '🧪',
+  },
+  {
+    key: 'token-usage',
+    group: 'project',
+    label: 'Token Usage',
+    panelTitle: 'Token Usage',
+    description: 'Inference spend by job, supporting runs, orchestrator turns, and time window',
+    empty: 'Token Usage placeholder. Heatmap, timeline, and per-job drill-down land in a later slice.',
+    icon: '▦',
+  },
+  {
+    key: 'audits',
+    group: 'project',
+    label: 'Audits & Checks',
+    panelTitle: 'Audits & Checks',
+    description: 'Review definitions, per-task checks, and runtime probe slots for this project',
+    empty: 'Audits & Checks placeholder. The review-definition model lands in a later slice.',
+    icon: '✅',
+  },
+  {
+    key: 'jobs',
+    group: 'project',
+    label: 'Jobs',
+    panelTitle: 'Jobs',
+    description: 'Tasks queued, in progress, and recently completed',
+    empty: 'Jobs placeholder. The board page is the live view; this panel will show a project-scoped slice.',
+    icon: '📋',
+  },
+  {
+    key: 'settings',
+    group: 'configuration',
+    label: 'Settings',
+    panelTitle: 'Settings',
+    description: 'How the orchestrator behaves on this project',
+    empty: 'Settings placeholder. Runner mode, auto-commit, and orchestrator model controls arrive next.',
+    icon: '⚙',
+  },
+  {
+    key: 'orchestrator',
+    group: 'configuration',
+    label: 'Orchestrator',
+    panelTitle: 'Orchestrator',
+    description: 'Live session, recent decisions and observations',
+    empty: 'Orchestrator placeholder. Session detail and recent decisions land in a later slice.',
+    icon: '🤖',
+  },
+  {
+    key: 'activity',
+    group: 'configuration',
+    label: 'Activity',
+    panelTitle: 'Activity',
+    description: 'Decisions, actions, and observations recorded by the orchestrator',
+    empty: 'Activity placeholder. The full feed lives at the project-feed overlay; a scoped view lands later.',
+    icon: '📜',
+  },
+];
+
+const RAIL_KEY_SET = new Set<string>(PROJECT_RAIL_ITEMS.map(i => i.key));
+
+export function isProjectRailKey(value: string | null | undefined): value is ProjectRailKey {
+  return !!value && RAIL_KEY_SET.has(value);
+}
+
+export const DEFAULT_PROJECT_RAIL_KEY: ProjectRailKey = 'overview';
+
+/**
+ * Slug used in the project-shell URL hash. Stable mapping from a watch-path
+ * project name (e.g. "Agent Task Processor") to a kebab-case identifier
+ * (e.g. "agent-task-processor"). The reverse lookup happens by computing
+ * the slug for every known watch path and matching.
+ */
+export function toProjectSlug(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}

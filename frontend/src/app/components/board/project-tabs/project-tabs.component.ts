@@ -33,6 +33,7 @@ export class ProjectTabsComponent {
   readonly toggle = output<string>();
   readonly toggleAuto = output<string>();
   readonly openDetail = output<string>();
+  readonly openShell = output<string>();
 
   readonly identityFor = (name: string) => projectIdentity(name);
 }

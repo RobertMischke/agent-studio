@@ -31,6 +31,9 @@ import { StatusPanel } from './next-gen-chat-workbench-prototype.models';
                   [attr.data-testid]="item.testId">
             <span>{{ item.label }}</span>
             <b>{{ item.value }}</b>
+            @if (item.window) {
+              <small>{{ item.window }}</small>
+            }
           </button>
         }
         <button class="usage-pill usage-pill--tokens" (click)="statusPanelRequested.emit('tokens')" data-testid="prototype-status-token">
@@ -51,8 +54,9 @@ import { StatusPanel } from './next-gen-chat-workbench-prototype.models';
         </button>
       </div>
       <div class="statusbar__group statusbar__group--right">
-        <button class="statusbar__item" (click)="statusPanelRequested.emit('tokens')">
+        <button class="statusbar__item statusbar__item--usage" (click)="statusPanelRequested.emit('tokens')" title="Codex and Claude 5-hour quota windows">
           <span>Usage</span>
+          <b>{{ compactUsageSummary }}</b>
         </button>
         <button class="statusbar__item" (click)="sideSheetRequested.emit()">
           <span>Orch</span>
@@ -209,6 +213,17 @@ import { StatusPanel } from './next-gen-chat-workbench-prototype.models';
       color: rgba(255,255,255,0.56);
     }
 
+    .usage-pill small {
+      color: rgba(255,255,255,0.46);
+      font-size: 9px;
+      font-weight: 740;
+    }
+
+    .statusbar__item--usage b {
+      color: #e6b673;
+      font-weight: 760;
+    }
+
     @media (max-width: 720px) {
       .statusbar {
         grid-template-columns: minmax(0, 1fr) auto;
@@ -224,8 +239,14 @@ import { StatusPanel } from './next-gen-chat-workbench-prototype.models';
         display: none;
       }
 
-      .statusbar__group--right button:first-child span {
-        max-width: 136px;
+      .statusbar__group--right button:first-child {
+        max-width: 172px;
+      }
+
+      .statusbar__group--right button:first-child span,
+      .statusbar__group--right button:first-child b {
+        min-width: 0;
+        max-width: 92px;
         overflow: hidden;
         text-overflow: ellipsis;
       }
@@ -238,4 +259,8 @@ export class FoundNextStatusbarComponent {
   readonly debugTraceRequested = output<void>();
 
   readonly usageStrip = USAGE_STRIP;
+  readonly compactUsageSummary = USAGE_STRIP
+    .filter((item) => item.window === '5h')
+    .map((item) => `${item.label.slice(0, 2)} ${item.value}`)
+    .join(' / ');
 }

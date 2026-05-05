@@ -28,7 +28,7 @@ The prototype now has a first component boundary:
 | Area | File | Responsibility |
 |------|------|----------------|
 | Shell top bar | `frontend/src/app/components/mockups/found-next-topbar.component.ts` | Product title, project filter chips, owner switch, run summary, sheet/queue/density/theme/command/debug controls. |
-| Shell status bar | `frontend/src/app/components/mockups/found-next-statusbar.component.ts` | Global run health, automation mode, session continuity, CLI usage strip, token/git/visual/tool signals, model defaults. |
+| Shell status bar | `frontend/src/app/components/mockups/found-next-statusbar.component.ts` | Global run health, automation mode, session continuity, Codex/Claude 5h quota strip, token/git/visual/tool signals, model defaults. |
 | Shared data | `frontend/src/app/components/mockups/next-gen-chat-workbench-prototype.data.ts` | Topbar project tabs, run stats, status usage strip, shared icon paths. |
 | Shared models | `frontend/src/app/components/mockups/next-gen-chat-workbench-prototype.models.ts` | Typed pane, actor, scenario, decision, status, density, theme, and transcript contracts. |
 | Workbench host | `frontend/src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts` | Task list, detail chrome, chat flow, rail, panes, popovers, modals, and orchestration state. |
@@ -49,7 +49,7 @@ This is intentionally not a full rewrite. The next useful boundaries are `Activi
 | Composer | Good density: mode, context chips, model, start/pause/continue in one place. | Buttons are numerous and can become visually equivalent. | Group mutating actions, emphasize primary action, and put lower-frequency controls in a small menu. |
 | Context panes | Additive panes solve the side-by-side review need. | The pane host is still one large component and can feel like a dashboard when all panes are open. | Extract pane host and tune each pane for quick review, not full replacement of existing tabs. Treat multi-pane review as focus mode: when two or more panes open, the project side sheet yields space and remains one click away. |
 | Project side sheet | Keeps project-level steering separate from task chat. | It needs stronger connection to project switch and owner filter. | Show active project set, owner filter, and side-sheet scope in one compact header. |
-| Status bar | Now closer to VS Code: tiny, bottom-aligned, short labels, global left and contextual right. | It is information-dense and could violate VS Code's "limit items" guidance. | Decide which items are always visible versus overflow. Keep tokens and session visible because they are product-defining. |
+| Status bar | Now closer to VS Code: tiny, bottom-aligned, short labels, global left and contextual right. Codex and Claude show percentage pressure plus the 5h quota window because these numbers affect routing decisions. | It is information-dense and could violate VS Code's "limit items" guidance. | Decide which items are always visible versus overflow. Keep tokens, session, Codex %, Claude %, and 5h reset context visible because they are product-defining. |
 | Popovers and modals | Good drill-down pattern. | Some popovers are too wide and content-heavy for routine use. | Make popovers command-like: dense rows, one primary metric, fast navigation to full debug. |
 | Dark theme | Much improved after the last pass. | Some colors still use light-first contrast assumptions. | Keep color tokens shared and test every primary state in dark screenshots. |
 

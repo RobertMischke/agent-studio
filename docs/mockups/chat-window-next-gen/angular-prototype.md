@@ -63,7 +63,7 @@ The prototype currently covers:
 - Left task rail with additive pane pinning, quick signal jumps, run state, tokens, commits, files, screenshots, failed retry, duration, and scenario switches.
 - Rail guide modal that explains the control model.
 - Clickable activity bar and top chrome for project side sheet, queue, run summary, density, theme, command palette, and debug.
-- Interactive status bar with queue, token, health, visual evidence, CLI/model, density, theme, and command-palette entry points.
+- Interactive status bar with queue, token, health, visual evidence, CLI/model, density, theme, and command-palette entry points. Codex and Claude quota pills show percent pressure and the 5h window because that window directly affects routing and continuation choices.
 - Status-bar popovers for queue automation, token heat, system health, evidence shortcuts, and model controls.
 - Optional chat toggle, additive context-pane toggles, "pin all" review panes, and a vertical splitter between chat and pinned review panes.
 - Clickable run marker popover with CLI, model, session, trace range, outcome, token budget, and artifact counts.

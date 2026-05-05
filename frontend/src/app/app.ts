@@ -7,6 +7,13 @@ import { CliUsageSheetComponent } from './components/cli-usage-sheet';
 import { OrchestratorFeedComponent } from './components/orchestrator-feed';
 import { OrchestratorSideSheetComponent } from './components/orchestrator-side-sheet/orchestrator-side-sheet.component';
 import { ProjectDetailComponent } from './components/project-detail';
+import { ProjectShellComponent } from './components/project-shell/project-shell.component';
+import {
+  DEFAULT_PROJECT_RAIL_KEY,
+  isProjectRailKey,
+  ProjectRailKey,
+  toProjectSlug,
+} from './components/project-shell/project-shell.config';
 import { AnalysisReportDrilldownComponent } from './components/analysis-report-drilldown';
 import { StatusBarComponent } from './components/status-bar';
 import { JobService } from './services/job.service';
@@ -39,7 +46,7 @@ interface VerboseDebugContext {
 
 @Component({
   selector: 'app-root',
-  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, AnalysisReportDrilldownComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceTokenTimelineComponent, WorkspaceScreenshotsComponent, WorkspaceBannerComponent, VerboseDebugOverlayComponent],
+  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, ProjectShellComponent, AnalysisReportDrilldownComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceTokenTimelineComponent, WorkspaceScreenshotsComponent, WorkspaceBannerComponent, VerboseDebugOverlayComponent],
   // Keep styles global to this subtree — the App shell still owns the
   // .header*, .filter-chip*, .overlay*, .create-dialog*, .error-dialog*
   // class rules used by the extracted dialogs and project-tabs.
@@ -65,7 +72,8 @@ interface VerboseDebugContext {
           [autoInfo]="getAutoInfoFn"
           (toggle)="toggleProject($event)"
           (toggleAuto)="onToggleAuto($event)"
-          (openDetail)="openProjectDetail($event)" />
+          (openDetail)="openProjectDetail($event)"
+          (openShell)="openProjectShell($event)" />
         <div class="header__actions">
           <label class="client-filter" data-testid="client-filter">
             <span class="client-filter__label">Owner:</span>
@@ -275,6 +283,19 @@ interface VerboseDebugContext {
               [projectName]="proj"
               (openFeed)="onOpenFeedFromDetail($event)"
               (openReport)="openAnalysisReport(proj, $event.reportId)" />
+          </div>
+        </div>
+      }
+
+      @if (projectShellName(); as projShell) {
+        <div class="overlay overlay--shell" data-testid="project-shell-overlay">
+          <div class="overlay__shell-panel">
+            <app-project-shell
+              [projectName]="projShell"
+              [activeRail]="projectShellRail()"
+              (railChange)="onProjectShellRailChange($event)"
+              (openFeed)="onOpenFeedFromShell()"
+              (closeShell)="closeProjectShell()" />
           </div>
         </div>
       }
@@ -535,7 +556,8 @@ interface VerboseDebugContext {
       align-items: center;
       gap: 4px;
     }
-    .project-tab__detail {
+    .project-tab__detail,
+    .project-tab__shell {
       background: rgba(255,255,255,0.04);
       border: 1px solid rgba(255,255,255,0.10);
       color: rgba(255,255,255,0.55);
@@ -547,7 +569,8 @@ interface VerboseDebugContext {
       line-height: 1;
       padding: 0;
     }
-    .project-tab__detail:hover {
+    .project-tab__detail:hover,
+    .project-tab__shell:hover {
       background: rgba(255,255,255,0.10);
       color: #cdd6f4;
     }
@@ -738,6 +761,27 @@ interface VerboseDebugContext {
     }
     .overlay__panel--wtt {
       width: min(1080px, 96vw);
+    }
+    /*
+     * The project-page shell renders full-bleed instead of as a centred
+     * dialog. It owns the whole viewport so the left rail can reach the
+     * edges and the content area gets real estate to grow into. The
+     * .overlay--shell modifier disables the grid centring and skips the
+     * panel border + max-width so the shell paints edge-to-edge.
+     */
+    .overlay--shell {
+      display: block;
+      background: #181825;
+    }
+    .overlay__shell-panel {
+      position: absolute;
+      inset: 0;
+      display: flex;
+    }
+    .overlay__shell-panel > app-project-shell {
+      flex: 1;
+      min-width: 0;
+      min-height: 0;
     }
     .overlay__close {
       position: absolute;
@@ -1573,6 +1617,16 @@ export class App implements OnInit {
   /** When non-null, names the project whose detail panel is open. */
   readonly projectDetailName = signal<string | null>(null);
   /**
+   * Project page shell state. When `projectShellName` is non-null, the
+   * project-shell overlay renders for that project and the URL hash is
+   * `#/projects/<slug>` (or `#/projects/<slug>/<rail-key>`). The active
+   * rail item drives which placeholder panel is shown. Slice 2 of the
+   * quality-system mockup; real per-panel content lands later.
+   */
+  readonly projectShellName = signal<string | null>(null);
+  readonly projectShellRail = signal<ProjectRailKey>(DEFAULT_PROJECT_RAIL_KEY);
+  private readonly projectShellHashPrefix = '#/projects/';
+  /**
    * When non-null, the (project, reportId) pair whose Analysis Reports
    * drill-down overlay is open. Stacked above the project-detail overlay so
    * the user can return to the list with a single click without losing
@@ -1872,6 +1926,11 @@ export class App implements OnInit {
       next: (entries) => {
         this.watchPaths.set(entries);
         if (entries.length > 0) this.newWatchPath = entries[0].path;
+        // The deep-link hash listener can fire before watch paths are
+        // known (e.g. on a hard reload of `#/projects/<slug>`); resolving
+        // the slug → project name needs the watch-path list, so re-apply
+        // once entries are available.
+        this.applyProjectShellHash();
       },
       error: (err) => {
         this.errorDialog.show(err, {
@@ -1895,6 +1954,7 @@ export class App implements OnInit {
       if (screenshotsOpen !== this.workspaceScreenshotsOpen()) {
         this.workspaceScreenshotsOpen.set(screenshotsOpen);
       }
+      this.applyProjectShellHash();
     };
     applyHash();
     this.hashListener = applyHash;
@@ -2151,6 +2211,99 @@ export class App implements OnInit {
 
   closeProjectDetail(): void {
     this.projectDetailName.set(null);
+  }
+
+  /**
+   * Open the project page shell (slice 2 of the quality-system mockup).
+   * Pushes a hash so deep-links survive reload; the hash listener picks
+   * the change up and updates `projectShellName` / `projectShellRail`.
+   */
+  openProjectShell(name: string, rail: ProjectRailKey = DEFAULT_PROJECT_RAIL_KEY): void {
+    const slug = toProjectSlug(name);
+    if (!slug) return;
+    const target = `${this.projectShellHashPrefix}${slug}`
+      + (rail !== DEFAULT_PROJECT_RAIL_KEY ? `/${rail}` : '');
+    if (window.location.hash !== target) {
+      try {
+        history.pushState(null, '', window.location.pathname + window.location.search + target);
+      } catch { /* ignore */ }
+    }
+    // pushState doesn't fire hashchange; apply the resolved state directly.
+    this.applyProjectShellHash();
+  }
+
+  closeProjectShell(): void {
+    this.projectShellName.set(null);
+    this.projectShellRail.set(DEFAULT_PROJECT_RAIL_KEY);
+    if (window.location.hash.startsWith(this.projectShellHashPrefix)) {
+      try {
+        history.pushState(null, '', window.location.pathname + window.location.search);
+      } catch { /* ignore */ }
+    }
+  }
+
+  onProjectShellRailChange(key: ProjectRailKey): void {
+    const name = this.projectShellName();
+    if (!name) return;
+    this.projectShellRail.set(key);
+    const slug = toProjectSlug(name);
+    const target = `${this.projectShellHashPrefix}${slug}`
+      + (key !== DEFAULT_PROJECT_RAIL_KEY ? `/${key}` : '');
+    if (window.location.hash !== target) {
+      try {
+        history.replaceState(null, '', window.location.pathname + window.location.search + target);
+      } catch { /* ignore */ }
+    }
+  }
+
+  onOpenFeedFromShell(): void {
+    const name = this.projectShellName();
+    if (!name) return;
+    // Stack the feed overlay over the shell (consistent with the project
+    // detail overlay → feed overlay handoff). The shell stays mounted so
+    // closing the feed returns to the same rail.
+    this.orchFeedProject.set(name);
+  }
+
+  /**
+   * Parse the URL hash and reconcile the project-shell signals with it.
+   * Accepts `#/projects/<slug>` and `#/projects/<slug>/<rail-key>`. The
+   * slug is mapped back to a project name by computing the slug for each
+   * known watch path and matching. If watch paths haven't loaded yet, we
+   * keep the signals untouched and re-run when they arrive.
+   */
+  private applyProjectShellHash(): void {
+    const hash = window.location.hash;
+    if (!hash.startsWith(this.projectShellHashPrefix)) {
+      if (this.projectShellName() !== null) {
+        this.projectShellName.set(null);
+        this.projectShellRail.set(DEFAULT_PROJECT_RAIL_KEY);
+      }
+      return;
+    }
+    const tail = hash.slice(this.projectShellHashPrefix.length);
+    const [slugRaw, railRaw] = tail.split('/', 2);
+    const slug = decodeURIComponent(slugRaw || '').toLowerCase();
+    if (!slug) return;
+    const entries = this.watchPaths();
+    if (entries.length === 0) {
+      // Hash arrived before /api/watch-paths returned. Leave the signals
+      // alone; the watch-paths success handler re-runs this.
+      return;
+    }
+    const match = entries.find(wp => toProjectSlug(wp.name) === slug);
+    if (!match) {
+      // Unknown slug — clear shell state but leave the URL alone so the
+      // user can fix it manually rather than getting silently bounced.
+      if (this.projectShellName() !== null) {
+        this.projectShellName.set(null);
+        this.projectShellRail.set(DEFAULT_PROJECT_RAIL_KEY);
+      }
+      return;
+    }
+    const railKey: ProjectRailKey = isProjectRailKey(railRaw) ? railRaw : DEFAULT_PROJECT_RAIL_KEY;
+    if (this.projectShellName() !== match.name) this.projectShellName.set(match.name);
+    if (this.projectShellRail() !== railKey) this.projectShellRail.set(railKey);
   }
 
   /** Open the analysis-report drill-down overlay for one report. */

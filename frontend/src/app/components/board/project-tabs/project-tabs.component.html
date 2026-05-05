@@ -29,6 +29,10 @@
           }
         </button>
       }
+      <button class="project-tab__shell"
+              [attr.data-testid]="'project-shell-open-' + name"
+              title="Open project page"
+              (click)="openShell.emit(name)">📊</button>
       <button class="project-tab__detail"
               [attr.data-testid]="'project-detail-' + name"
               title="Project settings, mode, orchestrator model, recent activity"

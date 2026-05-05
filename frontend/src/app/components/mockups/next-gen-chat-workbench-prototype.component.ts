@@ -726,6 +726,9 @@ import {
                     <div [attr.data-tone]="item.tone">
                       <b>{{ item.value }}</b>
                       <span>{{ item.label }}</span>
+                      @if (item.window) {
+                        <em>{{ item.window }} window · resets {{ item.reset }}</em>
+                      }
                     </div>
                   }
                 </div>
@@ -2684,6 +2687,13 @@ import {
     .usage-pop-grid span {
       color: var(--muted);
       font-size: 12px;
+    }
+
+    .usage-pop-grid em {
+      color: var(--muted);
+      font-size: 10px;
+      font-style: normal;
+      line-height: 1.25;
     }
 
     .project-pop-list button {
