@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using OrchestratorApi.Services.Bus;
 
 namespace OrchestratorApi.Services.Supervisor;
 
@@ -24,6 +25,7 @@ public sealed class SoftReasoningHostedService : BackgroundService
     private readonly RuntimePromptService _prompts;
     private readonly IConfiguration _configuration;
     private readonly ILogger<SoftReasoningHostedService> _logger;
+    private readonly AgentMessageBusBridge? _bus;
 
     private readonly Queue<DateTime> _callTimestamps = new();
 
@@ -32,13 +34,15 @@ public sealed class SoftReasoningHostedService : BackgroundService
         ProjectObservationService observe,
         RuntimePromptService prompts,
         IConfiguration configuration,
-        ILogger<SoftReasoningHostedService> logger)
+        ILogger<SoftReasoningHostedService> logger,
+        AgentMessageBusBridge? bus = null)
     {
         _taskRunner = taskRunner;
         _observe = observe;
         _prompts = prompts;
         _configuration = configuration;
         _logger = logger;
+        _bus = bus;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -100,6 +104,8 @@ public sealed class SoftReasoningHostedService : BackgroundService
                 foreach (var advisory in advisories)
                 {
                     HardHealthCheckHostedService.AppendObservationRecord(workspace, advisory);
+                    try { _ = _bus?.EmitAdvisoryAsync(advisory); }
+                    catch (Exception ex) { _logger.LogDebug(ex, "Bus mirror of soft-reasoning advisory failed for {Project}", project); }
                 }
                 _logger.LogInformation("SoftReasoning {Project}: {Count} observation(s)", project, advisories.Count);
             }

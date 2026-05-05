@@ -1,5 +1,6 @@
 using System.Text.Json;
 using OrchestratorApi.Models;
+using OrchestratorApi.Services.Bus;
 using OrchestratorApi.Services.Jobs;
 using OrchestratorApi.Services.Runner;
 
@@ -39,6 +40,7 @@ public sealed class SupervisorInterventionService
     private readonly IConfiguration _configuration;
     private readonly ILogger<SupervisorInterventionService> _logger;
     private readonly TimeProvider _time;
+    private readonly AgentMessageBusBridge? _bus;
 
     public SupervisorInterventionService(
         TaskRunnerService taskRunner,
@@ -46,7 +48,8 @@ public sealed class SupervisorInterventionService
         OrchestratorChatLog chatLog,
         IConfiguration configuration,
         ILogger<SupervisorInterventionService> logger,
-        TimeProvider? time = null)
+        TimeProvider? time = null,
+        AgentMessageBusBridge? bus = null)
     {
         _taskRunner = taskRunner;
         _jobScanner = jobScanner;
@@ -54,6 +57,7 @@ public sealed class SupervisorInterventionService
         _configuration = configuration;
         _logger = logger;
         _time = time ?? TimeProvider.System;
+        _bus = bus;
     }
 
     public Task CancelRunAsync(string project, string jobId, string reason, SupervisorSource source, CancellationToken ct)
@@ -193,6 +197,13 @@ public sealed class SupervisorInterventionService
         {
             _logger.LogWarning(ex, "SupervisorInterventionService failed to persist intervention {Kind} for {Project}", intervention.Kind, intervention.Project);
         }
+
+        // Bridge to the Agent Message Bus. The legacy interventions.jsonl above
+        // remains canonical (Auto-intervention reader, Layer 3 review tooling
+        // still parse it directly); the bus is a derived projection so the
+        // project screen can render typed events without re-parsing.
+        try { _ = _bus?.EmitInterventionAsync(intervention); }
+        catch (Exception ex) { _logger.LogDebug(ex, "Bus mirror of intervention {Kind} for {Project} failed", intervention.Kind, intervention.Project); }
     }
 
     /// <summary>

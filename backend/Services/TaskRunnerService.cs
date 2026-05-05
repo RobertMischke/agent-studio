@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using OrchestratorApi.Models;
+using OrchestratorApi.Services.Bus;
 using OrchestratorApi.Services.Cli;
 using OrchestratorApi.Services.Jobs;
 using OrchestratorApi.Services.Runner;
@@ -35,6 +36,7 @@ public class TaskRunnerService : BackgroundService
     private readonly OrchestratorRunner _orchestratorRunner;
     private readonly OrchestratorSessionStore _orchestratorSessions;
     private readonly GlobalOrchestratorBootstrap _globalOrchestrator;
+    private readonly AgentMessageBusBridge? _bus;
     private readonly ConcurrentDictionary<string, ProjectRunner> _runners = new();
 
     public event Action<string, ProjectRunnerStatus>? OnRunnerStatusChanged;
@@ -58,7 +60,8 @@ public class TaskRunnerService : BackgroundService
         OrchestratorRunner orchestratorRunner,
         OrchestratorSessionStore orchestratorSessions,
         GlobalOrchestratorBootstrap globalOrchestrator,
-        GitService git)
+        GitService git,
+        AgentMessageBusBridge? bus = null)
     {
         _config = config;
         _logger = logger;
@@ -79,6 +82,7 @@ public class TaskRunnerService : BackgroundService
         _orchestratorSessions = orchestratorSessions;
         _globalOrchestrator = globalOrchestrator;
         _git = git;
+        _bus = bus;
     }
 
     private readonly GitService _git;
@@ -113,7 +117,7 @@ public class TaskRunnerService : BackgroundService
                 continue;
             }
 
-            var runner = new ProjectRunner(entry.Name, entry, _logger, _scanner, _states, _sessions, _router, _summaryService, _prompts, _transitions, _chatLog, _mutations, _orchestratorLog, _orchestratorRunner, _orchestratorSessions, _projectSettings, _git);
+            var runner = new ProjectRunner(entry.Name, entry, _logger, _scanner, _states, _sessions, _router, _summaryService, _prompts, _transitions, _chatLog, _mutations, _orchestratorLog, _orchestratorRunner, _orchestratorSessions, _projectSettings, _git, _bus);
             runner.ConfigureWatchdog(LoadWatchdogConfig(_config));
             _stuckLoopBudget = LoadStuckLoopBudget(_config);
             runner.ConfigureStuckLoopBudget(_stuckLoopBudget);
@@ -275,6 +279,13 @@ public class TaskRunnerService : BackgroundService
 
         _mutations.AppendContinuationNote(jobId, followupPrompt, watchPath);
         AppendUserPromptToCliLog(info, followupPrompt);
+
+        // Mirror the user follow-up onto the bus. cli-output.log remains the
+        // canonical transcript (the activity-log parser reads it); the bus
+        // event is the typed projection that downstream messages chain onto
+        // via correlationId.
+        try { _ = _bus?.EmitUserPromptAsync(info, followupPrompt, normalizedMode); }
+        catch (Exception ex) { _logger.LogDebug(ex, "Bus mirror of user prompt failed for {JobId}", jobId); }
 
         var outcome = await runner.ContinueJobAsync(jobId, followupPrompt, normalizedMode, ct);
         return ShapeOutcome(outcome, info, jobId, watchPath, normalizedMode, followupPrompt);
@@ -471,7 +482,18 @@ public class TaskRunnerService : BackgroundService
     public bool StopJob(string jobId, string? watchPath = null, RunStopReason reason = RunStopReason.UserStop)
     {
         var info = _scanner.FindJob(jobId, watchPath);
-        return info != null && _router.Get(info.CliType).Stop(info.JobKey, reason);
+        if (info == null) return false;
+        var stopped = _router.Get(info.CliType).Stop(info.JobKey, reason);
+        if (stopped)
+        {
+            // Lifecycle event: stop requested. The matching RunFinished message
+            // is emitted by ProjectRunner.OnCliFinishedAsync after the process
+            // exits; this records the trigger separately so the timeline shows
+            // both the request and the actual termination.
+            try { _ = _bus?.EmitRunStopRequestedAsync(info, reason, source: "taskboard"); }
+            catch (Exception ex) { _logger.LogDebug(ex, "Bus mirror of stop-requested failed for {JobId}", jobId); }
+        }
+        return stopped;
     }
 
     /// <summary>

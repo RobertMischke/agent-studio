@@ -1,4 +1,5 @@
 using OrchestratorApi.Models;
+using OrchestratorApi.Services.Bus;
 
 namespace OrchestratorApi.Services.Runner;
 
@@ -28,10 +29,12 @@ namespace OrchestratorApi.Services.Runner;
 public class OrchestratorChatLog
 {
     private readonly ILogger<OrchestratorChatLog> _logger;
+    private readonly AgentMessageBusBridge? _bus;
 
-    public OrchestratorChatLog(ILogger<OrchestratorChatLog> logger)
+    public OrchestratorChatLog(ILogger<OrchestratorChatLog> logger, AgentMessageBusBridge? bus = null)
     {
         _logger = logger;
+        _bus = bus;
     }
 
     /// <summary>
@@ -43,7 +46,17 @@ public class OrchestratorChatLog
     /// </summary>
     public bool Append(JobInfo info, OrchestratorMessageKind kind, string text, ICollection<CliOutputLine>? liveBuffer = null)
     {
-        return AppendWithStream(info, "orchestrator", $"[{kind.ToTag()}] {text}", liveBuffer);
+        var ok = AppendWithStream(info, "orchestrator", $"[{kind.ToTag()}] {text}", liveBuffer);
+        if (ok)
+        {
+            // Bridge to the Agent Message Bus. Best-effort; the chat log is the
+            // canonical record (the activity-log parser reads it). The bus
+            // mirrors typed entries so future tooling can query without
+            // reparsing prose. See docs/agent-message-bus.md section 9.
+            try { _ = _bus?.EmitOrchestratorChatAsync(info, kind, text); }
+            catch (Exception ex) { _logger.LogDebug(ex, "Bus mirror of orchestrator chat failed for {JobId}", info?.Id); }
+        }
+        return ok;
     }
 
     /// <summary>
@@ -55,7 +68,13 @@ public class OrchestratorChatLog
     /// </summary>
     public bool AppendSupervisor(JobInfo info, string tag, string text, ICollection<CliOutputLine>? liveBuffer = null)
     {
-        return AppendWithStream(info, "supervisor", $"[{tag}] {text}", liveBuffer);
+        var ok = AppendWithStream(info, "supervisor", $"[{tag}] {text}", liveBuffer);
+        if (ok)
+        {
+            try { _ = _bus?.EmitSupervisorChatAsync(info, tag, text); }
+            catch (Exception ex) { _logger.LogDebug(ex, "Bus mirror of supervisor chat failed for {JobId}", info?.Id); }
+        }
+        return ok;
     }
 
     private bool AppendWithStream(JobInfo info, string streamTag, string body, ICollection<CliOutputLine>? liveBuffer)

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using OrchestratorApi.Services.Bus;
 
 namespace OrchestratorApi.Services.Supervisor;
 
@@ -25,17 +26,20 @@ public sealed class HardHealthCheckHostedService : BackgroundService
     private readonly ProjectObservationService _observe;
     private readonly IConfiguration _configuration;
     private readonly ILogger<HardHealthCheckHostedService> _logger;
+    private readonly AgentMessageBusBridge? _bus;
 
     public HardHealthCheckHostedService(
         TaskRunnerService taskRunner,
         ProjectObservationService observe,
         IConfiguration configuration,
-        ILogger<HardHealthCheckHostedService> logger)
+        ILogger<HardHealthCheckHostedService> logger,
+        AgentMessageBusBridge? bus = null)
     {
         _taskRunner = taskRunner;
         _observe = observe;
         _configuration = configuration;
         _logger = logger;
+        _bus = bus;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -83,6 +87,13 @@ public sealed class HardHealthCheckHostedService : BackgroundService
                 foreach (var advisory in HardHealthChecks.RunAll(observation, thresholds))
                 {
                     AppendObservationRecord(workspace, advisory);
+                    // Mirror to the Agent Message Bus. The legacy
+                    // observations.jsonl remains canonical (auto-intervention,
+                    // chat-note summary still read it); the bus is a typed
+                    // projection so the project screen can show advisories
+                    // alongside other timeline events.
+                    try { _ = _bus?.EmitAdvisoryAsync(advisory); }
+                    catch (Exception ex) { _logger.LogDebug(ex, "Bus mirror of advisory failed for {Project}", project); }
                 }
                 WriteHeartbeat(workspace, project, observation.CapturedAt);
             }

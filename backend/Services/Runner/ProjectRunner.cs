@@ -1,5 +1,6 @@
 using OrchestratorApi.Models;
 using OrchestratorApi.Services;
+using OrchestratorApi.Services.Bus;
 using OrchestratorApi.Services.Cli;
 using OrchestratorApi.Services.Jobs;
 
@@ -29,6 +30,7 @@ public class ProjectRunner
     private readonly OrchestratorSessionStore _orchestratorSessions;
     private readonly ProjectSettingsService _projectSettings;
     private readonly GitService _git;
+    private readonly AgentMessageBusBridge? _bus;
     private string _mode = "manual";
     private string? _activeJobId;
     private string? _activeCliType;
@@ -104,7 +106,8 @@ public class ProjectRunner
         OrchestratorRunner orchestratorRunner,
         OrchestratorSessionStore orchestratorSessions,
         ProjectSettingsService projectSettings,
-        GitService git)
+        GitService git,
+        AgentMessageBusBridge? bus = null)
     {
         ProjectName = projectName;
         Entry = entry;
@@ -123,6 +126,7 @@ public class ProjectRunner
         _orchestratorSessions = orchestratorSessions;
         _projectSettings = projectSettings;
         _git = git;
+        _bus = bus;
 
         // Listen across all CLI backends for completion of the active job.
         _router.OnFinished += (cliType, jobKey, exec) => OnCliFinished(cliType, jobKey, exec);
@@ -381,6 +385,14 @@ public class ProjectRunner
 
             // Spawn succeeded; drop the stashed intent (we've consumed it).
             _mutations.DiscardStashedPendingIntent(info.FolderPath);
+
+            // Mirror run-start onto the bus. Existing canonical signals
+            // (session-events.jsonl + cli-output.log "[taskboard] Started ..."
+            // marker) stay; the bus message is a typed projection so the
+            // project screen does not need to scan log text for run boundaries.
+            try { _ = _bus?.EmitRunStartedAsync(info, cli.CliType, execution.StartedAt, plan.SessionToResume, intent.ToString()); }
+            catch (Exception ex) { _logger.LogDebug(ex, "Bus mirror of run-start failed for {JobId}", jobId); }
+
             return RunOutcome.Started(execution);
         }
         finally
@@ -591,6 +603,21 @@ public class ProjectRunner
             Reasoning = $"Session id: {session.SessionId}. Boot loaded project README / AGENTS / ROADMAP plus recent orchestrator activity. Subsequent decisions resume this session.",
             TokenUsage = result.TokenUsage
         });
+
+        // Mirror the boot's token spend onto the bus so the workspace timeline
+        // captures the boot cost as a first-class event.
+        if (result.TokenUsage != null)
+        {
+            try
+            {
+                _ = _bus?.EmitTokenUsageAsync(
+                    ProjectName, jobId: null,
+                    AgentMessageBusBridge.ParticipantOrchestratorFor(ProjectName),
+                    topic: "orchestrator-boot",
+                    usage: result.TokenUsage);
+            }
+            catch (Exception ex) { _logger.LogDebug(ex, "Bus mirror of orchestrator boot token usage failed for {Project}", ProjectName); }
+        }
     }
 
     /// <summary>
@@ -816,6 +843,23 @@ public class ProjectRunner
                 TokenUsage = result.TokenUsage
             });
 
+            // Mirror orchestrator token spend onto the bus so the project
+            // screen can rank expensive turns. orchestrator.jsonl stays
+            // canonical for the per-job rollup; the bus carries one event
+            // per decision turn.
+            if (result.TokenUsage != null)
+            {
+                try
+                {
+                    _ = _bus?.EmitTokenUsageAsync(
+                        info.ProjectName, info.Id,
+                        AgentMessageBusBridge.ParticipantOrchestratorFor(info.ProjectName),
+                        topic: "orchestrator-decision",
+                        usage: result.TokenUsage);
+                }
+                catch (Exception ex) { _logger.LogDebug(ex, "Bus mirror of orchestrator token usage failed for {JobId}", jobId); }
+            }
+
             // Feed the orchestrator's reply back as a Continue. Reuses the
             // existing path (RunPlanner picks Resume vs Recovery based on
             // captured session id), so this is structurally identical to
@@ -950,6 +994,23 @@ public class ProjectRunner
             {
                 _sessions.UpdateLastUsage(jobId, usage, Entry.Path);
             }
+
+            // Mirror run-finish + agent-side token usage onto the bus. We emit
+            // these even before the post-run policy and lane move so a crash
+            // mid-finalisation does not lose the lifecycle event. RunFinished
+            // is the matching pair to the RunStarted emitted on spawn.
+            try
+            {
+                var finishedInfo = _scanner.FindJob(jobId, Entry.Path);
+                if (finishedInfo != null)
+                {
+                    _ = _bus?.EmitRunFinishedAsync(
+                        finishedInfo, cliType, execution.StartedAt,
+                        execution.Status ?? "unknown",
+                        execution.DurationSeconds, agentOutcome: null);
+                }
+            }
+            catch (Exception ex) { _logger.LogDebug(ex, "Bus mirror of run-finish failed for {JobId}", jobId); }
 
             // Persist the captured session UUID so follow-ups can resume.
             // Claude / Codex / Gemini all auto-create a UUID on first run and

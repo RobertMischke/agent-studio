@@ -91,6 +91,7 @@ builder.Services.AddSingleton<TaskRunnerService>();
 builder.Services.AddSingleton<CrashRecoveryService>();
 builder.Services.AddSingleton<StaleProgressArchiver>();
 builder.Services.AddSingleton<AgentMessageBusStore>();
+builder.Services.AddSingleton<AgentMessageBusBridge>();
 builder.Services.AddSingleton<OrchestratorApi.Services.State.SupervisorAdvisoryStore>();
 builder.Services.AddSingleton<OrchestratorApi.Services.State.SupervisorInterventionStore>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Analysis.AnalysisReportStore>();
@@ -215,6 +216,15 @@ catch (Exception ex)
 {
     crashRecorder.Record("StaleProgressArchiver", ex);
 }
+
+// Seed the Agent Message Bus participant registry. Workspace-scoped, idempotent
+// across boots; safe to fire-and-forget. See docs/agent-message-bus.md section 2.
+try
+{
+    var bus = app.Services.GetRequiredService<AgentMessageBusBridge>();
+    _ = bus.SeedBuiltInParticipantsAsync();
+}
+catch (Exception ex) { crashRecorder.Record("AgentMessageBusBridge.Seed", ex); }
 
 // Wire up FileSystemWatcher → SignalR push
 var watcher = app.Services.GetRequiredService<JobWatcherService>();
