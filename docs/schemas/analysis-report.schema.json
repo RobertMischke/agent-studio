@@ -1,0 +1,225 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-taskboard.local/schemas/analysis-report.schema.json",
+  "title": "AnalysisReport",
+  "description": "One inspection report. Generic shape used for manual, scheduled, meta-cycle, supporting-agent, and external-monitor analyses such as queue health, docs drift, stale jobs, roadmap alignment, token-spend review, QA status, architecture drift, and security posture. The Markdown sibling at <reportId>.md is the durable human artifact; this JSON is the additive app contract. Storage and producer rules are documented in docs/analysis-reports.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "reportId",
+    "createdAt",
+    "scope",
+    "producer",
+    "trigger",
+    "topic",
+    "summary",
+    "severity",
+    "parseStatus",
+    "references",
+    "followUpTaskSuggestions"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1,
+      "description": "Schema version for this record. Bumped only when a non-additive change forces readers to fork. Additive optional fields keep version 1."
+    },
+    "reportId": {
+      "type": "string",
+      "minLength": 8,
+      "maxLength": 128,
+      "description": "Stable id for this report. ULID or UUID v7 are recommended so the lexical order matches creation time. Matches the Markdown filename stem on disk."
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp at which the report was created. Must end in Z."
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "description": "Primary scope for this report. The kind decides which optional pointers are populated.",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["Workspace", "Project", "Task", "Run", "TimeWindow"],
+          "description": "Workspace: cross-project audit. Project: default project-level inspection. Task: bound to one job folder. Run: bound to one CLI invocation. TimeWindow: covers a wall-clock window across one or more projects."
+        },
+        "project": {
+          "type": ["string", "null"],
+          "description": "Project name as it appears in WatchPaths. Required for Project, Task, and Run scopes; null for Workspace; optional for TimeWindow."
+        },
+        "jobId": {
+          "type": ["string", "null"],
+          "description": "Job folder id when scope.kind is Task or Run."
+        },
+        "runIndex": {
+          "type": ["integer", "null"],
+          "minimum": 1,
+          "description": "1-based run index when scope.kind is Run."
+        },
+        "timeWindow": {
+          "type": ["object", "null"],
+          "description": "Wall-clock window for TimeWindow scope. UTC, ISO-8601.",
+          "additionalProperties": false,
+          "required": ["from", "to"],
+          "properties": {
+            "from": { "type": "string", "format": "date-time" },
+            "to": { "type": "string", "format": "date-time" }
+          }
+        }
+      }
+    },
+    "producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "description": "Who wrote the report. Descriptive only; producer kind does not grant any capability.",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["Manual", "Scheduled", "MetaCycle", "SupportingAgent", "ExternalMonitor"],
+          "description": "Manual: user-initiated button click. Scheduled: cron-like cadence configured per project. MetaCycle: orchestrator meta-cycle (Layer 2 1/2). SupportingAgent: a CLI agent invoked for meta work (security audit, UX/UI council, source-map skill). ExternalMonitor: Layer 3 external system review monitor."
+        },
+        "participantId": {
+          "type": ["string", "null"],
+          "description": "Optional Agent Message Bus participant id of the producer. When set, joins this report to the bus's participant graph."
+        },
+        "agent": {
+          "type": ["string", "null"],
+          "description": "Free-form CLI / tool label, e.g. 'claude', 'codex', 'system-review.sh'. Optional descriptor; the participantId is the joinable id."
+        }
+      }
+    },
+    "trigger": {
+      "type": "string",
+      "enum": ["Manual", "Scheduled", "MetaCycle", "SupportingAgent", "ExternalMonitor"],
+      "description": "What caused the analysis to run. Mirrors producer.kind in the simple case; carried as a separate field so a single producer can fire for multiple trigger reasons (e.g. a supporting agent invoked manually vs on a schedule)."
+    },
+    "topic": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80,
+      "description": "kebab-case subject of the report. Examples: queue-health, docs-drift, roadmap-alignment, stale-jobs, security-posture, architecture-drift, qa-status, token-spend, runtime-observability, are-we-on-track, ux-ui."
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 1000,
+      "description": "One-sentence verdict shown in the report list. Detail belongs in the Markdown sibling."
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["Info", "Warn", "High", "Critical"],
+      "description": "Highest finding severity in the report. Drives the badge in the project-level Analysis Reports surface."
+    },
+    "parseStatus": {
+      "type": "string",
+      "enum": ["Structured", "Unstructured", "MalformedJson"],
+      "description": "How the UI should present this report. Structured: both Markdown and a valid JSON sidecar. Unstructured: Markdown only. MalformedJson: Markdown plus a sidecar that failed to parse or validate; the Markdown stays visible."
+    },
+    "parseError": {
+      "type": ["string", "null"],
+      "maxLength": 1000,
+      "description": "When parseStatus is MalformedJson, a one-line reason a reviewer can read without re-running the analysis."
+    },
+    "tags": {
+      "type": "array",
+      "description": "Optional, free-form labels for filtering: 'pre-update-stable', 'post-batch', 'merge-freeze', 'release-prep'. kebab-case.",
+      "items": { "type": "string", "minLength": 1, "maxLength": 60 }
+    },
+    "references": {
+      "type": "array",
+      "description": "Typed pointers to the evidence the report rests on. References are joined against existing stores; the report does not copy raw logs.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "ref"],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["Job", "Run", "Commit", "Screenshot", "BusMessage", "RuntimeEvent", "PreviousReport", "LogSlice", "Doc"],
+            "description": "Pointer type. Job: job folder identity. Run: one CLI invocation. Commit: <repoSlug>@<sha>. Screenshot: path under <job>/results/. BusMessage: AgentMessage id. RuntimeEvent: typed event name + id (often bridged through the bus today). PreviousReport: another AnalysisReport id. LogSlice: <jobId>:<runIndex>:<startLine>-<endLine>. Doc: a path under the source repo (README, AGENTS, ADR file, etc.)."
+          },
+          "ref": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 400,
+            "description": "Stable identifier for the referenced object, in the shape documented for kind in docs/analysis-reports.md."
+          },
+          "label": {
+            "type": ["string", "null"],
+            "maxLength": 200,
+            "description": "Optional human-readable label shown in drill-down chips. Falls back to ref when absent."
+          }
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "description": "Optional typed findings. Each finding has a topic, severity, and a one-line message; evidence pointers reference the references array by index or by ref.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["topic", "severity", "message"],
+        "properties": {
+          "topic": { "type": "string", "minLength": 1, "maxLength": 80, "description": "kebab-case label, e.g. stale-job, missing-artefact, doc-drift." },
+          "severity": { "type": "string", "enum": ["Info", "Warn", "High", "Critical"] },
+          "message": { "type": "string", "minLength": 1, "maxLength": 600 },
+          "evidenceRefs": {
+            "type": "array",
+            "description": "Optional pointers (matching references[].ref) that back the finding.",
+            "items": { "type": "string", "minLength": 1, "maxLength": 400 }
+          }
+        }
+      }
+    },
+    "followUpTaskSuggestions": {
+      "type": "array",
+      "description": "Candidate follow-up tasks. The user (or a producer with creation rights) creates the actual job through the existing task-creation entry point; suggestions never enqueue silently. Source-code edits are out of scope: a follow-up runs as a normal queued task.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title", "summary", "priority"],
+        "properties": {
+          "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+          "summary": { "type": "string", "maxLength": 2000 },
+          "priority": { "type": "string", "enum": ["Low", "Normal", "High", "Critical"] },
+          "relatedTopic": {
+            "type": ["string", "null"],
+            "enum": [
+              "QueueHealth",
+              "DocsDrift",
+              "RoadmapAlignment",
+              "StaleJobs",
+              "Security",
+              "Architecture",
+              "Qa",
+              "TokenSpend",
+              "RuntimeObservability",
+              "UxUi",
+              "Other",
+              null
+            ],
+            "description": "Optional grouping label so the UI can colour or filter suggestions."
+          },
+          "targetState": {
+            "type": ["string", "null"],
+            "enum": ["1-preparation", "2-ready", null],
+            "description": "Initial state for the queued follow-up. Default 1-preparation; 2-ready is reserved for templated topics with a fixed contract."
+          },
+          "createdJobId": {
+            "type": ["string", "null"],
+            "description": "When the suggestion has been turned into a real queued job, the id of that job. Until set, the suggestion is a candidate, not a commitment."
+          }
+        }
+      }
+    },
+    "markdownPath": {
+      "type": ["string", "null"],
+      "description": "Optional pointer to the Markdown sibling, relative to the workspace root. Consumers normally compute this from reportId; the field exists for the rare case where the Markdown lives under a non-default path."
+    }
+  }
+}

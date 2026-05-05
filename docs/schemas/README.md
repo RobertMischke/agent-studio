@@ -26,6 +26,7 @@ Schemas in this folder are the single contract. C# records, TypeScript interface
 - `drift-report.schema.json` - one project-level drift analysis report with scores, dimensions, evidence references, and follow-up task suggestions.
 - `task-find-result.schema.json` - one job record plus the optimistic-concurrency token returned by the Task Access Layer's find / list / snapshot calls. ADR-0024.
 - `task-mutation-request.schema.json` - one narrowly-typed mutation request consumed by the Task Access Layer (field update, prompt attach, log-line append, create). Lane transitions have their own typed entry point inside the layer. ADR-0024.
+- `analysis-report.schema.json` - one inspection report. Generic shape used for manual, scheduled, meta-cycle, supporting-agent, and external-monitor analyses (queue health, docs drift, roadmap alignment, stale jobs, security posture, architecture drift, QA status, token-spend review). The Markdown sibling is the durable human artifact; the JSON is the additive app contract. Storage and producer rules are in [`docs/analysis-reports.md`](../analysis-reports.md).
 
 More schemas land here as concepts get formalised (audit findings, performance probes, companion snapshots). Keep one concept per file. Filename is `<concept-kebab>.schema.json`.
 

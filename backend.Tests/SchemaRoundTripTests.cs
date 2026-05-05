@@ -1,5 +1,6 @@
 using System.Text.Json;
 using OrchestratorApi.Models;
+using OrchestratorApi.Services.Analysis;
 using OrchestratorApi.Services.Supervisor;
 using Xunit;
 
@@ -145,6 +146,105 @@ public class SchemaRoundTripTests
         Assert.Contains("cli", required);
         Assert.Contains("model", required);
         Assert.Contains("tokens", required);
+    }
+
+    [Fact]
+    public void AnalysisReport_CanonicalExample_ContainsEverySchemaRequiredProperty()
+    {
+        var report = new AnalysisReport(
+            ReportId: "01HX0000000000000000000001",
+            CreatedAt: new DateTime(2026, 5, 5, 10, 0, 0, DateTimeKind.Utc),
+            Scope: new AnalysisReportScope(AnalysisReportScopeKind.Project, Project: "agent-taskboard"),
+            Producer: new AnalysisReportProducer(AnalysisReportProducerKind.Manual, Agent: "user"),
+            Trigger: AnalysisReportTrigger.Manual,
+            Topic: "are-we-on-track",
+            Summary: "On track with two follow-up suggestions.",
+            Severity: AnalysisReportSeverity.Warn,
+            ParseStatus: AnalysisReportParseStatus.Structured,
+            References: new[]
+            {
+                new AnalysisReportReference(AnalysisReportReferenceKind.Job, "agent-taskboard/3-progress/sample"),
+            },
+            FollowUpTaskSuggestions: new[]
+            {
+                new AnalysisReportFollowUpTaskSuggestion(
+                    Title: "Resync ROADMAP.md with queue",
+                    Summary: "Two themes drifted.",
+                    Priority: AnalysisReportFollowUpPriority.Normal,
+                    RelatedTopic: AnalysisReportFollowUpRelatedTopic.RoadmapAlignment),
+            });
+
+        // The on-disk format is what consumers compare against.
+        var serializerOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web)
+        {
+            DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+        };
+        var json = JsonSerializer.SerializeToElement(report, serializerOptions);
+        AssertEveryRequiredPropertyPresent(LoadSchema("analysis-report.schema.json"), json);
+    }
+
+    [Fact]
+    public void AnalysisReportSchema_ListsTheFiveScopesProducersAndParseStates()
+    {
+        var schema = LoadSchema("analysis-report.schema.json");
+        var properties = schema.GetProperty("properties");
+
+        var scopes = ReadStringArray(properties.GetProperty("scope").GetProperty("properties").GetProperty("kind"), "enum");
+        Assert.Equal(new[] { "Workspace", "Project", "Task", "Run", "TimeWindow" }, scopes);
+        foreach (var name in scopes)
+        {
+            Assert.True(Enum.TryParse<AnalysisReportScopeKind>(name, ignoreCase: false, out _),
+                $"Schema scope kind '{name}' has no matching C# enum value.");
+        }
+
+        var producerKinds = ReadStringArray(
+            properties.GetProperty("producer").GetProperty("properties").GetProperty("kind"), "enum");
+        Assert.Equal(new[] { "Manual", "Scheduled", "MetaCycle", "SupportingAgent", "ExternalMonitor" }, producerKinds);
+        foreach (var name in producerKinds)
+        {
+            Assert.True(Enum.TryParse<AnalysisReportProducerKind>(name, ignoreCase: false, out _),
+                $"Schema producer kind '{name}' has no matching C# enum value.");
+        }
+
+        var triggers = ReadStringArray(properties.GetProperty("trigger"), "enum");
+        Assert.Equal(new[] { "Manual", "Scheduled", "MetaCycle", "SupportingAgent", "ExternalMonitor" }, triggers);
+        foreach (var name in triggers)
+        {
+            Assert.True(Enum.TryParse<AnalysisReportTrigger>(name, ignoreCase: false, out _),
+                $"Schema trigger '{name}' has no matching C# enum value.");
+        }
+
+        var severities = ReadStringArray(properties.GetProperty("severity"), "enum");
+        Assert.Equal(new[] { "Info", "Warn", "High", "Critical" }, severities);
+        foreach (var name in severities)
+        {
+            Assert.True(Enum.TryParse<AnalysisReportSeverity>(name, ignoreCase: false, out _),
+                $"Schema severity '{name}' has no matching C# enum value.");
+        }
+
+        var parseStates = ReadStringArray(properties.GetProperty("parseStatus"), "enum");
+        Assert.Equal(new[] { "Structured", "Unstructured", "MalformedJson" }, parseStates);
+        foreach (var name in parseStates)
+        {
+            Assert.True(Enum.TryParse<AnalysisReportParseStatus>(name, ignoreCase: false, out _),
+                $"Schema parseStatus '{name}' has no matching C# enum value.");
+        }
+
+        // Reference kinds in the schema must each round-trip through the C# enum.
+        var refKinds = ReadStringArray(
+            properties.GetProperty("references")
+                .GetProperty("items")
+                .GetProperty("properties")
+                .GetProperty("kind"),
+            "enum");
+        Assert.Equal(
+            new[] { "Job", "Run", "Commit", "Screenshot", "BusMessage", "RuntimeEvent", "PreviousReport", "LogSlice", "Doc" },
+            refKinds);
+        foreach (var name in refKinds)
+        {
+            Assert.True(Enum.TryParse<AnalysisReportReferenceKind>(name, ignoreCase: false, out _),
+                $"Schema reference kind '{name}' has no matching C# enum value.");
+        }
     }
 
     [Fact]
