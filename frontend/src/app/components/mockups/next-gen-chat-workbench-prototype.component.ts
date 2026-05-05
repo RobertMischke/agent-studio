@@ -830,14 +830,14 @@ import {
               </article>
               <article>
                 <h3>Owner switch</h3>
-                <p>The header keeps owner filtering first-class. Found-next should preserve the fast switch for Robin, Orchestrator, QA, and Unassigned without pushing task content down.</p>
+                <p>The header keeps owner filtering first-class. Found-next should preserve the fast switch for Robert, Orchestrator, QA, and Unassigned without pushing task content down.</p>
                 <div class="handoff-list">
                   <span><b>Scope</b> active project set plus owner filter</span>
                   <span><b>Default route</b> last selected project, then user-owned queue</span>
                   <span><b>Empty state</b> keep side sheet and status bar available</span>
                 </div>
                 <div class="function-grid">
-                  <button class="function-grid__active">Robin</button>
+                  <button class="function-grid__active">Robert</button>
                   <button>Orchestrator</button>
                   <button>QA</button>
                   <button>Unassigned</button>

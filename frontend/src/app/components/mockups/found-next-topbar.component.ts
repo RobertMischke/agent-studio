@@ -35,8 +35,8 @@ import { Density, StatusPanel, Theme } from './next-gen-chat-workbench-prototype
       </div>
       <div class="topbar__actions">
         <button class="owner-switch"
-                title="Owner filter: Robin"
-                aria-label="Owner filter Robin"
+                title="Owner filter: Robert"
+                aria-label="Owner filter Robert"
                 data-testid="prototype-owner-switch"
                 (click)="projectPanelRequested.emit()">
           <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -44,7 +44,7 @@ import { Density, StatusPanel, Theme } from './next-gen-chat-workbench-prototype
               <path [attr.d]="path"></path>
             }
           </svg>
-          <span>Robin</span>
+          <span>Robert</span>
         </button>
         <button class="icon-btn"
                 [class.icon-btn--active]="sideSheetOpen()"
