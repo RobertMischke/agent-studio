@@ -1,6 +1,7 @@
 using OrchestratorApi.Endpoints;
 using OrchestratorApi.Hubs;
 using OrchestratorApi.Services;
+using OrchestratorApi.Services.Bus;
 using OrchestratorApi.Services.Cli;
 using OrchestratorApi.Services.Companion;
 using OrchestratorApi.Services.Diagnostics;
@@ -84,6 +85,7 @@ builder.Services.AddSingleton<RuntimePromptService>();
 builder.Services.AddSingleton<RoadmapIntakeService>();
 builder.Services.AddSingleton<TaskRunnerService>();
 builder.Services.AddSingleton<CrashRecoveryService>();
+builder.Services.AddSingleton<AgentMessageBusStore>();
 builder.Services.AddSingleton<ProjectObservationService>();
 builder.Services.AddSingleton<SupervisorInterventionService>();
 builder.Services.AddHostedService<HardHealthCheckHostedService>();

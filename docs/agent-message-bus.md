@@ -182,6 +182,21 @@ A one-shot reader under `scripts/bus-backfill/` translates pre-migration `observ
 
 No phase requires editing `RunOutcomePolicy`, the supervisor decision logic, or the runner state machine. The bus piggybacks on existing signals; it does not change them.
 
+## 9a. HTTP query surface
+
+The backend exposes the bus through `AgentMessageBusStore` and four read endpoints under `/api/bus`. The store keeps an in-memory projection per `(workspaceRoot, project)` so UI-polled endpoints never trigger a full disk scan; appends update the projection incrementally.
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/bus/{project}/summary` | Total messages, first/last timestamp, counts by `kind`, `participantId`, `severity`. |
+| GET | `/api/bus/{project}/recent?limit=N` | Newest N messages (default 100, max 1000), oldest-first within the window. |
+| GET | `/api/bus/{project}/messages?...` | Filtered query. Filter keys: `jobId`, `runId`, `participantId`, `kind`, `severity`, `cli`, `skill`, `tag`, `correlationId`, `since`, `until`, `limit`. Multiple filters are AND-combined. `cli` and `skill` resolve via the participant registry. |
+| GET | `/api/bus/{project}/messages/{id}` | One raw message by id, or 404. |
+
+Workspace root is resolved from the `TaskRepository` configuration value, matching the existing `/api/supervisor/{project}/recent-events` endpoint. Unknown projects return empty results, not 404, so the project screen renders during the first-message gap.
+
+The store is registered as a singleton in `Program.cs`. Writers can call `AgentMessageBusStore.AppendAsync(workspace, message)` directly; the store validates against the schema's required fields and known enums (`AgentMessageValidator`), then atomically appends one JSON line under a per-file `SemaphoreSlim`. The disk path follows section 4: `{workspace}/logs/bus/{project|_workspace}/{yyyy-mm-dd}.jsonl`. Participant ids that contain `:` (e.g. `supervisor:my-project`) are mapped to `-` for the on-disk filename only; the id inside the JSON document is preserved verbatim.
+
 ## 10. Changing this contract
 
 Before you touch any of the moving parts:
