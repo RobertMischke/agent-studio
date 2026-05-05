@@ -19,6 +19,16 @@ test.describe('@mockup next-gen chat Angular prototype', () => {
     await expect(page.getByTestId('prototype-topbar-nav')).toHaveCount(0);
     await expect(page.getByTestId('prototype-summary-strip')).toBeVisible();
     await expect(page.getByTestId('prototype-pane-result-view')).toContainText('Result summary');
+    const resultPane = page.getByTestId('prototype-pane-result-view');
+    await resultPane.getByRole('button', { name: 'Prompt history' }).click();
+    await expect(page.getByTestId('prototype-feature-modal')).toContainText('prompt.md');
+    await page.getByTestId('prototype-feature-modal').getByText('Close').click();
+    await resultPane.getByRole('button', { name: 'Run timeline' }).click();
+    await expect(page.getByTestId('prototype-feature-modal')).toContainText('Run 4');
+    await page.getByTestId('prototype-feature-modal').getByText('Close').click();
+    await resultPane.getByRole('button', { name: 'Start/Stop' }).click();
+    await expect(page.getByTestId('prototype-feature-modal')).toContainText('Run controls');
+    await page.getByTestId('prototype-feature-modal').getByText('Close').click();
     await page.waitForTimeout(250);
     await page.screenshot({
       path: path.join(evidenceDir, 'next-gen-chat-angular-prototype-result.png'),

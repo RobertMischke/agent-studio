@@ -12,6 +12,7 @@ type StatusPanel = 'health' | 'queue' | 'tokens' | 'evidence' | 'model';
 type ActorKind = 'user' | 'agent' | 'orchestrator' | 'supervisor' | 'support' | 'tool' | 'system';
 type InterventionTarget = 'currentRun' | 'nextRun' | 'orchestrator' | 'followUp';
 type DecisionKind = 'reissue' | 'heuristic' | 'needsInput' | 'circuit' | 'captureFail' | 'drift';
+type FeatureAction = 'prompt' | 'activity' | 'timeline' | 'git' | 'screenshots' | 'tokens' | 'sideSheet' | 'startStop';
 
 interface SummaryChip {
   label: string;
@@ -218,8 +219,8 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
                     <path [attr.d]="path"></path>
                   }
                 </svg>
-                <span>Task rail</span>
-                <small>quick views + pins</small>
+                <span>Views</span>
+                <small>pins + run facts</small>
               </button>
               <div class="inspector-rail__modes" data-testid="prototype-layout-buttons">
                 <b>Panes</b>
@@ -251,23 +252,6 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
                   </button>
                 }
               </div>
-              <div class="inspector-rail__summary" data-testid="prototype-summary-strip">
-                <b>Signals</b>
-                @for (chip of summaryChips; track chip.label) {
-                  <button class="summary-chip"
-                          [attr.data-tone]="chip.tone || 'neutral'"
-                          [attr.title]="chip.value + ' ' + chip.label"
-                          (click)="setPane(chip.pane)">
-                    <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
-                      @for (path of iconPath(chip.icon); track path) {
-                        <path [attr.d]="path"></path>
-                      }
-                    </svg>
-                    <strong>{{ chip.value }}</strong>
-                    <span>{{ chip.label }}</span>
-                  </button>
-                }
-              </div>
               <div class="inspector-rail__scenarios" data-testid="prototype-scenarios">
                 <b>Cases</b>
                 @for (scenario of scenarios; track scenario.id) {
@@ -282,6 +266,23 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
                       }
                     </svg>
                     <span>{{ scenario.label }}</span>
+                  </button>
+                }
+              </div>
+              <div class="inspector-rail__summary" data-testid="prototype-summary-strip">
+                <b>Signals</b>
+                @for (chip of summaryChips; track chip.label) {
+                  <button class="summary-chip"
+                          [attr.data-tone]="chip.tone || 'neutral'"
+                          [attr.title]="chip.value + ' ' + chip.label"
+                          (click)="setPane(chip.pane)">
+                    <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      @for (path of iconPath(chip.icon); track path) {
+                        <path [attr.d]="path"></path>
+                      }
+                    </svg>
+                    <strong>{{ chip.value }}</strong>
+                    <span>{{ chip.label }}</span>
                   </button>
                 }
               </div>
@@ -659,7 +660,7 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
                           <h3>Existing functions carried forward</h3>
                           <div class="function-grid">
                             @for (item of featureParity; track item.label) {
-                              <button [attr.title]="item.note" (click)="item.pane ? setPane(item.pane) : debugOpen.set(true)">
+                              <button [attr.title]="item.note" (click)="openFeatureParity(item.action)">
                                 <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
                                   @for (path of iconPath(item.icon); track path) {
                                     <path [attr.d]="path"></path>
@@ -1095,6 +1096,75 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
         </div>
       }
 
+      @if (featureModal(); as feature) {
+        <div class="modal" data-testid="prototype-feature-modal" (click)="featureModal.set(null)">
+          <section class="modal__panel modal__panel--guide" (click)="$event.stopPropagation()">
+            <header>
+              <strong>{{ featureTitle(feature) }}</strong>
+              <button (click)="featureModal.set(null)">Close</button>
+            </header>
+            <div class="guide-grid">
+              @switch (feature) {
+                @case ('prompt') {
+                  <article>
+                    <h3>Prompt history</h3>
+                    <p><code>prompt.md</code> is the original task. <code>prompt-2.md</code> and <code>prompt-3.md</code> are user extensions that should remain reviewable without leaving the chat workbench.</p>
+                  </article>
+                  <article>
+                    <h3>Edit path</h3>
+                    <p>Production should keep preview, source edit, save state, and prompt-history breadcrumbs. This mock keeps the interaction as a quick modal.</p>
+                    <div class="function-grid">
+                      <button>Preview prompt.md</button>
+                      <button>Edit prompt.md</button>
+                      <button>Open history diff</button>
+                    </div>
+                  </article>
+                }
+                @case ('timeline') {
+                  <article>
+                    <h3>Run timeline</h3>
+                    <div class="metric-grid">
+                      <div><b>Run 1</b><span>start</span></div>
+                      <div><b>Run 2</b><span>continue</span></div>
+                      <div><b>Run 3</b><span>reissue</span></div>
+                      <div><b>Run 4</b><span>review</span></div>
+                    </div>
+                  </article>
+                  <article>
+                    <h3>Expected behavior</h3>
+                    <p>The default transcript gets a tiny run marker. Full history opens here or in Verbose Debug, including session id, trace range, commits, and token pressure.</p>
+                    <div class="function-grid">
+                      <button (click)="markerOpen.set(true); featureModal.set(null)">Open run marker</button>
+                      <button (click)="debugTab.set('overview'); debugOpen.set(true); featureModal.set(null)">Verbose timeline</button>
+                    </div>
+                  </article>
+                }
+                @case ('startStop') {
+                  <article>
+                    <h3>Run controls</h3>
+                    <div class="metric-grid">
+                      <div><b>Codex</b><span>driver</span></div>
+                      <div><b>5.5</b><span>model</span></div>
+                      <div><b>Full</b><span>access</span></div>
+                      <div><b>Paused</b><span>safe stop ready</span></div>
+                    </div>
+                  </article>
+                  <article>
+                    <h3>Composer deck</h3>
+                    <p>Start, pause, stop, access mode, model, CLI, and selected file context stay in the bottom composer area. The task header only carries durable task state.</p>
+                    <div class="function-grid">
+                      <button (click)="composerMode.set('continue'); featureModal.set(null)">Focus continue</button>
+                      <button (click)="toggleStatusPanel('model'); featureModal.set(null)">Model settings</button>
+                      <button>Stop run</button>
+                    </div>
+                  </article>
+                }
+              }
+            </div>
+          </section>
+        </div>
+      }
+
       @if (commandOpen()) {
         <div class="modal" data-testid="prototype-command-palette" (click)="commandOpen.set(false)">
           <section class="command" (click)="$event.stopPropagation()">
@@ -1312,12 +1382,12 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
       min-width: 0;
       min-height: 0;
       display: grid;
-      grid-template-columns: 148px minmax(650px, 1fr) minmax(292px, 30vw);
+      grid-template-columns: 156px minmax(620px, 1fr) minmax(304px, 29vw);
       background: var(--bg);
     }
 
     .workspace--sheet-closed {
-      grid-template-columns: 148px minmax(650px, 1fr) 0;
+      grid-template-columns: 156px minmax(620px, 1fr) 0;
     }
 
     .task-list,
@@ -1497,7 +1567,7 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
       min-height: 0;
       min-width: 0;
       display: grid;
-      grid-template-columns: 82px minmax(0, 1fr);
+      grid-template-columns: 132px minmax(0, 1fr);
       grid-template-rows: minmax(0, 1fr);
       padding: 0;
       background: var(--surface);
@@ -1509,8 +1579,8 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
       display: grid;
       grid-template-rows: auto auto auto minmax(0, 1fr);
       align-content: start;
-      gap: 6px;
-      padding: 5px;
+      gap: 7px;
+      padding: 7px;
       border-right: 1px solid var(--line);
       background: var(--chrome);
     }
@@ -1525,7 +1595,8 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
       align-items: center;
       column-gap: 7px;
       row-gap: 1px;
-      padding: 6px;
+      min-height: 46px;
+      padding: 7px;
       border: 1px solid var(--line);
       border-radius: 7px;
       background: var(--surface);
@@ -1541,7 +1612,8 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      font-size: 11px;
+      font-size: 12px;
+      font-weight: 750;
     }
 
     .rail-guide small {
@@ -1560,17 +1632,20 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
     .inspector-rail__scenarios b,
     .inspector-rail__summary b {
       color: var(--muted);
+      padding: 0 2px;
       font-size: 10px;
+      line-height: 1.2;
+      text-transform: uppercase;
     }
 
     .inspector-rail__scenarios button,
     .rail-action {
       width: 100%;
-      min-height: 26px;
+      min-height: 31px;
       display: grid;
-      grid-template-columns: 16px minmax(0, 1fr) 14px;
+      grid-template-columns: 18px minmax(0, 1fr) auto;
       align-items: center;
-      gap: 4px;
+      gap: 6px;
       border: 1px solid transparent;
       border-radius: 6px;
       background: transparent;
@@ -1578,7 +1653,7 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
       font-size: 11px;
       font-weight: 700;
       text-align: left;
-      padding: 0 4px;
+      padding: 0 7px;
     }
 
     .inspector-rail__scenarios button span,
@@ -1590,8 +1665,8 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
     }
 
     .rail-action em {
-      min-width: 14px;
-      min-height: 14px;
+      min-width: 17px;
+      min-height: 17px;
       display: inline-grid;
       place-items: center;
       border-radius: 999px;
@@ -1612,9 +1687,9 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
 
     .inspector-rail__summary .summary-chip {
       width: 100%;
-      min-height: 30px;
+      min-height: 38px;
       display: grid;
-      grid-template-columns: 16px minmax(0, 1fr);
+      grid-template-columns: 18px minmax(0, 1fr);
       grid-template-areas:
         "icon value"
         "icon label";
@@ -1622,7 +1697,7 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
       justify-items: start;
       gap: 0;
       border-radius: 6px;
-      padding: 3px 5px;
+      padding: 4px 7px;
       text-align: left;
     }
 
@@ -1636,6 +1711,7 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
       text-overflow: ellipsis;
       white-space: nowrap;
       font-size: 10px;
+      line-height: 1.1;
     }
 
     .workbench__main {
@@ -1704,7 +1780,7 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
       min-height: 0;
       overflow: hidden;
       display: grid;
-      grid-template-rows: 30px minmax(0, 1fr) auto;
+      grid-template-rows: 32px minmax(0, 1fr) auto;
       background: var(--bg);
     }
 
@@ -1718,11 +1794,11 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
 
     .conversation__topline {
       min-width: 0;
-      min-height: 30px;
+      min-height: 32px;
       display: grid;
-      grid-template-columns: auto minmax(0, 1fr) auto auto;
+      grid-template-columns: auto minmax(0, 1fr) auto auto auto;
       align-items: center;
-      gap: 7px;
+      gap: 6px;
       padding: 0 8px;
       border-bottom: 1px solid var(--line);
       background: var(--chrome);
@@ -2747,6 +2823,46 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
       grid-template-rows: auto minmax(0, 1fr);
     }
 
+    .modal__panel--guide {
+      width: min(920px, 94vw);
+    }
+
+    .guide-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      padding: 14px;
+    }
+
+    .guide-grid article {
+      min-width: 0;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface-soft);
+      padding: 12px;
+    }
+
+    .guide-grid h3 {
+      margin: 0 0 8px;
+      font-size: 14px;
+    }
+
+    .guide-grid p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .guide-grid code {
+      border-radius: 4px;
+      background: var(--surface);
+      padding: 1px 4px;
+    }
+
+    .guide-grid .function-grid {
+      margin-top: 10px;
+    }
+
     .debug-grid {
       min-height: 0;
       overflow: auto;
@@ -2768,10 +2884,10 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
     .debug-grid p { color: var(--muted); line-height: 1.45; margin: 0; }
 
     .ng-chat-prototype[data-density="compact"] .workspace {
-      grid-template-columns: 132px minmax(590px, 1fr) minmax(260px, 28vw);
+      grid-template-columns: 144px minmax(590px, 1fr) minmax(272px, 28vw);
     }
 
-    .ng-chat-prototype[data-density="compact"] .workbench { grid-template-columns: 54px minmax(0, 1fr); }
+    .ng-chat-prototype[data-density="compact"] .workbench { grid-template-columns: 64px minmax(0, 1fr); }
     .ng-chat-prototype[data-density="compact"] .inspector-rail { padding: 5px 4px; gap: 5px; }
     .ng-chat-prototype[data-density="compact"] .rail-guide {
       min-height: 34px;
@@ -2902,6 +3018,7 @@ export class NextGenChatWorkbenchPrototypeComponent {
   readonly commandOpen = signal(false);
   readonly guideOpen = signal(false);
   readonly markerOpen = signal(false);
+  readonly featureModal = signal<FeatureAction | null>(null);
   readonly statusPanel = signal<StatusPanel | null>(null);
   readonly activeActivity = signal<ActivityTarget>('projects');
   readonly chatOpen = signal(true);
@@ -2966,10 +3083,10 @@ export class NextGenChatWorkbenchPrototypeComponent {
 
   readonly paneButtons: Array<{ id: WorkbenchPane; label: string; short: string; icon: string }> = [
     { id: 'chat', label: 'Toggle chat pane', short: 'Chat', icon: 'chat' },
-    { id: 'result', label: 'Result summary', short: 'Res', icon: 'check' },
+    { id: 'result', label: 'Result summary', short: 'Result', icon: 'check' },
     { id: 'git', label: 'Git changes', short: 'Git', icon: 'git' },
-    { id: 'preview', label: 'Screenshot preview', short: 'Prev', icon: 'image' },
-    { id: 'debug', label: 'Debug summary', short: 'Dbg', icon: 'bug' },
+    { id: 'preview', label: 'Screenshot preview', short: 'Preview', icon: 'image' },
+    { id: 'debug', label: 'Debug summary', short: 'Debug', icon: 'bug' },
   ];
 
   readonly scenarios: Array<{ id: Scenario; label: string; icon: string }> = [
@@ -3030,7 +3147,7 @@ export class NextGenChatWorkbenchPrototypeComponent {
     { value: '3', label: 'commits', icon: 'git', pane: 'git' },
     { value: '8', label: 'files', icon: 'fileDiff', pane: 'git' },
     { value: '4', label: 'images', icon: 'image', pane: 'preview' },
-    { value: '1', label: 'failed retry', icon: 'warning', pane: 'debug', tone: 'danger' },
+    { value: '1', label: 'retry fail', icon: 'warning', pane: 'debug', tone: 'danger' },
     { value: '12m', label: 'active', icon: 'clock', pane: 'result' },
   ];
 
@@ -3053,15 +3170,15 @@ export class NextGenChatWorkbenchPrototypeComponent {
     { label: 'Artifacts', value: '4 screenshots' },
   ];
 
-  readonly featureParity: Array<{ label: string; icon: string; note: string; pane?: WorkbenchPane }> = [
-    { label: 'Prompt history', icon: 'file', note: 'Original prompt plus task extensions remain visible.', pane: 'result' },
-    { label: 'Activity and Trace', icon: 'terminal', note: 'Raw CLI output stays available through the debug lens.', pane: 'debug' },
-    { label: 'Run timeline', icon: 'clock', note: 'Run cards become thin chat markers with popover metadata.', pane: 'debug' },
-    { label: 'Git review', icon: 'git', note: 'Files, commits, diff, commit message, and commit action remain accessible.', pane: 'git' },
-    { label: 'Screenshots', icon: 'image', note: 'Durable screenshot evidence opens in the preview pane.', pane: 'preview' },
-    { label: 'Token usage', icon: 'tokens', note: 'Task and project token pressure stay visible without crowding the transcript.', pane: 'debug' },
-    { label: 'Side sheet', icon: 'panelOpen', note: 'Project-level steering remains in the resizable side sheet.' },
-    { label: 'Start/Stop', icon: 'play', note: 'Execution controls move into the compact composer command deck.' },
+  readonly featureParity: Array<{ label: string; icon: string; note: string; action: FeatureAction }> = [
+    { label: 'Prompt history', icon: 'file', note: 'Original prompt plus task extensions remain visible.', action: 'prompt' },
+    { label: 'Activity and Trace', icon: 'terminal', note: 'Raw CLI output stays available through the debug lens.', action: 'activity' },
+    { label: 'Run timeline', icon: 'clock', note: 'Run cards become thin chat markers with popover metadata.', action: 'timeline' },
+    { label: 'Git review', icon: 'git', note: 'Files, commits, diff, commit message, and commit action remain accessible.', action: 'git' },
+    { label: 'Screenshots', icon: 'image', note: 'Durable screenshot evidence opens in the preview pane.', action: 'screenshots' },
+    { label: 'Token usage', icon: 'tokens', note: 'Task and project token pressure stay visible without crowding the transcript.', action: 'tokens' },
+    { label: 'Side sheet', icon: 'panelOpen', note: 'Project-level steering remains in the resizable side sheet.', action: 'sideSheet' },
+    { label: 'Start/Stop', icon: 'play', note: 'Execution controls move into the compact composer command deck.', action: 'startStop' },
   ];
 
   readonly transcript: TranscriptEntry[] = [
@@ -3518,6 +3635,44 @@ export class NextGenChatWorkbenchPrototypeComponent {
     if (target === 'tasks') this.toggleStatusPanel('queue');
     if (target === 'search') this.commandOpen.set(true);
     if (target === 'projects') this.sideSheetOpen.set(true);
+  }
+
+  openFeatureParity(action: FeatureAction): void {
+    switch (action) {
+      case 'activity':
+        this.debugTab.set('trace');
+        this.debugOpen.set(true);
+        return;
+      case 'timeline':
+        this.featureModal.set('timeline');
+        return;
+      case 'git':
+        this.setPane('git');
+        return;
+      case 'screenshots':
+        this.setPane('preview');
+        return;
+      case 'tokens':
+        this.debugTab.set('tokens');
+        this.debugOpen.set(true);
+        return;
+      case 'sideSheet':
+        this.sideSheetOpen.set(true);
+        return;
+      case 'startStop':
+        this.featureModal.set('startStop');
+        return;
+      default:
+        this.featureModal.set('prompt');
+    }
+  }
+
+  featureTitle(feature: FeatureAction): string {
+    switch (feature) {
+      case 'timeline': return 'Run timeline';
+      case 'startStop': return 'Start and stop controls';
+      default: return 'Prompt history';
+    }
   }
 
   toggleStatusPanel(panel: StatusPanel): void {
