@@ -6,6 +6,7 @@ import {
   SupervisorIntervention,
   SupervisorObservation,
 } from '../models/supervisor.model';
+import { ConceptHelpComponent } from './concept-help/concept-help.component';
 
 /**
  * Project-level Supervisor panel: live observation snapshot + recent
@@ -22,13 +23,14 @@ import {
 @Component({
   selector: 'app-project-supervisor-section',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, ConceptHelpComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <section class="proj-detail__group" data-testid="project-supervisor-section">
       <h3>
         <span class="psup__icon">🛡️</span>
         Supervisor
+        <app-concept-help concept="supervisor" />
         @if (status() === 'live') {
           <span class="psup__pill psup__pill--good" data-testid="project-supervisor-status">live</span>
         } @else if (status() === 'idle') {

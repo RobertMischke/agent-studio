@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { OrchestratorSession } from '../models/job.model';
 import { JobService } from '../services/job.service';
+import { ConceptHelpComponent } from './concept-help/concept-help.component';
 
 /**
  * Global orchestrator card. Sits above the per-project orchestrator panel
@@ -16,11 +17,13 @@ import { JobService } from '../services/job.service';
 @Component({
   selector: 'app-global-orchestrator-card',
   standalone: true,
+  imports: [ConceptHelpComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <article class="global-orch" data-testid="global-orchestrator-card">
       <header class="global-orch__head">
         <span class="global-orch__role">Global orchestrator</span>
+        <app-concept-help concept="orchestrator" />
         <span class="global-orch__scope">Across all watched projects</span>
       </header>
 

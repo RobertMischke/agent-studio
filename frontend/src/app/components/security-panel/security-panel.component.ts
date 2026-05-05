@@ -16,6 +16,7 @@ import {
   SecurityReviewListResponse,
   SecurityReviewSummary,
 } from './security-panel.types';
+import { ConceptHelpComponent } from '../concept-help/concept-help.component';
 
 /**
  * Project Security panel (slice 1 of the quality-system mockup,
@@ -39,6 +40,7 @@ import {
 @Component({
   selector: 'app-security-panel',
   standalone: true,
+  imports: [ConceptHelpComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <section class="sec-panel" data-testid="security-panel">
@@ -47,6 +49,7 @@ import {
           <h2 class="sec-panel__title">
             <span class="sec-panel__icon" aria-hidden="true">🔒</span>
             Security
+            <app-concept-help concept="audits-and-checks" />
           </h2>
           <span class="sec-panel__badge"
                 [class]="'sec-panel__badge--' + baselineBadge()"
