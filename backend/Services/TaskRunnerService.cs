@@ -121,7 +121,17 @@ public class TaskRunnerService : BackgroundService
             runner.ConfigureWatchdog(LoadWatchdogConfig(_config));
             _stuckLoopBudget = LoadStuckLoopBudget(_config);
             runner.ConfigureStuckLoopBudget(_stuckLoopBudget);
-            runner.OnStatusChanged += status => OnRunnerStatusChanged?.Invoke(entry.Name, status);
+            runner.OnStatusChanged += status =>
+            {
+                // A throwing subscriber here (typically the SignalR fan-out in
+                // Program.cs raising synchronously when the hub system is in
+                // a transitional state) used to bubble back up through
+                // ProjectRunner.NotifyStatus into the pickup tick, escape
+                // ExecuteAsync, and stop the host (BackgroundServiceExceptionBehavior
+                // defaults to StopHost). Catch and log instead.
+                try { OnRunnerStatusChanged?.Invoke(entry.Name, status); }
+                catch (Exception ex) { _logger.LogWarning(ex, "OnRunnerStatusChanged subscriber threw for {Project}", entry.Name); }
+            };
             // Persist every mode change so the auto-pickup toggle survives
             // backend restarts. Includes implicit transitions like "auto-single
             // → manual" after a job completes.
@@ -172,16 +182,32 @@ public class TaskRunnerService : BackgroundService
             catch (Exception ex) { _logger.LogWarning(ex, "Global orchestrator boot failed"); }
         }, stoppingToken);
 
-        // Run the loop - poll every 5 seconds for auto-mode runners
+        // Run the loop - poll every 5 seconds for auto-mode runners.
+        // Per-tick try/catch is the load-bearing safety net: an unhandled
+        // exception escaping ExecuteAsync stops the host
+        // (BackgroundServiceExceptionBehavior defaults to StopHost). One bad
+        // tick must not take down the API for every other project.
         while (!stoppingToken.IsCancellationRequested)
         {
             foreach (var runner in _runners.Values)
             {
                 if (stoppingToken.IsCancellationRequested) break;
-                await runner.TickAsync(stoppingToken);
+                try
+                {
+                    await runner.TickAsync(stoppingToken);
+                }
+                catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+                {
+                    break;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Pickup tick failed for project {Project}; continuing", runner.ProjectName);
+                }
             }
 
-            await Task.Delay(5000, stoppingToken);
+            try { await Task.Delay(5000, stoppingToken); }
+            catch (OperationCanceledException) { break; }
         }
     }
 

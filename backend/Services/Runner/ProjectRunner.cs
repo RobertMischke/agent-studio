@@ -1614,7 +1614,14 @@ public class ProjectRunner
 
     private void NotifyStatus()
     {
-        OnStatusChanged?.Invoke(GetStatus());
+        // Defense-in-depth: NotifyStatus is called from many points inside
+        // the pickup tick. A throwing subscriber would escape the tick,
+        // exit ExecuteAsync, and stop the host. The TaskRunnerService
+        // wrapper around the subscriber chain is the primary guard; this
+        // catch is the second line so any future direct subscriber added
+        // to ProjectRunner.OnStatusChanged stays contained.
+        try { OnStatusChanged?.Invoke(GetStatus()); }
+        catch (Exception ex) { _logger.LogWarning(ex, "OnStatusChanged subscriber threw for {Project}", ProjectName); }
     }
 
     /// <summary>

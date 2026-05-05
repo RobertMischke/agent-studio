@@ -66,6 +66,12 @@ public class JobWatcherService : BackgroundService
         }
 
         _logger.LogDebug("File change detected: {Path}", path);
-        OnJobChanged?.Invoke(path);
+        // FileSystemWatcher fires this on a thread-pool callback. An
+        // unhandled exception escaping a subscriber here goes through
+        // AppDomain.UnhandledException and terminates the process, which is
+        // the silent-kill class we are guarding against. Log and swallow so
+        // a single bad subscriber cannot crash the host.
+        try { OnJobChanged?.Invoke(path); }
+        catch (Exception ex) { _logger.LogWarning(ex, "OnJobChanged subscriber threw for {Path}", path); }
     }
 }

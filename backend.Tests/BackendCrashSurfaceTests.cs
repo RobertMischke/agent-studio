@@ -158,6 +158,44 @@ public class BackendCrashSurfaceTests
         }
     }
 
+    /// <summary>
+    /// Pins the host-survival contract: a HostedService whose
+    /// <c>ExecuteAsync</c> faults must not stop the rest of the host. .NET's
+    /// default <see cref="BackgroundServiceExceptionBehavior"/> is
+    /// <see cref="BackgroundServiceExceptionBehavior.StopHost"/>; the dev
+    /// backend silently went unreachable on 2026-05-04 because a tick
+    /// somewhere inside <c>TaskRunnerService.ExecuteAsync</c> threw and
+    /// took the whole API down with it.
+    ///
+    /// <para>Regression for that incident: <c>Program.cs</c> sets
+    /// <see cref="BackgroundServiceExceptionBehavior.Ignore"/> so the
+    /// offending service stops in isolation and other endpoints keep
+    /// serving. This test boots the real <c>Program</c> with an extra
+    /// hosted service that throws inside its first tick, then asserts the
+    /// HTTP surface (here <c>/healthz</c>) stays reachable.</para>
+    /// </summary>
+    [Fact]
+    public async Task HostStaysUp_WhenHostedServiceExecuteAsyncThrows()
+    {
+        await using var factory = new WebApplicationFactory<Program>()
+            .WithWebHostBuilder(b =>
+            {
+                b.UseEnvironment("Test");
+                b.ConfigureServices(s =>
+                {
+                    s.AddHostedService<ExecuteAsyncThrowingHostedService>();
+                });
+            });
+
+        using var client = factory.CreateClient();
+
+        // Give the throwing hosted service time to fault.
+        await Task.Delay(200);
+
+        var resp = await client.GetAsync("/healthz");
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+    }
+
     private static Exception? TryThrow(Action action)
     {
         try { action(); }
@@ -194,5 +232,18 @@ public class BackendCrashSurfaceTests
             return Task.CompletedTask;
         }
         public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Mimics the May 4 dev-backend crash class: a
+    /// <see cref="BackgroundService"/> whose <c>ExecuteAsync</c> escapes a
+    /// throw. With the default <see cref="BackgroundServiceExceptionBehavior.StopHost"/>
+    /// the whole host shuts down. Program.cs flips this to Ignore so the
+    /// rest of the API stays reachable.
+    /// </summary>
+    private sealed class ExecuteAsyncThrowingHostedService : BackgroundService
+    {
+        protected override Task ExecuteAsync(CancellationToken stoppingToken) =>
+            throw new InvalidOperationException("synthetic-execute-async-crash");
     }
 }

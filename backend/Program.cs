@@ -18,6 +18,16 @@ using Microsoft.AspNetCore.Diagnostics;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Default BackgroundServiceExceptionBehavior is StopHost: an unhandled
+// exception escaping any HostedService.ExecuteAsync stops the entire host.
+// That turned a single faulted runner tick or hosted-service iteration into
+// a silent API-down event. Switch to Ignore so the offending service stops
+// in isolation and the rest of the API keeps serving while the per-tick
+// try/catch (TaskRunnerService) and the UnhandledException recorder above
+// surface the cause.
+builder.Services.Configure<HostOptions>(o =>
+    o.BackgroundServiceExceptionBehavior = BackgroundServiceExceptionBehavior.Ignore);
+
 // Local-only override file (gitignored) - sets per-checkout flags such as
 // Environment:IsDev. Loaded after appsettings.Development.json so a developer
 // can flip the dev banner / dev PWA icon on for their checkout without
