@@ -23,10 +23,11 @@ import { JobCompletionSoundService } from './services/job-completion-sound.servi
 import { UpdateStableConsoleComponent } from './components/dev-tools/update-stable-console.component';
 import { E2ECleanupDialogComponent } from './components/dev-tools/e2e-cleanup-dialog.component';
 import { WorkspaceTokenTimelineComponent } from './components/workspace-token-timeline';
+import { WorkspaceBannerComponent } from './components/workspace-banner';
 
 @Component({
   selector: 'app-root',
-  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, AnalysisReportDrilldownComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceTokenTimelineComponent],
+  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, AnalysisReportDrilldownComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceTokenTimelineComponent, WorkspaceBannerComponent],
   // Keep styles global to this subtree — the App shell still owns the
   // .header*, .filter-chip*, .overlay*, .create-dialog*, .error-dialog*
   // class rules used by the extracted dialogs and project-tabs.
@@ -99,6 +100,8 @@ import { WorkspaceTokenTimelineComponent } from './components/workspace-token-ti
           }
         </div>
       </header>
+
+      <app-workspace-banner [projects]="bannerProjects()" />
 
       <div class="app__body">
         <div class="layout" [class.layout--focus]="selectedJob()">
@@ -1367,6 +1370,8 @@ export class App implements OnInit {
   private hashListener: (() => void) | null = null;
   readonly watchPaths = signal<WatchPathEntry[]>([]);
   readonly activeProjects = signal<Set<string>>(new Set(JSON.parse(localStorage.getItem('activeProjects') ?? '[]')));
+  /** Active project names as a plain readonly array for the workspace banner input. */
+  readonly bannerProjects = computed<readonly string[]>(() => [...this.activeProjects()]);
   readonly sideSheetWidth = signal<number>(parseInt(localStorage.getItem('sideSheetWidth') ?? '280'));
   readonly collapsedGroups = signal<Set<string>>(new Set(JSON.parse(localStorage.getItem('collapsedGroups') ?? '[]')));
   /**

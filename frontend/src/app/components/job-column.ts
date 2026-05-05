@@ -4,6 +4,7 @@ import { JobCardComponent } from './job-card';
 import { projectIdentity } from '../services/project-identity.util';
 import { cliTypeIcon } from '../services/format.util';
 import { InstantTooltipDirective } from '../directives/instant-tooltip.directive';
+import { groupReviewJobs } from './review-grouping.util';
 
 const ARCHIVE_VISIBLE_LIMIT = 20;
 
@@ -99,6 +100,28 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
               + {{ archiveOverflow() }} more in <code>6-archive/</code> folder
             </div>
           }
+        } @else if (isReview()) {
+          @for (group of reviewGroups(); track group.kind) {
+            <section class="column__subsection"
+                     [class]="'column__subsection--' + group.kind"
+                     [attr.data-testid]="'review-subsection-' + group.kind">
+              <h3 class="column__subsection-title">
+                <span class="column__subsection-icon" aria-hidden="true">{{ group.icon }}</span>
+                <span>{{ group.label }}</span>
+                <span class="column__subsection-count">{{ group.jobs.length }}</span>
+              </h3>
+              @for (job of group.jobs; track job.jobKey) {
+                <app-job-card
+                  [job]="job"
+                  (click)="jobClick.emit(job)"
+                  draggable="true"
+                  (dragstart)="onDragStart($event, job)" />
+              }
+              @if (group.jobs.length === 0) {
+                <div class="column__empty column__empty--subsection">No jobs</div>
+              }
+            </section>
+          }
         } @else {
           @for (job of jobs(); track job.jobKey; let i = $index) {
             @if (!reorderDisabled()) {
@@ -187,6 +210,56 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
       color: #4a5568;
       font-size: 13px;
       padding: 24px 0;
+    }
+    .column__empty--subsection {
+      padding: 8px 0;
+      font-size: 12px;
+    }
+    /* 4-review swim-lane subdivisions: orchestrator-decided cards visually
+       separate from human-review cards so the user sees at a glance which
+       cards the orchestrator already triaged. */
+    .column__subsection {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 8px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+    }
+    .column__subsection--orchestrator {
+      background: rgba(139, 92, 246, 0.06);
+      border-color: rgba(139, 92, 246, 0.20);
+    }
+    .column__subsection--human {
+      background: rgba(56, 189, 248, 0.04);
+      border-color: rgba(56, 189, 248, 0.16);
+    }
+    .column__subsection-title {
+      margin: 0 0 2px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #cbd5e1;
+    }
+    .column__subsection--orchestrator .column__subsection-title { color: #c4b5fd; }
+    .column__subsection--human        .column__subsection-title { color: #7dd3fc; }
+    .column__subsection-icon { font-size: 13px; line-height: 1; }
+    .column__subsection-count {
+      margin-left: auto;
+      background: rgba(255,255,255,0.08);
+      color: #cbd5e1;
+      border-radius: 10px;
+      padding: 1px 6px;
+      font-size: 10px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      min-width: 20px;
+      text-align: center;
     }
     /* The drop-zone occupies just 2px of layout space but extends its hit
        target via padding + negative margins, eating into the surrounding
@@ -526,6 +599,24 @@ export class JobColumnComponent {
   isArchive(): boolean {
     return this.state() === '6-archive';
   }
+
+  isReview(): boolean {
+    return this.state() === '4-review';
+  }
+
+  /**
+   * Splits 4-review cards into two visually distinct sub-sections:
+   *   - "Orchestrator review" holds cards with a non-null
+   *     orchestratorVerdict (the orchestrator picked them up from a
+   *     NEEDS_INPUT / NOOP / BLOCKED sentinel and decided reissue,
+   *     escalate, or accept).
+   *   - "Human review" holds the rest (clean DONE awaiting the user's
+   *     accept).
+   * The split is presentation-only; cards keep their underlying state
+   * lane and drag-drop semantics. Reorder within the column is disabled
+   * while subdivided so the swim-lanes stay coherent.
+   */
+  readonly reviewGroups = computed(() => groupReviewJobs(this.jobs()));
 
   canArchiveAll(): boolean {
     return this.state() === '5-completed';

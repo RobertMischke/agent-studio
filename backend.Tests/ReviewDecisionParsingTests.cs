@@ -108,6 +108,41 @@ public class ReviewDecisionParsingTests
     }
 
     [Fact]
+    public void FindUnresolvedBlocked_ReturnsLatestWhenNoFollowUp()
+    {
+        var log = string.Join('\n',
+            "[12:00:00.000] [stdout] working...",
+            "[12:00:01.000] [stdout] [[TASK_BLOCKED: awaiting user decision A/B/C]]",
+            "[12:00:02.000] [stdout] (idle)");
+
+        var state = ReviewDecisionParsing.FindUnresolvedBlocked(log);
+
+        Assert.NotNull(state);
+        Assert.Equal("awaiting user decision A/B/C", state!.Reason);
+    }
+
+    [Fact]
+    public void FindUnresolvedBlocked_ReturnsNull_WhenSupervisorAlreadyEscalated()
+    {
+        var log = string.Join('\n',
+            "[12:00:00.000] [stdout] [[TASK_BLOCKED: needs human]]",
+            "[12:00:30.000] [supervisor] [escalate] Orchestrator escalated BLOCKED to human review.");
+
+        Assert.Null(ReviewDecisionParsing.FindUnresolvedBlocked(log));
+    }
+
+    [Fact]
+    public void FindUnresolvedBlocked_NoReason_StillReturnsHit()
+    {
+        var log = "[12:00:00.000] [stdout] [[TASK_BLOCKED]]";
+
+        var state = ReviewDecisionParsing.FindUnresolvedBlocked(log);
+
+        Assert.NotNull(state);
+        Assert.Null(state!.Reason);
+    }
+
+    [Fact]
     public void ParseDecision_Reissue_RoundTripsActionAndReason()
     {
         var output = "After reading the roadmap...\n[[ORCHESTRATOR_DECISION: action=reissue; reason=Roadmap names option A as canonical.]]\n[[TASK_DONE]]";

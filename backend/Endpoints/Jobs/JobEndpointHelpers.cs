@@ -22,13 +22,20 @@ internal static class JobEndpointHelpers
     };
 
     internal static JobInfo WithRuntime(JobInfo job, CliRouter router, TaskRunnerService runners)
-        => WithRuntime(job, router, runners, tokensByJobId: null);
+        => WithRuntime(job, router, runners, tokensByJobId: null, verdictsByJobKey: null);
+
+    internal static JobInfo WithRuntime(
+        JobInfo job,
+        CliRouter router,
+        TaskRunnerService runners,
+        IReadOnlyDictionary<string, JobTokenSummary>? tokensByJobId)
+        => WithRuntime(job, router, runners, tokensByJobId, verdictsByJobKey: null);
 
     /// <summary>
-    /// Overlay variant that also folds in per-job orchestrator token totals.
-    /// The caller is expected to have read the orchestrator log once per
-    /// watch path and built the lookup, so this stays O(1) per job — the
-    /// perf contract locked by
+    /// Overlay variant that also folds in per-job orchestrator token totals
+    /// and the latest orchestrator-review verdict. The caller is expected
+    /// to have built both lookups once per request, so this stays O(1) per
+    /// job — the perf contract locked by
     /// <c>JobsEndpointPerfTests.WithRuntime_Over200Jobs_FinishesWellUnderOneSecond</c>
     /// still holds.
     /// </summary>
@@ -36,7 +43,8 @@ internal static class JobEndpointHelpers
         JobInfo job,
         CliRouter router,
         TaskRunnerService runners,
-        IReadOnlyDictionary<string, JobTokenSummary>? tokensByJobId)
+        IReadOnlyDictionary<string, JobTokenSummary>? tokensByJobId,
+        IReadOnlyDictionary<string, string>? verdictsByJobKey)
     {
         var exec = router.Get(job.CliType).GetExecution(job.JobKey);
         // Look up auto-loop state by ProjectName (O(1) ConcurrentDictionary
@@ -54,6 +62,11 @@ internal static class JobEndpointHelpers
         {
             tokens = t;
         }
+        string? verdict = null;
+        if (verdictsByJobKey != null && verdictsByJobKey.TryGetValue(job.JobKey, out var v))
+        {
+            verdict = v;
+        }
         return job with
         {
             Execution = exec,
@@ -70,8 +83,60 @@ internal static class JobEndpointHelpers
                 LastError = loop.LastError
             },
             SummaryState = summary != null && summary.Status != JobSummaryStatus.None ? summary : null,
-            TokenSummary = tokens
+            TokenSummary = tokens,
+            OrchestratorVerdict = verdict
         };
+    }
+
+    /// <summary>
+    /// Builds a per-JobKey lookup of the latest orchestrator-review
+    /// verdict, sourced from <see cref="ReviewDecisionLog"/>. One JSONL
+    /// read per (workspace, project) pair so the per-job overlay stays
+    /// O(1). Maps <see cref="ReviewDecisionKind"/> to the wire enum
+    /// (<c>reissue</c> / <c>escalate</c> / <c>accept</c>); skipped
+    /// records do not surface a verdict.
+    /// </summary>
+    internal static Dictionary<string, string> BuildOrchestratorVerdictLookup(
+        IEnumerable<JobInfo> jobs,
+        IConfiguration configuration)
+    {
+        var verdicts = new Dictionary<string, string>(StringComparer.Ordinal);
+        var workspace = configuration["TaskRepository"];
+        if (string.IsNullOrWhiteSpace(workspace)) return verdicts;
+
+        // Read each (workspace, project) journal at most once per request.
+        var byProject = new Dictionary<string, IReadOnlyList<ReviewDecisionRecord>>(StringComparer.OrdinalIgnoreCase);
+        foreach (var job in jobs)
+        {
+            if (string.IsNullOrWhiteSpace(job.ProjectName)) continue;
+            if (!byProject.TryGetValue(job.ProjectName, out var records))
+            {
+                try { records = ReviewDecisionLog.ReadAll(workspace!, job.ProjectName); }
+                catch { records = Array.Empty<ReviewDecisionRecord>(); }
+                byProject[job.ProjectName] = records;
+            }
+            // Latest record wins. The journal is append-only; the last
+            // entry for this jobId reflects the most recent decision.
+            ReviewDecisionRecord? latest = null;
+            for (int i = records.Count - 1; i >= 0; i--)
+            {
+                if (records[i].JobId == job.Id)
+                {
+                    latest = records[i];
+                    break;
+                }
+            }
+            if (latest == null) continue;
+            var verdict = latest.Kind switch
+            {
+                ReviewDecisionKind.Reissue      => "reissue",
+                ReviewDecisionKind.Escalate     => "escalate",
+                ReviewDecisionKind.AcceptAsDone => "accept",
+                _                                => (string?)null
+            };
+            if (verdict != null) verdicts[job.JobKey] = verdict;
+        }
+        return verdicts;
     }
 
     /// <summary>
@@ -113,4 +178,12 @@ internal static class JobEndpointHelpers
         TaskRunnerService runners,
         IReadOnlyDictionary<string, JobTokenSummary>? tokensByJobId)
         => detail with { Info = WithRuntime(detail.Info, router, runners, tokensByJobId) };
+
+    internal static JobDetail WithRuntime(
+        JobDetail detail,
+        CliRouter router,
+        TaskRunnerService runners,
+        IReadOnlyDictionary<string, JobTokenSummary>? tokensByJobId,
+        IReadOnlyDictionary<string, string>? verdictsByJobKey)
+        => detail with { Info = WithRuntime(detail.Info, router, runners, tokensByJobId, verdictsByJobKey) };
 }

@@ -90,6 +90,19 @@ public record JobInfo
     /// dead card.
     /// </summary>
     public JobSummaryState? SummaryState { get; init; }
+
+    /// <summary>
+    /// Latest orchestrator-review verdict for this job, populated at
+    /// endpoint-read time from the per-project decision journal at
+    /// <c>{workspace}/logs/decisions/{project}.jsonl</c>. Drives the
+    /// 4-review kanban swim-lane subdivision (orchestrator-review vs
+    /// human-review) and the workspace top-banner. Values: <c>pending</c>
+    /// (unresolved sentinel, not yet acted on), <c>reissue</c>,
+    /// <c>escalate</c>, <c>accept</c>. Null when no orchestrator
+    /// decision exists, e.g. a 4-review card that completed cleanly with
+    /// <c>[[TASK_DONE]]</c> awaiting human accept.
+    /// </summary>
+    public string? OrchestratorVerdict { get; init; }
 }
 
 /// <summary>

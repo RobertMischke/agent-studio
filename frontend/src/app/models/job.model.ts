@@ -202,6 +202,14 @@ export interface JobInfo {
    */
   summaryState?: JobSummaryState | null;
   /**
+   * Latest orchestrator-review verdict for this job, sourced from the
+   * per-project decision journal. Drives the 4-review kanban swim-lane
+   * subdivision (orchestrator-review vs human-review) and the workspace
+   * top-banner. Values: `pending`, `reissue`, `escalate`, `accept`. Null
+   * when no orchestrator decision exists for this card.
+   */
+  orchestratorVerdict?: 'pending' | 'reissue' | 'escalate' | 'accept' | null;
+  /**
    * Client identity that owns this job. References ClientIdentity.id.
    * Defaults to `local-default` for legacy jobs whose `job.json` predates
    * per-task attribution. The frontend renders a small chip on the card

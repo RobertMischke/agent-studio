@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
+using OrchestratorApi.Endpoints.Jobs;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.Jobs;
@@ -239,6 +240,110 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     }
 
     [Fact]
+    public async Task Blocked_EscalatesToHumanDecisionIntake_WithoutSpendingFastModel()
+    {
+        SeedReviewJobWithBlocked("bug-commit-hangs", "awaiting user decision A/B/C");
+        var calls = 0;
+        var orchestrator = BuildOrchestrator(cliResponse: "", onCall: () => calls++);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        // BLOCKED is deterministic: no fast-model call.
+        Assert.Equal(0, calls);
+
+        // Job stays in 4-review; an intake card lands in 1-preparation.
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Review, "bug-commit-hangs")));
+        var intake = Path.Combine(_watchPath, JobStates.Preparation, "human-decision-needed-bug-commit-hangs");
+        Assert.True(Directory.Exists(intake));
+        var intakePrompt = File.ReadAllText(Path.Combine(intake, "prompt.md"));
+        Assert.Contains("[[TASK_BLOCKED]]", intakePrompt);
+
+        var log = ReadCliLog(JobStates.Review, "bug-commit-hangs");
+        Assert.Contains("[supervisor]", log);
+        Assert.Contains("[escalate]", log);
+        Assert.Contains("BLOCKED", log);
+
+        var record = ReadOnlyDecisionRecord();
+        Assert.Equal(ReviewDecisionKind.Escalate, record.Kind);
+        Assert.Contains("awaiting user decision A/B/C", record.Reason);
+    }
+
+    [Fact]
+    public async Task Blocked_DoesNotReprocess_OnceSupervisorEscalateLineIsPresent()
+    {
+        SeedReviewJobWithBlocked("already-escalated", "needs human");
+        // Append a supervisor escalate so the parser treats the chain as resolved.
+        var logPath = JobPathLog(JobStates.Review, "already-escalated");
+        File.AppendAllText(logPath,
+            $"[12:00:30.000] [supervisor] [escalate] previously escalated{Environment.NewLine}");
+
+        var calls = 0;
+        var orchestrator = BuildOrchestrator(cliResponse: "", onCall: () => calls++);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        Assert.Equal(0, calls);
+        Assert.False(File.Exists(ReviewDecisionLog.DecisionsFile(_workspace, Project)));
+    }
+
+    [Fact]
+    public async Task BootSweep_ProcessesPreExistingFourReviewItem_Immediately()
+    {
+        // The audit case: a BLOCKED job that landed in 4-review while the
+        // backend was offline and is now stuck. The boot sweep (one-shot
+        // call to TickOnceAsync before the recurring loop starts) must
+        // pick it up on the very first tick rather than waiting for the
+        // 30-second interval.
+        SeedReviewJobWithBlocked("audit-stuck-blocked", "awaiting user input");
+
+        var orchestrator = BuildOrchestrator(cliResponse: "");
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        var record = ReadOnlyDecisionRecord();
+        Assert.Equal(ReviewDecisionKind.Escalate, record.Kind);
+        Assert.Equal("audit-stuck-blocked", record.JobId);
+    }
+
+    [Fact]
+    public void BuildOrchestratorVerdictLookup_ReturnsLatestKindPerJob()
+    {
+        // Two journal entries for the same job: the latest one wins.
+        ReviewDecisionLog.Append(_workspace, new ReviewDecisionRecord(
+            CreatedAt: DateTime.UtcNow.AddMinutes(-5),
+            JobId: "job-a", Project: Project,
+            Kind: ReviewDecisionKind.Reissue,
+            Reason: "first try", Prompt: "p", Response: "r", FollowUp: "f"));
+        ReviewDecisionLog.Append(_workspace, new ReviewDecisionRecord(
+            CreatedAt: DateTime.UtcNow,
+            JobId: "job-a", Project: Project,
+            Kind: ReviewDecisionKind.Escalate,
+            Reason: "gave up", Prompt: "p", Response: "r", FollowUp: ""));
+        // A separate job with one acceptAsDone record.
+        ReviewDecisionLog.Append(_workspace, new ReviewDecisionRecord(
+            CreatedAt: DateTime.UtcNow,
+            JobId: "job-b", Project: Project,
+            Kind: ReviewDecisionKind.AcceptAsDone,
+            Reason: "looks good", Prompt: "p", Response: "r", FollowUp: ""));
+
+        var jobs = new[]
+        {
+            new JobInfo { Id = "job-a", JobKey = $"{_watchPath}::job-a", ProjectName = Project, WatchPath = _watchPath, State = JobStates.Review },
+            new JobInfo { Id = "job-b", JobKey = $"{_watchPath}::job-b", ProjectName = Project, WatchPath = _watchPath, State = JobStates.Review },
+            new JobInfo { Id = "job-c", JobKey = $"{_watchPath}::job-c", ProjectName = Project, WatchPath = _watchPath, State = JobStates.Review },
+        };
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["TaskRepository"] = _workspace })
+            .Build();
+
+        var lookup = JobEndpointHelpers.BuildOrchestratorVerdictLookup(jobs, config);
+
+        Assert.Equal("escalate", lookup[$"{_watchPath}::job-a"]);
+        Assert.Equal("accept",   lookup[$"{_watchPath}::job-b"]);
+        Assert.False(lookup.ContainsKey($"{_watchPath}::job-c"));
+    }
+
+    [Fact]
     public void IsPromptUsable_SeparatesRealPromptsFromPlaceholders()
     {
         // Heuristic guard: any future change to the placeholder rules
@@ -250,6 +355,18 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         Assert.False(ReviewDecisionOrchestrator.IsPromptUsable("Real title", "# Heading only\n"));
         Assert.True(ReviewDecisionOrchestrator.IsPromptUsable("Add caching layer",
             "# Add caching\n\nWrap GetJobs in an LRU cache to avoid the disk scan on every poll.\n"));
+    }
+
+    private void SeedReviewJobWithBlocked(string slug, string reason)
+    {
+        var dir = Path.Combine(_watchPath, JobStates.Review, slug);
+        Directory.CreateDirectory(Path.Combine(dir, "logs"));
+        File.WriteAllText(Path.Combine(dir, "job.json"),
+            $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{JobStates.Review}\",\"order\":1,\"agent\":\"claude\"}}");
+        File.WriteAllText(Path.Combine(dir, "prompt.md"), $"# {slug}\n\nDo the thing.\n");
+        File.WriteAllText(Path.Combine(dir, "logs", "cli-output.log"),
+            $"[12:00:00.000] [stdout] starting{Environment.NewLine}" +
+            $"[12:00:01.000] [stdout] [[TASK_BLOCKED: {reason}]]{Environment.NewLine}");
     }
 
     private void SeedReviewJobWithNoOp(string slug, string title, string promptBody)
