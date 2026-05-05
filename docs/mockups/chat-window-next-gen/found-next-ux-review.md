@@ -19,6 +19,10 @@ Primary sources:
 - VS Code Custom Layout documentation: https://code.visualstudio.com/docs/configure/custom-layout
 - VS Code User Interface documentation: https://code.visualstudio.com/docs/getstarted/userinterface
 - VS Code Webview UI Toolkit repository: https://github.com/microsoft/vscode-webview-ui-toolkit
+- Code-OSS repository: https://github.com/microsoft/vscode
+- Angular Components / CDK repository: https://github.com/angular/components
+- Fluent UI Web Components documentation: https://learn.microsoft.com/en-us/fluent-ui/web-components/
+- Design-system comparison: [design-system-options.md](design-system-options.md)
 
 Research takeaways:
 
@@ -46,6 +50,8 @@ The framework is not a new library yet. It is a rule set plus reusable Angular c
 - **Evidence rule:** every visual iteration must have light, compact, no-chat Git, all-panes, dark, status-popover, owner-popover, and mobile screenshots.
 
 Decision: do not import `@vscode/webview-ui-toolkit`, shadcn, Material, or another heavy UI kit for this prototype. The app has specialized workbench requirements, already uses Angular standalone components, and needs tight control over density. A small internal framework gives better fit and avoids a deprecated VS Code dependency.
+
+The production path is narrower than "clone VS Code": inspect Code-OSS for measurement and behavior, use Codicons or local codicon-derived symbols for the small-icon vocabulary, use Angular CDK / Angular Aria for overlays, focus, splitter, menu, dialog, and keyboard behavior, and keep the visible layer in owned Found Next CSS tokens. The explicit comparison and guardrails live in [design-system-options.md](design-system-options.md).
 
 ## Panel And Document Model Trial
 

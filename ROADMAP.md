@@ -37,6 +37,7 @@ Today the application provides:
 - Supervisor, system-review, and meta-cycle concepts for recurring "is this on track?" inspection, with Markdown reports and structured JSON contracts where the app needs to parse results.
 - An integrated design mockup for project-level Security, Architecture, Drift, UX/UI, Test Quality, Token Usage, Steering Docs, Audits and Checks, and Skills under `docs/mockups/quality-system/`. This is exploratory, not product behavior yet.
 - A next-generation chat-window mockup under `docs/mockups/chat-window-next-gen/` that treats user, task agent, orchestrator, supervisor, supporting agents, tools, and system warnings as distinct actors in one run-based conversation.
+- A Found Next Workbench design-system direction for the chat prototype: VS Code-inspired containers and density, Codicons-style product icons, Angular-native primitives, owned theme tokens, and Code-OSS as a reference rather than a copied component library.
 - Early product planning for a project-level steering-documentation surface: the app should show the README, AGENTS, task contracts, skills lookup, and other agent-facing instructions together with a shorter human summary and drift warnings.
 
 ## Roadmap Themes
@@ -201,7 +202,7 @@ Make chat the primary human review surface for long-running, multi-actor agent w
 
 The current Activity Log is valuable evidence, but real Stable jobs already produce hundreds of conversation entries and more than a hundred tool chips. The next surface should keep the raw trace available while making the default view a compact developer chat, closer to GitHub Copilot Chat in VS Code than to an operations dashboard. The richer dashboard-style view from the first mockup remains valuable as a read-only fullscreen developer debugging view.
 
-Light theme is a first-class default because it is the user's primary working mode. Dark theme remains supported, but both themes share the same spacing, actor grammar, compact rows, warning treatment, and debug affordances. This work should also align with the VS Code-style layout direction: activity bar, compact tabs, resizable panels, status bar, low padding, and high information density.
+Light theme is a first-class default because it is the user's primary working mode. Dark theme remains supported, but both themes share the same spacing, actor grammar, compact rows, warning treatment, and debug affordances. This work should also align with the VS Code-style layout direction: activity bar, compact tabs, resizable panels, status bar, low padding, and high information density. The production visual layer should become the internal Found Next Workbench design system rather than a generic dashboard kit.
 
 The chat should render:
 

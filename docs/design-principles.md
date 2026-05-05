@@ -178,6 +178,21 @@ The rules:
 
 The first slice ships behind the `Frontend:VsCodeLayout` feature flag, default off; the spec is [mockups/vscode-layout/](mockups/vscode-layout/README.md) and the per-element migration map is [mockups/vscode-layout/taxonomy.md](mockups/vscode-layout/taxonomy.md). When you add a new chrome element, check both: (a) does it survive the density rule, and (b) is there already a taxonomy entry for the destination it belongs in.
 
+## Workbench design system
+
+The product needs its own compact workbench design system. It should learn from VS Code without becoming a clone of VS Code internals.
+
+The rule:
+
+- Use VS Code's public UX guidelines as the primary information-architecture reference: Activity Bar modules, Side Bar views, workbench documents, supporting panels, Status Bar items, contextual editor actions, command palette, and quick-pick style flows.
+- Use Code-OSS as a source-code reference for measurements, behavior, layout discipline, and theme-token thinking, not as an application framework to copy into this Angular app.
+- Prefer Codicons or equivalent local SVG symbols for product icons so small controls read like developer tooling rather than generic dashboard buttons.
+- Build production primitives in Angular with owned CSS tokens and Angular CDK / Angular Aria for behavior such as overlays, focus management, menus, dialogs, splitters, keyboard interaction, and accessible disclosures.
+- Avoid broad dashboard kits as the default visual layer. Angular Material, Fluent UI Web Components, Taiga UI, PrimeNG, NG-ZORRO, or similar kits may be useful for isolated spikes, but they must not override the workbench density and component grammar.
+- Keep light theme first-class and dark theme structurally identical. A theme switch changes tokens, not layout or hierarchy.
+
+The first named system is the internal Found Next Workbench Design System, documented for the next chat surface in [mockups/chat-window-next-gen/design-system-options.md](mockups/chat-window-next-gen/design-system-options.md). When production components graduate from a mockup, their tokens, spacing, icon usage, keyboard behavior, and screenshot evidence should move with them.
+
 ## Kanban board
 
 The project Kanban board has a single visual specification. Every layout change to the board must reconcile with it before touching CSS, components, or grid math. The spec lives at [mockups/kanban-board-design/](mockups/kanban-board-design/README.md), with the locked decisions in [mockups/kanban-board-design/taxonomy.md](mockups/kanban-board-design/taxonomy.md), the interactive reference at [mockups/kanban-board-design/ui.html](mockups/kanban-board-design/ui.html), and the reconciliation table for the in-flight layout tasks at [mockups/kanban-board-design/reconciliation.md](mockups/kanban-board-design/reconciliation.md). The first-slice CSS lands behind `Frontend:KanbanDesignSpecV1`, default off.

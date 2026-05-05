@@ -91,7 +91,7 @@ The prototype currently covers:
 
 The current refactor iteration starts turning the clickware into a component reference. Topbar and statusbar are now standalone Angular components, while topbar/statusbar dummy data and shared icon paths live in a separate data module. The next extraction should continue downward into `ActivityRail`, `StatusPopover`, `ConversationTranscript`, `ComposerBar`, and `WorkbenchPaneHost`, keeping the implementation slice small enough to visually review after every step.
 
-The UX review now names the target visual system as the internal Found Next Workbench Framework. This is a rule set and component boundary, not a third-party package: use VS Code workbench containers, local theme tokens, compact density primitives, screenshot-driven review, and reusable Angular components instead of importing a deprecated VS Code webview toolkit or a generic dashboard UI kit.
+The UX review now names the target visual system as the internal Found Next Workbench Framework. This is a rule set and component boundary, not a third-party package: use VS Code workbench containers, local theme tokens, compact density primitives, screenshot-driven review, and reusable Angular components instead of importing a deprecated VS Code webview toolkit or a generic dashboard UI kit. The candidate-system comparison and source-cloning guardrails live in [design-system-options.md](design-system-options.md).
 
 The current source research lives in [workbench-layout-research.md](workbench-layout-research.md). When adding a new surface, first classify it as Activity Bar module, Sidebar View, Workbench Document, supporting Panel, Status Bar item, contextual editor action, or command/quick-pick flow.
 
