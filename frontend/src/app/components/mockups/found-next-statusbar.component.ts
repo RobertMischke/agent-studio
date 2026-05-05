@@ -261,6 +261,6 @@ export class FoundNextStatusbarComponent {
   readonly usageStrip = USAGE_STRIP;
   readonly compactUsageSummary = USAGE_STRIP
     .filter((item) => item.window === '5h')
-    .map((item) => `${item.label.slice(0, 2)} ${item.value}`)
+    .map((item) => `${item.label === 'Codex' ? 'Cdx' : item.label.slice(0, 2)} ${item.value}`)
     .join(' / ');
 }
