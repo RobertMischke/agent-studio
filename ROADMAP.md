@@ -196,6 +196,55 @@ Make the running task board reachable from a phone without exposing the local pr
 
 The full V1 contract (endpoints, snapshot shape, command shape, sync cadence, file map) lives in [docs/companion-app-design.md](docs/companion-app-design.md). [ADR-0018](docs/architecture-decisions.md) captures the architectural decision.
 
+### Schema-First Communication and In-Memory Data Layer
+
+The product is accumulating cross-cutting structured data: token aggregates per project, supervisor advisories and interventions, audit findings, architecture-quality scores, componentisation metrics. None of this should sit in a database. It should be many small JSON-schema-validated documents on disk, plus a strongly-typed in-memory layer that loads them at boot, supports query and aggregation, and writes back changes the same way the job system already does.
+
+- One schema per concept, named `<concept>.schema.json`, under `docs/schemas/`. Draft 2020-12. English. No em dashes.
+- An in-memory store is a typed view over disk; the file is always the source of truth.
+- No SQL. No SQLite, no LiteDB, no EF. The repo deliberately avoids a database engine.
+- First slice: schemas for supervisor advisory, supervisor intervention, token aggregate, plus an `InMemoryStore` consumed by `AutoInterventionHostedService` to replace its direct file reads.
+
+Queued at `agent-taskboard/2-ready/json-schemas-and-in-memory-layer/`.
+
+### Continuous Decision Visibility
+
+The orchestrator should not just react at run-end. While a job is in `3-progress`, it should scan recent CLI output every few seconds and surface a "decision required" signal when the agent emits `[[TASK_NEEDS_INPUT:...]]` or another decision sentinel. Today such moments are visible only deep in the activity log; they should be a loud, distinct banner on the project view, with a one-click reply.
+
+- Reuse `AgentOutcomeAnalyzer.SentinelRegex` for detection.
+- Piggyback on the existing CLI output poll rather than adding a parallel ticker.
+- Banner has its own visual treatment, distinct from supervisor advisories and from regular activity entries.
+
+Queued at `agent-taskboard/2-ready/orchestrator-continuous-decision-visibility/`.
+
+### Dev-Stable Role Split
+
+Dev is a regression-test target, not a self-task target. After a coherent batch ships on stable, dev receives an end-to-end task that exercises the changed surfaces. Dev does not appear in its own watched-projects list. Runtime artefacts (per-project supervisor jsonl, system-review reports, backend logs) belong in `.gitignore`, not in commits.
+
+Queued at `agent-taskboard/2-ready/separate-dev-from-stable-roles/`.
+
+### Backend Observability
+
+The recent silent dev-backend crash exposed an observability gap: the on-disk `.api.log` was four days stale because the running backend redirects to `.api.log.out` / `.api.log.err`, neither of which is rotated, surfaced, or summarised when something dies. After the fix:
+
+- Structured rolling logs at `logs/backend/<date>.log` with traceId, project, jobId fields.
+- A `last-crash.json` marker and `/api/diagnostics/last-crash` endpoint so the supervisor and Layer 3 review can pick up crash evidence.
+- Layer 3 system-review reads the marker and surfaces it in the next run.
+
+Queued at `agent-taskboard/2-ready/backend-observability-real-logs/`.
+
+### In-Product Concept Documentation
+
+Concepts (Orchestrator, Supervisor, Skills, Audits, Probes, Companion) are documented under `docs/`, but a user looking at a panel cannot reach the docs without leaving the app. A reusable `app-concept-help` component renders an "i" icon on every panel that introduces a concept; the popover shows a short paragraph plus a "Learn more" link to the canonical `docs/` page.
+
+Queued at `agent-taskboard/2-ready/in-product-concept-docs/`.
+
+### Roadmap Intake from the Chat Window
+
+Long branching chat messages with many concerns at once should not require the user to leave the product. The chat window inside the project view gets a "Send to roadmap" mode: a fast-model splitter turns the text into candidate tasks, the user reviews the split, and confirmed candidates land in `1-preparation` (never auto-queued to `2-ready`).
+
+Queued at `agent-taskboard/2-ready/chat-intake-roadmap-from-app/`.
+
 ### Focused UX
 
 Keep the app dense, fast, and pleasant to use:
