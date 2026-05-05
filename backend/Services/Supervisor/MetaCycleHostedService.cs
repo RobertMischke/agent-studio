@@ -193,6 +193,16 @@ public sealed class MetaCycleHostedService : BackgroundService
             return null;
         }
 
+        // Pause prevents new pickups but does not abort the active CLI run.
+        // Inspection and any UpdateStableThenResume action would otherwise
+        // race a mid-flight job and either misclassify or get killed when
+        // the script tears down the backend. Wait for the runner to report
+        // active=null before continuing; on timeout we still proceed but
+        // log loudly so the operator can see a stuck job blocked the cycle.
+        var quiescenceTimeout = TimeSpan.FromSeconds(
+            _configuration.GetValue("Supervisor:MetaCyclePauseQuiescenceTimeoutSeconds", 1800));
+        await WaitForProjectQuiescenceAsync(project, cycleId, quiescenceTimeout, ct);
+
         var inspection = BuildInspection(workspace, project, projectStatus, window, projectJobs, config, state);
         var jobObservations = window
             .Select(j => new MetaCycleJobObservation(
@@ -399,6 +409,89 @@ public sealed class MetaCycleHostedService : BackgroundService
                 break;
         }
     }
+
+    private async Task WaitForProjectQuiescenceAsync(string project, string cycleId, TimeSpan timeout, CancellationToken ct)
+    {
+        var pollInterval = TimeSpan.FromSeconds(_configuration.GetValue("Supervisor:MetaCyclePauseQuiescencePollSeconds", 5));
+        var outcome = await WaitForQuiescenceAsync(
+            getActiveJobId: () =>
+            {
+                var status = _taskRunner.GetStatus();
+                if (status?.Projects == null) return null;
+                return status.Projects.TryGetValue(project, out var p) ? p.ActiveJobId : null;
+            },
+            timeout: timeout,
+            pollInterval: pollInterval,
+            time: _time,
+            ct: ct);
+
+        switch (outcome.Result)
+        {
+            case QuiescenceWaitResult.AlreadyIdle:
+                break;
+            case QuiescenceWaitResult.BecameIdle:
+                _logger.LogInformation(
+                    "MetaCycle:{CycleId} {Project} active job '{JobId}' finished after {Waited:g}; proceeding with inspection.",
+                    cycleId, project, outcome.LastSeenActiveJobId, outcome.Waited);
+                break;
+            case QuiescenceWaitResult.TimedOut:
+                _logger.LogWarning(
+                    "MetaCycle:{CycleId} {Project} pause-quiescence timed out after {Timeout:g}; active job '{JobId}' still running. Proceeding anyway; mid-flight run may be killed by UpdateStableThenResume.",
+                    cycleId, project, timeout, outcome.LastSeenActiveJobId);
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Polls <paramref name="getActiveJobId"/> until it returns <c>null</c> or
+    /// the timeout elapses. Used by the meta-cycle so a freshly-paused project
+    /// finishes its active CLI run before the cycle inspects state or
+    /// triggers an <c>update-stable</c> teardown that would kill the run.
+    /// Pure helper: no DI, no IO, deterministic against a fake
+    /// <see cref="TimeProvider"/>.
+    /// </summary>
+    internal static async Task<QuiescenceWaitOutcome> WaitForQuiescenceAsync(
+        Func<string?> getActiveJobId,
+        TimeSpan timeout,
+        TimeSpan pollInterval,
+        TimeProvider time,
+        CancellationToken ct)
+    {
+        var start = time.GetUtcNow();
+        var first = getActiveJobId();
+        if (first == null) return new QuiescenceWaitOutcome(QuiescenceWaitResult.AlreadyIdle, null, TimeSpan.Zero);
+
+        var lastSeen = first;
+        while (true)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            var elapsed = time.GetUtcNow() - start;
+            if (elapsed >= timeout)
+            {
+                return new QuiescenceWaitOutcome(QuiescenceWaitResult.TimedOut, lastSeen, elapsed);
+            }
+
+            var remaining = timeout - elapsed;
+            var delay = pollInterval < remaining ? pollInterval : remaining;
+            try { await Task.Delay(delay, time, ct); }
+            catch (OperationCanceledException) { throw; }
+
+            var current = getActiveJobId();
+            if (current == null)
+            {
+                return new QuiescenceWaitOutcome(QuiescenceWaitResult.BecameIdle, lastSeen, time.GetUtcNow() - start);
+            }
+            lastSeen = current;
+        }
+    }
+
+    internal enum QuiescenceWaitResult { AlreadyIdle, BecameIdle, TimedOut }
+
+    internal sealed record QuiescenceWaitOutcome(
+        QuiescenceWaitResult Result,
+        string? LastSeenActiveJobId,
+        TimeSpan Waited);
 
     private void TryRunUpdateStable(string workspace, string project, MetaCycleReport report)
     {

@@ -38,6 +38,26 @@ Today the application provides:
 
 ## Roadmap Themes
 
+### Task Access Layer
+
+Today every backend service that touches jobs reads or writes the filesystem directly. Performance regressions surface when the kanban poll rescans disk per request; concurrent writers race; and any future multi-instance or multi-user story is gated on having one place that owns task state.
+
+A separate **Task Access Layer** (`backend/Services/TaskAccess/`) becomes the single point of access for every job operation. It boots once, loads every project's lane folders into a typed in-memory index, watches the filesystem for external changes, and exposes a typed API for find / list / mutate / transition / subscribe. No service, hosted service, or test is allowed to touch job folders directly; everything goes through `ITaskAccess`.
+
+What the layer enables:
+
+- **Performance**: single index, cheap reads, no per-request disk rescans.
+- **Cleaner organisation**: `JobScannerService` and `JobMutationService` become thin facades or disappear; the runner is a state machine that calls the layer.
+- **Multi-instance and multi-user later**: with one API, multiple clients or multiple task-processor instances can speak the same protocol. The first cut keeps everything in-process; the typed surface keeps the door open for an HTTP-relay split.
+
+Hard rules:
+
+- File on disk stays the source of truth on cold start. The in-memory index is a view.
+- No SQL, no LiteDB, no EF. Files plus an index, same convention as the supervisor and message-bus layers.
+- Single-state-machine authority moves into this layer. The runner still owns "one running task per project"; the layer enforces it on every mutation.
+
+Phasing is detailed in the queued task `task-access-api-layer-extraction`: ADR + skeleton, in-memory store, mutations and subscribers, consumer migration, default-on with multi-instance preparation.
+
 ### Security First
 
 Make security a first-class project dimension, not a one-off task:
