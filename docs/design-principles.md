@@ -192,3 +192,17 @@ The non-negotiables that govern board work:
 - Per-project collapse persistence (`atp.kanban.collapsed.<project>`); `7-archive` is collapsed by default for new projects.
 
 When you add a new lane, change a column width, or adjust the card stack, check both: (a) does the change survive the locked rules above, and (b) does it require an amendment in the taxonomy. A change without an amendment is a regression.
+
+## Motion
+
+Motion has to feel correct, not just be technically present. The rules below come out of repeated regressions where transient overlays read as a "flash" because the user's eye picked up the lift and the snap-off as two distinct events.
+
+- **Drag-and-drop never changes brightness on the card or its column.** Only `opacity`, `transform`, and (for hover depth) `box-shadow` may animate during drag-and-drop. `background`, `background-color`, and `filter` are off-limits; transient overlays that snap off on drop register as a flash.
+- **Drop-zone activation fades in via `opacity 0 -> 1`** over ~120 ms, not via a `background` transition that ramps a colour. Glows that leak past the strip's bounds via `box-shadow` are equivalent to a colour ramp and are not allowed.
+- **Drop is optimistic.** The new position is in the DOM within one animation frame of the drop event. The reorder POST is fire-and-forget; the layer that pins this lives in `JobService` (`pendingPersistCount`, `applyOptimisticReorder`, `applyOptimisticMove`). The user-visible card never round-trips through the server before settling.
+- **Sibling reflow uses `transform`.** When a card lands and the rest of the column has to make space, the rhythm is `transition: transform 180ms cubic-bezier(0, 0, 0.2, 1)` (compositor-only, GPU-friendly). `top` / `margin` would trigger layout and break the rhythm.
+- **The drag source eases its opacity restore on release.** The browser's native drag handling drops the source to ~50% opacity, then snaps back to 100% on drop. We tame the snap with a controlled class (`app-job-card.drag-source`) so the source eases back to full opacity instead of popping.
+- **Reduced-motion is honoured.** Under `@media (prefers-reduced-motion: reduce)` the card's transition list, the drop-zone bar's transition, and the drag-source restore all collapse to zero duration. The optimistic state change still applies; only the easing disappears.
+- **Reconcile without re-rendering the lane.** When the server confirms a move, patch the affected rows in place. Re-setting the entire `grouped` snapshot collapses transitions because the DOM nodes are recreated.
+
+The contract is pinned by `frontend/e2e/dnd-no-flash.spec.ts`. When you change drag-and-drop styling, run that spec and add an assertion if your change introduces a new transition surface.

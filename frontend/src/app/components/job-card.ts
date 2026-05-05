@@ -167,8 +167,28 @@ if (typeof window !== 'undefined') {
       border-radius: 12px;
       padding: 16px;
       cursor: pointer;
-      transition: transform 0.15s, box-shadow 0.15s;
+      /* Compositor-only transitions. transform handles hover lift and
+         post-drop settle (CDK rhythm: 180ms cubic-bezier(0,0,0.2,1));
+         box-shadow handles depth on hover. background-color is
+         deliberately not transitioned — drag-and-drop must never
+         brighten the card surface. (Motion rule, design-principles.md) */
+      transition:
+        transform 180ms cubic-bezier(0, 0, 0.2, 1),
+        box-shadow 0.15s ease,
+        opacity 0.18s ease;
       border-left: 4px solid var(--state-color, #555);
+    }
+    /* Drag-source: while a card is being dragged, dim it to ~55% so the
+       drag-image (browser-rendered ghost) reads as the active object.
+       The transition above handles the smooth restore on release. */
+    :host(.drag-source) .job-card {
+      opacity: 0.55;
+      will-change: transform, opacity;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .job-card { transition: none; }
+      .job-card--running { animation: none; }
+      :host(.drag-source) .job-card { will-change: auto; }
     }
     .job-card:hover {
       transform: translateY(-2px);

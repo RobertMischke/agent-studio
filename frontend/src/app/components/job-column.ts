@@ -180,10 +180,14 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
       gap: 12px;
       transition: outline 0.15s;
     }
+    /* Drag-over signal: outline ring only. We deliberately do NOT tint the
+       column background because a transient overlay that snaps off on drop
+       reads as a "flash" together with the drop-zone glow underneath the
+       landed card. Motion rule (docs/design-principles.md): drag-and-drop
+       never changes brightness; only opacity (drop-zone) and transform. */
     .column--dragover {
       outline: 2px solid rgba(99, 102, 241, 0.6);
       outline-offset: -2px;
-      background: rgba(99, 102, 241, 0.05);
     }
     .column__header {
       display: flex;
@@ -302,17 +306,20 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
       left: 4px;
       right: 4px;
       top: 50%;
-      height: 2px;
+      height: 3px;
       transform: translateY(-50%);
       border-radius: 2px;
-      background: transparent;
-      transition: background 0.08s ease, height 0.08s ease;
+      background: rgba(99, 102, 241, 0.9);
+      opacity: 0;
+      transition: opacity 0.12s ease;
       pointer-events: none;
     }
+    /* Active drop-zone fades in via opacity only — no box-shadow glow.
+       The glow used to leak beyond the strip's bounds and lingered for
+       ~80ms after drop while it transitioned out, registering as a
+       "brightness flash" underneath the landed card. */
     .column__drop-zone--active::before {
-      background: rgba(99, 102, 241, 0.9);
-      height: 4px;
-      box-shadow: 0 0 8px rgba(99, 102, 241, 0.6);
+      opacity: 1;
     }
     .column__add {
       margin-top: 4px;
@@ -406,7 +413,6 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
     .column-rail--dragover {
       outline: 2px solid rgba(99, 102, 241, 0.6);
       outline-offset: -2px;
-      background: rgba(99, 102, 241, 0.05);
     }
     .column-rail__icon { font-size: 16px; line-height: 1; }
     .column-rail__count {
@@ -541,6 +547,11 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
       padding: 1px 5px;
       border-radius: 4px;
       font-size: 10px;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .column { transition: none; }
+      .column__drop-zone::before { transition: none; }
+      .column-rail { transition: none; }
     }
   `]
 })
@@ -720,6 +731,20 @@ export class JobColumnComponent {
   onDragStart(event: DragEvent, job: JobInfo) {
     event.dataTransfer?.setData('text/plain', JSON.stringify({ jobId: job.id, watchPath: job.watchPath, jobKey: job.jobKey }));
     event.dataTransfer?.setData('application/x-source-state', job.state);
+    // Mark the host so the dimmed-while-dragging style applies. Released
+    // on dragend (or drop) so the source eases back to full opacity
+    // smoothly instead of snapping. Tracked imperatively so we can clear
+    // it even when Angular re-renders the card into a different lane via
+    // the optimistic move.
+    const host = event.currentTarget as HTMLElement | null;
+    if (host) {
+      host.classList.add('drag-source');
+      const clear = () => {
+        host.classList.remove('drag-source');
+        host.removeEventListener('dragend', clear);
+      };
+      host.addEventListener('dragend', clear);
+    }
     this.startAutoScroll();
   }
 
