@@ -5178,3 +5178,67 @@ AggregateError [ECONNREFUSED]:
 AggregateError [ECONNREFUSED]: 
     at internalConnectMultiple (node:net:1139:18)
     at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'detailPanels' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:143:29:
+[37m      143 │               @for (panel of [32mdetailPanels[37m; track panel.label) {
+          ╵                              [32m~~~~~~~~~~~~[0m
+
+[39m[22m
+[1m[31m[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'detailPanels' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:143:29:
+[37m      143 │               @for (panel of [32mdetailPanels[37m; track panel.label) {
+          ╵                              [32m~~~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'markerOpen' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:264:50:
+[37m      264 │                         [class.run-marker--open]="[32mmarkerOpen[37m()"
+          ╵                                                   [32m~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'markerOpen' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:265:33:
+[37m      265 │                         (click)="[32mmarkerOpen[37m.set(!markerOpen())"
+          ╵                                  [32m~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'markerOpen' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:265:49:
+[37m      265 │                         (click)="markerOpen.set(![32mmarkerOpen[37m())"
+          ╵                                                  [32m~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'markerOpen' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:273:24:
+[37m      273 │                   <b>{{ [32mmarkerOpen[37m() ? 'hide' : 'details' }}</b>
+          ╵                         [32m~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'markerOpen' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:275:21:
+[37m      275 │                 @if ([32mmarkerOpen[37m()) {
+          ╵                      [32m~~~~~~~~~~[0m
+
+
+[31mX [41;31m[[41;97mERROR[41;31m][0m [1mTS2339: Property 'runMarkerDetails' does not exist on type 'NextGenChatWorkbenchPrototypeComponent'.[0m [1m[35m[plugin angular-compiler][0m
+
+    src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts:282:36:
+[37m      282 │ ...              @for (item of [32mrunMarkerDetails[37m; track item.label) {
+          ╵                                [32m~~~~~~~~~~~~~~~~[0m
+
+[39m[22m
+[1m[31m[2m17:05:03[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/cli/quota[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m
+[1m[31m[2m17:05:03[22m[1m [31m[1m[vite][22m[1m[31m [31mhttp proxy error: /api/runner/token-summary-aggregate[31m
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1139:18)
+    at afterConnectMultiple (node:net:1714:7)[39m[22m

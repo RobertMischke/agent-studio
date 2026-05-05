@@ -259,9 +259,40 @@ interface ChatTurn {
                 </div>
 
                 <div class="conversation__scroll">
-                <div class="run-marker">
+                <button class="run-marker"
+                        type="button"
+                        [class.run-marker--open]="markerOpen()"
+                        (click)="markerOpen.set(!markerOpen())"
+                        data-testid="prototype-run-marker">
+                  <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    @for (path of iconPath('clock'); track path) {
+                      <path [attr.d]="path"></path>
+                    }
+                  </svg>
                   <span>Run 4 · 12m active · 28 tool calls · 42k tokens · 3 commits</span>
-                </div>
+                  <b>{{ markerOpen() ? 'hide' : 'details' }}</b>
+                </button>
+                @if (markerOpen()) {
+                  <aside class="run-popover" data-testid="prototype-run-popover">
+                    <header>
+                      <strong>Run 4 context</strong>
+                      <span>One CLI invocation between user inputs</span>
+                    </header>
+                    <div class="run-popover__grid">
+                      @for (item of runMarkerDetails; track item.label) {
+                        <div>
+                          <span>{{ item.label }}</span>
+                          <b>{{ item.value }}</b>
+                        </div>
+                      }
+                    </div>
+                    <footer>
+                      <button (click)="setPane('debug')">Debug this run</button>
+                      <button (click)="setPane('git')">Review commits</button>
+                      <button (click)="toolOpen.set(true)">Open tools</button>
+                    </footer>
+                  </aside>
+                }
 
                 @for (turn of visibleTurns(); track turn.title) {
                   <article class="turn" [attr.data-tone]="turn.tone">
