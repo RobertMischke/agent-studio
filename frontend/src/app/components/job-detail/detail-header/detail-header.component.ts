@@ -109,6 +109,7 @@ export class DetailHeaderComponent {
   readonly savingTitle = input(false);
   readonly isReview = input(false);
   readonly completingAndNext = input(false);
+  readonly changingState = input(false);
 
   readonly back = output<void>();
   readonly startTitleEdit = output<void>();
@@ -117,6 +118,37 @@ export class DetailHeaderComponent {
   readonly titleDraftChange = output<string>();
   readonly completeAndNext = output<void>();
   readonly deleteRequested = output<void>();
+  readonly stateChange = output<string>();
+
+  /**
+   * Lane dropdown options surfaced in the detail header. The order mirrors
+   * the kanban left-to-right flow so picking a target reads like "advance"
+   * vs "send back". `1a-orchestrator-prep` and `1b-needs-human-review` are
+   * orchestrator-managed lanes (ADR-0026) — listed but unusual to pick by
+   * hand, hence the discreet labels.
+   */
+  readonly laneOptions: ReadonlyArray<{ state: string; label: string }> = [
+    { state: '1-preparation',         label: 'Preparation' },
+    { state: '1a-orchestrator-prep',  label: 'Orch Prep' },
+    { state: '1b-needs-human-review', label: 'Needs Clarification' },
+    { state: '2-ready',               label: 'Ready' },
+    { state: '3-progress',            label: 'In Progress' },
+    { state: '4-auto-review',         label: 'Auto Review' },
+    { state: '5-human-review',        label: 'Human Review' },
+    { state: '6-completed',           label: 'Completed' },
+    { state: '7-archive',             label: 'Archive' },
+  ];
+
+  isStandardLane(state: string): boolean {
+    return this.laneOptions.some(o => o.state === state);
+  }
+
+  onStateSelect(event: Event) {
+    const target = event.target as HTMLSelectElement;
+    const next = target.value;
+    if (!next || next === this.info().state) return;
+    this.stateChange.emit(next);
+  }
 
   readonly menuOpen = signal(false);
 

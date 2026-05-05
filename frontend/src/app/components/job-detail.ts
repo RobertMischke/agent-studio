@@ -52,12 +52,14 @@ import { markdownToHtml } from './markdown-utils';
         [savingTitle]="savingTitle()"
         [isReview]="isReview()"
         [completingAndNext]="completingAndNext()"
+        [changingState]="changingState()"
         (back)="back.emit()"
         (titleDraftChange)="titleDraft.set($event)"
         (startTitleEdit)="startTitleEdit()"
         (cancelTitleEdit)="cancelTitleEdit()"
         (saveTitle)="saveTitle()"
         (completeAndNext)="completeAndNext()"
+        (stateChange)="onStateChange($event)"
         (deleteRequested)="deleteRequested.emit()" />
 
       <app-command-deck
@@ -515,6 +517,39 @@ import { markdownToHtml } from './markdown-utils';
       font-weight: 600;
       letter-spacing: 0.5px;
       flex-shrink: 0;
+    }
+    /* The state pill is now a <select> so the user can move the job to a
+       different lane straight from the detail view. Keep the pill shape and
+       per-state colour, strip the native chrome, and append a small caret so
+       it still reads as a control. */
+    .detail__state--select {
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      border: 0;
+      cursor: pointer;
+      padding-right: 26px;
+      background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+                        linear-gradient(135deg, currentColor 50%, transparent 50%);
+      background-position: calc(100% - 14px) 50%, calc(100% - 9px) 50%;
+      background-size: 5px 5px, 5px 5px;
+      background-repeat: no-repeat;
+      font-family: inherit;
+      line-height: 1;
+    }
+    .detail__state--select:focus-visible {
+      outline: 2px solid rgba(148, 163, 184, 0.45);
+      outline-offset: 2px;
+    }
+    .detail__state--select:disabled {
+      opacity: 0.55;
+      cursor: progress;
+    }
+    .detail__state--select option {
+      color: #e2e8f0;
+      background: #11131a;
+      text-transform: none;
+      letter-spacing: normal;
     }
     .state--1-preparation { background: rgba(139,92,246,0.15); color: #8b5cf6; }
     .state--2-ready { background: rgba(6,182,212,0.15); color: #06b6d4; }
@@ -1290,6 +1325,7 @@ export class JobDetailComponent implements OnDestroy {
   readonly projectChanged = output<string>();
   readonly completeAndNextReview = output<void>();
   readonly deleteRequested = output<void>();
+  readonly stateChangeRequested = output<{ targetState: string }>();
 
   readonly editingPrompt = signal(false);
 
@@ -1376,6 +1412,7 @@ export class JobDetailComponent implements OnDestroy {
   readonly titleDraft = signal('');
   readonly savingTitle = signal(false);
   readonly completingAndNext = signal(false);
+  readonly changingState = signal(false);
   readonly detailPanePercent = this.layout.detailPanePercent;
 
   // Wall-clock tick used by relative-time formatters (e.g. formatResetIn).
@@ -1441,6 +1478,20 @@ export class JobDetailComponent implements OnDestroy {
     if (!this.isRunning() && this.setupExpandedDuringRun()) {
       this.setupExpandedDuringRun.set(false);
     }
+  });
+
+  /** Clear the lane-dropdown pending flag once the parent has re-fetched the
+   *  detail and the new `state` arrives. Without this the select stays
+   *  disabled forever after a successful move. The watch is on the raw
+   *  state string so it also fires for moves the parent triggered via
+   *  drag-and-drop on the kanban behind the open detail view. */
+  private lastObservedState: string | null = null;
+  private resetChangingStateOnUpdate = effect(() => {
+    const state = this.detail().info.state;
+    if (this.lastObservedState !== null && state !== this.lastObservedState && this.changingState()) {
+      this.changingState.set(false);
+    }
+    this.lastObservedState = state;
   });
 
   private detailEffect = effect(() => {
@@ -1865,6 +1916,20 @@ export class JobDetailComponent implements OnDestroy {
         });
       }
     });
+  }
+
+  /**
+   * Forwarded from the detail-header lane dropdown. The parent owns the
+   * actual move (so the board's optimistic-paint / detail re-fetch stay in
+   * the same place as drag-and-drop moves on the kanban). We only flip the
+   * local "changing" flag for the disabled-while-pending UX; the parent
+   * resolves it by re-feeding `[detail]` after the move settles.
+   */
+  onStateChange(targetState: string) {
+    if (this.changingState()) return;
+    if (targetState === this.detail().info.state) return;
+    this.changingState.set(true);
+    this.stateChangeRequested.emit({ targetState });
   }
 
   startEdit(which: 'prompt') {

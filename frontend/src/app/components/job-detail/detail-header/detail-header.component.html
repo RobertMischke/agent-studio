@@ -51,9 +51,21 @@
       }
     </div>
   </div>
-  <span class="detail__state" [class]="'state--' + info().state">
-    {{ stateLabel(info().state) }}
-  </span>
+  <select class="detail__state detail__state--select"
+          [class]="'detail__state detail__state--select state--' + info().state"
+          [value]="info().state"
+          [disabled]="changingState()"
+          [title]="changingState() ? 'Moving…' : 'Move to another lane'"
+          data-testid="detail-state-select"
+          aria-label="Change task lane"
+          (change)="onStateSelect($event)">
+    @for (lane of laneOptions; track lane.state) {
+      <option [value]="lane.state" [selected]="lane.state === info().state">{{ lane.label }}</option>
+    }
+    @if (!isStandardLane(info().state)) {
+      <option [value]="info().state" [selected]="true">{{ stateLabel(info().state) }}</option>
+    }
+  </select>
   @if (isReview()) {
     <button type="button"
             class="detail__complete-next"

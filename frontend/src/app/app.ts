@@ -210,7 +210,7 @@ interface VerboseDebugContext {
             }
 
             <main class="workspace__main">
-              <app-job-detail [detail]="detail" [watchPaths]="watchPaths()" (back)="closeDetail()" (fileSaved)="onFileSaved()" (projectChanged)="onProjectChanged($event)" (completeAndNextReview)="onCompleteAndNextReview()" (deleteRequested)="onDeleteFromDetail(detail.info)" />
+              <app-job-detail [detail]="detail" [watchPaths]="watchPaths()" (back)="closeDetail()" (fileSaved)="onFileSaved()" (projectChanged)="onProjectChanged($event)" (completeAndNextReview)="onCompleteAndNextReview()" (deleteRequested)="onDeleteFromDetail(detail.info)" (stateChangeRequested)="onStateChangeFromDetail(detail.info, $event.targetState)" />
             </main>
           </div>
         } @else {
@@ -2094,6 +2094,38 @@ export class App implements OnInit {
 
   onDeleteFromDetail(info: JobInfo) {
     this.confirmAndDeleteJob(info, true);
+  }
+
+  /**
+   * Lane-dropdown move from the detail view. Mirrors the drag-and-drop path
+   * (`onJobDrop`) so the board repaints optimistically while the POST is
+   * in flight, then re-fetches the open detail so the dropdown reflects the
+   * new lane. The detail-view's local "changing" flag is cleared by the
+   * detail component's effect when the new `state` arrives.
+   */
+  onStateChangeFromDetail(info: JobInfo, targetState: string) {
+    if (!targetState || targetState === info.state) return;
+    const snapshot = this.jobService.applyOptimisticMove(info.id, info.watchPath, targetState);
+    this.jobService.beginOptimisticPersist();
+    this.jobService.moveJob(info.id, targetState, info.watchPath).subscribe({
+      next: () => {
+        this.jobService.endOptimisticPersist();
+        this.jobService.getDetail(info.id, info.watchPath).subscribe({
+          next: (detail) => this.selectedJob.set(detail),
+          error: () => { /* polling will reconcile */ }
+        });
+      },
+      error: (err) => {
+        this.jobService.endOptimisticPersist();
+        if (snapshot) this.jobService.revertOptimisticMove(snapshot);
+        this.jobService.error.set(err.message || 'Failed to move job');
+        this.errorDialog.show(err, {
+          title: 'Failed to move task',
+          fallbackMessage: 'Failed to move task',
+          source: `Task ${info.id}`
+        });
+      }
+    });
   }
 
   private confirmAndDeleteJob(job: JobInfo, closeDetailOnSuccess: boolean) {
