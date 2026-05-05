@@ -100,28 +100,18 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
           <strong>Agent Task Processor</strong>
           <span>Task workbench</span>
         </div>
-        <nav class="topbar__nav detail-chrome__panes" aria-label="Workbench quick navigation" data-testid="prototype-topbar-nav">
-          <button [class.detail-chrome__pane--active]="chatOpen()"
-                  (click)="toggleChat()"
-                  data-testid="prototype-topbar-chat">
-            <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
-              @for (path of iconPath('chat'); track path) {
-                <path [attr.d]="path"></path>
-              }
-            </svg>
-            <span>{{ chatOpen() ? 'Hide Chat' : 'Show Chat' }}</span>
-          </button>
-          <button [class.detail-chrome__pane--active]="isPaneButtonActive('git')"
-                  (click)="togglePane('git')"
-                  data-testid="prototype-topbar-git">
-            <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
-              @for (path of iconPath('git'); track path) {
-                <path [attr.d]="path"></path>
-              }
-            </svg>
-            <span>Git Review</span>
-          </button>
-          <button [class.detail-chrome__pane--active]="sideSheetOpen()"
+        <div class="topbar__runline" aria-label="Current run summary" data-testid="prototype-topbar-runline">
+          <span>Run 4</span>
+          <span>12m</span>
+          <span>28 tools</span>
+          <span>42k tokens</span>
+          <span>3 commits</span>
+        </div>
+        <div class="topbar__actions">
+          <button class="icon-btn"
+                  [class.icon-btn--active]="sideSheetOpen()"
+                  title="Toggle project sheet"
+                  aria-label="Toggle project sheet"
                   (click)="sideSheetOpen.set(!sideSheetOpen())"
                   data-testid="prototype-topbar-sheet">
             <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -129,9 +119,11 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
                 <path [attr.d]="path"></path>
               }
             </svg>
-            <span>Project Sheet</span>
           </button>
-          <button [class.detail-chrome__pane--active]="statusPanel() === 'queue'"
+          <button class="icon-btn"
+                  [class.icon-btn--active]="statusPanel() === 'queue'"
+                  title="Queue and automation"
+                  aria-label="Queue and automation"
                   (click)="toggleStatusPanel('queue')"
                   data-testid="prototype-topbar-queue">
             <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -139,10 +131,7 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
                 <path [attr.d]="path"></path>
               }
             </svg>
-            <span>Queue</span>
           </button>
-        </nav>
-        <div class="topbar__actions">
           <button class="icon-btn" title="Toggle density" aria-label="Toggle density" (click)="toggleDensity()" data-testid="prototype-density-toggle">
             <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
               @for (path of iconPath(density() === 'compact' ? 'expand' : 'compress'); track path) {
@@ -184,15 +173,15 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
       <main class="workspace" [class.workspace--sheet-closed]="!sideSheetOpen()">
         <aside class="task-list" aria-label="Task list">
           <div class="task-list__header">
-            <span>2-ready</span>
-            <strong>Focused queue</strong>
+            <strong>Queue</strong>
+            <span>2-ready · 5 tasks</span>
           </div>
           @for (task of taskCards; track task.id) {
             <button class="task-card"
                     [class.task-card--active]="task.active"
                     [attr.data-state]="task.state">
               <span class="task-card__title">{{ task.title }}</span>
-              <span class="task-card__meta">{{ task.state }} · {{ task.meta }}</span>
+              <span class="task-card__meta">{{ task.meta }}</span>
             </button>
           }
         </aside>
@@ -229,9 +218,39 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
                     <path [attr.d]="path"></path>
                   }
                 </svg>
-                <span>Quick views</span>
-                <small>pin additive panes</small>
+                <span>Task rail</span>
+                <small>quick views + pins</small>
               </button>
+              <div class="inspector-rail__modes" data-testid="prototype-layout-buttons">
+                <b>Panes</b>
+                <button class="rail-action rail-action--all"
+                        title="Pin all review panes"
+                        aria-label="Pin all review panes"
+                        data-testid="prototype-pane-all"
+                        (click)="openAllContextPanes()">
+                  <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                    @for (path of iconPath('columns'); track path) {
+                      <path [attr.d]="path"></path>
+                    }
+                  </svg>
+                  <span>All</span>
+                  <em>{{ contextPanes().length + (chatOpen() ? 1 : 0) }}</em>
+                </button>
+                @for (mode of paneButtons; track mode.id) {
+                  <button class="rail-action"
+                          [class.icon-btn--active]="isPaneButtonActive(mode.id)"
+                          [attr.title]="mode.label"
+                          [attr.data-testid]="'prototype-pane-' + mode.id"
+                          (click)="togglePane(mode.id)">
+                    <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      @for (path of iconPath(mode.icon); track path) {
+                        <path [attr.d]="path"></path>
+                      }
+                    </svg>
+                    <span>{{ mode.short }}</span>
+                  </button>
+                }
+              </div>
               <div class="inspector-rail__summary" data-testid="prototype-summary-strip">
                 <b>Signals</b>
                 @for (chip of summaryChips; track chip.label) {
@@ -246,35 +265,6 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
                     </svg>
                     <strong>{{ chip.value }}</strong>
                     <span>{{ chip.label }}</span>
-                  </button>
-                }
-              </div>
-              <div class="inspector-rail__modes" data-testid="prototype-layout-buttons">
-                <b>Pin</b>
-                <button class="rail-action rail-action--all"
-                        title="Pin all review panes"
-                        aria-label="Pin all review panes"
-                        data-testid="prototype-pane-all"
-                        (click)="openAllContextPanes()">
-                  <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
-                    @for (path of iconPath('columns'); track path) {
-                      <path [attr.d]="path"></path>
-                    }
-                  </svg>
-                  <span>All</span>
-                </button>
-                @for (mode of paneButtons; track mode.id) {
-                  <button class="rail-action"
-                          [class.icon-btn--active]="isPaneButtonActive(mode.id)"
-                          [attr.title]="mode.label"
-                          [attr.data-testid]="'prototype-pane-' + mode.id"
-                          (click)="togglePane(mode.id)">
-                    <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
-                      @for (path of iconPath(mode.icon); track path) {
-                        <path [attr.d]="path"></path>
-                      }
-                    </svg>
-                    <span>{{ mode.short }}</span>
                   </button>
                 }
               </div>
@@ -1254,6 +1244,29 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
 
     .topbar__title span { color: var(--muted); }
 
+    .topbar__runline {
+      min-width: 0;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 5px;
+      overflow: hidden;
+    }
+
+    .topbar__runline span {
+      min-height: 20px;
+      display: inline-flex;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 1px 7px;
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 650;
+      white-space: nowrap;
+    }
+
     .topbar__actions { display: flex; gap: 5px; }
 
     .workspace {
@@ -1261,12 +1274,12 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
       min-width: 0;
       min-height: 0;
       display: grid;
-      grid-template-columns: 176px minmax(650px, 1fr) minmax(292px, 30vw);
+      grid-template-columns: 148px minmax(650px, 1fr) minmax(292px, 30vw);
       background: var(--bg);
     }
 
     .workspace--sheet-closed {
-      grid-template-columns: 176px minmax(650px, 1fr) 0;
+      grid-template-columns: 148px minmax(650px, 1fr) 0;
     }
 
     .task-list,
@@ -1298,9 +1311,9 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
       width: calc(100% - 12px);
       margin: 6px;
       display: grid;
-      gap: 4px;
+      gap: 3px;
       text-align: left;
-      padding: 9px;
+      padding: 8px;
       border: 1px solid var(--line);
       border-radius: 8px;
       background: var(--surface);
@@ -1316,6 +1329,10 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
       font-weight: 650;
       font-size: 12px;
       line-height: 1.25;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
     }
 
     .detail {
@@ -1398,41 +1415,6 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
       color: var(--text);
       background: var(--surface-soft);
       border-color: var(--line);
-    }
-
-    .detail-chrome__panes {
-      min-width: 0;
-      display: flex;
-      align-items: center;
-      gap: 3px;
-      overflow: hidden;
-    }
-
-    .detail-chrome__panes button {
-      width: 26px;
-      height: 26px;
-      display: grid;
-      place-items: center;
-      border: 1px solid var(--line);
-      border-radius: 6px;
-      background: var(--surface);
-      color: var(--muted);
-      padding: 0;
-      font-size: 11px;
-    }
-
-    .detail-chrome__panes button span {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      overflow: hidden;
-      clip: rect(0 0 0 0);
-      white-space: nowrap;
-    }
-
-    .detail-chrome__pane--active {
-      color: var(--accent) !important;
-      border-color: var(--accent) !important;
     }
 
     .composer__bar > div,
@@ -1548,9 +1530,9 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
       width: 100%;
       min-height: 26px;
       display: grid;
-      grid-template-columns: 16px minmax(0, 1fr);
+      grid-template-columns: 16px minmax(0, 1fr) 14px;
       align-items: center;
-      gap: 5px;
+      gap: 4px;
       border: 1px solid transparent;
       border-radius: 6px;
       background: transparent;
@@ -1558,7 +1540,7 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
       font-size: 11px;
       font-weight: 700;
       text-align: left;
-      padding: 0 5px;
+      padding: 0 4px;
     }
 
     .inspector-rail__scenarios button span,
@@ -1567,6 +1549,19 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+    }
+
+    .rail-action em {
+      min-width: 14px;
+      min-height: 14px;
+      display: inline-grid;
+      place-items: center;
+      border-radius: 999px;
+      background: var(--surface-soft);
+      color: var(--muted);
+      font-size: 9px;
+      font-style: normal;
+      font-weight: 800;
     }
 
     .inspector-rail__scenarios button:hover,
@@ -2735,10 +2730,10 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
     .debug-grid p { color: var(--muted); line-height: 1.45; margin: 0; }
 
     .ng-chat-prototype[data-density="compact"] .workspace {
-      grid-template-columns: 168px minmax(590px, 1fr) minmax(260px, 28vw);
+      grid-template-columns: 132px minmax(590px, 1fr) minmax(260px, 28vw);
     }
 
-    .ng-chat-prototype[data-density="compact"] .workbench { grid-template-columns: 56px minmax(0, 1fr); }
+    .ng-chat-prototype[data-density="compact"] .workbench { grid-template-columns: 54px minmax(0, 1fr); }
     .ng-chat-prototype[data-density="compact"] .inspector-rail { padding: 5px 4px; gap: 5px; }
     .ng-chat-prototype[data-density="compact"] .rail-guide {
       min-height: 34px;
@@ -2754,6 +2749,7 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
     .ng-chat-prototype[data-density="compact"] .inspector-rail__summary b,
     .ng-chat-prototype[data-density="compact"] .inspector-rail__scenarios button span,
     .ng-chat-prototype[data-density="compact"] .rail-action span,
+    .ng-chat-prototype[data-density="compact"] .rail-action em,
     .ng-chat-prototype[data-density="compact"] .summary-chip span {
       display: none;
     }
@@ -2781,8 +2777,7 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
     .ng-chat-prototype[data-density="compact"] .composer__bar { min-height: 34px; }
     .ng-chat-prototype[data-density="compact"] .detail-chrome { grid-template-columns: 28px minmax(0, 1fr) auto auto; }
     .ng-chat-prototype[data-density="compact"] .detail-chrome__edit,
-    .ng-chat-prototype[data-density="compact"] .detail-chrome__state,
-    .ng-chat-prototype[data-density="compact"] .detail-chrome__panes span { display: none; }
+    .ng-chat-prototype[data-density="compact"] .detail-chrome__state { display: none; }
     .ng-chat-prototype[data-density="compact"] .actor-key { padding: 4px 6px; gap: 4px; }
     .ng-chat-prototype[data-density="compact"] .actor-key__chip b { display: none; }
     .ng-chat-prototype[data-density="compact"] .decision__row { padding: 5px 7px; gap: 7px; }
@@ -2810,7 +2805,7 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
       .statusbar { grid-column: 1; }
       .topbar { grid-template-columns: minmax(0, 1fr) auto auto; gap: 4px; }
       .topbar__title span { display: none; }
-      .topbar__nav span { display: none; }
+      .topbar__runline span:nth-child(n+3) { display: none; }
       .statusbar { grid-template-columns: minmax(0, 1fr) auto; }
       .statusbar__group--center { display: none; }
       .statusbar__group:first-child button:nth-child(n+2),
@@ -2828,7 +2823,6 @@ type TranscriptEntry = ChatTurnEntry | DecisionEntry;
       }
       .detail-chrome__edit,
       .detail-chrome__state,
-      .detail-chrome__panes,
       .detail-chrome__complete,
       .project-pill { display: none; }
       .composer__bar { grid-template-columns: 1fr; }
@@ -2935,10 +2929,10 @@ export class NextGenChatWorkbenchPrototypeComponent {
 
   readonly paneButtons: Array<{ id: WorkbenchPane; label: string; short: string; icon: string }> = [
     { id: 'chat', label: 'Toggle chat pane', short: 'Chat', icon: 'chat' },
-    { id: 'result', label: 'Result summary', short: 'Result', icon: 'check' },
+    { id: 'result', label: 'Result summary', short: 'Res', icon: 'check' },
     { id: 'git', label: 'Git changes', short: 'Git', icon: 'git' },
-    { id: 'preview', label: 'Screenshot preview', short: 'Preview', icon: 'image' },
-    { id: 'debug', label: 'Debug summary', short: 'Debug', icon: 'bug' },
+    { id: 'preview', label: 'Screenshot preview', short: 'Prev', icon: 'image' },
+    { id: 'debug', label: 'Debug summary', short: 'Dbg', icon: 'bug' },
   ];
 
   readonly scenarios: Array<{ id: Scenario; label: string; icon: string }> = [

@@ -45,21 +45,21 @@ This follows the repo's product boundary: the app itself should not grow branch/
 
 ## Interaction Coverage
 
-The latest iteration is a tall workbench. Task tabs, summary metrics, split presets, and scenario switches moved out of horizontal top bands into a narrow left inspector rail. Chat and the adjacent Result, Git, Preview, Debug, or Source pane now start directly under a compact task-detail chrome and run down to the status bar. This is the working target for the production handoff: normal chat and adjacent review panes should use roughly the full available task height.
+The latest iteration is a tall workbench. Task tabs, summary metrics, split presets, and scenario switches moved out of horizontal top bands into a narrow left task rail. Chat and the adjacent Result, Git, Preview, or Debug pane now start directly under a compact task-detail chrome and run down to the status bar. This is the working target for the production handoff: normal chat and adjacent review panes should use roughly the full available task height.
 
-The nav and status-bar iteration adds a more VS Code-like control model. The activity bar is clickable, the top chrome exposes task chat, Git split, project side sheet, and queue shortcuts, and the status bar becomes a dense action surface instead of a passive label. Queue, token usage, health, visual evidence, and CLI/model configuration open as lightweight bottom popovers. The goal is to keep professional working height for chat and adjacent panes while still making observability, tokens, automation state, and run configuration one click away.
+The nav and status-bar iteration adds a more VS Code-like control model. The activity bar is clickable, the top chrome now shows only run summary plus global project sheet and queue shortcuts, and the status bar becomes a dense action surface instead of a passive label. Queue, token usage, health, visual evidence, and CLI/model configuration open as lightweight bottom popovers. The goal is to keep professional working height for chat and adjacent panes while still making observability, tokens, automation state, and run configuration one click away.
 
 The next iteration treats every workbench pane as optional and additive. Chat is no longer assumed to be permanent: it can be closed while Git review, Result, Preview, or Debug stays open. Git review now owns the source/editor preview, with a changes list on the left and the selected source diff on the right. The old range slider is gone; width is modeled by a real vertical splitter with keyboard support.
 
-The rail now has inline icons, visible labels in comfortable density, tooltip titles, and a `Quick views` guide button that explains why the controls live there. Compact density collapses the same controls back to icons so the chat area stays large. The detail header no longer duplicates the pane switcher; the rail owns pinning, the top bar owns global toggles, and the status bar owns runtime controls. The prototype is also deferred behind the feature flag, so the normal app does not pay the prototype bundle cost when the flag is off.
+The rail now has inline icons, visible labels in comfortable density, tooltip titles, a `Task rail` guide button, and an explicit open-pane count on the "All" pin action. Compact density collapses the same controls back to icons so the chat area stays large. The detail header and top bar no longer duplicate the pane switcher; the rail owns pane pinning, the top bar owns global sheet and queue toggles, and the status bar owns runtime controls. The task list is intentionally narrower and only carries queue selection, not pane controls. The prototype is also deferred behind the feature flag, so the normal app does not pay the prototype bundle cost when the flag is off.
 
 The prototype currently covers:
 
-- Task detail shell with project chip, editable-title affordance, state pill, Complete & Next, narrow task list, Chat tab, side sheet, and status bar.
+- Task detail shell with project chip, editable-title affordance, state pill, Complete & Next, narrow queue list, optional chat, side sheet, and status bar.
 - Workbench panes: Result, Git plus source diff, Preview, Debug, and optional Chat.
-- Left quick-view rail with run state, tokens, commits, files, screenshots, failed retry, duration, additive pane pinning, and scenario switches.
+- Left task rail with additive pane pinning, quick signal jumps, run state, tokens, commits, files, screenshots, failed retry, duration, and scenario switches.
 - Rail guide modal that explains the control model.
-- Clickable activity bar and top navigation for task chat, Git split, project side sheet, and queue.
+- Clickable activity bar and top chrome for project side sheet, queue, run summary, density, theme, command palette, and debug.
 - Interactive status bar with queue, token, health, visual evidence, CLI/model, density, theme, and command-palette entry points.
 - Status-bar popovers for queue automation, token heat, system health, evidence shortcuts, and model controls.
 - Optional chat toggle, additive context-pane toggles, "pin all" review panes, and a vertical splitter between chat and pinned review panes.

@@ -51,6 +51,8 @@ test.describe('@mockup next-gen chat Angular prototype', () => {
 
     await expect(page.getByTestId('next-gen-chat-angular-prototype')).toBeVisible();
     await expect(page.getByTestId('prototype-detail-chrome')).toContainText('Complete & Next');
+    await expect(page.getByTestId('prototype-topbar-runline')).toContainText('42k tokens');
+    await expect(page.getByTestId('prototype-topbar-nav')).toHaveCount(0);
     await expect(page.getByTestId('prototype-summary-strip')).toBeVisible();
     await expect(page.getByTestId('prototype-pane-result-view')).toContainText('Result summary');
     await page.waitForTimeout(250);
