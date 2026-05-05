@@ -220,6 +220,40 @@ First implementation order:
 
 Queued at `agent-taskboard/2-ready/agent-message-bus-contract/`, `agent-taskboard/2-ready/agent-message-bus-store/`, `agent-taskboard/2-ready/bridge-existing-events-to-message-bus/`, `agent-taskboard/2-ready/project-observability-message-bus-panel/`, `agent-taskboard/2-ready/supporting-agents-message-bus-events/`, and `agent-taskboard/2-ready/system-health-agent-message-bus-review/`.
 
+### Product Runtime Observability
+
+The product should help users understand not only what the agents did, but how the software being built behaves. Software on the workbench should be observable by default: it should emit structured logs, expose useful runtime signals, preserve failure evidence, and make performance and domain behaviour inspectable while the agent is still building it.
+
+This is a separate layer from the Agent Message Bus:
+
+- Agent Message Bus answers: which agent, supervisor, skill, or orchestrator acted, and why.
+- Product Runtime Observability answers: what did the built application do when it ran, where did it fail, how fast was it, and which domain events happened.
+
+The first version should be build-time first, production-later. Every serious generated or modified application should have enough observability for local testing, debugging, QA, performance probes, and review. Production deployment hooks can come later, but the build bench should already capture what the app says about itself.
+
+Core layer:
+
+- A project-level observability contract in Markdown that tells agents how this software should log, name domain events, expose metrics, preserve errors, and correlate user actions with runtime effects.
+- A small structured runtime event envelope for built software: timestamp, level, event name, subsystem, operation, correlation id, optional job/run/task id, duration, status, error, tags, and payload.
+- Default sinks that stay simple: JSONL file, stdout/stderr capture, browser console capture, test-run attachments, and optional HTTP diagnostics endpoint when the app already has a backend.
+- Optional adapters for OpenTelemetry or native platform logging later. Do not make OpenTelemetry a hard dependency for the first slice.
+- Base prompt guidance that asks coding agents to add or preserve practical observability when they build features: meaningful structured logs, stable event names, error context, performance timings for expensive paths, and enough domain signals to understand what happened.
+- An analysis skill that reads runtime logs and answers: what happened, what looks slow, what failed, which errors repeat, which paths are noisy, and which user-visible workflow needs attention.
+- A project-level Runtime Observability surface that shows recent product events, error groups, latency summaries, counters, domain-event timelines, and links back to tasks, test runs, screenshots, and agent messages.
+
+This should stay proportional. A tiny script does not need a telemetry platform. A web app, backend service, data pipeline, or product-like tool should have structured logging and a way for the task processor to collect and inspect it while it is under construction.
+
+First implementation order:
+
+1. Define `docs/product-runtime-observability.md` and `docs/schemas/product-runtime-event.schema.json`.
+2. Update base prompts and task contracts so agents consider build-time observability when adding meaningful software behaviour.
+3. Add capture paths for local runs, Playwright runs, backend logs, and browser console events into task evidence or project observability folders.
+4. Add a Runtime Observability project surface that reads structured product events and summarizes errors, latency, counters, and domain timelines.
+5. Add an analysis skill or project action that turns logs into reviewable Markdown plus structured JSON findings.
+6. Connect runtime events to the Agent Message Bus only by reference, not by mixing the two data models. The bus can say "this run produced runtime log artifact X"; product events remain their own schema.
+
+Queued at `agent-taskboard/2-ready/product-runtime-observability-contract/`, `agent-taskboard/2-ready/base-prompts-observability-guidance/`, `agent-taskboard/2-ready/product-runtime-log-capture/`, `agent-taskboard/2-ready/runtime-observability-project-surface/`, and `agent-taskboard/2-ready/runtime-log-analysis-skill/`.
+
 ### Companion App
 
 Make the running task board reachable from a phone without exposing the local processor to the internet:
@@ -235,14 +269,14 @@ The full V1 contract (endpoints, snapshot shape, command shape, sync cadence, fi
 
 ### Schema-First Communication and In-Memory Data Layer
 
-The product is accumulating cross-cutting structured data: agent messages, participant records, token aggregates per project, supervisor advisories and interventions, audit findings, architecture-quality scores, componentisation metrics. None of this should sit in a database. It should be many small JSON-schema-validated documents on disk, plus a strongly-typed in-memory layer that loads them at boot, supports query and aggregation, and writes back changes the same way the job system already does.
+The product is accumulating cross-cutting structured data: agent messages, participant records, product runtime events, token aggregates per project, supervisor advisories and interventions, audit findings, architecture-quality scores, componentisation metrics. None of this should sit in a database. It should be many small JSON-schema-validated documents on disk, plus a strongly-typed in-memory layer that loads them at boot, supports query and aggregation, and writes back changes the same way the job system already does.
 
 - One schema per concept, named `<concept>.schema.json`, under `docs/schemas/`. Draft 2020-12. English. No em dashes.
 - An in-memory store is a typed view over disk; the file is always the source of truth.
 - No SQL. No SQLite, no LiteDB, no EF. The repo deliberately avoids a database engine.
-- First slice: schemas for supervisor advisory, supervisor intervention, token aggregate, and agent message records, plus an `InMemoryStore` consumed by `AutoInterventionHostedService` and the Agent Message Bus projection to replace direct file reads.
+- First slice: schemas for supervisor advisory, supervisor intervention, token aggregate, agent message records, and product runtime events, plus an `InMemoryStore` consumed by `AutoInterventionHostedService`, the Agent Message Bus projection, and runtime observability projections to replace direct file reads.
 
-Queued at `agent-taskboard/2-ready/json-schemas-and-in-memory-layer/` and extended by the Agent Message Bus jobs.
+Queued at `agent-taskboard/2-ready/json-schemas-and-in-memory-layer/` and extended by the Agent Message Bus and Product Runtime Observability jobs.
 
 ### Continuous Decision Visibility
 
