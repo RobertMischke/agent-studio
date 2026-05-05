@@ -103,6 +103,7 @@ builder.Services.AddHostedService<HardHealthCheckHostedService>();
 builder.Services.AddHostedService<SoftReasoningHostedService>();
 builder.Services.AddHostedService<AutoInterventionHostedService>();
 builder.Services.AddHostedService<MetaCycleHostedService>();
+builder.Services.AddHostedService<OrchestratorPrepHostedService>();
 builder.Services.AddHostedService<ChatNoteHostedService>();
 builder.Services.AddHostedService<ReviewDecisionOrchestrator>();
 builder.Services.AddSingleton<GitService>();

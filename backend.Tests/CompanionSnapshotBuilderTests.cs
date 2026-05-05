@@ -41,7 +41,7 @@ public class CompanionSnapshotBuilderTests
             Job("a", "alpha", "C:/alpha", JobStates.Ready, order: 2),
             Job("b", "alpha", "C:/alpha", JobStates.Ready, order: 1),
             Job("c", "alpha", "C:/alpha", JobStates.Progress),
-            Job("d", "alpha", "C:/alpha", JobStates.Review),
+            Job("d", "alpha", "C:/alpha", JobStates.AutoReview),
             Job("e", "alpha", "C:/alpha", JobStates.Preparation), // not in any lane
             Job("f", "beta",  "C:/beta",  JobStates.Ready),
         };

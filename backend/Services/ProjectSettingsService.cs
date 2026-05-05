@@ -83,6 +83,25 @@ public class ProjectSettingsService
     }
 
     /// <summary>
+    /// ADR-0026: sets the per-project autonomy level for the
+    /// orchestrator-prep loop. Accepts <c>0..4</c>; out-of-range values are
+    /// clamped to the nearest valid stop. Null clears (revert to the default
+    /// balanced level when the setting is read).
+    /// </summary>
+    public void SetAutonomyLevel(string projectName, int? level)
+    {
+        EnsureLoaded();
+        int? clamped = level is null ? null : Math.Clamp(level.Value, 0, 4);
+        lock (_lock)
+        {
+            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
+            _cache[projectName] = current with { AutonomyLevel = clamped };
+            Persist();
+        }
+        _logger.LogInformation("Autonomy level set to {Level} for project {Project}", clamped, projectName);
+    }
+
+    /// <summary>
     /// Sets the cadence for one analysis-report topic on this project.
     /// Cadences are validated by the caller; null or empty value clears the
     /// entry (revert to "disabled" default). Every project starts with no

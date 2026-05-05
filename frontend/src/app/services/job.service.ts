@@ -5,8 +5,11 @@ import { ErrorDialogService } from './error-dialog.service';
 
 type LaneKey = keyof GroupedJobs;
 // ADR-0025: state strings use the new seven-lane order.
+// ADR-0026: 1a-orchestrator-prep + 1b-needs-human-review join the catalog.
 const STATE_TO_LANE: Record<string, LaneKey> = {
   '1-preparation': 'preparation',
+  '1a-orchestrator-prep': 'orchestratorPrep',
+  '1b-needs-human-review': 'needsHumanReview',
   '2-ready': 'ready',
   '3-progress': 'progress',
   '4-auto-review': 'autoReview',
@@ -50,7 +53,7 @@ export class JobService {
   }
 
   readonly jobs = signal<JobInfo[]>([]);
-  readonly grouped = signal<GroupedJobs>({ preparation: [], ready: [], progress: [], review: [], autoReview: [], humanReview: [], completed: [], archive: [] });
+  readonly grouped = signal<GroupedJobs>({ preparation: [], orchestratorPrep: [], needsHumanReview: [], ready: [], progress: [], review: [], autoReview: [], humanReview: [], completed: [], archive: [] });
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly runnerStatus = signal<RunnerStatus>({ projects: {} });
@@ -441,6 +444,19 @@ export class JobService {
 
   setProjectOrchestratorModel(projectName: string, model: string | null) {
     return this.http.put(`${this.baseUrl}/projects/${encodeURIComponent(projectName)}/orchestrator-model`, { model });
+  }
+
+  /** ADR-0026: read the per-project orchestrator-prep autonomy level (0..4). */
+  getProjectAutonomyLevel(projectName: string) {
+    return this.http.get<{ level: number }>(`${this.baseUrl}/projects/${encodeURIComponent(projectName)}/autonomy`);
+  }
+
+  /** ADR-0026: write the per-project orchestrator-prep autonomy level. Server clamps to 0..4. */
+  setProjectAutonomyLevel(projectName: string, level: number) {
+    return this.http.put<{ level: number }>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/autonomy`,
+      { level }
+    );
   }
 
   /**

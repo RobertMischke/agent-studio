@@ -9,6 +9,7 @@ type Scenario = 'review' | 'tools' | 'wait' | 'visual' | 'drift';
 interface SummaryChip {
   label: string;
   value: string;
+  icon: string;
   pane: WorkbenchPane;
   tone?: 'ok' | 'warn' | 'danger';
 }
@@ -33,14 +34,26 @@ interface ChatTurn {
              [attr.data-pane]="pane()"
              data-testid="next-gen-chat-angular-prototype">
       <nav class="activity" aria-label="Prototype activity bar">
-        <button class="activity__item activity__item--active" title="Projects">P</button>
-        <button class="activity__item" title="Tasks">T</button>
-        <button class="activity__item" title="Search">S</button>
-        <button class="activity__item" title="Git">G</button>
-        <button class="activity__item" title="QA">Q</button>
-        <button class="activity__item" title="Tokens">K</button>
+        @for (item of activityItems; track item.label) {
+          <button class="activity__item"
+                  [class.activity__item--active]="item.active"
+                  [attr.title]="item.title"
+                  [attr.aria-label]="item.title">
+            <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+              @for (path of iconPath(item.icon); track path) {
+                <path [attr.d]="path"></path>
+              }
+            </svg>
+          </button>
+        }
         <span class="activity__spacer"></span>
-        <button class="activity__item" title="Close prototype" (click)="close()">X</button>
+        <button class="activity__item" title="Close prototype" aria-label="Close prototype" (click)="close()">
+          <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+            @for (path of iconPath('close'); track path) {
+              <path [attr.d]="path"></path>
+            }
+          </svg>
+        </button>
       </nav>
 
       <header class="topbar">
@@ -49,11 +62,41 @@ interface ChatTurn {
           <span>Next-gen task chat workbench prototype</span>
         </div>
         <div class="topbar__actions">
-          <button class="icon-btn" title="Toggle density" (click)="toggleDensity()" data-testid="prototype-density-toggle">{{ density() === 'compact' ? 'C' : 'D' }}</button>
-          <button class="icon-btn" title="Toggle theme" (click)="toggleTheme()" data-testid="prototype-theme-toggle">{{ theme() === 'light' ? 'L' : 'D' }}</button>
-          <button class="icon-btn" title="Command palette" (click)="commandOpen.set(true)" data-testid="prototype-command-open">K</button>
-          <button class="icon-btn" title="Verbose debug" (click)="debugOpen.set(true)" data-testid="prototype-debug-open">B</button>
-          <button class="icon-btn" title="Close prototype" (click)="close()">X</button>
+          <button class="icon-btn" title="Toggle density" aria-label="Toggle density" (click)="toggleDensity()" data-testid="prototype-density-toggle">
+            <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+              @for (path of iconPath(density() === 'compact' ? 'expand' : 'compress'); track path) {
+                <path [attr.d]="path"></path>
+              }
+            </svg>
+          </button>
+          <button class="icon-btn" title="Toggle theme" aria-label="Toggle theme" (click)="toggleTheme()" data-testid="prototype-theme-toggle">
+            <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+              @for (path of iconPath(theme() === 'light' ? 'sun' : 'moon'); track path) {
+                <path [attr.d]="path"></path>
+              }
+            </svg>
+          </button>
+          <button class="icon-btn" title="Command palette" aria-label="Command palette" (click)="commandOpen.set(true)" data-testid="prototype-command-open">
+            <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+              @for (path of iconPath('command'); track path) {
+                <path [attr.d]="path"></path>
+              }
+            </svg>
+          </button>
+          <button class="icon-btn" title="Verbose debug" aria-label="Verbose debug" (click)="debugOpen.set(true)" data-testid="prototype-debug-open">
+            <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+              @for (path of iconPath('bug'); track path) {
+                <path [attr.d]="path"></path>
+              }
+            </svg>
+          </button>
+          <button class="icon-btn" title="Close prototype" aria-label="Close prototype" (click)="close()">
+            <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+              @for (path of iconPath('close'); track path) {
+                <path [attr.d]="path"></path>
+              }
+            </svg>
+          </button>
         </div>
       </header>
 
@@ -76,45 +119,77 @@ interface ChatTurn {
         <section class="detail" aria-label="Task detail">
           <section class="workbench" aria-label="Task chat workbench">
             <aside class="inspector-rail" aria-label="Task inspector rail">
-              <div class="inspector-rail__task">
-                <span>2-ready</span>
-                <strong>Next-gen chat projection</strong>
-              </div>
+              <button class="rail-guide" type="button" title="Explain this rail" (click)="guideOpen.set(true)" data-testid="prototype-rail-guide">
+                <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  @for (path of iconPath('panel'); track path) {
+                    <path [attr.d]="path"></path>
+                  }
+                </svg>
+                <span>Workbench</span>
+                <small>controls live here</small>
+              </button>
               <nav class="inspector-rail__tabs" aria-label="Task detail tabs">
-                <button>Pr</button>
-                <button>Lo</button>
-                <button class="inspector-rail__active">Ch</button>
-                <button>Fi</button>
-                <button>Co</button>
-                <button>Sc</button>
+                <b>Task</b>
+                @for (tab of taskTabs; track tab.label) {
+                  <button [class.inspector-rail__active]="tab.active"
+                          [attr.title]="tab.title"
+                          [attr.aria-label]="tab.title">
+                    <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      @for (path of iconPath(tab.icon); track path) {
+                        <path [attr.d]="path"></path>
+                      }
+                    </svg>
+                    <span>{{ tab.label }}</span>
+                  </button>
+                }
               </nav>
               <div class="inspector-rail__summary" data-testid="prototype-summary-strip">
+                <b>Signals</b>
                 @for (chip of summaryChips; track chip.label) {
                   <button class="summary-chip"
                           [attr.data-tone]="chip.tone || 'neutral'"
+                          [attr.title]="chip.value + ' ' + chip.label"
                           (click)="setPane(chip.pane)">
+                    <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      @for (path of iconPath(chip.icon); track path) {
+                        <path [attr.d]="path"></path>
+                      }
+                    </svg>
                     <strong>{{ chip.value }}</strong>
                     <span>{{ chip.label }}</span>
                   </button>
                 }
               </div>
               <div class="inspector-rail__modes" data-testid="prototype-layout-buttons">
+                <b>Split</b>
                 @for (mode of paneButtons; track mode.id) {
-                  <button class="icon-btn"
+                  <button class="rail-action"
                           [class.icon-btn--active]="pane() === mode.id"
                           [attr.title]="mode.label"
                           [attr.data-testid]="'prototype-pane-' + mode.id"
                           (click)="setPane(mode.id)">
-                    {{ mode.short }}
+                    <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      @for (path of iconPath(mode.icon); track path) {
+                        <path [attr.d]="path"></path>
+                      }
+                    </svg>
+                    <span>{{ mode.short }}</span>
                   </button>
                 }
               </div>
               <div class="inspector-rail__scenarios" data-testid="prototype-scenarios">
+                <b>Cases</b>
                 @for (scenario of scenarios; track scenario.id) {
                   <button [class.scenario-row__active]="activeScenario() === scenario.id"
                           [attr.title]="scenario.label"
+                          [attr.aria-label]="scenario.label"
                           (click)="activeScenario.set(scenario.id)">
-                    {{ scenario.label.slice(0, 2) }}
+                    <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      @for (path of iconPath(scenario.icon); track path) {
+                        <path [attr.d]="path"></path>
+                      }
+                    </svg>
+                    <span>{{ scenario.label }}</span>
                   </button>
                 }
               </div>
@@ -126,8 +201,22 @@ interface ChatTurn {
                 <div class="conversation__topline">
                   <span class="badge badge--ok">Task Chat</span>
                   <span>{{ scenarioText() }}</span>
-                  <button (click)="setPane('source')">Source map</button>
-                  <button (click)="debugOpen.set(true)">Verbose Debug</button>
+                  <button (click)="setPane('source')">
+                    <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      @for (path of iconPath('code'); track path) {
+                        <path [attr.d]="path"></path>
+                      }
+                    </svg>
+                    Source map
+                  </button>
+                  <button (click)="debugOpen.set(true)">
+                    <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      @for (path of iconPath('bug'); track path) {
+                        <path [attr.d]="path"></path>
+                      }
+                    </svg>
+                    Verbose Debug
+                  </button>
                 </div>
 
                 <div class="conversation__scroll">
@@ -183,14 +272,27 @@ interface ChatTurn {
                   <div class="composer__input">Reply in task context. Use #latest-run, #git, #screenshot, or /create-follow-up...</div>
                   <div class="composer__bar">
                     <div>
-                      <button>+</button>
+                      <button title="Attach context" aria-label="Attach context">
+                        <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                          @for (path of iconPath('plus'); track path) {
+                            <path [attr.d]="path"></path>
+                          }
+                        </svg>
+                      </button>
                       <button>Task context</button>
                       <button>Full access</button>
                       <button>#ui.html</button>
                     </div>
                     <div>
                       <button>5.5 Extra High</button>
-                      <button class="composer__send">Run</button>
+                      <button class="composer__send">
+                        <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                          @for (path of iconPath('play'); track path) {
+                            <path [attr.d]="path"></path>
+                          }
+                        </svg>
+                        Run
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -204,8 +306,20 @@ interface ChatTurn {
                       <span>{{ contextSubtitle() }}</span>
                     </div>
                     <div>
-                      <button class="icon-btn" (click)="setPane('chat')" title="Close pane">X</button>
-                      <button class="icon-btn" (click)="debugOpen.set(true)" title="Open Verbose Debug">B</button>
+                      <button class="icon-btn" (click)="setPane('chat')" title="Close pane" aria-label="Close pane">
+                        <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                          @for (path of iconPath('close'); track path) {
+                            <path [attr.d]="path"></path>
+                          }
+                        </svg>
+                      </button>
+                      <button class="icon-btn" (click)="debugOpen.set(true)" title="Open Verbose Debug" aria-label="Open Verbose Debug">
+                        <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                          @for (path of iconPath('bug'); track path) {
+                            <path [attr.d]="path"></path>
+                          }
+                        </svg>
+                      </button>
                     </div>
                   </header>
                   @switch (pane()) {
@@ -303,7 +417,13 @@ interface ChatTurn {
               <strong>Project side sheet chat</strong>
               <span>Project-level steering, queue context, task references</span>
             </div>
-            <button class="icon-btn" (click)="sideSheetOpen.set(!sideSheetOpen())">{{ sideSheetOpen() ? '>' : '<' }}</button>
+            <button class="icon-btn" (click)="sideSheetOpen.set(!sideSheetOpen())" title="Toggle side sheet" aria-label="Toggle side sheet">
+              <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                @for (path of iconPath(sideSheetOpen() ? 'panelClose' : 'panelOpen'); track path) {
+                  <path [attr.d]="path"></path>
+                }
+              </svg>
+            </button>
           </header>
           <div class="sheet__body">
             <article>
@@ -373,6 +493,31 @@ interface ChatTurn {
         </div>
       }
 
+      @if (guideOpen()) {
+        <div class="modal" data-testid="prototype-rail-guide-modal" (click)="guideOpen.set(false)">
+          <section class="modal__panel modal__panel--guide" (click)="$event.stopPropagation()">
+            <header>
+              <strong>Workbench rail</strong>
+              <button (click)="guideOpen.set(false)">Close</button>
+            </header>
+            <div class="guide-grid">
+              <article>
+                <h3>Why it is here</h3>
+                <p>The rail keeps controls out of the transcript, so chat and Git or Result can use the full height.</p>
+              </article>
+              <article>
+                <h3>What it contains</h3>
+                <p>Task tabs, run signals, split presets, and scenario cases. Each item has a tooltip and visible label in comfortable density.</p>
+              </article>
+              <article>
+                <h3>How it should ship</h3>
+                <p>The production version should bind these controls to real task tabs, token data, commits, screenshots, and ConversationEvent projections.</p>
+              </article>
+            </div>
+          </section>
+        </div>
+      }
+
       @if (lightboxOpen()) {
         <div class="modal" data-testid="prototype-lightbox" (click)="lightboxOpen.set(false)">
           <section class="modal__panel modal__panel--image" (click)="$event.stopPropagation()">
@@ -411,6 +556,18 @@ interface ChatTurn {
 
     * { box-sizing: border-box; }
     button { font: inherit; cursor: pointer; }
+
+    .svg-icon {
+      width: 16px;
+      height: 16px;
+      display: block;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      flex: 0 0 auto;
+    }
 
     .ng-chat-prototype {
       --bg: #f3f5f8;
@@ -479,6 +636,12 @@ interface ChatTurn {
       color: var(--muted);
       font-size: 12px;
       font-weight: 700;
+    }
+
+    .activity__item .svg-icon,
+    .icon-btn .svg-icon {
+      width: 15px;
+      height: 15px;
     }
 
     .activity__item:hover,
@@ -686,7 +849,7 @@ interface ChatTurn {
       min-height: 0;
       min-width: 0;
       display: grid;
-      grid-template-columns: 76px minmax(0, 1fr);
+      grid-template-columns: 126px minmax(0, 1fr);
       grid-template-rows: minmax(0, 1fr);
       padding: 0;
       background: var(--surface);
@@ -698,10 +861,46 @@ interface ChatTurn {
       display: grid;
       grid-template-rows: auto auto auto auto minmax(0, 1fr);
       align-content: start;
-      gap: 8px;
-      padding: 8px 6px;
+      gap: 10px;
+      padding: 8px;
       border-right: 1px solid var(--line);
       background: var(--chrome);
+    }
+
+    .rail-guide {
+      width: 100%;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      grid-template-areas:
+        "icon label"
+        "icon hint";
+      align-items: center;
+      column-gap: 7px;
+      row-gap: 1px;
+      padding: 7px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--surface);
+      color: var(--text);
+      text-align: left;
+    }
+
+    .rail-guide .svg-icon { grid-area: icon; }
+
+    .rail-guide span {
+      grid-area: label;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .rail-guide small {
+      grid-area: hint;
+      color: var(--muted);
+      font-size: 10px;
     }
 
     .inspector-rail__task {
@@ -726,20 +925,49 @@ interface ChatTurn {
       gap: 5px;
     }
 
+    .inspector-rail__tabs b,
+    .inspector-rail__modes b,
+    .inspector-rail__scenarios b,
+    .inspector-rail__summary b {
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
     .inspector-rail__tabs button,
-    .inspector-rail__scenarios button {
-      min-height: 26px;
+    .inspector-rail__scenarios button,
+    .rail-action {
+      width: 100%;
+      min-height: 28px;
+      display: grid;
+      grid-template-columns: 18px minmax(0, 1fr);
+      align-items: center;
+      gap: 6px;
       border: 1px solid transparent;
       border-radius: 6px;
       background: transparent;
       color: var(--muted);
       font-size: 11px;
       font-weight: 700;
+      text-align: left;
+      padding: 0 6px;
+    }
+
+    .inspector-rail__tabs button span,
+    .inspector-rail__scenarios button span,
+    .rail-action span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .inspector-rail__active,
     .inspector-rail__tabs button:hover,
-    .inspector-rail__scenarios button:hover {
+    .inspector-rail__scenarios button:hover,
+    .rail-action:hover,
+    .rail-action.icon-btn--active {
       background: var(--surface) !important;
       border-color: var(--line) !important;
       color: var(--text) !important;
@@ -747,15 +975,25 @@ interface ChatTurn {
 
     .inspector-rail__summary .summary-chip {
       width: 100%;
-      min-height: 38px;
+      min-height: 40px;
       display: grid;
-      justify-items: center;
+      grid-template-columns: 18px minmax(0, 1fr);
+      grid-template-areas:
+        "icon value"
+        "icon label";
+      align-items: center;
+      justify-items: start;
       gap: 0;
       border-radius: 6px;
-      padding: 3px 2px;
+      padding: 4px 6px;
+      text-align: left;
     }
 
+    .inspector-rail__summary .summary-chip .svg-icon { grid-area: icon; }
+    .inspector-rail__summary .summary-chip strong { grid-area: value; }
+
     .inspector-rail__summary .summary-chip span {
+      grid-area: label;
       max-width: 100%;
       overflow: hidden;
       text-overflow: ellipsis;

@@ -326,7 +326,7 @@ public class TaskRunnerPlanTests
     /// </summary>
     [Theory]
     [InlineData(JobStates.Ready)]
-    [InlineData(JobStates.Review)]
+    [InlineData(JobStates.AutoReview)]
     [InlineData(JobStates.Completed)]
     public void Continue_MovesJobBackToProgress(string state)
     {
@@ -483,7 +483,7 @@ public class TaskRunnerPlanTests
     /// previous run completed and to act on the delta.
     /// </summary>
     [Theory]
-    [InlineData(JobStates.Review)]
+    [InlineData(JobStates.AutoReview)]
     [InlineData(JobStates.Completed)]
     public void Start_FromReviewOrCompletedWithSession_UsesRestartPrompt(string state)
     {
@@ -506,7 +506,7 @@ public class TaskRunnerPlanTests
     /// about to write to it).
     /// </summary>
     [Theory]
-    [InlineData(JobStates.Review)]
+    [InlineData(JobStates.AutoReview)]
     [InlineData(JobStates.Completed)]
     public void Start_FromReviewOrCompletedNoSession_FallsBackToFreshStart(string state)
     {
@@ -567,12 +567,12 @@ public class TaskRunnerPlanTests
     [InlineData(RunIntent.UserContinue, JobStates.Progress, ValidUuid)]
     [InlineData(RunIntent.UserContinue, JobStates.Progress, PlaceholderSlug)]
     [InlineData(RunIntent.UserContinue, JobStates.Progress, ForeignSlug)]
-    [InlineData(RunIntent.UserContinue, JobStates.Review,   ValidUuid)]
-    [InlineData(RunIntent.UserContinue, JobStates.Review,   null)]
+    [InlineData(RunIntent.UserContinue, JobStates.AutoReview,   ValidUuid)]
+    [InlineData(RunIntent.UserContinue, JobStates.AutoReview,   null)]
     [InlineData(RunIntent.UserContinue, JobStates.Completed,ValidUuid)]
     [InlineData(RunIntent.UserContinue, JobStates.Completed,null)]
-    [InlineData(RunIntent.ManualStart,  JobStates.Review,   ValidUuid)]
-    [InlineData(RunIntent.ManualStart,  JobStates.Review,   null)]
+    [InlineData(RunIntent.ManualStart,  JobStates.AutoReview,   ValidUuid)]
+    [InlineData(RunIntent.ManualStart,  JobStates.AutoReview,   null)]
     [InlineData(RunIntent.ManualStart,  JobStates.Completed,ValidUuid)]
     [InlineData(RunIntent.ManualStart,  JobStates.Completed,null)]
     public void Plan_AlwaysProducesRunnableOutput(RunIntent intent, string state, string? sessionName)
@@ -669,7 +669,7 @@ public class TaskRunnerPlanTests
     [Fact]
     public void Continue_FromReview_MovesToProgressAndResumesWithFollowupVerbatim()
     {
-        var p = Plan(RunIntent.UserContinue, JobStates.Review, sessionName: ValidUuid,
+        var p = Plan(RunIntent.UserContinue, JobStates.AutoReview, sessionName: ValidUuid,
                      followup: "One more tweak: tighten the spacing.");
 
         Assert.Equal("continue", p.EventKind);

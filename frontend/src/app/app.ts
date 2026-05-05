@@ -1614,15 +1614,24 @@ export class App implements OnInit {
     const grouped = this.displayGrouped();
     // ADR-0025: seven lanes. The robot icon is the orchestrator's machine
     // pass; the eye icon is the user's "needs me" lane.
-    return [
+    // ADR-0026: 1a-orchestrator-prep is always rendered (rail at level 0);
+    // 1b-needs-human-review is hide-when-empty.
+    const lanes = [
       { state: '1-preparation', title: 'In Preparation', icon: '📋', jobs: grouped.preparation },
+      { state: '1a-orchestrator-prep', title: 'Orch Prep', icon: '🤖', jobs: grouped.orchestratorPrep },
+    ];
+    if (grouped.needsHumanReview.length > 0) {
+      lanes.push({ state: '1b-needs-human-review', title: 'Needs Clar', icon: '🚩', jobs: grouped.needsHumanReview });
+    }
+    lanes.push(
       { state: '2-ready', title: 'Ready', icon: '📦', jobs: grouped.ready },
       { state: '3-progress', title: 'In Progress', icon: '🔵', jobs: grouped.progress },
       { state: '4-auto-review', title: 'Auto Review', icon: '🤖', jobs: grouped.autoReview },
       { state: '5-human-review', title: 'Human Review', icon: '👁️', jobs: grouped.humanReview },
       { state: '6-completed', title: 'Completed', icon: '🟢', jobs: grouped.completed },
       { state: '7-archive', title: 'Archive', icon: '🗄️', jobs: grouped.archive ?? [] }
-    ];
+    );
+    return lanes;
   });
 
   /**
@@ -1639,15 +1648,22 @@ export class App implements OnInit {
    */
   readonly laneGroups = computed(() => {
     const grouped = this.displayGrouped();
+    // ADR-0026: orchestrator-prep + needs-human-review join the backlog
+    // bucket. The bounce lane only renders when at least one job lives there.
+    const backlogLanes: Array<{ state: string; title: string; icon: string; jobs: JobInfo[] }> = [
+      { state: '1-preparation', title: 'In Preparation', icon: '📋', jobs: grouped.preparation },
+      { state: '1a-orchestrator-prep', title: 'Orch Prep', icon: '🤖', jobs: grouped.orchestratorPrep },
+    ];
+    if (grouped.needsHumanReview.length > 0) {
+      backlogLanes.push({ state: '1b-needs-human-review', title: 'Needs Clar', icon: '🚩', jobs: grouped.needsHumanReview });
+    }
+    backlogLanes.push({ state: '2-ready', title: 'Ready', icon: '📦', jobs: grouped.ready });
     return [
       {
         id: 'backlog',
         label: 'Backlog',
         axis: 'human',
-        lanes: [
-          { state: '1-preparation', title: 'In Preparation', icon: '📋', jobs: grouped.preparation },
-          { state: '2-ready', title: 'Ready', icon: '📦', jobs: grouped.ready }
-        ]
+        lanes: backlogLanes
       },
       {
         id: 'active',

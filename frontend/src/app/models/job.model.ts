@@ -703,6 +703,10 @@ export interface JobLogEntry {
 
 export interface GroupedJobs {
   preparation: JobInfo[];
+  /** ADR-0026 lane: orchestrator-prep (1a-orchestrator-prep). */
+  orchestratorPrep: JobInfo[];
+  /** ADR-0026 lane: needs-human-review (1b-needs-human-review). Hide-when-empty. */
+  needsHumanReview: JobInfo[];
   ready: JobInfo[];
   progress: JobInfo[];
   /** ADR-0025 lane: orchestrator's review pass (4-auto-review). */

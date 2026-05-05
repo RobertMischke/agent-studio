@@ -77,7 +77,7 @@ public sealed class CrashRecoveryServiceTests : IDisposable
         // crashed before MoveAsync ran.
         CompletionMarker.Write(jobFolder, new CompletionMarker
         {
-            TargetState = JobStates.Review,
+            TargetState = JobStates.AutoReview,
             ExecutionStatus = "completed",
             AgentOutcome = "Done"
         });
@@ -86,7 +86,7 @@ public sealed class CrashRecoveryServiceTests : IDisposable
         var decisions = await recovery.RecoverAsync();
 
         Assert.False(Directory.Exists(jobFolder), "job folder must move out of 3-progress");
-        var newFolder = Path.Combine(_watchPath, JobStates.Review, "demo-task");
+        var newFolder = Path.Combine(_watchPath, JobStates.AutoReview, "demo-task");
         Assert.True(Directory.Exists(newFolder), "job folder must land in 4-review");
         Assert.False(File.Exists(CompletionMarker.PathFor(newFolder)),
             "completion-marker.json must be cleared after a successful recovery move");
@@ -94,7 +94,7 @@ public sealed class CrashRecoveryServiceTests : IDisposable
         var transition = Assert.Single(decisions);
         Assert.Equal(RecoveryDecisionKinds.TransitionCompleted, transition.Kind);
         Assert.Equal("demo-task", transition.JobId);
-        Assert.Equal(JobStates.Review, transition.TargetState);
+        Assert.Equal(JobStates.AutoReview, transition.TargetState);
 
         // recovery.jsonl: one structured row per decision so an external
         // operator (or Layer 3 review) can parse it without tailing logs.

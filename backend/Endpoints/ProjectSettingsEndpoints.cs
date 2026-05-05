@@ -42,5 +42,26 @@ public static class ProjectSettingsEndpoints
             settings.SetOrchestratorModel(projectName, req.Model);
             return Results.Ok(settings.Get(projectName));
         });
+
+        // ADR-0026: per-project autonomy slider for the orchestrator-prep
+        // loop. Returns the resolved level (default 2 when not set) so the
+        // header can render the slider without a second round-trip.
+        app.MapGet("/api/projects/{projectName}/autonomy", (string projectName, ProjectSettingsService settings, JobScannerService scanner) =>
+        {
+            var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+
+            var s = settings.Get(projectName);
+            return Results.Ok(new { level = s.AutonomyLevel ?? 2 });
+        });
+
+        app.MapPut("/api/projects/{projectName}/autonomy", (string projectName, SetAutonomyLevelRequest req, ProjectSettingsService settings, JobScannerService scanner) =>
+        {
+            var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+
+            settings.SetAutonomyLevel(projectName, req.Level);
+            return Results.Ok(new { level = settings.Get(projectName).AutonomyLevel ?? 2 });
+        });
     }
 }

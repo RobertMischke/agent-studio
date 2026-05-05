@@ -10,6 +10,7 @@ import { ProjectArchitectureSectionComponent } from './project-architecture-sect
 import { ProjectSupervisorSectionComponent } from './project-supervisor-section';
 import { ProjectMetaCycleSectionComponent } from './project-meta-cycle-section';
 import { ProjectAnalysisReportsSectionComponent } from './project-analysis-reports-section';
+import { AutonomySliderComponent } from './autonomy-slider';
 import { AnalysisReport } from '../models/analysis-report.model';
 
 interface ProjectSettingsRow {
@@ -39,7 +40,8 @@ interface ProjectSettingsRow {
     ProjectArchitectureSectionComponent,
     ProjectSupervisorSectionComponent,
     ProjectMetaCycleSectionComponent,
-    ProjectAnalysisReportsSectionComponent
+    ProjectAnalysisReportsSectionComponent,
+    AutonomySliderComponent
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
@@ -111,6 +113,10 @@ interface ProjectSettingsRow {
             Used when the orchestrator decides on your behalf in auto mode.
           </span>
         </div>
+      </section>
+
+      <section class="proj-detail__group">
+        <app-autonomy-slider [projectName]="projectName()" />
       </section>
 
       <section class="proj-detail__group">

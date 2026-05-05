@@ -378,6 +378,17 @@ public record ProjectSettings
     /// cadence choice only.
     /// </summary>
     public Dictionary<string, string>? AnalysisSchedules { get; init; }
+
+    /// <summary>
+    /// ADR-0026 orchestrator-prep autonomy scale, <c>0..4</c>:
+    /// <c>0</c> manual, <c>1</c> cautious, <c>2</c> balanced (default),
+    /// <c>3</c> confident, <c>4</c> fully-auto. Governs whether the
+    /// orchestrator-prep loop accepts borderline tasks, iterates, or
+    /// bounces them to <c>1b-needs-human-review</c>. Null means "use the
+    /// default (balanced, level 2)". The setting is consulted on each
+    /// pickup tick; mid-iteration policy switches do not happen.
+    /// </summary>
+    public int? AutonomyLevel { get; init; }
 }
 
 public record SetAutoCommitRequest
@@ -388,6 +399,15 @@ public record SetAutoCommitRequest
 public record SetOrchestratorModelRequest
 {
     public string? Model { get; init; }
+}
+
+/// <summary>
+/// Body for <c>PUT /api/projects/{name}/autonomy</c>. The integer level is
+/// clamped to <c>0..4</c> server-side. See ADR-0026.
+/// </summary>
+public record SetAutonomyLevelRequest
+{
+    public int Level { get; init; }
 }
 
 /// <summary>
@@ -623,6 +643,19 @@ public record CliOutputLine
 public static class JobStates
 {
     public const string Preparation = "1-preparation";
+
+    // ADR-0026: orchestrator-prep + needs-human-review lanes are *additive*
+    // (no rename of the existing 1-preparation -> 2-ready -> ... chain).
+    // The sort keys 1a- and 1b- slot between 1- and 2- both on disk and in
+    // the kanban: ASCII '-' (45) is less than 'a' (97), and '1' is less
+    // than '2'. Visible kanban order: Prep -> OrchPrep -> NeedsClar -> Ready -> ...
+    public const string OrchestratorPrep = "1a-orchestrator-prep";
+
+    // 1b-needs-human-review is the bounce lane the orchestrator-prep loop
+    // writes to at autonomy <= 3 when a task is genuinely-unclear. Hidden
+    // when empty in the UI (same rule as failed-pickup and 5-human-review).
+    public const string NeedsHumanReview = "1b-needs-human-review";
+
     public const string Ready = "2-ready";
     public const string Progress = "3-progress";
     // 4-auto-review is the orchestrator's lane: ReviewDecisionOrchestrator
@@ -637,7 +670,7 @@ public static class JobStates
     public const string Archive = "7-archive";
 
     public static readonly string[] All =
-        [Preparation, Ready, Progress, AutoReview, HumanReview, Completed, Archive];
+        [Preparation, OrchestratorPrep, NeedsHumanReview, Ready, Progress, AutoReview, HumanReview, Completed, Archive];
 
     /// <summary>Maps old unnumbered folder names to new numbered ones.</summary>
     public static readonly Dictionary<string, string> LegacyFolderMap = new()

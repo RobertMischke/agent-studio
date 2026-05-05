@@ -41,6 +41,11 @@ public static class JobCrudEndpoints
             var grouped = new
             {
                 Preparation = jobs.Where(j => j.State == JobStates.Preparation).OrderBy(j => j.Order).ToList(),
+                // ADR-0026: orchestrator-prep + needs-human-review lanes.
+                // Empty by default; clients render NeedsHumanReview only when
+                // it has at least one job (hide-when-empty rule).
+                OrchestratorPrep = jobs.Where(j => j.State == JobStates.OrchestratorPrep).OrderBy(j => j.Order).ToList(),
+                NeedsHumanReview = jobs.Where(j => j.State == JobStates.NeedsHumanReview).OrderBy(j => j.Order).ToList(),
                 Ready = jobs.Where(j => j.State == JobStates.Ready).OrderBy(j => j.Order).ToList(),
                 Progress = jobs.Where(j => j.State == JobStates.Progress).OrderBy(j => j.Order).ToList(),
                 AutoReview = autoReview,

@@ -75,6 +75,32 @@ public class JobStateMachineMigrationTests : IDisposable
     }
 
     [Fact]
+    public void Migrate_CreatesAdr0026Lanes_OrchestratorPrepAndNeedsHumanReview()
+    {
+        // ADR-0026 is purely additive: no rename, no migration of existing
+        // jobs. The boot-time pass simply creates the two new lane folders
+        // alongside the existing chain so the move endpoint can accept them
+        // and the kanban can render them. Idempotent on a second call.
+        var (machine, _) = BuildMachine();
+        machine.EnsureStateFoldersAndMigrate();
+
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.OrchestratorPrep)),
+            "expected 1a-orchestrator-prep folder to be created on boot");
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.NeedsHumanReview)),
+            "expected 1b-needs-human-review folder to be created on boot");
+
+        // Existing lanes still present.
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Preparation)));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Ready)));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.AutoReview)));
+
+        // Idempotent: calling again does not alter the workspace state.
+        machine.EnsureStateFoldersAndMigrate();
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.OrchestratorPrep)));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.NeedsHumanReview)));
+    }
+
+    [Fact]
     public void Migrate_PreservesExistingTargetFolders_WithoutOverwriting()
     {
         // Existing 4-auto-review folder with a card that landed there

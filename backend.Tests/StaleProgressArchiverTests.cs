@@ -64,14 +64,14 @@ public sealed class StaleProgressArchiverTests : IDisposable
         var (archiver, _) = Build();
         var decisions = await archiver.SweepAsync();
 
-        var moved = Path.Combine(_watchPath, JobStates.Review, "demo-task");
+        var moved = Path.Combine(_watchPath, JobStates.AutoReview, "demo-task");
         Assert.False(Directory.Exists(folder), "source 3-progress folder must be moved");
         Assert.True(Directory.Exists(moved), "job folder must land in 4-review");
 
         var d = Assert.Single(decisions);
         Assert.Equal(StaleProgressDecisionKinds.RecoveredToReview, d.Kind);
         Assert.Equal("DONE", d.SentinelKeyword);
-        Assert.Equal(JobStates.Review, d.TargetState);
+        Assert.Equal(JobStates.AutoReview, d.TargetState);
 
         // Chat-log note lands on the moved folder so the protocol pane sees it.
         var log = File.ReadAllText(Path.Combine(moved, "logs", "cli-output.log"));
