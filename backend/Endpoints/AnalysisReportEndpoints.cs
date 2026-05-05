@@ -1,3 +1,4 @@
+using System.Text;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.Analysis;
@@ -139,6 +140,127 @@ public static class AnalysisReportEndpoints
             return Results.Ok(new AnalysisReportDetailResponse(report, markdownBody));
         });
 
+        // -----------------------------------------------------------------
+        // Roadmap Alignment Review (named producer behind "are we on track?").
+        // GET /prompt returns the assembled prompt + scope summary so an
+        // operator (or future inline runner) can hand the prompt to a CLI
+        // agent. POST runs the action: without `agentResponse` it produces
+        // an Unstructured "evidence + prompt" report; with `agentResponse` it
+        // parses the agent's reply and produces the typed report.
+        // -----------------------------------------------------------------
+
+        group.MapGet("/{project}/actions/roadmap-alignment/prompt", (
+            string project,
+            IConfiguration config,
+            AnalysisReportStore store,
+            RuntimePromptService prompts,
+            RoadmapAlignmentReviewService action) =>
+        {
+            if (string.IsNullOrWhiteSpace(project))
+                return Results.BadRequest(new { error = "project required" });
+            var workspace = config["TaskRepository"];
+            if (string.IsNullOrWhiteSpace(workspace))
+                return Results.BadRequest(new { error = "TaskRepository not configured" });
+
+            var projectRoot = Path.Combine(workspace!, "projects", project);
+            if (!Directory.Exists(projectRoot))
+                return Results.NotFound(new { error = $"project root not found: {projectRoot}" });
+
+            var repoRoot = ResolveRepoRoot();
+            var scope = action.SelectScope(project, projectRoot, repoRoot, store, workspace);
+            var template = prompts.Render(
+                "roadmap-alignment-review.md",
+                new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase));
+            var renderedPrompt = action.BuildPrompt(scope, template);
+            return Results.Ok(new RoadmapAlignmentPromptResponse(
+                Project: project,
+                CapturedAt: scope.CapturedAt,
+                QueueIsClean: scope.QueueIsClean,
+                JobsByLane: scope.JobsByLane.ToDictionary(
+                    kv => kv.Key,
+                    kv => (IReadOnlyList<string>)kv.Value.Select(j => j.JobId).ToArray()),
+                StrayLaneFolders: scope.StrayLaneFolders,
+                Docs: scope.Docs.Select(d => d.Path).ToArray(),
+                RecentReports: scope.RecentReports.Select(r => r.ReportId).ToArray(),
+                Prompt: renderedPrompt));
+        });
+
+        group.MapPost("/{project}/actions/roadmap-alignment", async (
+            string project,
+            RoadmapAlignmentRunRequest? body,
+            IConfiguration config,
+            AnalysisReportStore store,
+            RuntimePromptService prompts,
+            RoadmapAlignmentReviewService action,
+            CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(project))
+                return Results.BadRequest(new { error = "project required" });
+            var workspace = config["TaskRepository"];
+            if (string.IsNullOrWhiteSpace(workspace))
+                return Results.BadRequest(new { error = "TaskRepository not configured" });
+
+            var projectRoot = Path.Combine(workspace!, "projects", project);
+            if (!Directory.Exists(projectRoot))
+                return Results.NotFound(new { error = $"project root not found: {projectRoot}" });
+
+            var repoRoot = ResolveRepoRoot();
+            var scope = action.SelectScope(project, projectRoot, repoRoot, store, workspace);
+            var template = prompts.Render(
+                "roadmap-alignment-review.md",
+                new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase));
+            var renderedPrompt = action.BuildPrompt(scope, template);
+
+            var agentResponse = body?.AgentResponse;
+            string markdown;
+            RoadmapAlignmentParseResult parse;
+            if (string.IsNullOrWhiteSpace(agentResponse))
+            {
+                // No agent run was supplied. Persist the assembled scope and
+                // the rendered prompt as an Unstructured report so the user
+                // has a durable artifact recording that the inspection was
+                // requested. The Markdown body embeds the prompt itself so an
+                // operator can copy it into a CLI session.
+                parse = new RoadmapAlignmentParseResult(
+                    Status: AnalysisReportParseStatus.Unstructured,
+                    Severity: AnalysisReportSeverity.Info,
+                    Summary: scope.QueueIsClean
+                        ? "Evidence assembled; no agent narrative supplied. Run the embedded prompt against a CLI to produce a verdict."
+                        : "Evidence assembled; queue has stray lane folders, narrative deferred to agent run.",
+                    Findings: null,
+                    FollowUps: new[]
+                    {
+                        new AnalysisReportFollowUpTaskSuggestion(
+                            Title: "Run roadmap alignment review against a CLI agent",
+                            Summary: "Hand the embedded prompt to Claude / Codex / Copilot / Gemini and POST the reply back to /api/analysis/{project}/actions/roadmap-alignment to produce the structured verdict.",
+                            Priority: AnalysisReportFollowUpPriority.Normal,
+                            RelatedTopic: AnalysisReportFollowUpRelatedTopic.RoadmapAlignment,
+                            TargetState: AnalysisReportFollowUpTargetStates.OnePreparation),
+                    },
+                    PriorityOrder: null,
+                    ParseError: null);
+                markdown = BuildEvidenceOnlyMarkdown(scope, renderedPrompt);
+            }
+            else
+            {
+                parse = action.TryParseAgentResponse(agentResponse);
+                markdown = agentResponse;
+            }
+
+            var reportId = "01" + DateTime.UtcNow.ToString("yyyyMMddHHmmssfff") + Guid.NewGuid().ToString("N").Substring(0, 8);
+            var report = action.BuildReport(
+                scope: scope,
+                parse: parse,
+                reportId: reportId,
+                createdAt: DateTime.UtcNow,
+                producerKind: AnalysisReportProducerKind.Manual,
+                trigger: AnalysisReportTrigger.Manual,
+                participantId: "user");
+
+            await store.AppendAsync(workspace!, project, report, markdown, ct).ConfigureAwait(false);
+            return Results.Ok(new AnalysisReportDetailResponse(report, markdown));
+        });
+
         group.MapGet("/{project}/schedule", (
             string project,
             ProjectSettingsService settings) =>
@@ -171,6 +293,74 @@ public static class AnalysisReportEndpoints
         "disabled" or "fewHours" or "daily" or "manualOnly" => true,
         _ => false,
     };
+
+    /// <summary>
+    /// Resolves the source repository root by walking up from
+    /// <see cref="AppContext.BaseDirectory"/> until <c>AGENTS.md</c> is found.
+    /// Falls back to the current working directory when no marker exists; the
+    /// roadmap-alignment action degrades gracefully (the doc list will be
+    /// shorter, the report still records the queue evidence).
+    /// </summary>
+    private static string ResolveRepoRoot()
+    {
+        var dir = new DirectoryInfo(AppContext.BaseDirectory);
+        while (dir is not null)
+        {
+            if (File.Exists(Path.Combine(dir.FullName, "AGENTS.md")))
+                return dir.FullName;
+            dir = dir.Parent;
+        }
+        var cwd = new DirectoryInfo(Directory.GetCurrentDirectory());
+        while (cwd is not null)
+        {
+            if (File.Exists(Path.Combine(cwd.FullName, "AGENTS.md")))
+                return cwd.FullName;
+            cwd = cwd.Parent;
+        }
+        return Directory.GetCurrentDirectory();
+    }
+
+    private static string BuildEvidenceOnlyMarkdown(
+        RoadmapAlignmentReviewScope scope,
+        string renderedPrompt)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("# Roadmap alignment review - evidence only");
+        sb.AppendLine();
+        sb.Append("**Verdict:** evidence assembled at ")
+            .Append(scope.CapturedAt.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ"))
+            .AppendLine("; no agent narrative supplied. Run the embedded prompt against a CLI agent and POST the reply back to produce the structured verdict.");
+        sb.AppendLine();
+        sb.Append("**Project:** `").Append(scope.Project).AppendLine("`");
+        sb.Append("**Queue clean (no stray lane folders):** ").AppendLine(scope.QueueIsClean ? "yes" : "no");
+        sb.AppendLine();
+        sb.AppendLine("## Queue snapshot");
+        sb.AppendLine();
+        sb.AppendLine("| Lane | Count |");
+        sb.AppendLine("|------|------:|");
+        foreach (var lane in RoadmapAlignmentReviewService.InspectedLanes)
+        {
+            var count = scope.JobsByLane.TryGetValue(lane, out var jobs) ? jobs.Count : 0;
+            sb.Append("| `").Append(lane).Append("` | ").Append(count).AppendLine(" |");
+        }
+        sb.AppendLine();
+        if (scope.StrayLaneFolders.Count > 0)
+        {
+            sb.AppendLine("## Stray lane folders");
+            sb.AppendLine();
+            foreach (var f in scope.StrayLaneFolders)
+                sb.Append("- ").AppendLine(f);
+            sb.AppendLine();
+        }
+        sb.AppendLine("## Embedded prompt");
+        sb.AppendLine();
+        sb.AppendLine("Copy the block below into a Claude / Codex / Copilot / Gemini session, then POST the reply back to `/api/analysis/{project}/actions/roadmap-alignment` with `agentResponse` set to produce the structured verdict.");
+        sb.AppendLine();
+        sb.AppendLine("```markdown");
+        sb.AppendLine(renderedPrompt);
+        sb.AppendLine("```");
+        return sb.ToString();
+    }
 }
 
 /// <summary>List response wrapper so the JSON shape stays additive when more aggregates appear.</summary>
@@ -184,3 +374,27 @@ public sealed record ManualAnalysisReportRequest(string? Topic, string? Summary)
 
 /// <summary>Body for <c>PUT /api/analysis/{project}/schedule</c>.</summary>
 public sealed record AnalysisScheduleRequest(string? Topic, string? Cadence);
+
+/// <summary>
+/// Body for <c>POST /api/analysis/{project}/actions/roadmap-alignment</c>.
+/// When <see cref="AgentResponse"/> is null or whitespace the endpoint emits
+/// an Unstructured "evidence only" report carrying the rendered prompt; when
+/// it is set, the endpoint parses the agent's reply (Markdown body plus an
+/// optional fenced JSON sidecar) and emits the typed verdict.
+/// </summary>
+public sealed record RoadmapAlignmentRunRequest(string? AgentResponse);
+
+/// <summary>
+/// Response for <c>GET /api/analysis/{project}/actions/roadmap-alignment/prompt</c>.
+/// Returns the assembled scope summary and the rendered prompt the operator
+/// (or future inline runner) hands to a CLI agent.
+/// </summary>
+public sealed record RoadmapAlignmentPromptResponse(
+    string Project,
+    DateTime CapturedAt,
+    bool QueueIsClean,
+    IReadOnlyDictionary<string, IReadOnlyList<string>> JobsByLane,
+    IReadOnlyList<string> StrayLaneFolders,
+    IReadOnlyList<string> Docs,
+    IReadOnlyList<string> RecentReports,
+    string Prompt);
