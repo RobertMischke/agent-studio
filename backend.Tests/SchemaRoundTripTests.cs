@@ -248,6 +248,68 @@ public class SchemaRoundTripTests
     }
 
     [Fact]
+    public void ProtocolHeaderSchema_PublishesPhaseEnumAndRequiredFields()
+    {
+        var schema = LoadSchema("protocol-header.schema.json");
+        var required = ReadStringArray(schema, "required");
+        Assert.Contains("phase", required);
+        Assert.Contains("summary", required);
+
+        var properties = schema.GetProperty("properties");
+        var phases = ReadStringArray(properties.GetProperty("phase"), "enum");
+        Assert.Equal(
+            new[] { "analysis", "plan", "implementing", "testing", "review", "blocked", "done" },
+            phases);
+
+        // summary has a 240-char cap.
+        Assert.Equal(240, properties.GetProperty("summary").GetProperty("maxLength").GetInt32());
+
+        // Optional, nullable fields advertised in the schema.
+        foreach (var nullableField in new[] { "nextAction", "lastDecisionAt", "correlationId", "agent", "model", "runs" })
+        {
+            var typeArray = properties.GetProperty(nullableField).GetProperty("type");
+            Assert.Equal(JsonValueKind.Array, typeArray.ValueKind);
+            var types = new List<string>();
+            foreach (var t in typeArray.EnumerateArray()) types.Add(t.GetString() ?? "");
+            Assert.Contains("null", types);
+        }
+    }
+
+    [Fact]
+    public void ExecutiveSummarySchema_PublishesWindowHeadlineAndAggregateShape()
+    {
+        var schema = LoadSchema("executive-summary.schema.json");
+        var required = ReadStringArray(schema, "required");
+        Assert.Equal(
+            new[]
+            {
+                "windowStart",
+                "windowEnd",
+                "headline",
+                "byProject",
+                "crashes",
+                "topDecisions",
+                "openHumanDecisions",
+            },
+            required);
+
+        var properties = schema.GetProperty("properties");
+        Assert.Equal(240, properties.GetProperty("headline").GetProperty("maxLength").GetInt32());
+
+        // byProject items.
+        var byProjectItem = properties.GetProperty("byProject").GetProperty("items");
+        var byProjectRequired = ReadStringArray(byProjectItem, "required");
+        Assert.Equal(
+            new[] { "project", "jobsMoved", "decisionsMade", "advisoriesRaised", "commits" },
+            byProjectRequired);
+
+        // topDecisions severity matches the AnalysisReport severity ladder.
+        var topDecisionsItem = properties.GetProperty("topDecisions").GetProperty("items");
+        var sevs = ReadStringArray(topDecisionsItem.GetProperty("properties").GetProperty("severity"), "enum");
+        Assert.Equal(new[] { "Info", "Warn", "High", "Critical" }, sevs);
+    }
+
+    [Fact]
     public void SupervisorInterventionSchema_ListsTheFourPreEmptiveKinds()
     {
         var schema = LoadSchema("supervisor-intervention.schema.json");

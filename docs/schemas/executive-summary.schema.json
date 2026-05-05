@@ -1,0 +1,167 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-taskboard.local/schemas/executive-summary.schema.json",
+  "title": "ExecutiveSummary",
+  "description": "Workspace-level executive summary returned by GET /api/workspace/summary?windowHours=N. Folds per-task protocols, supervisor advisories, orchestrator decisions, merged commits, and crash markers into one short read covering the last N hours. Default window is 24 hours; supported values are 1, 6, 24, and 168. The summary never invents events: every entry under byProject, topDecisions, crashes, and openHumanDecisions references an underlying record by id, sha, or job key.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "windowStart",
+    "windowEnd",
+    "headline",
+    "byProject",
+    "crashes",
+    "topDecisions",
+    "openHumanDecisions"
+  ],
+  "properties": {
+    "windowStart": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC start of the summary window. Inclusive."
+    },
+    "windowEnd": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC end of the summary window. Exclusive. Typically 'now' aligned to the producing clock."
+    },
+    "headline": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240,
+      "description": "One-sentence readable summary of the window. Plain prose, no markdown emphasis. Renders as the page title on #/summary. Producer must answer 'what is the most important thing that happened in this window' in 240 characters or less."
+    },
+    "byProject": {
+      "type": "array",
+      "description": "One entry per watched project that had any activity in the window. Empty array when the workspace was idle.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["project", "jobsMoved", "decisionsMade", "advisoriesRaised", "commits"],
+        "properties": {
+          "project": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Project name as it appears in WatchPaths."
+          },
+          "jobsMoved": {
+            "type": "array",
+            "description": "Job lane transitions observed in the window.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["jobId", "fromState", "toState", "at"],
+              "properties": {
+                "jobId": { "type": "string", "minLength": 1 },
+                "fromState": { "type": "string" },
+                "toState": { "type": "string" },
+                "at": { "type": "string", "format": "date-time" }
+              }
+            }
+          },
+          "decisionsMade": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Count of orchestrator/review decisions recorded in logs/decisions/<project>.jsonl in the window."
+          },
+          "advisoriesRaised": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Count of supervisor advisories appended to logs/meta/<project>/observations.jsonl in the window."
+          },
+          "commits": {
+            "type": "array",
+            "description": "Commits whose author date falls inside the window. Only commits in the project's repository, never in the workspace's job folders.",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["sha", "shortSha", "subject", "author", "at"],
+              "properties": {
+                "sha": { "type": "string", "minLength": 7 },
+                "shortSha": { "type": "string", "minLength": 7 },
+                "subject": { "type": "string", "minLength": 1 },
+                "author": { "type": "string" },
+                "at": { "type": "string", "format": "date-time" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "crashes": {
+      "type": "array",
+      "description": "References to last-crash.json entries whose timestamp falls inside the window. References only; the consumer reads the actual crash record from disk.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["at", "kind", "path"],
+        "properties": {
+          "at": { "type": "string", "format": "date-time" },
+          "kind": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Origin of the crash record: 'unhandled', 'unobserved-task', 'crash-recovery', 'orphan-recovery', or any other tag the producer wrote."
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Workspace-relative path to the crash record on disk so the reader can open it without ambiguity."
+          },
+          "summary": {
+            "type": ["string", "null"],
+            "description": "Optional one-line readable description copied from the source record."
+          }
+        }
+      }
+    },
+    "topDecisions": {
+      "type": "array",
+      "description": "Up to ~10 most load-bearing decisions in the window, weighted by severity. Each entry is a reference into logs/decisions/<project>.jsonl, never an inlined copy.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["project", "decisionId", "at", "severity", "title"],
+        "properties": {
+          "project": { "type": "string", "minLength": 1 },
+          "decisionId": { "type": "string", "minLength": 1 },
+          "at": { "type": "string", "format": "date-time" },
+          "severity": {
+            "type": "string",
+            "enum": ["Info", "Warn", "High", "Critical"],
+            "description": "Severity used for ranking. The aggregator sorts by severity desc, then timestamp desc."
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240,
+            "description": "One-line title of the decision, copied verbatim from the source record."
+          },
+          "jobId": {
+            "type": ["string", "null"],
+            "description": "Job this decision pertains to, when applicable."
+          }
+        }
+      }
+    },
+    "openHumanDecisions": {
+      "type": "array",
+      "description": "Tasks currently sitting in 1-preparation whose slug matches the prefix 'human-decision-needed-'. These are the questions the user has not answered yet. Independent of the window: an open decision is open regardless of when it was raised.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["project", "jobId", "title", "createdAt"],
+        "properties": {
+          "project": { "type": "string", "minLength": 1 },
+          "jobId": { "type": "string", "minLength": 1 },
+          "title": { "type": "string", "minLength": 1 },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      }
+    },
+    "schemaVersion": {
+      "type": "string",
+      "const": "1",
+      "description": "Schema version. Producers may omit; consumers must default missing values to '1'."
+    }
+  }
+}

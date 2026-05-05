@@ -35,5 +35,20 @@ public static class WorkspaceEndpoints
                     bucketMinutes ?? WorkspaceTokensTimelineService.DefaultBucketMinutes);
                 return Results.Ok(result);
             });
+
+        // Workspace executive summary. Folds per-project activity
+        // (job moves, supervisor advisories, repository commits) plus
+        // workspace-level crash records and any open
+        // human-decision-needed-* tasks into one snapshot covering the
+        // requested window. windowHours defaults to 24 and accepts
+        // {1, 6, 24, 168}; out-of-range values snap to the default
+        // so the page always renders. Schema:
+        // docs/schemas/executive-summary.schema.json.
+        group.MapGet("/summary",
+            (int? windowHours, WorkspaceSummaryService summary) =>
+            {
+                var result = summary.Build(windowHours ?? WorkspaceSummaryService.DefaultWindowHours);
+                return Results.Ok(result);
+            });
     }
 }

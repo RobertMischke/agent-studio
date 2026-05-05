@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-taskboard.local/schemas/protocol-header.schema.json",
+  "title": "ProtocolHeader",
+  "description": "Structured header carried at the top of a job's protocol document (today: status.md). The first two prose lines of the document remain a free-form one-paragraph summary; the schema-validated payload sits underneath the prose either inside an HTML comment of the form '<!-- header-json: { ... } -->' or inside a fenced code block tagged 'json header'. The parser is tolerant: any field below may be missing, and the UI falls back to the first lines of prose when the structured block is absent or malformed. Producers should treat the schema as additive context for the in-app header card, not as a tax that displaces the document's narrative.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["phase", "summary"],
+  "properties": {
+    "phase": {
+      "type": "string",
+      "enum": ["analysis", "plan", "implementing", "testing", "review", "blocked", "done"],
+      "description": "Current phase of the task. Drives the phase chip on the header card and the colour of the step navigator entry. Values are lowercase to match the kebab-case folder/log convention."
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 240,
+      "description": "One-sentence summary of the current state. Rendered as the bold first paragraph of the header card. Mirrors the document's first prose line so a reader who only sees the schema gets the same headline as a reader who only sees the markdown."
+    },
+    "nextAction": {
+      "type": ["string", "null"],
+      "maxLength": 240,
+      "description": "What is expected to happen next: 'awaiting human review', 'continuing implementation', 'rerun tests after fix', etc. Null when the task is in a terminal phase (done) or genuinely has no next step queued."
+    },
+    "decisionsOpen": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Count of open decisions tied to this task. Open means: a 'human-decision-needed-*' task is still in 1-preparation, or a logs/decisions/<project>.jsonl entry references this job and has no resolution timestamp. Drives the decisions-open chip on the header card."
+    },
+    "lastDecisionAt": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "UTC timestamp of the most recent decision recorded for this job in logs/decisions/<project>.jsonl. Null when no decision has been recorded yet."
+    },
+    "correlationId": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "description": "Agent Message Bus correlation id (see docs/agent-message-bus.md). When present, the header card links to all bus messages sharing this id so the reader can follow the conversation thread without leaving the protocol view."
+    },
+    "agent": {
+      "type": ["string", "null"],
+      "description": "Echoed agent identifier (e.g. 'claude-code', 'codex'). The job.json copy is canonical; the header carries it so the rendered header card has every chip in one payload."
+    },
+    "model": {
+      "type": ["string", "null"],
+      "description": "Echoed model identifier (e.g. 'claude-opus-4-7'). Echoed for the header card; job.json remains canonical."
+    },
+    "runs": {
+      "type": ["integer", "null"],
+      "minimum": 0,
+      "description": "Echoed count of CLI runs for this job. Echoed for the header card; the per-job runs endpoint remains canonical."
+    },
+    "schemaVersion": {
+      "type": "string",
+      "const": "1",
+      "description": "Schema version. Producers may omit; consumers must default missing values to '1'. Bumped only on a breaking change to the field set."
+    }
+  }
+}
