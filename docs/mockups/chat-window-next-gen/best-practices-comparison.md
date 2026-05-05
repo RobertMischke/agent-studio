@@ -22,6 +22,18 @@ This comparison is the design input for the compact chat-flow revision. GitHub C
 5. **Code changes are reviewed where code lives.** Inline diffs, keep/undo controls, staging, discard, and checkpoints avoid stuffing every diff into chat.
 6. **Media evidence gets its own browsing surface.** Image carousel support keeps screenshots visible without turning the transcript into a gallery.
 
+## What VS Code Workbench Gets Right
+
+The broader VS Code layout is as important as Copilot Chat for this product:
+
+1. **The editor region gets priority.** VS Code's UI is designed around maximizing the main work area while keeping project context accessible.
+2. **Side-by-side work is normal.** Editor groups, the Secondary Side Bar, movable panels, and split editors let users keep two related surfaces open.
+3. **Flexibility is bounded by regions.** Users can move views between the Primary Side Bar, Secondary Side Bar, Panel, and editor groups, but the model is not an unbounded canvas.
+4. **Toolbars are compact and scoped.** View, side bar, editor, and panel actions live close to their surface and less-used commands go behind overflow menus.
+5. **Status is peripheral.** Status bar items and Activity Bar indicators carry lightweight state without consuming the central work region.
+
+For Agent Task Processor, this means the chat transcript should behave like the editor region. Result summary, Git changes, screenshots, token heatmaps, and debug context can be adjacent workbench panes, but they should not permanently displace the transcript.
+
 ## What Claude Code Gets Right
 
 1. **Commands are fast session controls.** `/model`, `/permissions`, `/usage`, `/cost`, `/compact`, `/review`, and custom commands are discoverable and compact.
@@ -51,6 +63,7 @@ Agent Task Processor should not imitate a two-person assistant chat because its 
 - The **composer carries controls**: current chat, model, agent mode, permission level, configuration, context chips, attachments, slash actions, start, stop, and send live at the input edge.
 - The **trace is a mode, not the default**: raw log, JSON, and individual tool calls stay one click away.
 - The **verbose debug view is separate**: the dashboard-like diagnostic view is still valuable, but it opens as a read-only fullscreen developer surface instead of competing with the normal chat.
+- The **task chat has split presets**: Chat only, Chat plus Result, Chat plus Git, Chat plus Preview, and Chat plus Debug support side-by-side review without introducing a full window manager.
 
 ## Concrete UI Rules
 
@@ -67,6 +80,7 @@ Agent Task Processor should not imitate a two-person assistant chat because its 
 | Screenshots | Show a small artifact chip inline and thumbnail in inspector or artifact view. |
 | Raw trace | Keep exact raw entries in Trace mode and expansion panels. |
 | Debug view | Provide a fullscreen read-only view for actor counts, duration, tool density, task markers, orchestrator explanations, warnings, and raw trace links. |
+| Workbench split | Use named presets and a compact summary strip. Do not replace Files, Commits, Screenshots, or token surfaces with the preview pane. |
 
 ## Revised Mockup Direction
 
@@ -97,3 +111,16 @@ Best-practice alignment:
 | Codex use cases emphasize screenshots, visual checks, scoped tasks, review, and repeatable skills. | Visual evidence and handoff artifacts must be durable and task-linked. | Image evidence row, lightbox, durable `results/` path, and fixture-backed Playwright screenshots. |
 
 The design should not imitate any single product. VS Code remains the density reference, Claude Code remains the session-control reference, Gemini remains the approval and tool-visibility reference, and Codex remains the task-artifact and visual-verification reference.
+
+## Workbench Iteration Delta
+
+The v7 mockup adds a layout rule that v6 did not express strongly enough: the user must be able to keep chat open while inspecting adjacent evidence.
+
+Best-practice alignment:
+
+| Source pattern | Product lesson | v7 mockup response |
+|----------------|----------------|--------------------|
+| VS Code User Interface uses editor groups, Secondary Side Bar, Panel, Activity Bar, and Status Bar to keep work and context visible together. | The chat needs adjacent context, not a separate global window. | Task Chat gets split presets: Chat, Result, Git, Preview, Debug. |
+| VS Code Custom Layout exposes compact Activity Bar, layout toggles, panel moves, and toolbar overflow. | Layout controls should be tiny, persistent, and scoped to the surface. | Title bar and workbench toolbar use small icon actions, density toggle, and mode buttons. |
+| VS Code Views and Webviews guidance says to keep view count minimal and avoid custom webviews unless necessary. | A full docking framework is premature and may repeat existing app surfaces. | The right pane is a preview and launcher; existing Files, Commits, Screenshots, Trace, and token surfaces remain canonical. |
+| Developer chat products keep code review and artifact review adjacent to chat, not embedded as huge transcript cards. | The transcript should not become a dashboard. | Summary chips show state, tokens, commits, files, images, retry, and duration; details move to the side pane or Verbose Debug. |

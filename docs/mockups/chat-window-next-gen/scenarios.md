@@ -308,3 +308,17 @@ Expected UI:
 - Jobs reference the edge-case taxonomy before implementation starts.
 - The first implementation job creates a feature flag, event contract, host inventory, and fixture plan.
 - Later jobs must not replace existing Trace, composer, run timeline, token, side-sheet, or screenshot surfaces until equivalent behavior is verified.
+
+## 30. Side-By-Side Task Review
+
+The user wants to keep the task chat open while inspecting the task result, Git changes, screenshots, token cost, or debug evidence.
+
+Expected UI:
+
+- The task Chat tab supports named split presets: Chat only, Result, Git, Preview, and Debug.
+- Chat remains the primary surface and receives the largest region.
+- The adjacent pane is a preview and drill-down launcher, not a replacement for Files, Commits, Screenshots, Trace, token sheets, or Verbose Debug.
+- A compact summary strip shows state, run, tokens, commits, changed files, screenshots, retry warnings, and duration.
+- Layout controls are tiny icon buttons with tooltips and overflow behavior, not repeated large text buttons.
+- On narrow screens, the context pane collapses and the chat remains usable.
+- Playwright evidence covers Result split, Git split, compact density, chat-only, dark debug, and mobile.

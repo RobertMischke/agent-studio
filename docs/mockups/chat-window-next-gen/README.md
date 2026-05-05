@@ -6,9 +6,10 @@ This folder is not existing product behavior. It is the target surface for the n
 
 ## Files
 
-- [ui.html](ui.html) - interactive v6 visual mockup for the next-generation chat surfaces. This is the current reference.
+- [ui.html](ui.html) - interactive v7 visual mockup for the next-generation chat workbench. This is the current reference.
 - [scenarios.md](scenarios.md) - typical cases the UI must render well.
 - [activity-log-edge-cases.md](activity-log-edge-cases.md) - real Activity Log edge-case taxonomy from 136 sampled logs.
+- [workbench-layout-research.md](workbench-layout-research.md) - VS Code-inspired layout research for side-by-side chat, Git, result, preview, token, and debug workflows.
 - [research.md](research.md) - Stable observations and external product research.
 - [best-practices-comparison.md](best-practices-comparison.md) - focused comparison with VS Code Copilot Chat, Claude Code, Gemini Code Assist, and Codex.
 - [visual-audit.md](visual-audit.md) - visual critique of the current Stable chat evidence.
@@ -39,15 +40,25 @@ This folder is not existing product behavior. It is the target surface for the n
 - [evidence/next-gen-chat-v6-image-lightbox.png](evidence/next-gen-chat-v6-image-lightbox.png) - current v6 image evidence lightbox.
 - [evidence/next-gen-chat-v6-debug-dark.png](evidence/next-gen-chat-v6-debug-dark.png) - current v6 dark Verbose Debug view.
 - [evidence/next-gen-chat-v6-mobile.png](evidence/next-gen-chat-v6-mobile.png) - current v6 mobile task-chat reference.
+- [evidence/next-gen-chat-v7-workbench-result.png](evidence/next-gen-chat-v7-workbench-result.png) - current v7 task chat with result summary side pane.
+- [evidence/next-gen-chat-v7-workbench-git.png](evidence/next-gen-chat-v7-workbench-git.png) - current v7 task chat with Git changes side pane.
+- [evidence/next-gen-chat-v7-workbench-compact.png](evidence/next-gen-chat-v7-workbench-compact.png) - current v7 compact-density workbench state.
+- [evidence/next-gen-chat-v7-chat-only.png](evidence/next-gen-chat-v7-chat-only.png) - current v7 chat-only state with the context pane closed.
+- [evidence/next-gen-chat-v7-wait-loop.png](evidence/next-gen-chat-v7-wait-loop.png) - current v7 wait-loop scenario inside the workbench.
+- [evidence/next-gen-chat-v7-image-lightbox.png](evidence/next-gen-chat-v7-image-lightbox.png) - current v7 image evidence lightbox from the workbench preview.
+- [evidence/next-gen-chat-v7-debug-dark.png](evidence/next-gen-chat-v7-debug-dark.png) - current v7 dark Verbose Debug view.
+- [evidence/next-gen-chat-v7-mobile.png](evidence/next-gen-chat-v7-mobile.png) - current v7 mobile chat reference.
 - [evidence/tool-heavy-archive-full.png](evidence/tool-heavy-archive-full.png) - Stable screenshot for a tool-heavy archived job.
 - [evidence/review-chat-project-switch-full.png](evidence/review-chat-project-switch-full.png) - Stable screenshot for a review job.
 - [evidence/analysis-report-review-full.png](evidence/analysis-report-review-full.png) - Stable screenshot for an analysis-report job.
 
 ## Recommendation
 
-The current Activity Log is useful evidence but not yet a great conversation surface. It exposes the raw stream too directly, and the first mockup overcorrected toward an operations dashboard. The current v6 direction is a **compact embedded developer chat**: the same message grammar is placed into the existing task-detail Chat tab and the existing project side sheet. There is no new global chat window. The visual direction is light-first, dark-capable, VS Code-inspired, and compact without turning into an operations dashboard.
+The current Activity Log is useful evidence but not yet a great conversation surface. It exposes the raw stream too directly, and the first mockup overcorrected toward an operations dashboard. The current v7 direction is a **compact embedded developer chat workbench**: the same message grammar is placed into the existing task-detail Chat tab and the existing project side sheet, and the task chat can keep a small adjacent pane open for result, Git changes, screenshot preview, or debug context. There is no new global chat window. The visual direction is light-first, dark-capable, VS Code-inspired, and compact without turning into an operations dashboard.
 
-The v6 iteration adds a log-grounded edge-case taxonomy. A local sweep scanned 136 `cli-output.log` files with 27,634 lines and found recurring cases that must be explicit in the projection contract: tool-heavy bursts, watchdog wait and kill events, needs-input loops, orchestrator reissues, heuristic outcomes, capture-fail/session-rebuild cases, duplicate sentinels, image evidence, test fail/retry/pass runs, token spikes, parser/schema drift, user interventions, and cross-task side-sheet steering.
+The v6 iteration added a log-grounded edge-case taxonomy. A local sweep scanned 136 `cli-output.log` files with 27,634 lines and found recurring cases that must be explicit in the projection contract: tool-heavy bursts, watchdog wait and kill events, needs-input loops, orchestrator reissues, heuristic outcomes, capture-fail/session-rebuild cases, duplicate sentinels, image evidence, test fail/retry/pass runs, token spikes, parser/schema drift, user interventions, and cross-task side-sheet steering.
+
+The v7 iteration adds the workbench layout contract. The task Chat tab keeps the conversation primary while offering explicit split presets: Chat only, Chat plus Result, Chat plus Git, Chat plus Preview, and Chat plus Debug. A compact summary strip surfaces state, tokens, commits, changed files, screenshots, retry warnings, and duration without pushing the transcript down. The adjacent pane is a fast preview and drill-down launcher; full evidence remains in the existing task tabs and Verbose Debug.
 
 In Stable, tool-heavy jobs already reach this density:
 
@@ -63,6 +74,7 @@ The pure chatflow remains the center, but it has two homes in the existing app:
 
 - Task-level chat lives in the task detail Chat tab, next to Prompt, Protocol, Files, Commits, and Screenshots.
 - Project-level chat lives in the resizable side sheet, where cross-task steering and project context already belong.
+- Task-level chat can open a right-side workbench pane for result, Git changes, screenshots, or debug summaries while the transcript remains visible.
 - Integration must start from the existing implementation, not from a pasted mockup. Preserve the Activity Log parser, Trace mode, run timeline, auto-eval banner, task composer, project side sheet, CLI Usage sheet, Status Bar quota, Workspace Token Timeline, and project token summaries unless an equivalent replacement is already implemented and tested.
 - The chat renderer should sit behind a separate `Frontend:NextGenChat` flag so it can land independently of the `Frontend:VsCodeLayout` shell flag.
 - User and agent messages alternate like a normal chat in both places.
@@ -86,6 +98,7 @@ The pure chatflow remains the center, but it has two homes in the existing app:
 8. **Screen space is respected.** The default view should fit long jobs by using dense headers, compact actor rails, collapsed tool bursts, bottom controls, and sticky context instead of repeated banners.
 9. **Overlays are interactive.** Config, artifacts, jobs, task-marker popovers, tool details, decision details, inspector collapse, technical layer, start/stop, and Verbose Debug must be clickable in the mockup.
 10. **Overlays never block core chat controls.** Stable currently shows click interception around conversation/trace controls in some states. The next UI must reserve layout space for run timeline, auto-eval banners, and composer controls.
+11. **Side-by-side review is a first-class task workflow.** The user can keep chat open while inspecting result summary, Git changes, screenshot evidence, token risk, or debug context. The first implementation uses named split presets instead of a full docking window manager.
 
 ## Information Architecture
 
