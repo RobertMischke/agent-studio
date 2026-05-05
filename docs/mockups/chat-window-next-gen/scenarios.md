@@ -322,3 +322,20 @@ Expected UI:
 - Layout controls are tiny icon buttons with tooltips and overflow behavior, not repeated large text buttons.
 - On narrow screens, the context pane collapses and the chat remains usable.
 - Playwright evidence covers Result split, Git split, compact density, chat-only, dark debug, and mobile.
+
+## 31. Comment On A Closed Task - Queued Follow-Up
+
+The user types a follow-up into the chat of a task that is already in `4-auto-review`, `5-human-review`, `6-completed`, or `7-archive`. The composer must not silently restart the closed task; it must make the queue decision visible.
+
+Expected UI:
+
+- The composer shows a lane-aware mode set: only `Ask`, `Defer`, and (advanced) `Promote` are offered for closed tasks. The default is `Defer`.
+- After Send, the user message renders normally in the transcript. A single compact `feedback.queued` marker row appears underneath, e.g. `deferred - queued for later - "I'll get to this when there's bandwidth" - open in queue`.
+- `Ask` produces a read-only inline answer that cannot mutate the parent task. The marker row reads `asked - answered inline - no code changes`.
+- `Defer` creates a follow-up task in `1-preparation` with a parent back-reference. Three quick defers within ~30s fold into the same follow-up; the marker row reads `merged into follow-up #X`.
+- `Promote` is hidden behind a confirmation dialog and emits a `decision.orchestrator` row when it fires; an inline `undo` is available for ~10s.
+- `7-archive` chat is read-only: only `Ask` is offered, `Defer` is hidden.
+- Raw queue metadata (target slug, dedupe key, routing decision) lives behind details / Trace, not in the compact row.
+- The same marker grammar appears when the comment is posted from the side sheet, and the row mirrors into the task chat.
+
+Full design contract: [feedback-queued-from-chat.md](feedback-queued-from-chat.md).

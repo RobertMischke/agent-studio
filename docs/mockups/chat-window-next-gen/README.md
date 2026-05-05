@@ -17,6 +17,7 @@ This folder is not existing product behavior. It is the target surface for the n
 - [best-practices-comparison.md](best-practices-comparison.md) - focused comparison with VS Code Copilot Chat, Claude Code, Gemini Code Assist, and Codex.
 - [visual-audit.md](visual-audit.md) - visual critique of the current Stable chat evidence.
 - [integration-plan.md](integration-plan.md) - migration plan from today's Activity Log, side sheet, run evidence, token surfaces, and composer controls into the v6 chat grammar.
+- [feedback-queued-from-chat.md](feedback-queued-from-chat.md) - design contract for what the composer does when the user comments on a closed task: lane-aware modes (Ask / Defer / Promote), the `feedback.queued` event row, and the "I'll get to this when there's bandwidth" marker. Anchors scenario 31.
 - [evidence/stable-playwright-observations.json](evidence/stable-playwright-observations.json) - Playwright metrics from Stable.
 
 Mockup PNGs under `evidence/` are local Playwright output and are gitignored. Regenerate them for review when useful, but do not commit them to this source repository.
