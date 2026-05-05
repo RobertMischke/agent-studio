@@ -86,6 +86,8 @@ builder.Services.AddSingleton<RoadmapIntakeService>();
 builder.Services.AddSingleton<TaskRunnerService>();
 builder.Services.AddSingleton<CrashRecoveryService>();
 builder.Services.AddSingleton<AgentMessageBusStore>();
+builder.Services.AddSingleton<OrchestratorApi.Services.State.SupervisorAdvisoryStore>();
+builder.Services.AddSingleton<OrchestratorApi.Services.State.SupervisorInterventionStore>();
 builder.Services.AddSingleton<ProjectObservationService>();
 builder.Services.AddSingleton<SupervisorInterventionService>();
 builder.Services.AddHostedService<HardHealthCheckHostedService>();

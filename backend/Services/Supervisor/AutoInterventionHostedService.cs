@@ -1,4 +1,4 @@
-using System.Text.Json;
+using OrchestratorApi.Services.State;
 
 namespace OrchestratorApi.Services.Supervisor;
 
@@ -18,27 +18,28 @@ namespace OrchestratorApi.Services.Supervisor;
 /// </remarks>
 public sealed class AutoInterventionHostedService : BackgroundService
 {
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
-
     private readonly TaskRunnerService _taskRunner;
     private readonly SupervisorInterventionService _interventions;
     private readonly ProjectObservationService _observe;
+    private readonly SupervisorAdvisoryStore _advisoryStore;
     private readonly IConfiguration _configuration;
     private readonly ILogger<AutoInterventionHostedService> _logger;
 
     private readonly Dictionary<string, Queue<DateTime>> _ratePerProject = new();
-    private readonly Dictionary<string, long> _projectCursorPos = new();
+    private readonly Dictionary<string, long> _projectCursor = new(StringComparer.OrdinalIgnoreCase);
 
     public AutoInterventionHostedService(
         TaskRunnerService taskRunner,
         SupervisorInterventionService interventions,
         ProjectObservationService observe,
+        SupervisorAdvisoryStore advisoryStore,
         IConfiguration configuration,
         ILogger<AutoInterventionHostedService> logger)
     {
         _taskRunner = taskRunner;
         _interventions = interventions;
         _observe = observe;
+        _advisoryStore = advisoryStore;
         _configuration = configuration;
         _logger = logger;
     }
@@ -137,30 +138,15 @@ public sealed class AutoInterventionHostedService : BackgroundService
 
     private List<SupervisorAdvisory> ReadNewAdvisories(string workspace, string project)
     {
-        var path = SupervisorLogPaths.ObservationsFile(workspace, project);
-        if (!File.Exists(path)) return new();
-        long start = _projectCursorPos.GetValueOrDefault(path, 0L);
-        long len;
-        try { len = new FileInfo(path).Length; }
-        catch { return new(); }
-        if (len <= start) { _projectCursorPos[path] = len; return new(); }
+        // External writer (HardHealthCheckHostedService.AppendObservationRecord)
+        // bypasses the store; invalidate the projection so the next read picks
+        // up any lines appended out-of-band since the last tick. Once every
+        // writer routes through the store this invalidation can go away.
+        _advisoryStore.InvalidateProjection(workspace, project);
 
-        var result = new List<SupervisorAdvisory>();
-        using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-        fs.Seek(start, SeekOrigin.Begin);
-        using var reader = new StreamReader(fs);
-        string? line;
-        while ((line = reader.ReadLine()) != null)
-        {
-            if (string.IsNullOrWhiteSpace(line)) continue;
-            try
-            {
-                var a = JsonSerializer.Deserialize<SupervisorAdvisory>(line, Json);
-                if (a != null) result.Add(a);
-            }
-            catch { /* skip malformed line */ }
-        }
-        _projectCursorPos[path] = fs.Position;
-        return result;
+        var cursor = _projectCursor.GetValueOrDefault(project, 0L);
+        var (records, newCursor) = _advisoryStore.ReadSince(workspace, project, cursor);
+        _projectCursor[project] = newCursor;
+        return records.ToList();
     }
 }
