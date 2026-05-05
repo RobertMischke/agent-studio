@@ -139,7 +139,6 @@ public class JobScannerService
             var raw = JsonSerializer.Deserialize<JsonElement>(json, JobJsonFile.ReadOpts);
 
             var lastActivity = GetLastActivityTime(jobDir);
-            var totalSize = GetDirectorySize(jobDir);
 
             // The folder name is the canonical job id. Anything else (URL slugs,
             // log paths, MoveJob targets, the runner's job lookups) keys off the
@@ -174,7 +173,6 @@ public class JobScannerService
                 ProjectName = entry.Name,
                 FolderPath = jobDir,
                 LastActivity = lastActivity,
-                TotalSizeBytes = totalSize,
                 SessionName = raw.TryGetProperty("sessionName", out var sn) ? sn.GetString() : null,
                 LastUsage = raw.TryGetProperty("lastUsage", out var lu) && lu.ValueKind == JsonValueKind.Object
                     ? JsonSerializer.Deserialize<SessionUsage>(lu.GetRawText(), JobJsonFile.ReadOpts)
@@ -549,13 +547,4 @@ public class JobScannerService
         catch { return Directory.GetLastWriteTime(dir); }
     }
 
-    private static long GetDirectorySize(string dir)
-    {
-        try
-        {
-            return Directory.GetFiles(dir, "*", SearchOption.AllDirectories)
-                .Sum(f => new FileInfo(f).Length);
-        }
-        catch { return 0; }
-    }
 }

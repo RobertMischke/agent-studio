@@ -2,6 +2,7 @@ using OrchestratorApi.Models;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.Cli;
 using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.Runner;
 using static OrchestratorApi.Endpoints.Jobs.JobEndpointHelpers;
 
 namespace OrchestratorApi.Endpoints.Jobs;
@@ -16,15 +17,19 @@ public static class JobCrudEndpoints
 {
     public static void MapJobCrudEndpoints(this RouteGroupBuilder group)
     {
-        group.MapGet("/", (JobScannerService scanner, CliRouter router, TaskRunnerService runners) =>
+        group.MapGet("/", (JobScannerService scanner, CliRouter router, TaskRunnerService runners, TokenSummaryService tokens) =>
         {
-            var jobs = scanner.ScanAllJobs().Select(job => WithRuntime(job, router, runners)).ToList();
+            var raw = scanner.ScanAllJobs();
+            var tokenLookup = BuildTokenLookup(raw, tokens);
+            var jobs = raw.Select(job => WithRuntime(job, router, runners, tokenLookup)).ToList();
             return Results.Ok(jobs);
         });
 
-        group.MapGet("/grouped", (JobScannerService scanner, CliRouter router, TaskRunnerService runners) =>
+        group.MapGet("/grouped", (JobScannerService scanner, CliRouter router, TaskRunnerService runners, TokenSummaryService tokens) =>
         {
-            var jobs = scanner.ScanAllJobs().Select(job => WithRuntime(job, router, runners)).ToList();
+            var raw = scanner.ScanAllJobs();
+            var tokenLookup = BuildTokenLookup(raw, tokens);
+            var jobs = raw.Select(job => WithRuntime(job, router, runners, tokenLookup)).ToList();
             var grouped = new
             {
                 Preparation = jobs.Where(j => j.State == JobStates.Preparation).OrderBy(j => j.Order).ToList(),
@@ -37,10 +42,12 @@ public static class JobCrudEndpoints
             return Results.Ok(grouped);
         });
 
-        group.MapGet("/{jobId}", (string jobId, string? watchPath, JobScannerService scanner, CliRouter router, TaskRunnerService runners) =>
+        group.MapGet("/{jobId}", (string jobId, string? watchPath, JobScannerService scanner, CliRouter router, TaskRunnerService runners, TokenSummaryService tokens) =>
         {
             var detail = scanner.GetJobDetail(jobId, watchPath);
-            return detail is null ? Results.NotFound() : Results.Ok(WithRuntime(detail, router, runners));
+            if (detail is null) return Results.NotFound();
+            var tokenLookup = BuildTokenLookup(new[] { detail.Info }, tokens);
+            return Results.Ok(WithRuntime(detail, router, runners, tokenLookup));
         });
 
         group.MapPut("/{jobId}/state", async (string jobId, string? watchPath, MoveJobRequest req,

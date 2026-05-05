@@ -13,7 +13,13 @@ public record JobInfo
     public string ProjectName { get; init; } = "";
     public string FolderPath { get; init; } = "";
     public DateTime LastActivity { get; init; }
-    public long TotalSizeBytes { get; init; }
+    /// <summary>
+    /// Per-job orchestrator token totals, surfaced on the kanban card as a
+    /// small "token bubble". Populated at endpoint-read time from the
+    /// project's <c>orchestrator.jsonl</c>, filtered by this job's id; null
+    /// when the job has had no orchestrator LLM activity yet.
+    /// </summary>
+    public JobTokenSummary? TokenSummary { get; init; }
     /// <summary>Name passed to Copilot CLI via <c>--name</c> on first start; reused with <c>--resume</c> for follow-ups.</summary>
     public string? SessionName { get; init; }
     /// <summary>Preferred model for this job (e.g. <c>claude-sonnet-4.5</c>); passed via <c>--model</c> when supported.</summary>
@@ -110,6 +116,43 @@ public record SessionUsage
     public string? Tokens { get; init; }
     public string? Changes { get; init; }
     public string? Requests { get; init; }
+}
+
+/// <summary>
+/// Per-job token rollup attached to the kanban card. Covers orchestrator
+/// LLM calls attributed to this job (via <c>OrchestratorLogEntry.JobId</c>).
+/// The frontend renders a single colour-tiered "bubble" with the total,
+/// and a hover popover with the breakdown plus per-call rows.
+/// </summary>
+public record JobTokenSummary
+{
+    public int Calls { get; init; }
+    public long InputTokens { get; init; }
+    public long OutputTokens { get; init; }
+    public long CacheReadTokens { get; init; }
+    public long CacheCreationTokens { get; init; }
+    /// <summary>Sum of all four token counts. Drives the bubble label.</summary>
+    public long TotalTokens { get; init; }
+    /// <summary>Most recent model used by an attributed orchestrator call. Null when no model was recorded.</summary>
+    public string? LastModel { get; init; }
+    /// <summary>Timestamp of the most recent attributed orchestrator entry. Null when never updated.</summary>
+    public DateTime? LastUpdate { get; init; }
+    /// <summary>Per-call rows for the popover, oldest first.</summary>
+    public List<JobTokenCall> Entries { get; init; } = [];
+}
+
+/// <summary>
+/// One orchestrator LLM call attributed to a job. Used by the popover to
+/// list per-run rows below the aggregate.
+/// </summary>
+public record JobTokenCall
+{
+    public DateTime Ts { get; init; }
+    public string? Model { get; init; }
+    public long InputTokens { get; init; }
+    public long OutputTokens { get; init; }
+    public long CacheReadTokens { get; init; }
+    public long CacheCreationTokens { get; init; }
 }
 
 /// <summary>

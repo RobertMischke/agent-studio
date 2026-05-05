@@ -69,6 +69,96 @@ public class TokenSummaryService
     }
 
     /// <summary>
+    /// Read the orchestrator log once for a watch path and produce a
+    /// per-job token rollup. The kanban card uses this to render a
+    /// colour-tiered "token bubble" with a hover popover. Returns an
+    /// empty dictionary when the log file does not exist.
+    ///
+    /// <para>
+    /// Performance: O(N) over orchestrator entries, single sequential
+    /// read of <c>orchestrator.jsonl</c>. Callers must batch this per
+    /// watch path so the perf contract on
+    /// <c>JobEndpointHelpers.WithRuntime</c> (no per-job disk I/O)
+    /// stays intact.
+    /// </para>
+    /// </summary>
+    public Dictionary<string, JobTokenSummary> SummarizePerJob(string watchPath)
+    {
+        var entries = _log.Read(watchPath);
+        return SummarizePerJob(entries);
+    }
+
+    /// <summary>
+    /// Pure overload for tests: takes orchestrator log entries directly.
+    /// </summary>
+    public static Dictionary<string, JobTokenSummary> SummarizePerJob(IReadOnlyList<OrchestratorLogEntry> entries)
+    {
+        var perJob = new Dictionary<string, Bucket>(StringComparer.Ordinal);
+        foreach (var entry in entries)
+        {
+            var u = entry.TokenUsage;
+            if (u == null) continue;
+            var jobId = entry.JobId;
+            if (string.IsNullOrWhiteSpace(jobId)) continue;
+            if (!perJob.TryGetValue(jobId, out var bucket))
+            {
+                bucket = new Bucket();
+                perJob[jobId] = bucket;
+            }
+            bucket.Calls++;
+            bucket.Input += u.InputTokens;
+            bucket.Output += u.OutputTokens;
+            bucket.CacheRead += u.CacheReadTokens;
+            bucket.CacheCreate += u.CacheCreationTokens;
+            if (entry.Ts > (bucket.LastUpdate ?? DateTime.MinValue))
+            {
+                bucket.LastUpdate = entry.Ts;
+                bucket.LastModel = u.Model;
+            }
+            bucket.Entries.Add(new JobTokenCall
+            {
+                Ts = entry.Ts,
+                Model = u.Model,
+                InputTokens = u.InputTokens,
+                OutputTokens = u.OutputTokens,
+                CacheReadTokens = u.CacheReadTokens,
+                CacheCreationTokens = u.CacheCreationTokens
+            });
+        }
+
+        var result = new Dictionary<string, JobTokenSummary>(perJob.Count, StringComparer.Ordinal);
+        foreach (var (jobId, b) in perJob)
+        {
+            var total = b.Input + b.Output + b.CacheRead + b.CacheCreate;
+            result[jobId] = new JobTokenSummary
+            {
+                Calls = b.Calls,
+                InputTokens = b.Input,
+                OutputTokens = b.Output,
+                CacheReadTokens = b.CacheRead,
+                CacheCreationTokens = b.CacheCreate,
+                TotalTokens = total,
+                LastModel = b.LastModel,
+                LastUpdate = b.LastUpdate,
+                Entries = b.Entries.OrderBy(e => e.Ts).ToList()
+            };
+        }
+        return result;
+    }
+
+    private sealed class Bucket
+    {
+        public int Calls;
+        public long Input;
+        public long Output;
+        public long CacheRead;
+        public long CacheCreate;
+        public string? LastModel;
+        public DateTime? LastUpdate;
+        public List<JobTokenCall> Entries { get; } = [];
+    }
+
+    /// <summary>
     /// Workspace-wide aggregate: walks every watched project, runs the
     /// per-project summarizer, and folds amounts + per-model buckets into
     /// a single rollup. Persists the result to disk via

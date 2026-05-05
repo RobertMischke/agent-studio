@@ -1,5 +1,5 @@
 import { Component, OnDestroy, OnInit, computed, inject, input, signal } from '@angular/core';
-import { AutoLoopSnapshot, JobInfo, PendingIntent } from '../models/job.model';
+import { AutoLoopSnapshot, JobInfo, JobTokenSummary, PendingIntent } from '../models/job.model';
 import { GitSummaryService } from '../services/git-summary.service';
 import { ClientService } from '../services/client.service';
 import { cliTypeIcon } from '../services/format.util';
@@ -84,7 +84,59 @@ if (typeof window !== 'undefined') {
         @if (job().model) {
           <span class="job-card__model">🧠 {{ job().model }}</span>
         }
-        <span class="job-card__size">{{ formatSize(job().totalSizeBytes) }}</span>
+        @if (tokenBubble(); as tb) {
+          <span class="job-card__token-wrap">
+            <button type="button"
+                    class="job-card__token-bubble"
+                    [class]="'job-card__token-bubble--' + tb.tier"
+                    data-testid="job-card-token-bubble"
+                    [attr.data-token-tier]="tb.tier"
+                    [attr.data-token-total]="tb.total"
+                    [attr.aria-label]="'Token usage: ' + tb.label + ' total tokens'"
+                    (click)="$event.stopPropagation()">
+              {{ tb.label }}
+            </button>
+            <span class="job-card__token-popover"
+                  role="tooltip"
+                  data-testid="job-card-token-popover">
+              <span class="job-card__token-popover-title">Token usage</span>
+              <table class="job-card__token-table">
+                <tbody>
+                  <tr><th>Input</th><td data-testid="token-row-input">{{ formatTokens(tb.input) }}</td></tr>
+                  <tr><th>Output</th><td data-testid="token-row-output">{{ formatTokens(tb.output) }}</td></tr>
+                  <tr><th>Cache read</th><td data-testid="token-row-cache-read">{{ formatTokens(tb.cacheRead) }}</td></tr>
+                  <tr><th>Cache write</th><td data-testid="token-row-cache-write">{{ formatTokens(tb.cacheWrite) }}</td></tr>
+                  <tr class="job-card__token-total-row"><th>Total</th><td data-testid="token-row-total">{{ formatTokens(tb.total) }}</td></tr>
+                  <tr><th>Model</th><td data-testid="token-row-model">{{ tb.model || '-' }}</td></tr>
+                  <tr><th>Last update</th><td data-testid="token-row-last-update">{{ tb.lastUpdate || '-' }}</td></tr>
+                </tbody>
+              </table>
+              @if (tb.entries.length > 1) {
+                <div class="job-card__token-runs-title">Per-run</div>
+                <table class="job-card__token-table job-card__token-table--runs">
+                  <thead>
+                    <tr><th>When</th><th>Model</th><th>Tokens</th></tr>
+                  </thead>
+                  <tbody>
+                    @for (row of tb.entries; track row.ts) {
+                      <tr>
+                        <td>{{ row.tsLabel }}</td>
+                        <td>{{ row.model || '-' }}</td>
+                        <td>{{ formatTokens(row.total) }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              }
+              <a class="job-card__token-link"
+                 href="/workspace/tokens"
+                 data-testid="token-popover-timeline-link"
+                 (click)="$event.stopPropagation()">
+                View workspace timeline
+              </a>
+            </span>
+          </span>
+        }
       </div>
       @if (gitPill(); as g) {
         <div class="job-card__git" [title]="gitTooltip()" data-testid="job-card-git">
@@ -413,6 +465,135 @@ if (typeof window !== 'undefined') {
     }
     .job-card__commit-sha { font-family: var(--font-mono, monospace); font-weight: 600; }
     .job-card__commit-files { color: #94a3b8; }
+
+    /* Token bubble: a small status indicator that shows total tokens spent
+       on this task. The popover opens on hover and on keyboard focus, so
+       the bubble is keyboard-reachable as well. We render it as a button
+       (not a div) so screen readers and Tab navigation pick it up. */
+    .job-card__token-wrap {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+    }
+    .job-card__token-bubble {
+      min-width: 28px;
+      height: 18px;
+      padding: 0 6px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.18);
+      display: inline-grid;
+      place-items: center;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      cursor: help;
+      color: #e2e8f0;
+      background: rgba(148,163,184,0.18);
+      font-variant-numeric: tabular-nums;
+    }
+    .job-card__token-bubble:focus-visible {
+      outline: 2px solid #7dd3fc;
+      outline-offset: 2px;
+    }
+    /* Spend-tier colours. Defaults: < 50k = neutral, 50k-500k = blue,
+       500k-5M = mauve, > 5M = peach. Tier thresholds are computed in the
+       component (see tokenBubble()). Catppuccin palette to stay in line
+       with the rest of the board. */
+    .job-card__token-bubble--neutral {
+      color: #cbd5e1;
+      background: rgba(148,163,184,0.18);
+      border-color: rgba(148,163,184,0.32);
+    }
+    .job-card__token-bubble--blue {
+      color: #bae6fd;
+      background: rgba(56,189,248,0.18);
+      border-color: rgba(56,189,248,0.40);
+    }
+    .job-card__token-bubble--mauve {
+      color: #e9d5ff;
+      background: rgba(192,132,252,0.20);
+      border-color: rgba(192,132,252,0.42);
+    }
+    .job-card__token-bubble--peach {
+      color: #fed7aa;
+      background: rgba(251,146,60,0.22);
+      border-color: rgba(251,146,60,0.45);
+    }
+
+    .job-card__token-popover {
+      display: none;
+      position: absolute;
+      bottom: calc(100% + 8px);
+      right: 0;
+      z-index: 30;
+      min-width: 240px;
+      max-width: 320px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      background: #11131a;
+      border: 1px solid rgba(255,255,255,0.10);
+      box-shadow: 0 8px 28px rgba(0,0,0,0.45);
+      color: #e2e8f0;
+      text-align: left;
+      pointer-events: none;
+    }
+    .job-card__token-wrap:hover .job-card__token-popover,
+    .job-card__token-bubble:focus-visible + .job-card__token-popover,
+    .job-card__token-wrap:focus-within .job-card__token-popover {
+      display: block;
+      pointer-events: auto;
+    }
+    .job-card__token-popover-title {
+      display: block;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #94a3b8;
+      margin-bottom: 6px;
+    }
+    .job-card__token-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+    .job-card__token-table th {
+      text-align: left;
+      font-weight: 500;
+      color: #94a3b8;
+      padding: 2px 8px 2px 0;
+    }
+    .job-card__token-table td {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      color: #e2e8f0;
+      padding: 2px 0;
+    }
+    .job-card__token-total-row th,
+    .job-card__token-total-row td {
+      border-top: 1px solid rgba(255,255,255,0.08);
+      padding-top: 4px;
+      font-weight: 700;
+    }
+    .job-card__token-runs-title {
+      margin-top: 8px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #94a3b8;
+    }
+    .job-card__token-table--runs th,
+    .job-card__token-table--runs td {
+      font-size: 10px;
+      padding: 2px 6px 2px 0;
+    }
+    .job-card__token-link {
+      display: inline-block;
+      margin-top: 8px;
+      font-size: 11px;
+      color: #7dd3fc;
+      text-decoration: none;
+    }
+    .job-card__token-link:hover { text-decoration: underline; }
   `]
 })
 export class JobCardComponent implements OnInit, OnDestroy {
@@ -569,10 +750,74 @@ export class JobCardComponent implements OnInit, OnDestroy {
     return `Pending follow-up (${pi.mode}) saved ${when}.\nWill run on next auto-pickup.\n\n${preview}${(pi.prompt ?? '').length > 120 ? '...' : ''}`;
   }
 
-  formatSize(bytes: number): string {
-    if (bytes < 1024) return bytes + ' B';
-    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  /** Compact tokens label: 850 -> "850", 2400 -> "2.4k", 850000 -> "850k", 3_100_000 -> "3.1M". */
+  formatTokens(n: number): string {
+    if (!isFinite(n) || n <= 0) return '0';
+    if (n < 1000) return Math.round(n).toString();
+    if (n < 1_000_000) {
+      const k = n / 1000;
+      return (k >= 100 ? Math.round(k) : Number(k.toFixed(1))) + 'k';
+    }
+    const m = n / 1_000_000;
+    return (m >= 100 ? Math.round(m) : Number(m.toFixed(1))) + 'M';
+  }
+
+  /**
+   * Token-bubble descriptor: returns null when the task has no recorded
+   * orchestrator activity (input + output + cacheRead + cacheWrite == 0).
+   * Tier thresholds match the prompt: < 50k neutral, < 500k blue,
+   * < 5M mauve, otherwise peach.
+   */
+  readonly tokenBubble = computed<{
+    label: string;
+    total: number;
+    input: number;
+    output: number;
+    cacheRead: number;
+    cacheWrite: number;
+    model: string | null;
+    lastUpdate: string | null;
+    tier: 'neutral' | 'blue' | 'mauve' | 'peach';
+    entries: { ts: string; tsLabel: string; model: string | null; total: number }[];
+  } | null>(() => {
+    const t = this.job().tokenSummary;
+    if (!t) return null;
+    const input = t.inputTokens ?? 0;
+    const output = t.outputTokens ?? 0;
+    const cacheRead = t.cacheReadTokens ?? 0;
+    const cacheWrite = t.cacheCreationTokens ?? 0;
+    const total = input + output + cacheRead + cacheWrite;
+    if (total <= 0) return null;
+    const tier = total >= 5_000_000 ? 'peach'
+      : total >= 500_000 ? 'mauve'
+      : total >= 50_000 ? 'blue'
+      : 'neutral';
+    const entries = (t.entries ?? []).map(e => ({
+      ts: e.ts,
+      tsLabel: this.formatShortTime(e.ts),
+      model: e.model,
+      total: (e.inputTokens ?? 0) + (e.outputTokens ?? 0) + (e.cacheReadTokens ?? 0) + (e.cacheCreationTokens ?? 0)
+    }));
+    return {
+      label: this.formatTokens(total),
+      total,
+      input,
+      output,
+      cacheRead,
+      cacheWrite,
+      model: t.lastModel ?? null,
+      lastUpdate: t.lastUpdate ? this.formatShortTime(t.lastUpdate) : null,
+      tier,
+      entries
+    };
+  });
+
+  private formatShortTime(iso: string): string {
+    try {
+      return new Date(iso).toLocaleString();
+    } catch {
+      return iso;
+    }
   }
 
   readonly agentIcon = computed(() => {

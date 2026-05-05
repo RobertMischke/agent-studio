@@ -170,8 +170,14 @@ export interface JobInfo {
   projectName: string;
   folderPath: string;
   lastActivity: string;
-  totalSizeBytes: number;
   sessionName: string | null;
+  /**
+   * Per-job orchestrator token rollup. The kanban card renders a small
+   * colour-tiered bubble (2.4k / 850k / 3.1M) when this is non-null and
+   * the total is greater than zero, with a hover popover showing the
+   * detailed breakdown.
+   */
+  tokenSummary?: JobTokenSummary | null;
   model: string | null;
   cliType: CliType | null;
   useOwnSession: boolean | null;
@@ -218,6 +224,32 @@ export interface ClientSummary {
   lastSeenAt: string | null;
   tokenBudgetMonthly: number | null;
   notes: string | null;
+}
+
+/**
+ * Per-job orchestrator token rollup. Mirrors backend `JobTokenSummary`.
+ * Surfaced on the kanban card as a colour-tiered "token bubble" with a
+ * hover popover that lists per-call rows.
+ */
+export interface JobTokenSummary {
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  totalTokens: number;
+  lastModel: string | null;
+  lastUpdate: string | null;
+  entries: JobTokenCall[];
+}
+
+export interface JobTokenCall {
+  ts: string;
+  model: string | null;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
 }
 
 export interface AutoLoopSnapshot {

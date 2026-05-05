@@ -1,6 +1,7 @@
 using OrchestratorApi.Models;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.Cli;
+using OrchestratorApi.Services.Runner;
 
 namespace OrchestratorApi.Endpoints.Jobs;
 
@@ -21,6 +22,21 @@ internal static class JobEndpointHelpers
     };
 
     internal static JobInfo WithRuntime(JobInfo job, CliRouter router, TaskRunnerService runners)
+        => WithRuntime(job, router, runners, tokensByJobId: null);
+
+    /// <summary>
+    /// Overlay variant that also folds in per-job orchestrator token totals.
+    /// The caller is expected to have read the orchestrator log once per
+    /// watch path and built the lookup, so this stays O(1) per job — the
+    /// perf contract locked by
+    /// <c>JobsEndpointPerfTests.WithRuntime_Over200Jobs_FinishesWellUnderOneSecond</c>
+    /// still holds.
+    /// </summary>
+    internal static JobInfo WithRuntime(
+        JobInfo job,
+        CliRouter router,
+        TaskRunnerService runners,
+        IReadOnlyDictionary<string, JobTokenSummary>? tokensByJobId)
     {
         var exec = router.Get(job.CliType).GetExecution(job.JobKey);
         // Look up auto-loop state by ProjectName (O(1) ConcurrentDictionary
@@ -33,6 +49,11 @@ internal static class JobEndpointHelpers
         // the Haiku call is still working. Only return non-None states
         // so the field stays absent on cards where nothing is happening.
         var summary = runners.SummaryService.GetState(job.JobKey);
+        JobTokenSummary? tokens = null;
+        if (tokensByJobId != null && tokensByJobId.TryGetValue(job.JobKey, out var t) && t.TotalTokens > 0)
+        {
+            tokens = t;
+        }
         return job with
         {
             Execution = exec,
@@ -48,10 +69,48 @@ internal static class JobEndpointHelpers
                 LastReply = loop.LastReply,
                 LastError = loop.LastError
             },
-            SummaryState = summary != null && summary.Status != JobSummaryStatus.None ? summary : null
+            SummaryState = summary != null && summary.Status != JobSummaryStatus.None ? summary : null,
+            TokenSummary = tokens
         };
+    }
+
+    /// <summary>
+    /// Builds the per-watch-path → per-job token lookup used by
+    /// <c>WithRuntime</c> in the listing endpoints. Reads each unique
+    /// orchestrator log file at most once.
+    /// </summary>
+    internal static Dictionary<string, JobTokenSummary> BuildTokenLookup(
+        IEnumerable<JobInfo> jobs,
+        TokenSummaryService tokens)
+    {
+        // Read each watch path's orchestrator log at most once. Keyed by
+        // JobKey (watchPath::jobId) so jobs that share an id across
+        // watched workspaces stay distinct.
+        var byWatchPath = new Dictionary<string, Dictionary<string, JobTokenSummary>>(StringComparer.OrdinalIgnoreCase);
+        var merged = new Dictionary<string, JobTokenSummary>(StringComparer.Ordinal);
+        foreach (var job in jobs)
+        {
+            if (string.IsNullOrWhiteSpace(job.WatchPath)) continue;
+            if (!byWatchPath.TryGetValue(job.WatchPath, out var perJob))
+            {
+                perJob = tokens.SummarizePerJob(job.WatchPath);
+                byWatchPath[job.WatchPath] = perJob;
+            }
+            if (perJob.TryGetValue(job.Id, out var t))
+            {
+                merged[job.JobKey] = t;
+            }
+        }
+        return merged;
     }
 
     internal static JobDetail WithRuntime(JobDetail detail, CliRouter router, TaskRunnerService runners)
         => detail with { Info = WithRuntime(detail.Info, router, runners) };
+
+    internal static JobDetail WithRuntime(
+        JobDetail detail,
+        CliRouter router,
+        TaskRunnerService runners,
+        IReadOnlyDictionary<string, JobTokenSummary>? tokensByJobId)
+        => detail with { Info = WithRuntime(detail.Info, router, runners, tokensByJobId) };
 }
