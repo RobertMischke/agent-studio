@@ -49,17 +49,17 @@ public class JobCommitsEndpointIntegrationTests : IDisposable
 
         WriteFile(repoRoot, "README.md", "seed");
         RunGit(repoRoot, "add", "-A");
-        RunGit(repoRoot, "commit", "-q", "-m", "seed");
+        RunGit(repoRoot, "commit", "-q", "-m", "seed", "--date", "2026-05-05T10:00:00Z");
         var head0 = RunGitCapture(repoRoot, "rev-parse", "HEAD").Trim();
 
         WriteFile(repoRoot, "src/foo.cs", "// foo");
         RunGit(repoRoot, "add", "-A");
-        RunGit(repoRoot, "commit", "-q", "-m", "feat: foo");
+        RunGit(repoRoot, "commit", "-q", "-m", "feat: foo", "--date", "2026-05-05T10:01:00Z");
         var head1 = RunGitCapture(repoRoot, "rev-parse", "HEAD").Trim();
 
         WriteFile(repoRoot, "src/bar.cs", "// bar");
         RunGit(repoRoot, "add", "-A");
-        RunGit(repoRoot, "commit", "-q", "-m", "fix: bar");
+        RunGit(repoRoot, "commit", "-q", "-m", "fix: bar", "--date", "2026-05-05T10:02:00Z");
         var head2 = RunGitCapture(repoRoot, "rev-parse", "HEAD").Trim();
 
         AppendSessionEvent(jobFolder, new SessionEvent
