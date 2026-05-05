@@ -51,6 +51,41 @@ public static class DriftReportValidator
             if (string.IsNullOrWhiteSpace(s.Title)) { error = "follow-up suggestion missing title"; return false; }
         }
 
+        if (report.ArchitectureModel is { } model)
+        {
+            if (string.IsNullOrWhiteSpace(model.ModelId)) { error = "architectureModel.modelId required"; return false; }
+            if (string.IsNullOrWhiteSpace(model.Title)) { error = "architectureModel.title required"; return false; }
+            if (model.Elements is null || model.Elements.Count == 0)
+            {
+                error = "architectureModel.elements must contain at least one entry";
+                return false;
+            }
+            if (model.Elements.Count > 10)
+            {
+                error = "architectureModel.elements must contain at most ten entries";
+                return false;
+            }
+            var seenIds = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var el in model.Elements)
+            {
+                if (el is null) { error = "architectureModel.elements entry is null"; return false; }
+                if (string.IsNullOrWhiteSpace(el.ElementId)) { error = "architecture element elementId required"; return false; }
+                if (!seenIds.Add(el.ElementId)) { error = $"architecture element id '{el.ElementId}' is not unique"; return false; }
+                if (string.IsNullOrWhiteSpace(el.Label)) { error = $"architecture element {el.ElementId} label required"; return false; }
+                if (el.Score is < 0 or > 100) { error = $"architecture element {el.ElementId} score must be 0..100"; return false; }
+                if (el.SourceCoverage is < 0 or > 1) { error = $"architecture element {el.ElementId} sourceCoverage must be 0..1"; return false; }
+                if (el.EvidenceRefs is null) { error = $"architecture element {el.ElementId} evidenceRefs required"; return false; }
+                foreach (var refStr in el.EvidenceRefs)
+                {
+                    if (string.IsNullOrWhiteSpace(refStr))
+                    {
+                        error = $"architecture element {el.ElementId} has empty evidenceRef";
+                        return false;
+                    }
+                }
+            }
+        }
+
         error = null;
         return true;
     }

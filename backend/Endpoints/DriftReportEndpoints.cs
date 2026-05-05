@@ -182,6 +182,77 @@ public static class DriftReportEndpoints
             await driftStore.AppendAsync(workspace!, project, report, markdown, ct).ConfigureAwait(false);
             return Results.Ok(new DriftReportDetailResponse(report, markdown));
         });
+
+        // -----------------------------------------------------------------
+        // Architecture marble surface.
+        //
+        // The Drift project view renders an architecture map (max ten
+        // elements, per-element drift score and severity). The map reads
+        // from the most recent drift report that carries an
+        // `architectureModel`; element tracking-state overrides
+        // (Tracked / Accepted / Ignored / Resolved) live in a sidecar
+        // store so the user can mark drift without spawning a new
+        // immutable report. Action buttons (Analyze / Create follow-up)
+        // queue normal jobs through the existing job-create surface.
+        // -----------------------------------------------------------------
+
+        group.MapGet("/{project}/architecture", (
+            string project,
+            IConfiguration config,
+            DriftReportStore driftStore,
+            ArchitectureElementStateStore stateStore) =>
+        {
+            if (string.IsNullOrWhiteSpace(project))
+                return Results.BadRequest(new { error = "project required" });
+            var workspace = config["TaskRepository"];
+            if (string.IsNullOrWhiteSpace(workspace))
+                return Results.Ok(new DriftArchitectureSurfaceResponse(null, null, null, Array.Empty<ElementStateOverride>()));
+
+            var snap = driftStore.Snapshot(workspace!, project);
+            var latestWithModel = snap
+                .Where(r => r.ArchitectureModel is not null)
+                .OrderByDescending(r => r.CreatedAt)
+                .FirstOrDefault();
+            if (latestWithModel is null)
+            {
+                return Results.Ok(new DriftArchitectureSurfaceResponse(
+                    Model: null,
+                    SourceReportId: null,
+                    SourceReportCreatedAt: null,
+                    Overrides: Array.Empty<ElementStateOverride>()));
+            }
+
+            var overrides = stateStore.Snapshot(workspace!, project)
+                .Values
+                .Where(v => v.ModelId == latestWithModel.ArchitectureModel!.ModelId)
+                .ToArray();
+            return Results.Ok(new DriftArchitectureSurfaceResponse(
+                Model: latestWithModel.ArchitectureModel,
+                SourceReportId: latestWithModel.ReportId,
+                SourceReportCreatedAt: latestWithModel.CreatedAt,
+                Overrides: overrides));
+        });
+
+        group.MapPost("/{project}/architecture/{modelId}/elements/{elementId}/status", (
+            string project,
+            string modelId,
+            string elementId,
+            ElementStatusRequest? body,
+            IConfiguration config,
+            ArchitectureElementStateStore stateStore) =>
+        {
+            if (string.IsNullOrWhiteSpace(project) || string.IsNullOrWhiteSpace(modelId) || string.IsNullOrWhiteSpace(elementId))
+                return Results.BadRequest(new { error = "project, modelId and elementId required" });
+            if (body is null || string.IsNullOrWhiteSpace(body.Status))
+                return Results.BadRequest(new { error = "status required" });
+            if (!Enum.TryParse<DriftFindingStatus>(body.Status, ignoreCase: true, out var parsed))
+                return Results.BadRequest(new { error = $"unknown status '{body.Status}'" });
+            var workspace = config["TaskRepository"];
+            if (string.IsNullOrWhiteSpace(workspace))
+                return Results.BadRequest(new { error = "TaskRepository not configured" });
+            var saved = stateStore.Set(workspace!, project, modelId, elementId, parsed, body.Note);
+            return Results.Ok(saved);
+        });
     }
 
     /// <summary>
@@ -261,6 +332,19 @@ public sealed record AdrCodeDriftRunRequest(string? AgentResponse);
 /// the assembled scope summary and the rendered prompt the operator (or
 /// future inline runner) hands to a CLI agent.
 /// </summary>
+/// <summary>
+/// Architecture marble surface payload. Carries the most recent drift
+/// report's architecture model plus user-set element-state overrides.
+/// </summary>
+public sealed record DriftArchitectureSurfaceResponse(
+    DriftArchitectureModel? Model,
+    string? SourceReportId,
+    DateTime? SourceReportCreatedAt,
+    IReadOnlyList<ElementStateOverride> Overrides);
+
+/// <summary>Body for setting an architecture element's tracking-state override.</summary>
+public sealed record ElementStatusRequest(string Status, string? Note);
+
 public sealed record AdrCodeDriftPromptResponse(
     string Project,
     DateTime CapturedAt,

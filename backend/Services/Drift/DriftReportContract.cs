@@ -149,6 +149,40 @@ public sealed record DriftFollowUpSuggestion(
     DriftDimensionType? RelatedDimension = null);
 
 /// <summary>
+/// One element in a high-level architecture map. Drives the marble surface on
+/// the project Drift view (ROADMAP "Architecture marble drift surface"). The
+/// schema caps the element count at ten; the in-code validator enforces the
+/// same ceiling so a mis-emitted report is rejected at append time rather than
+/// silently overflowing the surface.
+/// </summary>
+public sealed record DriftArchitectureElement(
+    string ElementId,
+    string Label,
+    string ExpectedRole,
+    int Score,
+    DriftSeverity Severity,
+    double SourceCoverage,
+    DriftFindingStatus Status,
+    IReadOnlyList<string> EvidenceRefs,
+    IReadOnlyList<string>? Guidelines = null,
+    IReadOnlyList<string>? AllowedDependencies = null,
+    IReadOnlyList<string>? SourceRefs = null,
+    string? Summary = null,
+    IReadOnlyList<string>? FollowUpTaskSuggestions = null);
+
+/// <summary>
+/// Optional high-level architecture model carried by a drift report. When
+/// present, the Drift project surface renders it as a marble map: up to ten
+/// scan-friendly cards, each linking back to evidence. Mirrors the
+/// <c>architectureModel</c> branch in <c>docs/schemas/drift-report.schema.json</c>.
+/// </summary>
+public sealed record DriftArchitectureModel(
+    string ModelId,
+    string Title,
+    IReadOnlyList<DriftArchitectureElement> Elements,
+    string? SourceRef = null);
+
+/// <summary>
 /// One drift report. JSON sidecar contract plus the Markdown sibling under
 /// <c>logs/drift/&lt;project&gt;/&lt;reportId&gt;.md</c>. Reports are
 /// append-only and immutable; corrections land as a new report, not as an
@@ -165,4 +199,5 @@ public sealed record DriftReport(
     IReadOnlyList<DriftDimension> Dimensions,
     string Summary,
     IReadOnlyList<DriftFollowUpSuggestion> FollowUpTaskSuggestions,
-    int SchemaVersion = 1);
+    int SchemaVersion = 1,
+    DriftArchitectureModel? ArchitectureModel = null);

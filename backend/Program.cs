@@ -101,6 +101,7 @@ builder.Services.AddSingleton<OrchestratorApi.Services.Analysis.AnalysisReportSt
 builder.Services.AddSingleton<OrchestratorApi.Services.Analysis.RoadmapAlignmentReviewService>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Drift.DriftReportStore>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Drift.AdrCodeDriftAnalysisService>();
+builder.Services.AddSingleton<OrchestratorApi.Services.Drift.ArchitectureElementStateStore>();
 builder.Services.AddSingleton<ProjectObservationService>();
 builder.Services.AddSingleton<SupervisorInterventionService>();
 builder.Services.AddHostedService<HardHealthCheckHostedService>();

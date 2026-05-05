@@ -7,6 +7,7 @@ import { TokenSummaryBlockComponent } from './token-summary-block';
 import { GlobalOrchestratorCardComponent } from './global-orchestrator-card';
 import { ProjectSecuritySectionComponent } from './project-security-section';
 import { ProjectArchitectureSectionComponent } from './project-architecture-section';
+import { ProjectDriftSectionComponent } from './project-drift-section';
 import { ProjectSupervisorSectionComponent } from './project-supervisor-section';
 import { ProjectMetaCycleSectionComponent } from './project-meta-cycle-section';
 import { ProjectAnalysisReportsSectionComponent } from './project-analysis-reports-section';
@@ -38,6 +39,7 @@ interface ProjectSettingsRow {
     GlobalOrchestratorCardComponent,
     ProjectSecuritySectionComponent,
     ProjectArchitectureSectionComponent,
+    ProjectDriftSectionComponent,
     ProjectSupervisorSectionComponent,
     ProjectMetaCycleSectionComponent,
     ProjectAnalysisReportsSectionComponent,
@@ -184,6 +186,8 @@ interface ProjectSettingsRow {
       <app-project-security-section [projectName]="projectName()" />
 
       <app-project-architecture-section [projectName]="projectName()" />
+
+      <app-project-drift-section [projectName]="projectName()" />
 
       <section class="proj-detail__group">
         <h3>Recent orchestrator activity</h3>
