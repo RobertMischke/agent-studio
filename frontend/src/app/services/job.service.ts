@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport, QuotaReport, QuotaSnapshot, GitStatus, ClaudeSessionResponse, JobCommitDetail, SessionEventsResponse, ContinueMode, ContinueJobResponse, OrchestratorLogResponse, TokenSummary, TokenSummaryAggregate, OrchestratorSessionResponse, OrchestratorChatResponse, OrchestratorChatTurn, RunTimeline, RunCommitsResponse, RunFilesResponse, RunDiffResponse, RoadmapIntakeCandidate, RoadmapIntakeResponse, RoadmapIntakeConfirmResponse } from '../models/job.model';
+import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport, QuotaReport, QuotaSnapshot, GitStatus, ClaudeSessionResponse, JobCommitDetail, SessionEventsResponse, ContinueMode, ContinueJobResponse, OrchestratorLogResponse, TokenSummary, TokenSummaryAggregate, TokenTimeline, OrchestratorSessionResponse, OrchestratorChatResponse, OrchestratorChatTurn, RunTimeline, RunCommitsResponse, RunFilesResponse, RunDiffResponse, RoadmapIntakeCandidate, RoadmapIntakeResponse, RoadmapIntakeConfirmResponse } from '../models/job.model';
 import { ErrorDialogService } from './error-dialog.service';
 
 type LaneKey = keyof GroupedJobs;
@@ -500,6 +500,22 @@ export class JobService {
     return this.http.get<TokenSummaryAggregate>(
       `${this.baseUrl}/runner/token-summary-aggregate/cached`,
       { observe: 'response' }
+    );
+  }
+
+  /**
+   * Workspace-wide token timeline: one cell per (project, time-bucket).
+   * `windowHours` accepts {1, 6, 24, 168}; `bucketMinutes` accepts
+   * {5, 15, 60}. Out-of-range values are silently snapped to the
+   * defaults by the backend.
+   */
+  getWorkspaceTokensTimeline(windowHours: number, bucketMinutes: number) {
+    let params = new HttpParams()
+      .set('windowHours', String(windowHours))
+      .set('bucketMinutes', String(bucketMinutes));
+    return this.http.get<TokenTimeline>(
+      `${this.baseUrl}/workspace/tokens/timeline`,
+      { params }
     );
   }
 

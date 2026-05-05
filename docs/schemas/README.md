@@ -22,6 +22,7 @@ Schemas in this folder are the single contract. C# records, TypeScript interface
 - `agent-artifact-ref.schema.json` - typed pointer from a bus message to evidence on disk or another structured stream.
 - `client-identity.schema.json` - one client of the Task Access Layer (human, agent instance, external tool, service). Stored under `<workspace>/identities/<id>.json`.
 - `token-aggregate-by-client.schema.json` - per-client variant of `token-aggregate.schema.json`, additionally keyed by `clientId` for per-client legends in the workspace timeline.
+- `token-timeline-bucket.schema.json` - one (project, time-bucket) cell served by `GET /api/workspace/tokens/timeline`. Powers the workspace token timeline view at `#/workspace/tokens`.
 - `drift-report.schema.json` - one project-level drift analysis report with scores, dimensions, evidence references, and follow-up task suggestions.
 - `task-find-result.schema.json` - one job record plus the optimistic-concurrency token returned by the Task Access Layer's find / list / snapshot calls. ADR-0024.
 - `task-mutation-request.schema.json` - one narrowly-typed mutation request consumed by the Task Access Layer (field update, prompt attach, log-line append, create). Lane transitions have their own typed entry point inside the layer. ADR-0024.

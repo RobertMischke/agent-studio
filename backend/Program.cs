@@ -69,6 +69,7 @@ builder.Services.AddSingleton<GlobalOrchestratorSessionStore>();
 builder.Services.AddSingleton<GlobalOrchestratorBootstrap>();
 builder.Services.AddSingleton<TokenSummaryCacheStore>();
 builder.Services.AddSingleton<TokenSummaryService>();
+builder.Services.AddSingleton<WorkspaceTokensTimelineService>();
 builder.Services.AddSingleton<JobTransitionService>();
 builder.Services.AddSingleton<JobWatcherService>();
 builder.Services.AddSingleton<CopilotCliEnvironment>();

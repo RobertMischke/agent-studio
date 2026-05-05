@@ -23,6 +23,7 @@ public static class EndpointMapping
         jobs.MapJobClaudeEndpoints();
 
         app.MapRunnerEndpoints();
+        app.MapWorkspaceEndpoints();
         app.MapProjectSettingsEndpoints();
         app.MapProjectDocsEndpoints();
         app.MapReviewDecisionsEndpoints();

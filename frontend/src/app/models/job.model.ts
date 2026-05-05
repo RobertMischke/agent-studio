@@ -466,6 +466,52 @@ export interface TokenSummaryByProject {
 }
 
 /**
+ * Workspace token-usage timeline. Mirrors backend `TokenTimeline`.
+ * Powers the workspace token view at `#/workspace/tokens`. Each cell is
+ * a (project, time-bucket) datum that the chart stacks on the y axis.
+ */
+export interface TokenTimeline {
+  windowStart: string;
+  windowEnd: string;
+  windowHours: number;
+  bucketMinutes: number;
+  bucketCount: number;
+  cells: TokenTimelineCell[];
+  projects: TokenTimelineProject[];
+  fetchedAt: string;
+  disclaimer: string;
+}
+
+export interface TokenTimelineCell {
+  project: string;
+  bucketStart: string;
+  bucketEnd: string;
+  calls: number;
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  total: number;
+  dollars: number | null;
+  allModelsPriced: boolean;
+}
+
+export interface TokenTimelineProject {
+  project: string;
+  calls: number;
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  total: number;
+  dollars: number | null;
+  allModelsPriced: boolean;
+  peakBucketStart: string | null;
+  peakBucketTotal: number;
+  lastActivity: string | null;
+}
+
+/**
  * Long-lived orchestrator session record. The orchestrator boots one of
  * these per project at app start; subsequent decisions resume the same
  * Claude session via `-r <sessionId>`, so the orchestrator carries

@@ -21,10 +21,11 @@ import { DevToolsService } from './services/dev-tools.service';
 import { JobCompletionSoundService } from './services/job-completion-sound.service';
 import { UpdateStableConsoleComponent } from './components/dev-tools/update-stable-console.component';
 import { E2ECleanupDialogComponent } from './components/dev-tools/e2e-cleanup-dialog.component';
+import { WorkspaceTokenTimelineComponent } from './components/workspace-token-timeline';
 
 @Component({
   selector: 'app-root',
-  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent],
+  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceTokenTimelineComponent],
   // Keep styles global to this subtree — the App shell still owns the
   // .header*, .filter-chip*, .overlay*, .create-dialog*, .error-dialog*
   // class rules used by the extracted dialogs and project-tabs.
@@ -230,6 +231,15 @@ import { E2ECleanupDialogComponent } from './components/dev-tools/e2e-cleanup-di
             <app-project-detail
               [projectName]="proj"
               (openFeed)="onOpenFeedFromDetail($event)" />
+          </div>
+        </div>
+      }
+
+      @if (workspaceTokensOpen()) {
+        <div class="overlay" data-testid="workspace-tokens-overlay" (click)="closeWorkspaceTokens()">
+          <div class="overlay__panel overlay__panel--wtt" (click)="$event.stopPropagation()">
+            <button class="overlay__close" (click)="closeWorkspaceTokens()" title="Close">×</button>
+            <app-workspace-token-timeline />
           </div>
         </div>
       }
@@ -646,6 +656,9 @@ import { E2ECleanupDialogComponent } from './components/dev-tools/e2e-cleanup-di
       width: min(960px, 94vw);
       max-height: 90vh;
       overflow-y: auto;
+    }
+    .overlay__panel--wtt {
+      width: min(1080px, 96vw);
     }
     .overlay__close {
       position: absolute;
@@ -1255,6 +1268,12 @@ export class App implements OnInit {
   readonly orchFeedProject = signal<string | null>(null);
   /** When non-null, names the project whose detail panel is open. */
   readonly projectDetailName = signal<string | null>(null);
+  /** Workspace token timeline overlay. Triggered from the usage hover panel
+   *  and from the deep-link `#/workspace/tokens` so it can be opened from
+   *  another tab or a bookmark. */
+  readonly workspaceTokensOpen = signal<boolean>(false);
+  private readonly workspaceTokensHash = '#/workspace/tokens';
+  private hashListener: (() => void) | null = null;
   readonly watchPaths = signal<WatchPathEntry[]>([]);
   readonly activeProjects = signal<Set<string>>(new Set(JSON.parse(localStorage.getItem('activeProjects') ?? '[]')));
   readonly sideSheetWidth = signal<number>(parseInt(localStorage.getItem('sideSheetWidth') ?? '280'));
@@ -1470,6 +1489,23 @@ export class App implements OnInit {
     this.devTools.loadFlags();
     this.clientService.refresh();
     this.restoreDetailFromUrl();
+
+    // Deep-link: open the workspace token timeline when the URL already
+    // points at it, and keep the overlay in sync as the hash changes.
+    const applyHash = () => {
+      const open = window.location.hash === this.workspaceTokensHash;
+      if (open !== this.workspaceTokensOpen()) this.workspaceTokensOpen.set(open);
+    };
+    applyHash();
+    this.hashListener = applyHash;
+    window.addEventListener('hashchange', this.hashListener);
+  }
+
+  ngOnDestroy() {
+    if (this.hashListener) {
+      window.removeEventListener('hashchange', this.hashListener);
+      this.hashListener = null;
+    }
   }
 
   onE2EDidDelete(): void {
@@ -1678,6 +1714,20 @@ export class App implements OnInit {
 
   closeProjectDetail(): void {
     this.projectDetailName.set(null);
+  }
+
+  openWorkspaceTokens(): void {
+    this.workspaceTokensOpen.set(true);
+    if (window.location.hash !== this.workspaceTokensHash) {
+      try { history.replaceState(null, '', window.location.pathname + window.location.search + this.workspaceTokensHash); } catch { /* ignore */ }
+    }
+  }
+
+  closeWorkspaceTokens(): void {
+    this.workspaceTokensOpen.set(false);
+    if (window.location.hash === this.workspaceTokensHash) {
+      try { history.replaceState(null, '', window.location.pathname + window.location.search); } catch { /* ignore */ }
+    }
   }
 
   /**

@@ -73,6 +73,12 @@ interface QuotaRow {
              (mouseleave)="onPopLeave()">
           <header class="uhp__head">
             <h3 class="uhp__title">CLI usage &amp; tokens</h3>
+            <a class="uhp__timeline-link"
+               data-testid="usage-hover-panel-open-timeline"
+               href="#/workspace/tokens"
+               title="Open workspace token timeline">
+              📈 Timeline
+            </a>
             <button type="button"
                     class="uhp__refresh"
                     data-testid="usage-hover-panel-refresh-all"
@@ -325,8 +331,24 @@ interface QuotaRow {
       text-transform: uppercase;
       color: #f8fafc;
     }
-    .uhp__refresh {
+    .uhp__timeline-link {
       margin-left: auto;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.16);
+      color: #cdd6f4;
+      border-radius: 8px;
+      padding: 4px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .uhp__timeline-link:hover {
+      background: rgba(255,255,255,0.10);
+      border-color: rgba(255,255,255,0.26);
+      color: #f8fafc;
+    }
+    .uhp__refresh {
       background: rgba(124,58,237,0.30);
       border: 1px solid rgba(196,181,253,0.45);
       color: #f8fafc;
