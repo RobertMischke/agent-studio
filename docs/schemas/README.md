@@ -34,4 +34,6 @@ More schemas land here as concepts get formalised (audit findings, performance p
 
 ## Validation
 
-The backend's in-memory store (planned in `json-schemas-and-in-memory-layer` task) loads all schemas at boot, validates every read and every write, and refuses to serve invalid records. Tests under `backend.Tests/SchemaValidationTests.cs` lock the round-trip of canonical examples.
+The backend reads these documents through the file-backed in-memory store at [`backend/Services/State/InMemoryStore.cs`](../../backend/Services/State/InMemoryStore.cs). It validates every append (strict, rejects bad records), is lenient on read (skips a single bad legacy line so the projection never breaks), and exposes typed access by id, filtered queries, append-cursor reads, and optimistic concurrency. The full design rationale, including what intentionally stays out of scope (no database engine, no aggregate documents, no codegen step), lives in [ADR-0023](../architecture-decisions.md#adr-0023---json-schema-first-communication-formats-and-a-file-backed-in-memory-data-layer-2026-05-05).
+
+Round-trips between the schemas and the C# records are locked by [`backend.Tests/SchemaRoundTripTests.cs`](../../backend.Tests/SchemaRoundTripTests.cs); the store contract itself is locked by [`backend.Tests/InMemoryStoreTests.cs`](../../backend.Tests/InMemoryStoreTests.cs).
