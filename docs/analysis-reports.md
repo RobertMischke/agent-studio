@@ -178,3 +178,23 @@ The Task Access Layer (ADR-0024) is in phase 1 (contract only) at the time of wr
 - Backend store: `OrchestratorApi.Services.Analysis.AnalysisReportStore` (extends `InMemoryStore<AnalysisReportRecord>`).
 - Disk paths: `OrchestratorApi.Services.Analysis.AnalysisReportPaths`.
 - Tests: `backend.Tests/AnalysisReportStoreTests.cs`, `backend.Tests/SchemaRoundTripTests.cs`.
+
+## 10. Named producers
+
+Named producers wrap one topic with its own scope-selection, prompt, and parse logic. They share the storage contract above; what they own is the inspection logic.
+
+### 10.1 Roadmap Alignment Review (`topic = "roadmap-alignment"`)
+
+Answers the recurring user question "are we on track?". Compares the active queue (`1-preparation`, `2-ready`, `3-progress`, `4-review`) against `README.md`, `ROADMAP.md`, `AGENTS.md`, ADR titles, design principles, mockup folders, and recent analysis reports.
+
+- Service: `OrchestratorApi.Services.Analysis.RoadmapAlignmentReviewService` - pure scope selection, prompt rendering, and JSON parse fallback. No clock or id concerns.
+- Prompt template: [`prompts/runtime/roadmap-alignment-review.md`](../prompts/runtime/roadmap-alignment-review.md). Editable Markdown so wording does not require a recompile.
+- Endpoints (under `/api/analysis/{project}/actions/roadmap-alignment`):
+  - `GET .../prompt` returns the assembled scope summary plus the rendered prompt. Use this from a CLI agent session or the future inline runner.
+  - `POST ...` runs the action. Without `agentResponse` it produces an Unstructured "evidence + prompt" report so the user has a durable record that the inspection was requested. With `agentResponse` it parses the agent's reply (Markdown body plus an optional fenced JSON sidecar) and emits the typed verdict.
+- Constraints enforced by the service:
+  - Follow-up suggestions land in `1-preparation` only. The agent cannot bypass the user by emitting `targetState = "2-ready"`; the service silently coerces.
+  - The action is analysis only. It does not move jobs between lanes, edit `job.json`, or modify source files.
+  - Stray lane folders (no `job.json` or malformed `job.json`) are surfaced verbatim so the agent can flag the queue as too dirty to score.
+- Tests: `backend.Tests/RoadmapAlignmentReviewServiceTests.cs` covers scope selection (lane filtering, stray detection, doc list), prompt construction (placeholders, hard-constraint wording), JSON parse fallback (Structured / Unstructured / MalformedJson), and report assembly (validation, references, tags).
+- UI: the project Analysis Reports surface already exposes a "Roadmap alignment" trigger button (slug `roadmapAlignment`); see [`frontend/src/app/components/project-analysis-reports-section.ts`](../frontend/src/app/components/project-analysis-reports-section.ts). UI wiring to the dedicated `actions/roadmap-alignment` endpoint is a follow-up; the existing placeholder route still works for unstructured triggers.
