@@ -80,6 +80,17 @@ public class ProjectRunner
     private int _consecutiveCaptureFailCount;
     internal const int CaptureFailHaltThreshold = 3;
 
+    // Continuous decision review: while a job sits in 3-progress, we scan
+    // its live output buffer every tick for an unresolved interruptive
+    // sentinel ([[TASK_NEEDS_INPUT]] / [[TASK_BLOCKED]]). The latch is
+    // cleared when the active job changes, when the scan returns null
+    // (resolved or no longer present), or on backend restart. Surfaced
+    // via GET /api/runner/{project}/pending-decisions so the project
+    // view can render a prominent banner. See ADR-0027 and
+    // docs/research/orchestrator-decision-protocol-2026-05.md.
+    private PendingDecisionEntry? _activePendingDecision;
+    private readonly object _pendingDecisionLock = new();
+
     public string ProjectName { get; }
     public WatchPathEntry Entry { get; }
 
@@ -237,6 +248,12 @@ public class ProjectRunner
         // disabled, an active CLI on this project still needs to be watched
         // for hangs. Cheap (one timestamp arithmetic per active job).
         TickWatchdog();
+
+        // Continuous decision review (ADR-0027): scan the active job's live
+        // output buffer for an unresolved [[TASK_NEEDS_INPUT]] / [[TASK_BLOCKED]]
+        // sentinel so the project banner can stand out the moment the agent
+        // emits one, not only after the run ends.
+        TickPendingDecision();
 
         // Defensive reconciliation: if the in-memory active-job latch is
         // pointing at a job whose folder is no longer in 3-progress, release
@@ -1710,4 +1727,106 @@ public class ProjectRunner
             return null;
         }
     }
+
+    /// <summary>
+    /// Per-tick continuous decision review. Scans the active job's live
+    /// CLI output buffer for the latest unresolved interruptive sentinel
+    /// (<c>[[TASK_NEEDS_INPUT]]</c>, <c>[[TASK_BLOCKED]]</c>) and updates
+    /// <see cref="_activePendingDecision"/>. Cheap: one regex pass over
+    /// the buffer's tail. Same-state ticks are silent. See ADR-0027.
+    /// </summary>
+    private void TickPendingDecision()
+    {
+        var jobId = _activeJobId;
+        var cliType = _activeCliType;
+        if (jobId == null || cliType == null)
+        {
+            ClearPendingDecisionIfPresent();
+            return;
+        }
+
+        ICliExecutionService cli;
+        try { cli = _router.Get(cliType); }
+        catch
+        {
+            ClearPendingDecisionIfPresent();
+            return;
+        }
+
+        var jobKey = JobIdentity.CreateKey(Entry.Path, jobId);
+        List<CliOutputLine> output;
+        try { output = cli.GetOutput(jobKey); }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Pending-decision scan: GetOutput failed for {JobId}", jobId);
+            return;
+        }
+
+        var hit = PendingDecisionScanner.Scan(output);
+        lock (_pendingDecisionLock)
+        {
+            if (hit == null)
+            {
+                if (_activePendingDecision != null)
+                {
+                    _logger.LogInformation(
+                        "[taskboard] pending decision cleared for {JobId} on {Project}",
+                        jobId, ProjectName);
+                }
+                _activePendingDecision = null;
+                return;
+            }
+
+            // Same job, same line -> already known, nothing to log.
+            if (_activePendingDecision != null
+                && _activePendingDecision.JobId == jobId
+                && _activePendingDecision.Decision.LineIndex == hit.LineIndex
+                && _activePendingDecision.Decision.Kind == hit.Kind)
+            {
+                return;
+            }
+
+            string? title = null;
+            try { title = _scanner.FindJob(jobId, Entry.Path)?.Title; } catch { /* best-effort */ }
+            _activePendingDecision = new PendingDecisionEntry(jobId, title ?? jobId, hit);
+            _logger.LogInformation(
+                "[taskboard] pending decision detected for {JobId} on {Project}: kind={Kind} reason={Reason}",
+                jobId, ProjectName, hit.Kind, hit.Reason ?? "<none>");
+        }
+    }
+
+    private void ClearPendingDecisionIfPresent()
+    {
+        lock (_pendingDecisionLock)
+        {
+            if (_activePendingDecision == null) return;
+            _activePendingDecision = null;
+        }
+    }
+
+    /// <summary>
+    /// Returns the active unresolved decision sentinel(s) for this project.
+    /// At most one entry today (only one job runs in 3-progress per project,
+    /// per ADR-0001), but the surface is shaped as a list so a future
+    /// orchestrator advisory can join the same banner without an API break.
+    /// </summary>
+    public IReadOnlyList<PendingDecisionEntry> GetPendingDecisions()
+    {
+        lock (_pendingDecisionLock)
+        {
+            return _activePendingDecision == null
+                ? Array.Empty<PendingDecisionEntry>()
+                : new[] { _activePendingDecision };
+        }
+    }
 }
+
+/// <summary>
+/// One pending decision currently surfaced on a project. The job-level
+/// metadata (id, title) is captured at detection time so the read API can
+/// shape a banner without a follow-up scanner call.
+/// </summary>
+public sealed record PendingDecisionEntry(
+    string JobId,
+    string Title,
+    PendingDecision Decision);

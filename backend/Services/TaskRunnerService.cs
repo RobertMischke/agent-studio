@@ -249,6 +249,18 @@ public class TaskRunnerService : BackgroundService
         return true;
     }
 
+    /// <summary>
+    /// Continuous-decision read surface (ADR-0027): returns the live
+    /// unresolved interruptive sentinel(s) the named project's running job
+    /// has emitted, or null when the project is not configured. Empty list
+    /// means "no decision is currently pending".
+    /// </summary>
+    public IReadOnlyList<PendingDecisionEntry>? GetPendingDecisions(string projectName)
+    {
+        if (!_runners.TryGetValue(projectName, out var runner)) return null;
+        return runner.GetPendingDecisions();
+    }
+
     public async Task<ContinueJobResponse> StartJobAsync(string jobId, string? watchPath = null, string? modelOverride = null, string? cliTypeOverride = null, CancellationToken ct = default)
     {
         var info = _scanner.FindJob(jobId, watchPath);

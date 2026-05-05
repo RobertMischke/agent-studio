@@ -41,6 +41,35 @@ public static class RunnerEndpoints
             return success ? Results.Ok() : Results.BadRequest("Invalid project or mode");
         });
 
+        // Live, in-progress decision surface (ADR-0027): unresolved
+        // [[TASK_NEEDS_INPUT]] / [[TASK_BLOCKED]] sentinels the named
+        // project's running job has emitted. Distinct from
+        // /api/projects/{name}/review-decisions-pending, which scans the
+        // 4-auto-review lane post-run; this surface is the *during-run*
+        // banner the project view uses to make decision moments stand out.
+        runnerGroup.MapGet("/{projectName}/pending-decisions",
+            (string projectName, TaskRunnerService runner) =>
+            {
+                var entries = runner.GetPendingDecisions(projectName);
+                if (entries == null) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+
+                var items = entries
+                    .Select(e => new RunnerPendingDecisionDto(
+                        JobId: e.JobId,
+                        Title: e.Title,
+                        Kind: e.Decision.Kind switch
+                        {
+                            PendingDecisionKind.NeedsInput => "needs-input",
+                            PendingDecisionKind.Blocked    => "blocked",
+                            _                              => "unknown"
+                        },
+                        Reason: e.Decision.Reason,
+                        DetectedAt: e.Decision.DetectedAt))
+                    .ToList();
+
+                return Results.Ok(new RunnerPendingDecisionsResponse(projectName, items));
+            });
+
         runnerGroup.MapPost("/{projectName}/start", (string projectName, TaskRunnerService runner) =>
         {
             var success = runner.StartRunner(projectName);
@@ -252,3 +281,24 @@ public static class RunnerEndpoints
         }
     }
 }
+
+/// <summary>
+/// One unresolved interruptive decision sentinel the project's running
+/// job has emitted. Shape of an entry under
+/// <c>GET /api/runner/{project}/pending-decisions</c>.
+/// </summary>
+public sealed record RunnerPendingDecisionDto(
+    string JobId,
+    string Title,
+    string Kind,
+    string? Reason,
+    DateTime DetectedAt);
+
+/// <summary>
+/// Response body for the runner's continuous-decision surface
+/// (<c>GET /api/runner/{project}/pending-decisions</c>). <c>Items</c> is
+/// empty when nothing is pending.
+/// </summary>
+public sealed record RunnerPendingDecisionsResponse(
+    string Project,
+    IReadOnlyList<RunnerPendingDecisionDto> Items);

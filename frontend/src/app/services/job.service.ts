@@ -451,6 +451,19 @@ export class JobService {
     );
   }
 
+  /**
+   * ADR-0027: read the *live, in-progress* decision sentinel(s) the named
+   * project's running job has emitted. Distinct from
+   * getReviewDecisionsPending (post-run, scoped to 4-auto-review): this
+   * surface fires while the job is still in 3-progress, the moment the
+   * agent prints [[TASK_NEEDS_INPUT]] / [[TASK_BLOCKED]] to stdout.
+   */
+  getRunnerPendingDecisions(projectName: string) {
+    return this.http.get<{ project: string; items: { jobId: string; title: string; kind: string; reason: string | null; detectedAt: string }[] }>(
+      `${this.baseUrl}/runner/${encodeURIComponent(projectName)}/pending-decisions`
+    );
+  }
+
   /** All per-project settings (auto-commit, runner mode, orchestrator model). */
   getAllProjectSettings() {
     return this.http.get<{ [project: string]: { autoCommit: boolean; runnerMode: string | null; orchestratorModel: string | null } }>(

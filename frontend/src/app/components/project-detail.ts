@@ -78,6 +78,41 @@ interface ProjectSettingsRow {
         </section>
       }
 
+      @if (livePendingDecisions().length > 0) {
+        @for (p of livePendingDecisions(); track p.jobId) {
+          <section class="proj-detail__live-banner"
+                   [attr.data-testid]="'project-detail-live-decision-banner-' + p.jobId"
+                   [class.proj-detail__live-banner--blocked]="p.kind === 'blocked'">
+            <header>
+              <span class="proj-detail__live-banner__icon" aria-hidden="true">{{ p.kind === 'blocked' ? '⛔' : '🛎️' }}</span>
+              <strong>{{ p.kind === 'blocked' ? 'Agent blocked' : 'Agent is asking for input' }}</strong>
+              <span class="proj-detail__live-banner__chip">live · {{ p.jobId }}</span>
+            </header>
+            <p class="proj-detail__live-banner__title">{{ p.title }}</p>
+            <p class="proj-detail__live-banner__reason">{{ p.reason || '(no reason given by the agent)' }}</p>
+            <div class="proj-detail__live-banner__reply">
+              <textarea
+                [attr.data-testid]="'project-detail-live-decision-reply-' + p.jobId"
+                [(ngModel)]="liveReplyDrafts[p.jobId]"
+                rows="3"
+                placeholder="Reply to the agent. This goes through the existing continue endpoint (mode: steer) and resolves the banner once received."></textarea>
+              <div class="proj-detail__live-banner__actions">
+                @if (liveReplyErrors[p.jobId]) {
+                  <span class="proj-detail__live-banner__error">{{ liveReplyErrors[p.jobId] }}</span>
+                }
+                <button type="button"
+                        class="proj-detail__live-banner__send"
+                        [attr.data-testid]="'project-detail-live-decision-send-' + p.jobId"
+                        [disabled]="liveReplySending[p.jobId] || !(liveReplyDrafts[p.jobId] || '').trim()"
+                        (click)="sendLiveDecisionReply(p.jobId)">
+                  {{ liveReplySending[p.jobId] ? 'Sending…' : 'Reply' }}
+                </button>
+              </div>
+            </div>
+          </section>
+        }
+      }
+
       @if (paths(); as p) {
         <dl class="proj-detail__paths">
           <div><dt>Watch path</dt><dd>{{ p.path }}</dd></div>
@@ -270,6 +305,115 @@ interface ProjectSettingsRow {
     }
     .proj-detail__banner-reason { color: rgba(255,255,255,0.70); margin-left: 6px; }
 
+    /*
+     * ADR-0027: live, in-progress decision banner. Distinct from the
+     * yellow post-run "review-decisions-pending" banner above on
+     * purpose: this one fires while the agent is still running and is
+     * actively asking. Red border + softer red fill so it pops next to
+     * the rest of the panel without competing with the yellow review
+     * surface. Different shape: a rounded card with a textarea-and-send
+     * affordance instead of a list of one-liners.
+     */
+    .proj-detail__live-banner {
+      margin: 0 0 16px;
+      padding: 14px 16px;
+      border: 1px solid rgba(248, 113, 113, 0.55);
+      border-left-width: 4px;
+      border-radius: 10px;
+      background: linear-gradient(180deg, rgba(248,113,113,0.18) 0%, rgba(248,113,113,0.08) 100%);
+      box-shadow: 0 6px 18px rgba(248,113,113,0.12);
+      color: #f8fafc;
+      font-size: 0.88rem;
+    }
+    .proj-detail__live-banner--blocked {
+      border-color: rgba(244, 114, 182, 0.55);
+      background: linear-gradient(180deg, rgba(244,114,182,0.18) 0%, rgba(244,114,182,0.08) 100%);
+      box-shadow: 0 6px 18px rgba(244,114,182,0.12);
+    }
+    .proj-detail__live-banner header {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      margin-bottom: 6px;
+    }
+    .proj-detail__live-banner header strong {
+      color: #fda4af;
+      font-size: 0.95rem;
+      letter-spacing: 0.01em;
+    }
+    .proj-detail__live-banner--blocked header strong { color: #f9a8d4; }
+    .proj-detail__live-banner__icon { font-size: 1.05rem; }
+    .proj-detail__live-banner__chip {
+      margin-left: auto;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: rgba(248,113,113,0.20);
+      color: #fda4af;
+      font-size: 0.72rem;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+    .proj-detail__live-banner--blocked .proj-detail__live-banner__chip {
+      background: rgba(244,114,182,0.20);
+      color: #f9a8d4;
+    }
+    .proj-detail__live-banner__title {
+      margin: 0 0 2px;
+      color: #f8fafc;
+      font-weight: 600;
+    }
+    .proj-detail__live-banner__reason {
+      margin: 0 0 10px;
+      color: rgba(248,250,252,0.85);
+      font-style: italic;
+    }
+    .proj-detail__live-banner__reply textarea {
+      width: 100%;
+      box-sizing: border-box;
+      background: rgba(0,0,0,0.30);
+      color: #f8fafc;
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 6px;
+      padding: 8px 10px;
+      font: inherit;
+      font-size: 0.84rem;
+      resize: vertical;
+      min-height: 64px;
+    }
+    .proj-detail__live-banner__reply textarea:focus {
+      outline: none;
+      border-color: rgba(248,113,113,0.65);
+      box-shadow: 0 0 0 2px rgba(248,113,113,0.20);
+    }
+    .proj-detail__live-banner__actions {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      justify-content: flex-end;
+      margin-top: 8px;
+    }
+    .proj-detail__live-banner__send {
+      background: rgba(248,113,113,0.25);
+      color: #fef2f2;
+      border: 1px solid rgba(248,113,113,0.50);
+      border-radius: 6px;
+      padding: 6px 14px;
+      font: inherit;
+      font-size: 0.85rem;
+      cursor: pointer;
+    }
+    .proj-detail__live-banner__send:hover:not(:disabled) {
+      background: rgba(248,113,113,0.40);
+    }
+    .proj-detail__live-banner__send:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    .proj-detail__live-banner__error {
+      color: #fda4af;
+      font-size: 0.78rem;
+    }
+
     .proj-detail__paths {
       display: grid;
       grid-template-columns: max-content 1fr;
@@ -435,6 +579,15 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   readonly orchSession = signal<OrchestratorSession | null>(null);
   readonly pendingDecisions = signal<ReadonlyArray<{ jobId: string; title: string; reason: string | null }>>([]);
 
+  // ADR-0027: live, in-progress decision sentinels emitted by the running
+  // job. Distinct from pendingDecisions (post-run, lane-scoped). Polled on
+  // the same 5 s interval refreshAll uses; cleared by the backend the
+  // moment the user replies (the [user] line resolves the sentinel).
+  readonly livePendingDecisions = signal<ReadonlyArray<{ jobId: string; title: string; kind: string; reason: string | null; detectedAt: string }>>([]);
+  readonly liveReplyDrafts: { [jobId: string]: string } = {};
+  readonly liveReplySending: { [jobId: string]: boolean } = {};
+  readonly liveReplyErrors: { [jobId: string]: string | null } = {};
+
   // Two-way bound drafts so the form is responsive even before the
   // server round-trip completes.
   autoCommitDraft = false;
@@ -565,6 +718,39 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     this.jobService.getReviewDecisionsPending(this.projectName()).subscribe({
       next: (resp) => this.pendingDecisions.set(resp.items ?? []),
       error: () => this.pendingDecisions.set([])
+    });
+    this.jobService.getRunnerPendingDecisions(this.projectName()).subscribe({
+      next: (resp) => this.livePendingDecisions.set(resp.items ?? []),
+      error: () => this.livePendingDecisions.set([])
+    });
+  }
+
+  /**
+   * Send a reply to a live decision sentinel through the existing
+   * /api/jobs/{jobId}/continue endpoint with mode 'steer'. The sentinel
+   * resolves on the backend's next tick (the [user] log line cancels it),
+   * which clears the banner without an explicit dismiss.
+   */
+  sendLiveDecisionReply(jobId: string): void {
+    const text = (this.liveReplyDrafts[jobId] ?? '').trim();
+    if (!text) return;
+    this.liveReplySending[jobId] = true;
+    this.liveReplyErrors[jobId] = null;
+    this.jobService.continueJob(jobId, text, undefined, undefined, undefined, 'steer').subscribe({
+      next: () => {
+        this.liveReplyDrafts[jobId] = '';
+        this.liveReplySending[jobId] = false;
+        // Optimistically clear the banner; the next refresh tick will
+        // re-confirm from the backend.
+        this.livePendingDecisions.set(
+          this.livePendingDecisions().filter(p => p.jobId !== jobId)
+        );
+        this.refreshAll(true);
+      },
+      error: (err) => {
+        this.liveReplySending[jobId] = false;
+        this.liveReplyErrors[jobId] = err?.error?.error || err?.message || 'Failed to send reply.';
+      }
     });
   }
 

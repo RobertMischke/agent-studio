@@ -149,7 +149,13 @@ public static class AgentOutcomeAnalyzer
     // Kept loose on whitespace and case so a model that emits the marker on
     // its own line, indented, or in mixed case still matches. The actual
     // keyword set is small and explicit.
-    private static readonly Regex SentinelRegex = new(
+    //
+    // Public so callers that need to scan a buffer for live decision sentinels
+    // (the continuous-decision scanner, post-run policy, supervisor parsing)
+    // share one grammar. ADR-0002 anchors the deterministic-orchestration
+    // philosophy on a single sentinel regex; this is the single source of truth
+    // referenced from AGENTS.md and docs/agent-task-contract.md.
+    public static readonly Regex SentinelRegex = new(
         @"\[\[TASK_(?<keyword>DONE|BLOCKED|NEEDS_INPUT|NOOP)(?::(?<reason>[^\]]*))?\]\]",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
