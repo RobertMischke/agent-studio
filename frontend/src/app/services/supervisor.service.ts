@@ -1,7 +1,7 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { SupervisorObservation, SupervisorRecentEvents } from '../models/supervisor.model';
+import { MetaCycleResponse, SupervisorObservation, SupervisorRecentEvents } from '../models/supervisor.model';
 
 /**
  * Read-only observation + four manual intervention endpoints. Polls happen
@@ -49,6 +49,12 @@ export class SupervisorService {
     return this.http.post<{ ok: boolean }>(
       `${this.baseUrl}/${encodeURIComponent(project)}/intervene/resume`,
       { reason }
+    );
+  }
+
+  metaCycle(project: string, max: number = 8): Observable<MetaCycleResponse> {
+    return this.http.get<MetaCycleResponse>(
+      `${this.baseUrl}/${encodeURIComponent(project)}/meta-cycle?max=${max}`
     );
   }
 }

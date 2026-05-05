@@ -1,0 +1,192 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-taskboard.local/schemas/meta-cycle-report.schema.json",
+  "title": "MetaCycleReport",
+  "description": "One report from the per-project orchestrator meta-cycle (Layer 2 1/2). Written when the runner pauses after N completed jobs and the inspection finishes. Append-only; one file per cycle under <workspace>/logs/meta/<project>/meta-cycle/<timestamp>.json. The full design is in docs/mockups/orchestrator-meta-cycle/.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "cycleId",
+    "project",
+    "startedAt",
+    "completedAt",
+    "cycleLengthN",
+    "jobsObserved",
+    "inspection",
+    "findings",
+    "verdict",
+    "action"
+  ],
+  "properties": {
+    "cycleId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "ULID or UUID v7 for the cycle. Lexically sortable so the system-review monitor can replay in order without parsing timestamps."
+    },
+    "project": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Project name as it appears in WatchPaths and runner status. Matches ProjectRunnerStatus.projectName."
+    },
+    "startedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp at which the cycle started, i.e. the moment the runner was paused for inspection."
+    },
+    "completedAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp at which the chosen action finished executing."
+    },
+    "cycleLengthN": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 50,
+      "description": "Cycle length in jobs. The runner was paused after this many lane transitions into 4-review since the last cycle's resume."
+    },
+    "jobsObserved": {
+      "type": "array",
+      "description": "Jobs that closed in the window. Order is the order they reached 4-review.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["jobId", "title"],
+        "properties": {
+          "jobId": { "type": "string", "minLength": 1 },
+          "title": { "type": "string" },
+          "newCommits": { "type": "integer", "minimum": 0 },
+          "hasArtefacts": { "type": "boolean" }
+        }
+      }
+    },
+    "inspection": {
+      "type": "object",
+      "description": "Per-check results. Each default check writes its own block; extension hooks land under extras.",
+      "additionalProperties": false,
+      "properties": {
+        "commitLogDiff": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["totalCommits"],
+          "properties": {
+            "totalCommits": { "type": "integer", "minimum": 0 },
+            "fromSha": { "type": ["string", "null"] },
+            "toSha": { "type": ["string", "null"] }
+          }
+        },
+        "lastCrashMarker": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["present"],
+          "properties": {
+            "present": { "type": "boolean" },
+            "at": { "type": ["string", "null"], "format": "date-time" },
+            "details": { "type": ["string", "null"] }
+          }
+        },
+        "supervisorAdvisories": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["countAtOrAboveThreshold"],
+          "properties": {
+            "countAtOrAboveThreshold": { "type": "integer", "minimum": 0 },
+            "topics": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          }
+        },
+        "stuckInProgress": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["count"],
+          "properties": {
+            "count": { "type": "integer", "minimum": 0 },
+            "jobIds": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "expectedArtefacts": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["missingCount"],
+          "properties": {
+            "missingCount": { "type": "integer", "minimum": 0 },
+            "jobIds": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "runnerModeDrift": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["drifted"],
+          "properties": {
+            "drifted": { "type": "boolean" },
+            "expected": { "type": ["string", "null"] },
+            "actual": { "type": ["string", "null"] }
+          }
+        },
+        "extras": {
+          "type": "object",
+          "additionalProperties": true,
+          "description": "Per-project extension hook results (extraGlobs, extraAdvisoryTopics)."
+        }
+      }
+    },
+    "findings": {
+      "type": "array",
+      "description": "Typed findings derived from the inspection. Each finding has a topic, severity, and a one-line message; evidence pointers are optional.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["topic", "severity", "message"],
+        "properties": {
+          "topic": { "type": "string", "minLength": 1, "description": "kebab-case label, e.g. last-crash-marker, commit-log-diff, expected-artefact-missing." },
+          "severity": { "type": "string", "enum": ["Info", "Warn", "High"] },
+          "message": { "type": "string", "minLength": 1, "maxLength": 400 },
+          "jobId": { "type": ["string", "null"] },
+          "evidence": {
+            "type": "array",
+            "description": "Optional pointers to artefacts that back the finding (paths under the workspace).",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "verdict": {
+      "type": "string",
+      "enum": ["healthy", "fix-triggering", "escalation-only", "aborted"],
+      "description": "Outcome category of the cycle. 'aborted' is reserved for cycles that did not complete (e.g. backend restart mid-inspection)."
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "reason"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["resume", "update-stable-then-resume", "queue-fix", "escalate-to-user", "no-op"],
+          "description": "The single action picked for this cycle. 'no-op' is reserved for aborted cycles."
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 400,
+          "description": "Typed reason. For queue-fix, names the template used. For escalate-to-user, names the escalation cause."
+        },
+        "followUpJobId": {
+          "type": ["string", "null"],
+          "description": "When kind is queue-fix or escalate-to-user, the id of the new 1-preparation job."
+        },
+        "followUpState": {
+          "type": ["string", "null"],
+          "enum": ["1-preparation", "2-ready", null],
+          "description": "Initial state of the queued follow-up. Defaults to 1-preparation; 2-ready is reserved for templated topics that do not need human review."
+        }
+      }
+    },
+    "configSnapshot": {
+      "type": "object",
+      "description": "The MetaCycle override block in effect for this cycle. Recorded so a report read in the future is interpretable without consulting the live config.",
+      "additionalProperties": true
+    }
+  }
+}

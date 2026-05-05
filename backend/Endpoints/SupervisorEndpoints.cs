@@ -73,6 +73,35 @@ public static class SupervisorEndpoints
             return Results.Ok(new { ok = true });
         });
 
+        group.MapGet("/{project}/meta-cycle", (
+            string project,
+            IConfiguration config,
+            int? max) =>
+        {
+            if (string.IsNullOrWhiteSpace(project)) return Results.BadRequest(new { error = "project required" });
+            var workspace = config["TaskRepository"];
+            var enabled = config.GetValue("Supervisor:MetaCycleEnabled", false);
+            var defaults = MetaCycleConfig.FromConfiguration(config);
+            if (string.IsNullOrWhiteSpace(workspace))
+            {
+                return Results.Ok(new
+                {
+                    enabled,
+                    config = defaults,
+                    reports = Array.Empty<MetaCycleReport>(),
+                });
+            }
+            var dir = SupervisorLogPaths.MetaCycleDir(workspace!, project);
+            var cap = Math.Clamp(max ?? 8, 1, 50);
+            var reports = ReadMetaCycleReports(dir, cap);
+            return Results.Ok(new
+            {
+                enabled,
+                config = defaults,
+                reports,
+            });
+        });
+
         group.MapGet("/{project}/recent-events", (
             string project,
             IConfiguration config,
@@ -89,6 +118,35 @@ public static class SupervisorEndpoints
     }
 
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+
+    private static readonly JsonSerializerOptions MetaCycleJsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
+    };
+
+    private static List<MetaCycleReport> ReadMetaCycleReports(string dir, int max)
+    {
+        var list = new List<MetaCycleReport>();
+        if (!Directory.Exists(dir)) return list;
+        IEnumerable<string> files;
+        try
+        {
+            files = Directory.EnumerateFiles(dir, "*.json").OrderByDescending(p => p, StringComparer.Ordinal).Take(max);
+        }
+        catch { return list; }
+        foreach (var path in files)
+        {
+            try
+            {
+                var raw = File.ReadAllText(path);
+                if (string.IsNullOrWhiteSpace(raw)) continue;
+                var report = JsonSerializer.Deserialize<MetaCycleReport>(raw, MetaCycleJsonOptions);
+                if (report != null) list.Add(report);
+            }
+            catch { /* skip malformed */ }
+        }
+        return list;
+    }
 
     private static List<T> ReadJsonl<T>(string path, int max)
     {

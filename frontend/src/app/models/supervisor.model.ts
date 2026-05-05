@@ -61,3 +61,67 @@ export interface SupervisorRecentEvents {
   advisories: SupervisorAdvisory[];
   interventions: SupervisorIntervention[];
 }
+
+// Meta-cycle types. Mirrors backend/Services/Supervisor/MetaCycleContract.cs
+// and docs/schemas/meta-cycle-report.schema.json. Only the slice the panel
+// renders is duplicated here.
+
+export type MetaCycleVerdict = 'healthy' | 'fixTriggering' | 'escalationOnly' | 'aborted';
+export type MetaCycleActionKind =
+  | 'resume'
+  | 'updateStableThenResume'
+  | 'queueFix'
+  | 'escalateToUser'
+  | 'noOp';
+
+export interface MetaCycleAction {
+  kind: MetaCycleActionKind;
+  reason: string;
+  followUpJobId?: string | null;
+  followUpState?: string | null;
+}
+
+export interface MetaCycleJobObservation {
+  jobId: string;
+  title: string;
+  newCommits: number;
+  hasArtefacts: boolean;
+}
+
+export interface MetaCycleFinding {
+  topic: string;
+  severity: SupervisorSeverity;
+  message: string;
+  jobId?: string | null;
+  evidence?: string[];
+}
+
+export interface MetaCycleConfigDto {
+  enabled: boolean;
+  cycleLengthN: number;
+  stuckInProgressThreshold: string; // serialised TimeSpan, e.g. "00:30:00"
+  advisorySeverityThreshold: SupervisorSeverity;
+  runUpdateStableOnHealthy: boolean;
+  maxFixesPerHour: number;
+  extraGlobs: string[];
+  extraAdvisoryTopics: string[];
+  extraGlobAction: string;
+}
+
+export interface MetaCycleReport {
+  cycleId: string;
+  project: string;
+  startedAt: string;
+  completedAt: string;
+  cycleLengthN: number;
+  jobsObserved: MetaCycleJobObservation[];
+  findings: MetaCycleFinding[];
+  verdict: MetaCycleVerdict;
+  action: MetaCycleAction;
+}
+
+export interface MetaCycleResponse {
+  enabled: boolean;
+  config: MetaCycleConfigDto;
+  reports: MetaCycleReport[];
+}

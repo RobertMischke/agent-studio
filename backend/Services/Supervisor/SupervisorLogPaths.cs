@@ -38,6 +38,25 @@ public static class SupervisorLogPaths
         Path.Combine(ProjectLogDir(workspaceRoot, projectSlug), "heartbeat.json");
 
     /// <summary>
+    /// Per-project meta-cycle directory:
+    /// <c>{workspaceRoot}/logs/meta/{projectSlug}/meta-cycle/</c>. Each cycle
+    /// drops one report file under this folder.
+    /// </summary>
+    public static string MetaCycleDir(string workspaceRoot, string projectSlug) =>
+        Path.Combine(ProjectLogDir(workspaceRoot, projectSlug), "meta-cycle");
+
+    public static string MetaCycleReportFile(string workspaceRoot, string projectSlug, string cycleId) =>
+        Path.Combine(MetaCycleDir(workspaceRoot, projectSlug), $"{cycleId}.json");
+
+    /// <summary>
+    /// Tail log of meta-cycle decisions for the project (one line per cycle,
+    /// newest at end). Sits next to the per-cycle JSON files so an operator
+    /// can <c>tail -f</c> the timeline without parsing reports.
+    /// </summary>
+    public static string MetaCycleTailLog(string workspaceRoot, string projectSlug) =>
+        Path.Combine(MetaCycleDir(workspaceRoot, projectSlug), "meta-cycle.log");
+
+    /// <summary>
     /// Returns the system-review output directory:
     /// <c>{workspaceRoot}/logs/system-review/</c>.
     /// </summary>

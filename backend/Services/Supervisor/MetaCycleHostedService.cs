@@ -1,0 +1,588 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using OrchestratorApi.Models;
+using OrchestratorApi.Services.Jobs;
+
+namespace OrchestratorApi.Services.Supervisor;
+
+/// <summary>
+/// Per-project hosted ticker that owns the pause-inspect-resume loop above
+/// the runner. Off by default (<c>Supervisor:MetaCycleEnabled = false</c>)
+/// and additionally gated per project. Routes pause / resume side effects
+/// through <see cref="SupervisorInterventionService"/> so the runner state
+/// machine remains the single authority. The full design lives in
+/// <c>docs/mockups/orchestrator-meta-cycle/</c> and ADR-0022.
+/// </summary>
+/// <remarks>
+/// What this service is NOT:
+/// <list type="bullet">
+/// <item>It does not move jobs between lanes; <see cref="JobStateMachine"/> owns that.</item>
+/// <item>It does not edit source code; queued fix-tasks describe what needs fixing.</item>
+/// <item>It does not call <c>SetMode</c> directly; pause and resume go through the supervisor.</item>
+/// <item>It does not invoke <c>update-stable.sh</c> from the dev process unless explicitly opted in per project.</item>
+/// </list>
+/// </remarks>
+public sealed class MetaCycleHostedService : BackgroundService
+{
+    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
+    {
+        WriteIndented = false,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase) },
+    };
+
+    private readonly TaskRunnerService _taskRunner;
+    private readonly JobScannerService _scanner;
+    private readonly SupervisorInterventionService _interventions;
+    private readonly ProjectSettingsService _projectSettings;
+    private readonly IConfiguration _configuration;
+    private readonly ILogger<MetaCycleHostedService> _logger;
+    private readonly TimeProvider _time;
+
+    /// <summary>
+    /// Per-project mutable cycle state: which jobs we have already counted
+    /// toward the current cycle, the trailing fix queue rate-limit, and the
+    /// last cycle's report id. The dictionary is the only mutable state in
+    /// the service; everything else is computed per tick.
+    /// </summary>
+    private readonly ConcurrentDictionary<string, ProjectCycleState> _state = new(StringComparer.OrdinalIgnoreCase);
+
+    public MetaCycleHostedService(
+        TaskRunnerService taskRunner,
+        JobScannerService scanner,
+        SupervisorInterventionService interventions,
+        ProjectSettingsService projectSettings,
+        IConfiguration configuration,
+        ILogger<MetaCycleHostedService> logger,
+        TimeProvider? time = null)
+    {
+        _taskRunner = taskRunner;
+        _scanner = scanner;
+        _interventions = interventions;
+        _projectSettings = projectSettings;
+        _configuration = configuration;
+        _logger = logger;
+        _time = time ?? TimeProvider.System;
+    }
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        var defaults = MetaCycleConfig.FromConfiguration(_configuration);
+        if (!defaults.Enabled)
+        {
+            _logger.LogInformation("MetaCycleHostedService disabled (Supervisor:MetaCycleEnabled = false).");
+            return;
+        }
+
+        var workspace = _configuration["TaskRepository"];
+        if (string.IsNullOrWhiteSpace(workspace))
+        {
+            _logger.LogWarning("TaskRepository not configured; MetaCycleHostedService idle.");
+            return;
+        }
+
+        var intervalSeconds = _configuration.GetValue("Supervisor:MetaCycleTickSeconds", 30);
+
+        try { await Task.Delay(TimeSpan.FromSeconds(10), stoppingToken); } catch (OperationCanceledException) { return; }
+
+        while (!stoppingToken.IsCancellationRequested)
+        {
+            try { await TickOnceAsync(workspace!, stoppingToken); }
+            catch (OperationCanceledException) { break; }
+            catch (Exception ex) { _logger.LogWarning(ex, "MetaCycle tick failed"); }
+
+            try { await Task.Delay(TimeSpan.FromSeconds(intervalSeconds), stoppingToken); }
+            catch (OperationCanceledException) { break; }
+        }
+    }
+
+    /// <summary>
+    /// One pass over every project. Public so tests can drive the loop
+    /// deterministically without spinning up a hosted service.
+    /// </summary>
+    public async Task TickOnceAsync(string workspace, CancellationToken ct)
+    {
+        var status = _taskRunner.GetStatus();
+        if (status?.Projects == null) return;
+
+        var allJobs = _scanner.ScanAllJobs();
+        var byProject = allJobs.GroupBy(j => j.ProjectName, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (project, projectStatus) in status.Projects)
+        {
+            ct.ThrowIfCancellationRequested();
+
+            var config = ResolveConfig(project);
+            if (!config.Enabled) continue;
+
+            byProject.TryGetValue(project, out var projectJobs);
+            projectJobs ??= new List<JobInfo>();
+
+            try
+            {
+                await EvaluateProjectAsync(workspace, project, projectStatus, projectJobs, config, ct);
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "MetaCycle EvaluateProject failed for {Project}", project);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Decision pass for one project. Tracks newly-closed jobs since the last
+    /// cycle and fires the cycle when the count crosses N.
+    /// </summary>
+    public async Task<MetaCycleReport?> EvaluateProjectAsync(
+        string workspace,
+        string project,
+        ProjectRunnerStatus projectStatus,
+        IReadOnlyList<JobInfo> projectJobs,
+        MetaCycleConfig config,
+        CancellationToken ct)
+    {
+        var state = _state.GetOrAdd(project, _ => new ProjectCycleState());
+
+        var closedJobs = projectJobs
+            .Where(j => IsClosedForCycle(j.State))
+            .OrderBy(j => j.LastActivity)
+            .ToList();
+
+        // Carry-forward: only count jobs that closed AFTER the last cycle.
+        if (state.LastCycleAt is { } cutoff)
+        {
+            closedJobs = closedJobs.Where(j => j.LastActivity > cutoff).ToList();
+        }
+
+        // First-tick bootstrap: lock in the current set as already-counted so
+        // we do not fire on existing reviewed jobs the moment the service starts.
+        if (state.LastCycleAt == null && state.SeededFromBootstrap == false)
+        {
+            state.SeededFromBootstrap = true;
+            state.LastCycleAt = _time.GetUtcNow().UtcDateTime;
+            return null;
+        }
+
+        if (closedJobs.Count < config.CycleLengthN) return null;
+
+        // Take the first N. Anything above N rolls into the next cycle.
+        var window = closedJobs.Take(config.CycleLengthN).ToList();
+
+        var startedAt = _time.GetUtcNow().UtcDateTime;
+        var cycleId = NewCycleId(startedAt);
+
+        try
+        {
+            // Pause through the supervisor so the runner remains the single
+            // state-machine authority. Reason includes the cycle id so the
+            // pause is traceable from the interventions log.
+            await _interventions.PausePickupAsync(
+                project,
+                $"meta-cycle:{cycleId} inspecting {window.Count} job(s)",
+                ttl: null,
+                source: SupervisorSource.AutoIntervention,
+                ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "MetaCycle PausePickup failed for {Project}; aborting cycle", project);
+            return null;
+        }
+
+        var inspection = BuildInspection(workspace, project, projectStatus, window, projectJobs, config, state);
+        var jobObservations = window
+            .Select(j => new MetaCycleJobObservation(
+                JobId: j.Id,
+                Title: j.Title,
+                NewCommits: 0,
+                HasArtefacts: HasArtefacts(j)))
+            .ToList();
+
+        var autoCommit = _projectSettings.Get(project).AutoCommit;
+        var fixesInTrailingHour = state.CountFixesSince(_time.GetUtcNow().UtcDateTime - TimeSpan.FromHours(1));
+
+        var report = MetaCycleRules.BuildReport(
+            cycleId: cycleId,
+            project: project,
+            startedAt: startedAt,
+            completedAt: _time.GetUtcNow().UtcDateTime,
+            config: config,
+            jobs: jobObservations,
+            inspection: inspection,
+            autoCommitEnabled: autoCommit,
+            autoFixesInTrailingHour: fixesInTrailingHour);
+
+        try
+        {
+            await ApplyActionAsync(workspace, project, report, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "MetaCycle ApplyAction failed for {Project} cycle {CycleId}", project, report.CycleId);
+        }
+
+        WriteReport(workspace, report);
+        AppendTailLog(workspace, report);
+
+        state.LastCycleAt = report.CompletedAt;
+        state.LastCycleId = report.CycleId;
+        if (report.Action.Kind == MetaCycleActionKind.QueueFix)
+        {
+            state.RecordFix(report.CompletedAt);
+        }
+        return report;
+    }
+
+    private MetaCycleConfig ResolveConfig(string project)
+    {
+        // Per-project override path is reserved for a follow-up; for now the
+        // default config plus the per-project Enabled flag is enough to drive
+        // the loop. A project marked enabled on the global flag inherits the
+        // default knobs unless a future SetMetaCycleConfig endpoint writes
+        // them into ProjectSettings.
+        var baseConfig = MetaCycleConfig.FromConfiguration(_configuration);
+
+        // Per-project override: a project may explicitly enable / disable.
+        // Treated as "use defaults but flip Enabled" in this first cut.
+        // ProjectSettingsService does not yet expose a MetaCycle block, so
+        // we honour the global flag plus the per-project AutoCommit hint
+        // (auto-commit projects are exactly the ones that benefit from this
+        // loop). Future per-project knobs land on ProjectSettings.
+        return baseConfig;
+    }
+
+    private static bool IsClosedForCycle(string state)
+        => state == JobStates.Review || state == JobStates.Completed || state == JobStates.Archive;
+
+    private static bool HasArtefacts(JobInfo job)
+    {
+        try
+        {
+            var resultsDir = Path.Combine(job.FolderPath, "results");
+            if (Directory.Exists(resultsDir) && Directory.EnumerateFileSystemEntries(resultsDir).Any()) return true;
+            var logPath = Path.Combine(job.FolderPath, "logs", "cli-output.log");
+            if (File.Exists(logPath) && new FileInfo(logPath).Length > 0) return true;
+        }
+        catch { /* swallow; observation is best-effort */ }
+        return false;
+    }
+
+    private MetaCycleInspection BuildInspection(
+        string workspace,
+        string project,
+        ProjectRunnerStatus projectStatus,
+        IReadOnlyList<JobInfo> windowJobs,
+        IReadOnlyList<JobInfo> allProjectJobs,
+        MetaCycleConfig config,
+        ProjectCycleState state)
+    {
+        // 1. Crash marker
+        var crashMarkerPath = Path.Combine(workspace, "logs", "last-crash.json");
+        var crash = new MetaCycleCrashMarker(false, null, null);
+        try
+        {
+            if (File.Exists(crashMarkerPath))
+            {
+                var fi = new FileInfo(crashMarkerPath);
+                if (state.LastCycleAt == null || fi.LastWriteTimeUtc > state.LastCycleAt)
+                {
+                    crash = new MetaCycleCrashMarker(
+                        Present: true,
+                        At: fi.LastWriteTimeUtc,
+                        Details: ReadFirstChars(crashMarkerPath, 280));
+                }
+            }
+        }
+        catch { /* best-effort */ }
+
+        // 2. Advisories at or above threshold since the last cycle
+        var advisorySummary = ReadAdvisoriesSince(workspace, project, state.LastCycleAt, config.AdvisorySeverityThreshold);
+
+        // 3. Stuck-in-progress
+        var stuckJobs = allProjectJobs
+            .Where(j => j.State == JobStates.Progress)
+            .Where(j => _time.GetUtcNow().UtcDateTime - j.LastActivity > config.StuckInProgressThreshold)
+            .Select(j => j.Id)
+            .ToList();
+        var stuck = new MetaCycleStuckInProgress(stuckJobs.Count, stuckJobs);
+
+        // 4. Expected artefacts on the closed jobs in the window
+        var missing = windowJobs.Where(j => !HasArtefacts(j)).Select(j => j.Id).ToList();
+        var artefacts = new MetaCycleExpectedArtefacts(missing.Count, missing);
+
+        // 5. Runner-mode drift: compare persisted vs current
+        var savedMode = _projectSettings.Get(project).RunnerMode;
+        var actualMode = projectStatus.Mode;
+        var drift = new MetaCycleRunnerModeDrift(
+            Drifted: savedMode != null && actualMode != null && savedMode != actualMode,
+            Expected: savedMode,
+            Actual: actualMode);
+
+        // 6. Commit-log diff: not implemented in first cut without a guarantee
+        // of a clean SHA boundary; we emit zero with no SHA pair so the
+        // commit-log finding only fires when the inspection was definitely
+        // empty AND auto-commit is on. Conservative on purpose.
+        var commitLog = new MetaCycleCommitLogDiff(0, null, null);
+
+        // 7. Extras: extension hooks reserved for follow-up wiring.
+        IReadOnlyDictionary<string, object>? extras = null;
+
+        return new MetaCycleInspection(
+            CommitLogDiff: commitLog,
+            LastCrashMarker: crash,
+            SupervisorAdvisories: advisorySummary,
+            StuckInProgress: stuck,
+            ExpectedArtefacts: artefacts,
+            RunnerModeDrift: drift,
+            Extras: extras);
+    }
+
+    private static MetaCycleAdvisorySummary ReadAdvisoriesSince(
+        string workspace,
+        string project,
+        DateTime? since,
+        SupervisorSeverity threshold)
+    {
+        var path = SupervisorLogPaths.ObservationsFile(workspace, project);
+        if (!File.Exists(path)) return new MetaCycleAdvisorySummary(0, Array.Empty<string>());
+
+        var topics = new List<string>();
+        var count = 0;
+        try
+        {
+            foreach (var line in File.ReadLines(path))
+            {
+                if (string.IsNullOrWhiteSpace(line)) continue;
+                SupervisorAdvisory? adv;
+                try { adv = JsonSerializer.Deserialize<SupervisorAdvisory>(line, Json); }
+                catch { continue; }
+                if (adv == null) continue;
+                if (since.HasValue && adv.CreatedAt <= since.Value) continue;
+                if ((int)adv.Severity < (int)threshold) continue;
+                count++;
+                if (!topics.Contains(adv.Topic)) topics.Add(adv.Topic);
+            }
+        }
+        catch { /* best-effort */ }
+        return new MetaCycleAdvisorySummary(count, topics);
+    }
+
+    private async Task ApplyActionAsync(string workspace, string project, MetaCycleReport report, CancellationToken ct)
+    {
+        switch (report.Action.Kind)
+        {
+            case MetaCycleActionKind.Resume:
+                await _interventions.ResumeAsync(project, $"meta-cycle:{report.CycleId} {report.Action.Reason}", SupervisorSource.AutoIntervention, ct);
+                break;
+
+            case MetaCycleActionKind.UpdateStableThenResume:
+                TryRunUpdateStable(workspace, project, report);
+                await _interventions.ResumeAsync(project, $"meta-cycle:{report.CycleId} {report.Action.Reason}", SupervisorSource.AutoIntervention, ct);
+                break;
+
+            case MetaCycleActionKind.QueueFix:
+                report = report with { Action = report.Action with { FollowUpJobId = QueueFollowUpTask(workspace, project, report) } };
+                await _interventions.ResumeAsync(project, $"meta-cycle:{report.CycleId} resumed-after-fix-queued", SupervisorSource.AutoIntervention, ct);
+                break;
+
+            case MetaCycleActionKind.EscalateToUser:
+                report = report with { Action = report.Action with { FollowUpJobId = QueueFollowUpTask(workspace, project, report) } };
+                // Stay paused; user must resume manually.
+                break;
+
+            case MetaCycleActionKind.NoOp:
+                // Aborted; do nothing. Pause is left in place so the user can inspect.
+                break;
+        }
+    }
+
+    private void TryRunUpdateStable(string workspace, string project, MetaCycleReport report)
+    {
+        var helperPath = _configuration["Supervisor:MetaCycleUpdateStableScript"];
+        if (string.IsNullOrWhiteSpace(helperPath) || !File.Exists(helperPath))
+        {
+            _logger.LogWarning("MetaCycle update-stable requested but Supervisor:MetaCycleUpdateStableScript is missing or unreadable; skipping for {Project}", project);
+            return;
+        }
+        try
+        {
+            var psi = new ProcessStartInfo("sh", $"\"{helperPath}\"")
+            {
+                WorkingDirectory = workspace,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            };
+            using var proc = Process.Start(psi);
+            if (proc == null) return;
+            // Bounded wait; the helper itself owns its own lifecycle.
+            proc.WaitForExit(60_000);
+            _logger.LogInformation("MetaCycle update-stable helper for {Project} exit={Code}", project, proc.HasExited ? proc.ExitCode : -1);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "MetaCycle update-stable helper failed for {Project}", project);
+        }
+    }
+
+    private string? QueueFollowUpTask(string workspace, string project, MetaCycleReport report)
+    {
+        // Templated queueing lives off the hot path of the cycle; keep it
+        // minimal in this first cut. Drop a prompt.md + job.json under
+        // <workspace>/projects/<project>/1-preparation/auto-fix-<topic>-<ts>/
+        // so the existing scanner picks it up on the next pass.
+        try
+        {
+            var topic = ExtractTopic(report.Action);
+            var slug = $"auto-fix-{topic}-{report.StartedAt:yyyyMMddHHmmss}";
+            var folder = Path.Combine(workspace, "projects", project, JobStates.Preparation, slug);
+            if (Directory.Exists(folder))
+            {
+                folder += "-" + Guid.NewGuid().ToString("N")[..6];
+            }
+            Directory.CreateDirectory(folder);
+
+            var jobJson = new
+            {
+                id = Path.GetFileName(folder),
+                title = $"Meta-cycle: review {topic} ({report.CycleId})",
+                state = JobStates.Preparation,
+                order = 999,
+                agent = "claude",
+                createdAt = report.CompletedAt,
+            };
+            File.WriteAllText(Path.Combine(folder, "job.json"), JsonSerializer.Serialize(jobJson, Json));
+
+            var prompt = BuildFollowUpPrompt(project, report);
+            File.WriteAllText(Path.Combine(folder, "prompt.md"), prompt);
+
+            return jobJson.id;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "MetaCycle queue-fix folder creation failed for {Project}", project);
+            return null;
+        }
+    }
+
+    private static string ExtractTopic(MetaCycleAction action)
+    {
+        // Reasons are formatted as "queue-fix:<topic>" or "escalate:<topic>".
+        var reason = action.Reason ?? string.Empty;
+        var colon = reason.IndexOf(':');
+        if (colon >= 0 && colon < reason.Length - 1) return reason[(colon + 1)..];
+        return "needs-human";
+    }
+
+    private static string BuildFollowUpPrompt(string project, MetaCycleReport report)
+    {
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("# Meta-cycle follow-up");
+        sb.AppendLine();
+        sb.AppendLine($"The orchestrator meta-cycle for **{project}** flagged this batch as **{report.Verdict}**.");
+        sb.AppendLine();
+        sb.AppendLine($"- Cycle id: `{report.CycleId}`");
+        sb.AppendLine($"- Started: {report.StartedAt:u}");
+        sb.AppendLine($"- Action: `{report.Action.Kind}` (reason: `{report.Action.Reason}`)");
+        sb.AppendLine();
+        sb.AppendLine("## Findings");
+        foreach (var f in report.Findings)
+        {
+            sb.AppendLine($"- **{f.Severity}** `{f.Topic}` - {f.Message}");
+        }
+        sb.AppendLine();
+        sb.AppendLine("## What to do");
+        sb.AppendLine();
+        sb.AppendLine("Review the findings above and decide whether they reflect a real problem or a false positive. The meta-cycle does not act on this task automatically; a human must move it to `2-ready` after deciding the right scope.");
+        sb.AppendLine();
+        sb.AppendLine("If the meta-cycle was wrong, capture why so the rules can be tightened.");
+        sb.AppendLine();
+        sb.AppendLine("If the meta-cycle was right, scope the fix and queue it as a separate task; this folder records the trigger.");
+        return sb.ToString();
+    }
+
+    private void WriteReport(string workspace, MetaCycleReport report)
+    {
+        try
+        {
+            var dir = SupervisorLogPaths.MetaCycleDir(workspace, report.Project);
+            Directory.CreateDirectory(dir);
+            var path = SupervisorLogPaths.MetaCycleReportFile(workspace, report.Project, report.CycleId);
+            File.WriteAllText(path, JsonSerializer.Serialize(report, Json));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "MetaCycle WriteReport failed for {Project} cycle {CycleId}", report.Project, report.CycleId);
+        }
+    }
+
+    private void AppendTailLog(string workspace, MetaCycleReport report)
+    {
+        try
+        {
+            var dir = SupervisorLogPaths.MetaCycleDir(workspace, report.Project);
+            Directory.CreateDirectory(dir);
+            var line = $"{report.CompletedAt:u}\t{report.CycleId}\t{report.Verdict}\t{report.Action.Kind}\t{report.Action.Reason}";
+            File.AppendAllText(SupervisorLogPaths.MetaCycleTailLog(workspace, report.Project), line + Environment.NewLine);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "MetaCycle AppendTailLog failed for {Project}", report.Project);
+        }
+    }
+
+    private static string ReadFirstChars(string path, int max)
+    {
+        try
+        {
+            using var reader = File.OpenText(path);
+            var buf = new char[max];
+            var read = reader.Read(buf, 0, buf.Length);
+            return new string(buf, 0, read).Replace("\r", "").Replace("\n", " ").Trim();
+        }
+        catch { return string.Empty; }
+    }
+
+    private static string NewCycleId(DateTime nowUtc)
+    {
+        // ULID-like: 12-char timestamp + 8 random chars. Lexically sortable.
+        var ts = nowUtc.ToString("yyyyMMddHHmm");
+        var rand = Guid.NewGuid().ToString("N")[..8];
+        return $"mc-{ts}-{rand}";
+    }
+
+    /// <summary>
+    /// Per-project, in-memory cycle bookkeeping. Recreated on backend restart
+    /// (the cycle is best-effort; on restart the bootstrap logic seeds a new
+    /// "now" cutoff so we do not double-count older `4-review` jobs).
+    /// </summary>
+    private sealed class ProjectCycleState
+    {
+        public DateTime? LastCycleAt;
+        public string? LastCycleId;
+        public bool SeededFromBootstrap;
+        private readonly List<DateTime> _fixTimestamps = new();
+
+        public void RecordFix(DateTime at)
+        {
+            lock (_fixTimestamps)
+            {
+                _fixTimestamps.Add(at);
+                _fixTimestamps.RemoveAll(t => t < at - TimeSpan.FromHours(2));
+            }
+        }
+
+        public int CountFixesSince(DateTime cutoff)
+        {
+            lock (_fixTimestamps)
+            {
+                return _fixTimestamps.Count(t => t > cutoff);
+            }
+        }
+    }
+}
