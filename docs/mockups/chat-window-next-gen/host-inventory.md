@@ -54,7 +54,7 @@ The side sheet keeps project picker, task tab, roadmap intake, attachments, and 
 
 ### 3. Mockups / prototype (do not touch in production)
 
-- File: `frontend/src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts`.
+- Files: `frontend/src/mockups/next-gen-chat/app/` plus `frontend/src/mockups/next-gen-chat/styles.scss`.
 - Standalone serve target: `npm run mockup:chat` from `frontend/`, opening `http://127.0.0.1:4022`.
 - The prototype is not mounted in `App` and must not be reintroduced as a normal dev-shell overlay.
 - Use the prototype as the interaction reference. Do not import its dummy data into production.

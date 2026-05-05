@@ -24,11 +24,17 @@ The normal dev app continues to run on its own port. Do not use `atp.flag.nextGe
 
 | File | Purpose |
 |------|---------|
-| `frontend/src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts` | Standalone Angular workbench host for task list, detail, transcript, panes, popovers, and modals. |
-| `frontend/src/app/components/mockups/found-next-topbar.component.ts` | Extracted shell top bar for project filter, owner switch, run summary, density/theme, command, debug, and side-sheet controls. |
-| `frontend/src/app/components/mockups/found-next-statusbar.component.ts` | Extracted shell status bar for run health, automation state, session continuity, usage, tokens, Git, visual evidence, and model defaults. |
-| `frontend/src/app/components/mockups/next-gen-chat-workbench-prototype.data.ts` | Shared dummy data and icon paths used by the shell components and host. |
-| `frontend/src/app/components/mockups/next-gen-chat-workbench-prototype.models.ts` | Shared type contracts for panes, actors, scenarios, decisions, status panels, density, theme, and transcript events. |
+| `frontend/src/mockups/next-gen-chat/app/next-gen-chat-workbench-prototype.component.ts` | Standalone Angular workbench host for task detail state, transcript, popovers, and modal orchestration. |
+| `frontend/src/mockups/next-gen-chat/app/found-next-topbar.component.ts` | Shell top bar for project filter, owner switch, run summary, density/theme, command, debug, and side-sheet controls. |
+| `frontend/src/mockups/next-gen-chat/app/found-next-statusbar.component.ts` | Shell status bar for run health, automation state, session continuity, usage, tokens, Git, visual evidence, and model defaults. |
+| `frontend/src/mockups/next-gen-chat/app/next-gen-chat-activity-bar.component.ts` | Activity Bar module switcher for Projects, Tasks, Search, Git, QA, Tokens, and close. |
+| `frontend/src/mockups/next-gen-chat/app/next-gen-chat-queue.component.ts` | Optional Queue module with close control, filters, lane/order/agent metadata, and active task highlight. |
+| `frontend/src/mockups/next-gen-chat/app/next-gen-chat-rail.component.ts` | Task rail for opened workbench documents, scenario cases, and summary signals. |
+| `frontend/src/mockups/next-gen-chat/app/next-gen-chat-document-tabs.component.ts` | Workbench document tab strip with activate and close behavior. |
+| `frontend/src/mockups/next-gen-chat/app/next-gen-chat-context-document.component.ts` | Active Summary, Git, Screenshots, and Debug document renderer. |
+| `frontend/src/mockups/next-gen-chat/app/next-gen-chat-workbench-prototype.data.ts` | Shared dummy data and icon paths used by the shell components and host. |
+| `frontend/src/mockups/next-gen-chat/app/next-gen-chat-workbench-prototype.models.ts` | Shared type contracts for panes, actors, scenarios, decisions, status panels, density, theme, documents, queue cards, Git rows, and transcript events. |
+| `frontend/src/mockups/next-gen-chat/styles.scss` | Dedicated global stylesheet for this mockup app, independent from the production app shell. |
 | `frontend/src/mockups/next-gen-chat/main.ts` | Standalone Angular bootstrap for the mockup app. |
 | `frontend/src/mockups/next-gen-chat/index.html` | Dedicated mockup host document. |
 | `frontend/angular.json` | Defines the `next-gen-chat-mockup` app and serve target. |
@@ -89,7 +95,7 @@ The prototype currently covers:
 - Compact decision rows for reissue, heuristic, needs-input, circuit breaker, capture fail, and schema drift, expandable to reason / evidence / action / retry budget / token usage / next step plus a Trace link.
 - Target-aware user intervention chips (current run, next run, orchestrator, follow-up task) on user turns.
 
-The current refactor iteration starts turning the clickware into a component reference. Topbar and statusbar are now standalone Angular components, while topbar/statusbar dummy data and shared icon paths live in a separate data module. The next extraction should continue downward into `ActivityRail`, `StatusPopover`, `ConversationTranscript`, `ComposerBar`, and `WorkbenchPaneHost`, keeping the implementation slice small enough to visually review after every step.
+The current refactor iteration turns the clickware into a small standalone Angular app under `frontend/src/mockups/next-gen-chat/`. The mockup has its own bootstrap, host document, global stylesheet, shared data module, typed models, and component boundaries for topbar, statusbar, Activity Bar, Queue module, task rail, document tabs, and active context documents. The host still owns the transcript, composer, status popovers, and modal orchestration. The next extraction should continue into `ConversationTranscript`, `ComposerBar`, `StatusPopover`, and `VerboseDebugModal`, keeping each slice small enough to visually review after every step.
 
 The UX review now names the target visual system as the internal Found Next Workbench Framework. This is a rule set and component boundary, not a third-party package: use VS Code workbench containers, local theme tokens, compact density primitives, screenshot-driven review, and reusable Angular components instead of importing a deprecated VS Code webview toolkit or a generic dashboard UI kit. The candidate-system comparison and source-cloning guardrails live in [design-system-options.md](design-system-options.md).
 

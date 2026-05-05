@@ -89,13 +89,19 @@ The prototype now has a first component boundary:
 
 | Area | File | Responsibility |
 |------|------|----------------|
-| Shell top bar | `frontend/src/app/components/mockups/found-next-topbar.component.ts` | Product title, project filter chips, owner switch, run summary, sheet/queue/density/theme/command/debug controls. |
-| Shell status bar | `frontend/src/app/components/mockups/found-next-statusbar.component.ts` | Global run health, automation mode, session continuity, Codex/Claude 5h quota strip, token/git/visual/tool signals, model defaults. |
-| Shared data | `frontend/src/app/components/mockups/next-gen-chat-workbench-prototype.data.ts` | Topbar project tabs, run stats, status usage strip, shared icon paths. |
-| Shared models | `frontend/src/app/components/mockups/next-gen-chat-workbench-prototype.models.ts` | Typed pane, actor, scenario, decision, status, density, theme, and transcript contracts. |
-| Workbench host | `frontend/src/app/components/mockups/next-gen-chat-workbench-prototype.component.ts` | Task list, detail chrome, chat flow, rail, panes, popovers, modals, and orchestration state. |
+| Shell top bar | `frontend/src/mockups/next-gen-chat/app/found-next-topbar.component.ts` | Product title, project filter chips, owner switch, run summary, sheet/queue/density/theme/command/debug controls. |
+| Shell status bar | `frontend/src/mockups/next-gen-chat/app/found-next-statusbar.component.ts` | Global run health, automation mode, session continuity, Codex/Claude 5h quota strip, token/git/visual/tool signals, model defaults. |
+| Activity Bar | `frontend/src/mockups/next-gen-chat/app/next-gen-chat-activity-bar.component.ts` | Global module switcher for Projects, Tasks, Search, Git, QA, Tokens, and close. |
+| Queue module | `frontend/src/mockups/next-gen-chat/app/next-gen-chat-queue.component.ts` | Optional queue sidebar with filters, active task, lane, order, agent, and metadata. |
+| Task rail | `frontend/src/mockups/next-gen-chat/app/next-gen-chat-rail.component.ts` | Workbench documents, scenario cases, signal chips, and rail guide entry. |
+| Document tabs | `frontend/src/mockups/next-gen-chat/app/next-gen-chat-document-tabs.component.ts` | Opened document list with activate and close behavior. |
+| Context documents | `frontend/src/mockups/next-gen-chat/app/next-gen-chat-context-document.component.ts` | Summary, Git/source diff, Screenshots, and Debug document bodies. |
+| Shared data | `frontend/src/mockups/next-gen-chat/app/next-gen-chat-workbench-prototype.data.ts` | Topbar project tabs, run stats, status usage strip, shared icon paths. |
+| Shared models | `frontend/src/mockups/next-gen-chat/app/next-gen-chat-workbench-prototype.models.ts` | Typed pane, actor, scenario, decision, status, density, theme, document, queue, Git, token, and transcript contracts. |
+| Workbench host | `frontend/src/mockups/next-gen-chat/app/next-gen-chat-workbench-prototype.component.ts` | Task detail shell, transcript, composer, status popovers, modals, and orchestration state. |
+| Mockup global stylesheet | `frontend/src/mockups/next-gen-chat/styles.scss` | App-local Found Next theme tokens, density, grid, mobile, dark theme, and component styling. |
 
-This is intentionally not a full rewrite. The next useful boundaries are `ActivityRail`, `TaskQueueList`, `WorkbenchPaneHost`, `ConversationTranscript`, `ComposerBar`, `StatusPopover`, and `VerboseDebugModal`.
+This is intentionally not a full rewrite. The next useful boundaries are `ConversationTranscript`, `ComposerBar`, `StatusPopover`, and `VerboseDebugModal`.
 
 ## Component Scorecard
 
@@ -105,14 +111,14 @@ Scores: 1 means weak fit, 5 means production-reference fit.
 |-----------|------------|-----------|-----------|-------|-------|
 | Activity bar | 48px rail, icon-only, no vertical waste. | Good for global project surfaces and workbench navigation. | Sensible, but current targets are partly placeholder. | 4 | Keep as global container. Add exact target mapping before production build. |
 | Top bar | 34px high, run stats compressed into pills. | Project tabs, owner Robert, run stats, layout controls are valuable. | Slightly crowded at desktop right edge, but acceptable. | 4 | Keep only project/owner/run essentials visible. Push rare actions into command menu if crowding returns. |
-| Task queue | 156px wide, narrow cards, two-line titles. | Gives local task context without consuming editor width. | Sensible, but lane/owner/CLI metadata is too thin. | 3 | Extract `TaskQueueList`; add lane chip, owner, CLI type, and hidden long metadata. |
+| Task queue | 196px comfortable, 172px compact, narrow cards, two-line titles. | Gives local task context without consuming editor width. | Sensible after extraction; lane, order, agent, and metadata are now visible without becoming a Kanban board. | 4 | Keep it as an optional module. Bind the filters to real lane state during production migration. |
 | Detail chrome | 38px high, direct task action. | `Complete & Next` and state are essential. | Sensible, but run metrics duplicate statusbar in some states. | 3 | Make chrome about task actions only. Move global run health into statusbar and rail. |
 | Inspector rail | 132px comfortable, 64px compact. | Panes, signals, and cases are useful during design review. | Mixed: production controls and prototype scenario controls share one rail. | 3 | Split production pane controls from prototype-only scenarios. |
 | Chat transcript | Message cards are readable; actor chips are scannable. | Preserves human-level conversation while hiding technical layer. | Sensible, but some dummy copy still reads like requirements. | 4 | Collapse long agent text earlier and make technical paths disclosure-only. |
 | Actor grammar | Icons, glyphs, labels, counts, and accents avoid color-only meaning. | Essential because user, agent, orchestrator, supervisor, support, tool, and system differ. | Strong and product-specific. | 5 | Keep this as a contract for production conversation projection. |
 | Decision rows | One-line summary plus expandable details. | Reissue, heuristic, needs-input, circuit breaker, capture fail, and drift all fit. | Good, but retry/evidence can compete visually. | 4 | Keep details collapsed by default; move dense evidence to debug. |
 | Composer | Context chips, CLI/model, start/pause/continue stay close to input. | Strong because model, permission, run controls, and follow-up mode are real workflow controls. | Useful, but many buttons have similar weight. | 3 | Group low-frequency controls behind a menu and keep one primary send action. |
-| Workbench document host | Document tabs, optional chat, full-content active document, and all-tabs mode work. | Directly supports VS-Code-like task documents while keeping Summary as the default dashboard. | Strong, but split editor groups still need a separate design pass. | 4 | Extract host and decide whether production keeps one editor group or supports explicit split editor groups. |
+| Workbench document host | Document tabs, optional chat, full-content active document, and all-tabs mode work. | Directly supports VS-Code-like task documents while keeping Summary as the default dashboard. | Strong, and the document bodies now have their own component boundary. Split editor groups still need a separate design pass. | 4 | Decide whether production keeps one editor group or supports explicit split editor groups. |
 | Result pane | Metrics, human result, acceptance snapshot, function parity. | Useful after a run. | Current card density is still dashboard-like. | 3 | Convert to compact summary rows plus one expandable acceptance section. |
 | Git pane | Changed files plus source diff. | Very high value for reviewing agent output beside chat. | Strongest current pane. | 5 | Keep Git as source-review pane, not generic source browser. |
 | Preview pane | Evidence grid plus lightbox. | Useful when screenshots decide quality. | Sensible, but should appear only when visual evidence exists. | 4 | Bind to real result screenshots and hide empty preview pane by default. |
@@ -121,7 +127,7 @@ Scores: 1 means weak fit, 5 means production-reference fit.
 | Status bar | 28px, persistent, clickable, quota-aware. | Tokens, Codex %, Claude %, 5h window, session, Git, visual and model are product-defining. | Strong, though center group bends VS Code guidance. | 4 | Keep quota visible. Consider grouping center items into a primary left block if production crowding appears. |
 | Status popovers | Bottom popovers keep details out of transcript. | Token heat, model, health, evidence, queue are important. | Useful, but some popovers are too panel-like. | 3 | Make popovers row-dense and link to full pages/debug for deeper analysis. |
 | Dark theme | Primary surfaces are now readable. | Required, but light remains the primary user preference. | Mostly sensible. | 4 | Continue screenshot checks for every primary state. |
-| Mobile collapse | Main actions remain reachable at 390px. | Useful for inspection, not primary work mode. | Works, but expert workflows remain desktop-first. | 3 | Preserve no-overlap guarantee; do not optimize at the expense of desktop density. |
+| Mobile collapse | Main actions remain reachable at 390px and the document area no longer drifts into an implicit off-screen grid column. | Useful for inspection, not primary work mode. | Works, but expert workflows remain desktop-first. | 3 | Preserve the Playwright mobile guard; do not optimize at the expense of desktop density. |
 
 ## Component Notes
 
