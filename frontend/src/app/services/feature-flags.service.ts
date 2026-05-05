@@ -1,0 +1,54 @@
+import { Injectable, signal } from '@angular/core';
+
+/**
+ * Frontend-only feature flags persisted in localStorage. Each flag toggles
+ * an experimental UI surface that ships behind it; default off.
+ *
+ * Flags here are not user-facing settings. They are dev/QA hooks for in-flight
+ * UI redesigns. Tests flip them via `localStorage` before navigating, the way
+ * Playwright already does for other persisted preferences.
+ *
+ * To enable from the browser console:
+ *
+ *   localStorage.setItem('atp.flag.vsCodeLayout', '1'); location.reload();
+ */
+@Injectable({ providedIn: 'root' })
+export class FeatureFlagsService {
+  private static readonly KEY_VS_CODE_LAYOUT = 'atp.flag.vsCodeLayout';
+  private static readonly KEY_VS_CODE_META_OPEN = 'atp.flag.vsCodeLayout.metaOpen';
+
+  /** `Frontend:VsCodeLayout` — VS Code-style chrome with status bar + collapsible meta. */
+  readonly vsCodeLayout = signal<boolean>(this.read(FeatureFlagsService.KEY_VS_CODE_LAYOUT));
+
+  /** Meta-pane open state for the VS Code layout. Persisted independently. */
+  readonly vsCodeMetaOpen = signal<boolean>(this.read(FeatureFlagsService.KEY_VS_CODE_META_OPEN));
+
+  setVsCodeLayout(on: boolean): void {
+    this.vsCodeLayout.set(on);
+    this.write(FeatureFlagsService.KEY_VS_CODE_LAYOUT, on);
+  }
+
+  setVsCodeMetaOpen(open: boolean): void {
+    this.vsCodeMetaOpen.set(open);
+    this.write(FeatureFlagsService.KEY_VS_CODE_META_OPEN, open);
+  }
+
+  private read(key: string): boolean {
+    if (typeof window === 'undefined') return false;
+    try {
+      return window.localStorage?.getItem(key) === '1';
+    } catch {
+      return false;
+    }
+  }
+
+  private write(key: string, value: boolean): void {
+    if (typeof window === 'undefined') return;
+    try {
+      if (value) window.localStorage?.setItem(key, '1');
+      else window.localStorage?.removeItem(key);
+    } catch {
+      /* storage may be blocked; signal still reflects the live value */
+    }
+  }
+}

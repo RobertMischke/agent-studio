@@ -157,3 +157,17 @@ When you propose a UI change or a backend service that touches the protocol, the
 3. Are we adding a new signal that duplicates an existing one?
 
 If the answer to (1) or (2) is no, redesign. If (3) is yes, suppress the new signal or replace the existing one. Never stack them.
+
+## Density and chrome
+
+The chat is the content; everything around it is chrome. The user's cost when chrome grows is real and continuous: every extra row of headers pushes the conversation further from the top of the viewport, and on a long task the user pays that cost on every scroll-to-top. The bar is VS Code, which has spent twenty years tuning the editor-versus-chrome ratio for the same shape of work.
+
+The rules:
+
+- **Chrome above the chat reads in tens of pixels, not hundreds.** Title bar 30 px. Tab bar 30 px. Per-pane header 28 px. Padding 6 px / 12 px. Borders are 1 px hairlines, never decorative frames.
+- **Persistent navigation lives at the edges, not above the content.** Project switcher, owner filter, runs counter, model select, and dev tools belong in an activity bar (left rail) or a status bar (bottom strip), not stacked on top of the conversation.
+- **Meta information is opt-in.** The user opted into a chat-first reading mode by opening the task. Telemetry chips, session ids, token totals, and rate-limit windows are valuable evidence but stay collapsed by default; an "i" affordance reveals them on demand. Reflexively showing them in the header is a regression.
+- **Tabs replace breadcrumbs once two tasks are open.** A 30-px tab strip with kind icon + slug + close button beats a stack of breadcrumb rows; it is also how every code editor handles the same problem.
+- **Persisted layout state survives reloads.** Pane widths, side-bar widths, meta-pane open state, and the active tab are all in `localStorage` because the user expects their workspace to look the same when they come back.
+
+The first slice ships behind the `Frontend:VsCodeLayout` feature flag, default off; the spec is [mockups/vscode-layout/](mockups/vscode-layout/README.md) and the per-element migration map is [mockups/vscode-layout/taxonomy.md](mockups/vscode-layout/taxonomy.md). When you add a new chrome element, check both: (a) does it survive the density rule, and (b) is there already a taxonomy entry for the destination it belongs in.

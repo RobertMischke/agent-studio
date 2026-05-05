@@ -69,6 +69,16 @@
         }
       </span>
     }
+    @if (featureFlags.vsCodeLayout()) {
+      <button class="pane__maximize"
+              data-testid="pane-meta-toggle"
+              (click)="toggleVsCodeMeta()"
+              [class.pane__maximize--active]="featureFlags.vsCodeMetaOpen()"
+              [title]="featureFlags.vsCodeMetaOpen() ? 'Hide meta panel' : 'Show meta panel'"
+              aria-label="Toggle meta panel">
+        i
+      </button>
+    }
     <button class="pane__maximize"
             data-testid="pane-maximize-protocol"
             (click)="maximizeToggle.emit()"

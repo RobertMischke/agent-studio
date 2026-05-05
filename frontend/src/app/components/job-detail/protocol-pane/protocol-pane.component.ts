@@ -22,6 +22,7 @@ import { NowTickService } from '../../../services/now-tick.service';
 import { RunTimelineComponent } from './run-timeline.component';
 import { RunGitViewerComponent } from './run-git-viewer.component';
 import { CommonModule } from '@angular/common';
+import { FeatureFlagsService } from '../../../services/feature-flags.service';
 
 export type InspectorTab = 'protocol' | 'activity';
 
@@ -78,6 +79,14 @@ export class ProtocolPaneComponent implements OnDestroy {
   readonly cliOutput = this.cliPoll.output;
   readonly runTimeline = this.runTimelinePoll.timeline;
   readonly screenshots = this.screenshotsPoll.screenshots;
+
+  /** Feature-flagged VS Code-style chrome. The "i" header button is only
+   *  rendered when the flag is on; otherwise legacy chrome stays visible. */
+  readonly featureFlags = inject(FeatureFlagsService);
+
+  toggleVsCodeMeta(): void {
+    this.featureFlags.setVsCodeMetaOpen(!this.featureFlags.vsCodeMetaOpen());
+  }
 
   /**
    * Active run filter for the activity log. Set when the user clicks

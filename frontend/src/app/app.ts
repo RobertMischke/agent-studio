@@ -19,6 +19,7 @@ import { ErrorDialogComponent } from './components/board/error-dialog/error-dial
 import { ProjectAutoInfo, ProjectTabsComponent } from './components/board/project-tabs/project-tabs.component';
 import { projectIdentity } from './services/project-identity.util';
 import { DevToolsService } from './services/dev-tools.service';
+import { FeatureFlagsService } from './services/feature-flags.service';
 import { JobCompletionSoundService } from './services/job-completion-sound.service';
 import { UpdateStableConsoleComponent } from './components/dev-tools/update-stable-console.component';
 import { E2ECleanupDialogComponent } from './components/dev-tools/e2e-cleanup-dialog.component';
@@ -35,7 +36,11 @@ import { JobScreenshot } from './models/job.model';
   // class rules used by the extracted dialogs and project-tabs.
   encapsulation: ViewEncapsulation.None,
   template: `
-    <div class="app">
+    <div class="app"
+         [class.app--vscode-layout]="featureFlags.vsCodeLayout()"
+         [class.app--vscode-meta-open]="featureFlags.vsCodeLayout() && featureFlags.vsCodeMetaOpen()"
+         [class.app--task-open]="!!selectedJob()"
+         data-testid="app-root">
       <header class="header">
         <div class="header__brand">
           <img class="header__icon" src="icons/icon.svg" alt="Agent Task Processor" width="20" height="20" />
@@ -1354,6 +1359,102 @@ import { JobScreenshot } from './models/job.model';
     ::ng-deep body.resizing * {
       cursor: col-resize !important;
     }
+
+    /* ---------------------------------------------------------------
+       VS Code-style layout (flag: Frontend:VsCodeLayout, default off)
+       Spec: docs/mockups/vscode-layout/. Slice 1 reduces chrome density
+       and pulls the chat to the top of the viewport without restructuring
+       the DOM. Activity bar, tab bar, and full meta panel land in later
+       slices; the taxonomy notes the gap.
+       --------------------------------------------------------------- */
+    .app--vscode-layout {
+      --vscode-density-pad: 6px 12px;
+      --vscode-chrome-fg: #cbd5e1;
+      --vscode-chrome-bg: #181825;
+    }
+    /* Slimmer top header. Brand stays; dev tools menu stays. The
+       project switcher disappears once a task is open — its job moves to
+       the status bar in slice 1, to the activity bar in slice 3. */
+    .app--vscode-layout .header {
+      min-height: 30px;
+      padding: 2px 10px;
+    }
+    .app--vscode-layout.app--task-open app-project-tabs {
+      display: none;
+    }
+    /* Detail view: collapse the multi-row header to a single thin strip
+       and tighten pane padding so the chat starts close to the top. */
+    .app--vscode-layout .detail {
+      gap: 0;
+    }
+    .app--vscode-layout .detail__header {
+      padding: 2px 6px;
+      align-items: center;
+      gap: 8px;
+      min-height: 28px;
+    }
+    .app--vscode-layout .detail__back {
+      width: 22px;
+      height: 22px;
+      font-size: 12px;
+      border-radius: 4px;
+    }
+    .app--vscode-layout .detail__title {
+      font-size: 13px;
+      padding: 1px 4px;
+      margin-left: -4px;
+      gap: 6px;
+    }
+    .app--vscode-layout .detail__project {
+      font-size: 11px;
+      padding: 0 4px;
+    }
+    .app--vscode-layout .detail__meta {
+      display: none;
+    }
+    /* Hide the secondary command deck and the pane-toggle bar inside the
+       detail view. Their controls land in the status bar (status-bar
+       component) and the per-pane "i" Meta toggle. The user can still
+       start/stop runs from the chat composer. */
+    .app--vscode-layout .detail app-command-deck,
+    .app--vscode-layout .detail app-pane-toggle-bar,
+    .app--vscode-layout .detail__panes-toolbar {
+      display: none;
+    }
+    /* Pane chrome density: VS Code-style 6/12 padding, 12 px title. */
+    .app--vscode-layout .pane {
+      border-radius: 4px;
+      border-color: rgba(255,255,255,0.04);
+    }
+    .app--vscode-layout .pane__header {
+      padding: 4px 10px;
+      min-height: 28px;
+    }
+    .app--vscode-layout .pane__title {
+      font-size: 12px;
+      letter-spacing: 0;
+    }
+    .app--vscode-layout .pane__title-icon {
+      font-size: 12px;
+    }
+    /* When the meta-pane is closed, hide the verbose telemetry chips on
+       the protocol header. The "i" toggle inside the protocol pane can
+       reveal them again without forcing the user to read them by default. */
+    .app--vscode-layout:not(.app--vscode-meta-open) .pane__telemetry,
+    .app--vscode-layout:not(.app--vscode-meta-open) .pane__session-chip,
+    .app--vscode-layout:not(.app--vscode-meta-open) .pane__watchdog {
+      display: none;
+    }
+    .app--vscode-layout .pane__body {
+      padding: 0;
+    }
+    /* Inspector tabs — tighten without changing structure. */
+    .app--vscode-layout .inspector__header {
+      padding: 0;
+    }
+    .app--vscode-layout .inspector__tabs {
+      gap: 0;
+    }
   `]
 })
 export class App implements OnInit {
@@ -1599,6 +1700,7 @@ export class App implements OnInit {
     readonly errorDialog: ErrorDialogService,
     readonly devTools: DevToolsService,
     readonly clientService: ClientService,
+    readonly featureFlags: FeatureFlagsService,
     private readonly _completionSound: JobCompletionSoundService,
   ) {
     effect(() => {

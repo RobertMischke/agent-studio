@@ -1,0 +1,800 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>VS Code-style layout — mockup</title>
+  <style>
+    :root {
+      --surface-0: #0f0f1a;
+      --surface-1: #181825;
+      --surface-2: #1e1e2e;
+      --surface-3: #252537;
+      --border-1: rgba(255,255,255,0.06);
+      --border-2: rgba(255,255,255,0.10);
+      --text-0: #e2e8f0;
+      --text-1: #94a3b8;
+      --text-2: #64748b;
+      --accent: #a5b4fc;
+      --accent-warm: #f9a8d4;
+      --green: #86efac;
+      --orange: #fbbf24;
+      --red: #fda4af;
+      --font-ui: 'Segoe UI', system-ui, sans-serif;
+      --font-mono: 'Cascadia Mono', Consolas, monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      background: var(--surface-0);
+      color: var(--text-0);
+      font-family: var(--font-ui);
+      font-size: 13px;
+      line-height: 1.4;
+      overflow: hidden;
+    }
+
+    /* ----- Frame ------------------------------------------------ */
+    .frame { display: grid; grid-template-rows: 30px 1fr 22px; height: 100vh; }
+
+    .titlebar {
+      background: var(--surface-1);
+      border-bottom: 1px solid var(--border-1);
+      display: flex; align-items: center; gap: 12px;
+      padding: 0 12px;
+      font-size: 12px;
+      color: var(--text-1);
+    }
+    .titlebar__brand {
+      display: flex; align-items: center; gap: 8px;
+      font-weight: 700; color: var(--text-0);
+    }
+    .titlebar__brand .dot {
+      width: 14px; height: 14px; border-radius: 4px;
+      background: linear-gradient(135deg, #a5b4fc, #c4b5fd);
+    }
+    .titlebar__center {
+      flex: 1; display: flex; justify-content: center;
+    }
+    .titlebar__find {
+      background: var(--surface-2);
+      border: 1px solid var(--border-1);
+      border-radius: 4px;
+      padding: 2px 10px;
+      width: 360px;
+      max-width: 100%;
+      color: var(--text-1);
+      font-size: 12px;
+    }
+    .titlebar__view {
+      display: flex; gap: 4px;
+    }
+    .titlebar__btn {
+      background: transparent; border: none; color: var(--text-1);
+      padding: 2px 8px; cursor: pointer; font-size: 12px; border-radius: 3px;
+    }
+    .titlebar__btn:hover { background: var(--surface-2); color: var(--text-0); }
+    .titlebar__btn.is-active { background: var(--surface-3); color: var(--accent); }
+
+    /* ----- Body grid: activity bar | side bar | editor area ----- */
+    .body {
+      display: grid;
+      grid-template-columns: 48px 240px 1fr;
+      min-height: 0;
+    }
+
+    /* Activity bar */
+    .activity-bar {
+      background: var(--surface-1);
+      border-right: 1px solid var(--border-1);
+      display: flex; flex-direction: column; align-items: center;
+      padding: 6px 0;
+      gap: 2px;
+    }
+    .activity-bar__icon {
+      width: 36px; height: 36px;
+      display: grid; place-items: center;
+      border-radius: 4px; cursor: pointer;
+      color: var(--text-1); font-size: 18px;
+      position: relative;
+      background: transparent; border: none;
+    }
+    .activity-bar__icon:hover { color: var(--text-0); background: var(--surface-2); }
+    .activity-bar__icon.is-active { color: var(--text-0); }
+    .activity-bar__icon.is-active::before {
+      content: ''; position: absolute; left: 0; top: 4px; bottom: 4px; width: 2px;
+      background: var(--accent); border-radius: 2px;
+    }
+    .activity-bar__sep { flex: 1; }
+    .activity-bar__badge {
+      position: absolute; top: 4px; right: 4px;
+      background: var(--accent); color: var(--surface-0);
+      font-size: 9px; font-weight: 700;
+      padding: 0 4px; border-radius: 6px; min-width: 14px; text-align: center;
+    }
+
+    /* Side bar (task nav) */
+    .side {
+      background: var(--surface-1);
+      border-right: 1px solid var(--border-1);
+      display: flex; flex-direction: column; min-height: 0;
+      overflow: hidden;
+    }
+    .side__head {
+      padding: 6px 12px;
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-1);
+      display: flex; justify-content: space-between; align-items: center;
+      border-bottom: 1px solid var(--border-1);
+    }
+    .side__head .icon-btn {
+      background: transparent; border: none; color: var(--text-1); cursor: pointer;
+      width: 18px; height: 18px; display: grid; place-items: center; border-radius: 3px;
+    }
+    .side__head .icon-btn:hover { color: var(--text-0); background: var(--surface-2); }
+
+    .side__section { display: flex; flex-direction: column; }
+    .side__section-head {
+      padding: 4px 12px; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
+      color: var(--text-1); cursor: pointer;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .side__section-head:hover { color: var(--text-0); }
+    .side__chev { width: 10px; transition: transform 0.1s; }
+    .side__section.is-collapsed .side__chev { transform: rotate(-90deg); }
+    .side__items { display: flex; flex-direction: column; }
+    .side__section.is-collapsed .side__items { display: none; }
+    .side__item {
+      padding: 3px 12px 3px 26px;
+      font-size: 13px;
+      color: var(--text-0);
+      cursor: pointer;
+      display: flex; align-items: center; gap: 6px;
+      border-left: 2px solid transparent;
+    }
+    .side__item:hover { background: var(--surface-2); }
+    .side__item.is-active { background: var(--surface-3); border-left-color: var(--accent); }
+    .side__item-kind { color: var(--text-1); font-size: 11px; width: 14px; }
+
+    /* Editor area */
+    .editor {
+      display: flex; flex-direction: column; min-height: 0;
+      background: var(--surface-2);
+    }
+    .tabs {
+      display: flex; height: 30px;
+      background: var(--surface-1);
+      border-bottom: 1px solid var(--border-1);
+      overflow-x: auto;
+    }
+    .tab {
+      display: flex; align-items: center; gap: 6px;
+      padding: 0 10px;
+      font-size: 13px;
+      color: var(--text-1);
+      background: transparent;
+      border-right: 1px solid var(--border-1);
+      cursor: pointer;
+      max-width: 240px;
+      white-space: nowrap;
+    }
+    .tab:hover { color: var(--text-0); }
+    .tab.is-active {
+      background: var(--surface-2);
+      color: var(--text-0);
+      border-bottom: 1px solid var(--surface-2);
+      margin-bottom: -1px;
+    }
+    .tab__kind { font-size: 12px; opacity: 0.85; }
+    .tab__close {
+      background: transparent; border: none; color: var(--text-2);
+      width: 16px; height: 16px; border-radius: 3px; cursor: pointer;
+      display: grid; place-items: center; line-height: 1; font-size: 14px;
+    }
+    .tab__close:hover { background: var(--surface-3); color: var(--text-0); }
+    .tab__dirty { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); }
+
+    .editor__body {
+      flex: 1; min-height: 0; display: flex;
+    }
+    .chat {
+      flex: 1; min-width: 0; display: flex; flex-direction: column;
+      padding: 0;
+    }
+    .chat__head {
+      padding: 6px 12px;
+      display: flex; align-items: center; gap: 8px;
+      font-size: 12px;
+      color: var(--text-1);
+      border-bottom: 1px solid var(--border-1);
+    }
+    .chat__head h3 {
+      margin: 0; font-size: 13px; color: var(--text-0); font-weight: 600;
+    }
+    .chat__head .pill {
+      background: var(--surface-3); padding: 1px 6px;
+      border-radius: 3px; font-size: 11px;
+    }
+    .chat__head .live { color: var(--green); }
+    .chat__head .spacer { flex: 1; }
+    .chat__head .icon-btn {
+      background: transparent; border: 1px solid transparent; color: var(--text-1);
+      width: 22px; height: 22px; border-radius: 4px; cursor: pointer;
+      display: grid; place-items: center; line-height: 1; font-size: 13px;
+    }
+    .chat__head .icon-btn:hover { color: var(--text-0); border-color: var(--border-2); }
+    .chat__head .icon-btn.is-active { background: var(--surface-3); color: var(--accent); }
+
+    .chat__body {
+      flex: 1; min-height: 0; overflow: auto;
+      padding: 8px 12px 12px;
+      display: flex; flex-direction: column; gap: 10px;
+    }
+    .msg {
+      display: flex; gap: 8px;
+    }
+    .msg__avatar {
+      width: 22px; height: 22px; border-radius: 4px;
+      background: var(--surface-3); color: var(--text-1);
+      display: grid; place-items: center; font-size: 12px; flex: 0 0 auto;
+    }
+    .msg.user .msg__avatar { background: rgba(165,180,252,0.2); color: var(--accent); }
+    .msg.agent .msg__avatar { background: rgba(134,239,172,0.18); color: var(--green); }
+    .msg.orchestrator .msg__avatar { background: rgba(251,191,36,0.18); color: var(--orange); }
+    .msg__body { flex: 1; min-width: 0; }
+    .msg__head {
+      font-size: 11px; color: var(--text-1); margin-bottom: 2px;
+      display: flex; gap: 8px;
+    }
+    .msg__name { color: var(--text-0); font-weight: 600; }
+    .msg__text { font-size: 14px; line-height: 1.5; color: var(--text-0); }
+    .msg__text p + p { margin-top: 6px; }
+    .msg__text code {
+      font-family: var(--font-mono); font-size: 13px;
+      background: var(--surface-3); padding: 1px 4px; border-radius: 3px;
+    }
+    .msg__text pre {
+      font-family: var(--font-mono); font-size: 12px;
+      background: var(--surface-1); padding: 8px 10px; border-radius: 4px;
+      border: 1px solid var(--border-1);
+      overflow-x: auto;
+      margin-top: 4px;
+    }
+    .toolrow {
+      font-size: 11px;
+      color: var(--text-1);
+      padding: 4px 8px;
+      border: 1px solid var(--border-1);
+      border-radius: 4px;
+      display: flex; gap: 8px; align-items: center;
+      width: fit-content;
+      margin-top: 4px;
+      cursor: pointer;
+    }
+    .toolrow:hover { background: var(--surface-3); color: var(--text-0); }
+    .runsep {
+      display: flex; align-items: center; gap: 8px;
+      font-size: 11px; color: var(--text-2);
+      margin: 4px 0;
+    }
+    .runsep::before, .runsep::after {
+      content: ''; flex: 1; height: 1px; background: var(--border-1);
+    }
+
+    /* Composer */
+    .composer {
+      border-top: 1px solid var(--border-1);
+      padding: 8px 12px;
+      display: flex; flex-direction: column; gap: 6px;
+      background: var(--surface-2);
+    }
+    .composer__modes {
+      display: flex; gap: 4px; align-items: center;
+      font-size: 11px; color: var(--text-1);
+    }
+    .composer__mode {
+      background: transparent; border: 1px solid var(--border-1);
+      color: var(--text-1); padding: 2px 8px; border-radius: 3px;
+      font-size: 11px; cursor: pointer;
+    }
+    .composer__mode.is-active { color: var(--text-0); border-color: var(--accent); background: rgba(165,180,252,0.08); }
+    .composer__input {
+      background: var(--surface-1); border: 1px solid var(--border-1);
+      border-radius: 4px; padding: 6px 8px;
+      color: var(--text-0); font: inherit; font-size: 14px;
+      min-height: 32px; resize: none; outline: none;
+    }
+    .composer__row {
+      display: flex; gap: 6px; align-items: center;
+    }
+    .composer__btn {
+      background: var(--surface-3); border: 1px solid var(--border-1);
+      color: var(--text-0); padding: 3px 10px; border-radius: 3px;
+      font-size: 12px; cursor: pointer;
+    }
+    .composer__btn--primary { background: var(--accent); color: var(--surface-0); border-color: var(--accent); }
+    .composer__btn:hover { background: var(--surface-2); }
+    .composer__spacer { flex: 1; }
+
+    /* Meta panel */
+    .meta {
+      width: 280px; border-left: 1px solid var(--border-1);
+      background: var(--surface-1);
+      display: flex; flex-direction: column; min-height: 0;
+      transition: width 0.15s;
+      overflow: hidden;
+    }
+    .meta.is-collapsed { width: 0; border-left: none; }
+    .meta__head {
+      padding: 6px 12px;
+      font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+      color: var(--text-1);
+      display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid var(--border-1);
+    }
+    .meta__sections { overflow-y: auto; flex: 1; }
+    .meta__section { border-bottom: 1px solid var(--border-1); }
+    .meta__section-head {
+      padding: 6px 12px; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase;
+      color: var(--text-1); cursor: pointer; user-select: none;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .meta__section-head:hover { color: var(--text-0); }
+    .meta__chev { width: 10px; transition: transform 0.1s; color: var(--text-2); }
+    .meta__section.is-collapsed .meta__chev { transform: rotate(-90deg); }
+    .meta__section.is-collapsed .meta__body { display: none; }
+    .meta__body { padding: 6px 12px 10px; display: flex; flex-direction: column; gap: 6px; }
+    .meta__row { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 12px; }
+    .meta__label { color: var(--text-1); font-size: 11px; }
+    .meta__value { color: var(--text-0); font-family: var(--font-mono); font-size: 12px; }
+    .meta__select {
+      background: var(--surface-2); color: var(--text-0); border: 1px solid var(--border-1);
+      border-radius: 3px; padding: 2px 4px; font-size: 12px;
+    }
+
+    /* Status bar */
+    .statusbar {
+      background: var(--surface-1); border-top: 1px solid var(--border-1);
+      display: flex; align-items: center;
+      padding: 0 8px;
+      font-size: 11px;
+      color: var(--text-1);
+      gap: 0;
+    }
+    .statusbar__item {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 0 8px;
+      height: 22px;
+      cursor: pointer;
+      background: transparent; border: none; color: var(--text-1);
+      font-family: inherit; font-size: 11px;
+    }
+    .statusbar__item:hover { background: var(--surface-3); color: var(--text-0); }
+    .statusbar__item.is-on { color: var(--green); }
+    .statusbar__sep { width: 1px; align-self: stretch; background: var(--border-1); margin: 4px 0; }
+    .statusbar__spacer { flex: 1; }
+
+    /* Kanban view */
+    .board { padding: 8px; display: grid; grid-template-columns: repeat(5, minmax(220px, 1fr)); gap: 8px; height: 100%; min-height: 0; overflow: auto; }
+    .col {
+      background: var(--surface-1); border-radius: 4px; padding: 8px;
+      display: flex; flex-direction: column; gap: 6px;
+      border: 1px solid var(--border-1); min-height: 0;
+    }
+    .col__head { font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-1); display: flex; justify-content: space-between; }
+    .card {
+      background: var(--surface-2); border: 1px solid var(--border-1); border-radius: 4px;
+      padding: 6px 8px; font-size: 12px; cursor: pointer;
+      display: flex; flex-direction: column; gap: 3px;
+    }
+    .card:hover { border-color: var(--border-2); }
+    .card__title { color: var(--text-0); font-size: 13px; }
+    .card__meta { font-size: 11px; color: var(--text-1); display: flex; gap: 8px; }
+
+    /* View switcher (mockup-only) */
+    .view { display: none; height: 100%; min-height: 0; }
+    .view.is-active { display: contents; }
+    .view-board.is-active .editor { padding: 0; }
+
+    /* Hide meta toggle when meta is open in CSS (it's still clickable) */
+    .meta.is-collapsed + .meta-handle { display: none; }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <!-- Title bar ---------------------------------------------- -->
+    <div class="titlebar">
+      <div class="titlebar__brand">
+        <span class="dot"></span>
+        <span>Agent Task Processor</span>
+      </div>
+      <div class="titlebar__center">
+        <input class="titlebar__find" placeholder="Go to task or run…   Ctrl+P" readonly />
+      </div>
+      <div class="titlebar__view">
+        <button class="titlebar__btn" data-view="board">Board</button>
+        <button class="titlebar__btn is-active" data-view="task">Task</button>
+      </div>
+    </div>
+
+    <!-- Body --------------------------------------------------- -->
+    <div class="body">
+      <!-- Activity bar -->
+      <nav class="activity-bar">
+        <button class="activity-bar__icon" title="Board" data-view-trigger="board">📋</button>
+        <button class="activity-bar__icon is-active" title="Runbook (active)">
+          <span style="background:#a5b4fc;color:#0f0f1a;width:22px;height:22px;border-radius:4px;display:grid;place-items:center;font-size:11px;font-weight:700;">R</span>
+        </button>
+        <button class="activity-bar__icon" title="Agent Task Processor">
+          <span style="background:#252537;color:#a5b4fc;width:22px;height:22px;border-radius:4px;display:grid;place-items:center;font-size:11px;font-weight:700;">A</span>
+        </button>
+        <button class="activity-bar__icon" title="Add task">➕</button>
+        <span class="activity-bar__sep"></span>
+        <button class="activity-bar__icon" title="Settings">⚙</button>
+      </nav>
+
+      <!-- Side bar: task nav -->
+      <aside class="side">
+        <div class="side__head">
+          <span>Tasks · Runbook</span>
+          <button class="icon-btn" title="Refresh">⟳</button>
+        </div>
+
+        <div class="side__section" data-section>
+          <div class="side__section-head" data-section-toggle>
+            <span class="side__chev">▾</span>
+            <span>In progress · 1</span>
+          </div>
+          <div class="side__items">
+            <div class="side__item is-active">
+              <span class="side__item-kind">📝</span>
+              <span>vscode-style-layout-density-and-tabs</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="side__section" data-section>
+          <div class="side__section-head" data-section-toggle>
+            <span class="side__chev">▾</span>
+            <span>Review · 3</span>
+          </div>
+          <div class="side__items">
+            <div class="side__item"><span class="side__item-kind">📝</span><span>orchestrator-review-lane-and-bubble-up</span></div>
+            <div class="side__item"><span class="side__item-kind">📝</span><span>activity-log-tool-bursts</span></div>
+            <div class="side__item"><span class="side__item-kind">📝</span><span>chat-window-next-gen-evidence</span></div>
+          </div>
+        </div>
+
+        <div class="side__section is-collapsed" data-section>
+          <div class="side__section-head" data-section-toggle>
+            <span class="side__chev">▾</span>
+            <span>Ready · 12</span>
+          </div>
+          <div class="side__items"></div>
+        </div>
+
+        <div class="side__section is-collapsed" data-section>
+          <div class="side__section-head" data-section-toggle>
+            <span class="side__chev">▾</span>
+            <span>Completed · 87</span>
+          </div>
+          <div class="side__items"></div>
+        </div>
+      </aside>
+
+      <!-- Editor area: kanban OR chat -->
+      <div class="editor">
+        <!-- Tabs -->
+        <div class="tabs" data-view="task">
+          <div class="tab is-active">
+            <span class="tab__kind">📝</span>
+            <span>vscode-style-layout-density-and-tabs</span>
+            <button class="tab__close" title="Close">×</button>
+          </div>
+          <div class="tab">
+            <span class="tab__kind">📝</span>
+            <span>orchestrator-review-lane</span>
+            <button class="tab__close" title="Close">×</button>
+          </div>
+          <div class="tab">
+            <span class="tab__kind">📝</span>
+            <span>chat-window-next-gen-evidence</span>
+            <span class="tab__dirty" title="Unsaved"></span>
+          </div>
+        </div>
+
+        <!-- Body switches between chat (task) and board (kanban) -->
+        <div class="editor__body" data-view="task">
+          <div class="chat">
+            <div class="chat__head">
+              <h3>vscode-style-layout-density-and-tabs</h3>
+              <span class="pill" title="State">in progress</span>
+              <span class="live" title="Active run">● run #4</span>
+              <div class="spacer"></div>
+              <button class="icon-btn" title="Regenerate protocol">✨</button>
+              <button class="icon-btn" title="Copy markdown">⎘</button>
+              <button class="icon-btn" id="meta-toggle" title="Show / hide meta">i</button>
+              <button class="icon-btn" title="Maximize">⤢</button>
+            </div>
+
+            <div class="chat__body" id="chat-body">
+              <!-- Long chat content (~30 turns), demonstrating chat reads to top -->
+              <div class="msg user">
+                <div class="msg__avatar">R</div>
+                <div class="msg__body">
+                  <div class="msg__head"><span class="msg__name">You</span><span>· 14:02</span></div>
+                  <div class="msg__text"><p>Let's redo the layout to match VS Code. The chat needs to read to the top.</p></div>
+                </div>
+              </div>
+
+              <div class="msg agent">
+                <div class="msg__avatar">A</div>
+                <div class="msg__body">
+                  <div class="msg__head"><span class="msg__name">Claude</span><span>· run #1 · 14:02</span></div>
+                  <div class="msg__text">
+                    <p>I'll start by surveying the current chrome and sketching a taxonomy. Three layers: persistent navigation (activity bar + status bar), per-task chrome (tabs + meta), content (editor + composer).</p>
+                    <div class="toolrow">📂 12 reads · 0 edits · in <code>frontend/src/app</code></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="runsep">end of run #1 · 18 s · 0 commits</div>
+
+              <div class="msg user">
+                <div class="msg__avatar">R</div>
+                <div class="msg__body">
+                  <div class="msg__head"><span class="msg__name">You</span><span>· 14:08</span></div>
+                  <div class="msg__text"><p>Good. Pull all meta out of the header. Status bar at bottom. Activity bar on left.</p></div>
+                </div>
+              </div>
+
+              <div class="msg agent">
+                <div class="msg__avatar">A</div>
+                <div class="msg__body">
+                  <div class="msg__head"><span class="msg__name">Claude</span><span>· run #2 · 14:09</span></div>
+                  <div class="msg__text">
+                    <p>Implementing the first slice. The flag <code>Frontend:VsCodeLayout</code> defaults to off; flipping it adds a <code>.app--vscode-layout</code> root class that swaps in the new chrome.</p>
+                    <pre>+ activity-bar (48 px)
++ status-bar  (22 px)
+- detail__header (compressed)
+- pane-toggle-bar (moved to status bar)</pre>
+                    <div class="toolrow">✏ 6 edits · 1 add · <code>app.ts</code>, <code>job-detail.ts</code>, <code>feature-flags.service.ts</code></div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="msg orchestrator">
+                <div class="msg__avatar">O</div>
+                <div class="msg__body">
+                  <div class="msg__head"><span class="msg__name">Orchestrator</span><span>· decision · 14:14</span></div>
+                  <div class="msg__text"><p>Heuristic: agent reported done with no commits. Re-issued with stronger framing.</p></div>
+                </div>
+              </div>
+
+              <div class="runsep">end of run #2 · 1 m 42 s · 1 commit</div>
+
+              <div class="msg agent">
+                <div class="msg__avatar">A</div>
+                <div class="msg__body">
+                  <div class="msg__head"><span class="msg__name">Claude</span><span>· run #3 · 14:16</span></div>
+                  <div class="msg__text">
+                    <p>Wired the persistence: meta-pane open state, side-bar width, and the flag itself land in <code>localStorage</code>. Reload preserves all three.</p>
+                    <p>Density: pane header padding dropped from 10/14 to 6/12. The chat body now starts <strong>at y = 84 px</strong> (title bar 30 + tabs 30 + chat head 24).</p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="msg agent">
+                <div class="msg__avatar">A</div>
+                <div class="msg__body">
+                  <div class="msg__head"><span class="msg__name">Claude</span><span>· run #3 · 14:18</span></div>
+                  <div class="msg__text">
+                    <p>Playwright pass: with the flag on, first chat line measured at y = 76 px on a 1440x900 viewport. Target was &lt; 24 px from the editor top, which it satisfies.</p>
+                    <div class="toolrow">🧪 3 specs · all green · 14 s</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="runsep">end of run #3 · 4 m 6 s · 3 commits</div>
+
+              <div class="msg user">
+                <div class="msg__avatar">R</div>
+                <div class="msg__body">
+                  <div class="msg__head"><span class="msg__name">You</span><span>· 14:25</span></div>
+                  <div class="msg__text"><p>Looks good. What's left for slice 2?</p></div>
+                </div>
+              </div>
+
+              <div class="msg agent">
+                <div class="msg__avatar">A</div>
+                <div class="msg__body">
+                  <div class="msg__head"><span class="msg__name">Claude</span><span>· run #4 · 14:26</span></div>
+                  <div class="msg__text">
+                    <p>Replace the breadcrumb-style header with editor-style tabs (one tab per open task), persist tab order, and let users drag-reorder. The mockup taxonomy lists this as slice 2.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="composer">
+              <div class="composer__modes">
+                <span>Mode:</span>
+                <button class="composer__mode is-active">Continue</button>
+                <button class="composer__mode">Steer</button>
+                <button class="composer__mode">Slash</button>
+                <div class="composer__spacer"></div>
+                <span>claude-opus-4-7 · auto</span>
+              </div>
+              <textarea class="composer__input" placeholder="Reply, steer, or slash-command…  Ctrl+Enter to send" rows="2"></textarea>
+              <div class="composer__row">
+                <button class="composer__btn">⏸ Pause</button>
+                <div class="composer__spacer"></div>
+                <button class="composer__btn">✨ Regenerate</button>
+                <button class="composer__btn composer__btn--primary">Send ⌃⏎</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Meta panel -->
+          <aside class="meta is-collapsed" id="meta-panel">
+            <div class="meta__head">
+              <span>Meta</span>
+              <button class="icon-btn" id="meta-close" title="Close">×</button>
+            </div>
+            <div class="meta__sections">
+              <div class="meta__section" data-meta-section>
+                <div class="meta__section-head" data-meta-toggle><span class="meta__chev">▾</span> Identity</div>
+                <div class="meta__body">
+                  <div class="meta__row"><span class="meta__label">Owner</span><span class="meta__value">Robert</span></div>
+                  <div class="meta__row"><span class="meta__label">Created</span><span class="meta__value">2 h ago</span></div>
+                  <div class="meta__row"><span class="meta__label">Project</span><span class="meta__value">Runbook</span></div>
+                </div>
+              </div>
+              <div class="meta__section" data-meta-section>
+                <div class="meta__section-head" data-meta-toggle><span class="meta__chev">▾</span> Runtime</div>
+                <div class="meta__body">
+                  <div class="meta__row"><span class="meta__label">CLI</span>
+                    <select class="meta__select"><option>claude</option><option>codex</option></select>
+                  </div>
+                  <div class="meta__row"><span class="meta__label">Model</span>
+                    <select class="meta__select"><option>opus-4-7</option><option>sonnet-4-6</option></select>
+                  </div>
+                  <div class="meta__row"><span class="meta__label">Tokens</span><span class="meta__value">142k ↑ · 38k ↓</span></div>
+                  <div class="meta__row"><span class="meta__label">Cache hit</span><span class="meta__value">⚡ 86%</span></div>
+                </div>
+              </div>
+              <div class="meta__section is-collapsed" data-meta-section>
+                <div class="meta__section-head" data-meta-toggle><span class="meta__chev">▾</span> Runs · 4</div>
+                <div class="meta__body"></div>
+              </div>
+              <div class="meta__section is-collapsed" data-meta-section>
+                <div class="meta__section-head" data-meta-toggle><span class="meta__chev">▾</span> Software</div>
+                <div class="meta__body"></div>
+              </div>
+            </div>
+          </aside>
+        </div>
+
+        <!-- Board view -->
+        <div class="editor__body" data-view="board" style="display:none;">
+          <div class="board">
+            <div class="col">
+              <div class="col__head"><span>Preparation</span><span>2</span></div>
+              <div class="card"><div class="card__title">measure protocol roundtrip latency</div><div class="card__meta"><span>Runbook</span><span>R</span></div></div>
+              <div class="card"><div class="card__title">copilot-token-rotation-flow</div><div class="card__meta"><span>Agent Task Processor</span><span>R</span></div></div>
+            </div>
+            <div class="col">
+              <div class="col__head"><span>Ready</span><span>4</span></div>
+              <div class="card"><div class="card__title">activity-log-tool-bursts</div><div class="card__meta"><span>Runbook</span></div></div>
+              <div class="card"><div class="card__title">orchestrator-meta-cycle-evidence</div><div class="card__meta"><span>Agent Task Processor</span></div></div>
+              <div class="card"><div class="card__title">supervisor-rate-limit-advisory</div><div class="card__meta"><span>Runbook</span></div></div>
+              <div class="card"><div class="card__title">cli-skills-pickup-coverage</div><div class="card__meta"><span>Agent Task Processor</span></div></div>
+            </div>
+            <div class="col">
+              <div class="col__head"><span>Progress</span><span>1</span></div>
+              <div class="card" style="border-color:var(--accent);">
+                <div class="card__title">vscode-style-layout-density-and-tabs</div>
+                <div class="card__meta"><span>Agent Task Processor</span><span style="color:var(--green);">● run #4</span></div>
+              </div>
+            </div>
+            <div class="col">
+              <div class="col__head"><span>Review</span><span>3</span></div>
+              <div class="card"><div class="card__title">orchestrator-review-lane-and-bubble-up</div><div class="card__meta"><span>Agent Task Processor</span></div></div>
+              <div class="card"><div class="card__title">chat-window-next-gen-evidence</div><div class="card__meta"><span>Agent Task Processor</span></div></div>
+              <div class="card"><div class="card__title">cli-quota-overage-banner</div><div class="card__meta"><span>Runbook</span></div></div>
+            </div>
+            <div class="col">
+              <div class="col__head"><span>Completed</span><span>87</span></div>
+              <div class="card"><div class="card__title">claude-streaming-rate-pill</div><div class="card__meta"><span>Runbook</span></div></div>
+              <div class="card"><div class="card__title">project-tabs-overflow-fix</div><div class="card__meta"><span>Agent Task Processor</span></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Status bar --------------------------------------------- -->
+    <div class="statusbar">
+      <button class="statusbar__item" title="Active project">📁 Runbook</button>
+      <span class="statusbar__sep"></span>
+      <button class="statusbar__item" title="Task state">🟦 in progress · run #4</button>
+      <span class="statusbar__sep"></span>
+      <button class="statusbar__item" title="Model">🧠 claude-opus-4-7</button>
+      <span class="statusbar__sep"></span>
+      <button class="statusbar__item" title="Open runs panel">🔁 4 runs</button>
+      <span class="statusbar__sep"></span>
+      <button class="statusbar__item is-on" title="Auto pickup is on">⚡ auto</button>
+      <span class="statusbar__spacer"></span>
+      <button class="statusbar__item" title="Owner filter">👤 Robert</button>
+      <span class="statusbar__sep"></span>
+      <button class="statusbar__item" title="Panel toggle">⊟ panels</button>
+      <span class="statusbar__sep"></span>
+      <button class="statusbar__item" title="Watchdog">⏱ ok · 14:26</button>
+      <span class="statusbar__sep"></span>
+      <button class="statusbar__item" title="Open in VS Code">🪟 open in vs code</button>
+    </div>
+  </div>
+
+  <script>
+    // View switcher (mockup-only)
+    const viewBtns = document.querySelectorAll('[data-view-trigger], .titlebar__btn[data-view]');
+    const setView = (name) => {
+      document.querySelectorAll('.titlebar__btn[data-view]').forEach(b =>
+        b.classList.toggle('is-active', b.dataset.view === name)
+      );
+      document.querySelectorAll('.tabs[data-view], .editor__body[data-view]').forEach(el =>
+        el.style.display = el.dataset.view === name ? '' : 'none'
+      );
+    };
+    viewBtns.forEach(b => b.addEventListener('click', () => setView(b.dataset.view || b.dataset.viewTrigger)));
+
+    // Side-bar section toggles
+    document.querySelectorAll('[data-section-toggle]').forEach(h => {
+      h.addEventListener('click', () => h.parentElement.classList.toggle('is-collapsed'));
+    });
+
+    // Meta panel toggle
+    const meta = document.getElementById('meta-panel');
+    const metaToggle = document.getElementById('meta-toggle');
+    const metaClose = document.getElementById('meta-close');
+    const setMeta = (open) => {
+      meta.classList.toggle('is-collapsed', !open);
+      metaToggle.classList.toggle('is-active', open);
+    };
+    metaToggle.addEventListener('click', () => setMeta(meta.classList.contains('is-collapsed')));
+    metaClose.addEventListener('click', () => setMeta(false));
+
+    // Meta section toggles
+    document.querySelectorAll('[data-meta-toggle]').forEach(h => {
+      h.addEventListener('click', () => h.parentElement.classList.toggle('is-collapsed'));
+    });
+
+    // Tabs (close button removes a tab)
+    document.querySelectorAll('.tab__close').forEach(b => {
+      b.addEventListener('click', (e) => { e.stopPropagation(); b.closest('.tab').remove(); });
+    });
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('is-active'));
+        tab.classList.add('is-active');
+      });
+    });
+
+    // Composer mode toggles
+    document.querySelectorAll('.composer__mode').forEach(b => {
+      b.addEventListener('click', () => {
+        b.parentElement.querySelectorAll('.composer__mode').forEach(m => m.classList.remove('is-active'));
+        b.classList.add('is-active');
+      });
+    });
+
+    // Status bar — auto toggle
+    document.querySelectorAll('.statusbar__item').forEach(b => {
+      b.addEventListener('click', () => {
+        if (b.title.startsWith('Auto pickup')) b.classList.toggle('is-on');
+      });
+    });
+  </script>
+</body>
+</html>
