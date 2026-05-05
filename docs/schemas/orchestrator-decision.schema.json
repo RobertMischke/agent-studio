@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-taskboard.local/schemas/orchestrator-decision.schema.json",
+  "title": "OrchestratorDecisionRecord",
+  "description": "One typed decision the ReviewDecisionOrchestrator made about a 4-review job that ended in [[TASK_NEEDS_INPUT]]. Append-only entry in {workspace}/logs/decisions/{project}.jsonl. Mirrors backend/Services/Runner/ReviewDecisionRecord.cs::ReviewDecisionRecord. Consumed by Layer 3 review and the planned executive-summary surface.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["createdAt", "jobId", "project", "kind", "reason", "prompt", "response", "followUp"],
+  "properties": {
+    "createdAt": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp at which the decision was emitted."
+    },
+    "jobId": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Slug-form job id of the 4-review task the decision targeted."
+    },
+    "project": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Project name as it appears in WatchPaths and runner status."
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["Reissue", "Escalate", "AcceptAsDone", "Skipped"],
+      "description": "Action chosen by the orchestrator. 'Skipped' covers cases where the fast-model response did not contain a parsable [[ORCHESTRATOR_DECISION]] sentinel; the task is left untouched and re-evaluated next tick."
+    },
+    "reason": {
+      "type": "string",
+      "description": "One short sentence the orchestrator emitted as the rationale. Plain prose, no markdown."
+    },
+    "prompt": {
+      "type": "string",
+      "description": "Full rendered prompt that was sent to the fast-model session, captured for Layer 3 audit."
+    },
+    "response": {
+      "type": "string",
+      "description": "Raw stdout captured from the fast-model session, including the decision sentinel and any narrative around it."
+    },
+    "followUp": {
+      "type": "string",
+      "description": "For Reissue, the follow-up text the orchestrator wrote back into the chat log and the orchestrator-follow-up.md file in the job folder. Empty string for the other kinds."
+    }
+  }
+}

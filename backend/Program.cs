@@ -91,6 +91,7 @@ builder.Services.AddSingleton<SupervisorInterventionService>();
 builder.Services.AddHostedService<HardHealthCheckHostedService>();
 builder.Services.AddHostedService<SoftReasoningHostedService>();
 builder.Services.AddHostedService<AutoInterventionHostedService>();
+builder.Services.AddHostedService<ReviewDecisionOrchestrator>();
 builder.Services.AddSingleton<GitService>();
 builder.Services.AddSingleton<ProjectSettingsService>();
 builder.Services.AddSingleton<ProjectDocsService>();

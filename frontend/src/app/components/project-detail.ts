@@ -48,6 +48,27 @@ interface ProjectSettingsRow {
 
       <app-global-orchestrator-card />
 
+      @if (pendingDecisions().length > 0) {
+        <section class="proj-detail__banner" data-testid="project-detail-needs-input-banner">
+          <header>
+            <span class="proj-detail__banner-icon">⚠️</span>
+            <strong>Orchestrator decision pending</strong>
+            <span class="proj-detail__banner-count">{{ pendingDecisions().length }} task{{ pendingDecisions().length === 1 ? '' : 's' }}</span>
+          </header>
+          <ul>
+            @for (p of pendingDecisions(); track p.jobId) {
+              <li>
+                <code>{{ p.jobId }}</code>
+                <span class="proj-detail__banner-reason">{{ p.reason || '(no reason given)' }}</span>
+              </li>
+            }
+          </ul>
+          <p class="proj-detail__hint">
+            One or more 4-review tasks ended in <code>[[TASK_NEEDS_INPUT]]</code>. The orchestrator will pick them up on the next tick (≈ 30 s) and either reissue, escalate, or accept-as-done.
+          </p>
+        </section>
+      }
+
       @if (paths(); as p) {
         <dl class="proj-detail__paths">
           <div><dt>Watch path</dt><dd>{{ p.path }}</dd></div>
@@ -194,6 +215,39 @@ interface ProjectSettingsRow {
       cursor: pointer;
     }
     .proj-detail__feed:hover { background: rgba(249, 226, 175, 0.22); }
+
+    .proj-detail__banner {
+      margin: 0 0 16px;
+      padding: 10px 12px;
+      border: 1px solid rgba(249, 226, 175, 0.40);
+      border-left-width: 3px;
+      background: rgba(249, 226, 175, 0.10);
+      border-radius: 6px;
+      color: #f1f5f9;
+      font-size: 0.85rem;
+    }
+    .proj-detail__banner header {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .proj-detail__banner header strong { color: #fcd34d; }
+    .proj-detail__banner-icon { font-size: 0.95rem; }
+    .proj-detail__banner-count {
+      margin-left: auto;
+      color: rgba(255,255,255,0.55);
+      font-size: 0.75rem;
+    }
+    .proj-detail__banner ul { margin: 4px 0 0; padding-left: 18px; }
+    .proj-detail__banner li { margin: 2px 0; }
+    .proj-detail__banner code {
+      font-size: 0.78rem;
+      background: rgba(255,255,255,0.06);
+      padding: 1px 4px;
+      border-radius: 3px;
+    }
+    .proj-detail__banner-reason { color: rgba(255,255,255,0.70); margin-left: 6px; }
 
     .proj-detail__paths {
       display: grid;
@@ -357,6 +411,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   readonly grouped = signal<GroupedJobs | null>(null);
   readonly recentEntries = signal<OrchestratorLogEntry[]>([]);
   readonly orchSession = signal<OrchestratorSession | null>(null);
+  readonly pendingDecisions = signal<ReadonlyArray<{ jobId: string; title: string; reason: string | null }>>([]);
 
   // Two-way bound drafts so the form is responsive even before the
   // server round-trip completes.
@@ -483,6 +538,10 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     this.jobService.getOrchestratorSession(this.projectName()).subscribe({
       next: (resp) => this.orchSession.set(resp.session),
       error: () => {}
+    });
+    this.jobService.getReviewDecisionsPending(this.projectName()).subscribe({
+      next: (resp) => this.pendingDecisions.set(resp.items ?? []),
+      error: () => this.pendingDecisions.set([])
     });
   }
 

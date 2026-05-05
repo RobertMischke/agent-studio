@@ -414,6 +414,18 @@ export class JobService {
     );
   }
 
+  /**
+   * Read the per-project list of 4-review jobs whose latest CLI output
+   * carries an unresolved [[TASK_NEEDS_INPUT]] sentinel. Drives the
+   * project-detail banner: when non-empty, the orchestrator owes a
+   * decision (or is about to make one in the next tick).
+   */
+  getReviewDecisionsPending(projectName: string) {
+    return this.http.get<{ project: string; items: { jobId: string; title: string; reason: string | null }[] }>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/review-decisions-pending`
+    );
+  }
+
   /** All per-project settings (auto-commit, runner mode, orchestrator model). */
   getAllProjectSettings() {
     return this.http.get<{ [project: string]: { autoCommit: boolean; runnerMode: string | null; orchestratorModel: string | null } }>(
