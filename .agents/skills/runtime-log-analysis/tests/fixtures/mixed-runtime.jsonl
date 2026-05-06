@@ -1,0 +1,5 @@
+{"schemaVersion":1,"timestamp":"2026-05-06T12:00:00.000Z","level":"Info","event":"render.first-paint","subsystem":"frontend"}
+not really json
+{"schemaVersion":1,"timestamp":"2026-05-06T12:00:00.500Z","level":"Info","event":"order.placed","subsystem":"backend","correlationId":"corr-9"}
+{nope
+{"schemaVersion":1,"timestamp":"2026-05-06T12:00:01.000Z","level":"Info","event":"order.shipped","subsystem":"backend","correlationId":"corr-9"}

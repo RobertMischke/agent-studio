@@ -1,0 +1,18 @@
+{"schemaVersion":1,"timestamp":"2026-05-06T12:00:00.000Z","level":"Info","event":"render.first-paint","subsystem":"frontend","operation":"bootstrap","duration":{"ms":142.7},"status":"Ok","correlationId":"corr-1","payload":{"route":"/"}}
+{"schemaVersion":1,"timestamp":"2026-05-06T12:00:01.100Z","level":"Info","event":"http.request.completed","subsystem":"backend","operation":"GET /api/jobs","duration":{"ms":34.2},"status":"Ok","correlationId":"corr-1"}
+{"schemaVersion":1,"timestamp":"2026-05-06T12:00:01.300Z","level":"Error","event":"http.request.failed","subsystem":"backend","operation":"GET /api/jobs/x","duration":{"ms":612},"status":"Failed","correlationId":"corr-2","error":{"type":"System.IO.IOException","message":"upstream socket reset","code":"502","retryable":true}}
+{"schemaVersion":1,"timestamp":"2026-05-06T12:00:01.700Z","level":"Error","event":"http.request.failed","subsystem":"backend","operation":"GET /api/jobs/x","duration":{"ms":605},"status":"Failed","correlationId":"corr-2","error":{"type":"System.IO.IOException","message":"upstream socket reset","code":"502","retryable":true}}
+{"schemaVersion":1,"timestamp":"2026-05-06T12:00:02.000Z","level":"Error","event":"http.request.failed","subsystem":"backend","operation":"GET /api/jobs/x","duration":{"ms":598},"status":"Failed","correlationId":"corr-2","error":{"type":"System.IO.IOException","message":"upstream socket reset","code":"502","retryable":true}}
+{"schemaVersion":1,"timestamp":"2026-05-06T12:00:02.400Z","level":"Info","event":"order.shipped","subsystem":"backend","operation":"OrderService.Ship","correlationId":"corr-3"}
+{"schemaVersion":1,"timestamp":"2026-05-06T12:00:03.100Z","level":"Info","event":"queue.tick","subsystem":"runner"}
+{"schemaVersion":1,"timestamp":"2026-05-06T12:00:03.150Z","level":"Info","event":"queue.tick","subsystem":"runner"}
+{"schemaVersion":1,"timestamp":"2026-05-06T12:00:03.200Z","level":"Info","event":"queue.tick","subsystem":"runner"}
+{"schemaVersion":1,"timestamp":"2026-05-06T12:00:03.250Z","level":"Info","event":"queue.tick","subsystem":"runner"}
+{"schemaVersion":1,"timestamp":"2026-05-06T12:00:03.300Z","level":"Info","event":"queue.tick","subsystem":"runner"}
+{"schemaVersion":1,"timestamp":"2026-05-06T12:00:03.350Z","level":"Info","event":"queue.tick","subsystem":"runner"}
+{"schemaVersion":1,"timestamp":"2026-05-06T12:00:03.400Z","level":"Info","event":"queue.tick","subsystem":"runner"}
+{"schemaVersion":1,"timestamp":"2026-05-06T12:00:03.450Z","level":"Info","event":"queue.tick","subsystem":"runner"}
+{"schemaVersion":1,"timestamp":"2026-05-06T12:00:03.500Z","level":"Info","event":"queue.tick","subsystem":"runner"}
+{"schemaVersion":1,"timestamp":"2026-05-06T12:00:03.550Z","level":"Info","event":"queue.tick","subsystem":"runner"}
+{"schemaVersion":1,"timestamp":"2026-05-06T12:00:04.000Z","level":"Warn","event":"http.request.completed","subsystem":"backend","operation":"GET /api/cli/quota","duration":{"ms":812},"status":"Ok"}
+{"schemaVersion":1,"timestamp":"2026-05-06T12:00:05.000Z","level":"Info","event":"http.request.completed","subsystem":"backend","operation":"GET /api/cli/quota","duration":{"ms":24},"status":"Ok"}

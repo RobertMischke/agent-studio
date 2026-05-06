@@ -129,6 +129,11 @@ Proposed canonical structure:
       SKILL.md
       scripts/
       references/
+    runtime-log-analysis/
+      SKILL.md
+      scripts/
+      references/
+      tests/
   projects/
     <project-key>/
       skills/
@@ -137,6 +142,8 @@ Proposed canonical structure:
 ```
 
 The existing `docs/cli-skills/` files are an earlier, narrower version of this idea. They can be migrated into `.agents/skills/cli-*` later, with compatibility links left behind.
+
+The `runtime-log-analysis` skill is the canonical example of a read-only analysis skill that pairs with a runtime evidence stream. Its per-report contract specialises [`docs/analysis-reports.md`](analysis-reports.md) for one topic (`runtime-observability`); follow that pattern when adding analysis skills against new evidence streams.
 
 ## Risks
 

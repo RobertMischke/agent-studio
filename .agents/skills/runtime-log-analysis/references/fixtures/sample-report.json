@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "reportId": "01HX0RUNTIMELOGANALYSIS00001",
+  "createdAt": "2026-05-06T12:02:00.000Z",
+  "scope": {
+    "kind": "Run",
+    "project": "agent-taskboard",
+    "jobId": "sample-job",
+    "runIndex": 1
+  },
+  "producer": {
+    "kind": "Manual",
+    "agent": "claude"
+  },
+  "trigger": "Manual",
+  "topic": "runtime-observability",
+  "summary": "Failing run: 3 repeated http.request.failed errors, one slow operation, and a test passed while the runtime stream emitted level=Error.",
+  "severity": "Critical",
+  "parseStatus": "Structured",
+  "tags": ["runtime-log-analysis"],
+  "references": [
+    { "kind": "Job", "ref": "agent-taskboard/3-progress/sample-job", "label": "sample job" },
+    { "kind": "Run", "ref": "sample-job:1", "label": "run 1" },
+    { "kind": "LogSlice", "ref": "sample-job:1:3-5", "label": "first repeated http.request.failed cluster" },
+    { "kind": "LogSlice", "ref": "sample-job:1:16", "label": "slowest GET /api/cli/quota" },
+    { "kind": "LogSlice", "ref": "sample-job:1:7-15", "label": "queue.tick burst" },
+    { "kind": "LogSlice", "ref": "sample-job:1:6", "label": "order.shipped without order.placed" },
+    { "kind": "Screenshot", "ref": "sample-job/results/runtime/orders.spec.jsonl", "label": "Playwright runtime attachment" },
+    { "kind": "Doc", "ref": "docs/product-runtime-observability.md", "label": "runtime observability contract" }
+  ],
+  "findings": [
+    {
+      "topic": "repeated-error",
+      "severity": "High",
+      "message": "http.request.failed x3 with System.IO.IOException code=502 retryable=true on GET /api/jobs/x",
+      "evidenceRefs": ["sample-job:1:3-5"]
+    },
+    {
+      "topic": "slow-operation",
+      "severity": "Warn",
+      "message": "backend.GET /api/cli/quota p95 = 812ms over 2 samples",
+      "evidenceRefs": ["sample-job:1:16"]
+    },
+    {
+      "topic": "noisy-event",
+      "severity": "Info",
+      "message": "queue.tick is 53% of events in the window; demote to Trace",
+      "evidenceRefs": ["sample-job:1:7-15"]
+    },
+    {
+      "topic": "suspicious-sequence",
+      "severity": "High",
+      "message": "order.shipped emitted for correlationId=corr-3 without a preceding order.placed",
+      "evidenceRefs": ["sample-job:1:6"]
+    },
+    {
+      "topic": "tests-passed-with-runtime-errors",
+      "severity": "Critical",
+      "message": "orders.spec.ts green for correlationId=corr-2 while runtime emitted three http.request.failed at level=Error",
+      "evidenceRefs": ["sample-job:1:3-5", "sample-job/results/runtime/orders.spec.jsonl"]
+    }
+  ],
+  "followUpTaskSuggestions": [
+    {
+      "title": "Investigate http.request.failed cluster against api.example.com",
+      "summary": "Three failures share host=api.example.com and code=502 in a 1-second window. Reproduce locally and add a regression probe in the affected handler.",
+      "priority": "High",
+      "relatedTopic": "RuntimeObservability",
+      "targetState": "1-preparation",
+      "createdJobId": null
+    },
+    {
+      "title": "Demote queue.tick from Info to Trace",
+      "summary": "queue.tick dominated the runtime stream at 53%. Move it to Trace at the producer to keep Info actionable.",
+      "priority": "Normal",
+      "relatedTopic": "RuntimeObservability",
+      "targetState": "1-preparation",
+      "createdJobId": null
+    },
+    {
+      "title": "Make orders.spec fail when its correlationId emits level=Error",
+      "summary": "The Playwright spec passed while the runtime stream recorded three errors in the same correlationId. Either assert a clean runtime stream in the test, or attach the stream to the failure path so green is impossible while errors fire.",
+      "priority": "Critical",
+      "relatedTopic": "Qa",
+      "targetState": "1-preparation",
+      "createdJobId": null
+    }
+  ]
+}
