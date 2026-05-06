@@ -308,6 +308,120 @@ public static class DriftReportEndpoints
         });
 
         // -----------------------------------------------------------------
+        // Spec / Task / Job Drift action.
+        // GET /prompt returns the assembled prompt + scope summary so an
+        // operator (or future inline runner) can hand the prompt to a CLI
+        // agent. POST runs the action: without `agentResponse` it produces
+        // an Unstructured "evidence + prompt" report; with `agentResponse`
+        // it parses the agent's reply and produces the typed verdict.
+        // -----------------------------------------------------------------
+
+        group.MapGet("/{project}/actions/spec-task-job-drift/prompt", (
+            string project,
+            IConfiguration config,
+            DriftReportStore driftStore,
+            AnalysisReportStore analysisStore,
+            RuntimePromptService prompts,
+            SpecTaskJobDriftAnalysisService action) =>
+        {
+            if (string.IsNullOrWhiteSpace(project))
+                return Results.BadRequest(new { error = "project required" });
+            var workspace = config["TaskRepository"];
+            if (string.IsNullOrWhiteSpace(workspace))
+                return Results.BadRequest(new { error = "TaskRepository not configured" });
+
+            var projectRoot = Path.Combine(workspace!, "projects", project);
+            if (!Directory.Exists(projectRoot))
+                return Results.NotFound(new { error = $"project root not found: {projectRoot}" });
+
+            var repoRoot = ResolveRepoRoot();
+            var scope = action.SelectScope(project, projectRoot, repoRoot, driftStore, analysisStore, workspace);
+            var template = prompts.Render(
+                "spec-task-job-drift.md",
+                new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase));
+            var renderedPrompt = action.BuildPrompt(scope, template);
+            return Results.Ok(new SpecTaskJobDriftPromptResponse(
+                Project: project,
+                CapturedAt: scope.CapturedAt,
+                SpecDocs: scope.SpecDocs.Select(d => d.Path).ToArray(),
+                ActiveJobs: scope.ActiveJobs.Select(t => $"{t.Lane}/{t.JobId}").ToArray(),
+                RecentCompleted: scope.RecentCompleted.Select(t => $"{t.Lane}/{t.JobId}").ToArray(),
+                DuplicateCandidates: scope.DuplicateCandidates
+                    .Select(p => $"{p.LeftLane}/{p.LeftJobId} <> {p.RightLane}/{p.RightJobId} ({p.Overlap:0.00})")
+                    .ToArray(),
+                RecentDriftReports: scope.RecentDriftReports.Select(r => r.ReportId).ToArray(),
+                RecentAnalysisReports: scope.RecentAnalysisReports.Select(r => r.ReportId).ToArray(),
+                Prompt: renderedPrompt));
+        });
+
+        group.MapPost("/{project}/actions/spec-task-job-drift", async (
+            string project,
+            SpecTaskJobDriftRunRequest? body,
+            IConfiguration config,
+            DriftReportStore driftStore,
+            AnalysisReportStore analysisStore,
+            RuntimePromptService prompts,
+            SpecTaskJobDriftAnalysisService action,
+            CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(project))
+                return Results.BadRequest(new { error = "project required" });
+            var workspace = config["TaskRepository"];
+            if (string.IsNullOrWhiteSpace(workspace))
+                return Results.BadRequest(new { error = "TaskRepository not configured" });
+
+            var projectRoot = Path.Combine(workspace!, "projects", project);
+            if (!Directory.Exists(projectRoot))
+                return Results.NotFound(new { error = $"project root not found: {projectRoot}" });
+
+            var repoRoot = ResolveRepoRoot();
+            var scope = action.SelectScope(project, projectRoot, repoRoot, driftStore, analysisStore, workspace);
+            var template = prompts.Render(
+                "spec-task-job-drift.md",
+                new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase));
+            var renderedPrompt = action.BuildPrompt(scope, template);
+
+            var agentResponse = body?.AgentResponse;
+            string markdown;
+            SpecTaskJobDriftParseResult parse;
+            if (string.IsNullOrWhiteSpace(agentResponse))
+            {
+                parse = new SpecTaskJobDriftParseResult(
+                    Status: SpecTaskJobDriftParseStatus.Unstructured,
+                    ScoreBand: DriftScoreBand.Unknown,
+                    OverallScore: 0,
+                    Summary: "Evidence assembled; no agent narrative supplied. Run the embedded prompt against a CLI agent to produce the verdict.",
+                    Dimensions: null,
+                    FollowUps: new[]
+                    {
+                        new DriftFollowUpSuggestion(
+                            Title: "Run Spec / Task / Job Drift against a CLI agent",
+                            Summary: "Hand the embedded prompt to Claude / Codex / Copilot / Gemini and POST the reply back to /api/drift/{project}/actions/spec-task-job-drift to produce the structured verdict.",
+                            Priority: DriftFollowUpPriority.Normal,
+                            RelatedDimension: DriftDimensionType.TaskJob),
+                    },
+                    ParseError: null);
+                markdown = BuildSpecTaskJobEvidenceOnlyMarkdown(scope, renderedPrompt);
+            }
+            else
+            {
+                parse = action.TryParseAgentResponse(agentResponse);
+                markdown = agentResponse;
+            }
+
+            var reportId = "01" + DateTime.UtcNow.ToString("yyyyMMddHHmmssfff") + Guid.NewGuid().ToString("N").Substring(0, 8);
+            var report = action.BuildReport(
+                scope: scope,
+                parse: parse,
+                reportId: reportId,
+                createdAt: DateTime.UtcNow,
+                trigger: DriftReportTrigger.Manual);
+
+            await driftStore.AppendAsync(workspace!, project, report, markdown, ct).ConfigureAwait(false);
+            return Results.Ok(new DriftReportDetailResponse(report, markdown));
+        });
+
+        // -----------------------------------------------------------------
         // Architecture marble surface.
         //
         // The Drift project view renders an architecture map (max ten
@@ -437,6 +551,36 @@ public static class DriftReportEndpoints
         return sb.ToString();
     }
 
+    private static string BuildSpecTaskJobEvidenceOnlyMarkdown(
+        SpecTaskJobDriftScope scope,
+        string renderedPrompt)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("# Spec / Task / Job Drift - evidence only");
+        sb.AppendLine();
+        sb.Append("**Verdict:** evidence assembled at ")
+            .Append(scope.CapturedAt.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ"))
+            .AppendLine("; no agent narrative supplied. Run the embedded prompt against a CLI agent and POST the reply back to produce the structured verdict.");
+        sb.AppendLine();
+        sb.Append("**Project:** `").Append(scope.Project).AppendLine("`");
+        sb.AppendLine();
+        sb.AppendLine("## Snapshot");
+        sb.AppendLine();
+        sb.Append("- Spec / planning docs: ").Append(scope.SpecDocs.Count).AppendLine();
+        sb.Append("- Active queue jobs: ").Append(scope.ActiveJobs.Count).AppendLine();
+        sb.Append("- Recent completed evidence entries: ").Append(scope.RecentCompleted.Count).AppendLine();
+        sb.Append("- Duplicate candidate pairs (heuristic): ").Append(scope.DuplicateCandidates.Count).AppendLine();
+        sb.AppendLine();
+        sb.AppendLine("## Embedded prompt");
+        sb.AppendLine();
+        sb.AppendLine("Copy the block below into a Claude / Codex / Copilot / Gemini session, then POST the reply back to `/api/drift/{project}/actions/spec-task-job-drift` with `agentResponse` set to produce the structured verdict.");
+        sb.AppendLine();
+        sb.AppendLine("```markdown");
+        sb.AppendLine(renderedPrompt);
+        sb.AppendLine("```");
+        return sb.ToString();
+    }
+
     private static string BuildEvidenceOnlyMarkdown(
         AdrCodeDriftScope scope,
         string renderedPrompt)
@@ -537,6 +681,28 @@ public sealed record AdrCodeDriftPromptResponse(
     IReadOnlyList<string> ModuleBoundaries,
     IReadOnlyList<string> Schemas,
     IReadOnlyList<string> RecentTasks,
+    IReadOnlyList<string> RecentDriftReports,
+    IReadOnlyList<string> RecentAnalysisReports,
+    string Prompt);
+
+/// <summary>
+/// Body for <c>POST /api/drift/{project}/actions/spec-task-job-drift</c>.
+/// Same envelope as the other Drift actions: an empty
+/// <see cref="AgentResponse"/> emits an Unstructured "evidence only" report
+/// carrying the rendered prompt; a populated value parses the agent's reply
+/// and emits the typed verdict.
+/// </summary>
+public sealed record SpecTaskJobDriftRunRequest(string? AgentResponse);
+
+/// <summary>Response for
+/// <c>GET /api/drift/{project}/actions/spec-task-job-drift/prompt</c>.</summary>
+public sealed record SpecTaskJobDriftPromptResponse(
+    string Project,
+    DateTime CapturedAt,
+    IReadOnlyList<string> SpecDocs,
+    IReadOnlyList<string> ActiveJobs,
+    IReadOnlyList<string> RecentCompleted,
+    IReadOnlyList<string> DuplicateCandidates,
     IReadOnlyList<string> RecentDriftReports,
     IReadOnlyList<string> RecentAnalysisReports,
     string Prompt);
