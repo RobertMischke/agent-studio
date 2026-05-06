@@ -286,6 +286,19 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
         Assert.Contains("\"threshold\":3", line);
         Assert.Contains("\"outputDeadlineSeconds\":60", line);
         Assert.Contains("\"reason\":\"", line);
+
+        // Surface a sample JSONL row to the task job folder so the task report
+        // can quote a real wire-format line. Best-effort: never fails the test.
+        var sampleSink = Environment.GetEnvironmentVariable("PICKUP_FAILURE_SAMPLE_PATH");
+        if (!string.IsNullOrWhiteSpace(sampleSink))
+        {
+            try
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(sampleSink)!);
+                File.WriteAllText(sampleSink, line + Environment.NewLine);
+            }
+            catch { /* sample capture is informational only */ }
+        }
     }
 
     // ===== Helpers =====
