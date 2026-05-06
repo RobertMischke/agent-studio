@@ -41,16 +41,16 @@ mockup-next-gen-chat-document-tabs {
     }
 
     .ng-chat-prototype {
-      --bg: #f3f5f8;
-      --chrome: #f8fafc;
+      --bg: #f6f7f9;
+      --chrome: #f3f5f7;
       --surface: #ffffff;
-      --surface-soft: #eef2f7;
-      --line: #d7dfeb;
-      --line-strong: #b9c5d6;
-      --text: #172033;
-      --muted: #667287;
-      --faint: #93a0b4;
-      --accent: #356ad8;
+      --surface-soft: #eef1f5;
+      --line: #d5dbe3;
+      --line-strong: #b5bfcc;
+      --text: #1f252d;
+      --muted: #657181;
+      --faint: #9aa5b3;
+      --accent: #0e639c;
       --ok: #328a3b;
       --warn: #c56b00;
       --danger: #d21f2b;
@@ -62,8 +62,8 @@ mockup-next-gen-chat-document-tabs {
       --scrollbar-thumb: #aeb9ca;
       height: 100vh;
       display: grid;
-      grid-template-columns: 64px minmax(0, 1fr);
-      grid-template-rows: 34px minmax(0, 1fr) 28px;
+      grid-template-columns: 56px minmax(0, 1fr);
+      grid-template-rows: 32px minmax(0, 1fr) 26px;
       color: var(--text);
       background: var(--bg);
       overflow: hidden;
@@ -157,19 +157,19 @@ mockup-next-gen-chat-document-tabs {
       grid-column: 1;
       grid-row: 1 / 4;
       display: grid;
-      grid-template-rows: repeat(6, 52px) minmax(0, 1fr) 52px;
+      grid-template-rows: repeat(6, 48px) minmax(0, 1fr) 48px;
       justify-items: center;
       align-items: center;
-      padding: 4px 3px 6px;
-      background: color-mix(in srgb, var(--chrome) 68%, var(--bg));
+      padding: 3px 2px 5px;
+      background: var(--chrome);
       border-right: 1px solid var(--line);
     }
 
     .activity__item {
-      width: 56px;
-      height: 48px;
+      width: 50px;
+      height: 44px;
       border: 1px solid transparent;
-      border-radius: 8px;
+      border-radius: 5px;
       display: grid;
       grid-template-rows: 18px 12px;
       place-content: center;
@@ -206,7 +206,7 @@ mockup-next-gen-chat-document-tabs {
     }
 
     .activity__label {
-      max-width: 50px;
+      max-width: 46px;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -231,16 +231,16 @@ mockup-next-gen-chat-document-tabs {
       min-width: 0;
       min-height: 0;
       display: grid;
-      grid-template-columns: 196px minmax(620px, 1fr) minmax(304px, 29vw);
+      grid-template-columns: 178px minmax(620px, 1fr) minmax(264px, 20vw);
       background: var(--bg);
     }
 
     .workspace--sheet-closed {
-      grid-template-columns: 196px minmax(620px, 1fr);
+      grid-template-columns: 178px minmax(620px, 1fr);
     }
 
     .workspace--queue-closed {
-      grid-template-columns: minmax(620px, 1fr) minmax(304px, 29vw);
+      grid-template-columns: minmax(620px, 1fr) minmax(264px, 20vw);
     }
 
     .workspace--queue-closed.workspace--sheet-closed {
@@ -261,7 +261,7 @@ mockup-next-gen-chat-document-tabs {
       grid-template-columns: minmax(0, 1fr) 26px;
       align-items: center;
       gap: 8px;
-      padding: 9px 10px 8px;
+      padding: 7px 8px 6px;
       border-bottom: 1px solid var(--line);
       background: var(--chrome);
     }
@@ -275,7 +275,7 @@ mockup-next-gen-chat-document-tabs {
     }
 
     .task-list__header strong {
-      font-size: 15px;
+      font-size: 14px;
       line-height: 1.2;
     }
 
@@ -299,15 +299,15 @@ mockup-next-gen-chat-document-tabs {
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 4px;
-      padding: 7px 8px 5px;
+      padding: 5px 6px;
       border-bottom: 1px solid var(--line);
       background: var(--surface);
     }
 
     .task-list__filter {
-      min-height: 24px;
+      min-height: 22px;
       border: 1px solid var(--line);
-      border-radius: 6px;
+      border-radius: 4px;
       background: var(--surface-soft);
       color: var(--muted);
       font-size: 11px;
@@ -321,14 +321,14 @@ mockup-next-gen-chat-document-tabs {
     }
 
     .task-card {
-      width: calc(100% - 16px);
-      margin: 7px 8px;
+      width: calc(100% - 12px);
+      margin: 5px 6px;
       display: grid;
-      gap: 5px;
+      gap: 4px;
       text-align: left;
-      padding: 8px 9px;
+      padding: 7px 8px;
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: 5px;
       background: var(--surface);
       color: var(--text);
     }
@@ -367,7 +367,7 @@ mockup-next-gen-chat-document-tabs {
 
     .task-card__title {
       font-weight: 650;
-      font-size: 12.5px;
+      font-size: 12px;
       line-height: 1.28;
       display: -webkit-box;
       -webkit-line-clamp: 2;
@@ -386,26 +386,26 @@ mockup-next-gen-chat-document-tabs {
       min-width: 0;
       min-height: 0;
       display: grid;
-      grid-template-rows: 38px minmax(0, 1fr);
+      grid-template-rows: 36px minmax(0, 1fr);
       border-right: 1px solid var(--line);
     }
 
     .detail-chrome {
       min-width: 0;
-      min-height: 38px;
+      min-height: 36px;
       display: grid;
-      grid-template-columns: 30px minmax(0, 1fr) 28px auto auto;
+      grid-template-columns: 28px minmax(0, 1fr) 26px auto auto;
       align-items: center;
       gap: 6px;
-      padding: 4px 8px;
+      padding: 4px 7px;
       border-bottom: 1px solid var(--line);
       background: var(--surface);
     }
 
     .detail-chrome__back,
     .detail-chrome__edit {
-      width: 28px;
-      height: 28px;
+      width: 26px;
+      height: 26px;
       border: 1px solid var(--line);
       border-radius: 6px;
       display: grid;
@@ -506,7 +506,7 @@ mockup-next-gen-chat-document-tabs {
       min-height: 0;
       min-width: 0;
       display: grid;
-      grid-template-columns: 132px minmax(0, 1fr);
+      grid-template-columns: 118px minmax(0, 1fr);
       grid-template-rows: minmax(0, 1fr);
       padding: 0;
       background: var(--surface);
@@ -518,8 +518,8 @@ mockup-next-gen-chat-document-tabs {
       display: grid;
       grid-template-rows: auto auto auto minmax(0, 1fr);
       align-content: start;
-      gap: 7px;
-      padding: 7px;
+      gap: 5px;
+      padding: 6px;
       border-right: 1px solid var(--line);
       background: var(--chrome);
     }
@@ -534,10 +534,10 @@ mockup-next-gen-chat-document-tabs {
       align-items: center;
       column-gap: 7px;
       row-gap: 1px;
-      min-height: 46px;
-      padding: 7px;
+      min-height: 38px;
+      padding: 6px;
       border: 1px solid var(--line);
-      border-radius: 7px;
+      border-radius: 5px;
       background: var(--surface);
       color: var(--text);
       text-align: left;
@@ -551,7 +551,7 @@ mockup-next-gen-chat-document-tabs {
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      font-size: 12px;
+      font-size: 11.5px;
       font-weight: 750;
     }
 
@@ -564,7 +564,7 @@ mockup-next-gen-chat-document-tabs {
     .inspector-rail__scenarios,
     .inspector-rail__summary {
       display: grid;
-      gap: 5px;
+      gap: 4px;
     }
 
     .inspector-rail__modes b,
@@ -580,19 +580,19 @@ mockup-next-gen-chat-document-tabs {
     .inspector-rail__scenarios button,
     .rail-action {
       width: 100%;
-      min-height: 31px;
+      min-height: 28px;
       display: grid;
       grid-template-columns: 18px minmax(0, 1fr) auto;
       align-items: center;
       gap: 6px;
       border: 1px solid transparent;
-      border-radius: 6px;
+      border-radius: 4px;
       background: transparent;
       color: var(--muted);
-      font-size: 11px;
+      font-size: 10.5px;
       font-weight: 700;
       text-align: left;
-      padding: 0 7px;
+      padding: 0 6px;
     }
 
     .inspector-rail__scenarios button span,
@@ -626,7 +626,7 @@ mockup-next-gen-chat-document-tabs {
 
     .inspector-rail__summary .summary-chip {
       width: 100%;
-      min-height: 38px;
+      min-height: 32px;
       display: grid;
       grid-template-columns: 18px minmax(0, 1fr);
       grid-template-areas:
@@ -635,8 +635,8 @@ mockup-next-gen-chat-document-tabs {
       align-items: center;
       justify-items: start;
       gap: 0;
-      border-radius: 6px;
-      padding: 4px 7px;
+      border-radius: 4px;
+      padding: 4px 6px;
       text-align: left;
     }
 
@@ -657,12 +657,12 @@ mockup-next-gen-chat-document-tabs {
       min-width: 0;
       min-height: 0;
       display: grid;
-      grid-template-rows: 30px minmax(0, 1fr);
+      grid-template-rows: 29px minmax(0, 1fr);
     }
 
     .document-tabs {
       min-width: 0;
-      min-height: 32px;
+      min-height: 29px;
       display: flex;
       align-items: stretch;
       gap: 0;
@@ -675,7 +675,7 @@ mockup-next-gen-chat-document-tabs {
     .document-tab {
       min-width: 128px;
       max-width: 210px;
-      height: 32px;
+      height: 29px;
       display: grid;
       grid-template-columns: 16px minmax(0, 1fr) 18px;
       grid-template-areas:
@@ -689,7 +689,7 @@ mockup-next-gen-chat-document-tabs {
       border-radius: 0;
       background: color-mix(in srgb, var(--chrome) 92%, var(--surface));
       color: var(--muted);
-      padding: 3px 7px;
+      padding: 2px 7px;
       text-align: left;
       font: inherit;
       cursor: pointer;
@@ -811,7 +811,7 @@ mockup-next-gen-chat-document-tabs {
       min-height: 0;
       overflow: hidden;
       display: grid;
-      grid-template-rows: 32px minmax(0, 1fr) auto;
+      grid-template-rows: 30px minmax(0, 1fr) auto;
       background: var(--bg);
     }
 
@@ -825,7 +825,7 @@ mockup-next-gen-chat-document-tabs {
 
     .conversation__topline {
       min-width: 0;
-      min-height: 32px;
+      min-height: 30px;
       display: grid;
       grid-template-columns: auto minmax(0, 1fr) auto auto auto;
       align-items: center;
@@ -864,7 +864,7 @@ mockup-next-gen-chat-document-tabs {
     .conversation__scroll {
       min-height: 0;
       overflow: auto;
-      padding: 8px 12px 4px;
+      padding: 7px 10px 4px;
     }
 
     .scenario-row__active {
@@ -1525,19 +1525,19 @@ mockup-next-gen-chat-document-tabs {
 
     .git-actions button,
     .function-grid button {
-      min-height: 26px;
+      min-height: 24px;
       border: 1px solid var(--line);
-      border-radius: 6px;
+      border-radius: 4px;
       background: var(--surface-soft);
       color: var(--text);
-      padding: 3px 8px;
-      font-size: 12px;
+      padding: 2px 7px;
+      font-size: 11.5px;
     }
 
     .function-grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 6px;
+      gap: 5px;
     }
 
     .function-grid button {
@@ -1545,7 +1545,7 @@ mockup-next-gen-chat-document-tabs {
       display: flex;
       align-items: center;
       justify-content: flex-start;
-      gap: 6px;
+      gap: 5px;
       text-align: left;
       overflow: hidden;
     }
@@ -1561,7 +1561,7 @@ mockup-next-gen-chat-document-tabs {
       min-width: 0;
       min-height: 0;
       display: grid;
-      grid-template-rows: 30px minmax(0, 1fr);
+      grid-template-rows: 28px minmax(0, 1fr);
       border-left: 0;
       background: var(--surface);
     }
@@ -1575,12 +1575,12 @@ mockup-next-gen-chat-document-tabs {
 
     .context__head,
     .sheet__head {
-      min-height: 30px;
+      min-height: 28px;
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
       gap: 8px;
       align-items: center;
-      padding: 4px 7px;
+      padding: 3px 7px;
       border-bottom: 1px solid var(--line);
       background: var(--chrome);
     }
@@ -1604,14 +1604,22 @@ mockup-next-gen-chat-document-tabs {
 
     .summary-callout {
       display: grid;
-      gap: 5px;
-      margin-bottom: 9px;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 7px;
       border: 1px solid color-mix(in srgb, var(--accent) 36%, var(--line));
-      border-radius: 8px;
+      border-radius: 5px;
       background:
-        linear-gradient(90deg, color-mix(in srgb, var(--accent) 10%, transparent), transparent 72%),
+        linear-gradient(90deg, color-mix(in srgb, var(--accent) 7%, transparent), transparent 72%),
         var(--surface);
-      padding: 10px;
+      padding: 8px 9px;
+    }
+
+    .summary-callout__copy {
+      min-width: 0;
+      display: grid;
+      gap: 3px;
     }
 
     .summary-callout span {
@@ -1623,7 +1631,7 @@ mockup-next-gen-chat-document-tabs {
 
     .summary-callout strong {
       color: var(--text);
-      font-size: 14px;
+      font-size: 13px;
       line-height: 1.25;
     }
 
@@ -1634,11 +1642,10 @@ mockup-next-gen-chat-document-tabs {
       line-height: 1.4;
     }
 
-    .summary-callout div {
+    .summary-callout__actions {
       display: flex;
       flex-wrap: wrap;
       gap: 5px;
-      margin-top: 2px;
     }
 
     .summary-callout button {
@@ -1651,6 +1658,42 @@ mockup-next-gen-chat-document-tabs {
       font-size: 11px;
     }
 
+    .summary-signal-row {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 5px;
+      margin-bottom: 7px;
+    }
+
+    .summary-signal-row span {
+      min-width: 0;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 5px;
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      background: var(--surface);
+      padding: 6px 7px;
+    }
+
+    .summary-signal-row b {
+      min-width: 0;
+      overflow: hidden;
+      font-size: 13px;
+      line-height: 1.15;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .summary-signal-row em {
+      color: var(--muted);
+      font-size: 10px;
+      font-style: normal;
+      line-height: 1;
+      text-transform: uppercase;
+    }
+
     .metric-grid div,
     .context-card,
     .source-card,
@@ -1658,9 +1701,9 @@ mockup-next-gen-chat-document-tabs {
     .sheet__body article,
     .sheet__summary {
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: 5px;
       background: var(--surface);
-      padding: 9px;
+      padding: 8px;
     }
 
     .metric-grid b,
@@ -1694,9 +1737,14 @@ mockup-next-gen-chat-document-tabs {
     .source-card,
     .git-summary { margin-bottom: 9px; }
 
+    .context-card--compact {
+      margin-bottom: 7px;
+      padding: 7px 8px;
+    }
+
     .context-card h3 {
-      margin: 0 0 6px;
-      font-size: 13px;
+      margin: 0 0 4px;
+      font-size: 12.5px;
     }
 
     .context-card p { margin: 0; }
@@ -1789,18 +1837,18 @@ mockup-next-gen-chat-document-tabs {
     .sheet__body {
       min-height: 0;
       overflow: auto;
-      padding: 10px;
+      padding: 8px;
       display: grid;
       align-content: start;
-      gap: 9px;
+      gap: 7px;
     }
 
-    .sheet__body p { margin: 5px 0 0; color: var(--text); font-size: 13px; line-height: 1.4; }
+    .sheet__body p { margin: 4px 0 0; color: var(--text); font-size: 12.5px; line-height: 1.38; }
     .sheet__summary { width: 100%; text-align: left; display: grid; gap: 4px; }
 
     .sheet__composer {
       border-top: 1px solid var(--line);
-      padding: 8px;
+      padding: 7px;
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
       gap: 8px;
@@ -1812,7 +1860,7 @@ mockup-next-gen-chat-document-tabs {
       border: 1px solid var(--line);
       border-radius: 8px;
       color: var(--faint);
-      min-height: 42px;
+      min-height: 36px;
       display: flex;
       align-items: center;
       padding: 0 10px;
@@ -2106,14 +2154,14 @@ mockup-next-gen-chat-document-tabs {
     }
 
     .ng-chat-prototype[data-density="compact"] .workspace:not(.workspace--queue-closed):not(.workspace--sheet-closed) {
-      grid-template-columns: 172px minmax(590px, 1fr) minmax(272px, 28vw);
+      grid-template-columns: 158px minmax(590px, 1fr) minmax(240px, 20vw);
     }
 
     .ng-chat-prototype[data-density="compact"] .workspace:not(.workspace--queue-closed).workspace--sheet-closed {
-      grid-template-columns: 172px minmax(590px, 1fr);
+      grid-template-columns: 158px minmax(590px, 1fr);
     }
 
-    .ng-chat-prototype[data-density="compact"] .workbench { grid-template-columns: 64px minmax(0, 1fr); }
+    .ng-chat-prototype[data-density="compact"] .workbench { grid-template-columns: 56px minmax(0, 1fr); }
     .ng-chat-prototype[data-density="compact"] .inspector-rail { padding: 5px 4px; gap: 5px; }
     .ng-chat-prototype[data-density="compact"] .rail-guide {
       min-height: 34px;

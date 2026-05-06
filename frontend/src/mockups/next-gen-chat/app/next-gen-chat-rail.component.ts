@@ -56,7 +56,7 @@ import {
       </div>
 
       <div class="inspector-rail__scenarios" data-testid="prototype-scenarios">
-        <b>Cases</b>
+        <b>Edge cases</b>
         @for (scenario of scenarios(); track scenario.id) {
           <button [class.scenario-row__active]="activeScenario() === scenario.id"
                   [attr.title]="scenario.label"

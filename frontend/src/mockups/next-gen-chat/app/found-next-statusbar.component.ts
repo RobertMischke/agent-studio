@@ -90,7 +90,7 @@ import { StatusPanel } from './next-gen-chat-workbench-prototype.models';
     button { font: inherit; cursor: pointer; }
 
     .statusbar {
-      min-height: 28px;
+      min-height: 26px;
       display: grid;
       grid-template-columns: minmax(230px, .75fr) minmax(460px, 1.25fr) auto;
       gap: 6px;
@@ -98,7 +98,7 @@ import { StatusPanel } from './next-gen-chat-workbench-prototype.models';
       background: #11111b;
       border-top: 1px solid rgba(255,255,255,0.08);
       color: rgba(255,255,255,0.76);
-      padding: 0 8px;
+      padding: 0 7px;
       font-size: 11px;
       letter-spacing: 0;
     }
@@ -121,7 +121,7 @@ import { StatusPanel } from './next-gen-chat-workbench-prototype.models';
 
     .statusbar button {
       min-width: 0;
-      height: 22px;
+      height: 20px;
       display: inline-flex;
       align-items: center;
       gap: 5px;

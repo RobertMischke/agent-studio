@@ -18,6 +18,8 @@ test.describe('@mockup next-gen chat actor rails and decision cards', () => {
     await openPrototype(page);
 
     await expect(page.getByTestId('next-gen-chat-angular-prototype')).toBeVisible();
+    await page.getByTestId('prototype-document-chat').click();
+    await expect(page.getByTestId('prototype-conversation')).toBeVisible();
 
     // 1. Actor rail surfaces every actor identity, with non-color cues (icon + glyph + label).
     const actorKey = page.getByTestId('prototype-actor-key');

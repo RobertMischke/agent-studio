@@ -131,12 +131,12 @@ import { Density, StatusPanel, Theme } from './next-gen-chat-workbench-prototype
     }
 
     .topbar {
-      height: 34px;
+      height: 32px;
       display: grid;
       grid-template-columns: minmax(148px, auto) minmax(320px, 1fr) auto auto;
       align-items: center;
       gap: 8px;
-      padding: 0 8px 0 10px;
+      padding: 0 7px 0 9px;
       background: var(--chrome);
       border-bottom: 1px solid var(--line);
     }
@@ -165,12 +165,12 @@ import { Density, StatusPanel, Theme } from './next-gen-chat-workbench-prototype
     .project-chip {
       min-width: 0;
       max-width: 176px;
-      min-height: 24px;
+      min-height: 22px;
       display: inline-flex;
       align-items: center;
       gap: 5px;
       border: 1px solid var(--project-border, var(--line));
-      border-radius: 7px;
+      border-radius: 5px;
       background: color-mix(in srgb, var(--project-soft, var(--surface-soft)) 58%, var(--surface));
       color: var(--text);
       padding: 1px 6px 1px 4px;
@@ -240,7 +240,7 @@ import { Density, StatusPanel, Theme } from './next-gen-chat-workbench-prototype
     }
 
     .owner-switch {
-      min-height: 28px;
+      min-height: 26px;
       max-width: 108px;
       display: inline-flex;
       align-items: center;
@@ -261,10 +261,10 @@ import { Density, StatusPanel, Theme } from './next-gen-chat-workbench-prototype
     }
 
     .icon-btn {
-      width: 28px;
-      height: 28px;
+      width: 26px;
+      height: 26px;
       border: 1px solid transparent;
-      border-radius: 6px;
+      border-radius: 5px;
       display: grid;
       place-items: center;
       background: transparent;

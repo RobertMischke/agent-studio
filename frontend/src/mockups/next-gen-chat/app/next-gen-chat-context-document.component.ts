@@ -64,31 +64,33 @@ import {
         @case ('result') {
           <section class="context__body">
             <article class="summary-callout" data-testid="prototype-summary-document">
-              <span>Default document</span>
-              <strong>Review ready</strong>
-              <p>Start here for phase, risk, evidence, and the next useful document. Each tab owns a full document surface; split review is an explicit action, not the default layout.</p>
-              <div>
-                <button type="button" (click)="paneSelected.emit('git')">Open Git document</button>
-                <button type="button" (click)="paneSelected.emit('chat')">Open Chat document</button>
-                <button type="button" (click)="paneSelected.emit('debug')">Open debug document</button>
+              <div class="summary-callout__copy">
+                <span>Default document</span>
+                <strong>Review ready</strong>
+                <p>Phase, risk, evidence, and the next useful drill-down. The full detail stays in Chat, Git, Screenshots, or Debug.</p>
+              </div>
+              <div class="summary-callout__actions">
+                <button type="button" (click)="paneSelected.emit('git')">Git</button>
+                <button type="button" (click)="paneSelected.emit('chat')">Chat</button>
+                <button type="button" (click)="paneSelected.emit('debug')">Debug</button>
               </div>
             </article>
-            <div class="metric-grid">
-              <div><b>Review</b><span>current state</span></div>
-              <div><b>3</b><span>commits</span></div>
-              <div><b>4</b><span>screenshots</span></div>
-              <div><b>42k</b><span>tokens</span></div>
+            <div class="summary-signal-row">
+              <span><b>Review</b><em>state</em></span>
+              <span><b>3</b><em>commits</em></span>
+              <span><b>4</b><em>shots</em></span>
+              <span><b>42k</b><em>tokens</em></span>
             </div>
-            <article class="context-card">
+            <article class="context-card context-card--compact">
               <h3>Human result</h3>
               <p>The renderer turns noisy Activity Logs into a readable conversation, keeps the side sheet for project steering, and opens adjacent review panes only when useful.</p>
             </article>
-            <article class="context-card">
+            <article class="context-card context-card--compact">
               <h3>Acceptance snapshot</h3>
               <p>Preserve Trace, run timeline, Files, Commits, Screenshots, token surfaces, composer behavior, and side-sheet controls while the flag is off.</p>
             </article>
-            <article class="context-card">
-              <h3>Existing functions carried forward</h3>
+            <article class="context-card context-card--compact">
+              <h3>Existing surfaces carried forward</h3>
               <div class="function-grid">
                 @for (item of featureParity(); track item.label) {
                   <button type="button" [attr.title]="item.note" (click)="featureSelected.emit(item.action)">

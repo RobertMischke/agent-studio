@@ -53,6 +53,30 @@ Decision: do not import `@vscode/webview-ui-toolkit`, shadcn, Material, or anoth
 
 The production path is narrower than "clone VS Code": inspect Code-OSS for measurement and behavior, use Codicons or local codicon-derived symbols for the small-icon vocabulary, use Angular CDK / Angular Aria for overlays, focus, splitter, menu, dialog, and keyboard behavior, and keep the visible layer in owned Found Next CSS tokens. The explicit comparison and guardrails live in [design-system-options.md](design-system-options.md).
 
+## May 6 Reduction Pass
+
+The latest visual pass intentionally reduces rather than adds. It follows three framework rules:
+
+1. VS Code container model: Activity Bar opens modules, Side Bar selects, document tabs do work, Status Bar summarizes.
+2. Angular CDK path: future behavior primitives should be overlays, menus, dialogs, focus, and splitters, not a broad visual kit.
+3. Found Next tokens: the app owns color, density, border, radius, and spacing tokens so project surfaces do not drift into generic dashboard styling.
+
+Research anchors: the VS Code UX overview defines Activity Bar, Primary Sidebar, Editor, Panel, and Status Bar as containers; the Activity Bar guideline treats it as a navigation surface; the Status Bar guideline asks for short labels and limited items; the VS Code UI guide emphasizes maximizing editor height and using split editor groups. Angular CDK remains the preferred implementation source for behavior primitives such as overlays, dialogs, menus, and focus handling while keeping the visual skin owned by this product.
+
+Component decisions:
+
+| Component | Keep | Reduce or move | Reason |
+|-----------|------|----------------|--------|
+| Activity Bar | Projects, Tasks, Search, Git, QA, Tokens. | Make the rail narrower and more neutral. Avoid adding one-off mockup-only modules. | This is a global module switcher, not a task toolbar. |
+| Queue module | Current queue, lane, order, agent, active task, close. | Keep filters shallow. Do not turn it into a second Kanban board. | The existing app already has a board; task detail only needs local orientation. |
+| Task rail | Documents, signal chips, edge-case scenarios for prototype testing. | Visually demote prototype scenarios under "Edge cases". Production should not ship scenario switches. | Pane controls are product behavior; scenarios are mockup QA. |
+| Summary document | Current state, commits, screenshots, tokens, human result, acceptance snapshot, existing surfaces. | Remove dashboard-card weight and shorten action labels. | Summary is an entry point, not the whole review UI. |
+| Git document | File list plus source/diff area. | Keep it purpose-bound to changes, not generic source browsing. | This is the highest-value adjacent review surface. |
+| Side sheet | Project chat and queue signal. | Make it narrower and optional. | It is project steering, not the primary task document. |
+| Status Bar | Run health, automation, session, quota, tokens, Git, visual, tools, model. | Keep labels short. Deeper details go into popovers or full documents. | VS Code guidance favors short workspace/context items. Quota is a justified product exception. |
+
+The pass updates the Angular prototype accordingly: slimmer Activity Bar, Queue, rail, side sheet, tabs, topbar, and statusbar; a compact Summary document; and less prominent card styling. This does not solve every polish issue, but it makes the next round about fine visual quality rather than raw information architecture.
+
 ## Panel And Document Model Trial
 
 The prototype should now explore a VS-Code-like panel/document model:
