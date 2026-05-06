@@ -1,0 +1,7 @@
+{"Timestamp":"2026-05-06T00:32:03.1010399Z","Stream":"system","Text":"[taskboard] Started fake-node CLI (PID 74172)"}
+{"Timestamp":"2026-05-06T00:32:03.1740287Z","Stream":"stdout","Text":"{\u0022type\u0022:\u0022progress\u0022,\u0022i\u0022:0}"}
+{"Timestamp":"2026-05-06T00:32:03.1776357Z","Stream":"stdout","Text":"{\u0022type\u0022:\u0022progress\u0022,\u0022i\u0022:1}"}
+{"Timestamp":"2026-05-06T00:32:03.1799877Z","Stream":"stdout","Text":"{\u0022type\u0022:\u0022progress\u0022,\u0022i\u0022:2}"}
+{"Timestamp":"2026-05-06T00:32:03.1921785Z","Stream":"stdout","Text":"{\u0022type\u0022:\u0022progress\u0022,\u0022i\u0022:3}"}
+{"Timestamp":"2026-05-06T00:32:03.1936343Z","Stream":"stdout","Text":"{\u0022type\u0022:\u0022progress\u0022,\u0022i\u0022:4}"}
+{"Timestamp":"2026-05-06T00:32:03.1957952Z","Stream":"system","Text":"[taskboard] fake-node CLI exited: status=completed, exitCode=0, duration=0,1s"}

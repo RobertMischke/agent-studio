@@ -1,0 +1,4 @@
+{"Timestamp":"2026-05-06T00:32:16.7631415Z","Stream":"system","Text":"[taskboard] Started fake-node CLI (PID 29788)"}
+{"Timestamp":"2026-05-06T00:32:16.8507853Z","Stream":"stderr","Text":"error-line-1"}
+{"Timestamp":"2026-05-06T00:32:16.8578681Z","Stream":"stderr","Text":"error-line-2"}
+{"Timestamp":"2026-05-06T00:32:17.0848782Z","Stream":"system","Text":"[taskboard] fake-node CLI exited: status=completed, exitCode=0, duration=0,3s"}
