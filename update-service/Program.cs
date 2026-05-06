@@ -44,9 +44,16 @@ builder.Services.AddSingleton(sp =>
 builder.Services.AddSingleton<UpdateOrchestrator>();
 builder.Services.AddHostedService<PeriodicProbeService>();
 
+// CORS: the UpdateService must be reachable from the FE during a stable
+// restart, when the main backend's /api proxy is dark. We are running on
+// localhost only, so a wide-open CORS policy is fine.
+builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
+    p.SetIsOriginAllowed(_ => true).AllowAnyHeader().AllowAnyMethod().AllowCredentials()));
+
 builder.WebHost.UseUrls(options.ListenUrl);
 
 var app = builder.Build();
+app.UseCors();
 
 // --- endpoints ---------------------------------------------------------------
 

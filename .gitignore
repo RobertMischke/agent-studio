@@ -50,3 +50,7 @@ frontend/mockup-chat.*.log
 # them universally so a transient build never bleeds into a commit.
 **/bin/
 **/obj/
+
+# UpdateService launcher artefacts (update-service.sh detached pid + log).
+.update-service.pid
+.update-service.log

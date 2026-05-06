@@ -1,0 +1,53 @@
+// Sticky-top notification strip. Always above the kanban; never blocks
+// pointer events for the rest of the page even when visible.
+.update-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+
+  // Light Catppuccin-leaning accents per state. The shell already runs
+  // dark, so backgrounds stay subtle to avoid a marketing feel.
+  &--running { background: rgba(137, 180, 250, 0.14); color: #cdd6f4; }
+  &--behind  { background: rgba(249, 226, 175, 0.10); color: #e6dec0; }
+  &--done    { background: rgba(166, 227, 161, 0.10); color: #cfead0; }
+  &--failed  { background: rgba(243, 139, 168, 0.14); color: #f9c5d5; }
+
+  &__spinner {
+    display: inline-block;
+    animation: update-banner-spin 1.4s linear infinite;
+  }
+
+  &__text { flex: 1; }
+  &__head {
+    margin-left: 0.5rem;
+    font-family: var(--mono-stack, ui-monospace, SFMono-Regular, monospace);
+    font-size: 0.75rem;
+    opacity: 0.8;
+  }
+
+  &__btn {
+    padding: 0.25rem 0.75rem;
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    background: rgba(255, 255, 255, 0.04);
+    color: inherit;
+    cursor: pointer;
+    font-size: 0.8125rem;
+
+    &:hover:not(:disabled) { background: rgba(255, 255, 255, 0.08); }
+    &:disabled { cursor: progress; opacity: 0.6; }
+
+    &--primary {
+      border-color: rgba(137, 180, 250, 0.4);
+      background: rgba(137, 180, 250, 0.18);
+      &:hover:not(:disabled) { background: rgba(137, 180, 250, 0.28); }
+    }
+  }
+}
+
+@keyframes update-banner-spin {
+  to { transform: rotate(360deg); }
+}
