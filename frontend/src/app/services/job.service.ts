@@ -6,12 +6,16 @@ import { ErrorDialogService } from './error-dialog.service';
 type LaneKey = keyof GroupedJobs;
 // ADR-0025: state strings use the new seven-lane order.
 // ADR-0026: 1a-orchestrator-prep + 1b-needs-human-review join the catalog.
+// ADR-0029: 3a-failed-pickup joins the catalog so optimistic reorders/moves
+// targeting the loud-not-archived lane keep the same fast-path treatment as
+// every other lane.
 const STATE_TO_LANE: Record<string, LaneKey> = {
   '1-preparation': 'preparation',
   '1a-orchestrator-prep': 'orchestratorPrep',
   '1b-needs-human-review': 'needsHumanReview',
   '2-ready': 'ready',
   '3-progress': 'progress',
+  '3a-failed-pickup': 'failedPickup',
   '4-auto-review': 'autoReview',
   '5-human-review': 'humanReview',
   '6-completed': 'completed',
@@ -53,7 +57,7 @@ export class JobService {
   }
 
   readonly jobs = signal<JobInfo[]>([]);
-  readonly grouped = signal<GroupedJobs>({ preparation: [], orchestratorPrep: [], needsHumanReview: [], ready: [], progress: [], review: [], autoReview: [], humanReview: [], completed: [], archive: [] });
+  readonly grouped = signal<GroupedJobs>({ preparation: [], orchestratorPrep: [], needsHumanReview: [], ready: [], progress: [], failedPickup: [], review: [], autoReview: [], humanReview: [], completed: [], archive: [] });
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly runnerStatus = signal<RunnerStatus>({ projects: {} });
