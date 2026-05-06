@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.Runner;
@@ -513,5 +514,241 @@ public sealed class AgentMessageBusBridge
             Uri = $"interventions.jsonl#{i.Project}",
             Label = i.Kind.ToString(),
         };
+    }
+
+    // ---------------------------------------------------------------------
+    // Supporting-agent bridge: explicit user-triggered meta workers (roadmap
+    // alignment, security audit, docs drift, UX/UI council, source-map skill,
+    // architecture review, ...). Each report run produces one bus message
+    // referencing the durable artifacts under
+    // <c>logs/analysis/&lt;project&gt;/&lt;reportId&gt;.{md,json}</c>. The bus
+    // never edits source code; supporting agents are observability + decision
+    // records, not coding-agent extensions. See
+    // <c>docs/agent-message-bus.md</c> section "Supporting agents" and
+    // <c>docs/analysis-reports.md</c> section 11.
+    // ---------------------------------------------------------------------
+
+    /// <summary>
+    /// Stable participant id for a supporting-agent topic.
+    /// Convention: <c>support:&lt;topic&gt;</c>, e.g.
+    /// <c>support:roadmap-alignment</c>, <c>support:security-audit</c>.
+    /// </summary>
+    public static string ParticipantSupportingFor(string topic)
+    {
+        var slug = SafeKebab(topic);
+        return $"support:{slug}";
+    }
+
+    /// <summary>
+    /// Idempotently register a <c>SupportingAgent</c> participant in the
+    /// workspace registry. Safe to call before every emit; the store
+    /// overwrites on identical id.
+    /// </summary>
+    public async Task RegisterSupportingAgentAsync(
+        string topic,
+        string displayName,
+        string? cli = null,
+        string? skill = null,
+        string? project = null,
+        CancellationToken ct = default)
+    {
+        var ws = Workspace();
+        if (string.IsNullOrWhiteSpace(ws)) return;
+        var participant = new AgentParticipant
+        {
+            Id = ParticipantSupportingFor(topic),
+            Kind = "SupportingAgent",
+            DisplayName = string.IsNullOrWhiteSpace(displayName) ? topic : displayName,
+            Cli = cli,
+            Skill = string.IsNullOrWhiteSpace(skill) ? topic : skill,
+            Project = project,
+            CreatedAt = _time.GetUtcNow().UtcDateTime,
+        };
+        try { await _store.RegisterParticipantAsync(ws!, participant, ct).ConfigureAwait(false); }
+        catch (Exception ex) { _logger.LogDebug(ex, "Bus participant register skipped for {Id}", participant.Id); }
+    }
+
+    /// <summary>
+    /// Emit one bus message that mirrors a supporting-agent
+    /// <see cref="AnalysisReport"/> run (e.g. roadmap alignment review,
+    /// security audit, docs drift). The Markdown sibling and the optional
+    /// JSON sidecar remain canonical on disk under
+    /// <c>logs/analysis/</c>; this projection lets the timeline see the run
+    /// alongside coding-agent activity and lets a reviewer drill from the
+    /// timeline back to the report files.
+    /// </summary>
+    /// <param name="project">Project slug. Workspace-scoped reports pass
+    /// <c>null</c>.</param>
+    /// <param name="topic">Analysis topic slug (<c>roadmap-alignment</c>,
+    /// <c>docs-drift</c>, <c>security-audit</c>, ...). Drives the participant
+    /// id and the topic tag.</param>
+    /// <param name="reportId">Stable report id (ULID/UUID v7).</param>
+    /// <param name="summary">One-line verdict for the timeline. Truncated to
+    /// the bus 280-char limit.</param>
+    /// <param name="severity">Analysis-report severity
+    /// (<c>Info|Warn|High|Critical</c>). The bus envelope's
+    /// <c>severity</c> is capped at <c>High</c>; the original analysis value
+    /// is preserved verbatim under <c>payload.analysisSeverity</c> so the
+    /// Critical badge survives the projection.</param>
+    /// <param name="parseStatus">One of <c>Structured</c>,
+    /// <c>Unstructured</c>, <c>MalformedJson</c>. Drives the
+    /// <c>parse-*</c> tag and is mirrored on the payload so the UI can render
+    /// the raw-fallback warning without re-reading the report.</param>
+    /// <param name="markdownPath">Absolute path to the Markdown sibling. The
+    /// bus stores the reference; no bytes are inlined.</param>
+    /// <param name="jsonSidecarPath">Optional absolute path to the JSON
+    /// sidecar when <paramref name="parseStatus"/> is <c>Structured</c>.</param>
+    /// <param name="jobId">Optional job slug when the report scope is
+    /// <c>Task</c> or <c>Run</c>.</param>
+    /// <param name="cli">Optional CLI driver that produced the agent reply
+    /// (claude / codex / copilot / gemini). Recorded on the participant
+    /// registry, surfaced as a tag (<c>cli-&lt;name&gt;</c>) on the message.</param>
+    /// <param name="skill">Optional skill or workflow id; surfaced as a tag
+    /// (<c>skill-&lt;name&gt;</c>) so the UI can filter by reusable workflow.</param>
+    /// <param name="participantId">Override participant id. Defaults to
+    /// <c>support:&lt;topic&gt;</c>.</param>
+    /// <param name="parseError">When <paramref name="parseStatus"/> is
+    /// <c>MalformedJson</c>, the parser error text. Surfaced verbatim on the
+    /// payload so the user-visible warning ("the agent reply did not parse")
+    /// is one bus query away.</param>
+    /// <param name="body">Optional longer-form body (the rendered Markdown
+    /// verdict, an extracted finding list, etc.). Heavy evidence stays in the
+    /// referenced artifacts.</param>
+    /// <param name="tokens">Optional per-call token attribution for
+    /// supporting-jobs token accounting. Kept distinct from job tokens
+    /// (coding agent) and orchestrator tokens; the participant id
+    /// (<c>support:*</c>) is the discriminator the rollup view groups on.</param>
+    /// <param name="correlationId">Optional correlation id tying this
+    /// message to the originating user request or report.</param>
+    /// <param name="createdAt">Optional explicit creation time. Defaults to
+    /// the injected <see cref="TimeProvider"/>.</param>
+    public Task EmitSupportingAgentReportAsync(
+        string? project,
+        string topic,
+        string reportId,
+        string summary,
+        string severity,
+        string parseStatus,
+        string markdownPath,
+        string? jsonSidecarPath = null,
+        string? jobId = null,
+        string? cli = null,
+        string? skill = null,
+        string? participantId = null,
+        string? parseError = null,
+        string? body = null,
+        AgentMessageTokens? tokens = null,
+        string? correlationId = null,
+        DateTime? createdAt = null,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(topic) || string.IsNullOrWhiteSpace(reportId))
+            return Task.CompletedTask;
+
+        var pid = string.IsNullOrWhiteSpace(participantId)
+            ? ParticipantSupportingFor(topic)
+            : participantId!;
+        var topicSlug = SafeKebab(topic);
+        var parseSlug = SafeKebab(parseStatus);
+        var busSeverity = MapAnalysisSeverityToBusSeverity(severity);
+
+        var artifacts = new List<AgentArtifactRef>();
+        if (!string.IsNullOrWhiteSpace(markdownPath))
+        {
+            artifacts.Add(new AgentArtifactRef
+            {
+                Kind = "markdown-report",
+                Uri = markdownPath,
+                Label = $"{topicSlug}/{reportId}.md",
+            });
+        }
+        if (!string.IsNullOrWhiteSpace(jsonSidecarPath))
+        {
+            artifacts.Add(new AgentArtifactRef
+            {
+                Kind = "json-document",
+                Uri = jsonSidecarPath!,
+                Label = $"{topicSlug}/{reportId}.json",
+            });
+        }
+
+        var tags = new List<string> { "supporting-agent", topicSlug, $"parse-{parseSlug}" };
+        if (!string.IsNullOrWhiteSpace(cli)) tags.Add($"cli-{SafeKebab(cli)}");
+        if (!string.IsNullOrWhiteSpace(skill)) tags.Add($"skill-{SafeKebab(skill)}");
+
+        // Structured + Unstructured carry a typed verdict, so they map to
+        // kind:decision. MalformedJson is an inspection record without a
+        // typed verdict the app can act on, so it lands as kind:observation
+        // and the warning surfaces in the payload + parse-malformedjson tag.
+        var kind = parseStatus.Equals("MalformedJson", StringComparison.OrdinalIgnoreCase)
+            ? "observation"
+            : "decision";
+
+        var msg = NewMessage(
+            participantId: pid,
+            role: "evidence",
+            kind: kind,
+            severity: busSeverity,
+            project: project,
+            jobId: jobId,
+            topic: topicSlug,
+            summary: TruncateSummary(summary),
+            body: body,
+            createdAt: createdAt,
+            artifacts: artifacts,
+            tokens: tokens,
+            correlationId: correlationId,
+            payload: new
+            {
+                reportId,
+                topic = topicSlug,
+                parseStatus,
+                analysisSeverity = severity,
+                parseError,
+                cli,
+                skill,
+            },
+            tags: tags);
+
+        return EmitAsync(msg, ct);
+    }
+
+    /// <summary>
+    /// Map the analysis-report severity ladder (Info/Warn/High/Critical) onto
+    /// the bus envelope ladder (Info/Warn/High). Critical collapses into
+    /// High; the original value is preserved on the payload so the UI badge
+    /// can still distinguish the two.
+    /// </summary>
+    private static string MapAnalysisSeverityToBusSeverity(string severity)
+    {
+        if (string.IsNullOrWhiteSpace(severity)) return "Info";
+        return severity.Trim().ToLowerInvariant() switch
+        {
+            "critical" => "High",
+            "high"     => "High",
+            "warn"     => "Warn",
+            _           => "Info",
+        };
+    }
+
+    /// <summary>
+    /// Lower-case kebab-case slug for tags. The agent-message schema enforces
+    /// <c>^[a-z0-9][a-z0-9-]*$</c> on tag values, so we collapse anything
+    /// outside <c>[a-z0-9-]</c> into single dashes and strip leading/trailing
+    /// dashes.
+    /// </summary>
+    private static string SafeKebab(string raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return "unknown";
+        var sb = new StringBuilder(raw.Length);
+        foreach (var ch in raw.Trim().ToLowerInvariant())
+        {
+            if (ch >= 'a' && ch <= 'z') sb.Append(ch);
+            else if (ch >= '0' && ch <= '9') sb.Append(ch);
+            else if (ch == '-') sb.Append('-');
+            else if (sb.Length > 0 && sb[^1] != '-') sb.Append('-');
+        }
+        var s = sb.ToString().Trim('-');
+        return s.Length == 0 ? "unknown" : s;
     }
 }

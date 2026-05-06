@@ -277,6 +277,117 @@ public sealed class AgentMessageBusBridgeTests : IDisposable
     }
 
     [Fact]
+    public async Task RegisterSupportingAgentAsync_AddsParticipantWithSupportingAgentKind()
+    {
+        await _bridge.RegisterSupportingAgentAsync(
+            topic: "roadmap-alignment",
+            displayName: "Roadmap alignment review",
+            cli: "claude",
+            skill: "roadmap-alignment");
+
+        var participants = _store.ListParticipants(_workspace);
+        var p = Assert.Single(participants, x => x.Id == "support:roadmap-alignment");
+        Assert.Equal("SupportingAgent", p.Kind);
+        Assert.Equal("Roadmap alignment review", p.DisplayName);
+        Assert.Equal("claude", p.Cli);
+        Assert.Equal("roadmap-alignment", p.Skill);
+    }
+
+    [Fact]
+    public async Task EmitSupportingAgentReportAsync_StructuredReport_ProducesDecisionWithBothArtifacts()
+    {
+        await _bridge.EmitSupportingAgentReportAsync(
+            project: "agent-taskboard",
+            topic: "roadmap-alignment",
+            reportId: "01HXYZSTRUCTURED",
+            summary: "On track. Three follow-ups suggested.",
+            severity: "Warn",
+            parseStatus: "Structured",
+            markdownPath: "/ws/logs/analysis/agent-taskboard/01HXYZSTRUCTURED.md",
+            jsonSidecarPath: "/ws/logs/analysis/agent-taskboard/01HXYZSTRUCTURED.json",
+            cli: "claude",
+            skill: "roadmap-alignment");
+
+        var msg = Assert.Single(_store.Recent(_workspace, "agent-taskboard", 10));
+        Assert.Equal("decision", msg.Kind);
+        Assert.Equal("Warn", msg.Severity);
+        Assert.Equal("evidence", msg.Role);
+        Assert.Equal("support:roadmap-alignment", msg.ParticipantId);
+        Assert.Equal("roadmap-alignment", msg.Topic);
+        Assert.NotNull(msg.Artifacts);
+        Assert.Contains(msg.Artifacts!, a => a.Kind == "markdown-report");
+        Assert.Contains(msg.Artifacts!, a => a.Kind == "json-document");
+        Assert.Contains(msg.Tags!, t => t == "supporting-agent");
+        Assert.Contains(msg.Tags!, t => t == "roadmap-alignment");
+        Assert.Contains(msg.Tags!, t => t == "parse-structured");
+        Assert.Contains(msg.Tags!, t => t == "cli-claude");
+        Assert.Contains(msg.Tags!, t => t == "skill-roadmap-alignment");
+        Assert.NotNull(msg.Payload);
+        Assert.Equal("01HXYZSTRUCTURED", msg.Payload!.Value.GetProperty("reportId").GetString());
+        Assert.Equal("Structured", msg.Payload.Value.GetProperty("parseStatus").GetString());
+    }
+
+    [Fact]
+    public async Task EmitSupportingAgentReportAsync_MalformedJson_ProducesObservationWithParseError()
+    {
+        await _bridge.EmitSupportingAgentReportAsync(
+            project: "agent-taskboard",
+            topic: "roadmap-alignment",
+            reportId: "01HXYZBROKEN",
+            summary: "Markdown body retained; JSON sidecar failed to parse.",
+            severity: "Info",
+            parseStatus: "MalformedJson",
+            markdownPath: "/ws/logs/analysis/agent-taskboard/01HXYZBROKEN.md",
+            parseError: "Unexpected token at line 4");
+
+        var msg = Assert.Single(_store.Recent(_workspace, "agent-taskboard", 10));
+        // MalformedJson must NOT be advertised as a typed verdict; it lands
+        // as an observation so the timeline does not promise a structured
+        // decision the report cannot back up.
+        Assert.Equal("observation", msg.Kind);
+        Assert.Contains(msg.Tags!, t => t == "parse-malformedjson");
+        // JSON sidecar artifact is omitted when the sidecar is missing.
+        Assert.Single(msg.Artifacts!, a => a.Kind == "markdown-report");
+        Assert.DoesNotContain(msg.Artifacts!, a => a.Kind == "json-document");
+        // Parser error is surfaced verbatim so the UI can render the raw
+        // fallback warning without re-reading the report file.
+        Assert.Equal("Unexpected token at line 4",
+            msg.Payload!.Value.GetProperty("parseError").GetString());
+    }
+
+    [Fact]
+    public async Task EmitSupportingAgentReportAsync_CriticalSeverity_CollapsesToHighOnEnvelope()
+    {
+        await _bridge.EmitSupportingAgentReportAsync(
+            project: "agent-taskboard",
+            topic: "security-audit",
+            reportId: "01HXYZCRIT",
+            summary: "Critical finding: hardcoded credentials in commit 9c1d3aa.",
+            severity: "Critical",
+            parseStatus: "Structured",
+            markdownPath: "/ws/logs/analysis/agent-taskboard/01HXYZCRIT.md");
+
+        var msg = Assert.Single(_store.Recent(_workspace, "agent-taskboard", 10));
+        // Bus envelope severity ladder is Info|Warn|High; Critical collapses
+        // to High but the original is preserved on the payload so the UI
+        // badge can keep the louder Critical class.
+        Assert.Equal("High", msg.Severity);
+        Assert.Equal("Critical",
+            msg.Payload!.Value.GetProperty("analysisSeverity").GetString());
+    }
+
+    [Fact]
+    public void ParticipantSupportingFor_SlugifiesTopicForBusTagSafety()
+    {
+        Assert.Equal("support:roadmap-alignment",
+            AgentMessageBusBridge.ParticipantSupportingFor("Roadmap Alignment"));
+        Assert.Equal("support:security-audit",
+            AgentMessageBusBridge.ParticipantSupportingFor("security_audit"));
+        Assert.Equal("support:ux-ui-council",
+            AgentMessageBusBridge.ParticipantSupportingFor("UX/UI council"));
+    }
+
+    [Fact]
     public async Task OrchestratorChatLog_Append_AlsoWritesBusMessage()
     {
         // End-to-end: the chat log keeps writing cli-output.log (the canonical

@@ -214,6 +214,55 @@ Workspace root is resolved from the `TaskRepository` configuration value, matchi
 
 The store is registered as a singleton in `Program.cs`. Writers can call `AgentMessageBusStore.AppendAsync(workspace, message)` directly; the store validates against the schema's required fields and known enums (`AgentMessageValidator`), then atomically appends one JSON line under a per-file `SemaphoreSlim`. The disk path follows section 4: `{workspace}/logs/bus/{project|_workspace}/{yyyy-mm-dd}.jsonl`. Participant ids that contain `:` (e.g. `supervisor:my-project`) are mapped to `-` for the on-disk filename only; the id inside the JSON document is preserved verbatim.
 
+## 9b. Supporting agents
+
+Supporting agents (`SupportingAgent` participant kind) cover user-triggered meta work: roadmap alignment review, security audit, architecture review, source-map skill, UX/UI critique, design council, screenshot comparison, token analysis, QA status. They are explicit, action-driven, and never run automatically just because a project exists. Each call produces an [`AnalysisReport`](analysis-reports.md) plus one bus mirror so the project timeline shows the supporting run alongside coding-agent activity.
+
+Participant id convention: `support:<topic>`, e.g. `support:roadmap-alignment`, `support:security-audit`, `support:docs-drift`, `support:ux-council`. The id is created on first emit by `AgentMessageBusBridge.RegisterSupportingAgentAsync` and is idempotent across boots. The participant carries `kind: "SupportingAgent"`, an optional `cli` (claude / codex / copilot / gemini) when the producer was a CLI agent, and a `skill` slug equal to the topic by default.
+
+### 9b.1 Message shape
+
+| Field | Value |
+|-------|-------|
+| `participantId` | `support:<topic>` (override permitted via the bridge call when the same topic runs against multiple skills). |
+| `role` | `evidence` - the message points at a durable Markdown + JSON pair on disk. |
+| `kind` | `decision` when the report parsed (`Structured` or `Unstructured`); `observation` when the JSON sidecar failed (`MalformedJson`) so the timeline does not promise a typed verdict that does not exist. |
+| `severity` | Bus envelope severity (`Info|Warn|High`) mapped from the analysis-report ladder; `Critical` collapses to `High` and the original is preserved on `payload.analysisSeverity`. |
+| `topic` | Topic slug, e.g. `roadmap-alignment`. |
+| `summary` | The report's one-line verdict, truncated to 280 chars. |
+| `artifacts` | `markdown-report` pointer to `<workspace>/logs/analysis/<project>/<reportId>.md`; `json-document` pointer to the sibling `.json` when `parseStatus == Structured`. |
+| `payload` | `{ reportId, topic, parseStatus, analysisSeverity, parseError, cli, skill }`. The `parseError` field is the raw fallback warning the UI surfaces verbatim when the JSON sidecar did not parse. |
+| `tags` | `supporting-agent`, the topic slug, `parse-<status>` (e.g. `parse-malformedjson`), and optional `cli-<name>` / `skill-<name>` tags so filters can pivot on either dimension. |
+
+### 9b.2 Action catalogue
+
+Each project-level supporting action declares the same five-field contract. The first row is the implemented bridge; the remaining rows are planned topics that follow the same shape.
+
+| Topic | Trigger source | Inputs | Markdown report | JSON sidecar | Bus messages | Token category |
+|-------|----------------|--------|-----------------|--------------|--------------|----------------|
+| `roadmap-alignment` | `POST /api/analysis/{project}/actions/roadmap-alignment` (project Analysis Reports surface). | Project lane folders (`1-preparation` -> `5-human-review`), repo docs (`README`, `ROADMAP`, `AGENTS`, ADRs, design-principles, mockups), recent analysis reports. | `# Roadmap alignment review` with verdict, queue snapshot, evidence, follow-up suggestions. Skeleton in [`prompts/runtime/roadmap-alignment-review.md`](../prompts/runtime/roadmap-alignment-review.md). | `{ verdict, severity, findings[], followUpTaskSuggestions[], recommendedPriorityOrder[] }` per the agent reply. | One `kind:decision` (or `observation` when malformed) from `support:roadmap-alignment`, with `markdown-report` + optional `json-document` artifacts. | Supporting Jobs Tokens. |
+| `docs-drift` | `POST /api/analysis/{project}/actions/steering-docs-drift`. | Steering inventory (`AGENTS.md`, project AGENTS, watched-target instructions, ADRs, skills index), prior drift reports. | `# Steering docs drift` with inventory table, drift findings, proposed text changes. | `{ verdict, severity, findings[], proposalRefs[], sources[] }`. | One `kind:decision` from `support:docs-drift`. | Supporting Jobs Tokens. |
+| `security-audit` | Project Action button (planned). | Job folder diff, `cli-output.log`, dependency manifests, secrets-scan output. | `# Security audit` with risk verdict, finding list, evidence pointers. | `{ verdict, severity, findings[], cwes[] }`. | One `kind:decision` from `support:security-audit`; severe findings carry `severity: High` and a `parse-structured` tag. | Supporting Jobs Tokens. |
+| `architecture-review` | Project Action button (planned). | Service catalogue, recent commits, ADR titles. | `# Architecture review` with drift score, layering findings. | `{ verdict, severity, findings[], adrSuggestions[] }`. | One `kind:decision` from `support:architecture-review`. | Supporting Jobs Tokens. |
+| `ux-council` | Project Action button (planned). | Frontend mockups, Playwright screenshots in `<job>/results/`, product-runtime events. | `# UX/UI council` with critique per heuristic. | `{ verdict, severity, findings[], heuristics[] }`. | One `kind:decision` from `support:ux-council`. | Supporting Jobs Tokens. |
+| `screenshot-compare` | Project Action button (planned). | Two screenshot artifacts (before/after) under `<job>/results/`. | `# Screenshot comparison` with diff verdict, regions of interest. | `{ verdict, severity, regions[], diffPath }`. | One `kind:decision` from `support:screenshot-compare`. | Supporting Jobs Tokens. |
+| `source-map` | Skill button (planned). | Repo glob filters, recent commits. | `# Source map` with module summary, hot files. | `{ verdict, modules[], hotFiles[] }`. | One `kind:decision` from `support:source-map`. | Supporting Jobs Tokens. |
+| `token-analysis` | Workspace Action (planned). | `logs/tokens/<project>.jsonl`, recent `kind:token-usage` bus messages. | `# Token-spend review` with rolling totals, expensive turns. | `{ verdict, severity, expensiveTurns[], windows[] }`. | One `kind:decision` from `support:token-analysis`; the inputs already carry `kind:token-usage` rollups. | Supporting Jobs Tokens. |
+
+### 9b.3 Constraints
+
+- **Action-driven, not automatic.** A supporting agent fires only when the user (or a deliberate, opt-in scheduler) invokes the action. Pickup loops do not enqueue supporting runs as a side effect.
+- **No source edits.** Supporting agents are evidence + decision producers. They never edit code, mockups, or documentation. Steering doc updates that fall out of a supporting run go through normal review-task creation.
+- **No lane moves.** A supporting message never moves a job between lanes. The runner remains the single state-machine authority.
+- **Markdown is the durable artifact.** When the JSON sidecar fails to parse, the bus message keeps `kind:observation` plus a `parse-malformedjson` tag and surfaces the parser error on `payload.parseError`; the Markdown stays visible. The UI must show the raw fallback warning rather than hiding the report.
+- **Token attribution stays split.** Supporting-jobs token usage is reported on bus messages whose participant id starts with `support:`. The token rollup view groups by participant prefix so Job Tokens (coding agent), Supporting Jobs Tokens (`support:*`), and Orchestrator Tokens (`orchestrator*`) never bleed into one another.
+
+### 9b.4 Implementation pointers
+
+- Bridge methods: `AgentMessageBusBridge.RegisterSupportingAgentAsync` and `AgentMessageBusBridge.EmitSupportingAgentReportAsync`.
+- First wired path: `POST /api/analysis/{project}/actions/roadmap-alignment` in [`backend/Endpoints/AnalysisReportEndpoints.cs`](../backend/Endpoints/AnalysisReportEndpoints.cs). The endpoint emits the bus mirror only when `agentResponse` is supplied; the evidence-only path stays a Manual report so the timeline does not falsely advertise a supporting-agent run that never happened.
+- Tests: `backend.Tests/AgentMessageBusBridgeTests.cs` locks the supporting-agent message shape (participant id, kind, severity mapping, artifact list, parse-failure fallback). The endpoint integration test lives in `backend.Tests/RoadmapAlignmentReviewServiceTests.cs`.
+
 ## 10. Changing this contract
 
 Before you touch any of the moving parts:
@@ -223,5 +272,6 @@ Before you touch any of the moving parts:
 3. If you add a **new participant kind**, add the enum value to `agent-participant.schema.json`, declare which scopes it lives at in Section 2, and confirm Section 8's "preserves the boundary" guards still hold.
 4. If you add a **new artifact kind**, add the enum value to `agent-artifact-ref.schema.json` and a UI render branch in the projection panel.
 5. If you change the **on-disk layout**, update Section 4 and add a backfill step in Section 9. The legacy layout must keep working until system-review can read the new one.
+6. If you wire a **new supporting-agent topic**, add a row to the action catalogue in Section 9b.2, register the participant via `AgentMessageBusBridge.RegisterSupportingAgentAsync`, emit the report via `AgentMessageBusBridge.EmitSupportingAgentReportAsync`, and confirm the topic carries the constraints in Section 9b.3 (action-driven, no source edits, no lane moves, raw fallback warning on parse failure).
 
 The single-source-of-truth rule from [AGENTS.md](../AGENTS.md): if the doc and the code disagree, the doc is wrong. Fix it.

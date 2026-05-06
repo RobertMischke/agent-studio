@@ -199,6 +199,10 @@ Answers the recurring user question "are we on track?". Compares the active queu
 - Tests: `backend.Tests/RoadmapAlignmentReviewServiceTests.cs` covers scope selection (lane filtering, stray detection, doc list), prompt construction (placeholders, hard-constraint wording), JSON parse fallback (Structured / Unstructured / MalformedJson), and report assembly (validation, references, tags).
 - UI: the project Analysis Reports surface already exposes a "Roadmap alignment" trigger button (slug `roadmapAlignment`); see [`frontend/src/app/components/project-analysis-reports-section.ts`](../frontend/src/app/components/project-analysis-reports-section.ts). UI wiring to the dedicated `actions/roadmap-alignment` endpoint is a follow-up; the existing placeholder route still works for unstructured triggers.
 
+### 10.1.1 Bus mirror (supporting-agent)
+
+When the agent narrative is supplied (POST with `agentResponse`), the endpoint records the report with `producer.kind = SupportingAgent`, `trigger = SupportingAgent`, and `participantId = support:roadmap-alignment`, then emits one Agent Message Bus message via `AgentMessageBusBridge.EmitSupportingAgentReportAsync`. The bus emit is best-effort: a failure never breaks the canonical report write. The evidence-only path (no `agentResponse`) stays a Manual report and does not produce a bus message, so the timeline does not falsely advertise a supporting-agent run that never happened. The full supporting-agent message contract lives in [docs/agent-message-bus.md](agent-message-bus.md#9b-supporting-agents).
+
 ### 10.2 Runtime Log Analysis (`topic = "runtime-observability"`)
 
 Answers "what did the built software actually do during this run?". Reads the structured product runtime event JSONL produced by the [Product Runtime Observability](product-runtime-observability.md) layer plus the raw `cli-output.log` fallback, optionally cross-checks Playwright/test artefacts, and surfaces typed findings (repeated errors, slow operations, noisy events, missing correlation ids, suspicious domain sequences, tests that passed while runtime errors fired).
