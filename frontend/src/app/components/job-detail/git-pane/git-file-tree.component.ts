@@ -126,28 +126,40 @@ export class GitFileTreeComponent {
   readonly fill = input<boolean>(false);
   readonly select = output<string>();
 
-  /**
-   * Expansion state, keyed by folder node path. Default-expanded is computed
-   * from the file count so small change sets are immediately scannable; large
-   * change sets start collapsed so the tree does not flood the viewport.
-   */
-  readonly expanded = signal<Set<string>>(new Set<string>());
-  private lastFilesRef: readonly GitFileChange[] | null = null;
-
   readonly tree = computed<TreeNode[]>(() => buildTree(this.files()));
 
-  readonly visibleRows = computed<TreeNode[]>(() => {
+  /**
+   * Default expansion: small change sets fully expand so the tree is
+   * immediately scannable; large change sets start collapsed so the tree
+   * does not flood the viewport. Pure derivation — never written.
+   */
+  private readonly defaultExpanded = computed<Set<string>>(() => {
     const tree = this.tree();
-    // Initialise default expansion the first time we see this file list.
-    if (this.lastFilesRef !== this.files()) {
-      this.lastFilesRef = this.files();
-      const totalFiles = countFiles(tree);
-      const next = new Set<string>();
-      if (totalFiles <= 50) collectFolderPaths(tree, next);
-      this.expanded.set(next);
-    }
+    const next = new Set<string>();
+    if (countFiles(tree) <= 50) collectFolderPaths(tree, next);
+    return next;
+  });
+
+  /**
+   * User overrides to the default expansion, tagged by the `files()`
+   * reference they were authored against. When `files()` changes the tag
+   * stops matching and we revert to defaults — same reset behaviour as
+   * the prior signal-write-on-load logic, but as a pure derivation.
+   */
+  private readonly userExpanded = signal<{
+    files: readonly GitFileChange[];
+    set: Set<string>;
+  } | null>(null);
+
+  readonly expanded = computed<Set<string>>(() => {
+    const user = this.userExpanded();
+    if (user && user.files === this.files()) return user.set;
+    return this.defaultExpanded();
+  });
+
+  readonly visibleRows = computed<TreeNode[]>(() => {
     const out: TreeNode[] = [];
-    walkVisible(tree, this.expanded(), out);
+    walkVisible(this.tree(), this.expanded(), out);
     return out;
   });
 
@@ -156,11 +168,10 @@ export class GitFileTreeComponent {
       this.select.emit(node.path);
       return;
     }
-    this.expanded.update(prev => {
-      const next = new Set(prev);
-      if (next.has(node.path)) next.delete(node.path); else next.add(node.path);
-      return next;
-    });
+    const files = this.files();
+    const next = new Set(this.expanded());
+    if (next.has(node.path)) next.delete(node.path); else next.add(node.path);
+    this.userExpanded.set({ files, set: next });
   }
 }
 
