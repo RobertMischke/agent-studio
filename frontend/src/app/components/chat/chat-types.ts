@@ -52,3 +52,41 @@ export interface ChatSubmitEvent {
   text: string;
   attachments: ChatDraftAttachment[];
 }
+
+/**
+ * Inline event card surfaced inside the chat timeline. The chat is
+ * becoming the primary product surface; events from background CLIs
+ * (tool calls, watchdog warnings, rate-limit pills, etc.) belong woven
+ * into the chronology, not in a separate toast or panel.
+ *
+ * The chat component is purely presentational: callers feed it an
+ * `events` list and the chat merges it with `messages` by timestamp.
+ * Persistence and the live data source live elsewhere (Slice D backs
+ * this with per-month markdown files + the chat search index; here we
+ * pin the rendering contract so a host can already plug in events).
+ */
+export type ChatEventKind =
+  | 'tool-call'
+  | 'watchdog'
+  | 'rate-limit'
+  | 'decision'
+  | 'update'
+  | 'task';
+
+export interface ChatEvent {
+  id: string;
+  kind: ChatEventKind;
+  /** ISO 8601 timestamp. Used to merge with messages chronologically. */
+  timestamp: string;
+  /** One-line summary shown in the inline card head. Plain text. */
+  summary: string;
+  /**
+   * Optional expandable detail. Markdown is rendered the same way as
+   * agent turns (line-numbered code blocks for >5 lines, inline code,
+   * links with safe rels, etc). Leave empty when the summary alone is
+   * enough.
+   */
+  detail?: string;
+  /** Higher severity flips the card chrome to the error-coloured palette. */
+  severity?: 'info' | 'warn' | 'error';
+}

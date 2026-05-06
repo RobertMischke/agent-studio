@@ -164,4 +164,46 @@ describe('markdownToHtml', () => {
       expect(html).toBe('<pre><code></code></pre>');
     });
   });
+
+  describe('codeLineNumbers option', () => {
+    it('keeps short code blocks unnumbered even with the option on', () => {
+      const md = ['```', 'a = 1', 'b = 2', '```'].join('\n');
+      const html = markdownToHtml(md, { codeLineNumbers: true });
+      expect(html).toBe('<pre><code>a = 1\nb = 2</code></pre>');
+    });
+
+    it('numbers code blocks above the default 5-line threshold', () => {
+      const lines = ['l1', 'l2', 'l3', 'l4', 'l5', 'l6'];
+      const md = ['```', ...lines, '```'].join('\n');
+      const html = markdownToHtml(md, { codeLineNumbers: true });
+      expect(html).toContain('class="md-code md-code--numbered"');
+      expect(html).toContain('data-line-count="6"');
+      expect(html).toContain('<span class="md-code-num" aria-hidden="true">1</span>');
+      expect(html).toContain('<span class="md-code-num" aria-hidden="true">6</span>');
+      expect(html).toContain('<span class="md-code-text">l6</span>');
+    });
+
+    it('escapes < and > inside numbered code text', () => {
+      const lines = ['<a>', '<b>', '<c>', '<d>', '<e>', '<f>'];
+      const md = ['```', ...lines, '```'].join('\n');
+      const html = markdownToHtml(md, { codeLineNumbers: true });
+      expect(html).toContain('<span class="md-code-text">&lt;f&gt;</span>');
+      expect(html).not.toContain('<span class="md-code-text"><f></span>');
+    });
+
+    it('respects a custom threshold', () => {
+      const md = ['```', 'a', 'b', '```'].join('\n');
+      const html = markdownToHtml(md, { codeLineNumbers: true, codeLineNumberThreshold: 1 });
+      expect(html).toContain('class="md-code md-code--numbered"');
+      expect(html).toContain('data-line-count="2"');
+    });
+
+    it('default-off keeps the historical <pre><code> shape verbatim', () => {
+      // Critical: the editor relies on this shape for HTML <-> markdown
+      // round-tripping. Pin so the option default never silently flips.
+      const lines = ['l1', 'l2', 'l3', 'l4', 'l5', 'l6'];
+      const md = ['```', ...lines, '```'].join('\n');
+      expect(markdownToHtml(md)).toBe(`<pre><code>${lines.join('\n')}</code></pre>`);
+    });
+  });
 });

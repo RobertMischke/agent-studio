@@ -7,6 +7,14 @@
 export interface MarkdownImageOptions {
   resolveImageSrc?: (mdSrc: string) => string;
   serializeImageSrc?: (htmlSrc: string) => string;
+  /**
+   * Render fenced code blocks with a numbered gutter when the block has
+   * more than `codeLineNumberThreshold` lines (default 5). Off by default
+   * so the editor's HTML <-> markdown round-trip stays byte-stable; the
+   * chat surface opts in for the dev-tools-leaning look on long blocks.
+   */
+  codeLineNumbers?: boolean;
+  codeLineNumberThreshold?: number;
 }
 
 // Sentinel placeholders wrap image and link tokens so the bold/italic regex
@@ -52,7 +60,7 @@ export function markdownToHtml(markdown: string, options: MarkdownImageOptions =
 
     if (line.startsWith('```')) {
       if (inCode) {
-        html.push(`<pre><code>${escapeHtml(codeLines.join('\n'))}</code></pre>`);
+        html.push(renderCodeBlock(codeLines, options));
         codeLines = [];
         inCode = false;
       } else {
@@ -119,7 +127,7 @@ export function markdownToHtml(markdown: string, options: MarkdownImageOptions =
   }
 
   if (inCode) {
-    html.push(`<pre><code>${escapeHtml(codeLines.join('\n'))}</code></pre>`);
+    html.push(renderCodeBlock(codeLines, options));
   }
   flushParagraph();
   flushList();
@@ -273,6 +281,25 @@ function safeLinkUrl(raw: string): string {
   if (/^[/.#]/.test(trimmed)) return trimmed;
   if (/^[a-z0-9][a-z0-9+.-]*:/i.test(trimmed)) return '#';
   return trimmed;
+}
+
+function renderCodeBlock(codeLines: string[], options: MarkdownImageOptions): string {
+  const threshold = options.codeLineNumberThreshold ?? 5;
+  if (!options.codeLineNumbers || codeLines.length <= threshold) {
+    return `<pre><code>${escapeHtml(codeLines.join('\n'))}</code></pre>`;
+  }
+  // Numbered shape: one row per source line, gutter cells get a stable
+  // class so the chat stylesheet can hide them from text selection.
+  const rows = codeLines
+    .map((line, i) => {
+      const num = i + 1;
+      return `<span class="md-code-row" data-line="${num}">`
+        + `<span class="md-code-num" aria-hidden="true">${num}</span>`
+        + `<span class="md-code-text">${escapeHtml(line)}</span>`
+        + `</span>`;
+    })
+    .join('');
+  return `<pre class="md-code md-code--numbered" data-line-count="${codeLines.length}"><code>${rows}</code></pre>`;
 }
 
 function renderImage(alt: string, src: string, options: MarkdownImageOptions): string {

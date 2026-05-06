@@ -14,7 +14,7 @@ import {
 import { JobService } from '../../services/job.service';
 import { OrchestratorChatTurn, WatchPathEntry } from '../../models/job.model';
 import { ChatComponent } from '../chat/chat.component';
-import { ChatMessage, ChatSubmitEvent } from '../chat/chat-types';
+import { ChatEvent, ChatMessage, ChatSubmitEvent } from '../chat/chat-types';
 import { RoadmapIntakePanelComponent } from '../roadmap-intake/roadmap-intake-panel.component';
 
 /**
@@ -153,6 +153,7 @@ import { RoadmapIntakePanelComponent } from '../roadmap-intake/roadmap-intake-pa
           <app-chat
             variant="embedded"
             [messages]="messages()"
+            [events]="events()"
             [pending]="sending()"
             [disabled]="sending()"
             [placeholder]="'Ask the orchestrator about this project…'"
@@ -600,6 +601,16 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   /** Locally-buffered user turns shown immediately (server is source of truth on next refresh). */
   private readonly localTurns = signal<OrchestratorChatTurn[]>([]);
 
+  /**
+   * Inline event cards interleaved with the chat (Slice B mechanism).
+   * Default empty; the data source for the six event kinds (tool-call,
+   * watchdog, rate-limit, decision, update, task) lands as a separate
+   * task that wires SignalR / endpoint streams into this signal.
+   * The `?demoEvents=1` URL flag seeds three sample events for visual
+   * review and Playwright regression coverage of the rendering contract.
+   */
+  readonly events = signal<ChatEvent[]>([]);
+
   private readonly jobService = inject(JobService);
   private pollTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -705,6 +716,68 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
         this.refresh(true);
       }
     }, 30_000);
+
+    this.maybeSeedDemoEvents();
+  }
+
+  /**
+   * `?demoEvents=1` on the URL seeds three sample event cards so the
+   * Slice B rendering contract can be reviewed visually and pinned by
+   * Playwright before the live data source lands. No-op without the
+   * flag, so production callers see an empty events list as designed.
+   */
+  private maybeSeedDemoEvents(): void {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('demoEvents') !== '1') return;
+    const baseTs = Date.now();
+    const iso = (offsetMs: number) => new Date(baseTs + offsetMs).toISOString();
+    this.events.set([
+      {
+        id: 'demo-tool-call-1',
+        kind: 'tool-call',
+        timestamp: iso(0),
+        summary: 'Read backend/Services/Runner/PhaseAwareWatchdog.cs',
+        detail:
+          '```\n'
+          + '/* Result: 412 lines, last modified 2026-05-04 */\n'
+          + 'PhaseAwareWatchdog observes per-phase silence budgets;\n'
+          + 'FormatBudgetReason emits a one-line summary plus the\n'
+          + 'previous CLI event that preceded the silence so the\n'
+          + 'operator can see what the agent was doing.\n'
+          + '```'
+      },
+      {
+        id: 'demo-watchdog-1',
+        kind: 'watchdog',
+        timestamp: iso(45_000),
+        severity: 'warn',
+        summary: 'Tool burst phase silent for 90s (budget: 60s)',
+        detail:
+          '**Phase:** tool-burst\n\n**Silence:** 90s\n\n**Budget:** 60s\n\n'
+          + 'Last event before the silence:\n\n'
+          + '```\n'
+          + '● Read frontend/src/app/components/chat/chat.component.ts\n'
+          + '  L1-100\n'
+          + '```'
+      },
+      {
+        id: 'demo-rate-limit-1',
+        kind: 'rate-limit',
+        timestamp: iso(90_000),
+        severity: 'warn',
+        summary: 'Anthropic 5h window: 78% used, resets in 1h 12m',
+        detail:
+          '```\n'
+          + '{\n'
+          + '  "type": "rate_limit_event",\n'
+          + '  "window": "5h",\n'
+          + '  "used_pct": 78,\n'
+          + '  "reset_at": "2026-05-06T13:12:00Z"\n'
+          + '}\n'
+          + '```'
+      }
+    ]);
   }
 
   ngOnDestroy(): void {

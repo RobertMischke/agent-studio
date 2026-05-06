@@ -15,17 +15,47 @@ import {
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { markdownToHtml } from '../markdown-utils';
+import { mergeByTimestamp } from './merge-by-timestamp';
 import {
   ChatDraftAttachment,
+  ChatEvent,
+  ChatEventKind,
   ChatMessage,
   ChatRole,
   ChatSubmitEvent
 } from './chat-types';
 
 interface RenderedMessage {
+  kind: 'message';
+  id: string;
+  /** Sort key used to merge with events chronologically. */
+  timestamp: string;
   message: ChatMessage;
   bodyHtml: SafeHtml;
+  /** True when the message body exceeds COLLAPSE_LINE_THRESHOLD lines. */
+  collapsible: boolean;
+  /** Resolved collapsed state: collapsible AND not user-expanded. */
+  collapsed: boolean;
 }
+
+interface RenderedEvent {
+  kind: 'event';
+  id: string;
+  timestamp: string;
+  event: ChatEvent;
+  /** Pre-rendered markdown for the expanded detail body. */
+  detailHtml: SafeHtml | null;
+  expanded: boolean;
+}
+
+type RenderedItem = RenderedMessage | RenderedEvent;
+
+/**
+ * Source-line threshold above which non-user turns auto-collapse with a
+ * "show more" caret. Tuned to roughly two screens of agent prose at the
+ * chat's 1.55 line-height; under it, even chatty agents look fine inline.
+ */
+const COLLAPSE_LINE_THRESHOLD = 24;
 
 /**
  * Reusable chat surface. Pure presentation layer: owns the draft and
@@ -64,7 +94,8 @@ interface RenderedMessage {
         @if (rendered().length === 0) {
           <div class="chat__empty" data-testid="chat-empty">{{ emptyState() }}</div>
         } @else {
-          @for (item of rendered(); track item.message.id) {
+          @for (item of rendered(); track item.id) {
+            @if (item.kind === 'message') {
             <article class="chat__msg"
                      [class.chat__msg--user]="item.message.role === 'user'"
                      [class.chat__msg--agent]="item.message.role === 'agent'"
@@ -72,14 +103,29 @@ interface RenderedMessage {
                      [class.chat__msg--system]="item.message.role === 'system'"
                      [class.chat__msg--pending]="item.message.pending"
                      [class.chat__msg--error]="!!item.message.error"
-                     [attr.data-testid]="'chat-msg-' + item.message.role">
+                     [class.chat__msg--collapsible]="item.collapsible"
+                     [class.chat__msg--collapsed]="item.collapsed"
+                     [attr.data-testid]="'chat-msg-' + item.message.role"
+                     [attr.data-turn-id]="item.message.id"
+                     [attr.data-collapsed]="item.collapsed ? 'true' : 'false'">
               <header class="chat__msg-head">
                 <span class="chat__msg-role">{{ roleLabel(item.message.role) }}</span>
                 <span class="chat__msg-time">{{ formatTime(item.message.timestamp) }}</span>
               </header>
               <div class="chat__msg-body"
                    [class.chat__msg-body--markdown]="item.message.role !== 'user'"
+                   [class.chat__msg-body--collapsed]="item.collapsed"
+                   [attr.data-testid]="item.message.role !== 'user' ? 'chat-turn-md' : null"
                    [innerHTML]="item.bodyHtml"></div>
+              @if (item.collapsible) {
+                <button type="button"
+                        class="chat__msg-toggle"
+                        [attr.data-testid]="'chat-msg-toggle-' + item.message.id"
+                        [attr.aria-expanded]="!item.collapsed"
+                        (click)="toggleCollapsed(item.message.id)">
+                  {{ item.collapsed ? '▾ Show more' : '▴ Show less' }}
+                </button>
+              }
               @if (item.message.attachments?.length) {
                 <ul class="chat__msg-attachments">
                   @for (att of item.message.attachments; track att.url) {
@@ -94,6 +140,35 @@ interface RenderedMessage {
                 <div class="chat__msg-error">{{ item.message.error }}</div>
               }
             </article>
+            } @else {
+            <article class="chat__event"
+                     [class.chat__event--warn]="item.event.severity === 'warn'"
+                     [class.chat__event--error]="item.event.severity === 'error'"
+                     [class.chat__event--expanded]="item.expanded"
+                     [attr.data-testid]="'chat-event-' + item.event.kind"
+                     [attr.data-event-id]="item.event.id"
+                     [attr.data-expanded]="item.expanded ? 'true' : 'false'">
+              <button type="button"
+                      class="chat__event-head"
+                      [attr.data-testid]="'chat-event-toggle-' + item.event.id"
+                      [attr.aria-expanded]="item.expanded"
+                      [disabled]="!item.detailHtml"
+                      (click)="toggleEventExpanded(item.event.id)">
+                <span class="chat__event-icon" aria-hidden="true">{{ eventIcon(item.event.kind) }}</span>
+                <span class="chat__event-kind">{{ eventLabel(item.event.kind) }}</span>
+                <span class="chat__event-summary">{{ item.event.summary }}</span>
+                <span class="chat__event-time">{{ formatTime(item.event.timestamp) }}</span>
+                @if (item.detailHtml) {
+                  <span class="chat__event-caret" aria-hidden="true">{{ item.expanded ? '▴' : '▾' }}</span>
+                }
+              </button>
+              @if (item.expanded && item.detailHtml) {
+                <div class="chat__event-detail"
+                     data-testid="chat-event-detail"
+                     [innerHTML]="item.detailHtml"></div>
+              }
+            </article>
+            }
           }
           @if (pending()) {
             <div class="chat__typing" data-testid="chat-typing">
@@ -339,6 +414,163 @@ interface RenderedMessage {
       background: transparent; border: 0; padding: 0;
       font-size: 12px; color: #e0f2fe; white-space: pre;
     }
+    /* Numbered code: each source line is its own grid row so the gutter
+       stays selection-stable and font-size-stable. */
+    .chat__msg-body--markdown pre.md-code--numbered {
+      padding: 8px 0;
+    }
+    .chat__msg-body--markdown pre.md-code--numbered code {
+      display: block;
+      font-size: 12px;
+      line-height: 1.55;
+    }
+    .chat__msg-body--markdown .md-code-row {
+      display: grid;
+      grid-template-columns: 36px 1fr;
+      column-gap: 12px;
+    }
+    .chat__msg-body--markdown .md-code-num {
+      text-align: right;
+      color: rgba(148,163,184,0.55);
+      user-select: none;
+      font-variant-numeric: tabular-nums;
+      padding-right: 2px;
+      border-right: 1px solid rgba(148,163,184,0.12);
+    }
+    .chat__msg-body--markdown .md-code-text {
+      padding-left: 8px;
+      white-space: pre;
+      color: #e0f2fe;
+    }
+
+    /* Collapse: clip the body to ~12 visual rows; the show-more button
+       below it offers the toggle and doubles as the expand affordance. */
+    .chat__msg-body--collapsed {
+      max-height: 18em;
+      overflow: hidden;
+      position: relative;
+      mask-image: linear-gradient(to bottom, #000 70%, transparent);
+      -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent);
+    }
+    .chat__msg-toggle {
+      align-self: flex-start;
+      margin-top: 4px;
+      padding: 3px 10px;
+      font-size: 11px;
+      letter-spacing: 0.04em;
+      color: #c4b5fd;
+      background: rgba(76,29,149,0.32);
+      border: 1px solid rgba(196,181,253,0.32);
+      border-radius: 999px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .chat__msg-toggle:hover {
+      background: rgba(99,102,241,0.32);
+      color: #e9d5ff;
+      border-color: rgba(196,181,253,0.55);
+    }
+
+    /* Inline event card. Compact one-line head with kind chip + summary;
+       click expands to show the markdown detail. Severity tints the
+       border so warn / error events stand out without screaming. */
+    .chat__event {
+      align-self: stretch;
+      display: flex;
+      flex-direction: column;
+      border: 1px solid rgba(148,163,184,0.18);
+      background: rgba(15,23,42,0.5);
+      border-radius: 8px;
+      overflow: hidden;
+      font-size: 12px;
+    }
+    .chat__event--warn {
+      border-color: rgba(217,119,6,0.55);
+      background: rgba(120,53,15,0.18);
+    }
+    .chat__event--error {
+      border-color: rgba(239,68,68,0.6);
+      background: rgba(127,29,29,0.18);
+    }
+    .chat__event-head {
+      display: grid;
+      grid-template-columns: 18px auto 1fr auto auto;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      background: transparent;
+      border: 0;
+      color: inherit;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 12px;
+      text-align: left;
+      width: 100%;
+    }
+    .chat__event-head:disabled { cursor: default; }
+    .chat__event-head:hover:not(:disabled) {
+      background: rgba(99,102,241,0.08);
+    }
+    .chat__event-icon {
+      font-size: 13px;
+      line-height: 1;
+    }
+    .chat__event-kind {
+      font-size: 10px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: #94a3b8;
+    }
+    .chat__event--warn .chat__event-kind  { color: #fbbf24; }
+    .chat__event--error .chat__event-kind { color: #fca5a5; }
+    .chat__event-summary {
+      color: #e2e8f0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .chat__event-time {
+      font-variant-numeric: tabular-nums;
+      color: #64748b;
+      font-size: 11px;
+    }
+    .chat__event-caret {
+      color: #a5b4fc;
+      font-size: 11px;
+    }
+    .chat__event-detail {
+      padding: 8px 12px 10px;
+      border-top: 1px solid rgba(148,163,184,0.14);
+      color: #cbd5e1;
+      font-size: 12.5px;
+      line-height: 1.55;
+    }
+    /* Reuse the markdown styles defined for messages so code blocks /
+       headings / lists in event details look identical to agent turns. */
+    .chat__event-detail :first-child { margin-top: 0; }
+    .chat__event-detail :last-child  { margin-bottom: 0; }
+    .chat__event-detail p { margin: 0 0 0.6em; }
+    .chat__event-detail pre {
+      margin: 0.4em 0;
+      padding: 8px 10px;
+      background: rgba(2,6,23,0.6);
+      border: 1px solid rgba(148,163,184,0.16);
+      border-radius: 6px;
+      overflow: auto;
+      max-height: 320px;
+      font-size: 11.5px;
+    }
+    .chat__event-detail code {
+      background: rgba(2,6,23,0.55);
+      border: 1px solid rgba(148,163,184,0.16);
+      border-radius: 3px;
+      padding: 0 4px;
+      font-family: 'Consolas', 'Monaco', monospace;
+      font-size: 0.92em;
+      color: #fef3c7;
+    }
+    .chat__event-detail pre code { background: transparent; border: 0; padding: 0; }
 
     .chat__msg-attachments {
       list-style: none;
@@ -540,6 +772,7 @@ interface RenderedMessage {
 })
 export class ChatComponent implements AfterViewInit, OnDestroy {
   readonly messages = input<ChatMessage[]>([]);
+  readonly events = input<ChatEvent[]>([]);
   readonly placeholder = input<string>('Type a message…');
   readonly emptyState = input<string>('No messages yet.');
   readonly submitLabel = input<string>('Send');
@@ -556,6 +789,10 @@ export class ChatComponent implements AfterViewInit, OnDestroy {
   readonly attachmentError = signal<string | null>(null);
   readonly stickToBottom = signal(true);
   readonly isDragging = signal(false);
+  /** Per-message-id override: ids the user has explicitly expanded. */
+  readonly expandedIds = signal<ReadonlySet<string>>(new Set());
+  /** Per-event-id override: ids of events the user has expanded. */
+  readonly expandedEventIds = signal<ReadonlySet<string>>(new Set());
 
   draftText = '';
 
@@ -568,22 +805,53 @@ export class ChatComponent implements AfterViewInit, OnDestroy {
 
   private readonly sanitizer = inject(DomSanitizer);
 
-  readonly rendered = computed<RenderedMessage[]>(() =>
-    this.messages().map((message) => ({
-      message,
+  readonly rendered = computed<RenderedItem[]>(() => {
+    const expanded = this.expandedIds();
+    const expandedEvents = this.expandedEventIds();
+    const messageItems: RenderedItem[] = this.messages().map((message) => {
       // User input stays plain text (newlines + escaping); every other role
       // ships Markdown, which is how agents and orchestrator log entries
       // express themselves on the wire.
-      bodyHtml: this.sanitizer.bypassSecurityTrustHtml(
-        message.role === 'user'
+      const isUser = message.role === 'user';
+      const bodyHtml = this.sanitizer.bypassSecurityTrustHtml(
+        isUser
           ? escapeForPlain(message.text)
-          : markdownToHtml(message.text)
-      )
-    }))
-  );
+          : markdownToHtml(message.text, { codeLineNumbers: true })
+      );
+      // Source-line count is a cheap, deterministic proxy for visual height
+      // that survives signal recomputes; we don't need exact rendered geometry
+      // for the collapse decision since the CSS max-height clips below the fold.
+      const sourceLines = countSourceLines(message.text);
+      const collapsible = !isUser && !message.pending && sourceLines > COLLAPSE_LINE_THRESHOLD;
+      const collapsed = collapsible && !expanded.has(message.id);
+      return {
+        kind: 'message',
+        id: message.id,
+        timestamp: message.timestamp,
+        message,
+        bodyHtml,
+        collapsible,
+        collapsed
+      };
+    });
+    const eventItems: RenderedItem[] = this.events().map((event) => ({
+      kind: 'event',
+      id: event.id,
+      timestamp: event.timestamp,
+      event,
+      detailHtml: event.detail
+        ? this.sanitizer.bypassSecurityTrustHtml(
+            markdownToHtml(event.detail, { codeLineNumbers: true })
+          )
+        : null,
+      expanded: expandedEvents.has(event.id)
+    }));
+    return mergeByTimestamp(messageItems, eventItems);
+  });
 
   private readonly autoScrollEffect = effect(() => {
     this.messages();
+    this.events();
     this.pending();
     if (!this.stickToBottom()) return;
     this.scheduleScrollToBottom();
@@ -725,6 +993,48 @@ export class ChatComponent implements AfterViewInit, OnDestroy {
     this.scheduleScrollToBottom();
   }
 
+  toggleCollapsed(messageId: string): void {
+    const next = new Set(this.expandedIds());
+    if (next.has(messageId)) {
+      next.delete(messageId);
+    } else {
+      next.add(messageId);
+    }
+    this.expandedIds.set(next);
+  }
+
+  toggleEventExpanded(eventId: string): void {
+    const next = new Set(this.expandedEventIds());
+    if (next.has(eventId)) {
+      next.delete(eventId);
+    } else {
+      next.add(eventId);
+    }
+    this.expandedEventIds.set(next);
+  }
+
+  eventIcon(kind: ChatEventKind): string {
+    switch (kind) {
+      case 'tool-call':  return '🔧';
+      case 'watchdog':   return '⏱';
+      case 'rate-limit': return '⏳';
+      case 'decision':   return '⚙';
+      case 'update':     return '↻';
+      case 'task':       return '🎯';
+    }
+  }
+
+  eventLabel(kind: ChatEventKind): string {
+    switch (kind) {
+      case 'tool-call':  return 'Tool call';
+      case 'watchdog':   return 'Watchdog';
+      case 'rate-limit': return 'Rate limit';
+      case 'decision':   return 'Decision';
+      case 'update':     return 'Update';
+      case 'task':       return 'Task';
+    }
+  }
+
   private scheduleScrollToBottom(): void {
     if (typeof requestAnimationFrame === 'undefined') return;
     if (this.scrollFrame !== null) cancelAnimationFrame(this.scrollFrame);
@@ -763,6 +1073,12 @@ function makeId(): string {
     return crypto.randomUUID().replace(/-/g, '').slice(0, 12);
   }
   return Math.random().toString(36).slice(2, 14);
+}
+
+function countSourceLines(text: string): number {
+  if (!text) return 0;
+  // Newline-separated source lines; trailing newlines don't count as a row.
+  return text.replace(/\n+$/, '').split('\n').length;
 }
 
 function escapeForPlain(text: string): string {
