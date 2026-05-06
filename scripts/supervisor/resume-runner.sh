@@ -138,17 +138,41 @@ read_project_mode() {
       '
 }
 
+# Percent-encode a string so it is safe to drop into a URL path segment.
+# Pure POSIX-ish awk; we only depend on awk being available, which the
+# rest of this script also assumes. Without this, project names with a
+# space (e.g. "Agent Task Processor") produce a malformed URL and curl
+# returns code 000 — the exact failure that motivated this hardening.
+urlencode() {
+  LC_ALL=C awk -v s="$1" '
+    function ord(c,   n) {
+      for (n = 0; n < 256; n++) if (sprintf("%c", n) == c) return n
+      return 63   # "?", should never happen
+    }
+    BEGIN {
+      out = ""
+      for (i = 1; i <= length(s); i++) {
+        c = substr(s, i, 1)
+        if (c ~ /[A-Za-z0-9._~-]/) out = out c
+        else                       out = out sprintf("%%%02X", ord(c))
+      }
+      print out
+    }'
+}
+
 # 4. PUT the resume request and verify the mode flipped.
 put_resume() {
   curl -s -o /dev/null -w '%{http_code}' --max-time 5 \
     -X PUT \
     -H 'Content-Type: application/json' \
     -H "X-Client-Id: $CLIENT_ID" \
-    "$API/api/runner/$PROJECT/mode" \
+    "$API/api/runner/$PROJECT_URL/mode" \
     -d '{"mode":"auto-continuous"}' || printf '000'
 }
 
 # --- main ---------------------------------------------------------------------
+
+PROJECT_URL="$(urlencode "$PROJECT")"
 
 log "starting; project=$PROJECT api=$API max=$MAX_ATTEMPTS"
 
