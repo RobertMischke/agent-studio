@@ -1,0 +1,152 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-taskboard.local/schemas/product-runtime-event.schema.json",
+  "title": "ProductRuntimeEvent",
+  "description": "One structured event emitted by the software the agents are building. Append-only record, written as a single JSON document on disk (one line per event in JSONL files under <job>/logs/runtime/<yyyy-mm-dd>.jsonl, or under <project>/logs/runtime/<yyyy-mm-dd>.jsonl when the run is project-scoped rather than job-scoped). This is a separate stream from the Agent Message Bus: bus messages answer 'which agent or supervisor acted, and why', product runtime events answer 'what did the built application do when it ran, where did it fail, how fast was it, and which domain events happened'. The two formats never mix; the Agent Message Bus may carry an artifact reference of kind runtime-event that points at one of these records, but it never embeds them. The first slice is build-time first: structured logs and timings captured during local runs, Playwright runs, backend test runs, and the orchestrator's CLI runs. Production deployment hooks may follow once the build-bench loop is stable. Contract documented in docs/product-runtime-observability.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "timestamp",
+    "level",
+    "event",
+    "subsystem"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "const": 1,
+      "description": "Schema version. Bumped only when a non-additive change forces readers to fork. Additive optional fields keep version 1."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp at which the event was observed by the producer. Must end in Z. Producers preserve the original timestamp when retransmitting; replays use the original time, not the replay time."
+    },
+    "level": {
+      "type": "string",
+      "enum": ["Trace", "Debug", "Info", "Warn", "Error", "Fatal"],
+      "description": "Severity of the event from the producing software's point of view. Trace and Debug are diagnostic detail that consumers may collapse by default. Info is the normal stream. Warn is recoverable trouble. Error is a failed operation that did not crash the process. Fatal is a process-ending failure. The product-level UI typically defaults to Info and above."
+    },
+    "event": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80,
+      "pattern": "^[a-z0-9][a-z0-9-]*(\\.[a-z0-9][a-z0-9-]*)*$",
+      "description": "Stable kebab-case event name, optionally namespaced with dots, e.g. http.request.completed, job.created, payment.declined, render.first-paint. Event names are part of the contract: consumers filter, count, and trend by name. Renames are breaking changes and should be staged through a deprecation window."
+    },
+    "subsystem": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 80,
+      "description": "Coarse-grained source area inside the built application: backend, frontend, runner, ingest, scheduler, auth, billing. Used by the Runtime Observability surface to group counters and error lists. Producers should pick a small fixed vocabulary per project rather than free text."
+    },
+    "operation": {
+      "type": ["string", "null"],
+      "maxLength": 120,
+      "description": "Optional finer-grained operation label inside the subsystem: GET /api/jobs, JobScannerService.FindJob, render-protocol-pane, queue-tick. Free-form, but stable per code path so latency and error counters can group on it."
+    },
+    "correlationId": {
+      "type": ["string", "null"],
+      "maxLength": 200,
+      "description": "Free-form correlation key for grouping events that belong to the same logical activity. Often a request id, a trace id, or an inbound user action id. Reuse the upstream id when the event sits inside a larger flow; mint a fresh id at the entry point of an independent flow."
+    },
+    "traceId": {
+      "type": ["string", "null"],
+      "maxLength": 200,
+      "description": "Optional W3C trace context trace-id. Lets future OpenTelemetry adapters round-trip without redefining identity. Producers without distributed tracing leave this null."
+    },
+    "spanId": {
+      "type": ["string", "null"],
+      "maxLength": 200,
+      "description": "Optional W3C trace context span-id for the operation that produced this event. Pairs with traceId."
+    },
+    "project": {
+      "type": ["string", "null"],
+      "description": "Project name as it appears in WatchPaths and ProjectRunnerStatus. Set when the event was produced under the orchestrator and the producer knows which watched project triggered the run. Null for production deployments and for events produced outside the orchestrator's environment."
+    },
+    "jobId": {
+      "type": ["string", "null"],
+      "description": "JobInfo.Id slug if the event was produced inside a job's CLI run. Set automatically by the orchestrator's run wrapper when present; null for production deployments."
+    },
+    "runId": {
+      "type": ["string", "null"],
+      "description": "Stable id of the orchestrator CLI invocation that produced this event. Matches the run id used by the per-job run timeline (/api/jobs/{id}/runs). Null when the event is not bound to one specific orchestrated run."
+    },
+    "taskId": {
+      "type": ["string", "null"],
+      "description": "Domain-level task id inside the built software, distinct from the orchestrator job. Lets a workflow application carry its own work-item correlation while still emitting product runtime events. Null when the application has no internal task concept."
+    },
+    "duration": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Optional timing for events that wrap a measurable operation. Set by the producer when the event represents the completion of a span; absent when the event is a point-in-time observation.",
+      "required": ["ms"],
+      "properties": {
+        "ms": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Wall-clock duration of the operation in milliseconds. Producers may use sub-millisecond floats for fast paths."
+        },
+        "startedAt": {
+          "type": ["string", "null"],
+          "format": "date-time",
+          "description": "Optional UTC timestamp at which the operation started. timestamp is the end of the span; startedAt + ms equals timestamp within clock skew."
+        }
+      }
+    },
+    "status": {
+      "type": ["string", "null"],
+      "enum": ["Ok", "Failed", "Cancelled", "Timeout", "Skipped", null],
+      "description": "Outcome label for events that wrap a completed operation. Ok is a successful completion. Failed is a handled error path. Cancelled is a deliberate abort. Timeout is a deadline miss. Skipped is a no-op short-circuit (cache hit, gate closed). Null for point-in-time observations that have no outcome."
+    },
+    "error": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Optional structured error context. Present when level is Error or Fatal, or when status is Failed or Timeout. Heavy stacks may be truncated; the full stack belongs in an attached artifact when needed.",
+      "required": ["message"],
+      "properties": {
+        "type": {
+          "type": ["string", "null"],
+          "maxLength": 200,
+          "description": "Exception or error type, e.g. System.IO.IOException, TimeoutError, ValidationError."
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "description": "One-line human-readable message. Plain prose, no markdown."
+        },
+        "stack": {
+          "type": ["string", "null"],
+          "maxLength": 8000,
+          "description": "Optional truncated stack trace. Larger payloads belong in an attached artifact and stay out of the JSONL line."
+        },
+        "code": {
+          "type": ["string", "null"],
+          "maxLength": 80,
+          "description": "Optional short error code for grouping (HTTP status, application code, posix errno)."
+        },
+        "retryable": {
+          "type": ["boolean", "null"],
+          "description": "Optional hint that the failure is transient. Consumers may use it for retry-budget accounting and for collapsing repeated transient failures."
+        }
+      }
+    },
+    "tags": {
+      "type": "array",
+      "description": "Optional flat list of short kebab-case labels for filtering: feature flag names, route groups, customer tiers, environment slugs. Not a primary index; pick a small fixed vocabulary per project.",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 64,
+        "pattern": "^[a-z0-9][a-z0-9-]*$"
+      },
+      "maxItems": 16
+    },
+    "payload": {
+      "type": ["object", "null"],
+      "description": "Open object for kind-specific structured fields. Producers attach the small dimensions that make the event useful (route, statusCode, byteSize, queueDepth, userTier). Keep it small: under a few KB per event. Heavy evidence belongs in artifacts. Consumers ignore unknown payload fields. Producers must not put PII or secrets here without a documented redaction step; this stream is local and inspectable but the same record may flow into shared review artifacts later."
+    }
+  }
+}
