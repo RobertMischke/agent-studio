@@ -2742,6 +2742,12 @@ export class App implements OnInit {
     // intake loop is the only producer of the lane-defining `phase`
     // field, so a manual drag never has to write phase from the UI.
     if (event.targetState === '2-ready-intake') event = { ...event, targetState: '2-ready' };
+    // Same-state drops (drag onto a sibling card in the same lane) are a
+    // no-op: the column-level drop handler already filters the common path,
+    // this is defense in depth so a stray emit cannot trigger a wasted
+    // backend round-trip or a vanish-and-recover repaint.
+    const moving = this.jobService.jobs().find(j => j.id === event.jobId && j.watchPath === event.watchPath);
+    if (moving && moving.state === event.targetState) return;
     const snapshot = this.jobService.applyOptimisticMove(event.jobId, event.watchPath, event.targetState);
     this.jobService.beginOptimisticPersist();
     this.jobService.moveJob(event.jobId, event.targetState, event.watchPath).subscribe({

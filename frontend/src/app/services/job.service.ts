@@ -178,11 +178,19 @@ export class JobService {
       if (found) { fromLane = k; moving = found; break; }
     }
     if (!fromLane || !moving) return null;
+    // Same-lane "move" is a no-op at the data layer: the previous shape
+    // filtered the card out of `fromLane` and then aliased `toLane` to the
+    // already-filtered array, so the card vanished from its lane until the
+    // next poll repainted. Bail out here so the column-level drop handler
+    // (which used to fall into this path when a card was released over a
+    // sibling card instead of a drop-zone) cannot make the card disappear,
+    // even if a future caller forgets the sourceState guard.
+    if (fromLane === toLane) return null;
     const fromBefore = current[fromLane] ?? [];
     const toBefore = current[toLane] ?? [];
     const next: GroupedJobs = { ...current };
     next[fromLane] = fromBefore.filter(j => `${j.watchPath}::${j.id}` !== key);
-    next[toLane] = fromLane === toLane ? next[toLane] : [...toBefore, { ...moving, state: targetState }];
+    next[toLane] = [...toBefore, { ...moving, state: targetState }];
     this.grouped.set(next);
     this.mutationVersion++;
     this.pendingGroupedSuppressUntil = Date.now() + JobService.OPTIMISTIC_GRACE_MS;

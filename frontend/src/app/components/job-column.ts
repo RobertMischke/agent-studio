@@ -888,9 +888,19 @@ export class JobColumnComponent {
     this.isDragOver = false;
     this.dropIndex = -1;
     const payload = this.parsePayload(event.dataTransfer?.getData('text/plain'));
-    if (payload) {
-      this.jobDrop.emit({ jobId: payload.jobId, watchPath: payload.watchPath, targetState: this.state() });
-    }
+    if (!payload) return;
+    // The card drop-zone strips are intentionally narrow (~14 px hit target);
+    // when the user releases the cursor over an actual card the drop bubbles
+    // up to this column-level handler. If the card already lives in this
+    // lane, treat it as a within-lane drop and emit nothing — emitting
+    // `jobDrop` with `targetState === sourceState` would route through the
+    // optimistic-move path, which removes the card from its lane and never
+    // re-adds it (same fromLane/toLane case), making it disappear visually
+    // until the next polling tick repaints. Cross-lane drops still flow
+    // through the same path.
+    const sourceState = event.dataTransfer?.getData('application/x-source-state');
+    if (sourceState === this.state()) return;
+    this.jobDrop.emit({ jobId: payload.jobId, watchPath: payload.watchPath, targetState: this.state() });
   }
 
   private parsePayload(rawPayload?: string): { jobId: string; watchPath: string; jobKey: string } | null {
