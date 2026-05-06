@@ -397,16 +397,19 @@ import { markdownToHtml } from './markdown-utils';
       font-size: 0.8rem;
     }
     /* Command-bar styles moved to ./job-detail/command-deck/command-deck.component.scss */
+    /* Chat-first redesign: heavy 24 / 20 / 16 px radii brought down to
+       4 px so the page reads as IDE chrome, not a marketing card. The
+       dark Catppuccin background palette is preserved unchanged. */
     .detail {
       background: #181825;
       border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 24px;
-      padding: 18px 20px;
+      border-radius: 4px;
+      padding: 10px 12px;
       height: 100%;
       min-height: 0;
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 8px;
       position: relative;
       box-sizing: border-box;
     }
@@ -698,16 +701,17 @@ import { markdownToHtml } from './markdown-utils';
       min-height: 0;
       background: rgba(12,12,23,0.55);
       border: 1px solid rgba(255,255,255,0.05);
-      border-radius: 16px;
+      border-radius: 4px;
       overflow: hidden;
     }
     .pane__header {
       display: flex;
       align-items: center;
-      gap: 8px;
-      padding: 10px 14px;
-      border-bottom: 1px solid rgba(255,255,255,0.04);
+      gap: 6px;
+      padding: 6px 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
       background: rgba(255,255,255,0.02);
+      min-height: 28px;
     }
     .pane__title {
       flex: 1;
@@ -768,7 +772,7 @@ import { markdownToHtml } from './markdown-utils';
       display: flex;
       flex-direction: column;
       min-height: 0;
-      padding: 14px;
+      padding: 10px 12px;
       overflow: auto;
     }
     .pane__splitter {
@@ -831,11 +835,11 @@ import { markdownToHtml } from './markdown-utils';
     .inspector {
       background: rgba(12,12,23,0.55);
       border: 1px solid rgba(255,255,255,0.05);
-      border-radius: 24px;
-      padding: 20px;
+      border-radius: 4px;
+      padding: 8px 10px;
       display: flex;
       flex-direction: column;
-      gap: 18px;
+      gap: 8px;
       min-height: 0;
       height: 100%;
     }
@@ -855,10 +859,10 @@ import { markdownToHtml } from './markdown-utils';
       background: rgba(255,255,255,0.04);
       border: 1px solid rgba(255,255,255,0.08);
       color: #94a3b8;
-      padding: 8px 14px;
-      border-radius: 999px;
+      padding: 4px 10px;
+      border-radius: 3px;
       cursor: pointer;
-      font-size: 12px;
+      font-size: 11.5px;
       font-weight: 600;
       transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
     }
@@ -963,11 +967,11 @@ import { markdownToHtml } from './markdown-utils';
       margin: 0;
       background: rgba(12,12,23,0.55);
       border: 1px solid rgba(255,255,255,0.05);
-      border-radius: 20px;
-      padding: 20px;
+      border-radius: 4px;
+      padding: 14px;
     }
     .section--primary {
-      padding: 24px;
+      padding: 16px;
     }
     .section--fill {
       display: flex;
@@ -1003,7 +1007,7 @@ import { markdownToHtml } from './markdown-utils';
     .markdown-preview {
       margin: 0;
       border: 1px solid rgba(255,255,255,0.05);
-      border-radius: 10px;
+      border-radius: 4px;
       background: rgba(0,0,0,0.16);
       color: #cbd5e1;
       padding: 12px 14px;
@@ -1083,7 +1087,7 @@ import { markdownToHtml } from './markdown-utils';
       border: 1px solid rgba(255,255,255,0.08);
       color: #94a3b8;
       padding: 4px 10px;
-      border-radius: 6px;
+      border-radius: 3px;
       cursor: pointer;
       font-size: 12px;
     }
@@ -1140,11 +1144,11 @@ import { markdownToHtml } from './markdown-utils';
     .sidebar-card {
       background: rgba(12,12,23,0.55);
       border: 1px solid rgba(255,255,255,0.05);
-      border-radius: 20px;
-      padding: 18px;
+      border-radius: 4px;
+      padding: 12px;
       display: flex;
       flex-direction: column;
-      gap: 14px;
+      gap: 10px;
       min-width: 0;
     }
     .sidebar-card--toolbar {

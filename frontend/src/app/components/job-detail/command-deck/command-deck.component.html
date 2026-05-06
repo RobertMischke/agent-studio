@@ -21,9 +21,16 @@
     </button>
     <button class="btn-exec btn-exec--stop commandbar__action" (click)="stop.emit()">⏹ Stop</button>
   } @else {
-    <label class="commandbar__field commandbar__field--project">
-      <span class="commandbar__label">Project</span>
-      <select class="commandbar__select"
+    <!--
+      Compressed Project chip: the text "Project" label is dropped from
+      the visible chrome (the dropdown chevron is enough of a cue) and
+      lives on aria-label/title for screen readers + hover. -->
+    <label class="commandbar__field commandbar__field--chip commandbar__field--project">
+      <span class="commandbar__label commandbar__label--sr" aria-hidden="false">Project</span>
+      <select class="commandbar__select commandbar__select--chip"
+              aria-label="Project"
+              title="Project"
+              data-testid="commandbar-project"
               [ngModel]="currentWatchPath()"
               (ngModelChange)="projectChange.emit($event)">
         @for (wp of watchPaths(); track wp.path) {
@@ -38,17 +45,23 @@
                 class="commandbar__cli-btn"
                 [class.commandbar__cli-btn--active]="cliTypeDraft() === t"
                 [disabled]="isRunning()"
+                [title]="cliTypeLabel(t)"
+                [attr.aria-label]="cliTypeLabel(t)"
                 (click)="cliTypeChange.emit(t)">
           <span class="commandbar__cli-icon" aria-hidden="true">{{ cliTypeIcon(t) }}</span>
-          {{ cliTypeLabel(t) }}
+          <span class="commandbar__cli-text">{{ cliTypeLabel(t) }}</span>
         </button>
       }
     </div>
 
-    <label class="commandbar__field commandbar__field--grow">
-      <span class="commandbar__label">Model</span>
+    <!-- Compressed Model chip (same shape as Project). -->
+    <label class="commandbar__field commandbar__field--chip commandbar__field--grow">
+      <span class="commandbar__label commandbar__label--sr" aria-hidden="false">Model</span>
       <select id="job-model"
-              class="commandbar__select"
+              class="commandbar__select commandbar__select--chip"
+              aria-label="Model"
+              title="Model"
+              data-testid="commandbar-model"
               [ngModel]="modelDraft()"
               [disabled]="isRunning()"
               (ngModelChange)="modelChange.emit($event)">

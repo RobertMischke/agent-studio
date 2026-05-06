@@ -35,14 +35,17 @@
               [title]="'Claude session telemetry: ' + cs.error"
               data-testid="claude-telemetry-error">⚠ no session yet</span>
       } @else if (cs.turnCount > 0) {
-        <span class="pane__telemetry"
+        <!--
+          Single-badge telemetry: the verbose multi-chip row used to eat a
+          full line in the protocol-pane header. The hover tooltip carries
+          the full breakdown (input / output / cache / turns / model) so
+          no information is lost — the data is one hover away. -->
+        <span class="pane__telemetry pane__telemetry--badge"
               [title]="claudeSessionTooltip()"
-              data-testid="claude-telemetry">
-          <span class="pane__telemetry-chip">🧠 {{ cs.model || '?' }}</span>
-          <span class="pane__telemetry-chip">↑ {{ formatTokens(cs.inputTokens) }}</span>
-          <span class="pane__telemetry-chip">↓ {{ formatTokens(cs.outputTokens) }}</span>
-          <span class="pane__telemetry-chip pane__telemetry-chip--cache">⚡ {{ formatTokens(cs.cacheReadTokens) }}</span>
-          <span class="pane__telemetry-chip">{{ cs.turnCount }} turns</span>
+              data-testid="claude-telemetry"
+              role="img"
+              [attr.aria-label]="claudeSessionTooltip()">
+          🪙 {{ formatTokens(cs.outputTokens) }} · {{ cs.turnCount }}t
         </span>
       }
     }
@@ -186,18 +189,23 @@
         } @else {
           <div class="inspector__stack">
             <section class="activity-panel">
-              <div class="activity-panel__header">
-                <div>
-                  <h3 class="section__title">Activity log</h3>
+              <div class="activity-panel__header activity-panel__header--compact">
+                <h3 class="section__title activity-panel__title">Activity log</h3>
+                <div class="activity-panel__actions">
+                  @if (cliOutput().length > 0 || detail().log.length > 0 || isRunning()) {
+                    <button class="btn-icon"
+                            data-testid="protocol-maximize-log"
+                            (click)="openLogOverlay.emit()"
+                            aria-label="Maximize log"
+                            title="Maximize log">⤢</button>
+                  }
+                  <button type="button"
+                          class="btn-icon"
+                          data-testid="protocol-open-verbose-debug"
+                          aria-label="Open Verbose Debug"
+                          title="Open the read-only Verbose Debug view for this run"
+                          (click)="verboseDebugOpen.set(true)">🐞</button>
                 </div>
-                @if (cliOutput().length > 0 || detail().log.length > 0 || isRunning()) {
-                  <button class="btn-sm" (click)="openLogOverlay.emit()">⤢ Maximize log</button>
-                }
-                <button type="button"
-                        class="btn-sm"
-                        data-testid="protocol-open-verbose-debug"
-                        title="Open the read-only Verbose Debug view for this run"
-                        (click)="verboseDebugOpen.set(true)">🐞 Verbose Debug</button>
               </div>
 
               <app-run-timeline

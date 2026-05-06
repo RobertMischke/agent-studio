@@ -4,21 +4,25 @@
 .commandbar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 6px 10px;
+  gap: 8px;
+  padding: 4px 8px;
   background: rgba(12,12,23,0.55);
-  border: 1px solid rgba(255,255,255,0.05);
-  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 4px;
   flex-wrap: wrap;
+  min-height: 30px;
 }
 .commandbar__field {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   min-width: 0;
 }
-.commandbar__field--project { flex: 0 1 220px; }
-.commandbar__field--grow { flex: 1 1 220px; min-width: 160px; }
+.commandbar__field--project { flex: 0 1 200px; }
+.commandbar__field--grow { flex: 1 1 200px; min-width: 140px; }
+.commandbar__field--chip {
+  position: relative;
+}
 .commandbar__label {
   font-size: 10px;
   text-transform: uppercase;
@@ -26,15 +30,40 @@
   color: #64748b;
   white-space: nowrap;
 }
+/*
+ * The visible "Project" / "Model" labels were the loudest chrome in
+ * the old command bar; the chat-first redesign drops them from the
+ * visible row and keeps them only for assistive tech via the aria
+ * label on the <select>. The dropdown chevron + selected option text
+ * is enough cue for sighted users. */
+.commandbar__label--sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 .commandbar__select {
   flex: 1;
   min-width: 0;
   background: rgba(0,0,0,0.25);
   color: #cdd6f4;
-  border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 6px;
-  padding: 4px 8px;
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 3px;
+  padding: 3px 6px;
   font-size: 12px;
+}
+.commandbar__select--chip {
+  /* Read like a small chip rather than a full <select>: shorter
+   * padding, native chevron rendered by the browser, calm border. */
+  padding: 2px 6px;
+  font-size: 11.5px;
+  height: 22px;
+  line-height: 1.2;
 }
 .commandbar__select:focus { outline: none; border-color: rgba(99,102,241,0.55); }
 .commandbar__select:disabled { opacity: 0.6; cursor: not-allowed; }
@@ -43,25 +72,35 @@
   gap: 2px;
   padding: 2px;
   border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 6px;
+  border-radius: 3px;
   background: rgba(0,0,0,0.25);
 }
 .commandbar__cli-btn {
   border: 0;
   background: transparent;
   color: #94a3b8;
-  padding: 3px 9px;
+  padding: 2px 7px;
   font-size: 11px;
-  border-radius: 4px;
+  border-radius: 2px;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
 }
 .commandbar__cli-icon { font-size: 12px; line-height: 1; }
 .commandbar__cli-btn:hover:not(:disabled) { color: #e2e8f0; background: rgba(255,255,255,0.06); }
 .commandbar__cli-btn--active { background: rgba(99,102,241,0.22); color: #c7d2fe; }
 .commandbar__cli-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/*
+ * Below ~720 px wide the CLI text labels collapse to icon-only so the
+ * single header row keeps its 30px height instead of wrapping. The
+ * `title` attribute carries the label for hover. */
+@media (max-width: 1100px) {
+  .commandbar__cli-text { display: none; }
+  .commandbar__cli-btn { padding: 2px 5px; }
+}
+
 .commandbar__status {
   display: inline-flex;
   align-items: center;
@@ -76,7 +115,7 @@
   background: #3b82f6;
   animation: cdpulse 1.5s infinite;
 }
-.commandbar__action { padding: 5px 12px; font-size: 12px; }
+.commandbar__action { padding: 4px 10px; font-size: 12px; border-radius: 3px; }
 .commandbar__spacer { flex: 1 1 auto; }
 .commandbar__compact-meta {
   display: inline-flex;
@@ -86,8 +125,8 @@
 }
 .commandbar__chip {
   font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 999px;
+  padding: 1px 7px;
+  border-radius: 3px;
   background: rgba(99,102,241,0.18);
   color: #c7d2fe;
   border: 1px solid rgba(99,102,241,0.28);
@@ -96,28 +135,28 @@
 .commandbar__chip--muted {
   background: rgba(255,255,255,0.04);
   color: #94a3b8;
-  border-color: rgba(255,255,255,0.08);
+  border-color: rgba(255,255,255,0.10);
   font-family: var(--font-mono, monospace);
 }
 .commandbar__toggle {
   background: transparent;
   border: 1px solid rgba(255,255,255,0.12);
   color: #cbd5e1;
-  border-radius: 6px;
-  padding: 4px 10px;
+  border-radius: 3px;
+  padding: 3px 8px;
   font-size: 11px;
   cursor: pointer;
   white-space: nowrap;
 }
 .commandbar__toggle:hover { background: rgba(255,255,255,0.06); color: #e2e8f0; }
-.commandbar--collapsed { padding: 4px 10px; }
+.commandbar--collapsed { padding: 3px 8px; }
 
 .btn-exec {
   border: none;
-  padding: 6px 16px;
-  border-radius: 6px;
+  padding: 4px 12px;
+  border-radius: 3px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 600;
 }
 .btn-exec--start {

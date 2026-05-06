@@ -13,7 +13,14 @@ const DETAIL_PCT_MAX = 72;
 const DETAIL_PCT_DEFAULT = 54;
 
 const VISIBLE_FALLBACK: PanesVisible = { prompt: true, protocol: true, git: false };
-const WEIGHTS_FALLBACK: PaneWeights = { prompt: 4, protocol: 3, git: 3 };
+// Chat-first redesign: the protocol pane (right column) hosts the
+// conversation the user actually reads, so the default split now
+// gives it ~62 % of the horizontal space versus the prompt's ~38 %
+// when only prompt + protocol are visible (the default visibility).
+// The user's saved choice in localStorage still wins on subsequent
+// visits — this only changes first-load behaviour for new browsers /
+// freshly-cleared storage.
+const WEIGHTS_FALLBACK: PaneWeights = { prompt: 3, protocol: 5, git: 4 };
 
 /**
  * Owns the three-pane layout state of the job-detail view: which panes are

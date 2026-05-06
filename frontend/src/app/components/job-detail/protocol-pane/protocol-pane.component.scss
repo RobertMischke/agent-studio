@@ -31,6 +31,82 @@
   filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.15));
 }
 
+/*
+ * Compact single-badge token telemetry. Replaces the verbose multi-chip
+ * row that used to read "🧠 model ↑ in ↓ out ⚡ cache N turns". The
+ * tooltip (title attribute) still carries the full breakdown so nothing
+ * is lost — the chat below gains the freed pixel rows.
+ */
+.pane__telemetry--badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  background: rgba(148, 163, 184, 0.10);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  color: #cbd5e1;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: help;
+  font-variant-numeric: tabular-nums;
+}
+.pane__telemetry--badge:hover {
+  background: rgba(148, 163, 184, 0.18);
+  border-color: rgba(148, 163, 184, 0.45);
+}
+
+/*
+ * Icon-only action button: 22px square, 3px radius, calm border. Used
+ * by the activity-panel header to replace verbose "⤢ Maximize log" and
+ * "🐞 Verbose Debug" full-text buttons. Tooltip carries the label.
+ */
+.btn-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 3px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.04);
+  color: #94a3b8;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+.btn-icon:hover:not(:disabled) {
+  background: rgba(255,255,255,0.10);
+  color: #f1f5f9;
+  border-color: rgba(255,255,255,0.22);
+}
+.btn-icon:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.activity-panel__header--compact {
+  align-items: center;
+  padding-bottom: 4px;
+}
+
+.activity-panel__title {
+  flex: 1 1 auto;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+  margin: 0;
+}
+
+.activity-panel__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .pane__live-dot {
   width: 8px;
   height: 8px;
@@ -93,13 +169,13 @@
 .inspector__tabs--pill {
   display: inline-flex;
   gap: 2px;
-  padding: 3px;
+  padding: 2px;
   background: rgba(120, 120, 140, 0.12);
-  border-radius: 999px;
+  border-radius: 3px;
 
   .inspector__tab {
-    border-radius: 999px;
-    padding: 4px 12px;
+    border-radius: 2px;
+    padding: 3px 10px;
     border: none;
     background: transparent;
     font-size: 0.9em;

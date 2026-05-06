@@ -33,52 +33,142 @@ import { JobService } from '../../../services/job.service';
       <div class="run-timeline__empty">No CLI runs yet — start the task to populate the timeline.</div>
     } @else {
       <div class="run-timeline">
-        <button type="button"
-                class="run-timeline__header run-timeline__header--toggle"
-                (click)="toggleListExpanded()"
-                [attr.aria-expanded]="listExpanded()"
-                [attr.data-testid]="'runs-toggle'">
-          <span class="run-timeline__caret">{{ listExpanded() ? '▾' : '▸' }}</span>
+        <!--
+          Chat-first redesign: runs collapse to a compact icon row by
+          default. Each square icon represents one CLI invocation; the
+          colour conveys status (green = ok, red = fail, blue = running,
+          amber = stopped/cancelled). Clicking an icon expands that run's
+          full card inline below — same data the verbose timeline showed,
+          one click away. The aggregate summary stays inline so the user
+          knows how many runs there are without expanding anything.
+        -->
+        <div class="run-timeline__header run-timeline__header--icons">
           <span class="run-timeline__title">Runs</span>
-          <span class="run-timeline__aggregate">{{ visibleRuns().length }} run{{ visibleRuns().length === 1 ? '' : 's' }}</span>
-          @if (statusSummary().completed > 0) {
-            <span class="run-timeline__chip run-timeline__chip--ok">{{ statusSummary().completed }} ok</span>
-          }
-          @if (statusSummary().failed > 0) {
-            <span class="run-timeline__chip run-timeline__chip--bad">{{ statusSummary().failed }} fail</span>
-          }
-          @if (statusSummary().running > 0) {
-            <span class="run-timeline__chip run-timeline__chip--live">{{ statusSummary().running }} live</span>
-          }
-          @if (statusSummary().other > 0) {
-            <span class="run-timeline__chip run-timeline__chip--other">{{ statusSummary().other }} other</span>
-          }
-          <span class="run-timeline__latest">
-            latest: <span class="run-timeline__latest-status" [attr.data-status]="latestRun()?.status">{{ latestRun()?.status || '—' }}</span>
-            @if (latestRun(); as lr) {
-              <span class="run-timeline__latest-time">{{ formatTime(lr.startedAt) }}</span>
+          <div class="run-timeline__icons" role="list" data-testid="runs-icon-row">
+            @for (r of iconRuns(); track r.index) {
+              <button type="button"
+                      class="run-timeline__icon"
+                      role="listitem"
+                      [class.run-timeline__icon--active]="expandedIndex() === r.index"
+                      [attr.data-status]="r.status"
+                      [attr.data-testid]="'run-icon-' + r.index"
+                      [attr.aria-label]="'Run #' + r.index + ' ' + statusLabel(r)"
+                      [title]="iconTooltip(r)"
+                      (click)="toggle(r.index)">{{ iconChar(r) }}</button>
             }
-          </span>
-        </button>
-        @if (!listExpanded() && visibleRuns().length > 0) {
-          <!-- Always keep the most recent / running run visible even when collapsed -->
-          <div class="run-card run-card--peek"
-               [attr.data-status]="visibleRuns()[0].status">
-            <div class="run-card__head run-card__head--peek">
-              <span class="run-card__index">#{{ visibleRuns()[0].index }}</span>
-              <span class="run-card__chip run-card__chip--status" [attr.data-status]="visibleRuns()[0].status">{{ statusLabel(visibleRuns()[0]) }}</span>
-              <span class="run-card__followup" [class.run-card__followup--empty]="!visibleRuns()[0].userFollowup">
-                {{ visibleRuns()[0].userFollowup || '(no follow-up)' }}
-              </span>
-              <span class="run-card__meta">
-                @if (visibleRuns()[0].durationSeconds; as dur) {
-                  <span>{{ formatDuration(dur) }}</span>
-                }
-                <span class="run-card__time">{{ formatTime(visibleRuns()[0].startedAt) }}</span>
-              </span>
-            </div>
           </div>
+          <span class="run-timeline__aggregate" data-testid="runs-aggregate">
+            {{ visibleRuns().length }} run{{ visibleRuns().length === 1 ? '' : 's' }}
+            @if (statusSummary().completed > 0) { · {{ statusSummary().completed }} ok }
+            @if (statusSummary().failed > 0)    { · {{ statusSummary().failed }} fail }
+            @if (statusSummary().running > 0)   { · {{ statusSummary().running }} live }
+            @if (statusSummary().other > 0)     { · {{ statusSummary().other }} other }
+          </span>
+          <button type="button"
+                  class="run-timeline__listtoggle"
+                  data-testid="runs-toggle"
+                  [attr.aria-expanded]="listExpanded()"
+                  [title]="listExpanded() ? 'Collapse run list' : 'Show full run list'"
+                  (click)="toggleListExpanded()">{{ listExpanded() ? '▾' : '▸' }}</button>
+        </div>
+
+        <!--
+          When a single run icon is clicked we render that one run's
+          full card (the same content the legacy expanded list showed).
+          This is the in-place popover variant of "click an icon for
+          the full card" — the data the user is looking for is the
+          first thing they see, no modal stack to navigate.
+        -->
+        @if (expandedIndex() != null) {
+          @for (r of visibleRuns(); track r.index) {
+            @if (r.index === expandedIndex()) {
+              <div class="run-card run-card--popover"
+                   [attr.data-status]="r.status"
+                   [attr.data-testid]="'run-popover-' + r.index">
+                <div class="run-card__head run-card__head--peek">
+                  <span class="run-card__index">#{{ r.index }}</span>
+                  <span class="run-card__chip run-card__chip--intent" [attr.data-intent]="r.intent">{{ intentLabel(r.intent) }}</span>
+                  <span class="run-card__chip run-card__chip--status" [attr.data-status]="r.status">{{ statusLabel(r) }}</span>
+                  <span class="run-card__followup" [class.run-card__followup--empty]="!r.userFollowup">
+                    {{ r.userFollowup || '(no follow-up)' }}
+                  </span>
+                  <span class="run-card__meta">
+                    @if (r.durationSeconds != null) { <span>{{ formatDuration(r.durationSeconds) }}</span> }
+                    @if (r.exitCode != null) { <span class="run-card__exit">exit {{ r.exitCode }}</span> }
+                    <span class="run-card__time">{{ formatTime(r.startedAt) }}</span>
+                  </span>
+                  <button type="button"
+                          class="run-card__close"
+                          [attr.data-testid]="'run-popover-close-' + r.index"
+                          aria-label="Close run details"
+                          title="Close"
+                          (click)="closePopover(); $event.stopPropagation()">×</button>
+                </div>
+                <div class="run-card__body">
+                  @if (r.reason) {
+                    <div class="run-card__row"><span class="run-card__row-label">Reason</span><span>{{ r.reason }}</span></div>
+                  }
+                  @if (r.inputSessionId || r.capturedSessionId) {
+                    <div class="run-card__row">
+                      <span class="run-card__row-label">Session</span>
+                      <span class="run-card__session">
+                        @if (r.inputSessionId) { <code>{{ short(r.inputSessionId) }}</code> → }
+                        @if (r.capturedSessionId) { <code>{{ short(r.capturedSessionId) }}</code> }
+                        @if (!r.capturedSessionId) { <em>not captured</em> }
+                      </span>
+                    </div>
+                  }
+                  <div class="run-card__row run-card__row--commits">
+                    <span class="run-card__row-label">Software change</span>
+                    @if (commitsState() === 'loading') {
+                      <span class="run-card__commits-loading">loading…</span>
+                    } @else if (commitsError()) {
+                      <span class="run-card__commits-error">{{ commitsError() }}</span>
+                    } @else if (commits().length === 0) {
+                      <span class="run-card__commits-empty">No commits in this run's window.</span>
+                    } @else {
+                      <div class="run-card__commits">
+                        <div class="run-card__commits-summary">
+                          {{ commits().length }} commit{{ commits().length === 1 ? '' : 's' }} ·
+                          +{{ totalAdded() }} / -{{ totalRemoved() }} across {{ totalFiles() }} file{{ totalFiles() === 1 ? '' : 's' }}
+                        </div>
+                        <ul class="run-card__commit-list">
+                          @for (c of commits(); track c.sha) {
+                            <li class="run-card__commit">
+                              <code class="run-card__commit-sha">{{ c.shortSha }}</code>
+                              <span class="run-card__commit-subject">{{ c.subject }}</span>
+                              <span class="run-card__commit-stats">+{{ c.added }}/-{{ c.removed }} · {{ c.filesChanged }}f</span>
+                            </li>
+                          }
+                        </ul>
+                      </div>
+                    }
+                  </div>
+                  <div class="run-card__row run-card__row--actions">
+                    <button type="button"
+                            class="run-card__filter"
+                            (click)="emitFilter(r); $event.stopPropagation()"
+                            [disabled]="r.lineStart == null">
+                      Filter activity log to this run
+                    </button>
+                    <button type="button"
+                            class="run-card__filter run-card__filter--primary"
+                            (click)="openGitViewer.emit(r); $event.stopPropagation()"
+                            [disabled]="!r.headShaBefore || !r.headShaAfter || r.headShaBefore === r.headShaAfter"
+                            [attr.title]="(!r.headShaBefore || !r.headShaAfter)
+                              ? 'No HEAD SHAs captured for this run (older run or repo unavailable).'
+                              : (r.headShaBefore === r.headShaAfter
+                                ? 'No commits made during this run.'
+                                : 'Open the file-tree + diff viewer for this run.')">
+                      Open git viewer
+                    </button>
+                  </div>
+                </div>
+              </div>
+            }
+          }
         }
+
         @if (listExpanded()) {
         @for (r of visibleRuns(); track r.index) {
           <div class="run-card"
@@ -183,6 +273,68 @@ import { JobService } from '../../../services/job.service';
       border-radius: 6px; cursor: pointer; color: inherit; font: inherit; text-align: left;
     }
     .run-timeline__header--toggle:hover { background: rgba(148, 163, 184, 0.08); }
+
+    /*
+     * Icon row (chat-first redesign): one square per run, status-tinted,
+     * tooltip carries full information so the icon stays calm. Click
+     * expands the run inline below.
+     */
+    .run-timeline__header--icons {
+      flex-wrap: nowrap;
+      gap: 6px;
+      padding: 2px 4px;
+      border: 1px solid rgba(148, 163, 184, 0.16);
+      border-radius: 3px;
+      background: rgba(30, 41, 59, 0.30);
+      min-height: 26px;
+    }
+    .run-timeline__icons {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      flex: 0 1 auto;
+      overflow: hidden;
+      flex-wrap: wrap;
+      max-height: 22px;
+    }
+    .run-timeline__icon {
+      width: 18px;
+      height: 18px;
+      padding: 0;
+      display: inline-grid;
+      place-items: center;
+      border-radius: 2px;
+      border: 1px solid rgba(148, 163, 184, 0.30);
+      background: rgba(148, 163, 184, 0.18);
+      color: #e2e8f0;
+      font-size: 11px;
+      line-height: 1;
+      cursor: pointer;
+      font-variant-numeric: tabular-nums;
+    }
+    .run-timeline__icon:hover { filter: brightness(1.15); }
+    .run-timeline__icon[data-status="completed"] { background: rgba(34, 197, 94, 0.28); border-color: rgba(74, 222, 128, 0.55); color: #bbf7d0; }
+    .run-timeline__icon[data-status="failed"]    { background: rgba(220, 38, 38, 0.40); border-color: rgba(248, 113, 113, 0.55); color: #fecaca; }
+    .run-timeline__icon[data-status="running"]   { background: rgba(56, 189, 248, 0.30); border-color: rgba(125, 211, 252, 0.60); color: #bae6fd; }
+    .run-timeline__icon[data-status="stopped"],
+    .run-timeline__icon[data-status="cancelled"] { background: rgba(251, 191, 36, 0.26); border-color: rgba(251, 191, 36, 0.50); color: #fde68a; }
+    .run-timeline__icon--active { box-shadow: 0 0 0 2px rgba(196, 181, 253, 0.55); }
+    .run-timeline__listtoggle {
+      width: 22px; height: 22px;
+      padding: 0; display: inline-grid; place-items: center;
+      border-radius: 2px; border: 1px solid rgba(148, 163, 184, 0.30);
+      background: transparent; color: #94a3b8; cursor: pointer; font-size: 12px;
+    }
+    .run-timeline__listtoggle:hover { background: rgba(148, 163, 184, 0.10); color: #e2e8f0; }
+    .run-card--popover { margin-top: 2px; }
+    .run-card__close {
+      margin-left: auto;
+      width: 20px; height: 20px;
+      padding: 0; display: inline-grid; place-items: center;
+      border-radius: 2px; border: 1px solid rgba(148, 163, 184, 0.30);
+      background: transparent; color: #94a3b8; cursor: pointer; font-size: 14px; line-height: 1;
+    }
+    .run-card__close:hover { background: rgba(148, 163, 184, 0.10); color: #f1f5f9; }
     .run-timeline__caret { width: 12px; text-align: center; color: #94a3b8; font-size: 11px; }
     .run-timeline__title { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.06em; color: #cbd5e1; font-weight: 600; }
     .run-timeline__aggregate { font-size: 11.5px; color: #94a3b8; }
@@ -315,6 +467,42 @@ export class RunTimelineComponent {
     }
     this.expandedIndex.set(index);
     this.loadCommits(index);
+  }
+
+  closePopover(): void {
+    this.expandedIndex.set(null);
+  }
+
+  /**
+   * Order for the icon row: chronological (oldest → newest), so the
+   * timeline reads left-to-right like a progress bar. The full-card
+   * list above continues to show newest-first because that's what
+   * matters when the user wants to read what just happened.
+   */
+  readonly iconRuns = computed(() => [...this.runs()].sort((a, b) => a.index - b.index));
+
+  /** Single character glyph for the icon. Uses the run index when small,
+   *  otherwise a status-shaped marker so the row stays calm. */
+  iconChar(r: RunRecord): string {
+    if (r.index <= 99) return String(r.index);
+    if (r.status === 'failed') return '✕';
+    if (r.status === 'running') return '●';
+    if (r.status === 'completed') return '✓';
+    return '·';
+  }
+
+  /** Multi-line tooltip carrying the full info the verbose card showed. */
+  iconTooltip(r: RunRecord): string {
+    const parts: string[] = [
+      `Run #${r.index} — ${this.statusLabel(r)} (${this.intentLabel(r.intent)})`,
+      `Started ${this.formatTime(r.startedAt)}`
+    ];
+    if (r.durationSeconds != null) parts.push(`Duration: ${this.formatDuration(r.durationSeconds)}`);
+    if (r.exitCode != null) parts.push(`Exit code: ${r.exitCode}`);
+    if (r.userFollowup) parts.push(`Follow-up: ${r.userFollowup}`);
+    if (r.reason) parts.push(`Reason: ${r.reason}`);
+    parts.push('Click to expand');
+    return parts.join('\n');
   }
 
   emitFilter(r: RunRecord): void {

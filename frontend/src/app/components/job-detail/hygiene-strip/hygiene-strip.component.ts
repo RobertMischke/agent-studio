@@ -7,18 +7,13 @@ import { ErrorDialogService } from '../../../services/error-dialog.service';
 /**
  * Repository-hygiene strip rendered at the top of the protocol pane for
  * jobs in `4-auto-review`, `5-human-review`, `6-completed`, or `7-archive`.
- * Surfaces the three signals the user should not be able to miss:
  *
- *  - whether the task carries a platform-owned commit stamp,
- *  - whether the working tree is dirty (and therefore "accepted task work
- *    is sitting uncommitted"),
- *  - whether stamped commits are still ahead of the upstream (push pending).
- *
- * When accepted task work appears uncommitted the strip also shows a
- * "Commit accepted task evidence" action that runs through the platform's
- * commit-message path, stamps `JobInfo.Commit`, and writes a
- * `[decision]` orchestrator-chat entry so the action is visible in the
- * activity log.
+ * The strip is the calm, angular icon-only variant introduced by the
+ * "task detail page chat-first" redesign: three tiny squares (commit /
+ * tree / push) carry the same data the verbose strip used to show, with
+ * hover-tooltips for the breakdown. The full warning banners
+ * ("accepted task work uncommitted", "push pending") still expand
+ * inline because those carry user actions, not just status.
  */
 @Component({
   selector: 'app-hygiene-strip',
@@ -31,64 +26,37 @@ import { ErrorDialogService } from '../../../services/error-dialog.service';
                [attr.data-testid]="'hygiene-strip'"
                [class.hygiene-strip--dirty]="hygiene()?.job?.acceptedTaskUncommitted"
                [class.hygiene-strip--unpushed]="hygiene()?.job?.commitUnpushed">
-        <div class="hygiene-strip__row">
-          <span class="hygiene-strip__title">Repository hygiene</span>
-
-          <span class="hygiene-strip__chip"
-                [class.hygiene-strip__chip--ok]="hygiene()?.job?.jobInfoCommitPresent"
-                [class.hygiene-strip__chip--warn]="hygiene() && !hygiene()?.job?.jobInfoCommitPresent"
-                [attr.data-testid]="'hygiene-commit'">
-            @if (hygiene()?.job?.jobInfoCommitPresent) {
-              <span aria-hidden="true">✓</span>
-              <span>Task committed</span>
-              @if (hygiene()?.job?.stampedCommitSha) {
-                <code class="hygiene-strip__sha">{{ shortSha(hygiene()!.job!.stampedCommitSha) }}</code>
-              }
-            } @else {
-              <span aria-hidden="true">○</span>
-              <span>No task commit recorded</span>
-            }
+        <div class="hygiene-strip__icons" role="group" aria-label="Repository hygiene">
+          <span class="hygiene-strip__icon"
+                [class.hygiene-strip__icon--ok]="hygiene()?.job?.jobInfoCommitPresent"
+                [class.hygiene-strip__icon--warn]="hygiene() && !hygiene()?.job?.jobInfoCommitPresent"
+                [attr.data-testid]="'hygiene-commit'"
+                [attr.aria-label]="commitTooltip()"
+                [title]="commitTooltip()">
+            {{ hygiene()?.job?.jobInfoCommitPresent ? '◆' : '◇' }}
           </span>
-
           @if (hygiene(); as h) {
-            <span class="hygiene-strip__chip"
-                  [class.hygiene-strip__chip--ok]="!h.isDirty"
-                  [class.hygiene-strip__chip--warn]="h.isDirty"
-                  [attr.data-testid]="'hygiene-tree'">
-              @if (h.isDirty) {
-                <span aria-hidden="true">⚠</span>
-                <span>Working tree dirty</span>
-                <span class="hygiene-strip__detail">
-                  ({{ h.stagedCount }} staged · {{ h.unstagedCount }} unstaged · {{ h.untrackedCount }} untracked)
-                </span>
-              } @else {
-                <span aria-hidden="true">✓</span>
-                <span>Working tree clean</span>
-              }
+            <span class="hygiene-strip__icon"
+                  [class.hygiene-strip__icon--ok]="!h.isDirty"
+                  [class.hygiene-strip__icon--warn]="h.isDirty"
+                  [attr.data-testid]="'hygiene-tree'"
+                  [attr.aria-label]="treeTooltip()"
+                  [title]="treeTooltip()">
+              {{ h.isDirty ? '✱' : '■' }}
             </span>
-
-            <span class="hygiene-strip__chip"
-                  [class.hygiene-strip__chip--ok]="h.hasUpstream && h.ahead === 0"
-                  [class.hygiene-strip__chip--warn]="h.hasUpstream && h.ahead > 0"
-                  [class.hygiene-strip__chip--neutral]="!h.hasUpstream"
-                  [attr.data-testid]="'hygiene-push'">
-              @if (!h.hasUpstream) {
-                <span aria-hidden="true">·</span>
-                <span>No upstream configured</span>
-              } @else if (h.ahead > 0) {
-                <span aria-hidden="true">↑</span>
-                <span>{{ h.ahead }} commit{{ h.ahead === 1 ? '' : 's' }} ahead — push pending</span>
-              } @else {
-                <span aria-hidden="true">✓</span>
-                <span>In sync with {{ h.upstream }}</span>
-              }
+            <span class="hygiene-strip__icon"
+                  [class.hygiene-strip__icon--ok]="h.hasUpstream && h.ahead === 0"
+                  [class.hygiene-strip__icon--warn]="h.hasUpstream && h.ahead > 0"
+                  [class.hygiene-strip__icon--neutral]="!h.hasUpstream"
+                  [attr.data-testid]="'hygiene-push'"
+                  [attr.aria-label]="pushTooltip()"
+                  [title]="pushTooltip()">
+              {{ pushIconChar(h) }}
             </span>
-
-            @if (h.branch) {
-              <span class="hygiene-strip__branch" [title]="'Current branch'">⎇ {{ h.branch }}</span>
-            }
           } @else {
-            <span class="hygiene-strip__chip hygiene-strip__chip--loading">Loading repository state…</span>
+            <span class="hygiene-strip__icon hygiene-strip__icon--loading"
+                  data-testid="hygiene-icon-loading"
+                  title="Loading repository state…">…</span>
           }
         </div>
 
@@ -147,6 +115,37 @@ export class HygieneStripComponent implements OnDestroy {
   ]);
 
   readonly visibleForState = computed(() => HygieneStripComponent.VISIBLE_STATES.has(this.job().state));
+
+  readonly commitTooltip = computed(() => {
+    const h = this.hygiene();
+    if (!h) return 'Repository commit state — loading…';
+    if (h.job?.jobInfoCommitPresent) {
+      const sha = h.job.stampedCommitSha ? this.shortSha(h.job.stampedCommitSha) : '';
+      return sha ? `Task committed (${sha})` : 'Task committed';
+    }
+    return 'No task commit recorded';
+  });
+
+  readonly treeTooltip = computed(() => {
+    const h = this.hygiene();
+    if (!h) return 'Working tree — loading…';
+    if (!h.isDirty) return 'Working tree clean';
+    return `Working tree dirty — ${h.stagedCount} staged · ${h.unstagedCount} unstaged · ${h.untrackedCount} untracked`;
+  });
+
+  readonly pushTooltip = computed(() => {
+    const h = this.hygiene();
+    if (!h) return 'Push state — loading…';
+    if (!h.hasUpstream) return 'No upstream configured';
+    if (h.ahead > 0) return `${h.ahead} commit${h.ahead === 1 ? '' : 's'} ahead — push pending (${h.upstream})`;
+    return `In sync with ${h.upstream}`;
+  });
+
+  pushIconChar(h: GitHygieneStatus): string {
+    if (!h.hasUpstream) return '·';
+    if (h.ahead > 0) return '↑';
+    return '✓';
+  }
 
   private pollTimer: ReturnType<typeof setInterval> | null = null;
   private currentJobKey: string | null = null;

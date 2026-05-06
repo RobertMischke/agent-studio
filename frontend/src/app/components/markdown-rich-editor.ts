@@ -28,40 +28,52 @@ const ATTACHMENTS_PREFIX = 'attachments/';
           🔒 {{ readOnlyReason() || 'Editing disabled while the CLI is running for this task. Stop it first.' }}
         </div>
       }
-      <div class="md-editor__bar">
+      <!--
+        Chat-first redesign: the toolbar is a tight icon strip; tooltips
+        carry the labels the verbose row used to render in visible text.
+        Save state is a small coloured dot rather than a long pill. -->
+      <div class="md-editor__bar md-editor__bar--compact">
         <div class="md-editor__tabs">
-          <button class="md-editor__tab"
+          <button class="md-editor__tab md-editor__tab--icon"
                   [class.md-editor__tab--active]="mode() === 'rich'"
-                  (click)="setMode('rich')">
-            Rich text
-          </button>
-          <button class="md-editor__tab"
+                  (click)="setMode('rich')"
+                  aria-label="Rich text editor"
+                  title="Rich text editor">P</button>
+          <button class="md-editor__tab md-editor__tab--icon"
                   [class.md-editor__tab--active]="mode() === 'source'"
-                  (click)="setMode('source')">
-            Markdown
-          </button>
+                  (click)="setMode('source')"
+                  aria-label="Markdown source editor"
+                  title="Markdown source editor">M</button>
           @if (canAttach()) {
-            <button class="md-editor__tab md-editor__tab--upload"
+            <button class="md-editor__tab md-editor__tab--icon md-editor__tab--upload"
                     type="button"
                     [disabled]="readOnly() || uploading()"
                     (click)="triggerFilePicker()"
                     data-testid="prompt-editor-attach"
+                    [attr.aria-label]="uploading() ? 'Uploading image' : 'Insert image'"
                     [title]="uploading() ? 'Uploading…' : 'Insert image (Ctrl+V also works)'">
-              {{ uploading() ? '⏳' : '📎' }} Image
+              {{ uploading() ? '⏳' : '📎' }}
             </button>
           }
         </div>
         <div class="md-editor__status" data-testid="prompt-editor-status">
           @switch (state()) {
-            @case ('dirty') { <span class="md-editor__status-pill md-editor__status-pill--dirty">Unsaved changes</span> }
-            @case ('saved') { <span class="md-editor__status-pill md-editor__status-pill--saved">✓ Saved</span> }
-            @default        { <span class="md-editor__status-pill">Saved</span> }
+            @case ('dirty') {
+              <span class="md-editor__dot md-editor__dot--dirty" title="Unsaved changes" aria-label="Unsaved changes"></span>
+            }
+            @case ('saved') {
+              <span class="md-editor__dot md-editor__dot--saved" title="Saved" aria-label="Saved"></span>
+            }
+            @default {
+              <span class="md-editor__dot" title="Saved" aria-label="Saved"></span>
+            }
           }
-          <button class="md-editor__save"
+          <button class="md-editor__save md-editor__save--icon"
                   (click)="emitSave()"
                   [disabled]="readOnly()"
                   data-testid="prompt-editor-save"
-                  title="Save (Ctrl+S)">Save</button>
+                  aria-label="Save (Ctrl+S)"
+                  title="Save (Ctrl+S)">💾</button>
         </div>
       </div>
 
@@ -111,13 +123,46 @@ const ATTACHMENTS_PREFIX = 'attachments/';
       gap: 8px;
       margin-bottom: 6px;
     }
+    .md-editor__bar--compact {
+      min-height: 24px;
+      margin-bottom: 4px;
+    }
     .md-editor__tabs {
       display: inline-flex;
-      gap: 4px;
+      gap: 2px;
       padding: 2px;
       border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 6px;
+      border-radius: 3px;
       background: rgba(255,255,255,0.03);
+    }
+    .md-editor__tab--icon {
+      width: 22px;
+      height: 22px;
+      padding: 0;
+      display: inline-grid;
+      place-items: center;
+      font-size: 12px;
+      line-height: 1;
+      border-radius: 2px;
+    }
+    .md-editor__dot {
+      width: 8px;
+      height: 8px;
+      display: inline-block;
+      border-radius: 50%;
+      background: rgba(148,163,184,0.45);
+      cursor: help;
+    }
+    .md-editor__dot--dirty { background: #c4b5fd; box-shadow: 0 0 0 2px rgba(139,92,246,0.25); }
+    .md-editor__dot--saved { background: #86efac; box-shadow: 0 0 0 2px rgba(34,197,94,0.25); }
+    .md-editor__save--icon {
+      width: 24px;
+      height: 22px;
+      padding: 0;
+      display: inline-grid;
+      place-items: center;
+      font-size: 12px;
+      border-radius: 3px;
     }
     .md-editor__status {
       display: inline-flex;

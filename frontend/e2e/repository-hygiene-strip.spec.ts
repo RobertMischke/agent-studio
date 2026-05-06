@@ -276,9 +276,12 @@ test.describe('Repository hygiene - review/completed strip', () => {
     await page.goto(`/?job=${encodeURIComponent(target.id)}&watchPath=${encodeURIComponent(target.watchPath)}`);
     await ensureProtocolPaneOpen(page);
     await expect(page.getByTestId('hygiene-strip')).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByTestId('hygiene-commit')).toContainText(/Task committed/i);
-    await expect(page.getByTestId('hygiene-tree')).toContainText(/Working tree clean/i);
-    await expect(page.getByTestId('hygiene-push')).toContainText(/In sync/i);
+    // Icon-only strip: state lives on the title attribute (hover tooltip)
+    // since the visible glyph is a single character. No information is
+    // lost — the tooltip carries the same wording as the old verbose row.
+    await expect(page.getByTestId('hygiene-commit')).toHaveAttribute('title', /Task committed/i);
+    await expect(page.getByTestId('hygiene-tree')).toHaveAttribute('title', /Working tree clean/i);
+    await expect(page.getByTestId('hygiene-push')).toHaveAttribute('title', /In sync/i);
     await expect(page.getByTestId('hygiene-warning-dirty-after-accept')).toHaveCount(0);
     await expect(page.getByTestId('hygiene-warning-unpushed')).toHaveCount(0);
     await captureStrip(page, 'clean-committed');
@@ -291,8 +294,8 @@ test.describe('Repository hygiene - review/completed strip', () => {
     await page.goto(`/?job=${encodeURIComponent(target.id)}&watchPath=${encodeURIComponent(target.watchPath)}`);
     await ensureProtocolPaneOpen(page);
     await expect(page.getByTestId('hygiene-strip')).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByTestId('hygiene-commit')).toContainText(/No task commit/i);
-    await expect(page.getByTestId('hygiene-tree')).toContainText(/Working tree dirty/i);
+    await expect(page.getByTestId('hygiene-commit')).toHaveAttribute('title', /No task commit/i);
+    await expect(page.getByTestId('hygiene-tree')).toHaveAttribute('title', /Working tree dirty/i);
     await expect(page.getByTestId('hygiene-warning-dirty-after-accept')).toBeVisible();
     await expect(page.getByTestId('hygiene-commit-accepted')).toBeVisible();
     await captureStrip(page, 'dirty-after-accept');
@@ -305,8 +308,8 @@ test.describe('Repository hygiene - review/completed strip', () => {
     await page.goto(`/?job=${encodeURIComponent(target.id)}&watchPath=${encodeURIComponent(target.watchPath)}`);
     await ensureProtocolPaneOpen(page);
     await expect(page.getByTestId('hygiene-strip')).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByTestId('hygiene-commit')).toContainText(/Task committed/i);
-    await expect(page.getByTestId('hygiene-push')).toContainText(/2 commits ahead/i);
+    await expect(page.getByTestId('hygiene-commit')).toHaveAttribute('title', /Task committed/i);
+    await expect(page.getByTestId('hygiene-push')).toHaveAttribute('title', /2 commits ahead/i);
     await expect(page.getByTestId('hygiene-warning-unpushed')).toBeVisible();
     await expect(page.getByTestId('project-hygiene-badge')).toContainText(/unpushed/i);
     await captureStrip(page, 'ahead-unpushed');
