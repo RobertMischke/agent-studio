@@ -127,6 +127,21 @@ When a CLI version bump changes the output format, the regression shows up as `S
 3. **Codex reports % left, we report % used.** The probe inverts the value so the UI's `UsedPct` semantics stay consistent across CLIs. Don't double-invert.
 4. **`--json` is required.** Without it, stdout is a colored panel that can't be parsed. The runner always passes it.
 
+## Watchdog parity with Claude (ADR-0030)
+
+The watchdog tunings shipped for Claude in ADR-0030 are CLI-agnostic and apply unchanged here:
+
+- **`SessionInitializing` budget is 60 s suspicious / 120 s hung.** Codex's first frame (`{"type":"session_configured", …}`) sometimes lags 30-50 s behind spawn under API load; the old 30 / 60 budget killed those legitimately-slow inits.
+- **`Unknown` frames count as activity.** A future Codex `--json` frame variant that the adapter does not yet classify still resets the silence clock; the unknown-sample is captured for diagnosis.
+- **Loud-failure routing on N same-job kills.** When the same Codex job fails three runs in a row, the runner moves it to `5-human-review` (instead of leaving it stuck in `3-progress` while auto-mode flips to `manual`).
+- **`logs/tool-calls.jsonl`** is written for any CLI driver — Codex's `tool_use` events flow through `CodexEventAdapter.MapLineToRunEvents` to `CliRunEvent.ToolStarted` / `ToolCompleted` and land in the same per-job JSONL the operator playbook for Claude references.
+
+Codex-specific differences worth flagging during a hang:
+
+- Codex `--json` frames are **pass-through today** (see § "`--json` frame model"); the `CodexEventAdapter` is the typed-event surface for the watchdog. If you patch frame parsing here, run the deterministic suite in [`backend.Tests/CliWatchdogIntegrationTests.cs`](../../backend.Tests/CliWatchdogIntegrationTests.cs) and the per-CLI tests in [`backend.Tests/CodexEventAdapterTests.cs`](../../backend.Tests/CodexEventAdapterTests.cs).
+- Codex does not emit Claude's `rate_limit_event` shape; the rate-limit-aware budget multiplier (an ADR-0030 follow-up) will need its own probe before it can flip on for Codex runs.
+- Codex has no equivalent of Claude's `~/.claude/projects/<cwd>/<uuid>.jsonl` side-channel session file. The heartbeat helper documented for Claude does not have a Codex analogue today; the same pipe-buffer hypothesis would need a different signal (e.g. polling `codex` IPC or a process-level CPU heartbeat).
+
 ## Quota probe
 
 [`CodexQuotaProbe`](../../backend/Services/Quota/CodexQuotaProbe.cs) returns two windows: a 5-hour bucket and a weekly bucket. Implementation runs `codex` over a PTY, accepts the trust prompt, navigates to `/status`, scrapes the panel.
