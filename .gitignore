@@ -43,3 +43,10 @@ frontend/mockup-chat.*.log
 .ng-serve-*.out.log
 .ng-serve-*.err.log
 .ng-serve-*.pid
+
+# .NET per-project build outputs. The .NET 10 layout already redirects most
+# output to artifacts/, but freshly-scaffolded projects (e.g. update-service)
+# fall back to bin/obj until they pick up the artifacts setting; gitignore
+# them universally so a transient build never bleeds into a commit.
+**/bin/
+**/obj/

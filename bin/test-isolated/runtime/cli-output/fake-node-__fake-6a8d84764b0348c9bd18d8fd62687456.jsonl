@@ -1,3 +1,0 @@
-{"Timestamp":"2026-05-06T00:32:19.3402459Z","Stream":"system","Text":"[taskboard] Started fake-node CLI (PID 28160)"}
-{"Timestamp":"2026-05-06T00:32:19.3976739Z","Stream":"stdout","Text":"{\u0022type\u0022:\u0022system\u0022,\u0022subtype\u0022:\u0022init\u0022,\u0022session_id\u0022:\u002200000000-0000-4000-8000-000000000000\u0022}"}
-{"Timestamp":"2026-05-06T00:32:19.4932385Z","Stream":"system","Text":"[taskboard] fake-node CLI exited: status=stopped, exitCode=-1, duration=0,2s"}
