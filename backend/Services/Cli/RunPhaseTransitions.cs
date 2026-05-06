@@ -68,6 +68,14 @@ public static class RunPhaseTransitions
         CliRunEvent.RateLimitObserved => true,
         CliRunEvent.SessionStarted    => true,
         CliRunEvent.TurnStarted       => true,
+        // An `Unknown` frame is still output: the CLI wrote *something*
+        // to stdout that the adapter could not classify. Treating it as
+        // silence would punish the orchestrator for adapter coverage
+        // gaps (a new claude-code stream-json frame variant, an
+        // experimental codex event). Counting it as activity is the
+        // defensive choice; the unknown-sample is captured downstream
+        // for diagnosis.
+        CliRunEvent.Unknown           => true,
         _                              => false
     };
 }

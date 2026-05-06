@@ -132,6 +132,17 @@ public static class JobCrudEndpoints
             return success ? Results.Ok() : Results.BadRequest("Reorder failed");
         });
 
+        // "Do Next" from the detail view: surface JobStateMachine.PromoteToReadyTop
+        // so the user can push a queued task to the head of the project's ready
+        // queue with one click. The state machine handles the reorder atomically
+        // on disk and preserves the relative position of any other queued
+        // jobs that already carry a PendingIntent.
+        group.MapPost("/{jobId}/move-to-top", (string jobId, string? watchPath, JobStateMachine states) =>
+        {
+            var position = states.PromoteToReadyTop(jobId, watchPath);
+            return position == 0 ? Results.NotFound() : Results.Ok(new { position });
+        });
+
         group.MapPost("/{jobId}/change-project", (string jobId, string? watchPath, ChangeProjectRequest req, JobStateMachine states) =>
         {
             var success = states.ChangeProject(jobId, req.TargetWatchPath, watchPath);

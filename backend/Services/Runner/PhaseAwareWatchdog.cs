@@ -28,7 +28,14 @@ public sealed record PhaseBudget(
         // means the CLI binary is wedged or the OS pipe is broken; past
         // 60 s the runner kills it.
         RunPhase.Spawning             => new PhaseBudget(SuspiciousSeconds: 30,  HungSeconds: 60),
-        RunPhase.SessionInitializing  => new PhaseBudget(SuspiciousSeconds: 30,  HungSeconds: 60),
+        // Anthropic's API init can legitimately take 30-60 s under load
+        // (especially when a `rate_limit_event allowed_warning` is in
+        // flight). Pattern analysis of 12+ recent hangs in May 2026
+        // showed `SessionInitializing` was the dominant kill phase at
+        // 31-33 s, well below any reasonable interpretation of "stuck".
+        // Widen the budget so transient API slowness no longer reads
+        // as a hung agent.
+        RunPhase.SessionInitializing  => new PhaseBudget(SuspiciousSeconds: 60,  HungSeconds: 120),
         // After SessionStarted but before TurnStarted, the CLI has the
         // prompt and is contacting the model. The original "init then
         // silence" hang sits here: the symptom we want to surface fast.

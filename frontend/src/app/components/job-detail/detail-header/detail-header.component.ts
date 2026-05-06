@@ -112,6 +112,7 @@ export class DetailHeaderComponent {
   readonly isReview = input(false);
   readonly completingAndNext = input(false);
   readonly changingState = input(false);
+  readonly movingToTop = input(false);
 
   readonly back = output<void>();
   readonly startTitleEdit = output<void>();
@@ -121,6 +122,7 @@ export class DetailHeaderComponent {
   readonly completeAndNext = output<void>();
   readonly deleteRequested = output<void>();
   readonly stateChange = output<string>();
+  readonly moveToTop = output<void>();
 
   /**
    * Lane dropdown options surfaced in the detail header. The order mirrors
@@ -144,6 +146,11 @@ export class DetailHeaderComponent {
   isStandardLane(state: string): boolean {
     return this.laneOptions.some(o => o.state === state);
   }
+
+  /** "Do Next" only makes sense while the task is queued in 2-ready and not yet
+   *  picked up. The state-select dropdown is the path to bring it into ready
+   *  from a different lane first; after that the button surfaces. */
+  readonly canMoveToTop = computed(() => this.info().state === '2-ready');
 
   onStateSelect(event: Event) {
     const target = event.target as HTMLSelectElement;

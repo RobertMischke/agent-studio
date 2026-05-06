@@ -67,6 +67,16 @@
       <option [value]="info().state" [selected]="true">{{ stateLabel(info().state) }}</option>
     }
   </select>
+  @if (canMoveToTop()) {
+    <button type="button"
+            class="detail__do-next"
+            data-testid="do-next-btn"
+            [disabled]="movingToTop()"
+            [title]="movingToTop() ? 'Moving to top…' : 'Move this task to the top of the Ready queue so it is picked up next'"
+            (click)="moveToTop.emit()">
+      {{ movingToTop() ? '⏳' : '↑ Do Next' }}
+    </button>
+  }
   @if (isReview()) {
     <button type="button"
             class="detail__complete-next"

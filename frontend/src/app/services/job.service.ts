@@ -271,6 +271,19 @@ export class JobService {
     return this.http.post(`${this.baseUrl}/jobs/reorder`, { jobs });
   }
 
+  /**
+   * "Do Next" from the detail view: ask the backend to atomically promote
+   * this job to the head of its project's ready queue. Single round-trip,
+   * no client-side knowledge of sibling jobs required.
+   */
+  moveJobToTop(jobId: string, watchPath?: string) {
+    return this.http.post<{ position: number }>(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/move-to-top`,
+      null,
+      this.withWatchPath(watchPath)
+    );
+  }
+
   changeProject(jobId: string, targetWatchPath: string, watchPath?: string) {
     return this.http.post(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/change-project`, { targetWatchPath }, this.withWatchPath(watchPath));
   }

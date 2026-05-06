@@ -53,6 +53,7 @@ import { markdownToHtml } from './markdown-utils';
         [isReview]="isReview()"
         [completingAndNext]="completingAndNext()"
         [changingState]="changingState()"
+        [movingToTop]="movingToTop()"
         (back)="back.emit()"
         (titleDraftChange)="titleDraft.set($event)"
         (startTitleEdit)="startTitleEdit()"
@@ -60,6 +61,7 @@ import { markdownToHtml } from './markdown-utils';
         (saveTitle)="saveTitle()"
         (completeAndNext)="completeAndNext()"
         (stateChange)="onStateChange($event)"
+        (moveToTop)="moveToTopOfReady()"
         (deleteRequested)="deleteRequested.emit()" />
 
       <app-command-deck
@@ -583,6 +585,32 @@ import { markdownToHtml } from './markdown-utils';
       color: #34d399;
     }
     .detail__complete-next:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+
+    /* "Do Next" — visible only on 2-ready cards, distinct from the green
+       "Complete & Next" review button so the two never read as the same
+       action. Uses the cyan ready-lane palette to echo the lane chip. */
+    .detail__do-next {
+      background: rgba(6,182,212,0.12);
+      border: 1px solid rgba(6,182,212,0.35);
+      color: #06b6d4;
+      padding: 7px 14px;
+      border-radius: 999px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+      flex-shrink: 0;
+    }
+    .detail__do-next:hover:not(:disabled) {
+      background: rgba(6,182,212,0.22);
+      border-color: rgba(6,182,212,0.6);
+      color: #22d3ee;
+    }
+    .detail__do-next:disabled {
       opacity: 0.5;
       cursor: default;
     }
@@ -1413,6 +1441,7 @@ export class JobDetailComponent implements OnDestroy {
   readonly savingTitle = signal(false);
   readonly completingAndNext = signal(false);
   readonly changingState = signal(false);
+  readonly movingToTop = signal(false);
   readonly detailPanePercent = this.layout.detailPanePercent;
 
   // Wall-clock tick used by relative-time formatters (e.g. formatResetIn).
@@ -1930,6 +1959,37 @@ export class JobDetailComponent implements OnDestroy {
     if (targetState === this.detail().info.state) return;
     this.changingState.set(true);
     this.stateChangeRequested.emit({ targetState });
+  }
+
+  /**
+   * "Do Next": jump this 2-ready task to the head of the Ready queue so the
+   * project's runner picks it up on the next tick. The backend reorder is
+   * atomic (POST /api/jobs/{id}/move-to-top → JobStateMachine.PromoteToReadyTop),
+   * which preserves any earlier-queued PendingIntent jobs and avoids the
+   * stale-grouped() race the optimistic-reorder path had.
+   */
+  moveToTopOfReady(): void {
+    if (this.movingToTop()) return;
+    const info = this.detail().info;
+    if (info.state !== '2-ready') return;
+
+    this.movingToTop.set(true);
+    this.jobService.beginOptimisticPersist();
+    this.jobService.moveJobToTop(info.id, info.watchPath).subscribe({
+      next: () => {
+        this.jobService.endOptimisticPersist();
+        this.movingToTop.set(false);
+      },
+      error: (err) => {
+        this.jobService.endOptimisticPersist();
+        this.movingToTop.set(false);
+        this.errorDialog.show(err, {
+          title: 'Failed to move task to top',
+          fallbackMessage: 'Failed to move task to the top of the Ready queue',
+          source: `Task ${info.id}`
+        });
+      }
+    });
   }
 
   startEdit(which: 'prompt') {
