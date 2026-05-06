@@ -105,7 +105,7 @@ Numbering is monotonic. Never reuse a number; never silently delete history.
 
 ## ADR-0005 - Portable skills use a central library plus project lookup contract (2026-05-02)
 
-**Decision.** Skills are stored and managed as portable workspace knowledge in Agent Task Processor, while each watched project exposes a README or agent-instruction lookup section so direct CLI sessions can discover the same skills.
+**Decision.** Skills are stored and managed as portable workspace knowledge in Agent Software Studio, while each watched project exposes a README or agent-instruction lookup section so direct CLI sessions can discover the same skills.
 
 **Context.** The user wants the orchestrator to be the main work surface, but also wants to move into direct Codex, Claude Code, Copilot, Gemini, or VS Code sessions without losing the reusable specialist workflows built up in the task processor. A skill system that only works during managed taskboard runs would create two disconnected worlds.
 
@@ -263,7 +263,7 @@ The investigation also surfaced a parallel question from the user: "is this a WS
 
 ## ADR-0012 - Existing coding agents are the execution engines, not raw model APIs (2026-05-03)
 
-**Decision.** Agent Task Processor orchestrates existing coding-agent products, primarily CLI or SDK-backed local agents such as Codex, Claude Code, GitHub Copilot, and Gemini, instead of implementing its own API-backed coding-agent runtime. The app owns queues, lifecycle, state movement, protocol generation, review evidence, and cross-CLI fallback. The provider-owned agent owns planning, model/tool loop, editing mechanics, approvals, authentication, model routing, and native IDE or terminal fallback where available.
+**Decision.** Agent Software Studio orchestrates existing coding-agent products, primarily CLI or SDK-backed local agents such as Codex, Claude Code, GitHub Copilot, and Gemini, instead of implementing its own API-backed coding-agent runtime. The app owns queues, lifecycle, state movement, protocol generation, review evidence, and cross-CLI fallback. The provider-owned agent owns planning, model/tool loop, editing mechanics, approvals, authentication, model routing, and native IDE or terminal fallback where available.
 
 **Context.** The user wants to keep high-quality coding agents busy and make review easier while using the subscriptions already paid for. Codex and Claude Code are the clearest focus today because they are strong coding agents and have attractive subscription economics. Copilot and Gemini remain supported fallback paths where their CLIs expose enough control. The value of this product is not "another agent loop"; it is the local workbench around existing agents: ordered task queues, deterministic lifecycle boundaries, durable logs, screenshots, protocol summaries, and review handoff.
 
@@ -275,7 +275,7 @@ Recent CLI-integration research reinforces this boundary. OpenAI's Codex clients
 - Treating PTY automation as the preferred integration layer when a structured protocol, JSONL mode, SDK, or provider session file is available.
 - Making one provider permanent. If model economics or provider capabilities shift, the execution-engine boundary can be revisited.
 
-**Reasoning style.** Build the missing workbench, not the agent. Existing coding agents already package a large amount of product engineering: tool approval UX, file editing, prompt/tool policies, auth, session history, model routing, and IDE affordances. Agent Task Processor should spend its complexity budget on the layer those tools do not share: queue utilization, deterministic orchestration, protocol/evidence capture, review ergonomics, and fallback across providers.
+**Reasoning style.** Build the missing workbench, not the agent. Existing coding agents already package a large amount of product engineering: tool approval UX, file editing, prompt/tool policies, auth, session history, model routing, and IDE affordances. Agent Software Studio should spend its complexity budget on the layer those tools do not share: queue utilization, deterministic orchestration, protocol/evidence capture, review ergonomics, and fallback across providers.
 
 **Implementation pointers.** [README.md](../README.md) "Use existing coding agents, not a custom agent runtime"; [ROADMAP.md](../ROADMAP.md) "Product Thesis" and "Hard Boundaries"; CLI contracts in [docs/supported-clis.md](supported-clis.md); per-CLI adapters in [backend/Services/Cli/](../backend/Services/Cli/); deterministic orchestration in [backend/Services/Runner/](../backend/Services/Runner/).
 
@@ -361,7 +361,7 @@ The reference clones at `c:/Projects/agent-taskboard-devspace/cli-source-referen
 
 ## ADR-0015 - Windows-native runtime; WSL2 is a documented alternative, not a requirement (2026-05-04)
 
-**Decision.** Agent Task Processor's reference platform is Windows-native (.NET on Windows, claude / codex / gemini / copilot CLIs from their official Windows installers). WSL2 is a fully supported alternative for users who prefer it; CI runs on both Windows and Linux runners. We do **not** require WSL2 to use this product, even though some failure modes are easier to reason about under Linux semantics.
+**Decision.** Agent Software Studio's reference platform is Windows-native (.NET on Windows, claude / codex / gemini / copilot CLIs from their official Windows installers). WSL2 is a fully supported alternative for users who prefer it; CI runs on both Windows and Linux runners. We do **not** require WSL2 to use this product, even though some failure modes are easier to reason about under Linux semantics.
 
 **Context.** A long thread of CLI-spawn hangs raised the legitimate question: "should we just require WSL2 and stop fighting Windows?" The research deliverable [`docs/research/wsl2-vs-windows-decision-2026-05.md`](research/wsl2-vs-windows-decision-2026-05.md) (497 lines) examines this seriously. The split that emerged:
 

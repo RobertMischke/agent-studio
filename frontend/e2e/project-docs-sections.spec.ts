@@ -3,7 +3,7 @@ import { api } from './helpers/api';
 
 interface WatchPath { path: string; name: string }
 
-const ATP = 'Agent Task Processor';
+const PROJECT_NAME = 'Agent Software Studio';
 
 /**
  * Project-level Security + Architecture sections (prototype).
@@ -16,11 +16,11 @@ const ATP = 'Agent Task Processor';
 test.describe('Project docs sections', () => {
   test('security + architecture sections render in project-detail', async ({ page }) => {
     const projects = await api<WatchPath[]>('/api/watch-paths');
-    const target = projects.find(p => p.name === ATP);
-    test.skip(!target, `Watch path "${ATP}" not configured on this machine`);
+    const target = projects.find(p => p.name === PROJECT_NAME);
+    test.skip(!target, `Watch path "${PROJECT_NAME}" not configured on this machine`);
 
     await page.goto('/');
-    const trigger = page.getByTestId(`project-detail-${ATP}`);
+    const trigger = page.getByTestId(`project-detail-${PROJECT_NAME}`);
     await expect(trigger).toBeVisible({ timeout: 10_000 });
     await trigger.click();
 
@@ -32,7 +32,7 @@ test.describe('Project docs sections', () => {
     await expect(sec).toBeVisible();
 
     // Seed meta so the header pill + summary render deterministically.
-    await api(`/api/projects/${encodeURIComponent(ATP)}/security/meta`, {
+    await api(`/api/projects/${encodeURIComponent(PROJECT_NAME)}/security/meta`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -44,7 +44,7 @@ test.describe('Project docs sections', () => {
 
     // Force a refresh by re-opening the panel.
     await page.reload();
-    await page.getByTestId(`project-detail-${ATP}`).click();
+    await page.getByTestId(`project-detail-${PROJECT_NAME}`).click();
     await expect(page.getByTestId('project-security-section')).toBeVisible();
 
     const meta = page.getByTestId('project-security-meta');

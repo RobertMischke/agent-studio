@@ -1,6 +1,6 @@
 # System Review Skill (Layer 3)
 
-A read-only review skill for the running stable instance of Agent Task Processor. Driven from outside the app. The user (or a scheduler) runs this every 4-8 hours; it produces one structured review file per run.
+A read-only review skill for the running stable instance of Agent Software Studio. Driven from outside the app. The user (or a scheduler) runs this every 4-8 hours; it produces one structured review file per run.
 
 This is the **third loop** above the orchestrator: not part of the app's runtime, so it survives any failure mode of the app itself.
 

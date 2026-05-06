@@ -61,7 +61,7 @@ Catppuccin tokens map onto the dark VS Code palette as follows:
 
 Three layers, mapped 1:1 onto VS Code surfaces:
 
-1. **Persistent navigation (activity bar + status bar).** The project switcher (Runbook / Agent Task Processor / + add) becomes activity-bar icons. Owner pill, current model, run counts, "auto pickup" badge, and the panel toggle move to the status bar. Both are always visible but never steal vertical content space.
+1. **Persistent navigation (activity bar + status bar).** The project switcher (Runbook / Agent Software Studio / + add) becomes activity-bar icons. Owner pill, current model, run counts, "auto pickup" badge, and the panel toggle move to the status bar. Both are always visible but never steal vertical content space.
 
 2. **Per-task chrome (tab bar + meta side panel).** Multiple open tasks become editor tabs (30 px). The detail header collapses to a thin breadcrumb-less title strip with one "i" affordance that opens a collapsible Meta side panel. Meta is closed by default — the user opted into a chat-first reading mode.
 

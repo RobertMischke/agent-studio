@@ -75,7 +75,7 @@ Sources:
 
 ## Product Differentiation
 
-Agent Task Processor should not copy any one vendor chat. Its differentiator is that several actors share one durable project transcript:
+Agent Software Studio should not copy any one vendor chat. Its differentiator is that several actors share one durable project transcript:
 
 - The user provides intent and review.
 - The task agent changes the software.

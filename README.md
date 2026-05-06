@@ -1,4 +1,4 @@
-# Agent Task Processor
+# Agent Software Studio
 
 > **TEST / Hinweis an alle Agenten:** MEMORY hilft mir nicht - Memory ist pro Agent / pro Session und propagiert nicht. Ich brauche **immer einen Eintrag in einer Datei** (README, AGENTS.md, etc.), damit Änderungen für **alle Agenten gleichzeitig** wirken. Bitte keine agentenspezifischen Anpassungen vorschlagen - ich brauche **Standards**, die für viele Agenten funktionieren.
 
@@ -12,7 +12,7 @@
 
 ## Security first
 
-Agent Task Processor makes security work repeatable instead of heroic. A human reviewer can miss an edge case because they are tired, rushed, or carrying the context in their head. A queued agent can spend millions of tokens on the same class of review every time, write down what it checked, preserve evidence, and leave a durable protocol for human review.
+Agent Software Studio makes security work repeatable instead of heroic. A human reviewer can miss an edge case because they are tired, rushed, or carrying the context in their head. A queued agent can spend millions of tokens on the same class of review every time, write down what it checked, preserve evidence, and leave a durable protocol for human review.
 
 That is the product bet: **with enough inference budget, the right process, and documented evidence, AI-assisted review can become more thorough than ordinary human-only security review.** The goal is not to trust a model blindly. The goal is to put frontier cyber capability inside a controlled workflow: clear task scope, project conventions, repeatable skills, logs, screenshots, summaries, and review gates.
 
@@ -31,7 +31,7 @@ Modern coding agents can run for hours. They don't get tired. They don't context
 The bottleneck isn't the model. It's the human babysitting it: paste a prompt, watch it run, review, paste the next one. Every minute spent on that loop is a minute your subscription's token bucket sits idle.
 
 ```
-  WITHOUT a queue                          WITH Agent Task Processor
+  WITHOUT a queue                          WITH Agent Software Studio
   ───────────────                          ─────────────────────────
 
   you ──► prompt ──► agent ──► review      queue ──► agent ──► review
@@ -62,7 +62,7 @@ The board exists to make the queue the only thing you maintain. Tasks land in `2
 
 **Use what you already pay for.** The runner drives **your** Claude Code, Codex, Copilot, and Gemini CLIs through their existing subscriptions. **No API keys. No per-token billing.** Your Pro/Max plan is the budget; the board's job is to use as much of it as productively as possible.
 
-**Use existing coding agents, not a custom agent runtime.** Agent Task Processor deliberately sits above productized coding agents instead of rebuilding their agent loop against raw model APIs. Claude Code, Codex, Copilot, and Gemini already bundle planning, editing, tool use, approvals, authentication, model routing, and subscription economics. The app's job is queueing, lifecycle control, evidence capture, review handoff, and cross-CLI fallback. If a run gets awkward, the user can still drop into the native CLI or VS Code integration with the same subscription and provider-owned session artifacts where the provider exposes them.
+**Use existing coding agents, not a custom agent runtime.** Agent Software Studio deliberately sits above productized coding agents instead of rebuilding their agent loop against raw model APIs. Claude Code, Codex, Copilot, and Gemini already bundle planning, editing, tool use, approvals, authentication, model routing, and subscription economics. The app's job is queueing, lifecycle control, evidence capture, review handoff, and cross-CLI fallback. If a run gets awkward, the user can still drop into the native CLI or VS Code integration with the same subscription and provider-owned session artifacts where the provider exposes them.
 
 Building a custom coding agent is not a forbidden idea. Many projects do it. It is out of scope for this product while the best price/performance sits in polished subscription coding agents, especially Codex and Claude Code. This boundary can be revisited if model economics or provider capabilities make API-native execution clearly better.
 
@@ -152,7 +152,7 @@ Skills are reusable specialist workflows: security review, Playwright visual ver
 
 The skill model has two layers:
 
-1. **Central skill library.** Agent Task Processor owns the canonical skill library. Standard skills ship with the processor; project-specific skills are managed there too, scoped to one or more watched projects.
+1. **Central skill library.** Agent Software Studio owns the canonical skill library. Standard skills ship with the processor; project-specific skills are managed there too, scoped to one or more watched projects.
 2. **Project lookup contract.** Each watched project should expose a small README or agent-instruction section that tells direct CLI agents where to find the relevant central skills. That keeps skills useful even when the user works directly in Codex, Claude Code, Copilot, or Gemini outside the orchestrator.
 
 During a managed taskboard run, the orchestrator can attach selected skills to the prompt stack explicitly. During direct CLI work, the project's README acts as the common lookup point. Native CLI skill exports may be added later, but the Markdown lookup contract is the agent-neutral base.
@@ -250,7 +250,7 @@ All code edits happen in the **dev** checkout. The stable checkout exists for re
 
 - An orange "DEV" stripe is pinned to the top of the window.
 - The PWA install icon and favicon use an orange variant with a "DEV" corner ribbon.
-- The window title becomes `Agent Task Processor (DEV)`.
+- The window title becomes `Agent Software Studio (DEV)`.
 
 These markers activate when the backend serves `/api/environment` with `{ isDev: true }`, which it does iff a local-only `backend/appsettings.Local.json` file is present:
 

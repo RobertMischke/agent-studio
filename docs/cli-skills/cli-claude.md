@@ -144,7 +144,7 @@ Claude can accept a resume target and still behave badly if the session's useful
 
 Reference incident: Anthropic's [April 23, 2026 postmortem](https://www.anthropic.com/engineering/april-23-postmortem) ("An update on recent Claude Code quality reports") traced a real Claude Code quality regression to three harness changes, not to model degradation. The stale-session lesson is the March 26 change: sessions idle for over one hour were supposed to clear older thinking once to reduce resume latency, but a bug kept clearing older thinking on every later turn. The result was forgetfulness, repetition, odd tool choices, and higher usage. Anthropic also noted that internal evals, unit tests, end-to-end tests, automated verification, and dogfooding missed it because it sat at the intersection of context management, the API, extended thinking, and stale sessions.
 
-Operational consequences for Agent Task Processor:
+Operational consequences for Agent Software Studio:
 
 - A healthy Claude continuation is not "process exited zero" and not "resume id accepted". It must act on the latest user follow-up and reconcile against `prompt.md`, `prompt-N.md`, `status.md`, and `logs/cli-output.log`.
 - Stale-session probes need idle-age variation. Test fresh resume, short-idle resume, backend-restart resume, and an intentionally rejected resume target. The rejected target proves Recovery; the accepted stale target proves useful continuation.

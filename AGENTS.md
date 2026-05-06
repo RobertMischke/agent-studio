@@ -4,7 +4,7 @@
 
 ## Project Overview
 
-Agent Task Processor is a local AI work monitor: a .NET 10 backend plus an Angular 21 frontend that watches external job folders and displays agent progress as a Kanban board.
+Agent Software Studio is a local AI work monitor: a .NET 10 backend plus an Angular 21 frontend that watches external job folders and displays agent progress as a Kanban board.
 
 For product context, read [README.md](README.md) and [ROADMAP.md](ROADMAP.md). The README explains what the tool is and how it is wired. The roadmap explains the product thesis, near-term themes, hard boundaries, and decision principles.
 
@@ -56,7 +56,7 @@ The rule of thumb:
 
 - Core orchestration rules are always active and stay in code, runtime prompts, AGENTS.md, and the target task contract.
 - Skills are optional, situational workflow guides. They explain how to do a specialist job; they must not own task lifecycle, state movement, review transitions, or queue policy.
-- Agent Task Processor is the central home for standard skills and project-specific skills.
+- Agent Software Studio is the central home for standard skills and project-specific skills.
 - Watched child projects should expose a small README or agent-instruction lookup section that tells direct CLI agents where to find the relevant skills.
 
 This lookup section matters because users may work both through the orchestrator and directly in Codex, Claude Code, Copilot, or Gemini from VS Code. Managed taskboard runs can attach selected skills explicitly; direct CLI sessions rely on the watched project's README or AGENTS.md lookup section. Native CLI skill exports may come later, but the Markdown lookup is the shared baseline.
@@ -84,7 +84,7 @@ When NOT to update stable:
 
 Direct-agent work in this repository should not remain local after it is finished. When Codex or another directly-invoked agent changes source, docs, mockups, prompts, or task evidence, commit the coherent batch and push it before reporting done, unless the user explicitly says not to push. Keep the commit scoped to the files touched for the request and do not sweep in unrelated dirty work.
 
-This rule does not allow worker CLIs spawned by Agent Task Processor to commit or push on their own. Managed task runs still follow [docs/commit-push-doctrine.md](docs/commit-push-doctrine.md): the platform owns the commit and push boundary. The direct-agent rule is for interactive repository work like this file, documentation updates, mockups, and task-queue maintenance.
+This rule does not allow worker CLIs spawned by Agent Software Studio to commit or push on their own. Managed task runs still follow [docs/commit-push-doctrine.md](docs/commit-push-doctrine.md): the platform owns the commit and push boundary. The direct-agent rule is for interactive repository work like this file, documentation updates, mockups, and task-queue maintenance.
 
 Layer 3 - the system review monitor at [`scripts/supervisor/run-system-review.sh`](scripts/supervisor/run-system-review.sh) - reads stable's state read-only. It is the most useful right after a stable update has happened: it can confirm the new code is running, capture a baseline, and surface any drift against the just-shipped behaviour.
 

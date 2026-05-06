@@ -99,7 +99,7 @@ import {
               </svg>
             </button>
             <div class="detail-chrome__title">
-              <span class="project-pill"><b>ATP</b> Agent Task Processor</span>
+              <span class="project-pill"><b>ASS</b> Agent Software Studio</span>
               <strong>Next-gen chat conversation event projection</strong>
             </div>
             <button class="detail-chrome__edit" title="Rename task" aria-label="Rename task">

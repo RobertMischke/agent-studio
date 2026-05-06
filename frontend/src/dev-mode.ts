@@ -64,7 +64,7 @@ export async function applyDevModeIfFlagged(): Promise<void> {
   // dev mode just drop it so the SVG above is the sole favicon source.
   document.head.querySelector('link[rel="icon"][type="image/x-icon"]')?.remove();
   setMetaThemeColor('#f59e0b');
-  document.title = 'Agent Task Processor (DEV)';
+  document.title = 'Agent Software Studio (DEV)';
   injectDevBanner();
 }
 

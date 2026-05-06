@@ -33,7 +33,7 @@ test.describe('Project identity & running prominence', () => {
       first.name.replace(/[^A-Za-z0-9]/g, '')[0].toUpperCase()
     );
 
-    // The deterministic hash maps "Agent Task Processor" and "Runbook" to
+    // The deterministic hash maps "Agent Software Studio" and "Runbook" to
     // different palette slots; assert the rendered disk colours diverge so
     // a regression that collapses everything to one hue is caught.
     const firstColor = await firstChip.locator('.filter-chip__disk').evaluate(

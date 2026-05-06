@@ -1,6 +1,6 @@
 # Agent Task Contract
 
-Agent Task Processor owns the queue. A CLI agent owns only the single task that the application starts.
+Agent Software Studio owns the queue. A CLI agent owns only the single task that the application starts.
 
 This contract is copied into watched target projects so Claude Code, Codex, GitHub Copilot, Gemini, and other coding agents understand the boundary.
 
@@ -71,7 +71,7 @@ Agents may read all task files. Agents may write evidence files when useful, but
 
 ## Skill Lookup
 
-Agent Task Processor may manage reusable standard skills and project-specific skills centrally. A watched project should expose a small README or agent-instruction section that points direct CLI agents to the relevant skills.
+Agent Software Studio may manage reusable standard skills and project-specific skills centrally. A watched project should expose a small README or agent-instruction section that points direct CLI agents to the relevant skills.
 
 This lookup section is for discoverability only. It does not transfer lifecycle ownership to the agent:
 

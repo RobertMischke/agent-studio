@@ -2,7 +2,7 @@
 
 ## Headline
 
-**The platform owns the commit boundary. Models execute work; the platform records it.** Every coding agent that runs under Agent Task Processor produces a working tree, never a commit. The runner decides when work is "done enough to record", composes the commit message, stamps the resulting SHA onto the job, and (where configured) pushes. The CLI never speaks for itself in git history. That separation is the difference between a workbench and a hopeful prompt.
+**The platform owns the commit boundary. Models execute work; the platform records it.** Every coding agent that runs under Agent Software Studio produces a working tree, never a commit. The runner decides when work is "done enough to record", composes the commit message, stamps the resulting SHA onto the job, and (where configured) pushes. The CLI never speaks for itself in git history. That separation is the difference between a workbench and a hopeful prompt.
 
 ## Why
 
@@ -38,7 +38,7 @@ If the user wants PR-shaped review for an external project, they do that in thei
 
 ## What models / CLIs are NOT allowed to do
 
-A run inside Agent Task Processor must not, under any circumstance:
+A run inside Agent Software Studio must not, under any circumstance:
 
 - Run `git commit` (or `git commit --amend`).
 - Run `git push` or any remote-mutating operation.

@@ -110,6 +110,67 @@ public static class JobGitEndpoints
             return Results.Ok(new { diff });
         });
 
+        // Per-job hygiene: project-level snapshot overlaid with whether the
+        // job carries a platform-owned commit stamp and whether accepted task
+        // work appears uncommitted. The job-detail review/completed strip
+        // polls this; the project header polls /api/git/hygiene instead.
+        group.MapGet("/{jobId}/git/hygiene", (string jobId, string? watchPath, GitService git) =>
+        {
+            var hygiene = git.GetJobHygiene(jobId, watchPath);
+            return string.IsNullOrEmpty(hygiene.Error)
+                ? Results.Ok(hygiene)
+                : Results.NotFound(new { error = hygiene.Error });
+        });
+
+        // Manual "commit accepted task evidence" action. Re-uses the same
+        // platform-owned commit-message path the auto-commit on
+        // 3-progress -> 4-auto-review uses (Haiku via runtime/commit-message.md
+        // with a deterministic fallback) so the user gets one consistent
+        // commit voice regardless of which CLI did the work. Stamps the
+        // produced SHA onto JobInfo.Commit so the detail view picks it up,
+        // and writes a [commit] orchestrator-chat entry into the activity
+        // log so the action is visible in the protocol pane.
+        group.MapPost("/{jobId}/git/commit-accepted-evidence",
+            async (string jobId, string? watchPath,
+                   GitService git, JobScannerService scanner, JobMutationService mutations,
+                   OrchestratorChatLog chat, CancellationToken ct) =>
+        {
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info == null) return Results.NotFound(new { error = "Job not found" });
+
+            var (result, message) = await git.AutoCommitAsync(jobId, watchPath, ct);
+            if (!result.Success || string.IsNullOrWhiteSpace(result.Sha))
+            {
+                return Results.BadRequest(new { error = result.Error ?? "Commit failed", message });
+            }
+
+            var files = git.GetCommitFiles(jobId, watchPath, result.Sha);
+            var commitInfo = new JobCommitInfo
+            {
+                Sha = result.Sha,
+                ShortSha = result.Sha.Length > 7 ? result.Sha[..7] : result.Sha,
+                Message = message ?? "",
+                FilesChanged = files.Count,
+                Files = files.Select(f => f.Path).ToList(),
+                At = DateTime.UtcNow
+            };
+            mutations.SetJobCommitOnFolder(info.FolderPath, commitInfo);
+            git.InvalidateHygieneCache();
+
+            // Refresh and chat-log entry: the protocol-pane activity-log
+            // reader will pick this up as a [commit] line and render it
+            // alongside agent + orchestrator messages.
+            var refreshed = scanner.FindJob(jobId, watchPath) ?? info;
+            try
+            {
+                chat.Append(refreshed, OrchestratorMessageKind.Decision,
+                    $"Committed accepted task evidence: {commitInfo.ShortSha} \"{(message ?? "").Split('\n')[0]}\" ({commitInfo.FilesChanged} file{(commitInfo.FilesChanged == 1 ? "" : "s")})");
+            }
+            catch { /* chat-log is best-effort */ }
+
+            return Results.Ok(new { commit = commitInfo });
+        });
+
         group.MapPost("/{jobId}/open-in-vscode", (string jobId, string? watchPath, GitService git) =>
         {
             return git.OpenInVsCode(jobId, watchPath, out var error)

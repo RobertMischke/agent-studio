@@ -6,7 +6,7 @@ export const PROJECT_TABS: readonly ProjectTab[] = [
     initial: 'T',
     active: true,
     auto: 'auto 2',
-    tooltip: 'Agent Task Processor, active filter, 2 ready tasks',
+    tooltip: 'Agent Software Studio, active filter, 2 ready tasks',
     color: '#7aa7ff',
     soft: 'rgba(122, 167, 255, .22)',
     border: 'rgba(122, 167, 255, .66)',

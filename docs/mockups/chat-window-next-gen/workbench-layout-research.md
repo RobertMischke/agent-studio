@@ -4,7 +4,7 @@ This note captures the v7 layout research for the next-generation chat mockup. I
 
 ## Research Question
 
-Agent Task Processor does not have a global chat window. The chat must work in two existing places:
+Agent Software Studio does not have a global chat window. The chat must work in two existing places:
 
 - The task-detail Chat tab, next to Prompt, Protocol, Files, Commits, and Screenshots.
 - The project side sheet, which can become wider and carries project-level steering.
@@ -32,7 +32,7 @@ The missing workflow in v6 was side-by-side work. A reviewer often needs the tra
 
 VS Code is useful here less as a visual skin and more as a containment philosophy. The workbench separates navigation, discovery, work, supporting diagnostics, and ambient state into different regions. The product should borrow that separation without cloning every layout feature.
 
-| VS Code idea | ATP interpretation | Rule for the next chat workbench |
+| VS Code idea | Software Studio interpretation | Rule for the next chat workbench |
 |--------------|--------------------|----------------------------------|
 | Activity Bar opens View Containers. | `Projects`, `Tasks / Queue`, `Search`, `Git`, `QA`, and `Tokens` are modules, not permanent panes. | Activity items toggle or focus modules. They do not directly open one-off webviews. |
 | Sidebars group a small number of related Views. | Queue and project context are Side Bar modules. | Queue can close. Keep 3 to 5 visible view groups, with overflow or command entry for rarer surfaces. |
@@ -47,7 +47,7 @@ The consequence for the Queue decision is important: the Queue is not "the left 
 
 ## VS Code Patterns To Borrow
 
-1. **Editor space is sacred.** VS Code's basic layout is built to maximize the editor while still exposing project context. For Agent Task Processor, the transcript is the equivalent of the editor. It should get the largest continuous region.
+1. **Editor space is sacred.** VS Code's basic layout is built to maximize the editor while still exposing project context. For Agent Software Studio, the transcript is the equivalent of the editor. It should get the largest continuous region.
 2. **Two views at once are a first-class need.** VS Code solves this with editor groups and the Secondary Side Bar. For this app, that maps to Chat plus Result, Chat plus Git, Chat plus Preview, and Chat plus Debug.
 3. **Layout flexibility is constrained, not arbitrary.** VS Code has many layout moves, but they are bounded by workbench regions. The first implementation should use a few named split presets, not a full drag-and-drop window manager.
 4. **Actions live in toolbars and overflow.** Small icon buttons plus a `...` overflow are preferable to repeated text buttons inside the chat body.

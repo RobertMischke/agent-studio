@@ -22,9 +22,9 @@ test.describe('Project detail — Security & Architecture sections', () => {
   test.beforeAll(async () => {
     const paths = await api<WatchPath[]>('/api/watch-paths');
     expect(paths.length).toBeGreaterThan(0);
-    // Prefer the Agent Task Processor project, since this repo has the
+    // Prefer the Agent Software Studio project, since this repo has the
     // canonical docs/security/ and docs/architecture-decisions.md files.
-    const preferred = paths.find(p => /agent.?task/i.test(p.name)) ?? paths[0];
+    const preferred = paths.find(p => /agent.?software/i.test(p.name)) ?? paths[0];
     projectName = preferred.name;
   });
 

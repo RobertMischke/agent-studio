@@ -2,7 +2,7 @@
 
 ## Scope
 
-This review compares the upcoming Agent Task Processor job queue against the internal product documents:
+This review compares the upcoming Agent Software Studio job queue against the internal product documents:
 
 - `README.md`
 - `ROADMAP.md`
@@ -49,7 +49,7 @@ The main risk is not strategic drift. The risk is backlog and evidence hygiene:
 - Several completed planning or infrastructure items sit in `4-review`, which makes the board look less settled than the docs suggest.
 - The workspace repository is very dirty, mostly due to task moves, new task folders, logs, and archived E2E artifacts. This is expected for a task repository, but it reduces confidence until committed or intentionally ignored.
 - The dev checkout currently has a larger uncommitted client identity / task attribution change set. That likely belongs to the in-progress multi-client work. Do not mix meta-documentation commits with that code.
-- Local `backend/appsettings.Local.json` still watches `Agent Task Processor` from the dev checkout, while the roadmap says dev should become a regression-test target and not appear in its own watched-project list. This may be intentional during transition, but it is a real drift signal.
+- Local `backend/appsettings.Local.json` still watches `Agent Software Studio` from the dev checkout, while the roadmap says dev should become a regression-test target and not appear in its own watched-project list. This may be intentional during transition, but it is a real drift signal.
 
 ## Theme Review
 
@@ -180,7 +180,7 @@ Evidence:
 - Roadmap says dev is a regression-test target, not a self-task target.
 - `separate-dev-from-stable-roles` is queued.
 - `dev-as-playwright-target-only` is in `4-review`.
-- `backend/appsettings.Local.json` in the dev checkout still lists `Agent Task Processor` as a watch path.
+- `backend/appsettings.Local.json` in the dev checkout still lists `Agent Software Studio` as a watch path.
 
 Concern:
 

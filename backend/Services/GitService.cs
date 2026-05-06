@@ -48,6 +48,61 @@ public record GitProjectSummary(
     int TotalRemoved);
 
 /// <summary>
+/// Repository hygiene snapshot used by the project header badge and the
+/// review/completed job-detail strip. Answers: is the working tree dirty,
+/// how many files are staged / unstaged / untracked, what is the current
+/// branch and upstream, how far ahead/behind are we, and what was the last
+/// recorded commit. When called with a job context, also reports whether
+/// the job carries a platform-owned commit stamp and whether accepted task
+/// work appears uncommitted ("dirty after accept").
+/// <para>
+/// Cached server-side per project for ~3 seconds: the fields are deliberately
+/// cheap to recompute, but a polling UI should still avoid forking N git
+/// processes per render.
+/// </para>
+/// </summary>
+public record GitHygieneStatus
+{
+    public string ProjectName { get; init; } = "";
+    public string? RepoRoot { get; init; }
+    public bool IsRepo { get; init; }
+    public string? Branch { get; init; }
+    public string? Upstream { get; init; }
+    public int Ahead { get; init; }
+    public int Behind { get; init; }
+    public bool HasUpstream { get; init; }
+    public bool IsDirty { get; init; }
+    public int StagedCount { get; init; }
+    public int UnstagedCount { get; init; }
+    public int UntrackedCount { get; init; }
+    public string? LastCommitSha { get; init; }
+    public string? LastCommitShortSha { get; init; }
+    public string? LastCommitSubject { get; init; }
+    public DateTime? LastCommitAtUtc { get; init; }
+    /// <summary>
+    /// Job context, populated only when <see cref="GitService.GetJobHygiene"/>
+    /// is the entry point. Null for project-only queries.
+    /// </summary>
+    public JobHygieneContext? Job { get; init; }
+    public string? Error { get; init; }
+}
+
+/// <summary>
+/// Per-job hygiene overlay: did the platform stamp a commit on the job
+/// (<see cref="JobInfoCommitPresent"/>), and does the job's lane plus the
+/// current working tree look like accepted task work was left uncommitted
+/// (<see cref="AcceptedTaskUncommitted"/>)? The latter is the "dirty after
+/// accept" signal the reviewer should not be able to miss.
+/// </summary>
+public record JobHygieneContext(
+    string JobId,
+    string State,
+    bool JobInfoCommitPresent,
+    string? StampedCommitSha,
+    bool AcceptedTaskUncommitted,
+    bool CommitUnpushed);
+
+/// <summary>
 /// Thin wrapper around git CLI for the per-task Git view. Operates on the
 /// project's configured repository path, not on the job folder.
 /// </summary>
@@ -131,6 +186,203 @@ public class GitService
             _summaryAt = DateTime.UtcNow;
         }
         return list;
+    }
+
+    private readonly object _hygieneLock = new();
+    private readonly Dictionary<string, (DateTime At, GitHygieneStatus Value)> _hygieneCache = new();
+    private static readonly TimeSpan HygieneTtl = TimeSpan.FromSeconds(3);
+
+    /// <summary>
+    /// Project-level hygiene snapshot. Cached for ~3 s so a polling UI can
+    /// call freely without forking N git processes per render. Returns a
+    /// shape with <see cref="GitHygieneStatus.IsRepo"/> false when the
+    /// project is not a repo - callers can branch on that.
+    /// </summary>
+    public GitHygieneStatus GetProjectHygiene(string projectName)
+    {
+        if (string.IsNullOrWhiteSpace(projectName))
+            return new GitHygieneStatus { ProjectName = "", Error = "projectName is required" };
+
+        lock (_hygieneLock)
+        {
+            if (_hygieneCache.TryGetValue(projectName, out var cached) &&
+                DateTime.UtcNow - cached.At < HygieneTtl)
+            {
+                return cached.Value;
+            }
+        }
+
+        var fresh = ComputeProjectHygiene(projectName);
+        lock (_hygieneLock)
+        {
+            _hygieneCache[projectName] = (DateTime.UtcNow, fresh);
+        }
+        return fresh;
+    }
+
+    /// <summary>
+    /// Job-scoped hygiene: project-level snapshot overlaid with whether the
+    /// job carries a platform-owned commit stamp, whether the job's lane plus
+    /// the live working tree imply accepted task work was left uncommitted,
+    /// and whether the stamped commit is still ahead of the upstream
+    /// (committed but unpushed). Used by the job-detail review/completed
+    /// hygiene strip.
+    /// </summary>
+    public GitHygieneStatus GetJobHygiene(string jobId, string? watchPath)
+    {
+        var info = _scanner.FindJob(jobId, watchPath);
+        if (info == null)
+        {
+            return new GitHygieneStatus { Error = $"Job not found: {jobId}" };
+        }
+        var project = GetProjectHygiene(info.ProjectName);
+        var jobCommitPresent = info.Commit != null && !string.IsNullOrWhiteSpace(info.Commit.Sha);
+
+        // "Accepted task work appears uncommitted" = the job has reached a
+        // post-progress lane (auto-review, human-review, completed, archive)
+        // and the working tree still has a dirty diff that wasn't recorded
+        // on the job. We don't gate on the auto-commit setting - the user's
+        // contract is that accepted task work must not silently sit dirty.
+        var lane = info.State;
+        var isPostProgress =
+            lane == JobStates.AutoReview ||
+            lane == JobStates.HumanReview ||
+            lane == JobStates.Completed ||
+            lane == JobStates.Archive;
+        var acceptedUncommitted = isPostProgress && project.IsRepo && project.IsDirty;
+
+        // "Committed but unpushed": a stamped SHA exists *and* the project
+        // has an upstream that is behind by at least one commit. With no
+        // upstream configured we can't tell - report false (UI shows the
+        // separate "no upstream" affordance via HasUpstream=false).
+        var commitUnpushed = jobCommitPresent && project.IsRepo && project.HasUpstream && project.Ahead > 0;
+
+        return project with
+        {
+            Job = new JobHygieneContext(
+                JobId: info.Id,
+                State: info.State,
+                JobInfoCommitPresent: jobCommitPresent,
+                StampedCommitSha: info.Commit?.Sha,
+                AcceptedTaskUncommitted: acceptedUncommitted,
+                CommitUnpushed: commitUnpushed)
+        };
+    }
+
+    private GitHygieneStatus ComputeProjectHygiene(string projectName)
+    {
+        var entry = _scanner.GetWatchPaths().FirstOrDefault(e => e.Name == projectName);
+        if (entry == null)
+        {
+            return new GitHygieneStatus { ProjectName = projectName, Error = "Unknown project" };
+        }
+        var configured = ResolveConfiguredRepositoryPath(entry);
+        if (string.IsNullOrWhiteSpace(configured))
+        {
+            return new GitHygieneStatus { ProjectName = projectName, IsRepo = false };
+        }
+        var root = ResolveGitToplevel(configured);
+        if (root == null)
+        {
+            return new GitHygieneStatus { ProjectName = projectName, RepoRoot = configured, IsRepo = false };
+        }
+
+        var (statusOut, _, statusCode) = RunGit(root, "status --porcelain=v1");
+        var staged = 0; var unstaged = 0; var untracked = 0;
+        if (statusCode == 0)
+        {
+            foreach (var line in statusOut.Split('\n'))
+            {
+                if (string.IsNullOrEmpty(line) || line.Length < 2) continue;
+                var x = line[0];
+                var y = line.Length > 1 ? line[1] : ' ';
+                if (x == '?' && y == '?') { untracked++; continue; }
+                if (x != ' ' && x != '?') staged++;
+                if (y != ' ' && y != '?') unstaged++;
+            }
+        }
+        var dirty = (staged + unstaged + untracked) > 0;
+
+        var (branchOut, _, _) = RunGit(root, "rev-parse --abbrev-ref HEAD");
+        var branch = string.IsNullOrWhiteSpace(branchOut) ? null : branchOut.Trim();
+
+        // Upstream + ahead/behind. `git rev-parse --abbrev-ref @{u}` returns
+        // exit-code != 0 when no upstream is configured; treat that as
+        // "no upstream" rather than an error. The numeric counts come from
+        // rev-list --left-right --count.
+        string? upstream = null;
+        var hasUpstream = false;
+        var ahead = 0; var behind = 0;
+        var (upOut, _, upCode) = RunGit(root, "rev-parse --abbrev-ref --symbolic-full-name @{u}");
+        if (upCode == 0 && !string.IsNullOrWhiteSpace(upOut))
+        {
+            upstream = upOut.Trim();
+            hasUpstream = !string.IsNullOrEmpty(upstream);
+            if (hasUpstream)
+            {
+                var (countOut, _, countCode) = RunGit(root, "rev-list --left-right --count HEAD..." + upstream);
+                if (countCode == 0 && !string.IsNullOrWhiteSpace(countOut))
+                {
+                    var parts = countOut.Trim().Split('\t', StringSplitOptions.RemoveEmptyEntries);
+                    if (parts.Length >= 2)
+                    {
+                        int.TryParse(parts[0], out ahead);
+                        int.TryParse(parts[1], out behind);
+                    }
+                }
+            }
+        }
+
+        // Last commit. Single git invocation, machine-parseable.
+        const char US = '\x1f';
+        var (lastOut, _, lastCode) = RunGit(root, $"log -1 --pretty=format:%H{US}%h{US}%aI{US}%s");
+        string? lastSha = null; string? lastShort = null; string? lastSubject = null; DateTime? lastAt = null;
+        if (lastCode == 0 && !string.IsNullOrWhiteSpace(lastOut))
+        {
+            var parts = lastOut.Split(US);
+            if (parts.Length >= 4)
+            {
+                lastSha = parts[0];
+                lastShort = parts[1];
+                if (DateTime.TryParse(parts[2], System.Globalization.CultureInfo.InvariantCulture,
+                        System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
+                        out var ts))
+                {
+                    lastAt = DateTime.SpecifyKind(ts, DateTimeKind.Utc);
+                }
+                lastSubject = parts[3];
+            }
+        }
+
+        return new GitHygieneStatus
+        {
+            ProjectName = projectName,
+            RepoRoot = root,
+            IsRepo = true,
+            Branch = branch,
+            Upstream = upstream,
+            HasUpstream = hasUpstream,
+            Ahead = ahead,
+            Behind = behind,
+            IsDirty = dirty,
+            StagedCount = staged,
+            UnstagedCount = unstaged,
+            UntrackedCount = untracked,
+            LastCommitSha = lastSha,
+            LastCommitShortSha = lastShort,
+            LastCommitSubject = lastSubject,
+            LastCommitAtUtc = lastAt
+        };
+    }
+
+    /// <summary>
+    /// Drops the in-memory hygiene cache. Tests use this to force a fresh
+    /// observation after they have mutated a fixture repo; production code
+    /// just lets the 3 s TTL roll over.
+    /// </summary>
+    public void InvalidateHygieneCache()
+    {
+        lock (_hygieneLock) _hygieneCache.Clear();
     }
 
     /// <summary>Resolve the repository root for a job.</summary>

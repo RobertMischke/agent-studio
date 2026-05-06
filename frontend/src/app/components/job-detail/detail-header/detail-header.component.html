@@ -33,6 +33,7 @@
              [style.--project-on]="identity().onColor">
           <span class="detail__project-disk" aria-hidden="true">{{ identity().initial }}</span>
           <span class="detail__project-name">{{ info().projectName }}</span>
+          <app-project-hygiene-badge [projectName]="info().projectName" />
         </div>
         <h2 class="detail__title"
             (click)="startTitleEdit.emit()"

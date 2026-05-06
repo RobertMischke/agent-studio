@@ -2,7 +2,7 @@
 
 > Status: V1 contract. Backend `CompanionSyncService` and the standalone relay project under `companion/relay/` implement this contract. The PWA front-end is a follow-up task.
 
-The Agent Task Processor runs on a private machine without inbound network reachability. The Companion App lets the user check pipeline status, token usage, and open decisions from a phone, and post small steering interventions back. Both legs of the conversation flow through a public relay; the local processor only opens outbound HTTPS.
+The Agent Software Studio runs on a private machine without inbound network reachability. The Companion App lets the user check pipeline status, token usage, and open decisions from a phone, and post small steering interventions back. Both legs of the conversation flow through a public relay; the local processor only opens outbound HTTPS.
 
 ## Three-tier shape
 

@@ -14,7 +14,7 @@
  * Resolution rules (no hard-coded paths):
  *   - DEV_CHECKOUT env var wins.
  *   - Else: ask the dev backend's `/api/watch-paths` endpoint after start
- *     (Agent Task Processor entry) for the workspace path.
+ *     (Agent Software Studio entry) for the workspace path.
  *   - Else: fall back to the script's own default (sibling folder).
  *
  * The fixture exposes:

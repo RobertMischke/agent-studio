@@ -1,6 +1,6 @@
 # Design System Options
 
-This note answers the design-system question for the next-generation chat workbench. The goal is not to make Agent Task Processor look like a generic dashboard. The goal is a production-ready workbench system for expert software review: dense, inspectable, themeable, keyboard-friendly, and familiar to users who know VS Code.
+This note answers the design-system question for the next-generation chat workbench. The goal is not to make Agent Software Studio look like a generic dashboard. The goal is a production-ready workbench system for expert software review: dense, inspectable, themeable, keyboard-friendly, and familiar to users who know VS Code.
 
 ## Recommendation
 

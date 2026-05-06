@@ -743,7 +743,7 @@ public class ProjectRunner
     private string BuildOrchestratorBootPrompt()
     {
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine($"You are the orchestrator for the project \"{ProjectName}\" running in Agent Task Processor.");
+        sb.AppendLine($"You are the orchestrator for the project \"{ProjectName}\" running in Agent Software Studio.");
         sb.AppendLine();
         sb.AppendLine("Project context:");
         sb.AppendLine($"- Watch path: {Entry.Path}");
@@ -1123,7 +1123,7 @@ public class ProjectRunner
             ? $"\n\nAttachments on this task (read with your Read tool if the agent's question hinges on them - e.g. a screenshot the agent referenced):\n{attachmentsList}"
             : string.Empty;
         return
-            "You are the project orchestrator for Agent Task Processor. " +
+            "You are the project orchestrator for Agent Software Studio. " +
             "The user has set this project to auto mode and stepped away. " +
             "The active task agent just asked for input and is waiting. " +
             "Your job: decide what the user would have replied, in one short paragraph, in the user's voice. " +

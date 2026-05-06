@@ -1,19 +1,19 @@
 # Roadmap
 
-Agent Task Processor is a local control layer for keeping coding agents busy without turning a project into an orchestration platform.
+Agent Software Studio is a local control layer for keeping coding agents busy without turning a project into an orchestration platform.
 
 The product goal is simple: keep one coding task moving per project, reduce human babysitting, make review easier, and make security review a repeatable, documented project-level habit.
 
 ## Product Thesis
 
-Modern coding agents are useful for long-running implementation work, but they still need a steady queue, clear handoffs, and fast human review. Agent Task Processor turns that loop into a local board:
+Modern coding agents are useful for long-running implementation work, but they still need a steady queue, clear handoffs, and fast human review. Agent Software Studio turns that loop into a local board:
 
 - The human defines and reviews work.
 - The board keeps the queue visible.
 - The runner starts the next ready task automatically.
 - The agent writes evidence back into the task folder.
 
-The thesis is not to invent another coding agent. The app assumes that productized agents such as Codex and Claude Code are already excellent, economically attractive through subscriptions, and available as direct fallback tools in terminals and IDEs. Agent Task Processor adds the layer those agents do not try to own: ordered local queues, lifecycle boundaries, durable evidence, review handoff, and cross-CLI fallback.
+The thesis is not to invent another coding agent. The app assumes that productized agents such as Codex and Claude Code are already excellent, economically attractive through subscriptions, and available as direct fallback tools in terminals and IDEs. Agent Software Studio adds the layer those agents do not try to own: ordered local queues, lifecycle boundaries, durable evidence, review handoff, and cross-CLI fallback.
 
 An API-native agent runtime may become attractive later if model pricing, provider features, or subscription limits change enough to make it clearly better. Until then, building a custom coding agent loop is intentionally out of scope.
 

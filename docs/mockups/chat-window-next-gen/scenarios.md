@@ -201,7 +201,7 @@ Expected UI:
 
 ## 20. Existing Application Embedding
 
-The chat design is implemented inside the current Agent Task Processor UI.
+The chat design is implemented inside the current Agent Software Studio UI.
 
 Expected UI:
 

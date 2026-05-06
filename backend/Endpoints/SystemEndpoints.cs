@@ -80,6 +80,14 @@ public static class SystemEndpoints
         // for ~3 s so the board can call freely without forking N git processes.
         app.MapGet("/api/git/summary", (GitService git) => Results.Ok(git.GetSummaries()));
 
+        // Repository hygiene snapshot for the project header badge: dirty
+        // working tree, ahead-of-upstream, last commit, etc. Cached for ~3 s
+        // and deliberately separate from /api/git/summary because the
+        // hygiene shape carries upstream + last-commit info the board pills
+        // do not need.
+        app.MapGet("/api/git/hygiene", (string project, GitService git) =>
+            Results.Ok(git.GetProjectHygiene(project)));
+
         app.MapGet("/healthz", () => Results.Ok("ok"));
     }
 }

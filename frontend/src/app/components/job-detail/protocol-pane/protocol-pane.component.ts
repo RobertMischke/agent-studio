@@ -24,6 +24,7 @@ import { RunGitViewerComponent } from './run-git-viewer.component';
 import { CommonModule } from '@angular/common';
 import { FeatureFlagsService } from '../../../services/feature-flags.service';
 import { VerboseDebugOverlayComponent } from '../../verbose-debug/verbose-debug-overlay.component';
+import { HygieneStripComponent } from '../hygiene-strip/hygiene-strip.component';
 import type { RawLineRange } from '../../chat/conversation-event';
 
 export type InspectorTab = 'protocol' | 'activity';
@@ -38,7 +39,7 @@ export type InspectorTab = 'protocol' | 'activity';
   selector: 'app-protocol-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, ActivityLogViewComponent, RunTimelineComponent, RunGitViewerComponent, ScreenshotStripComponent, VerboseDebugOverlayComponent],
+  imports: [CommonModule, ActivityLogViewComponent, RunTimelineComponent, RunGitViewerComponent, ScreenshotStripComponent, VerboseDebugOverlayComponent, HygieneStripComponent],
   templateUrl: './protocol-pane.component.html',
   styleUrls: ['./protocol-pane.component.scss']
 })

@@ -8,7 +8,7 @@ import { test, expect } from '@playwright/test';
  *   - render a fixed orange "DEV" marker (data-testid="dev-banner")
  *   - swap the SVG favicon to icons-dev/icon.svg
  *   - point the manifest link at manifest-dev.webmanifest
- *   - set the document title to "Agent Task Processor (DEV)"
+ *   - set the document title to "Agent Software Studio (DEV)"
  */
 test.describe('DEV-mode visual markers', () => {
   test.beforeEach(async ({ request }) => {
@@ -30,7 +30,7 @@ test.describe('DEV-mode visual markers', () => {
     const bodyPaddingTop = await page.evaluate(() => getComputedStyle(document.body).paddingTop);
     expect(parseFloat(bodyPaddingTop), 'dev marker must not push the app down').toBeLessThanOrEqual(1);
 
-    await expect(page).toHaveTitle('Agent Task Processor (DEV)');
+    await expect(page).toHaveTitle('Agent Software Studio (DEV)');
 
     const manifestHref = await page.locator('link[rel="manifest"]').getAttribute('href');
     expect(manifestHref).toBe('manifest-dev.webmanifest');

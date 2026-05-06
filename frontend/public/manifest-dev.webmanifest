@@ -1,7 +1,7 @@
 {
-  "name": "Agent Task Processor (DEV)",
-  "short_name": "Task Processor DEV",
-  "description": "Agent Task Processor – DEV checkout",
+  "name": "Agent Software Studio (DEV)",
+  "short_name": "Software Studio DEV",
+  "description": "Agent Software Studio – DEV checkout",
   "display": "standalone",
   "background_color": "#1a1208",
   "theme_color": "#f59e0b",

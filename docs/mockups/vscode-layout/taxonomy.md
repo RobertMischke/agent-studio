@@ -6,7 +6,7 @@ Every visible element of today's task-detail page, mapped to its destination in 
 
 | Element today                       | Source                                       | Destination (slice 1)                                       | Destination (final) |
 |-------------------------------------|----------------------------------------------|-------------------------------------------------------------|--------------------|
-| Brand icon + "Agent · Task Processor" | `app.ts` `.header__brand`                   | Title bar (30 px), unchanged                                | Title bar          |
+| Brand icon + "Agent · Software Studio" | `app.ts` `.header__brand`                   | Title bar (30 px), unchanged                                | Title bar          |
 | Project tabs strip                  | `project-tabs.component`                     | Hidden inside the detail view; visible on board             | Activity bar       |
 | Owner select ("All / Robert / …")   | `app.ts` `.client-filter`                    | Status bar (right-side cluster)                             | Status bar         |
 | `+ Add Task` button                 | `app.ts` `.btn--create`                      | Activity bar bottom (or status bar)                         | Activity bar       |

@@ -7,6 +7,7 @@ import {
 } from '../../../services/format.util';
 import { NowTickService } from '../../../services/now-tick.service';
 import { projectIdentity } from '../../../services/project-identity.util';
+import { ProjectHygieneBadgeComponent } from '../hygiene-strip/project-hygiene-badge.component';
 
 /**
  * Top header of the job-detail view: back button, editable title,
@@ -17,6 +18,7 @@ import { projectIdentity } from '../../../services/project-identity.util';
   selector: 'app-detail-header',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [ProjectHygieneBadgeComponent],
   templateUrl: './detail-header.component.html',
   styles: [`
     /* Project identity chip above the title — same shape as the board cards

@@ -9,7 +9,7 @@ import { Density, StatusPanel, Theme } from './next-gen-chat-workbench-prototype
   template: `
     <header class="topbar">
       <div class="topbar__title">
-        <strong>Agent Task Processor</strong>
+        <strong>Agent Software Studio</strong>
         <span>Task workbench</span>
       </div>
       <div class="topbar__projects" aria-label="Project filter" data-testid="prototype-project-switcher">

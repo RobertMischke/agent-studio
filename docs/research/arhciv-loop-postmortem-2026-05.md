@@ -98,7 +98,7 @@ Pinned by 5 unit tests in [`backend.Tests/AutoPickupCascadeTests.cs`](../../back
 ## What this does NOT fix
 
 - The original `dacb0f58` session loss at 17:49 — that was the cascade kill from the prior post-mortem. The fix here ensures one such event doesn't snowball into 31 wasted continues.
-- AutoCommit not running for "Agent Task Processor" — `project-settings.json` has `AutoCommit: false`. That's a separate configuration issue (toggle in the UI or default change); tracked outside this fix.
+- AutoCommit not running for "Agent Software Studio" — `project-settings.json` has `AutoCommit: false`. That's a separate configuration issue (toggle in the UI or default change); tracked outside this fix.
 - Stable backend pointing at the dev checkout via `appsettings.Local.json` — separate config drift, fix is to correct the WatchPath RootPath. The user should change stable's `WatchPaths[].RootPath` to `C:\Projects\agent-taskboard-devspace\agent-taskboard-stable`.
 
 ## Verification

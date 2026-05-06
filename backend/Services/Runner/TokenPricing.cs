@@ -3,7 +3,7 @@ namespace OrchestratorApi.Services.Runner;
 /// <summary>
 /// Per-model API price (USD per million tokens). Used to compute the
 /// **theoretical** cost of orchestrator activity for transparency, not
-/// the user's actual bill: Agent Task Processor runs everything through
+/// the user's actual bill: Agent Software Studio runs everything through
 /// CLI subscriptions (Pro / Max / Team / Enterprise plans), so real
 /// dollar cost is zero on top of those plans. The estimate exists so
 /// the user can sanity-check whether the orchestrator is burning a

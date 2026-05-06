@@ -1,6 +1,6 @@
 # Companion Relay
 
-Tiny ASP.NET 10 minimal API. Holds the last snapshot pushed by the local Agent Task Processor and a small queue of commands the PWA enqueues. No persistence; a restart clears state and the next processor sync repopulates it.
+Tiny ASP.NET 10 minimal API. Holds the last snapshot pushed by the local Agent Software Studio and a small queue of commands the PWA enqueues. No persistence; a restart clears state and the next processor sync repopulates it.
 
 The full V1 contract lives in [`docs/companion-app-design.md`](../../docs/companion-app-design.md). [ADR-0018](../../docs/architecture-decisions.md) explains the why.
 

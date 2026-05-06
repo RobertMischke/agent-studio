@@ -66,9 +66,9 @@ interface VerboseDebugContext {
          data-testid="app-root">
       <header class="header">
         <div class="header__brand">
-          <img class="header__icon" src="icons/icon.svg" alt="Agent Task Processor" width="20" height="20" />
+          <img class="header__icon" src="icons/icon.svg" alt="Agent Software Studio" width="20" height="20" />
           <h1 class="header__title">
-            <span class="header__title-ai">Agent</span><span class="header__title-sep"></span><span class="header__title-name">Task Processor</span>
+            <span class="header__title-ai">Agent</span><span class="header__title-sep"></span><span class="header__title-name">Software Studio</span>
           </h1>
         </div>
         <app-project-tabs

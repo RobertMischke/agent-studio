@@ -168,8 +168,8 @@ export const DEFAULT_PROJECT_RAIL_KEY: ProjectRailKey = 'overview';
 
 /**
  * Slug used in the project-shell URL hash. Stable mapping from a watch-path
- * project name (e.g. "Agent Task Processor") to a kebab-case identifier
- * (e.g. "agent-task-processor"). The reverse lookup happens by computing
+ * project name (e.g. "Agent Software Studio") to a kebab-case identifier
+ * (e.g. "agent-software-studio"). The reverse lookup happens by computing
  * the slug for every known watch path and matching.
  */
 export function toProjectSlug(name: string): string {

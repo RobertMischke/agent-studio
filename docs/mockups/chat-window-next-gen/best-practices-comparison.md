@@ -32,7 +32,7 @@ The broader VS Code layout is as important as Copilot Chat for this product:
 4. **Toolbars are compact and scoped.** View, side bar, editor, and panel actions live close to their surface and less-used commands go behind overflow menus.
 5. **Status is peripheral.** Status bar items and Activity Bar indicators carry lightweight state without consuming the central work region.
 
-For Agent Task Processor, this means the chat transcript should behave like the editor region. Result summary, Git changes, screenshots, token heatmaps, and debug context can be adjacent workbench panes, but they should not permanently displace the transcript.
+For Agent Software Studio, this means the chat transcript should behave like the editor region. Result summary, Git changes, screenshots, token heatmaps, and debug context can be adjacent workbench panes, but they should not permanently displace the transcript.
 
 ## What Claude Code Gets Right
 
@@ -53,9 +53,9 @@ For Agent Task Processor, this means the chat transcript should behave like the 
 2. **Review and commands are product concepts.** The chat is tied to review, automation, sandboxing, subagents, and rules rather than being only a plain transcript.
 3. **Background work is a different shape.** Long-running agent work needs task artifacts and review state, not only chat bubbles.
 
-## Design Judgment For Agent Task Processor
+## Design Judgment For Agent Software Studio
 
-Agent Task Processor should not imitate a two-person assistant chat because its product has more actors. But it should imitate the compactness of VS Code Copilot Chat:
+Agent Software Studio should not imitate a two-person assistant chat because its product has more actors. But it should imitate the compactness of VS Code Copilot Chat:
 
 - The **center column is the chatflow**: human, agent, orchestrator, supervisor, and supporting agents as alternating participant turns.
 - The **meta layer docks to the side**: run metrics, token totals, tool families, commits, tests, screenshots, and raw trace filters live in an inspector that can collapse.
@@ -98,7 +98,7 @@ The first dashboard-style mockup should survive as `Verbose Debug`. That gives d
 
 ## Edge-Case Iteration Delta
 
-The v6 mockup adds one more best-practice rule: complicated agent communication should be represented as typed events before it is represented as UI. This is the bridge between modern agent chats and Agent Task Processor's Activity Logs.
+The v6 mockup adds one more best-practice rule: complicated agent communication should be represented as typed events before it is represented as UI. This is the bridge between modern agent chats and Agent Software Studio's Activity Logs.
 
 Best-practice alignment:
 

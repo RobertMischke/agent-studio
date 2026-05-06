@@ -1,4 +1,4 @@
-# Agent Task Processor Paths
+# Agent Software Studio Paths
 
 ## Trennung: App-Code vs. Beobachtete Daten
 
@@ -51,7 +51,7 @@ C:\Projects\Runbook\App\.orchestrator\jobs\
 ### Agent-Instruktionen im Ziel-Projekt
 - `<Ziel-Projekt>/AGENTS.md` — enthält den Autopilot-Workflow
 - `<Ziel-Projekt>/.github/copilot-instructions.md` — optionaler Copilot-Kompatibilitätsverweis
-- Wird vom Task Processor aus per Prompt synchronisiert (`/sync-target-instructions`)
+- Wird vom Software Studio aus per Prompt synchronisiert (`/sync-target-instructions`)
 
 ### Beispiel-Jobs (Runtime, im Ziel-Projekt)
 - `C:\Projects\MeinProjekt\.orchestrator\jobs\feature-login\`

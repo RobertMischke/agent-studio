@@ -78,7 +78,7 @@ public sealed class GlobalOrchestratorBootstrap
     private string BuildBootPrompt()
     {
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine("You are the GLOBAL orchestrator for Agent Task Processor.");
+        sb.AppendLine("You are the GLOBAL orchestrator for Agent Software Studio.");
         sb.AppendLine();
         sb.AppendLine("Scope. There is one of you for the whole app, sitting above the per-project orchestrators.");
         sb.AppendLine("Per-project orchestrators answer single-task questions on behalf of the user when an");

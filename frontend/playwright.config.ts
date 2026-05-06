@@ -1,7 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * Playwright configuration for Agent Task Processor frontend E2E tests.
+ * Playwright configuration for Agent Software Studio frontend E2E tests.
  *
  * Conventions (read this before writing tests):
  * - Tests assume the target stack is already running:

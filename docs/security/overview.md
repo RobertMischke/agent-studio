@@ -2,7 +2,7 @@
 
 ## Situation
 
-Agent Task Processor is a **local-only desktop app**. The backend binds to `localhost:5030`, the frontend to `localhost:4010`, and CORS allows only those origins. There is no public network surface.
+Agent Software Studio is a **local-only desktop app**. The backend binds to `localhost:5030`, the frontend to `localhost:4010`, and CORS allows only those origins. There is no public network surface.
 
 The app drives external CLI agents (Claude Code, Codex, Copilot, Gemini) as the logged-in user. Anything the user can do at the shell, the agents can do too; the trust boundary is the user's machine, not the app.
 

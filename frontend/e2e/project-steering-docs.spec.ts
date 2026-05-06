@@ -22,9 +22,9 @@ test.describe('Project detail - Steering Docs section', () => {
   test.beforeAll(async () => {
     const paths = await api<WatchPath[]>('/api/watch-paths');
     expect(paths.length).toBeGreaterThan(0);
-    // Prefer the Agent Task Processor project: it has the canonical
+    // Prefer the Agent Software Studio project: it has the canonical
     // README, AGENTS, ROADMAP, ADR, runtime-prompts set.
-    const preferred = paths.find(p => /agent.?task/i.test(p.name)) ?? paths[0];
+    const preferred = paths.find(p => /agent.?software/i.test(p.name)) ?? paths[0];
     projectName = preferred.name;
   });
 

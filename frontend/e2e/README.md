@@ -1,6 +1,6 @@
 # Frontend E2E Tests (Playwright)
 
-End-to-end regression suite for the Agent Task Processor frontend.
+End-to-end regression suite for the Agent Software Studio frontend.
 
 ## Why this exists
 

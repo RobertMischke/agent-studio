@@ -2,7 +2,7 @@
 
 ## Where Jobs Live
 
-Jobs belong to the watched target project, not to the Agent Task Processor source repository.
+Jobs belong to the watched target project, not to the Agent Software Studio source repository.
 
 ```
 <target-project>/

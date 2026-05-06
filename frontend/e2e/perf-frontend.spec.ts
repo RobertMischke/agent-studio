@@ -35,7 +35,7 @@ import { apiRoundtrip, clickToVisible, startLongTaskRecorder } from './helpers/t
  * a real regression hits.
  */
 
-const PROJECT_NAME = 'Agent Task Processor';
+const PROJECT_NAME = 'Agent Software Studio';
 
 test.describe('Frontend perceived latency', () => {
   test('grouped jobs roundtrip from inside the running app stays under 1 s', async ({ page }) => {

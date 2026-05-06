@@ -141,7 +141,7 @@ read_project_mode() {
 # Percent-encode a string so it is safe to drop into a URL path segment.
 # Pure POSIX-ish awk; we only depend on awk being available, which the
 # rest of this script also assumes. Without this, project names with a
-# space (e.g. "Agent Task Processor") produce a malformed URL and curl
+# space (e.g. "Agent Software Studio") produce a malformed URL and curl
 # returns code 000 — the exact failure that motivated this hardening.
 urlencode() {
   LC_ALL=C awk -v s="$1" '
