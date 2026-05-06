@@ -16,6 +16,7 @@ export type ProjectRailKey =
   | 'test-quality'
   | 'token-usage'
   | 'observability'
+  | 'steering'
   | 'audits'
   | 'jobs'
   | 'settings'
@@ -100,6 +101,15 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Agent communication on the message bus: timeline, participants, kinds, token usage',
     empty: 'No bus messages for this project yet. Once the orchestrator, an agent, or the supervisor speaks, the timeline and counters fill in here.',
     icon: '📡',
+  },
+  {
+    key: 'steering',
+    group: 'project',
+    label: 'Steering Docs',
+    panelTitle: 'Steering Docs',
+    description: 'Agent-facing instruction sources, human summary, drift warnings, and propose-update actions',
+    empty: 'No steering inventory yet. The Steering Docs slice lists README, AGENTS, ROADMAP, the task contract, the skills lookup, the ADR archive, runtime prompts, and project settings.',
+    icon: '🧭',
   },
   {
     key: 'audits',

@@ -48,12 +48,16 @@ export class DriftService {
     if (opts?.limit) params.push(`limit=${opts.limit}`);
     if (opts?.trigger) params.push(`trigger=${encodeURIComponent(opts.trigger)}`);
     if (opts?.scoreBand) params.push(`scoreBand=${encodeURIComponent(opts.scoreBand)}`);
-    if (opts?.refresh) params.push('refresh=true');
-    // Cache-buster: drift evidence rotates on user action (a planted fixture,
-    // a fresh action) and at least one observed environment served stale
-    // /reports responses from an HTTP cache while the projection had already
-    // moved on. Every poll is unique so browser-side caching cannot mask
-    // the freshly-appended record.
+    // Always force the in-memory projection to re-read from disk on read.
+    // Drift evidence is small per-project (one Markdown + one JSON line per
+    // report) and rotates on user action; the cost of a re-read is well
+    // under a millisecond. Without refresh=true the projection can hold
+    // stale records across test invocations and the surface renders pre-
+    // wipe data while the disk has already moved on. The opt-in
+    // `refresh=false` escape is left for any future low-volume reader.
+    if (opts?.refresh !== false) params.push('refresh=true');
+    // Cache-buster: prevent any intermediate HTTP cache from serving a
+    // stale projection response.
     params.push(`_=${Date.now()}`);
     const qs = `?${params.join('&')}`;
     return this.http.get<DriftReportListResponse>(

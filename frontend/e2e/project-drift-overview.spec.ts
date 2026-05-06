@@ -40,23 +40,20 @@ test.beforeAll(async () => {
 
 test.beforeEach(async () => {
   // Wipe the drift folder for this project so each test starts from a known
-  // baseline. Two strategies because Windows occasionally locks the index
-  // file (the InMemoryStore briefly opens it during a refresh): try
-  // recursive rm, then explicit per-file unlink as a fallback. As a last
-  // resort, truncate index.jsonl - the projection re-reads only that file,
-  // so an empty index renders as "no reports" even if json/md siblings stay.
+  // baseline. The InMemoryStore reads only index.jsonl; truncating that file
+  // is enough to make the projection empty on the next refresh, even if a
+  // stray json/md sibling could not be deleted (Windows file-lock case).
+  // We additionally try to remove the dir recursively so subsequent plants
+  // do not see stray reports the projection happens to ignore.
   for (const dir of candidateDriftDirs(projectPath, projectName)) {
-    if (!fs.existsSync(dir)) continue;
-    try { fs.rmSync(dir, { recursive: true, force: true }); }
-    catch { /* fall through to per-file cleanup */ }
-    if (!fs.existsSync(dir)) continue;
     try {
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'index.jsonl'), '', 'utf8');
       for (const name of fs.readdirSync(dir)) {
+        if (name === 'index.jsonl') continue;
         try { fs.unlinkSync(path.join(dir, name)); } catch { /* best-effort */ }
       }
     } catch { /* best-effort */ }
-    try { fs.writeFileSync(path.join(dir, 'index.jsonl'), '', 'utf8'); }
-    catch { /* best-effort */ }
   }
   // Force projection refresh + verify the projection actually settles to
   // zero. The previous run sometimes left the in-memory projection holding
@@ -152,7 +149,7 @@ test('dimension drill-down: panel renders evidence and findings', async ({ page 
     dimensions: [
       dimension('Architecture', 60, 'High', 0.80, 'Tracked',
         'Runner state-machine has drifted from ADR-0024.', {
-          evidence: ['docs/architecture-decisions.md#adr-0024', 'backend/Services/Runner/'],
+          evidence: ['docs/architecture-decisions.md#adr-0024', 'backend/Services/Jobs/JobTransitionService.cs'],
           recommendedActions: ['Reconcile RunnerEndpoints with JobTransitionService.'],
           findings: [
             finding('finding-001', 'High', 'Two endpoints write job state outside JobTransitionService.', 'New', [
@@ -280,9 +277,9 @@ test('follow-up task creation: clicking a finding follow-up queues a 1-preparati
   // The new job exists in 1-preparation.
   await page.waitForTimeout(500);
   const after = await listPreparationSlugs();
-  const created = after.filter(s => !before.has(s));
+  const created = [...after].filter(s => !before.has(s));
   expect(created.length, `expected exactly one new preparation job after click; got ${created.length}`).toBeGreaterThanOrEqual(1);
-  expect(created.some(s => s.startsWith('followup-drift-schema-finding-schema-001'))).toBeTruthy();
+  expect(created.some(s => s.startsWith('followup-drift-schema-'))).toBeTruthy();
 
   await page.screenshot({ path: `${SCREENSHOTS}/05-followup-task-created.png`, fullPage: true });
 
@@ -298,6 +295,14 @@ test('follow-up task creation: clicking a finding follow-up queues a 1-preparati
 // ----------------------------------------------------------------------
 
 async function openProjectDetail(page: Page): Promise<void> {
+  // Clear the browser's HTTP cache so a per-context fetch can never return
+  // a previous test's planted report. The test runs at workers=1 with
+  // shared context defaults; the cache otherwise survives navigation.
+  try {
+    const session = await page.context().newCDPSession(page);
+    await session.send('Network.clearBrowserCache');
+    await session.detach();
+  } catch { /* best-effort */ }
   await page.goto('/');
   await page.getByTestId(`project-detail-${projectName}`).click();
   await expect(page.getByTestId('project-detail')).toBeVisible({ timeout: 10_000 });

@@ -149,9 +149,11 @@ const RANGE_OPTIONS: ReadonlyArray<{ id: number; label: string }> = [
         <section class="obs__filters" aria-label="Filters" data-testid="observability-filters">
           <label class="obs__field">
             <span>Range</span>
-            <select [(ngModel)]="filter.rangeHours" (ngModelChange)="onFilterChanged()" data-testid="observability-filter-range">
+            <select [ngModel]="filter.rangeHours"
+                    (ngModelChange)="onRangeChanged($event)"
+                    data-testid="observability-filter-range">
               @for (r of rangeOptions; track r.id) {
-                <option [ngValue]="r.id">{{ r.label }}</option>
+                <option [value]="r.id">{{ r.label }}</option>
               }
             </select>
           </label>
@@ -934,6 +936,12 @@ export class ProjectObservabilityPanelComponent implements OnInit, OnDestroy {
   }
 
   onFilterChanged(): void {
+    this.filterTick.update(v => v + 1);
+  }
+
+  onRangeChanged(value: string | number): void {
+    const n = typeof value === 'number' ? value : Number(value);
+    this.filter.rangeHours = Number.isFinite(n) ? n : 0;
     this.filterTick.update(v => v + 1);
   }
 

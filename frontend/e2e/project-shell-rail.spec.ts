@@ -34,7 +34,7 @@ interface WatchPath { name: string; path: string }
  * `project-shell-panel-desc`, and `project-shell-panel-empty` for these
  * keys; the per-slice spec asserts the real content instead.
  */
-const RAILS_WITH_CUSTOM_PANEL = new Set<string>(['security', 'token-usage', 'observability']);
+const RAILS_WITH_CUSTOM_PANEL = new Set<string>(['security', 'token-usage', 'observability', 'steering']);
 
 const RAIL_ITEMS: ReadonlyArray<{ key: string; label: string; title: string; descriptionFragment: string }> = [
   { key: 'overview',     label: 'Overview',        title: 'Overview',        descriptionFragment: 'Snapshot of project health' },
@@ -44,6 +44,7 @@ const RAIL_ITEMS: ReadonlyArray<{ key: string; label: string; title: string; des
   { key: 'test-quality', label: 'Test Quality',    title: 'Test Quality',    descriptionFragment: 'Backend tests, end-to-end tests' },
   { key: 'token-usage',  label: 'Token Usage',     title: 'Token Usage',     descriptionFragment: 'Inference spend by job' },
   { key: 'observability',label: 'Observability',   title: 'Observability',   descriptionFragment: 'Agent communication on the message bus' },
+  { key: 'steering',     label: 'Steering Docs',   title: 'Steering Docs',   descriptionFragment: 'Agent-facing instruction sources' },
   { key: 'audits',       label: 'Audits & Checks', title: 'Audits & Checks', descriptionFragment: 'Review definitions, per-task checks' },
   { key: 'jobs',         label: 'Jobs',            title: 'Jobs',            descriptionFragment: 'Tasks queued, in progress' },
   { key: 'settings',     label: 'Settings',        title: 'Settings',        descriptionFragment: 'How the orchestrator behaves' },
@@ -131,11 +132,11 @@ test('every rail entry routes to its placeholder panel', async ({ page }) => {
     await page.screenshot({ path: path.join(SCREENSHOT_DIR, fileName), fullPage: true });
   }
 
-  // Budget: 11 panel mounts × 50 ms ceiling = 550 ms. Keep generous so
+  // Budget: 13 panel mounts × 50 ms ceiling = 650 ms. Keep generous so
   // CI noise (background animations, ChromeDevTools overhead) doesn't
   // flake the test; tighten only after a real regression.
   const totalLong = await longTasks.totalMs();
-  expect(totalLong).toBeLessThan(550);
+  expect(totalLong).toBeLessThan(650);
 });
 
 test('reload preserves the active rail item', async ({ page }) => {
