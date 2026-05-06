@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.ProjectChat;
 
 namespace OrchestratorApi.Services.Runner;
 
@@ -25,6 +26,9 @@ namespace OrchestratorApi.Services.Runner;
 public class OrchestratorChat
 {
     private readonly ILogger<OrchestratorChat> _logger;
+    private readonly ProjectChatStore? _projectStore;
+    private readonly ProjectChatIndex? _projectIndex;
+    private readonly JobScannerService? _scanner;
 
     private static readonly JsonSerializerOptions WriteOpts = new()
     {
@@ -38,9 +42,16 @@ public class OrchestratorChat
         PropertyNameCaseInsensitive = true
     };
 
-    public OrchestratorChat(ILogger<OrchestratorChat> logger)
+    public OrchestratorChat(
+        ILogger<OrchestratorChat> logger,
+        ProjectChatStore? projectStore = null,
+        ProjectChatIndex? projectIndex = null,
+        JobScannerService? scanner = null)
     {
         _logger = logger;
+        _projectStore = projectStore;
+        _projectIndex = projectIndex;
+        _scanner = scanner;
     }
 
     public bool Append(string watchPath, OrchestratorChatTurn turn)
@@ -53,12 +64,59 @@ public class OrchestratorChat
             if (!string.IsNullOrWhiteSpace(dir)) Directory.CreateDirectory(dir);
             var line = JsonSerializer.Serialize(turn, WriteOpts) + Environment.NewLine;
             File.AppendAllText(path, line, Encoding.UTF8);
+
+            // Slice D mirror: also write the per-turn markdown file so the
+            // new file-tree + FTS index stay current as turns are appended.
+            // Best-effort; legacy JSONL remains the fallback if this fails.
+            MirrorToProjectChat(watchPath, turn);
             return true;
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Failed to append orchestrator chat turn under {WatchPath}", watchPath);
             return false;
+        }
+    }
+
+    private void MirrorToProjectChat(string watchPath, OrchestratorChatTurn turn)
+    {
+        if (_projectStore == null || _scanner == null) return;
+        try
+        {
+            var entry = _scanner.GetWatchPaths().FirstOrDefault(e =>
+                string.Equals(e.Path, watchPath, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(e.RootPath, watchPath, StringComparison.OrdinalIgnoreCase));
+            var projectFolder = entry?.Path;
+            if (string.IsNullOrWhiteSpace(projectFolder)) return;
+
+            var author = turn.Role switch
+            {
+                "user" => ProjectChatTurnAuthors.User,
+                "orchestrator" => ProjectChatTurnAuthors.Orchestrator,
+                _ => ProjectChatTurnAuthors.Orchestrator
+            };
+            var body = turn.Text ?? "";
+            if (!string.IsNullOrWhiteSpace(turn.ErrorMessage))
+            {
+                body = string.IsNullOrEmpty(body)
+                    ? "_error:_ " + turn.ErrorMessage
+                    : body + "\n\n_error:_ " + turn.ErrorMessage;
+            }
+
+            var pTurn = new ProjectChatTurn
+            {
+                TurnId = turn.Id,
+                Author = author,
+                Kind = ProjectChatTurnKinds.Turn,
+                Ts = DateTime.SpecifyKind(turn.Ts, DateTimeKind.Utc),
+                Body = body
+            };
+            var written = _projectStore.Write(projectFolder, pTurn);
+            _projectIndex?.Upsert(projectFolder, pTurn, written);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Mirror to project chat tree failed for {WatchPath}", watchPath);
         }
     }
 

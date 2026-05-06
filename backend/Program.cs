@@ -8,6 +8,7 @@ using OrchestratorApi.Services.Clients;
 using OrchestratorApi.Services.Companion;
 using OrchestratorApi.Services.Diagnostics;
 using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.ProjectChat;
 using OrchestratorApi.Services.Pty;
 using OrchestratorApi.Services.Quota;
 using OrchestratorApi.Services.Runner;
@@ -77,6 +78,9 @@ builder.Services.AddSingleton<OrchestratorChatLog>();
 builder.Services.AddSingleton<OrchestratorLog>();
 builder.Services.AddSingleton<OrchestratorChat>();
 builder.Services.AddSingleton<OrchestratorChatService>();
+builder.Services.AddSingleton<ProjectChatStore>();
+builder.Services.AddSingleton<ProjectChatIndex>();
+builder.Services.AddSingleton<ProjectChatMigration>();
 builder.Services.AddSingleton<OrchestratorRunner>();
 builder.Services.AddSingleton<OrchestratorSessionStore>();
 builder.Services.AddSingleton<GlobalOrchestratorSessionStore>();
@@ -260,6 +264,32 @@ try
     _ = bus.SeedBuiltInParticipantsAsync();
 }
 catch (Exception ex) { crashRecorder.Record("AgentMessageBusBridge.Seed", ex); }
+
+// Slice D project-chat: migrate the legacy `orchestrator-chat.jsonl`
+// per-project file into the new per-month markdown tree, then ensure
+// the per-project FTS5 index is fresh. Idempotent; cheap when the
+// migration has already run. Fire-and-forget so a slow disk does not
+// hold up boot.
+_ = Task.Run(() =>
+{
+    try
+    {
+        var migration = app.Services.GetRequiredService<ProjectChatMigration>();
+        migration.MigrateAll();
+
+        var scanner = app.Services.GetRequiredService<JobScannerService>();
+        var index = app.Services.GetRequiredService<ProjectChatIndex>();
+        foreach (var entry in scanner.GetWatchPaths())
+        {
+            try { index.EnsureFresh(entry.Path); }
+            catch (Exception ex) { crashRecorder.Record($"ProjectChatIndex.EnsureFresh:{entry.Name}", ex); }
+        }
+    }
+    catch (Exception ex)
+    {
+        crashRecorder.Record("ProjectChatMigration", ex);
+    }
+});
 
 // Wire up FileSystemWatcher → SignalR push
 var watcher = app.Services.GetRequiredService<JobWatcherService>();

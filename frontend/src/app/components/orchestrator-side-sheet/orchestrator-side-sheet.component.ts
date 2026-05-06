@@ -9,13 +9,15 @@ import {
   input,
   output,
   signal,
-  untracked
+  untracked,
+  viewChild,
 } from '@angular/core';
 import { JobService } from '../../services/job.service';
 import { OrchestratorChatTurn, WatchPathEntry } from '../../models/job.model';
 import { ChatComponent } from '../chat/chat.component';
 import { ChatEvent, ChatMessage, ChatSubmitEvent } from '../chat/chat-types';
 import { RoadmapIntakePanelComponent } from '../roadmap-intake/roadmap-intake-panel.component';
+import { ProjectChatListComponent } from '../project-chat-list/project-chat-list.component';
 
 /**
  * Right-hand side sheet that hosts the orchestrator chat. Shell follows
@@ -36,7 +38,7 @@ import { RoadmapIntakePanelComponent } from '../roadmap-intake/roadmap-intake-pa
 @Component({
   selector: 'app-orchestrator-side-sheet',
   standalone: true,
-  imports: [ChatComponent, RoadmapIntakePanelComponent],
+  imports: [ChatComponent, RoadmapIntakePanelComponent, ProjectChatListComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <aside class="sheet" [class.sheet--open]="open()" data-testid="orch-side-sheet">
@@ -150,15 +152,31 @@ import { RoadmapIntakePanelComponent } from '../roadmap-intake/roadmap-intake-pa
             [emptyState]="'No follow-ups sent from here yet. The full activity log lives in the protocol pane.'"
             (submitMessage)="onTaskSubmit($event)" />
         } @else if (activeProject()) {
-          <app-chat
-            variant="embedded"
-            [messages]="messages()"
-            [events]="events()"
-            [pending]="sending()"
-            [disabled]="sending()"
-            [placeholder]="'Ask the orchestrator about this project…'"
-            [emptyState]="emptyStateText()"
-            (submitMessage)="onSubmit($event)" />
+          @if (virtualChatEnabled()) {
+            <app-project-chat-list
+              #projectChatList
+              [project]="activeProject()" />
+            <app-chat
+              variant="embedded"
+              [messages]="[]"
+              [events]="[]"
+              [pending]="sending()"
+              [disabled]="sending()"
+              [placeholder]="'Ask the orchestrator about this project…'"
+              [emptyState]="''"
+              [bodyMaxHeight]="'0px'"
+              (submitMessage)="onSubmit($event)" />
+          } @else {
+            <app-chat
+              variant="embedded"
+              [messages]="messages()"
+              [events]="events()"
+              [pending]="sending()"
+              [disabled]="sending()"
+              [placeholder]="'Ask the orchestrator about this project…'"
+              [emptyState]="emptyStateText()"
+              (submitMessage)="onSubmit($event)" />
+          }
 
           <div class="sheet__draft-actions" data-testid="orch-side-sheet-draft-actions">
             <button class="sheet__draft-btn"
@@ -551,6 +569,26 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly loading = signal(false);
   readonly sending = signal(false);
   readonly errorMsg = signal<string | null>(null);
+
+  /**
+   * Slice D virtualised chat list. Off by default so the existing
+   * non-virtualised surface (and its Playwright coverage) stays as-is
+   * while the new endpoints + index settle. The flag is read once at
+   * construction; reload to flip it.
+   */
+  readonly virtualChatEnabled = signal<boolean>(this.readVirtualFlag());
+
+  private readonly projectChatList = viewChild<ProjectChatListComponent>('projectChatList');
+
+  /** Read the `?virtualChat=1` URL flag once at construction. */
+  private readVirtualFlag(): boolean {
+    if (typeof window === 'undefined') return false;
+    try {
+      return new URLSearchParams(window.location.search).get('virtualChat') === '1';
+    } catch {
+      return false;
+    }
+  }
 
   /**
    * Which surface is in front: the project orchestrator thread, the
@@ -1016,6 +1054,11 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
         this.sending.set(false);
         this.localTurns.set([]);
         this.refresh(true);
+        // Slice D virtualised list: pull the new turn(s) from disk via
+        // /scroll. Cheap (one ranged query) and keeps the windowed
+        // renderer in sync without us having to mirror the OrchestratorChat
+        // append logic on the client side.
+        this.projectChatList()?.resetAndLoad();
         for (const att of event.attachments) URL.revokeObjectURL(att.previewUrl);
       },
       error: (err) => {
