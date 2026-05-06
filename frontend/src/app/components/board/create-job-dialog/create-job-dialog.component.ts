@@ -11,6 +11,12 @@ export interface PendingAttachment {
   previewUrl: string;
 }
 
+export interface PromptEnhancement {
+  refinedPrompt: string;
+  intent: string;
+  tags: string[];
+}
+
 const PENDING_PREFIX = 'pending-attachment-';
 
 /**
@@ -57,6 +63,15 @@ export class CreateJobDialogComponent {
     return prompt.length > 0 && !this.titleGenerating();
   });
 
+  readonly enhancing = signal(false);
+  readonly enhanceError = signal<string | null>(null);
+  readonly enhancement = signal<PromptEnhancement | null>(null);
+
+  readonly canEnhance = computed(() => {
+    const prompt = (this.newPrompt() ?? '').trim();
+    return prompt.length > 0 && !this.enhancing();
+  });
+
   readonly cliTypes = CLI_TYPES;
   cliTypeLabel(t: CliType): string { return fmtCliTypeLabel(t); }
   cliTypeIcon(t: CliType): string { return fmtCliTypeIcon(t); }
@@ -93,6 +108,63 @@ export class CreateJobDialogComponent {
         this.titleGenerating.set(false);
       }
     });
+  }
+
+  /**
+   * Run the prompt through the Haiku enhancer and stash the result as a
+   * preview the user can Apply or Discard. Pure preview - the textarea
+   * is NOT mutated until Apply is clicked.
+   */
+  enhancePrompt(): void {
+    if (!this.canEnhance()) return;
+    const prompt = (this.newPrompt() ?? '').trim();
+    if (prompt.length === 0) return;
+
+    this.enhancing.set(true);
+    this.enhanceError.set(null);
+    this.jobs.enhancePrompt(prompt).subscribe({
+      next: (resp) => {
+        const refined = (resp?.refinedPrompt ?? '').trim();
+        const intent = (resp?.intent ?? '').trim();
+        const tags = Array.isArray(resp?.tags) ? resp.tags.filter(t => !!t) : [];
+        if (refined.length === 0 && intent.length === 0 && tags.length === 0) {
+          this.enhanceError.set('Enhancer returned an empty result. Try again.');
+        } else {
+          this.enhancement.set({ refinedPrompt: refined, intent, tags });
+        }
+        this.enhancing.set(false);
+      },
+      error: (err) => {
+        const msg = err?.error?.error
+          || err?.error?.detail
+          || err?.message
+          || 'Could not enhance the prompt. Try again.';
+        this.enhanceError.set(msg);
+        this.enhancing.set(false);
+      }
+    });
+  }
+
+  /**
+   * Replace the current prompt with the refined version and append the
+   * intent + tag list as a trailing comment block (since the data model
+   * does not yet have first-class tag fields). Discards the preview.
+   */
+  applyEnhancement(): void {
+    const e = this.enhancement();
+    if (!e) return;
+    const parts: string[] = [];
+    if (e.refinedPrompt) parts.push(e.refinedPrompt.trim());
+    if (e.intent) parts.push(`Intent: ${e.intent.trim()}`);
+    if (e.tags.length > 0) parts.push(`Tags: ${e.tags.join(', ')}`);
+    this.newPrompt.set(parts.join('\n\n'));
+    this.enhancement.set(null);
+    this.enhanceError.set(null);
+  }
+
+  discardEnhancement(): void {
+    this.enhancement.set(null);
+    this.enhanceError.set(null);
   }
 
   @HostListener('document:keydown', ['$event'])

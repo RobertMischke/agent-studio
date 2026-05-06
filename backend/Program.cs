@@ -103,6 +103,7 @@ builder.Services.AddSingleton<SummaryGenerationService>();
 builder.Services.AddSingleton<RuntimePromptService>();
 builder.Services.AddSingleton<RoadmapIntakeService>();
 builder.Services.AddSingleton<TitleGenerationService>();
+builder.Services.AddSingleton<PromptEnhancementService>();
 builder.Services.AddSingleton<TaskRunnerService>();
 builder.Services.AddSingleton<CrashRecoveryService>();
 builder.Services.AddSingleton<StaleProgressArchiver>();

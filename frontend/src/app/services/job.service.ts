@@ -724,6 +724,19 @@ export class JobService {
   }
 
   /**
+   * One-shot Haiku call that returns three artefacts derived from the
+   * user's free-text prompt: a refined prompt, a one-line intent, and
+   * up to five topical tags. Drives the "Enhance" button on the
+   * Create-task dialog. Pure preview - no side effects.
+   */
+  enhancePrompt(prompt: string) {
+    return this.http.post<{ refinedPrompt: string; intent: string; tags: string[] }>(
+      `${this.baseUrl}/prompt/enhance`,
+      { prompt }
+    );
+  }
+
+  /**
    * Override an orchestrator decision. Appends an intervention entry to
    * the feed, and (when `jobId` is provided) routes `newDirection`
    * through the Continue path as a Steer-mode follow-up.

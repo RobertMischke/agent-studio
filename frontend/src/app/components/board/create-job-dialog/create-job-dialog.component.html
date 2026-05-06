@@ -73,11 +73,27 @@
     <div class="field">
       <div class="create-dialog__prompt-label">
         <span class="field__label">Prompt (optional)</span>
-        <button type="button"
-                class="create-dialog__attach-btn"
-                data-testid="create-attach-image"
-                (click)="triggerFilePicker()"
-                title="Attach image (paste or drop also works)">📎 Image</button>
+        <div class="create-dialog__prompt-actions">
+          <button type="button"
+                  class="create-dialog__generate-btn"
+                  data-testid="create-enhance-prompt"
+                  [disabled]="!canEnhance()"
+                  (click)="enhancePrompt()"
+                  title="Refine the prompt and extract intent + tags (Haiku)">
+            @if (enhancing()) {
+              <span class="create-dialog__generate-spinner" aria-hidden="true"></span>
+              <span>Enhancing…</span>
+            } @else {
+              <span aria-hidden="true">✨</span>
+              <span>Enhance</span>
+            }
+          </button>
+          <button type="button"
+                  class="create-dialog__attach-btn"
+                  data-testid="create-attach-image"
+                  (click)="triggerFilePicker()"
+                  title="Attach image (paste or drop also works)">📎 Image</button>
+        </div>
       </div>
       <textarea #promptArea
                 class="field__input field__textarea"
@@ -86,6 +102,43 @@
                 (paste)="onPromptPaste($event)"
                 rows="10"
                 placeholder="Task description..."></textarea>
+      @if (enhanceError()) {
+        <div class="create-dialog__generate-error" data-testid="create-enhance-error">⚠ {{ enhanceError() }}</div>
+      }
+      @if (enhancement(); as e) {
+        <div class="create-dialog__enhance-preview" data-testid="create-enhance-preview">
+          <div class="create-dialog__enhance-row">
+            <span class="create-dialog__enhance-label">Refined</span>
+            <pre class="create-dialog__enhance-refined" data-testid="create-enhance-refined">{{ e.refinedPrompt }}</pre>
+          </div>
+          @if (e.intent) {
+            <div class="create-dialog__enhance-row">
+              <span class="create-dialog__enhance-label">Intent</span>
+              <span class="create-dialog__enhance-intent" data-testid="create-enhance-intent">{{ e.intent }}</span>
+            </div>
+          }
+          @if (e.tags.length > 0) {
+            <div class="create-dialog__enhance-row">
+              <span class="create-dialog__enhance-label">Tags</span>
+              <span class="create-dialog__enhance-tags" data-testid="create-enhance-tags">
+                @for (t of e.tags; track t) {
+                  <span class="create-dialog__enhance-tag">{{ t }}</span>
+                }
+              </span>
+            </div>
+          }
+          <div class="create-dialog__enhance-actions">
+            <button type="button"
+                    class="btn"
+                    data-testid="create-enhance-discard"
+                    (click)="discardEnhancement()">Discard</button>
+            <button type="button"
+                    class="btn btn--primary"
+                    data-testid="create-enhance-apply"
+                    (click)="applyEnhancement()">Apply</button>
+          </div>
+        </div>
+      }
       @if (hasAttachments()) {
         <div class="create-dialog__attachments" data-testid="create-attachments">
           @for (att of attachments(); track att.id) {

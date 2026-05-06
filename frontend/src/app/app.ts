@@ -1071,6 +1071,69 @@ interface VerboseDebugContext {
       border-radius: 6px;
       padding: 6px 10px;
     }
+    .create-dialog__prompt-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .create-dialog__enhance-preview {
+      margin-top: 10px;
+      padding: 12px;
+      border-radius: 8px;
+      background: rgba(99,102,241,0.08);
+      border: 1px solid rgba(167,139,250,0.30);
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .create-dialog__enhance-row {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .create-dialog__enhance-label {
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: #a5b4fc;
+    }
+    .create-dialog__enhance-refined {
+      margin: 0;
+      font-family: inherit;
+      font-size: 13px;
+      line-height: 1.5;
+      color: #e2e8f0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .create-dialog__enhance-intent {
+      font-size: 13px;
+      color: #e2e8f0;
+    }
+    .create-dialog__enhance-tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .create-dialog__enhance-tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 600;
+      background: rgba(167,139,250,0.18);
+      color: #ddd6fe;
+      border: 1px solid rgba(167,139,250,0.40);
+    }
+    .create-dialog__enhance-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 4px;
+    }
     .overlay--error {
       z-index: 120;
       padding: 24px;

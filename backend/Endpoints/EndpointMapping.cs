@@ -37,6 +37,7 @@ public static class EndpointMapping
         app.MapDiagnosticsEndpoints();
         app.MapRoadmapIntakeEndpoints();
         app.MapTitleGenerationEndpoints();
+        app.MapPromptEnhancementEndpoints();
         app.MapBusEndpoints();
         app.MapClientEndpoints();
         app.MapAnalysisReportEndpoints();
