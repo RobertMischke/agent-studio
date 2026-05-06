@@ -50,7 +50,7 @@ builder.Services.AddHostedService<PeriodicProbeService>();
 builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
     p.SetIsOriginAllowed(_ => true).AllowAnyHeader().AllowAnyMethod().AllowCredentials()));
 
-builder.WebHost.UseUrls(options.ListenUrl);
+builder.WebHost.UseUrls(options.ListenUrl.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
 
 var app = builder.Build();
 app.UseCors();

@@ -7,8 +7,13 @@ namespace AgentTaskboard.UpdateService;
 /// </summary>
 public sealed class UpdateServiceOptions
 {
-    /// <summary>Listening URL.</summary>
-    public string ListenUrl { get; set; } = "http://127.0.0.1:5039";
+    /// <summary>
+    /// Listening URL(s) — semicolon-separated for ASP.NET Core. Binds both
+    /// IPv4 loopback and IPv6 loopback so the FE reaches us via either
+    /// `localhost` (often resolves to ::1) or `127.0.0.1`. CORS is wide
+    /// open inside the process so cross-origin (4011 → 5039) just works.
+    /// </summary>
+    public string ListenUrl { get; set; } = "http://127.0.0.1:5039;http://[::1]:5039";
 
     /// <summary>Path to the stable checkout we manage.</summary>
     public string StableCheckoutDir { get; set; } = @"C:\Projects\agent-taskboard-devspace\agent-taskboard-stable";
