@@ -1,10 +1,1 @@
-[
-  {
-    "JobKey": "::fake-61a9bae89efa4124bb2239e489d00b07",
-    "JobId": "fake-61a9bae89efa4124bb2239e489d00b07",
-    "ProcessId": 79576,
-    "ProcessName": "node",
-    "ProcessStartTimeUtc": "2026-05-06T00:32:18.1523475Z",
-    "StartedAt": "2026-05-06T00:32:18.1649352Z"
-  }
-]
+[]
