@@ -1016,6 +1016,60 @@ interface VerboseDebugContext {
     .create-dialog__file {
       display: none;
     }
+    .create-dialog__title-row {
+      display: flex;
+      gap: 8px;
+      align-items: stretch;
+    }
+    .create-dialog__title-input {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
+    .create-dialog__generate-btn {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(99,102,241,0.18);
+      border: 1px solid rgba(167,139,250,0.45);
+      color: #ddd6fe;
+      padding: 0 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s, opacity 0.15s;
+      white-space: nowrap;
+    }
+    .create-dialog__generate-btn:hover:not(:disabled) {
+      background: rgba(99,102,241,0.32);
+      color: #f5f3ff;
+      border-color: rgba(167,139,250,0.75);
+    }
+    .create-dialog__generate-btn:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    .create-dialog__generate-spinner {
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      border: 2px solid rgba(221,214,254,0.35);
+      border-top-color: #ddd6fe;
+      animation: create-dialog-spin 0.8s linear infinite;
+    }
+    @keyframes create-dialog-spin {
+      to { transform: rotate(360deg); }
+    }
+    .create-dialog__generate-error {
+      margin-top: 6px;
+      font-size: 12px;
+      color: #fca5a5;
+      background: rgba(239,68,68,0.10);
+      border: 1px solid rgba(239,68,68,0.35);
+      border-radius: 6px;
+      padding: 6px 10px;
+    }
     .overlay--error {
       z-index: 120;
       padding: 24px;

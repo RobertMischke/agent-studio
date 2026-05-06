@@ -1,7 +1,8 @@
-import { ChangeDetectionStrategy, Component, ElementRef, HostListener, ViewChild, computed, input, model, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, HostListener, ViewChild, computed, inject, input, model, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { CliModelInfo, CliType, CLI_TYPES, WatchPathEntry } from '../../../models/job.model';
 import { cliTypeIcon as fmtCliTypeIcon, cliTypeLabel as fmtCliTypeLabel, formatMultiplier as fmtMultiplier } from '../../../services/format.util';
+import { JobService } from '../../../services/job.service';
 
 export interface PendingAttachment {
   id: string;
@@ -47,6 +48,15 @@ export class CreateJobDialogComponent {
   readonly isDragging = model<boolean>(false);
   readonly attachmentError = model<string | null>(null);
 
+  private readonly jobs = inject(JobService);
+  readonly titleGenerating = signal(false);
+  readonly titleGenerateError = signal<string | null>(null);
+
+  readonly canGenerateTitle = computed(() => {
+    const prompt = (this.newPrompt() ?? '').trim();
+    return prompt.length > 0 && !this.titleGenerating();
+  });
+
   readonly cliTypes = CLI_TYPES;
   cliTypeLabel(t: CliType): string { return fmtCliTypeLabel(t); }
   cliTypeIcon(t: CliType): string { return fmtCliTypeIcon(t); }
@@ -59,6 +69,30 @@ export class CreateJobDialogComponent {
 
   triggerFilePicker(): void {
     this.fileInput?.nativeElement.click();
+  }
+
+  generateTitle(): void {
+    if (!this.canGenerateTitle()) return;
+    const prompt = (this.newPrompt() ?? '').trim();
+    if (prompt.length === 0) return;
+
+    this.titleGenerating.set(true);
+    this.titleGenerateError.set(null);
+    this.jobs.generateTaskTitle(prompt).subscribe({
+      next: (resp) => {
+        const t = (resp?.title ?? '').trim();
+        if (t.length > 0) this.newTitle.set(t);
+        this.titleGenerating.set(false);
+      },
+      error: (err) => {
+        const msg = err?.error?.error
+          || err?.error?.detail
+          || err?.message
+          || 'Could not generate a title. Try again or type one.';
+        this.titleGenerateError.set(msg);
+        this.titleGenerating.set(false);
+      }
+    });
   }
 
   @HostListener('document:keydown', ['$event'])

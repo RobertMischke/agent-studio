@@ -13,10 +13,32 @@
             title="Close"
             (click)="cancel.emit()">×</button>
     <h2 class="create-dialog__title">{{ title() }}</h2>
-    <label class="field">
+    <div class="field">
       <span class="field__label">Title</span>
-      <input class="field__input" [(ngModel)]="newTitle" placeholder="Task title" />
-    </label>
+      <div class="create-dialog__title-row">
+        <input class="field__input create-dialog__title-input"
+               data-testid="create-title"
+               [(ngModel)]="newTitle"
+               placeholder="Task title" />
+        <button type="button"
+                class="create-dialog__generate-btn"
+                data-testid="create-generate-title"
+                [disabled]="!canGenerateTitle()"
+                (click)="generateTitle()"
+                title="Generate a title from the prompt below (Haiku)">
+          @if (titleGenerating()) {
+            <span class="create-dialog__generate-spinner" aria-hidden="true"></span>
+            <span>Generating…</span>
+          } @else {
+            <span aria-hidden="true">✨</span>
+            <span>Generate</span>
+          }
+        </button>
+      </div>
+      @if (titleGenerateError()) {
+        <div class="create-dialog__generate-error" data-testid="create-generate-title-error">⚠ {{ titleGenerateError() }}</div>
+      }
+    </div>
     <label class="field">
       <span class="field__label">Project</span>
       <select class="field__input" data-testid="create-project-select" [(ngModel)]="newWatchPath">

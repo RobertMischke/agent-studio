@@ -712,6 +712,18 @@ export class JobService {
   }
 
   /**
+   * One-shot Haiku call that turns a free-text prompt into a short
+   * imperative English title. Drives the "Generate" button on the
+   * Create-task dialog. Returns immediately when the prompt is empty.
+   */
+  generateTaskTitle(prompt: string) {
+    return this.http.post<{ title: string }>(
+      `${this.baseUrl}/title/generate`,
+      { prompt }
+    );
+  }
+
+  /**
    * Override an orchestrator decision. Appends an intervention entry to
    * the feed, and (when `jobId` is provided) routes `newDirection`
    * through the Continue path as a Steer-mode follow-up.
