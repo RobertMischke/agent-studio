@@ -8,6 +8,12 @@ Agent Software Studio is a local AI work monitor: a .NET 10 backend plus an Angu
 
 For product context, read [README.md](README.md) and [ROADMAP.md](ROADMAP.md). The README explains what the tool is and how it is wired. The roadmap explains the product thesis, near-term themes, hard boundaries, and decision principles.
 
+## Documentation lookup
+
+[docs/README.md](docs/README.md) is the hierarchical index of every load-bearing document in this repository, with a one-line description per file. **When you need a doc and don't already know which one, start there** rather than scanning the tree blind. Categories: top-level entry points, architecture / decisions / contracts, CLI integration (per-CLI deep refs), process surfaces, mockups, research, schemas.
+
+When you add a new document under `docs/`, add a one-line row to the index in the same commit so it stays a single grep target. Mockup README files and research notes nest under their existing parent rows; they do not each get their own line.
+
 ## Edit only the dev checkout
 
 This repository is checked out twice in the parent `agent-taskboard-devspace/` folder: `agent-taskboard-dev/` (active development) and `agent-taskboard-stable/` (reference). **All edits go to the dev checkout.** Stable receives changes via `git pull` from `main` and is never edited directly.

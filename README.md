@@ -311,11 +311,15 @@ When the agent task contract or folder schema changes, run the `/sync-target-ins
 
 ## Docs
 
-- [AGENTS.md](AGENTS.md) - canonical agent instructions
-- [ROADMAP.md](ROADMAP.md) - product direction, roadmap themes, and decision principles
-- [docs/supported-clis.md](docs/supported-clis.md) - CLI integration contract
-- [docs/filesystem-contract.md](docs/filesystem-contract.md) - job folder contract
-- [docs/agent-task-contract.md](docs/agent-task-contract.md) - application and agent ownership boundary
-- [docs/skills-architecture.md](docs/skills-architecture.md) - portable skills and project lookup contract
-- [prompts/runtime/](prompts/runtime/) - editable backend runtime prompt templates
-- [PATHS.md](PATHS.md) - path conventions
+- [docs/README.md](docs/README.md) — **hierarchical lookup index** of every load-bearing document with a one-line description per file. Start here when you don't already know which doc to read.
+- [AGENTS.md](AGENTS.md) — canonical agent instructions
+- [ROADMAP.md](ROADMAP.md) — product direction, roadmap themes, and decision principles
+- [PATHS.md](PATHS.md) — path conventions
+- [prompts/runtime/](prompts/runtime/) — editable backend runtime prompt templates
+
+The four most-asked-for individual documents (the index covers the full set):
+
+- [docs/supported-clis.md](docs/supported-clis.md) — CLI integration contract
+- [docs/filesystem-contract.md](docs/filesystem-contract.md) — job folder contract
+- [docs/agent-task-contract.md](docs/agent-task-contract.md) — application and agent ownership boundary
+- [docs/architecture-decisions.md](docs/architecture-decisions.md) — ADR archive with the load-bearing decisions
