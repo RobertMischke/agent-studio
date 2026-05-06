@@ -293,6 +293,27 @@ interface VerboseDebugContext {
               <span class="failed-pickup-banner__chev" aria-hidden="true">›</span>
             </button>
           }
+          <div class="board-toolbar" data-testid="board-toolbar">
+            <div class="board-toolbar__group" role="search">
+              <span class="board-toolbar__icon" aria-hidden="true">🔍</span>
+              <input class="board-toolbar__search"
+                     type="search"
+                     data-testid="board-search-input"
+                     placeholder="Search tasks…"
+                     autocomplete="off"
+                     spellcheck="false"
+                     [value]="searchQuery()"
+                     (input)="onSearchInput($event)"
+                     (keydown.escape)="clearSearch()" />
+              @if (searchQuery()) {
+                <button type="button"
+                        class="board-toolbar__clear"
+                        data-testid="board-search-clear"
+                        title="Clear search (Esc)"
+                        (click)="clearSearch()">×</button>
+              }
+            </div>
+          </div>
           <main class="dashboard" data-testid="kanban-dashboard">
             @for (g of laneGroups(); track g.id) {
               <section class="lane-group"
@@ -1435,6 +1456,72 @@ interface VerboseDebugContext {
     .layout--focus {
       padding: 12px;
     }
+    /* Toolbar above the kanban columns. The search input is the
+       primary control; sized to feel like a single, central command
+       affordance rather than a corner widget. Future grouped controls
+       (e.g. a sort toggle) belong inside .board-toolbar__group so they
+       read as one cluster. */
+    .board-toolbar {
+      display: flex;
+      justify-content: center;
+      padding: 10px 16px 0;
+    }
+    .board-toolbar__group {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 999px;
+      padding: 4px 10px 4px 12px;
+      width: min(560px, 100%);
+      transition: border-color 0.15s ease, background 0.15s ease;
+    }
+    .board-toolbar__group:focus-within {
+      border-color: rgba(167,139,250,0.55);
+      background: rgba(255,255,255,0.06);
+    }
+    .board-toolbar__icon {
+      font-size: 13px;
+      opacity: 0.65;
+      line-height: 1;
+    }
+    .board-toolbar__search {
+      flex: 1 1 auto;
+      min-width: 0;
+      background: transparent;
+      border: 0;
+      outline: 0;
+      color: #e2e8f0;
+      font: inherit;
+      font-size: 13px;
+      padding: 6px 4px;
+    }
+    .board-toolbar__search::placeholder {
+      color: rgba(226,232,240,0.40);
+    }
+    /* Hide the WebKit/IE search clear glyphs; we render our own × button so
+       the icon is consistent across browsers and matches the dark theme. */
+    .board-toolbar__search::-webkit-search-cancel-button,
+    .board-toolbar__search::-webkit-search-decoration {
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    .board-toolbar__clear {
+      background: transparent;
+      border: 0;
+      color: rgba(226,232,240,0.55);
+      font-size: 16px;
+      line-height: 1;
+      padding: 2px 6px;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: background 0.12s ease, color 0.12s ease;
+    }
+    .board-toolbar__clear:hover {
+      background: rgba(255,255,255,0.10);
+      color: #f8fafc;
+    }
     .dashboard {
       display: flex;
       gap: 18px;
@@ -2078,6 +2165,15 @@ export class App implements OnInit {
   readonly showUpdateStable = signal(false);
   readonly showE2ECleanup = signal(false);
   readonly devToolsMenuOpen = signal(false);
+  /**
+   * Free-text query for the kanban search box. Matched as a case-insensitive
+   * substring across every JobInfo field that's loaded for the grouped view
+   * (title, id, project, agent, model, CLI, session, state, owner, phase,
+   * type, tag ids). Prompt-body text is intentionally not searched here -
+   * grouped jobs don't carry their prompts, so a "matches body" pretence
+   * would lie. Ephemeral; not persisted to localStorage.
+   */
+  readonly searchQuery = signal<string>('');
 
   readonly projectNames = computed(() => {
     return this.watchPaths().map(wp => wp.name);
@@ -2089,8 +2185,19 @@ export class App implements OnInit {
     const ownerId = this.activeClientFilter();
     const types = this.activeTypeFilter();
     const tagIds = this.activeTagFilter();
-    const noFilters = active.size === 0 && !ownerId && types.size === 0 && tagIds.size === 0;
+    const query = this.searchQuery().trim().toLowerCase();
+    const noFilters = active.size === 0 && !ownerId && types.size === 0 && tagIds.size === 0 && !query;
     if (noFilters) return grouped;
+    const matchesQuery = (j: JobInfo) => {
+      if (!query) return true;
+      const haystack = [
+        j.title, j.id, j.projectName, j.agent,
+        j.model ?? '', j.cliType ?? '', j.sessionName ?? '', j.state,
+        j.ownerClientId ?? '', j.phase ?? '', j.taskType ?? '',
+        ...(j.tags ?? []),
+      ].join(' ').toLowerCase();
+      return haystack.includes(query);
+    };
     const filterJobs = (jobs: JobInfo[]) => jobs.filter(j => {
       if (active.size > 0 && !active.has(j.projectName)) return false;
       if (ownerId && j.ownerClientId !== ownerId) return false;
@@ -2104,6 +2211,7 @@ export class App implements OnInit {
         // OR-match: card needs at least one of the selected tags.
         if (!jobTags.some(t => tagIds.has(t))) return false;
       }
+      if (!matchesQuery(j)) return false;
       return true;
     });
     const autoReviewFiltered = filterJobs(grouped.autoReview ?? grouped.review);
@@ -2756,6 +2864,15 @@ export class App implements OnInit {
     this.newWatchPath = this.pickCreateWatchPath();
     this.loadCreateModels(this.newCliType);
     this.showCreate.set(true);
+  }
+
+  onSearchInput(event: Event) {
+    const value = (event.target as HTMLInputElement).value;
+    this.searchQuery.set(value);
+  }
+
+  clearSearch() {
+    this.searchQuery.set('');
   }
 
   /**
