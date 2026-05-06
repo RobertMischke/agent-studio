@@ -46,7 +46,10 @@ async function deleteJob(jobId: string, watchPath: string): Promise<void> {
 }
 
 async function cleanup(prefix: string, watchPath: string): Promise<void> {
-  const all = await listJobs();
+  // includeFixtures so we also sweep up trios from a prior run that
+  // were created with fixture:true (the helper's old default). Without
+  // this, a re-run hits 409 on the same `id`.
+  const all = await api<{ id: string; watchPath: string }[]>('/api/jobs?includeFixtures=true');
   const stale = all.filter(j => j.watchPath === watchPath && j.id.startsWith(prefix));
   await Promise.all(stale.map(j => deleteJob(j.id, j.watchPath).catch(() => {})));
 }
@@ -155,9 +158,14 @@ async function seedThreeCardsIn(state: string, watchPath: string, prefix: string
   const titleC = `${prefix}C-${Date.now() + 2}`;
   const startState = createTarget ?? state;
   const createState = startState === '0-backlog' ? '0-backlog' : startState === '2-ready' ? '2-ready' : '0-backlog';
-  const a = await createJob({ id: `${prefix}A`, title: titleA, watchPath, targetState: createState });
-  const b = await createJob({ id: `${prefix}B`, title: titleB, watchPath, targetState: createState });
-  const c = await createJob({ id: `${prefix}C`, title: titleC, watchPath, targetState: createState });
+  // fixture: false so the seeded cards are visible on the kanban. The
+  // backend's /api/jobs/grouped endpoint hides fixture jobs by default,
+  // and the frontend never passes ?includeFixtures=true, so a fixture
+  // job would be invisible to the UI assertions below. Cleanup in the
+  // surrounding test deletes the trio whether the test passes or fails.
+  const a = await createJob({ id: `${prefix}A`, title: titleA, watchPath, targetState: createState, fixture: false });
+  const b = await createJob({ id: `${prefix}B`, title: titleB, watchPath, targetState: createState, fixture: false });
+  const c = await createJob({ id: `${prefix}C`, title: titleC, watchPath, targetState: createState, fixture: false });
   if (createState !== state) {
     await moveJob(a.id, watchPath, state);
     await moveJob(b.id, watchPath, state);
