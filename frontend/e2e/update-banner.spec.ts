@@ -1,72 +1,61 @@
 import { expect, test } from '@playwright/test';
 
 /**
- * Update banner contract: the four mutually-exclusive modes that the
- * <app-update-banner /> component renders, observed end-to-end against
- * the real UpdateService at :5039.
+ * Update surface contract (phase 2): version badge in the header, an
+ * Update Center drawer behind it, a full-screen block modal during a
+ * run, and a small done/failed toast after.
  *
- * This spec is intentionally agnostic about how stable was started: it
- * only asserts that *one* of the four banner test-ids is consistent
- * with the live /update/status snapshot, plus that the dismiss path on
- * a "done" banner clears it.
- *
- * Skips when the UpdateService is not reachable (e.g. CI without the
- * sibling process), so it does not become a flaky required test.
+ * Skips when the standalone UpdateService is not reachable so a CI run
+ * without the sibling process does not turn red.
  */
-test.describe('update banner', () => {
+test.describe('update surface', () => {
   test.beforeEach(async ({ page, baseURL }) => {
-    // Assume the FE points at stable; the service base URL it polls is
-    // host-of-FE:5039 (see UpdateClientService).
     const url = new URL(baseURL ?? 'http://localhost:4011');
     const probe = await page.request.get(`${url.protocol}//${url.hostname}:5039/healthz`).catch(() => null);
-    test.skip(!probe?.ok(), 'UpdateService not reachable on :5039; skipping banner spec.');
+    test.skip(!probe?.ok(), 'UpdateService not reachable on :5039.');
   });
 
-  test('mounts and reflects current status', async ({ page }) => {
-    await page.goto('/', { waitUntil: 'domcontentloaded' });
-    // Give the first poll a chance to land. The service answers in <50ms,
-    // so 3s covers a slow CI machine.
-    await page.waitForTimeout(3000);
-
-    const counts = {
-      running: await page.locator('[data-testid="update-banner-running"]').count(),
-      behind:  await page.locator('[data-testid="update-banner-behind"]').count(),
-      done:    await page.locator('[data-testid="update-banner-done"]').count(),
-      failed:  await page.locator('[data-testid="update-banner-failed"]').count(),
-    };
-    const total = counts.running + counts.behind + counts.done + counts.failed;
-    // 0 or 1 visible banners; never multiple at once.
-    expect(total, 'at most one banner mode should be visible').toBeLessThanOrEqual(1);
-  });
-
-  test('done banner can be dismissed', async ({ page, baseURL }) => {
-    // Set up: the easiest way to put the banner into "done" mode is to
-    // trigger an update against the up-to-date stable. The orchestrator
-    // does a no-op git pull and reports done; we do not have to actually
-    // change HEAD. Trigger via the service, then load the page.
-    const url = new URL(baseURL ?? 'http://localhost:4011');
-    const triggerResp = await page.request.post(`${url.protocol}//${url.hostname}:5039/update/trigger`, {
-      data: { reason: 'spec dismiss test', force: false },
-      headers: { 'Content-Type': 'application/json' }
-    });
-    expect(triggerResp.status(), 'trigger should be 202 Accepted').toBe(202);
-
-    // Wait for orchestration to settle (no-op pull + restart waits ~30s).
-    // Poll status until phase != preparing/pausing-runners/pulling/restarting/resuming.
-    for (let i = 0; i < 60; i++) {
-      const st = await page.request.get(`${url.protocol}//${url.hostname}:5039/update/status`);
-      const body = await st.json();
-      if (body.phase === 'done' || body.phase === 'failed') break;
-      await page.waitForTimeout(1000);
-    }
-
+  test('version badge renders the product version + short SHA', async ({ page }) => {
     await page.goto('/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(2500);
 
-    const done = page.locator('[data-testid="update-banner-done"]');
-    await expect(done, 'done banner should be visible after a no-op trigger').toBeVisible();
+    const badge = page.locator('[data-testid="version-badge"]').first();
+    await expect(badge).toBeVisible();
+    const text = await badge.innerText();
+    // Expect at least "v" followed by something, plus a 7-char SHA.
+    expect(text).toMatch(/^v[\d.]+/);
+    expect(text).toMatch(/[0-9a-f]{7}/);
+  });
 
-    await page.locator('[data-testid="update-banner-dismiss"]').click();
-    await expect(done, 'done banner should disappear after dismiss').not.toBeVisible();
+  test('update center drawer opens and closes', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(2500);
+
+    await page.locator('[data-testid="version-badge"]').first().click();
+    const center = page.locator('[data-testid="update-center"]');
+    await expect(center).toBeVisible();
+
+    await page.locator('[data-testid="update-center-close"]').click();
+    await expect(center).not.toBeVisible();
+  });
+
+  test('manual trigger from update center surfaces the block modal', async ({ page }) => {
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(2500);
+
+    await page.locator('[data-testid="version-badge"]').first().click();
+    await expect(page.locator('[data-testid="update-center"]')).toBeVisible();
+
+    await page.locator('[data-testid="update-center-trigger"]').click();
+
+    // Block modal must appear within ~5 s (FE switches to 2 s polling
+    // immediately after the trigger() helper resolves).
+    const block = page.locator('[data-testid="update-block-modal"]');
+    await expect(block, 'block modal should appear within 5 s').toBeVisible({ timeout: 5_000 });
+    const phase = await page.locator('[data-testid="update-block-phase"]').innerText();
+    expect(phase.length).toBeGreaterThan(0);
+
+    // Wait for the run to settle.
+    await expect(block, 'block modal should clear when the run is done').not.toBeVisible({ timeout: 90_000 });
   });
 });
