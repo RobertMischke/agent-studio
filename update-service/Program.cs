@@ -84,7 +84,12 @@ app.MapGet("/update/history", (UpdateStatusStore store, int? max) =>
 // Manual trigger.
 //   - Honours optional ATP_UPDATE_TOKEN: send as X-Update-Token header.
 //   - Body { reason?, force? } is recorded in history.
-app.MapPost("/update/trigger", async (HttpContext ctx, UpdateOrchestrator orch, UpdateServiceOptions opt, CancellationToken ct) =>
+//   - The orchestration is intentionally decoupled from the HTTP request's
+//     cancellation: a client that gives up (e.g. Playwright's 30 s default)
+//     must not abort an in-flight stable restart. We tie cancellation to
+//     the application's stopping token so the only thing that can cancel
+//     the run is a process shutdown.
+app.MapPost("/update/trigger", async (HttpContext ctx, UpdateOrchestrator orch, UpdateServiceOptions opt, IHostApplicationLifetime lifetime, CancellationToken ct) =>
 {
     if (!string.IsNullOrEmpty(opt.TriggerToken))
     {
@@ -97,7 +102,7 @@ app.MapPost("/update/trigger", async (HttpContext ctx, UpdateOrchestrator orch, 
     try { body = await ctx.Request.ReadFromJsonAsync<TriggerRequest>(ct); } catch { /* empty body OK */ }
 
     var force = body?.Force ?? false;
-    var (runId, phase, message) = await orch.TriggerAsync(trigger: "manual", force: force, ct);
+    var (runId, phase, message) = await orch.TriggerAsync(trigger: "manual", force: force, lifetime.ApplicationStopping);
     var status = (phase == "failed") ? 500 : 200;
     return Results.Json(new TriggerResponse(runId, phase, message), statusCode: status);
 });
