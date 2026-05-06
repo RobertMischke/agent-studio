@@ -155,29 +155,27 @@ async function installFixtureRoutes(
   const projectHygiene = JSON.stringify({ ...hygiene, job: null });
   const jobHygiene = JSON.stringify(hygiene);
 
-  // Intercept the targeted job's reads.
-  await page.route(`**/api/jobs/${encodeURIComponent(target.id)}?**`, (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: detail }));
-  await page.route(`**/api/jobs/${encodeURIComponent(target.id)}/output?**`, (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
-  await page.route(`**/api/jobs/${encodeURIComponent(target.id)}/runs?**`, (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ runs: [] }) }));
-  await page.route(`**/api/jobs/${encodeURIComponent(target.id)}/session-events?**`, (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ events: [], sessionChain: [] }) }));
-  await page.route(`**/api/jobs/${encodeURIComponent(target.id)}/claude-session?**`, (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: 'null' }));
-  await page.route(`**/api/jobs/${encodeURIComponent(target.id)}/git/hygiene?**`, (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: jobHygiene }));
+  // Playwright route handlers fire LIFO: the *most recently registered*
+  // matching handler wins. Register the catch-all first so the
+  // specifically-targeted routes registered below take precedence.
+  await page.route('**/api/**', (route) => {
+    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => {});
+  });
 
   // Cross-cutting reads that fire on every navigation. Stub minimally so
   // the app boots cleanly even when the backend is offline (the dev
   // backend is offline by default per AGENTS.md "Dev backend lifecycle").
-  await page.route('**/api/git/hygiene?**', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: projectHygiene }));
   await page.route('**/api/jobs', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
   await page.route('**/api/jobs/grouped**', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({}) }));
+    route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({
+        preparation: [], orchestratorPrep: [], needsHumanReview: [],
+        ready: [], progress: [], failedPickup: [],
+        autoReview: [], humanReview: [], completed: [], archive: []
+      })
+    }));
   await page.route('**/api/watch-paths**', (route) =>
     route.fulfill({
       status: 200, contentType: 'application/json',
@@ -185,6 +183,8 @@ async function installFixtureRoutes(
     }));
   await page.route('**/api/git/summary**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+  await page.route(/\/api\/git\/hygiene(\?|$)/, (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: projectHygiene }));
   await page.route('**/api/environment**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ isDev: false, devTools: { updateStableEnabled: false, deleteE2EJobsEnabled: false } }) }));
   await page.route('**/api/agent-rules**', (route) =>
@@ -196,11 +196,22 @@ async function installFixtureRoutes(
   await page.route('**/api/cli/quota**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [] }) }));
 
-  // Catch-all for any other backend probe so an unmocked request doesn't
-  // flood the UI with an error dialog that intercepts pointer events.
-  await page.route('**/api/**', (route) => {
-    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }).catch(() => {});
-  });
+  // Targeted job reads - registered last so they win over the catch-all.
+  // Playwright's glob mode treats `?` as a single-character wildcard, so
+  // we use regex patterns here to match the literal `?` query separator.
+  const idEsc = target.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  await page.route(new RegExp(`/api/jobs/${idEsc}/output(\\?|$)`), (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
+  await page.route(new RegExp(`/api/jobs/${idEsc}/runs(\\?|$)`), (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ runs: [] }) }));
+  await page.route(new RegExp(`/api/jobs/${idEsc}/session-events(\\?|$)`), (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ events: [], sessionChain: [] }) }));
+  await page.route(new RegExp(`/api/jobs/${idEsc}/claude-session(\\?|$)`), (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: 'null' }));
+  await page.route(new RegExp(`/api/jobs/${idEsc}/git/hygiene(\\?|$)`), (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: jobHygiene }));
+  await page.route(new RegExp(`/api/jobs/${idEsc}(\\?|$)`), (route) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: detail }));
 }
 
 const TARGET = { id: 'fixture-job', watchPath: 'C:/fixtures/repo' };
@@ -212,12 +223,27 @@ const TARGET = { id: 'fixture-job', watchPath: 'C:/fixtures/repo' };
 // reviewer expects.
 const RESULTS_DIR = process.env.JOB_RESULTS_DIR ?? '';
 
+async function dismissAnyErrorDialog(page: Page) {
+  // The app's global error-dialog overlay intercepts pointer events when
+  // any backend probe fails. Our route handlers cover every /api/ call we
+  // know about, but a transient pre-mock request from the page.goto can
+  // still trigger one. Close it before continuing so the pane toggles
+  // are clickable.
+  const close = page.locator('.error-dialog__close').first();
+  for (let i = 0; i < 3; i++) {
+    if (!(await close.isVisible().catch(() => false))) return;
+    await close.click({ timeout: 1_000 }).catch(() => {});
+    await page.waitForTimeout(150);
+  }
+}
+
 async function ensureProtocolPaneOpen(page: Page) {
+  await dismissAnyErrorDialog(page);
   // The pane-toggle-bar persists visibility to localStorage. A prior run
   // that closed the Protocol pane will leave it hidden for us; open it
   // explicitly so the strip's host pane is mounted.
   if (!(await page.getByTestId('pane-protocol').isVisible())) {
-    const toggle = page.getByRole('button', { name: /Protocol/i }).first();
+    const toggle = page.getByTestId('pane-toggle-protocol');
     if (await toggle.isVisible()) await toggle.click();
   }
   await expect(page.getByTestId('pane-protocol')).toBeVisible({ timeout: 10_000 });
