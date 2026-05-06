@@ -38,9 +38,7 @@ test.beforeAll(async () => {
   projectPath = preferred.path;
 });
 
-test.beforeEach(async ({}, testInfo) => {
-  // eslint-disable-next-line no-console
-  console.log(`[BE-START] ${new Date().toISOString()} ${testInfo.title}`);
+test.beforeEach(async () => {
   // Wipe the drift folder for this project so each test starts from a known
   // baseline. Two strategies because Windows occasionally locks the index
   // file (the InMemoryStore briefly opens it during a refresh): try
@@ -71,19 +69,9 @@ test.beforeEach(async ({}, testInfo) => {
     } catch { /* tolerate transient errors */ }
     await new Promise(r => setTimeout(r, 250));
   }
-  // eslint-disable-next-line no-console
-  console.log(`[BE-DONE]  ${new Date().toISOString()} ${testInfo.title}`);
 });
 
 test('empty state: section visible with action buttons; no scored block', async ({ page }) => {
-  // Sanity check: the API really should return zero reports right now.
-  const apiCheck = await api<{ reports: { reportId: string }[] }>(`/api/drift/${encodeURIComponent(projectName)}/reports?refresh=true`);
-  // eslint-disable-next-line no-console
-  console.log(`[empty-state-pre] api count=${apiCheck.reports?.length ?? 0}`);
-  if ((apiCheck.reports?.length ?? 0) > 0) {
-    // eslint-disable-next-line no-console
-    console.log(`[empty-state-pre] stale ids: ${apiCheck.reports.map(r => r.reportId).join(',')}`);
-  }
   await openProjectDetail(page);
 
   const section = page.getByTestId('project-drift-overview-section');
@@ -107,7 +95,7 @@ test('empty state: section visible with action buttons; no scored block', async 
 });
 
 test('scored report: overall score, band, summary, dimension cards, history row', async ({ page }) => {
-  plantDriftReport(driftDir(projectPath, projectName), {
+  const reportId = plantDriftReport(driftDir(projectPath, projectName), {
     overall: 78,
     band: 'Watch',
     summary: 'Two dimensions tracked; architecture docs slightly stale.',
@@ -124,7 +112,7 @@ test('scored report: overall score, band, summary, dimension cards, history row'
       followUp('Refresh ADR archive against current services', 'High', 'Architecture'),
     ],
   });
-  await api(`/api/drift/${encodeURIComponent(projectName)}/reports?refresh=true`);
+  await waitForReportVisible(reportId);
 
   await openProjectDetail(page);
   const section = page.getByTestId('project-drift-overview-section');
@@ -156,7 +144,7 @@ test('scored report: overall score, band, summary, dimension cards, history row'
 });
 
 test('dimension drill-down: panel renders evidence and findings', async ({ page }) => {
-  plantDriftReport(driftDir(projectPath, projectName), {
+  const reportId = plantDriftReport(driftDir(projectPath, projectName), {
     overall: 64,
     band: 'Warn',
     summary: 'Architecture and Schema drift; finding-level evidence available.',
@@ -179,7 +167,7 @@ test('dimension drill-down: panel renders evidence and findings', async ({ page 
     ],
     followUps: [],
   });
-  await api(`/api/drift/${encodeURIComponent(projectName)}/reports?refresh=true`);
+  await waitForReportVisible(reportId);
 
   await openProjectDetail(page);
   await expect(page.getByTestId('project-drift-overview-section')).toBeAttached({ timeout: 30_000 });
@@ -210,14 +198,14 @@ test('unstructured / malformed JSON: warning chip on history row, drilldown stil
   // each render their parse-status chip; clicking either opens the report
   // drilldown with the Markdown body intact (scores never hide evidence).
   const dir = driftDir(projectPath, projectName);
-  plantDriftReport(dir, {
+  const unstructuredId = plantDriftReport(dir, {
     overall: 0, band: 'Unknown',
     summary: 'Evidence assembled; no agent narrative supplied.',
     parseStatus: 'Unstructured',
     dimensions: [],
     followUps: [],
   });
-  plantDriftReport(dir, {
+  const malformedId = plantDriftReport(dir, {
     overall: 0, band: 'Unknown',
     summary: 'Sidecar JSON failed to parse; Markdown body still readable.',
     parseStatus: 'MalformedJson',
@@ -225,7 +213,8 @@ test('unstructured / malformed JSON: warning chip on history row, drilldown stil
     dimensions: [],
     followUps: [],
   });
-  await api(`/api/drift/${encodeURIComponent(projectName)}/reports?refresh=true`);
+  await waitForReportVisible(unstructuredId);
+  await waitForReportVisible(malformedId);
 
   await openProjectDetail(page);
   await expect(page.getByTestId('project-drift-overview-section')).toBeAttached({ timeout: 30_000 });
@@ -249,7 +238,7 @@ test('unstructured / malformed JSON: warning chip on history row, drilldown stil
 });
 
 test('follow-up task creation: clicking a finding follow-up queues a 1-preparation job', async ({ page }) => {
-  plantDriftReport(driftDir(projectPath, projectName), {
+  const reportId = plantDriftReport(driftDir(projectPath, projectName), {
     overall: 50,
     band: 'Warn',
     summary: 'Schema drift with one tracked finding.',
@@ -269,7 +258,7 @@ test('follow-up task creation: clicking a finding follow-up queues a 1-preparati
     ],
     followUps: [],
   });
-  await api(`/api/drift/${encodeURIComponent(projectName)}/reports?refresh=true`);
+  await waitForReportVisible(reportId);
 
   await openProjectDetail(page);
   await expect(page.getByTestId('project-drift-overview-section')).toBeAttached({ timeout: 30_000 });
@@ -312,6 +301,23 @@ async function openProjectDetail(page: Page): Promise<void> {
   await page.goto('/');
   await page.getByTestId(`project-detail-${projectName}`).click();
   await expect(page.getByTestId('project-detail')).toBeVisible({ timeout: 10_000 });
+}
+
+/**
+ * Poll the dev backend until /reports?refresh=true returns the expected
+ * report id. Closes the disk-projection-cache race that otherwise lets the
+ * page navigate before the InMemoryStore has re-loaded from disk.
+ */
+async function waitForReportVisible(reportId: string, timeoutMs = 5000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const resp = await api<{ reports: { reportId: string }[] }>(`/api/drift/${encodeURIComponent(projectName)}/reports?refresh=true&_=${Date.now()}`);
+      if ((resp.reports ?? []).some(r => r.reportId === reportId)) return;
+    } catch { /* tolerate transient errors */ }
+    await new Promise(r => setTimeout(r, 100));
+  }
+  throw new Error(`drift report ${reportId} not visible after ${timeoutMs}ms; the projection cache did not catch up to disk.`);
 }
 
 interface PlantedDimension {

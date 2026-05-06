@@ -10,6 +10,7 @@ import { ProjectDetailComponent } from './components/project-detail';
 import { ProjectShellComponent } from './components/project-shell/project-shell.component';
 import { SecurityPanelComponent } from './components/security-panel/security-panel.component';
 import { ProjectTokenUsagePanelComponent } from './components/project-token-usage/project-token-usage-panel.component';
+import { ProjectObservabilityPanelComponent } from './components/project-observability/project-observability-panel.component';
 import {
   DEFAULT_PROJECT_RAIL_KEY,
   isProjectRailKey,
@@ -49,7 +50,7 @@ interface VerboseDebugContext {
 
 @Component({
   selector: 'app-root',
-  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, ProjectShellComponent, SecurityPanelComponent, ProjectTokenUsagePanelComponent, AnalysisReportDrilldownComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceTokenTimelineComponent, WorkspaceScreenshotsComponent, WorkspaceBannerComponent, VerboseDebugOverlayComponent, CliAdminPanelComponent],
+  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, ProjectShellComponent, SecurityPanelComponent, ProjectTokenUsagePanelComponent, ProjectObservabilityPanelComponent, AnalysisReportDrilldownComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceTokenTimelineComponent, WorkspaceScreenshotsComponent, WorkspaceBannerComponent, VerboseDebugOverlayComponent, CliAdminPanelComponent],
   // Keep styles global to this subtree — the App shell still owns the
   // .header*, .filter-chip*, .overlay*, .create-dialog*, .error-dialog*
   // class rules used by the extracted dialogs and project-tabs.
@@ -323,7 +324,7 @@ interface VerboseDebugContext {
             <app-project-shell
               [projectName]="projShell"
               [activeRail]="projectShellRail()"
-              [hasCustomPanel]="projectShellRail() === 'security' || projectShellRail() === 'token-usage'"
+              [hasCustomPanel]="projectShellRail() === 'security' || projectShellRail() === 'token-usage' || projectShellRail() === 'observability'"
               (railChange)="onProjectShellRailChange($event)"
               (openFeed)="onOpenFeedFromShell()"
               (closeShell)="closeProjectShell()">
@@ -339,6 +340,12 @@ interface VerboseDebugContext {
               @defer (when projectShellRail() === 'token-usage') {
                 @if (projectShellRail() === 'token-usage') {
                   <app-project-token-usage-panel
+                    [projectName]="projShell" />
+                }
+              }
+              @defer (when projectShellRail() === 'observability') {
+                @if (projectShellRail() === 'observability') {
+                  <app-project-observability-panel
                     [projectName]="projShell" />
                 }
               }

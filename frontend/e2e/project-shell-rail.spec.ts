@@ -34,7 +34,7 @@ interface WatchPath { name: string; path: string }
  * `project-shell-panel-desc`, and `project-shell-panel-empty` for these
  * keys; the per-slice spec asserts the real content instead.
  */
-const RAILS_WITH_CUSTOM_PANEL = new Set<string>(['security', 'token-usage']);
+const RAILS_WITH_CUSTOM_PANEL = new Set<string>(['security', 'token-usage', 'observability']);
 
 const RAIL_ITEMS: ReadonlyArray<{ key: string; label: string; title: string; descriptionFragment: string }> = [
   { key: 'overview',     label: 'Overview',        title: 'Overview',        descriptionFragment: 'Snapshot of project health' },
@@ -43,6 +43,7 @@ const RAIL_ITEMS: ReadonlyArray<{ key: string; label: string; title: string; des
   { key: 'uxui',         label: 'UX/UI',           title: 'UX/UI',           descriptionFragment: 'Design references' },
   { key: 'test-quality', label: 'Test Quality',    title: 'Test Quality',    descriptionFragment: 'Backend tests, end-to-end tests' },
   { key: 'token-usage',  label: 'Token Usage',     title: 'Token Usage',     descriptionFragment: 'Inference spend by job' },
+  { key: 'observability',label: 'Observability',   title: 'Observability',   descriptionFragment: 'Agent communication on the message bus' },
   { key: 'audits',       label: 'Audits & Checks', title: 'Audits & Checks', descriptionFragment: 'Review definitions, per-task checks' },
   { key: 'jobs',         label: 'Jobs',            title: 'Jobs',            descriptionFragment: 'Tasks queued, in progress' },
   { key: 'settings',     label: 'Settings',        title: 'Settings',        descriptionFragment: 'How the orchestrator behaves' },

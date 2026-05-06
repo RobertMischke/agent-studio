@@ -15,6 +15,7 @@ export type ProjectRailKey =
   | 'uxui'
   | 'test-quality'
   | 'token-usage'
+  | 'observability'
   | 'audits'
   | 'jobs'
   | 'settings'
@@ -90,6 +91,15 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Inference spend by job, supporting runs, orchestrator turns, and time window',
     empty: 'Token Usage placeholder. Heatmap, timeline, and per-job drill-down land in a later slice.',
     icon: '▦',
+  },
+  {
+    key: 'observability',
+    group: 'project',
+    label: 'Observability',
+    panelTitle: 'Observability',
+    description: 'Agent communication on the message bus: timeline, participants, kinds, token usage',
+    empty: 'No bus messages for this project yet. Once the orchestrator, an agent, or the supervisor speaks, the timeline and counters fill in here.',
+    icon: '📡',
   },
   {
     key: 'audits',
