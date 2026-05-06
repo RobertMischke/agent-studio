@@ -14,13 +14,25 @@ public sealed record UpdateStatus(
     string HeadLocal,                // short SHA, e.g. "9973f03"
     string? HeadOrigin,              // short SHA from last fetch, null until first fetch
     int BehindBy,                    // commits stable is behind origin/main; 0 = up to date
+    IReadOnlyList<CommitInfo> PendingCommits, // up to 50 commits HEAD..origin/main, newest first
     DateTime? LastFetchAt,
     DateTime? LastUpdateAt,          // last time an update completed (any status)
     DateTime? LastSuccessAt,         // last time an update completed with status=ok
     bool IsRunning,                  // shorthand: Phase != idle && Phase != done && Phase != failed
     bool BackendReachable,           // last health probe of the main backend
-    string Version,                  // own version string (assembly version), so the FE can spot upgrades
+    string ServiceVersion,           // UpdateService assembly version (was Version)
+    string ProductVersion,           // semver from the VERSION file at repo root
     string Mode                      // "manual" | "scheduled"; phase-2 will use this
+);
+
+/// <summary>
+/// One git commit summary, used for "what's new in this update" lists.
+/// </summary>
+public sealed record CommitInfo(
+    string Sha,                      // short SHA
+    string Subject,                  // first line of the commit message
+    string Author,                   // author name
+    DateTime AuthorDate              // author date in UTC
 );
 
 /// <summary>

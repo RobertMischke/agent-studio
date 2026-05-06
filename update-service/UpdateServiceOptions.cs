@@ -40,6 +40,13 @@ public sealed class UpdateServiceOptions
     /// <summary>Append-only history.</summary>
     public string HistoryFile { get; set; } = @"C:\Projects\agent-taskboard-workspace\logs\stable-updates.jsonl";
 
+    /// <summary>
+    /// Path to the user-curated VERSION file at the repo root. One line of
+    /// SemVer ("0.1.0"). Re-read at every status mutation so a `git pull`
+    /// that bumps it is reflected immediately.
+    /// </summary>
+    public string VersionFile { get; set; } = @"C:\Projects\agent-taskboard-devspace\agent-taskboard-stable\VERSION";
+
     /// <summary>How often the bookkeeping ticker probes git+backend.</summary>
     public int ProbeIntervalSeconds { get; set; } = 30;
 

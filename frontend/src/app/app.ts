@@ -39,6 +39,9 @@ import { WorkspaceTokenTimelineComponent } from './components/workspace-token-ti
 import { WorkspaceScreenshotsComponent } from './components/workspace-screenshots';
 import { WorkspaceBannerComponent } from './components/workspace-banner';
 import { UpdateBannerComponent } from './components/update-banner/update-banner.component';
+import { UpdateVersionBadgeComponent } from './components/update-version-badge/update-version-badge.component';
+import { UpdateCenterComponent } from './components/update-center/update-center.component';
+import { UpdateBlockModalComponent } from './components/update-block-modal/update-block-modal.component';
 import { CliAdminPanelComponent } from './components/cli-admin-panel';
 import { JobScreenshot, RunTimeline, JobTokenSummary, CliOutputLine } from './models/job.model'; // verbose-debug overlay context types
 import { VerboseDebugOverlayComponent } from './components/verbose-debug/verbose-debug-overlay.component';
@@ -54,7 +57,7 @@ interface VerboseDebugContext {
 
 @Component({
   selector: 'app-root',
-  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, ProjectShellComponent, SecurityPanelComponent, ProjectTokenUsagePanelComponent, ProjectObservabilityPanelComponent, ProjectProductRuntimePanelComponent, ProjectSteeringDocsSectionComponent, AnalysisReportDrilldownComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceTokenTimelineComponent, WorkspaceScreenshotsComponent, WorkspaceBannerComponent, UpdateBannerComponent, VerboseDebugOverlayComponent, CliAdminPanelComponent],
+  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, ProjectShellComponent, SecurityPanelComponent, ProjectTokenUsagePanelComponent, ProjectObservabilityPanelComponent, ProjectProductRuntimePanelComponent, ProjectSteeringDocsSectionComponent, AnalysisReportDrilldownComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceTokenTimelineComponent, WorkspaceScreenshotsComponent, WorkspaceBannerComponent, UpdateBannerComponent, UpdateVersionBadgeComponent, UpdateCenterComponent, UpdateBlockModalComponent, VerboseDebugOverlayComponent, CliAdminPanelComponent],
   // Keep styles global to this subtree — the App shell still owns the
   // .header*, .filter-chip*, .overlay*, .create-dialog*, .error-dialog*
   // class rules used by the extracted dialogs and project-tabs.
@@ -83,6 +86,7 @@ interface VerboseDebugContext {
           (openDetail)="openProjectDetail($event)"
           (openShell)="openProjectShell($event)" />
         <div class="header__actions">
+          <app-update-version-badge />
           <label class="client-filter" data-testid="client-filter">
             <span class="client-filter__label">Owner:</span>
             <select class="client-filter__select"
@@ -144,6 +148,8 @@ interface VerboseDebugContext {
       </header>
 
       <app-update-banner />
+      <app-update-center />
+      <app-update-block-modal />
       <app-workspace-banner [projects]="bannerProjects()" />
 
       <div class="app__body">

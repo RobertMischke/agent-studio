@@ -16,6 +16,7 @@ options.BackendUrl      = Environment.GetEnvironmentVariable("ATP_BACKEND_URL") 
 options.HistoryFile     = Environment.GetEnvironmentVariable("ATP_UPDATE_HISTORY")      ?? options.HistoryFile;
 options.TriggerToken    = Environment.GetEnvironmentVariable("ATP_UPDATE_TOKEN")        ?? options.TriggerToken;
 options.BashPath        = Environment.GetEnvironmentVariable("ATP_BASH_PATH")           ?? options.BashPath;
+options.VersionFile     = Environment.GetEnvironmentVariable("ATP_VERSION_FILE")        ?? options.VersionFile;
 
 builder.Services.AddSingleton(options);
 builder.Services.AddHttpClient();
@@ -38,7 +39,21 @@ builder.Services.AddSingleton(sp =>
 {
     var logger = sp.GetRequiredService<ILogger<UpdateStatusStore>>();
     var git = sp.GetRequiredService<GitProbe>();
-    return new UpdateStatusStore(options.HistoryFile, git.HeadShort(), logger);
+    Func<string> readVersion = () =>
+    {
+        // First non-empty trimmed line of the VERSION file. The function
+        // is invoked from inside the store every time the snapshot moves,
+        // so we accept the file IO cost (it's <100 bytes).
+        var path = options.VersionFile;
+        if (!File.Exists(path)) return "unknown";
+        foreach (var line in File.ReadAllLines(path))
+        {
+            var trimmed = line.Trim();
+            if (trimmed.Length > 0 && !trimmed.StartsWith("#")) return trimmed;
+        }
+        return "unknown";
+    };
+    return new UpdateStatusStore(options.HistoryFile, git.HeadShort(), readVersion, logger);
 });
 
 builder.Services.AddSingleton<UpdateOrchestrator>();

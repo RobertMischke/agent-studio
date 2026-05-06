@@ -43,7 +43,11 @@ public sealed class PeriodicProbeService : BackgroundService
                 if (!string.IsNullOrEmpty(head)) _store.SetHead(head);
 
                 var (origin, behindBy) = _git.FetchAndCompare();
-                if (!string.IsNullOrEmpty(origin)) _store.SetFetchResult(origin, behindBy);
+                if (!string.IsNullOrEmpty(origin))
+                {
+                    var pending = behindBy > 0 ? _git.PendingCommits(50) : Array.Empty<CommitInfo>();
+                    _store.SetFetchResult(origin, behindBy, pending);
+                }
 
                 var healthy = await _backend.IsHealthyAsync(stoppingToken);
                 _store.SetBackendReachable(healthy);

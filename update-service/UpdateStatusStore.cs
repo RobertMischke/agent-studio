@@ -12,19 +12,18 @@ public sealed class UpdateStatusStore
     private readonly object _lock = new();
     private readonly string _historyFile;
     private readonly ILogger<UpdateStatusStore> _logger;
-    private readonly string _version;
+    private readonly string _serviceVersion;
+    private readonly Func<string> _readProductVersion;
 
     private UpdateStatus _status;
-    private DateTime? _lastFetchAt;
-    private string? _headOrigin;
-    private int _behindBy;
     private bool _backendReachable;
 
-    public UpdateStatusStore(string historyFile, string headLocal, ILogger<UpdateStatusStore> logger)
+    public UpdateStatusStore(string historyFile, string headLocal, Func<string> readProductVersion, ILogger<UpdateStatusStore> logger)
     {
         _historyFile = historyFile;
         _logger = logger;
-        _version = typeof(UpdateStatusStore).Assembly.GetName().Version?.ToString() ?? "0.0.0";
+        _readProductVersion = readProductVersion;
+        _serviceVersion = typeof(UpdateStatusStore).Assembly.GetName().Version?.ToString() ?? "0.0.0";
         _status = new UpdateStatus(
             Phase: "idle",
             Message: null,
@@ -34,14 +33,21 @@ public sealed class UpdateStatusStore
             HeadLocal: headLocal,
             HeadOrigin: null,
             BehindBy: 0,
+            PendingCommits: Array.Empty<CommitInfo>(),
             LastFetchAt: null,
             LastUpdateAt: null,
             LastSuccessAt: HydrateLastSuccess(),
             IsRunning: false,
             BackendReachable: false,
-            Version: _version,
+            ServiceVersion: _serviceVersion,
+            ProductVersion: SafeReadVersion(),
             Mode: "manual"
         );
+    }
+
+    private string SafeReadVersion()
+    {
+        try { return _readProductVersion(); } catch { return "unknown"; }
     }
 
     public UpdateStatus Get()
@@ -53,18 +59,27 @@ public sealed class UpdateStatusStore
     {
         lock (_lock)
         {
-            _status = _status with { HeadLocal = headLocal };
+            // Refresh ProductVersion alongside HEAD so a `git pull` that
+            // changes the VERSION file is reflected at the same instant
+            // the new SHA is published. Otherwise the FE can briefly see
+            // "new HEAD, old version" which looks like a bug.
+            _status = _status with { HeadLocal = headLocal, ProductVersion = SafeReadVersion() };
         }
     }
 
-    public void SetFetchResult(string headOrigin, int behindBy)
+    public void SetFetchResult(string headOrigin, int behindBy, IReadOnlyList<CommitInfo> pending)
     {
         lock (_lock)
         {
-            _lastFetchAt = DateTime.UtcNow;
-            _headOrigin = headOrigin;
-            _behindBy = behindBy;
-            _status = _status with { HeadOrigin = headOrigin, BehindBy = behindBy, LastFetchAt = _lastFetchAt };
+            var now = DateTime.UtcNow;
+            _status = _status with
+            {
+                HeadOrigin = headOrigin,
+                BehindBy = behindBy,
+                PendingCommits = pending,
+                LastFetchAt = now,
+                ProductVersion = SafeReadVersion(),
+            };
         }
     }
 

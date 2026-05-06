@@ -35,6 +35,35 @@ public sealed class GitProbe
         return (origin, behindBy);
     }
 
+    /// <summary>
+    /// One-line summary of every commit in HEAD..origin/main, newest first.
+    /// Capped at <paramref name="max"/> entries so a long backlog doesn't
+    /// blow up the status JSON. Returns an empty list when behindBy=0 or
+    /// when git fails.
+    /// </summary>
+    public IReadOnlyList<CommitInfo> PendingCommits(int max = 50)
+    {
+        // Format: <sha>\t<subject>\t<author>\t<iso-date>
+        // The unit-separator chars are unlikely in commit messages but we
+        // still split by tab; subjects with tabs are extremely rare.
+        var fmt = "%h%x09%s%x09%an%x09%aI";
+        var raw = Run("log", "--no-merges", $"--max-count={max}",
+                      $"--pretty=format:{fmt}", "HEAD..origin/main");
+        if (string.IsNullOrWhiteSpace(raw)) return Array.Empty<CommitInfo>();
+
+        var list = new List<CommitInfo>();
+        foreach (var line in raw.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var parts = line.Split('\t', 4);
+            if (parts.Length < 4) continue;
+            DateTime.TryParse(parts[3], null,
+                System.Globalization.DateTimeStyles.AssumeUniversal | System.Globalization.DateTimeStyles.AdjustToUniversal,
+                out var when);
+            list.Add(new CommitInfo(parts[0].Trim(), parts[1].Trim(), parts[2].Trim(), when));
+        }
+        return list;
+    }
+
     private string Run(params string[] args)
     {
         var psi = new ProcessStartInfo("git")

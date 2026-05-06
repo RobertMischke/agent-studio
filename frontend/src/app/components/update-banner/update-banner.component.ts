@@ -1,8 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { UpdateClientService } from '../../services/update.service';
-import { DevToolsService } from '../../services/dev-tools.service';
-import { ErrorDialogService } from '../../services/error-dialog.service';
 
 /**
  * Always-mounted banner that:
@@ -29,88 +27,38 @@ import { ErrorDialogService } from '../../services/error-dialog.service';
 })
 export class UpdateBannerComponent {
   private readonly client = inject(UpdateClientService);
-  private readonly devTools = inject(DevToolsService);
-  private readonly errors = inject(ErrorDialogService);
 
   readonly status = this.client.status;
-  readonly serviceUnreachable = this.client.serviceUnreachable;
-  readonly isRunning = this.client.isRunning;
-  readonly behindBy = this.client.behindBy;
-  // Dev mode = the same gate the existing Update-Stable button uses,
-  // surfaced via DevTools flags from /api/environment.
-  readonly isDev = computed(() => this.devTools.flags().updateStableEnabled);
 
   /** Hide the success/failure toast after the user has clearly seen it. */
   private readonly dismissed = signal<string | null>(null);
 
   /**
-   * The banner has four mutually exclusive modes; expose one signal so the
-   * template stays a flat *ngIf chain.
+   * Toast-style notifier for finished runs. The 'running' phase is owned
+   * by <app-update-block-modal />; the 'behind' indicator lives in the
+   * version badge + Update Center. We only own the brief done/failed
+   * toast that informs the user the *previous* run completed.
    *
-   *   running  - update is in flight; sticky, blocks dismiss
-   *   behind   - dev mode + behindBy>0 + idle; offers a Trigger button
    *   done     - last run succeeded recently and isn't dismissed yet
    *   failed   - last run failed and isn't dismissed yet
    *   hidden   - nothing to show
    */
-  readonly mode = computed<'running' | 'behind' | 'done' | 'failed' | 'hidden'>(() => {
+  readonly mode = computed<'done' | 'failed' | 'hidden'>(() => {
     const s = this.status();
     if (!s) return 'hidden';
-    if (s.isRunning) return 'running';
+    if (s.isRunning) return 'hidden'; // block modal handles this
 
     const dismissedRunId = this.dismissed();
     const sameRunStillDismissed = dismissedRunId !== null && s.currentRunId === dismissedRunId;
 
     if (s.phase === 'failed' && !sameRunStillDismissed) return 'failed';
     if (s.phase === 'done' && !sameRunStillDismissed) return 'done';
-
-    if (this.isDev() && s.behindBy > 0) return 'behind';
     return 'hidden';
   });
-
-  /** What we render in the running banner; a one-line status. */
-  readonly runningLine = computed(() => {
-    const s = this.status();
-    if (!s) return '';
-    const phase = humanPhase(s.phase);
-    return s.message ? `${phase} — ${s.message}` : phase;
-  });
-
-  readonly triggerInFlight = signal(false);
-
-  async trigger(): Promise<void> {
-    if (this.triggerInFlight()) return;
-    this.triggerInFlight.set(true);
-    try {
-      await this.client.trigger('manual via banner', false);
-      this.dismissed.set(null); // make the next done/failed toast visible
-    } catch (err: any) {
-      this.errors.show({
-        title: 'Update trigger failed',
-        message: err?.message ?? 'Could not reach UpdateService at :5039.',
-      });
-    } finally {
-      this.triggerInFlight.set(false);
-    }
-  }
 
   dismiss(): void {
     const s = this.status();
     if (s?.currentRunId) this.dismissed.set(s.currentRunId);
     else this.dismissed.set('null-run');
-  }
-}
-
-function humanPhase(phase: string): string {
-  switch (phase) {
-    case 'preparing':       return 'Preparing update';
-    case 'pausing-runners': return 'Pausing runners';
-    case 'pulling':         return 'Pulling and restarting';
-    case 'building':        return 'Building';
-    case 'restarting':      return 'Waiting for backend';
-    case 'resuming':        return 'Resuming runners';
-    case 'done':            return 'Done';
-    case 'failed':          return 'Failed';
-    default:                return phase;
   }
 }

@@ -11,13 +11,22 @@ export interface UpdateStatus {
   headLocal: string;
   headOrigin: string | null;
   behindBy: number;
+  pendingCommits: CommitInfo[];
   lastFetchAt: string | null;
   lastUpdateAt: string | null;
   lastSuccessAt: string | null;
   isRunning: boolean;
   backendReachable: boolean;
-  version: string;
+  serviceVersion: string;
+  productVersion: string;
   mode: 'manual' | 'scheduled';
+}
+
+export interface CommitInfo {
+  sha: string;
+  subject: string;
+  author: string;
+  authorDate: string;
 }
 
 export type UpdatePhase =

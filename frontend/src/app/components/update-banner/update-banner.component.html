@@ -1,31 +1,4 @@
 @switch (mode()) {
-  @case ('running') {
-    <div class="update-banner update-banner--running" data-testid="update-banner-running" role="status" aria-live="polite">
-      <span class="update-banner__spinner" aria-hidden="true">⟳</span>
-      <span class="update-banner__text">{{ runningLine() }}</span>
-      @if (status()?.headLocal && status()?.headOrigin) {
-        <span class="update-banner__head">{{ status()!.headLocal }} → {{ status()!.headOrigin }}</span>
-      }
-    </div>
-  }
-  @case ('behind') {
-    <div class="update-banner update-banner--behind" data-testid="update-banner-behind">
-      <span class="update-banner__text">
-        Stable is <strong>{{ behindBy() }}</strong> commit{{ behindBy() === 1 ? '' : 's' }} behind <code>origin/main</code>.
-        @if (status()?.headLocal && status()?.headOrigin) {
-          <span class="update-banner__head">{{ status()!.headLocal }} → {{ status()!.headOrigin }}</span>
-        }
-      </span>
-      <button
-        type="button"
-        class="update-banner__btn update-banner__btn--primary"
-        data-testid="update-banner-trigger"
-        [disabled]="triggerInFlight()"
-        (click)="trigger()">
-        @if (triggerInFlight()) { Triggering… } @else { Update now }
-      </button>
-    </div>
-  }
   @case ('done') {
     <div class="update-banner update-banner--done" data-testid="update-banner-done" role="status" aria-live="polite">
       <span class="update-banner__text">

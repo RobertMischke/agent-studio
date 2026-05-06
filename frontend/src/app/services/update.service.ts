@@ -38,12 +38,23 @@ export class UpdateClientService {
   /** Convenience: how far behind origin/main we are; 0 when unknown / synced. */
   readonly behindBy = computed(() => this.status()?.behindBy ?? 0);
 
+  /** Product version from the VERSION file (semver, e.g. "0.1.0"). */
+  readonly productVersion = computed(() => this.status()?.productVersion ?? '');
+
+  /** Local short SHA of the running stable HEAD. */
+  readonly headLocal = computed(() => this.status()?.headLocal ?? '');
+
   /**
    * UI feature gate: while an update is running, mutations should be
    * blocked at the call site (job create / move / mode change) so the
    * banner and the actual behaviour stay aligned.
    */
   readonly mutationsBlocked = computed(() => this.isRunning());
+
+  /** Whether the Update Center drawer is currently open. */
+  readonly centerOpen = signal(false);
+  openCenter(): void { this.centerOpen.set(true); }
+  closeCenter(): void { this.centerOpen.set(false); }
 
   private pollTimer: ReturnType<typeof setTimeout> | null = null;
 
