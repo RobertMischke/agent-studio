@@ -261,6 +261,132 @@ public static class AnalysisReportEndpoints
             return Results.Ok(new AnalysisReportDetailResponse(report, markdown));
         });
 
+        // -----------------------------------------------------------------
+        // Steering Docs Summary and Drift Check (named producer behind
+        // "what are agents told today, and where has that drifted?").
+        // GET /prompt returns the assembled prompt + scope summary so an
+        // operator (or future inline runner) can hand the prompt to a CLI
+        // agent. POST runs the action: without `agentResponse` it produces
+        // an Unstructured "evidence + prompt" report; with `agentResponse`
+        // it parses the agent's reply and produces the typed report.
+        //
+        // The Steering Docs UI surface (project-steering-docs-surface)
+        // attaches its manual "Summarize Steering Docs / Check Docs Drift"
+        // action to this endpoint pair. Until that surface lands the
+        // backend route remains the entry point; see the queued task
+        // `project-steering-docs-surface` for the UI TODO.
+        // -----------------------------------------------------------------
+
+        group.MapGet("/{project}/actions/steering-docs-drift/prompt", (
+            string project,
+            IConfiguration config,
+            AnalysisReportStore store,
+            RuntimePromptService prompts,
+            SteeringDocsSummaryDriftService action) =>
+        {
+            if (string.IsNullOrWhiteSpace(project))
+                return Results.BadRequest(new { error = "project required" });
+            var workspace = config["TaskRepository"];
+            if (string.IsNullOrWhiteSpace(workspace))
+                return Results.BadRequest(new { error = "TaskRepository not configured" });
+
+            var projectRoot = Path.Combine(workspace!, "projects", project);
+            if (!Directory.Exists(projectRoot))
+                return Results.NotFound(new { error = $"project root not found: {projectRoot}" });
+
+            var repoRoot = ResolveRepoRoot();
+            var scope = action.SelectScope(project, projectRoot, repoRoot, store, workspace);
+            var template = prompts.Render(
+                "steering-docs-summary-and-drift.md",
+                new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase));
+            var renderedPrompt = action.BuildPrompt(scope, template);
+            return Results.Ok(new SteeringDocsDriftPromptResponse(
+                Project: project,
+                CapturedAt: scope.CapturedAt,
+                InventoryClean: scope.InventoryClean,
+                Sources: scope.Sources.Select(s => new SteeringDocsDriftSourceSummary(
+                    s.Id, s.Label, s.RelPath, s.Exists, s.UpdatedAt, s.Size)).ToArray(),
+                Warnings: scope.Warnings.Select(w => new SteeringDocsDriftWarningSummary(
+                    w.Severity.ToString(), w.Kind.ToString(), w.Message, w.SourceId)).ToArray(),
+                RecentReports: scope.RecentAnalysisReports.Select(r => r.ReportId).ToArray(),
+                JobEvidence: scope.JobsByLane.ToDictionary(
+                    kv => kv.Key,
+                    kv => (IReadOnlyList<string>)kv.Value.Select(j => j.JobId).ToArray()),
+                Prompt: renderedPrompt));
+        });
+
+        group.MapPost("/{project}/actions/steering-docs-drift", async (
+            string project,
+            SteeringDocsDriftRunRequest? body,
+            IConfiguration config,
+            AnalysisReportStore store,
+            RuntimePromptService prompts,
+            SteeringDocsSummaryDriftService action,
+            CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(project))
+                return Results.BadRequest(new { error = "project required" });
+            var workspace = config["TaskRepository"];
+            if (string.IsNullOrWhiteSpace(workspace))
+                return Results.BadRequest(new { error = "TaskRepository not configured" });
+
+            var projectRoot = Path.Combine(workspace!, "projects", project);
+            if (!Directory.Exists(projectRoot))
+                return Results.NotFound(new { error = $"project root not found: {projectRoot}" });
+
+            var repoRoot = ResolveRepoRoot();
+            var scope = action.SelectScope(project, projectRoot, repoRoot, store, workspace);
+            var template = prompts.Render(
+                "steering-docs-summary-and-drift.md",
+                new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase));
+            var renderedPrompt = action.BuildPrompt(scope, template);
+
+            var agentResponse = body?.AgentResponse;
+            string markdown;
+            SteeringDocsSummaryDriftParseResult parse;
+            if (string.IsNullOrWhiteSpace(agentResponse))
+            {
+                parse = new SteeringDocsSummaryDriftParseResult(
+                    Status: AnalysisReportParseStatus.Unstructured,
+                    Severity: AnalysisReportSeverity.Info,
+                    Summary: scope.InventoryClean
+                        ? "Steering inventory assembled; no agent narrative supplied. Run the embedded prompt against a CLI to produce the verdict."
+                        : "Steering inventory assembled; warnings present, narrative deferred to agent run.",
+                    Findings: null,
+                    FollowUps: new[]
+                    {
+                        new AnalysisReportFollowUpTaskSuggestion(
+                            Title: "Run steering docs summary and drift check against a CLI agent",
+                            Summary: "Hand the embedded prompt to Claude / Codex / Copilot / Gemini and POST the reply back to /api/analysis/{project}/actions/steering-docs-drift to produce the structured verdict.",
+                            Priority: AnalysisReportFollowUpPriority.Normal,
+                            RelatedTopic: AnalysisReportFollowUpRelatedTopic.DocsDrift,
+                            TargetState: AnalysisReportFollowUpTargetStates.OnePreparation),
+                    },
+                    ProposalRefs: null,
+                    Sources: null,
+                    ParseError: null);
+                markdown = BuildSteeringDocsEvidenceOnlyMarkdown(scope, renderedPrompt);
+            }
+            else
+            {
+                parse = action.TryParseAgentResponse(agentResponse);
+                markdown = agentResponse;
+            }
+
+            var reportId = "01" + DateTime.UtcNow.ToString("yyyyMMddHHmmssfff") + Guid.NewGuid().ToString("N").Substring(0, 8);
+            var report = action.BuildReport(
+                scope: scope,
+                parse: parse,
+                reportId: reportId,
+                createdAt: DateTime.UtcNow,
+                producerKind: AnalysisReportProducerKind.Manual,
+                trigger: AnalysisReportTrigger.Manual,
+                participantId: "user");
+
+            await store.AppendAsync(workspace!, project, report, markdown, ct).ConfigureAwait(false);
+            return Results.Ok(new AnalysisReportDetailResponse(report, markdown));
+        });
+
         group.MapGet("/{project}/schedule", (
             string project,
             ProjectSettingsService settings) =>
@@ -318,6 +444,46 @@ public static class AnalysisReportEndpoints
             cwd = cwd.Parent;
         }
         return Directory.GetCurrentDirectory();
+    }
+
+    private static string BuildSteeringDocsEvidenceOnlyMarkdown(
+        SteeringDocsSummaryDriftScope scope,
+        string renderedPrompt)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("# Steering docs summary and drift check - evidence only");
+        sb.AppendLine();
+        sb.Append("**Verdict:** evidence assembled at ")
+            .Append(scope.CapturedAt.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ"))
+            .AppendLine("; no agent narrative supplied. Run the embedded prompt against a CLI agent and POST the reply back to produce the structured verdict.");
+        sb.AppendLine();
+        sb.Append("**Project:** `").Append(scope.Project).AppendLine("`");
+        sb.Append("**Inventory clean:** ").AppendLine(scope.InventoryClean ? "yes" : "no");
+        sb.AppendLine();
+        sb.AppendLine("## Steering source inventory");
+        sb.AppendLine();
+        foreach (var s in scope.Sources)
+        {
+            sb.Append("- `").Append(s.RelPath).Append("` - ").Append(s.Label);
+            sb.AppendLine(s.Exists ? string.Empty : " _(missing)_");
+        }
+        sb.AppendLine();
+        if (scope.Warnings.Count > 0)
+        {
+            sb.AppendLine("## Inventory warnings");
+            sb.AppendLine();
+            foreach (var w in scope.Warnings)
+                sb.Append("- **").Append(w.Severity).Append("** ").AppendLine(w.Message);
+            sb.AppendLine();
+        }
+        sb.AppendLine("## Embedded prompt");
+        sb.AppendLine();
+        sb.AppendLine("Copy the block below into a Claude / Codex / Copilot / Gemini session, then POST the reply back to `/api/analysis/{project}/actions/steering-docs-drift` with `agentResponse` set to produce the structured verdict.");
+        sb.AppendLine();
+        sb.AppendLine("```markdown");
+        sb.AppendLine(renderedPrompt);
+        sb.AppendLine("```");
+        return sb.ToString();
     }
 
     private static string BuildEvidenceOnlyMarkdown(
@@ -397,4 +563,44 @@ public sealed record RoadmapAlignmentPromptResponse(
     IReadOnlyList<string> StrayLaneFolders,
     IReadOnlyList<string> Docs,
     IReadOnlyList<string> RecentReports,
+    string Prompt);
+
+/// <summary>
+/// Body for <c>POST /api/analysis/{project}/actions/steering-docs-drift</c>.
+/// When <see cref="AgentResponse"/> is null or whitespace the endpoint emits
+/// an Unstructured "evidence only" report carrying the rendered prompt; when
+/// it is set, the endpoint parses the agent's reply (Markdown body plus an
+/// optional fenced JSON sidecar) and emits the typed verdict.
+/// </summary>
+public sealed record SteeringDocsDriftRunRequest(string? AgentResponse);
+
+/// <summary>One-line summary of a steering source for the prompt response.</summary>
+public sealed record SteeringDocsDriftSourceSummary(
+    string Id,
+    string Label,
+    string RelPath,
+    bool Exists,
+    DateTime? UpdatedAt,
+    long Size);
+
+/// <summary>One-line summary of an inventory warning for the prompt response.</summary>
+public sealed record SteeringDocsDriftWarningSummary(
+    string Severity,
+    string Kind,
+    string Message,
+    string? SourceId);
+
+/// <summary>
+/// Response for <c>GET /api/analysis/{project}/actions/steering-docs-drift/prompt</c>.
+/// Returns the assembled scope summary and the rendered prompt the operator
+/// (or future inline runner) hands to a CLI agent.
+/// </summary>
+public sealed record SteeringDocsDriftPromptResponse(
+    string Project,
+    DateTime CapturedAt,
+    bool InventoryClean,
+    IReadOnlyList<SteeringDocsDriftSourceSummary> Sources,
+    IReadOnlyList<SteeringDocsDriftWarningSummary> Warnings,
+    IReadOnlyList<string> RecentReports,
+    IReadOnlyDictionary<string, IReadOnlyList<string>> JobEvidence,
     string Prompt);

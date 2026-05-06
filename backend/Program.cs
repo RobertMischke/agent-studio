@@ -115,6 +115,7 @@ builder.Services.AddSingleton<OrchestratorApi.Services.State.SupervisorAdvisoryS
 builder.Services.AddSingleton<OrchestratorApi.Services.State.SupervisorInterventionStore>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Analysis.AnalysisReportStore>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Analysis.RoadmapAlignmentReviewService>();
+builder.Services.AddSingleton<OrchestratorApi.Services.Analysis.SteeringDocsSummaryDriftService>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Drift.DriftReportStore>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Drift.AdrCodeDriftAnalysisService>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Drift.DocsMarketingDriftAnalysisService>();
