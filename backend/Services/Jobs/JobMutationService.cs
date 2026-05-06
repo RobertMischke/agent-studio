@@ -106,6 +106,22 @@ public class JobMutationService
         return true;
     }
 
+    /// <summary>
+    /// Application-owned write of the optional <c>phase</c> field on a job's
+    /// <c>job.json</c>. Used by the orchestrator-intake hosted service to
+    /// move a 2-ready card through <c>human-ready → intake-running →
+    /// intake-passed | intake-blocked</c> without changing the filesystem
+    /// state. Pass <see cref="LifecyclePhases.IsAllowed"/> values; an empty
+    /// string clears the field. Validation against the state happens at the
+    /// scanner so a corrupt write is rendered inert rather than fatal.
+    /// </summary>
+    public bool SetJobPhase(string folderPath, string? phase)
+    {
+        if (!Directory.Exists(folderPath)) return false;
+        JobJsonFile.UpdateField(folderPath, "phase", phase ?? "", _logger);
+        return true;
+    }
+
     public string? CreateJob(CreateJobRequest req)
     {
         var watchPaths = _scanner.GetWatchPaths();

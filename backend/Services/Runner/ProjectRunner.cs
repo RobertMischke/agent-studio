@@ -1775,10 +1775,27 @@ public class ProjectRunner
 
     private JobInfo? GetNextReadyJob()
     {
+        var intakeEnabled = _projectSettings.Get(ProjectName).IntakeEnabled == true;
         return _scanner.ScanAllJobs()
-            .Where(j => j.ProjectName == ProjectName && j.State == JobStates.Ready)
+            .Where(j => j.ProjectName == ProjectName
+                        && j.State == JobStates.Ready
+                        && IsPickupAllowed(j, intakeEnabled))
             .OrderBy(j => j.Order)
             .FirstOrDefault();
+    }
+
+    /// <summary>
+    /// Intake gate. When intake is disabled (default), every 2-ready card is
+    /// pickup-eligible. When intake is enabled per project, the runner waits
+    /// for the orchestrator-intake hosted service to mark a card
+    /// <see cref="LifecyclePhases.IntakePassed"/> before picking it up. Cards
+    /// in <c>human-ready</c>, <c>intake-running</c>, or <c>intake-blocked</c>
+    /// stay in 2-ready and the runner tick falls through to the next card.
+    /// </summary>
+    internal static bool IsPickupAllowed(JobInfo job, bool intakeEnabled)
+    {
+        if (!intakeEnabled) return true;
+        return job.Phase == LifecyclePhases.IntakePassed;
     }
 
     /// <summary>

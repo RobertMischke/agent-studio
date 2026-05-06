@@ -126,6 +126,11 @@ builder.Services.AddHostedService<MetaCycleHostedService>();
 builder.Services.AddHostedService<OrchestratorPrepHostedService>();
 builder.Services.AddHostedService<ChatNoteHostedService>();
 builder.Services.AddHostedService<ReviewDecisionOrchestrator>();
+// Orchestrator-intake (ready-orchestrator-intake-lane). Off by default per
+// project; see ProjectSettings.IntakeEnabled. The hosted service is cheap
+// (heuristic only, no LLM) and skips projects that have not opted in.
+builder.Services.AddSingleton<IntakeRunner>();
+builder.Services.AddHostedService<IntakeHostedService>();
 builder.Services.AddSingleton<GitService>();
 builder.Services.AddSingleton<ProjectSettingsService>();
 builder.Services.AddSingleton<ProjectDocsService>();

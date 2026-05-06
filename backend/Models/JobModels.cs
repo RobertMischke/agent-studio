@@ -150,6 +150,13 @@ public static class LifecyclePhases
     public const string HumanReady = "human-ready";
     public const string IntakeRunning = "intake-running";
     public const string IntakeBlocked = "intake-blocked";
+    /// <summary>
+    /// Card passed orchestrator intake; the main coding runner is now allowed
+    /// to pick it up. When per-project intake is enabled, the runner skips
+    /// 2-ready cards that have not reached this phase. When intake is
+    /// disabled (default), the gate is open regardless of phase.
+    /// </summary>
+    public const string IntakePassed = "intake-passed";
 
     // 3-progress substates: distinguishes "coding CLI is working" from
     // "post-processing pipeline (auto-commit, summary, future checks) is
@@ -162,7 +169,7 @@ public static class LifecyclePhases
 
     public static readonly string[] All =
     [
-        HumanReady, IntakeRunning, IntakeBlocked,
+        HumanReady, IntakeRunning, IntakeBlocked, IntakePassed,
         ExecutionRunning, ExecutionStalled,
         PostProcessingRunning, PostProcessingBlocked, AwaitingReview
     ];
@@ -178,7 +185,7 @@ public static class LifecyclePhases
     /// </summary>
     public static readonly Dictionary<string, string[]> AllowedByState = new()
     {
-        [JobStates.Ready] = [HumanReady, IntakeRunning, IntakeBlocked],
+        [JobStates.Ready] = [HumanReady, IntakeRunning, IntakeBlocked, IntakePassed],
         [JobStates.Progress] = [ExecutionRunning, ExecutionStalled, PostProcessingRunning, PostProcessingBlocked, AwaitingReview],
     };
 
@@ -550,6 +557,18 @@ public record ProjectSettings
     /// pickup tick; mid-iteration policy switches do not happen.
     /// </summary>
     public int? AutonomyLevel { get; init; }
+
+    /// <summary>
+    /// Per-project switch for the orchestrator intake loop. When true, the
+    /// coding runner waits for orchestrator intake to finish before picking
+    /// up a 2-ready card (gates pickup on <c>phase == intake-passed</c>).
+    /// When false / null (default), the gate is open: cards are picked up
+    /// regardless of phase, and the intake hosted service does not act on
+    /// the project. Intake is opt-in per project so the broader migration
+    /// risk stays bounded; see the <c>ready-orchestrator-intake-lane</c>
+    /// task in the expanded-lifecycle-lanes plan.
+    /// </summary>
+    public bool? IntakeEnabled { get; init; }
 }
 
 public record SetAutoCommitRequest

@@ -40,6 +40,7 @@ import { WorkspaceBannerComponent } from './components/workspace-banner';
 import { CliAdminPanelComponent } from './components/cli-admin-panel';
 import { JobScreenshot, RunTimeline, JobTokenSummary, CliOutputLine } from './models/job.model'; // verbose-debug overlay context types
 import { VerboseDebugOverlayComponent } from './components/verbose-debug/verbose-debug-overlay.component';
+import { splitReadyByPhase } from './components/ready-lane-split.util';
 
 interface VerboseDebugContext {
   lines: CliOutputLine[];
@@ -2001,7 +2002,16 @@ export class App implements OnInit {
     if (grouped.needsHumanReview.length > 0) {
       backlogLanes.push({ state: '1b-needs-human-review', title: 'Needs Clar', icon: '🚩', jobs: grouped.needsHumanReview });
     }
-    backlogLanes.push({ state: '2-ready', title: 'Ready', icon: '📦', jobs: grouped.ready });
+    // ready-orchestrator-intake-lane: split 2-ready into Human Ready and
+    // Orchestrator Intake. The Intake lane is hide-when-empty so projects
+    // that have not opted into intake see the same single Ready column as
+    // before. Both lanes carry the same `2-ready` filesystem state on
+    // their data-state attribute so drag-and-drop / pickup keep working.
+    const readySplit = splitReadyByPhase(grouped.ready);
+    backlogLanes.push({ state: '2-ready', title: 'Human Ready', icon: '📦', jobs: readySplit.humanReady });
+    if (readySplit.intake.length > 0) {
+      backlogLanes.push({ state: '2-ready-intake', title: 'Orch Intake', icon: '🛂', jobs: readySplit.intake });
+    }
     return [
       {
         id: 'backlog',
@@ -2286,6 +2296,12 @@ export class App implements OnInit {
     // catch up. While the POST is in flight, silent polls are suppressed
     // so a stale /api/jobs/grouped response can't repaint the old lane.
     // On failure, revert the local snapshot and surface the error.
+    // Virtual lanes inside the same filesystem state (e.g. the intake
+    // sub-lane that splits 2-ready into "Human Ready" and "Orch Intake")
+    // map back to the real state for the backend move; the orchestrator
+    // intake loop is the only producer of the lane-defining `phase`
+    // field, so a manual drag never has to write phase from the UI.
+    if (event.targetState === '2-ready-intake') event = { ...event, targetState: '2-ready' };
     const snapshot = this.jobService.applyOptimisticMove(event.jobId, event.watchPath, event.targetState);
     this.jobService.beginOptimisticPersist();
     this.jobService.moveJob(event.jobId, event.targetState, event.watchPath).subscribe({

@@ -69,6 +69,14 @@ if (typeof window !== 'undefined') {
       </h3>
       <div class="job-card__badges">
         <span class="job-card__state-pill">{{ stateLabel() }}</span>
+        @if (phaseBadge(); as pb) {
+          <span class="job-card__phase-pill"
+                [class]="'job-card__phase-pill--' + pb.tone"
+                [title]="pb.tooltip"
+                data-testid="job-card-phase">
+            {{ pb.label }}
+          </span>
+        }
         @if (executionBadge(); as badge) {
           <span class="job-card__execution-pill" [class]="'job-card__execution-pill--' + badge.tone">
             <span class="job-card__execution-dot"></span>
@@ -493,6 +501,34 @@ if (typeof window !== 'undefined') {
       0%, 100% { opacity: 1; }
       50% { opacity: 0.35; }
     }
+    /* Lifecycle phase chip (ready-orchestrator-intake-lane). Distinct
+       palette per outcome so the Ready group reads at a glance: blue for
+       human-owned phases, amber when intake is mid-flight, red on a
+       block, green on pass. */
+    .job-card__phase-pill {
+      border: 1px solid transparent;
+      font-weight: 600;
+    }
+    .job-card__phase-pill--human-ready {
+      color: #7dd3fc;
+      background: rgba(56, 189, 248, 0.10);
+      border-color: rgba(56, 189, 248, 0.28);
+    }
+    .job-card__phase-pill--intake-running {
+      color: #fcd34d;
+      background: rgba(252, 211, 77, 0.10);
+      border-color: rgba(252, 211, 77, 0.32);
+    }
+    .job-card__phase-pill--intake-blocked {
+      color: #fda4af;
+      background: rgba(244, 63, 94, 0.12);
+      border-color: rgba(244, 63, 94, 0.30);
+    }
+    .job-card__phase-pill--intake-passed {
+      color: #86efac;
+      background: rgba(134, 239, 172, 0.10);
+      border-color: rgba(134, 239, 172, 0.30);
+    }
     .job-card__meta {
       display: flex;
       justify-content: space-between;
@@ -832,6 +868,33 @@ export class JobCardComponent implements OnInit, OnDestroy {
     const state = this.job().state;
     const name = state.includes('-') ? state.substring(state.indexOf('-') + 1) : state;
     return name.replace(/-/g, ' ');
+  }
+
+  /**
+   * Lifecycle-phase chip. Surfaces the `phase` substate on cards that
+   * carry one (Ready group: human-ready / intake-running / intake-blocked /
+   * intake-passed). Hidden when the job has no explicit phase, so cards
+   * that predate the field render exactly like before.
+   */
+  phaseBadge(): { label: string; tone: 'human-ready' | 'intake-running' | 'intake-blocked' | 'intake-passed'; tooltip: string } | null {
+    const phase = this.job().phase ?? null;
+    if (!phase) return null;
+    switch (phase) {
+      case 'human-ready':
+        return { label: 'Human Ready', tone: 'human-ready',
+                 tooltip: 'The user marked this task ready. Orchestrator intake will check it before the coding runner picks it up.' };
+      case 'intake-running':
+        return { label: 'Intake running', tone: 'intake-running',
+                 tooltip: 'Orchestrator intake is checking this card (separate runner from the coding CLI).' };
+      case 'intake-blocked':
+        return { label: 'Intake blocked', tone: 'intake-blocked',
+                 tooltip: 'Orchestrator intake flagged this card. Check the activity log for the reason and resolve before the coding runner can pick it up.' };
+      case 'intake-passed':
+        return { label: 'Intake passed', tone: 'intake-passed',
+                 tooltip: 'Orchestrator intake approved this card. The coding runner is now allowed to pick it up.' };
+      default:
+        return null;
+    }
   }
 
   executionBadge(): { label: string; tone: 'running' | 'failed' | 'cancelled' } | null {

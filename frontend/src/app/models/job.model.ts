@@ -216,6 +216,19 @@ export interface JobInfo {
    * (emoji + colour) so reviewers can see at a glance who is responsible.
    */
   ownerClientId?: string | null;
+  /**
+   * Optional lifecycle substate. Mirrors backend `JobInfo.Phase`. Drives
+   * the kanban Ready group split (Human Ready vs Intake) and the per-card
+   * phase chip. Null means "no explicit phase on disk"; the Ready lane
+   * defaults to Human Ready in that case (compatibility contract from
+   * docs/research/expanded-lifecycle-lanes-plan-2026-05.md).
+   *
+   * Allowed values for 2-ready: `human-ready`, `intake-running`,
+   * `intake-blocked`, `intake-passed`. The 3-progress phase values
+   * (`execution-running`, `post-processing-running`, ...) ride on the
+   * same field but are owned by the post-processing slice.
+   */
+  phase?: string | null;
 }
 
 /**

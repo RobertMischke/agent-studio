@@ -88,6 +88,24 @@ public class ProjectSettingsService
     /// clamped to the nearest valid stop. Null clears (revert to the default
     /// balanced level when the setting is read).
     /// </summary>
+    /// <summary>
+    /// Per-project toggle for the orchestrator-intake loop. When enabled, the
+    /// coding runner stops picking up 2-ready cards until intake has marked
+    /// them as <c>phase == intake-passed</c>. Default is disabled (null is
+    /// treated as false at the read site).
+    /// </summary>
+    public void SetIntakeEnabled(string projectName, bool? enabled)
+    {
+        EnsureLoaded();
+        lock (_lock)
+        {
+            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
+            _cache[projectName] = current with { IntakeEnabled = enabled };
+            Persist();
+        }
+        _logger.LogInformation("Intake enabled set to {Enabled} for project {Project}", enabled, projectName);
+    }
+
     public void SetAutonomyLevel(string projectName, int? level)
     {
         EnsureLoaded();
