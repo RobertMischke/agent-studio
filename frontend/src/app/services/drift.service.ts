@@ -49,9 +49,16 @@ export class DriftService {
     if (opts?.trigger) params.push(`trigger=${encodeURIComponent(opts.trigger)}`);
     if (opts?.scoreBand) params.push(`scoreBand=${encodeURIComponent(opts.scoreBand)}`);
     if (opts?.refresh) params.push('refresh=true');
-    const qs = params.length ? `?${params.join('&')}` : '';
+    // Cache-buster: drift evidence rotates on user action (a planted fixture,
+    // a fresh action) and at least one observed environment served stale
+    // /reports responses from an HTTP cache while the projection had already
+    // moved on. Every poll is unique so browser-side caching cannot mask
+    // the freshly-appended record.
+    params.push(`_=${Date.now()}`);
+    const qs = `?${params.join('&')}`;
     return this.http.get<DriftReportListResponse>(
       `${this.baseUrl}/${encodeURIComponent(project)}/reports${qs}`,
+      { headers: { 'Cache-Control': 'no-cache' } },
     );
   }
 

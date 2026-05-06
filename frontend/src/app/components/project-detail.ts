@@ -8,6 +8,7 @@ import { GlobalOrchestratorCardComponent } from './global-orchestrator-card';
 import { ProjectSecuritySectionComponent } from './project-security-section';
 import { ProjectArchitectureSectionComponent } from './project-architecture-section';
 import { ProjectDriftSectionComponent } from './project-drift-section';
+import { ProjectDriftOverviewSectionComponent } from './project-drift-overview-section';
 import { ProjectSupervisorSectionComponent } from './project-supervisor-section';
 import { ProjectMetaCycleSectionComponent } from './project-meta-cycle-section';
 import { ProjectAnalysisReportsSectionComponent } from './project-analysis-reports-section';
@@ -40,6 +41,7 @@ interface ProjectSettingsRow {
     ProjectSecuritySectionComponent,
     ProjectArchitectureSectionComponent,
     ProjectDriftSectionComponent,
+    ProjectDriftOverviewSectionComponent,
     ProjectSupervisorSectionComponent,
     ProjectMetaCycleSectionComponent,
     ProjectAnalysisReportsSectionComponent,
@@ -221,6 +223,8 @@ interface ProjectSettingsRow {
       <app-project-security-section [projectName]="projectName()" />
 
       <app-project-architecture-section [projectName]="projectName()" />
+
+      <app-project-drift-overview-section [projectName]="projectName()" />
 
       <app-project-drift-section [projectName]="projectName()" />
 
