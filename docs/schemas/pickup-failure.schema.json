@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agent-taskboard.local/schemas/pickup-failure.schema.json",
+  "title": "PickupFailureRecord",
+  "description": "One row appended to <workspace>/logs/pickup-failures.jsonl when the per-project pickup loop dead-letters a 3-progress folder. The strict-iteration pickup walks every 3-progress folder oldest-first by mtime before considering 2-ready; a folder whose run finished without producing a CLI output line for several attempts in a row is unrecoverable and gets surfaced loudly in 3a-failed-pickup/<slug>-pickup-failed-<utc-date>/ (ADR-0028: pickup failures are loud, never silently archived) so the runner can move on to the next 3-progress folder, then to 2-ready. The record captures why the dead-letter fired so the next-day operator can tell whether the cause was infrastructure (pickup never produced output) or content (folder was empty / corrupted).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["at", "kind", "projectName", "slug", "destinationSlug", "attempts", "threshold", "outputDeadlineSeconds", "reason"],
+  "properties": {
+    "at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "UTC timestamp at which the dead-letter move happened."
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["pickup-failed"],
+      "description": "Outcome class. Single value today; more verdicts may join when the pickup loop grows additional dead-letter triggers."
+    },
+    "projectName": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Project name as it appears in WatchPaths and runner status."
+    },
+    "slug": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Original folder slug under 3-progress at the time of the dead-letter."
+    },
+    "jobId": {
+      "type": ["string", "null"],
+      "description": "Job id read from job.json when present; usually equal to the folder slug. Null when the folder lacked a parseable job.json."
+    },
+    "destinationSlug": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Slug under 3a-failed-pickup after the dead-letter move (ADR-0028). Format: '<original>-pickup-failed-<yyyy-mm-dd>', with a numeric suffix on collisions."
+    },
+    "attempts": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Number of consecutive autopickup runs that finished without producing a CLI output line before the dead-letter fired."
+    },
+    "threshold": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Configured maximum-attempts threshold (default 3). Attempts at or above this trigger the dead-letter."
+    },
+    "outputDeadlineSeconds": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Configured per-attempt output deadline in seconds (default 60). Each attempt counts as failed when no CLI output line arrives within this window after spawn."
+    },
+    "attemptHistory": {
+      "type": ["array", "null"],
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["at", "durationSeconds", "outputLines"],
+        "properties": {
+          "at": { "type": "string", "format": "date-time" },
+          "durationSeconds": { "type": "number", "minimum": 0 },
+          "outputLines": { "type": "integer", "minimum": 0 },
+          "executionStatus": { "type": ["string", "null"] }
+        }
+      },
+      "description": "Per-attempt diagnostics (most recent last) recorded since the runner last reset the counter for this slug. Bounded by <threshold>; older entries are dropped."
+    },
+    "reason": {
+      "type": "string",
+      "description": "Human-readable explanation of the dead-letter; surfaces in the structured backend log line and in the chat-log note dropped on the archived folder."
+    }
+  }
+}

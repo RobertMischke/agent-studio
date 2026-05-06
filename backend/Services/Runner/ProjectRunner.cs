@@ -33,6 +33,7 @@ public class ProjectRunner
     private readonly QuotaService _quotaService;
     private readonly CliQuotaCapsService _quotaCaps;
     private readonly GitService _git;
+    private readonly PickupFailureLog _pickupFailures;
     private readonly AgentMessageBusBridge? _bus;
     private string _mode = "manual";
     private string? _activeJobId;
@@ -123,6 +124,7 @@ public class ProjectRunner
         QuotaService quotaService,
         CliQuotaCapsService quotaCaps,
         GitService git,
+        PickupFailureLog pickupFailures,
         AgentMessageBusBridge? bus = null)
     {
         ProjectName = projectName;
@@ -144,6 +146,7 @@ public class ProjectRunner
         _quotaService = quotaService;
         _quotaCaps = quotaCaps;
         _git = git;
+        _pickupFailures = pickupFailures;
         _bus = bus;
 
         // Listen across all CLI backends for completion of the active job.
@@ -268,12 +271,15 @@ public class ProjectRunner
         // Check if there's a running process for this project on any CLI
         if (_router.All.Any(c => c.IsRunningForProject(Entry.RootPath))) return;
 
-        // Progress-first pickup: an interrupted run that captured a session
-        // id is the most valuable thing to resume - the agent already has
-        // context, and leaving it idle while we pull a brand-new ready job
-        // is wasted work. Falls through to the ready queue when no
-        // resumable progress job is available.
-        var nextJob = GetNextResumableProgressJob() ?? GetNextReadyJob();
+        // Strict progress-first pickup: walk every 3-progress folder oldest-first
+        // by mtime BEFORE considering 2-ready. A folder qualifies for resume
+        // regardless of whether it carries a captured session id or even a
+        // cli-output.log: the "no log" case means the previous attempt died
+        // before the CLI streamed anything, which is the most-restartable
+        // case, not the most-skippable. Folders that have failed silently
+        // for the configured retry budget get dead-lettered into 7-archive
+        // here so the iteration drains and falls through to the ready queue.
+        var nextJob = TryPickProgressJobOrDeadLetter() ?? GetNextReadyJob();
         if (nextJob == null)
         {
             if (_mode == "auto-single")
@@ -473,6 +479,18 @@ public class ProjectRunner
                 // the next auto-pickup retries instead of losing the user's
                 // input.
                 _mutations.RollbackStashedPendingIntent(info.FolderPath);
+                // A spawn failure on autopickup is a silent attempt for
+                // dead-letter purposes: the CLI never produced output. The
+                // OnCliFinished path that normally records this never fires
+                // because there is no execution.
+                if (intent == RunIntent.AutoPickup && info.State == JobStates.Progress)
+                {
+                    RecordPickupAttemptResult(
+                        slug: jobId,
+                        outputLines: 0,
+                        durationSeconds: 0.0,
+                        executionStatus: "spawn-failed");
+                }
                 return RunOutcome.Reject(new RunRejection(
                     Reason: RunRejectReason.CliUnavailable,
                     Message: cliError ?? $"Failed to start {cli.CliType} CLI process"));
@@ -1296,6 +1314,23 @@ public class ProjectRunner
             // the regular review/summary pipeline proceed.
             var liveOutputSnapshot = cli.GetOutput(jobKey);
 
+            // Strict-iteration progress-first pickup bookkeeping: only
+            // autopickup runs feed the per-slug silent-attempt counter.
+            // Manual starts and user-driven continues do not count, since
+            // they are user-acknowledged and not part of the autonomous
+            // queue pacing. A run that streamed any output line resets the
+            // counter; a fully silent run increments it. Reaching
+            // <see cref="PickupFailureThreshold"/> dead-letters the folder
+            // on the next pickup tick.
+            if (intentSnapshot == RunIntent.AutoPickup)
+            {
+                RecordPickupAttemptResult(
+                    slug: jobId,
+                    outputLines: liveOutputSnapshot.Count,
+                    durationSeconds: execution.DurationSeconds ?? 0.0,
+                    executionStatus: execution.Status);
+            }
+
             // Write CLI output to log file. The runtime JSONL is the durable
             // backup that lets us recover the Activity Log after a backend
             // restart; once the consolidated cli-output.log has it, the JSONL
@@ -1755,6 +1790,14 @@ public class ProjectRunner
     /// <see cref="JobInfo.SessionName"/> or any non-recovery-marker entry
     /// in <see cref="JobInfo.SessionChain"/> is non-empty.
     /// </summary>
+    /// <remarks>
+    /// Retained because <see cref="AutoPickupCascadeTests"/> pins the
+    /// <see cref="HasResumableSession"/> classifier as a public-shape
+    /// invariant. The pickup tick itself no longer routes through this
+    /// method; <see cref="TryPickProgressJobOrDeadLetter"/> picks ANY
+    /// 3-progress folder regardless of session state (the "no log" case
+    /// is the most-restartable, not the most-skippable).
+    /// </remarks>
     private JobInfo? GetNextResumableProgressJob()
     {
         return _scanner.ScanAllJobs()
@@ -1770,6 +1813,247 @@ public class ProjectRunner
         if (!string.IsNullOrWhiteSpace(info.SessionName)) return true;
         if (info.SessionChain == null || info.SessionChain.Count == 0) return false;
         return info.SessionChain.Any(id => !string.IsNullOrWhiteSpace(id));
+    }
+
+    // Strict-iteration progress-first pickup (deliverables of the
+    // pickup-loop-progress-first-strict-iteration task).
+    //
+    // Production observation: a 2-ready job had been picked up while a
+    // 3-progress folder for the same project still existed, because the
+    // older "GetNextResumableProgressJob" filter required a captured
+    // session id. The folder in question lost its cli-output.log to a
+    // race during a backend restart, so it carried no session id and was
+    // skipped. The fix walks EVERY 3-progress folder oldest-first by
+    // mtime before considering 2-ready, and dead-letters any folder that
+    // has exhausted the retry budget without producing CLI output.
+
+    /// <summary>Default retry budget before a 3-progress folder is dead-lettered.</summary>
+    internal const int PickupFailureThreshold = 3;
+    /// <summary>
+    /// Per-attempt deadline (seconds) within which the spawned CLI must
+    /// produce at least one streamed output line for the attempt to count
+    /// as healthy. Today the runner observes this passively at run-finish:
+    /// a run that finishes with zero captured output lines is treated as
+    /// a silent attempt regardless of duration. The constant is recorded
+    /// in the dead-letter row so operators can correlate the verdict with
+    /// the active configuration.
+    /// </summary>
+    internal const int PickupOutputDeadlineSeconds = 60;
+
+    // Per-slug consecutive-silent-attempt counter. In-memory only - a
+    // backend restart resets the counter, which matches the wider runner
+    // pattern (a restart is itself a recovery boundary). Bounded by
+    // <see cref="PickupFailureThreshold"/>; the same dictionary is read
+    // when picking and written when the failed run finishes.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, PickupAttemptState> _pickupAttempts = new();
+
+    private sealed class PickupAttemptState
+    {
+        public int Count;
+        public readonly Queue<PickupAttemptDiagnostic> History = new();
+    }
+
+    /// <summary>Test seam: lets a unit test prime the per-slug attempt counter
+    /// without driving a real failed run.</summary>
+    internal void SetPickupAttemptsForTest(string slug, int count)
+    {
+        var state = _pickupAttempts.GetOrAdd(slug, _ => new PickupAttemptState());
+        state.Count = count;
+    }
+
+    /// <summary>Test seam: read the per-slug attempt counter.</summary>
+    internal int GetPickupAttempts(string slug)
+        => _pickupAttempts.TryGetValue(slug, out var s) ? s.Count : 0;
+
+    /// <summary>
+    /// Strict-iteration progress-first picker. Walks every 3-progress folder
+    /// for this project oldest-first by mtime, dead-letters folders past the
+    /// retry budget, and returns the first remaining folder. Returns null
+    /// only when 3-progress contains no folders (or all of them were
+    /// dead-lettered in this call).
+    /// </summary>
+    private JobInfo? TryPickProgressJobOrDeadLetter()
+    {
+        var folders = ListProgressFoldersOldestFirst();
+        foreach (var candidate in folders)
+        {
+            var slug = Path.GetFileName(candidate.FolderPath);
+            var attempts = GetPickupAttempts(slug);
+            if (attempts >= PickupFailureThreshold)
+            {
+                DeadLetterUnrecoverableFolder(candidate, slug, attempts);
+                continue;
+            }
+            return candidate.Info ?? _scanner.FindJob(slug, Entry.Path);
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Lists every folder under this project's <c>3-progress</c> lane,
+    /// ordered oldest-first by mtime. mtime uses the same shape as
+    /// <see cref="StaleProgressArchiver"/>: <c>logs/cli-output.log</c>
+    /// when present, falling back to <c>job.json</c>, falling back to
+    /// the directory itself; an empty folder lands at epoch 0 so it
+    /// sorts to the head of the iteration.
+    /// </summary>
+    internal List<ProgressPickupCandidate> ListProgressFoldersOldestFirst()
+    {
+        var progressDir = Path.Combine(Entry.Path, JobStates.Progress);
+        if (!Directory.Exists(progressDir)) return new();
+
+        var byId = _scanner.ScanAllJobs()
+            .Where(j => j.ProjectName == ProjectName && j.State == JobStates.Progress)
+            .ToDictionary(j => j.Id, StringComparer.OrdinalIgnoreCase);
+
+        var candidates = new List<ProgressPickupCandidate>();
+        foreach (var folder in Directory.EnumerateDirectories(progressDir))
+        {
+            var slug = Path.GetFileName(folder);
+            byId.TryGetValue(slug, out var info);
+            candidates.Add(new ProgressPickupCandidate(
+                FolderPath: folder,
+                Slug: slug,
+                Info: info,
+                Mtime: MeasureProgressFolderMtime(folder)));
+        }
+
+        return OrderProgressByMtime(candidates);
+    }
+
+    /// <summary>
+    /// Pure helper: orders progress-folder candidates oldest-first by mtime.
+    /// Ties are broken by slug for determinism (so test fixtures with mtime
+    /// pinned to the same instant still sort predictably).
+    /// </summary>
+    internal static List<ProgressPickupCandidate> OrderProgressByMtime(IEnumerable<ProgressPickupCandidate> candidates)
+        => candidates.OrderBy(c => c.Mtime).ThenBy(c => c.Slug, StringComparer.OrdinalIgnoreCase).ToList();
+
+    /// <summary>
+    /// mtime measurement matching <see cref="StaleProgressArchiver.MeasureFolder"/>:
+    /// prefer <c>logs/cli-output.log</c>, fall back to <c>job.json</c>, fall
+    /// back to the directory itself. Folders with neither file return
+    /// <see cref="DateTime.MinValue"/> so they sort to the head of the
+    /// oldest-first iteration.
+    /// </summary>
+    internal static DateTime MeasureProgressFolderMtime(string folder)
+    {
+        try
+        {
+            var cliLog = JobPaths.CliOutputLog(folder);
+            if (File.Exists(cliLog)) return File.GetLastWriteTimeUtc(cliLog);
+            var jobJson = Path.Combine(folder, "job.json");
+            if (File.Exists(jobJson)) return File.GetLastWriteTimeUtc(jobJson);
+            if (Directory.Exists(folder)) return Directory.GetLastWriteTimeUtc(folder);
+        }
+        catch { /* best-effort: an unreadable folder sorts to the head */ }
+        return DateTime.MinValue.ToUniversalTime();
+    }
+
+    /// <summary>
+    /// Dead-letter a 3-progress folder whose autopickup attempts have
+    /// exhausted the retry budget. ADR-0028: the destination is the visible
+    /// <see cref="JobStates.FailedPickup"/> lane, not <c>7-archive</c>; pickup
+    /// failures are loud, never silent. Single-state-machine authority
+    /// (per-task constraint): the move goes through
+    /// <see cref="JobStateMachine.MoveFolderToFailedPickup"/>, not direct file
+    /// IO. Writes a <see cref="PickupFailureRecord"/> row to
+    /// <c>&lt;workspace&gt;/logs/pickup-failures.jsonl</c> and clears the
+    /// per-slug attempt counter.
+    /// </summary>
+    private void DeadLetterUnrecoverableFolder(ProgressPickupCandidate candidate, string slug, int attempts)
+    {
+        var now = DateTime.UtcNow;
+        var destinationSlug = PickupFailureLog.BuildArchiveSlug(slug, now,
+            existsInDestination: name => Directory.Exists(Path.Combine(Entry.Path, JobStates.FailedPickup, name)));
+
+        var jobIdBeforeMove = candidate.Info?.Id ?? slug;
+        var historySnapshot = _pickupAttempts.TryGetValue(slug, out var state)
+            ? state.History.ToList()
+            : new List<PickupAttemptDiagnostic>();
+
+        var outcome = _states.MoveFolderToFailedPickup(candidate.FolderPath, destinationSlug);
+        if (outcome.Status != MoveJobStatus.Success)
+        {
+            _logger.LogWarning(
+                "PickupFailureLog: failed-pickup move refused for {Slug} on {Project}: {Status} {Message}",
+                slug, ProjectName, outcome.Status, outcome.Message);
+            // Reset the counter so we don't loop on the same failed move every
+            // tick. The folder stays in 3-progress; the operator can intervene.
+            _pickupAttempts.TryRemove(slug, out _);
+            return;
+        }
+
+        var record = new PickupFailureRecord
+        {
+            At = now,
+            Kind = PickupFailureKinds.PickupFailed,
+            ProjectName = ProjectName,
+            Slug = slug,
+            JobId = jobIdBeforeMove,
+            DestinationSlug = destinationSlug,
+            Attempts = attempts,
+            Threshold = PickupFailureThreshold,
+            OutputDeadlineSeconds = PickupOutputDeadlineSeconds,
+            AttemptHistory = historySnapshot.Count == 0 ? null : historySnapshot,
+            Reason = $"Auto-pickup exhausted retry budget: {attempts} consecutive runs finished without producing a CLI output line within {PickupOutputDeadlineSeconds}s. Folder dead-lettered to {JobStates.FailedPickup}/{destinationSlug}."
+        };
+        _pickupFailures.Append(record);
+        _logger.LogWarning(
+            "[taskboard] dead-lettered 3-progress folder {Slug} on {Project} after {Attempts} silent autopickup attempts (-> {Destination})",
+            slug, ProjectName, attempts, destinationSlug);
+
+        // Drop a chat-log note on the moved folder so the protocol pane
+        // surfaces why the lane returned to one-task-per-project. Best-effort.
+        try
+        {
+            var moved = _scanner.FindJob(jobIdBeforeMove, Entry.Path);
+            if (moved != null)
+            {
+                _chatLog.AppendSupervisor(moved, "pickup-failed",
+                    $"Auto-pickup gave up after {attempts} consecutive silent runs (no CLI output within {PickupOutputDeadlineSeconds}s). " +
+                    $"Folder surfaced in {JobStates.FailedPickup}/{destinationSlug}; the runner now considers the next 3-progress folder, then 2-ready.");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "PickupFailureLog: chat-log append failed for {Slug}", slug);
+        }
+
+        _pickupAttempts.TryRemove(slug, out _);
+    }
+
+    /// <summary>
+    /// Records a per-attempt diagnostic against the per-slug attempt counter
+    /// for an autopickup against a 3-progress folder. A "silent" attempt
+    /// (zero output lines) increments the counter; a productive attempt
+    /// (any output streamed) resets the counter to zero so a flaky single
+    /// run does not wedge a productive folder. Called from
+    /// <see cref="OnCliFinishedAsync"/>.
+    /// </summary>
+    private void RecordPickupAttemptResult(string slug, int outputLines, double durationSeconds, string? executionStatus)
+    {
+        if (outputLines > 0)
+        {
+            // Productive attempt: drop the slug from the counter so the next
+            // failure starts a fresh streak instead of inheriting an old one.
+            _pickupAttempts.TryRemove(slug, out _);
+            return;
+        }
+
+        var state = _pickupAttempts.GetOrAdd(slug, _ => new PickupAttemptState());
+        state.Count++;
+        state.History.Enqueue(new PickupAttemptDiagnostic
+        {
+            At = DateTime.UtcNow,
+            DurationSeconds = durationSeconds,
+            OutputLines = outputLines,
+            ExecutionStatus = executionStatus
+        });
+        // Bound the history at the threshold so the JSONL row stays compact
+        // and the in-memory state does not grow unboundedly when a move keeps
+        // refusing.
+        while (state.History.Count > PickupFailureThreshold) state.History.Dequeue();
     }
 
     /// <summary>

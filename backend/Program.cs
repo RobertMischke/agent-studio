@@ -105,6 +105,7 @@ builder.Services.AddSingleton<RoadmapIntakeService>();
 builder.Services.AddSingleton<TaskRunnerService>();
 builder.Services.AddSingleton<CrashRecoveryService>();
 builder.Services.AddSingleton<StaleProgressArchiver>();
+builder.Services.AddSingleton<PickupFailureLog>();
 builder.Services.AddSingleton<AgentMessageBusStore>();
 builder.Services.AddSingleton<AgentMessageBusBridge>();
 builder.Services.AddSingleton<OrchestratorApi.Services.State.SupervisorAdvisoryStore>();

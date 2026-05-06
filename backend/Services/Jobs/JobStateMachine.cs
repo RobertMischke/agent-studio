@@ -119,13 +119,12 @@ public class JobStateMachine
     }
 
     /// <summary>
-    /// Archive a job folder by absolute source path under <c>6-archive/</c>
+    /// Archive a job folder by absolute source path under <c>7-archive/</c>
     /// with a new folder slug. Used by the boot-time stale-progress sweep
-    /// (ADR-0020 follow-up): a folder that has been wedged in <c>3-progress</c>
-    /// past the resume window with no completion sentinel is archived as
-    /// <c>6-archive/&lt;original-slug&gt;-orphan-&lt;utc-date&gt;/</c> (or
-    /// <c>-empty-&lt;utc-date&gt;</c> when the folder lacks both a job.json
-    /// and a cli-output.log) so the lane visibly returns to one job per project.
+    /// (ADR-0020 follow-up) for the residual case where a folder is genuinely
+    /// nothing but a directory entry (no <c>job.json</c>, no
+    /// <c>cli-output.log</c>): see <see cref="MoveFolderToFailedPickup"/> for
+    /// the loud path that handles real orphans.
     /// </summary>
     /// <remarks>
     /// Takes a folder path rather than a jobId because empty stale folders have
@@ -134,9 +133,30 @@ public class JobStateMachine
     /// callers never write to the state folders directly.
     /// </remarks>
     public MoveJobOutcome ArchiveFolder(string sourceFolder, string newSlug)
+        => MoveFolderToState(sourceFolder, newSlug, JobStates.Archive);
+
+    /// <summary>
+    /// Move a stale <c>3-progress</c> folder into <c>3a-failed-pickup</c> with
+    /// a new folder slug. ADR-0028: pickup failures are loud, not silent;
+    /// orphan and empty folders that the boot sweep used to hide in
+    /// <c>7-archive</c> now land in the visible failed-pickup lane so the
+    /// user sees what the runner could not finish.
+    /// </summary>
+    /// <remarks>
+    /// Same shape as <see cref="ArchiveFolder"/> but targets
+    /// <see cref="JobStates.FailedPickup"/>. Empty stale folders may not have
+    /// a <c>job.json</c>; in that case a placeholder is written so the lane
+    /// can render a card and the state-field invariant holds.
+    /// </remarks>
+    public MoveJobOutcome MoveFolderToFailedPickup(string sourceFolder, string newSlug)
+        => MoveFolderToState(sourceFolder, newSlug, JobStates.FailedPickup, writePlaceholderJobJson: true);
+
+    private MoveJobOutcome MoveFolderToState(string sourceFolder, string newSlug, string targetState, bool writePlaceholderJobJson = false)
     {
         if (string.IsNullOrWhiteSpace(newSlug))
-            return new MoveJobOutcome(MoveJobStatus.Failure, "Archive slug must not be empty");
+            return new MoveJobOutcome(MoveJobStatus.Failure, "Slug must not be empty");
+        if (!JobStates.All.Contains(targetState))
+            return new MoveJobOutcome(MoveJobStatus.Failure, $"Invalid state: {targetState}");
         if (!Directory.Exists(sourceFolder))
             return new MoveJobOutcome(MoveJobStatus.NotFound);
 
@@ -145,30 +165,39 @@ public class JobStateMachine
         if (string.IsNullOrEmpty(watchPath))
             return new MoveJobOutcome(MoveJobStatus.Failure, "Source folder is not under a state directory");
 
-        var targetDir = Path.Combine(watchPath, JobStates.Archive, newSlug);
+        var targetDir = Path.Combine(watchPath, targetState, newSlug);
         if (Directory.Exists(targetDir))
         {
             _logger.LogWarning(
-                "Cannot archive {Source} as {Slug}: target folder already exists at {Target}",
-                sourceFolder, newSlug, targetDir);
+                "Cannot move {Source} to {State}/{Slug}: target folder already exists at {Target}",
+                sourceFolder, targetState, newSlug, targetDir);
             return new MoveJobOutcome(
                 MoveJobStatus.TargetFolderExists,
-                $"A folder named '{newSlug}' already exists in {JobStates.Archive}.");
+                $"A folder named '{newSlug}' already exists in {targetState}.");
         }
 
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(targetDir)!);
             Directory.Move(sourceFolder, targetDir);
-            if (File.Exists(Path.Combine(targetDir, "job.json")))
+            var jobJsonPath = Path.Combine(targetDir, "job.json");
+            if (File.Exists(jobJsonPath))
             {
-                JobJsonFile.UpdateField(targetDir, "state", JobStates.Archive, _logger);
+                JobJsonFile.UpdateField(targetDir, "state", targetState, _logger);
+            }
+            else if (writePlaceholderJobJson)
+            {
+                // The empty-stale path lacks any metadata. Synthesize a minimal
+                // job.json so the scanner sees the card and the state-field
+                // invariant ("every job folder has a state field on disk") holds.
+                var placeholder = $"{{\"id\":\"{newSlug}\",\"title\":\"{newSlug}\",\"state\":\"{targetState}\",\"order\":1,\"agent\":\"unknown\"}}";
+                File.WriteAllText(jobJsonPath, placeholder);
             }
             return new MoveJobOutcome(MoveJobStatus.Success);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to archive {Source} as {Slug}", sourceFolder, newSlug);
+            _logger.LogError(ex, "Failed to move {Source} to {State}/{Slug}", sourceFolder, targetState, newSlug);
             return new MoveJobOutcome(MoveJobStatus.Failure, ex.Message);
         }
     }

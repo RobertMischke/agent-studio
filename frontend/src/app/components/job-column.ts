@@ -55,11 +55,19 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
     <div class="column"
          [class.column--dragover]="isDragOver"
          [class.column--archive]="isArchive()"
+         [class.column--failed-pickup]="isFailedPickup()"
+         [attr.data-testid]="'lane-' + state()"
+         [attr.data-state]="state()"
          (dragover)="onDragOver($event)"
          (dragleave)="onDragLeave($event)"
          (drop)="onDrop($event)">
       <div class="column__header">
         <span class="column__icon">{{ icon() }}</span>
+        @if (isFailedPickup()) {
+          <span class="column__amber-dot"
+                aria-hidden="true"
+                data-testid="failed-pickup-dot"></span>
+        }
         <h2 class="column__title">{{ title() }}</h2>
         <span class="column__count">{{ jobs().length }}</span>
         @if (canArchiveAll()) {
@@ -71,11 +79,13 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
             ⬇ Archive all
           </button>
         }
-        <button type="button"
-                class="column__collapse"
-                [attr.data-testid]="'lane-collapse-' + state()"
-                [appTip]="'Collapse ' + title() + ' lane'"
-                (click)="collapseToggle.emit()">‹</button>
+        @if (!isFailedPickup()) {
+          <button type="button"
+                  class="column__collapse"
+                  [attr.data-testid]="'lane-collapse-' + state()"
+                  [appTip]="'Collapse ' + title() + ' lane'"
+                  (click)="collapseToggle.emit()">‹</button>
+        }
       </div>
       <div class="column__body">
         @if (isArchive()) {
@@ -191,6 +201,23 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
     .column--dragover {
       outline: 2px solid rgba(99, 102, 241, 0.6);
       outline-offset: -2px;
+    }
+    /* ADR-0028: 3a-failed-pickup is the only lane that uses an outline tint
+       on the column itself. 1 px amber per the kanban-board-design taxonomy.
+       Pickup failures must remain visible; collapse is suppressed in the
+       template so a non-empty failed-pickup lane cannot be hidden. */
+    .column--failed-pickup {
+      border: 1px solid rgba(245, 158, 11, 0.55);
+    }
+    .column--failed-pickup .column__title { color: #fbbf24; }
+    .column__amber-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      background: #f59e0b;
+      box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.20);
+      flex-shrink: 0;
+      display: inline-block;
     }
     .column__header {
       display: flex;
@@ -640,6 +667,11 @@ export class JobColumnComponent {
     // Accept both ADR-0025 and legacy archive lane names so a transitional
     // payload (legacy backend, new frontend) keeps rendering correctly.
     return this.state() === '7-archive' || this.state() === '6-archive';
+  }
+
+  /** ADR-0028: 3a-failed-pickup is the loud-not-archived lane. */
+  isFailedPickup(): boolean {
+    return this.state() === '3a-failed-pickup';
   }
 
   /**

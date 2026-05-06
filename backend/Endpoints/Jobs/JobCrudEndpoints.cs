@@ -50,6 +50,11 @@ public static class JobCrudEndpoints
                 NeedsHumanReview = jobs.Where(j => j.State == JobStates.NeedsHumanReview).OrderBy(j => j.Order).ToList(),
                 Ready = jobs.Where(j => j.State == JobStates.Ready).OrderBy(j => j.Order).ToList(),
                 Progress = jobs.Where(j => j.State == JobStates.Progress).OrderBy(j => j.Order).ToList(),
+                // ADR-0028: 3a-failed-pickup is a hide-when-empty lane that
+                // surfaces orphan boot-sweep verdicts the runner used to hide
+                // in 7-archive. Empty by default; clients render it only when
+                // it has at least one job.
+                FailedPickup = jobs.Where(j => j.State == JobStates.FailedPickup).OrderBy(j => j.Order).ToList(),
                 AutoReview = autoReview,
                 HumanReview = humanReview,
                 Review = autoReview, // legacy alias for pre-ADR-0025 clients

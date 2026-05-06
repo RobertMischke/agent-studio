@@ -288,6 +288,7 @@ public sealed class RunnerActiveStateClearedOnExternalMoveTests : IDisposable
         var quotaCacheStore = new QuotaCacheStore(d.Config, NullLogger<QuotaCacheStore>.Instance);
         var quotaService = new QuotaService(NullLogger<QuotaService>.Instance, Array.Empty<IQuotaProbe>(), d.Config, quotaCacheStore);
         var quotaCaps = new CliQuotaCapsService(NullLogger<CliQuotaCapsService>.Instance, d.Config);
+        var pickupFailures = new PickupFailureLog(d.Config, NullLogger<PickupFailureLog>.Instance);
 
         return new ProjectRunner(
             ProjectName, entry,
@@ -295,6 +296,6 @@ public sealed class RunnerActiveStateClearedOnExternalMoveTests : IDisposable
             d.Scanner, d.States, d.Sessions, d.Router,
             d.Summary, d.Prompts, d.Transitions, d.ChatLog, d.Mutations,
             d.OrchestratorLog, d.OrchestratorRunner, d.OrchestratorSessions,
-            d.Settings, quotaService, quotaCaps, d.Git, bus: null);
+            d.Settings, quotaService, quotaCaps, d.Git, pickupFailures, bus: null);
     }
 }

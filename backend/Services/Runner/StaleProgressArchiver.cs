@@ -10,7 +10,7 @@ using OrchestratorApi.Services.Jobs;
 namespace OrchestratorApi.Services.Runner;
 
 /// <summary>
-/// Boot-time sweep that archives <c>3-progress</c> folders the orchestrator
+/// Boot-time sweep that surfaces <c>3-progress</c> folders the orchestrator
 /// has lost track of (ADR-0001: at most one running task per project).
 ///
 /// <para>Pairs with <see cref="CrashRecoveryService"/>: that one rescues
@@ -32,12 +32,20 @@ namespace OrchestratorApi.Services.Runner;
 ///   (<c>[[TASK_DONE]]</c> / <c>[[TASK_BLOCKED]]</c> /
 ///   <c>[[TASK_NEEDS_INPUT]]</c>) appears in the last 50 lines of
 ///   <c>cli-output.log</c>, the sweep finishes the
-///   <c>3-progress -&gt; 4-review</c> transition the orchestrator missed and
-///   appends a <c>[recovered-from-stuck-progress]</c> note to the chat log.</item>
-///   <item>If older with no sentinel and at least one file present, archive
-///   to <c>6-archive/&lt;original-slug&gt;-orphan-&lt;utc-date&gt;/</c>.</item>
+///   <c>3-progress -&gt; 4-auto-review</c> transition the orchestrator missed
+///   and appends a <c>[recovered-from-stuck-progress]</c> note to the chat
+///   log.</item>
+///   <item>If older with no sentinel and at least one file present, the
+///   folder is moved to
+///   <c>3a-failed-pickup/&lt;original-slug&gt;-orphan-&lt;utc-date&gt;/</c>
+///   (ADR-0028: pickup failures are loud, not silent). A
+///   <c>failed-pickup-reason.md</c> placard records the kind, last activity,
+///   and sweep timestamp.</item>
 ///   <item>If older AND empty (no <c>job.json</c>, no <c>cli-output.log</c>),
-///   archive to <c>6-archive/&lt;original-slug&gt;-empty-&lt;utc-date&gt;/</c>.</item>
+///   the folder is moved to
+///   <c>3a-failed-pickup/&lt;original-slug&gt;-empty-&lt;utc-date&gt;/</c>
+///   with the same placard. Empty stale folders gain a synthetic
+///   <c>job.json</c> so the kanban can render the card.</item>
 /// </list>
 ///
 /// <para>Single-state-machine authority: every move goes through
@@ -151,7 +159,7 @@ public sealed class StaleProgressArchiver
                 StaleProgressDecision decision;
                 if (isEmpty)
                 {
-                    decision = ArchiveEmpty(entry, jobFolder, slug, now);
+                    decision = MoveToFailedPickup(entry, jobFolder, slug, now, kind: FailureKind.Empty, lastActivity: lastActivity);
                 }
                 else if (TryFindSentinel(jobFolder, out var keyword))
                 {
@@ -159,7 +167,7 @@ public sealed class StaleProgressArchiver
                 }
                 else
                 {
-                    decision = ArchiveOrphan(entry, jobFolder, slug, now);
+                    decision = MoveToFailedPickup(entry, jobFolder, slug, now, kind: FailureKind.Orphan, lastActivity: lastActivity);
                 }
 
                 decisions.Add(decision);
@@ -168,17 +176,18 @@ public sealed class StaleProgressArchiver
         }
 
         var actionable = decisions.Count(d =>
-            d.Kind == StaleProgressDecisionKinds.ArchivedOrphan ||
-            d.Kind == StaleProgressDecisionKinds.ArchivedEmpty ||
+            d.Kind == StaleProgressDecisionKinds.MovedToFailedPickup ||
+            d.Kind == StaleProgressDecisionKinds.MoveToFailedPickupFailed ||
             d.Kind == StaleProgressDecisionKinds.RecoveredToReview ||
-            d.Kind == StaleProgressDecisionKinds.RecoveryFailed ||
-            d.Kind == StaleProgressDecisionKinds.ArchiveFailed);
+            d.Kind == StaleProgressDecisionKinds.RecoveryFailed);
         _logger.LogInformation(
             "StaleProgressArchiver: completed boot sweep with {Total} candidate(s), {Actionable} actionable.",
             decisions.Count, actionable);
 
         return decisions;
     }
+
+    private enum FailureKind { Orphan, Empty }
 
     private Dictionary<string, string?> SafeGetActiveJobIds()
     {
@@ -338,50 +347,93 @@ public sealed class StaleProgressArchiver
         }
     }
 
-    private StaleProgressDecision ArchiveOrphan(WatchPathEntry entry, string jobFolder, string slug, DateTime now)
-        => Archive(entry, jobFolder, slug, now, suffix: "orphan", kind: StaleProgressDecisionKinds.ArchivedOrphan);
-
-    private StaleProgressDecision ArchiveEmpty(WatchPathEntry entry, string jobFolder, string slug, DateTime now)
-        => Archive(entry, jobFolder, slug, now, suffix: "empty", kind: StaleProgressDecisionKinds.ArchivedEmpty);
-
-    private StaleProgressDecision Archive(WatchPathEntry entry, string jobFolder, string slug, DateTime now, string suffix, string kind)
+    private StaleProgressDecision MoveToFailedPickup(
+        WatchPathEntry entry,
+        string jobFolder,
+        string slug,
+        DateTime now,
+        FailureKind kind,
+        DateTime lastActivity)
     {
+        // ADR-0028: orphan and empty 3-progress folders move to the visible
+        // 3a-failed-pickup lane, not silently into 7-archive. The lane card
+        // carries a failed-pickup-reason.md placard so the user sees what the
+        // boot sweep saw.
+        var suffix = kind == FailureKind.Empty ? "empty" : "orphan";
         var datePart = now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         var newSlug = $"{slug}-{suffix}-{datePart}";
-        // Disambiguate when the same slug is archived twice on the same day
-        // (re-creates of the same task name across boots).
         var attempt = newSlug;
-        for (int i = 2; Directory.Exists(Path.Combine(entry.Path, JobStates.Archive, attempt)) && i < 1000; i++)
+        for (int i = 2; Directory.Exists(Path.Combine(entry.Path, JobStates.FailedPickup, attempt)) && i < 1000; i++)
         {
             attempt = $"{newSlug}-{i}";
         }
 
-        var outcome = _states.ArchiveFolder(jobFolder, attempt);
+        var outcome = _states.MoveFolderToFailedPickup(jobFolder, attempt);
         if (outcome.Status != MoveJobStatus.Success)
         {
             return new StaleProgressDecision
             {
                 At = now,
-                Kind = StaleProgressDecisionKinds.ArchiveFailed,
+                Kind = StaleProgressDecisionKinds.MoveToFailedPickupFailed,
                 ProjectName = entry.Name,
                 Slug = slug,
-                ArchiveSlug = attempt,
-                Reason = $"archive refused: {outcome.Status} {outcome.Message}"
+                FailedPickupSlug = attempt,
+                Reason = $"move to {JobStates.FailedPickup} refused: {outcome.Status} {outcome.Message}"
             };
         }
+
+        var movedFolder = Path.Combine(entry.Path, JobStates.FailedPickup, attempt);
+        TryWriteReasonPlacard(movedFolder, kind, lastActivity, now);
 
         return new StaleProgressDecision
         {
             At = now,
-            Kind = kind,
+            Kind = StaleProgressDecisionKinds.MovedToFailedPickup,
             ProjectName = entry.Name,
             Slug = slug,
-            ArchiveSlug = attempt,
-            TargetState = JobStates.Archive,
-            Reason = suffix == "empty"
-                ? "stale folder with no job.json or cli-output.log"
-                : "stale folder past resume window with no completion sentinel"
+            FailedPickupSlug = attempt,
+            FailureKind = suffix,
+            TargetState = JobStates.FailedPickup,
+            Reason = kind == FailureKind.Empty
+                ? "stale folder with no job.json or cli-output.log; surfaced in 3a-failed-pickup"
+                : "stale folder past resume window with no completion sentinel; surfaced in 3a-failed-pickup"
         };
+    }
+
+    private void TryWriteReasonPlacard(string folder, FailureKind kind, DateTime lastActivity, DateTime sweepAt)
+    {
+        try
+        {
+            var placard = BuildReasonPlacard(kind, lastActivity, sweepAt);
+            File.WriteAllText(Path.Combine(folder, "failed-pickup-reason.md"), placard);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "StaleProgressArchiver: could not write failed-pickup-reason.md in {Folder}", folder);
+        }
+    }
+
+    private static string BuildReasonPlacard(FailureKind kind, DateTime lastActivity, DateTime sweepAt)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("# Pickup failure");
+        sb.AppendLine();
+        sb.Append("**Kind**: ").AppendLine(kind == FailureKind.Empty ? "empty" : "orphan");
+        sb.Append("**Detected at**: ").AppendLine(sweepAt.ToString("o", CultureInfo.InvariantCulture));
+        if (lastActivity > DateTime.MinValue.ToUniversalTime())
+        {
+            sb.Append("**Last activity**: ").AppendLine(lastActivity.ToString("o", CultureInfo.InvariantCulture));
+        }
+        else
+        {
+            sb.AppendLine("**Last activity**: none (folder had no job.json or cli-output.log)");
+        }
+        sb.AppendLine();
+        sb.AppendLine(kind == FailureKind.Empty
+            ? "The boot-time sweep found a `3-progress` folder with no `job.json` and no `cli-output.log`. The runner could not resume it; the orchestrator never finished a transition. Surfacing it loudly in `3a-failed-pickup` so it is not silently archived."
+            : "The boot-time sweep found a `3-progress` folder past the resume window with no completion sentinel (`[[TASK_DONE]]` / `[[TASK_BLOCKED]]` / `[[TASK_NEEDS_INPUT]]`) in the tail of `cli-output.log`. Either the run died mid-stream and the orchestrator did not see it, or the agent never emitted a sentinel. Surfacing it loudly in `3a-failed-pickup` so it is not silently archived.");
+        return sb.ToString();
     }
 
     private static StaleProgressDecision Skip(string projectName, string slug, string reason, DateTime at)
@@ -450,7 +502,10 @@ public sealed record StaleProgressDecision
     [JsonPropertyName("projectName")] public string ProjectName { get; init; } = "";
     [JsonPropertyName("slug")] public string Slug { get; init; } = "";
     [JsonPropertyName("jobId")] public string? JobId { get; init; }
-    [JsonPropertyName("archiveSlug")] public string? ArchiveSlug { get; init; }
+    /// <summary>Renamed slug under <c>3a-failed-pickup</c> after a successful loud-not-archived move (ADR-0028).</summary>
+    [JsonPropertyName("failedPickupSlug")] public string? FailedPickupSlug { get; init; }
+    /// <summary><c>orphan</c> or <c>empty</c>: which boot-sweep verdict produced the move.</summary>
+    [JsonPropertyName("failureKind")] public string? FailureKind { get; init; }
     [JsonPropertyName("targetState")] public string? TargetState { get; init; }
     [JsonPropertyName("sentinelKeyword")] public string? SentinelKeyword { get; init; }
     [JsonPropertyName("ageSeconds")] public long? AgeSeconds { get; init; }
@@ -464,14 +519,12 @@ public static class StaleProgressDecisionKinds
     public const string Fresh = "fresh";
     /// <summary>Folder is the runner's currently active job; left alone.</summary>
     public const string Skipped = "skipped";
-    /// <summary>Sentinel found in tail; folder moved to <c>4-review</c>.</summary>
+    /// <summary>Sentinel found in tail; folder moved to <c>4-auto-review</c>.</summary>
     public const string RecoveredToReview = "recovered-to-review";
     /// <summary>Sentinel found but the transition refused or threw.</summary>
     public const string RecoveryFailed = "recovery-failed";
-    /// <summary>Stale folder with content but no sentinel; archived as <c>-orphan-</c>.</summary>
-    public const string ArchivedOrphan = "archived-orphan";
-    /// <summary>Stale folder with no <c>job.json</c> and no <c>cli-output.log</c>; archived as <c>-empty-</c>.</summary>
-    public const string ArchivedEmpty = "archived-empty";
-    /// <summary>Archive call refused (e.g. target slug already exists).</summary>
-    public const string ArchiveFailed = "archive-failed";
+    /// <summary>Stale orphan or empty folder moved to <c>3a-failed-pickup</c> (ADR-0028).</summary>
+    public const string MovedToFailedPickup = "moved-to-failed-pickup";
+    /// <summary>Move to <c>3a-failed-pickup</c> refused (e.g. target slug already exists).</summary>
+    public const string MoveToFailedPickupFailed = "move-to-failed-pickup-failed";
 }

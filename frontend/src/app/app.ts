@@ -224,6 +224,21 @@ interface VerboseDebugContext {
             </main>
           </div>
         } @else {
+          @if (failedPickupCount() > 0) {
+            <button type="button"
+                    class="failed-pickup-banner"
+                    data-testid="failed-pickup-banner"
+                    [attr.aria-label]="'Open failed-pickup lane'"
+                    (click)="scrollToFailedPickupLane()">
+              <span class="failed-pickup-banner__dot" aria-hidden="true"></span>
+              <span class="failed-pickup-banner__text">
+                <strong data-testid="failed-pickup-banner-count">{{ failedPickupCount() }}</strong>
+                {{ failedPickupCount() === 1 ? 'job' : 'jobs' }} failed to pick up.
+                Open the failed-pickup lane.
+              </span>
+              <span class="failed-pickup-banner__chev" aria-hidden="true">›</span>
+            </button>
+          }
           <main class="dashboard" data-testid="kanban-dashboard">
             @for (g of laneGroups(); track g.id) {
               <section class="lane-group"
@@ -1157,6 +1172,68 @@ interface VerboseDebugContext {
       align-items: stretch;
     }
     /*
+     * ADR-0028 persistent banner. Always rendered when at least one job
+     * lives in 3a-failed-pickup across the visible (filtered) board, so
+     * pickup failures cannot be hidden by collapsing the lane or by
+     * filtering the project list. Sits between the workspace banner and
+     * the kanban dashboard. Single amber outline tint matches the
+     * failed-pickup lane's treatment per kanban-board-design taxonomy.
+     */
+    .failed-pickup-banner {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: calc(100% - 32px);
+      margin: 12px 16px 0;
+      padding: 10px 14px;
+      background: rgba(245, 158, 11, 0.08);
+      border: 1px solid rgba(245, 158, 11, 0.55);
+      border-radius: 10px;
+      color: #fcd34d;
+      font-size: 13px;
+      cursor: pointer;
+      text-align: left;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .failed-pickup-banner:hover {
+      background: rgba(245, 158, 11, 0.16);
+      border-color: rgba(245, 158, 11, 0.85);
+    }
+    .failed-pickup-banner__dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      background: #f59e0b;
+      box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.20);
+      flex-shrink: 0;
+    }
+    .failed-pickup-banner__text { flex: 1 1 auto; min-width: 0; }
+    .failed-pickup-banner__text strong {
+      color: #fbbf24;
+      font-weight: 700;
+      margin-right: 2px;
+    }
+    .failed-pickup-banner__chev {
+      color: #fbbf24;
+      font-size: 18px;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+    /* Banner click-through pulse: highlights the failed-pickup lane briefly
+       so the user's eye lands on it after the smooth scroll completes. */
+    .column--failed-pickup-pulse {
+      animation: failed-pickup-pulse 1.4s ease-out 1;
+    }
+    @keyframes failed-pickup-pulse {
+      0%   { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.0); }
+      30%  { box-shadow: 0 0 0 6px rgba(245, 158, 11, 0.40); }
+      100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.0); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .column--failed-pickup-pulse { animation: none; }
+      .failed-pickup-banner { transition: none; }
+    }
+    /*
      * Lane groups bundle the individual columns into visually distinct
      * phases of the workflow:
      *   Backlog (human)    -> Preparation, Ready
@@ -1748,6 +1825,9 @@ export class App implements OnInit {
       needsHumanReview: filterJobs(grouped.needsHumanReview ?? []),
       ready: filterJobs(grouped.ready),
       progress: filterJobs(grouped.progress),
+      // ADR-0028: hide-when-empty on the board, but the persistent banner
+      // still counts items here when any project has a failed pickup.
+      failedPickup: filterJobs(grouped.failedPickup ?? []),
       autoReview: autoReviewFiltered,
       humanReview: filterJobs(grouped.humanReview ?? []),
       review: autoReviewFiltered,
@@ -1755,6 +1835,31 @@ export class App implements OnInit {
       archive: filterJobs(grouped.archive ?? []),
     } as GroupedJobs;
   });
+
+  /**
+   * ADR-0028: count of jobs in <c>3a-failed-pickup</c> across the visible
+   * (filtered) board. Drives the persistent failure banner above the
+   * dashboard. The lane itself is hide-when-empty; the banner is the
+   * always-on cross-board surface that survives a collapsed lane and a
+   * filtered owner view (counts respect the active project / client filter).
+   */
+  readonly failedPickupCount = computed(() => (this.filteredGrouped().failedPickup ?? []).length);
+
+  /**
+   * Banner click-through: scroll the failed-pickup lane into view and pulse
+   * its outline so the user's eye lands on it. The lane is rendered inside
+   * the same dashboard, so a smooth scroll plus a one-shot CSS class is
+   * cheaper than a routing change.
+   */
+  scrollToFailedPickupLane(): void {
+    queueMicrotask(() => {
+      const el = document.querySelector('[data-testid="lane-3a-failed-pickup"]') as HTMLElement | null;
+      if (!el) return;
+      el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      el.classList.add('column--failed-pickup-pulse');
+      setTimeout(() => el.classList.remove('column--failed-pickup-pulse'), 1400);
+    });
+  }
 
   /** null = no filter; otherwise show only jobs whose ownerClientId matches. */
   readonly activeClientFilter = signal<string | null>(null);
@@ -1789,7 +1894,14 @@ export class App implements OnInit {
     }
     lanes.push(
       { state: '2-ready', title: 'Ready', icon: '📦', jobs: grouped.ready },
-      { state: '3-progress', title: 'In Progress', icon: '🔵', jobs: grouped.progress },
+      { state: '3-progress', title: 'In Progress', icon: '🔵', jobs: grouped.progress }
+    );
+    // ADR-0028: 3a-failed-pickup is hide-when-empty. The card style and the
+    // amber outline live on the column component when state === '3a-failed-pickup'.
+    if ((grouped.failedPickup ?? []).length > 0) {
+      lanes.push({ state: '3a-failed-pickup', title: 'Failed Pickup', icon: '⚠️', jobs: grouped.failedPickup });
+    }
+    lanes.push(
       { state: '4-auto-review', title: 'Auto Review', icon: '🤖', jobs: grouped.autoReview },
       { state: '5-human-review', title: 'Human Review', icon: '👁️', jobs: grouped.humanReview },
       { state: '6-completed', title: 'Completed', icon: '🟢', jobs: grouped.completed },
@@ -1833,13 +1945,22 @@ export class App implements OnInit {
         id: 'active',
         label: 'Active',
         axis: 'agent',
-        lanes: [
-          { state: '3-progress', title: 'In Progress', icon: '🔵', jobs: grouped.progress },
-          // ADR-0025: explicit auto-review (orchestrator-managed) and
-          // human-review (waiting on the user) lanes.
-          { state: '4-auto-review', title: 'Auto Review', icon: '🤖', jobs: grouped.autoReview },
-          { state: '5-human-review', title: 'Human Review', icon: '👁️', jobs: grouped.humanReview }
-        ]
+        // ADR-0028: 3a-failed-pickup slots between 3-progress and 4-auto-review,
+        // hide-when-empty. Renders with the amber loud-not-archived treatment.
+        lanes: ((grouped.failedPickup ?? []).length > 0
+          ? [
+              { state: '3-progress', title: 'In Progress', icon: '🔵', jobs: grouped.progress },
+              { state: '3a-failed-pickup', title: 'Failed Pickup', icon: '⚠️', jobs: grouped.failedPickup },
+              // ADR-0025: explicit auto-review (orchestrator-managed) and
+              // human-review (waiting on the user) lanes.
+              { state: '4-auto-review', title: 'Auto Review', icon: '🤖', jobs: grouped.autoReview },
+              { state: '5-human-review', title: 'Human Review', icon: '👁️', jobs: grouped.humanReview }
+            ]
+          : [
+              { state: '3-progress', title: 'In Progress', icon: '🔵', jobs: grouped.progress },
+              { state: '4-auto-review', title: 'Auto Review', icon: '🤖', jobs: grouped.autoReview },
+              { state: '5-human-review', title: 'Human Review', icon: '👁️', jobs: grouped.humanReview }
+            ])
       },
       {
         id: 'done',

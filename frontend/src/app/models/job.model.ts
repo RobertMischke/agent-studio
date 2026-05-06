@@ -809,6 +809,15 @@ export interface GroupedJobs {
   needsHumanReview: JobInfo[];
   ready: JobInfo[];
   progress: JobInfo[];
+  /**
+   * ADR-0028 lane: pickup failures (3a-failed-pickup). Hide-when-empty.
+   * Populated by StaleProgressArchiver and the per-project dead-letter path.
+   * Renders with the amber loud-not-archived treatment: orphan / empty
+   * boot-sweep verdicts and silent-pickup dead-letters used to vanish into
+   * 7-archive; they now stay visible here with a per-card placard
+   * (`failed-pickup-reason.md`).
+   */
+  failedPickup: JobInfo[];
   /** ADR-0025 lane: orchestrator's review pass (4-auto-review). */
   autoReview: JobInfo[];
   /** ADR-0025 lane: waiting for the user (5-human-review). */

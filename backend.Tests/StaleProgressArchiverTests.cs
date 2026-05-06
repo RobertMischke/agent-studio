@@ -10,14 +10,18 @@ using Xunit;
 namespace OrchestratorApi.Tests;
 
 /// <summary>
-/// Boot-time stale-progress sweep (pairs with ADR-0020 crash recovery). Five
-/// cases plus the active-job defensive guard:
+/// Boot-time stale-progress sweep (pairs with ADR-0020 crash recovery, ADR-0028
+/// loud-not-archived). Five cases plus the active-job defensive guard:
 ///
 /// <list type="number">
-///   <item>Sentinel + stale -> finished missed transition into 4-review with a
-///   <c>recovered-from-stuck-progress</c> supervisor chat note.</item>
-///   <item>No sentinel + stale -> archived as <c>-orphan-&lt;date&gt;</c>.</item>
-///   <item>Empty + stale -> archived as <c>-empty-&lt;date&gt;</c>.</item>
+///   <item>Sentinel + stale -> finished missed transition into 4-auto-review
+///   with a <c>recovered-from-stuck-progress</c> supervisor chat note.</item>
+///   <item>No sentinel + stale -> moved to <c>3a-failed-pickup</c> as
+///   <c>-orphan-&lt;date&gt;</c> with a <c>failed-pickup-reason.md</c>
+///   placard (ADR-0028: never silently archived).</item>
+///   <item>Empty + stale -> moved to <c>3a-failed-pickup</c> as
+///   <c>-empty-&lt;date&gt;</c> with a placard and a synthesized
+///   <c>job.json</c>.</item>
 ///   <item>Fresh -> untouched (progress-first pickup will resume).</item>
 ///   <item>Re-run on the same lane -> no further changes (idempotency).</item>
 ///   <item>Active job -> never touched even when stale (defensive guard).</item>
@@ -85,8 +89,9 @@ public sealed class StaleProgressArchiverTests : IDisposable
     }
 
     [Fact]
-    public async Task Sweep_StaleFolderWithoutSentinel_IsArchivedAsOrphan()
+    public async Task Sweep_StaleFolderWithoutSentinel_IsMovedToFailedPickupNotSilentlyArchived()
     {
+        // ADR-0028: orphan folders surface in 3a-failed-pickup, not 7-archive.
         WriteJob(JobStates.Progress, "no-sentinel");
         var folder = Path.Combine(_watchPath, JobStates.Progress, "no-sentinel");
         WriteCliLog(folder, "agent talked but never finished");
@@ -98,31 +103,58 @@ public sealed class StaleProgressArchiverTests : IDisposable
 
         Assert.False(Directory.Exists(folder));
         var d = Assert.Single(decisions);
-        Assert.Equal(StaleProgressDecisionKinds.ArchivedOrphan, d.Kind);
-        Assert.NotNull(d.ArchiveSlug);
-        Assert.StartsWith("no-sentinel-orphan-", d.ArchiveSlug);
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Archive, d.ArchiveSlug!)));
+        Assert.Equal(StaleProgressDecisionKinds.MovedToFailedPickup, d.Kind);
+        Assert.Equal("orphan", d.FailureKind);
+        Assert.NotNull(d.FailedPickupSlug);
+        Assert.StartsWith("no-sentinel-orphan-", d.FailedPickupSlug);
+        Assert.Equal(JobStates.FailedPickup, d.TargetState);
+
+        var moved = Path.Combine(_watchPath, JobStates.FailedPickup, d.FailedPickupSlug!);
+        Assert.True(Directory.Exists(moved), "folder must land in 3a-failed-pickup, not 7-archive");
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Archive, d.FailedPickupSlug!)),
+            "loud-not-archived: nothing may land in 7-archive on this path");
+
+        // Placard captures kind + timestamps so the operator sees what the
+        // sweep saw without re-parsing logs.
+        var placard = File.ReadAllText(Path.Combine(moved, "failed-pickup-reason.md"));
+        Assert.Contains("**Kind**: orphan", placard);
+        Assert.Contains("Pickup failure", placard);
 
         var jsonl = File.ReadAllText(Path.Combine(_workspaceRoot, "logs", "orphan-recoveries.jsonl"));
-        Assert.Contains("archived-orphan", jsonl);
+        Assert.Contains("moved-to-failed-pickup", jsonl);
+        Assert.DoesNotContain("archived-orphan", jsonl);
     }
 
     [Fact]
-    public async Task Sweep_EmptyStaleFolder_IsArchivedAsEmpty()
+    public async Task Sweep_EmptyStaleFolder_IsMovedToFailedPickupNotSilentlyArchived()
     {
+        // ADR-0028: even empty stale folders surface in 3a-failed-pickup so
+        // the operator sees that the runner could not resume them.
         var folder = Path.Combine(_watchPath, JobStates.Progress, "empty-shell");
         Directory.CreateDirectory(folder);
-        // No job.json, no logs. mtime irrelevant: MeasureFolder treats this as
-        // epoch 0 so it always crosses the threshold.
+        // No job.json, no logs. MeasureFolder treats this as epoch 0 so it
+        // always crosses the threshold.
 
         var (archiver, _) = Build();
         var decisions = await archiver.SweepAsync();
 
         Assert.False(Directory.Exists(folder));
         var d = Assert.Single(decisions);
-        Assert.Equal(StaleProgressDecisionKinds.ArchivedEmpty, d.Kind);
-        Assert.StartsWith("empty-shell-empty-", d.ArchiveSlug);
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Archive, d.ArchiveSlug!)));
+        Assert.Equal(StaleProgressDecisionKinds.MovedToFailedPickup, d.Kind);
+        Assert.Equal("empty", d.FailureKind);
+        Assert.NotNull(d.FailedPickupSlug);
+        Assert.StartsWith("empty-shell-empty-", d.FailedPickupSlug);
+
+        var moved = Path.Combine(_watchPath, JobStates.FailedPickup, d.FailedPickupSlug!);
+        Assert.True(Directory.Exists(moved));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Archive, d.FailedPickupSlug!)),
+            "loud-not-archived: nothing may land in 7-archive on this path");
+
+        // Empty folders gain a synthetic job.json so the kanban can render the
+        // card and the state-field invariant holds.
+        var jobJson = Path.Combine(moved, "job.json");
+        Assert.True(File.Exists(jobJson));
+        Assert.Contains(JobStates.FailedPickup, File.ReadAllText(jobJson));
     }
 
     [Fact]

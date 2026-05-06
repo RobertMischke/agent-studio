@@ -831,6 +831,19 @@ public static class JobStates
 
     public const string Ready = "2-ready";
     public const string Progress = "3-progress";
+
+    // 3a-failed-pickup is the visible orphan lane for boot-sweep verdicts
+    // that previously vanished into 7-archive. The pickup-loud-not-archive
+    // contract: a folder that crossed the resume window without a completion
+    // sentinel lands here, never silently in 7-archive. Hide-when-empty in
+    // the UI (same rule as 1b-needs-human-review and 5-human-review). The
+    // additive 3a- sort key keeps existing folders, code references, and
+    // tests valid: ASCII '-' (45) < 'a' (97) so 3-progress sorts before
+    // 3a-...; '3' < '4' so 3a- sorts before 4-auto-review. Populated by
+    // StaleProgressArchiver when it sees a stale orphan or empty 3-progress
+    // folder. See ADR-0028.
+    public const string FailedPickup = "3a-failed-pickup";
+
     // 4-auto-review is the orchestrator's lane: ReviewDecisionOrchestrator
     // can reissue, accept-as-done, or escalate. Anything that has crossed
     // the "ready for the user" line lives in 5-human-review instead, so
@@ -843,7 +856,7 @@ public static class JobStates
     public const string Archive = "7-archive";
 
     public static readonly string[] All =
-        [Preparation, OrchestratorPrep, NeedsHumanReview, Ready, Progress, AutoReview, HumanReview, Completed, Archive];
+        [Preparation, OrchestratorPrep, NeedsHumanReview, Ready, Progress, FailedPickup, AutoReview, HumanReview, Completed, Archive];
 
     /// <summary>Maps old unnumbered folder names to new numbered ones.</summary>
     public static readonly Dictionary<string, string> LegacyFolderMap = new()
