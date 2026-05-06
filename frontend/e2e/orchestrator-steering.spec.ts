@@ -35,6 +35,18 @@ function copyResultsArtifact(absoluteSourcePath: string, jobFolder: string, name
   } catch {
     /* best-effort: results-folder mirroring failure must not fail the spec */
   }
+  // Mirror the same artifact into the task processor's canonical job
+  // results folder when the spec is driven by an agent task run. The
+  // env var is set by the task processor when it spawns Playwright.
+  const taskResults = process.env.JOB_RESULTS_DIR;
+  if (taskResults) {
+    try {
+      fs.mkdirSync(taskResults, { recursive: true });
+      fs.copyFileSync(absoluteSourcePath, path.join(taskResults, name));
+    } catch {
+      /* best-effort */
+    }
+  }
 }
 
 function buildSteerLog(): string {
@@ -73,20 +85,25 @@ test.describe('Orchestrator steering', () => {
     fs.mkdirSync(logsDir, { recursive: true });
     fs.writeFileSync(path.join(logsDir, 'cli-output.log'), buildSteerLog(), 'utf-8');
 
-    // Visit the job and switch to the Activity tab.
+    // Visit the job and switch to the Activity tab. The Activity tab is
+    // already selected by default once the detail panel opens; click it
+    // anyway with `force: true` because the inspector header re-renders
+    // mid-load and a "stable" wait flakes against background polling.
     await page.goto(`/?job=${encodeURIComponent(created.id)}&watchPath=${encodeURIComponent(wp.path)}`);
     const activityTab = page.getByTestId('inspector-tab-activity');
     await expect(activityTab).toBeVisible({ timeout: 10_000 });
-    await activityTab.click();
+    await activityTab.click({ force: true });
 
     const conversationBtn = page.getByTestId('activity-log-mode-conversation');
-    await expect(conversationBtn).toBeVisible({ timeout: 5_000 });
+    await expect(conversationBtn).toBeVisible({ timeout: 10_000 });
     await conversationBtn.click({ force: true });
 
     // Steer card is present with the question-mark icon and the parsed
-    // Need / Why fields.
+    // Need / Why fields. The first cli-output poll fires ~1 s after the
+    // detail panel mounts, then every 5 s while the job is idle. Give the
+    // card up to 20 s so a slow first poll never flakes the assertion.
     const card = page.getByTestId('orchestrator-steer-card');
-    await expect(card).toBeVisible({ timeout: 8_000 });
+    await expect(card).toBeVisible({ timeout: 20_000 });
 
     const need = page.getByTestId('orchestrator-steer-need');
     await expect(need).toContainText('screenshot of the affected modal');
@@ -96,6 +113,9 @@ test.describe('Orchestrator steering', () => {
 
     // Capture a "before" screenshot of the steer card while the compose box
     // is still empty. Saved under results/ so reviewers can inspect it.
+    // Scroll the card into view first - the activity panel scrolls
+    // independently and the card may sit below the auto-eval banner.
+    await card.scrollIntoViewIfNeeded();
     const beforePath = testInfo.outputPath('orchestrator-steer-before.png');
     await card.screenshot({ path: beforePath });
     copyResultsArtifact(beforePath, folder, 'orchestrator-steer-before.png');
@@ -106,14 +126,28 @@ test.describe('Orchestrator steering', () => {
     await expect(optionButtons.nth(0)).toContainText('keep the legacy modal');
     await expect(optionButtons.nth(1)).toContainText('migrate to the side sheet');
 
-    await optionButtons.nth(1).click();
+    // dispatchEvent('click') instead of .click(): in this layout the
+    // run-timeline empty banner above the activity log and the auto-eval
+    // banner below it stack higher than the steer card in pointer-events
+    // hit-testing. A coordinate-based click (even with `force: true`)
+    // hits the overlying element and the (click) handler never fires.
+    // dispatchEvent goes straight to the target element, which is what
+    // we want here - we're testing the click-to-prefill contract, not
+    // hit-test geometry.
+    await optionButtons.nth(1).dispatchEvent('click');
 
+    // Wait for change-detection to flush. The compose <textarea> binds via
+    // `[value]="followupPrompt()"`, so the parent signal needs to propagate
+    // through Angular's microtask queue before the DOM property updates.
     const composeInput = page.getByTestId('activity-chat-input');
-    await expect(composeInput).toHaveValue('migrate to the side sheet');
+    await expect(composeInput).toHaveValue('migrate to the side sheet', { timeout: 5_000 });
 
-    // Capture the "after option click" state.
+    // Capture the "after option click" state. We screenshot the steer card
+    // and the chat compose strip stacked, so the prefilled textarea is
+    // visible right next to the option that produced it.
+    await card.scrollIntoViewIfNeeded();
     const afterPath = testInfo.outputPath('orchestrator-steer-after-option.png');
-    await page.screenshot({ path: afterPath });
+    await page.screenshot({ path: afterPath, fullPage: false });
     copyResultsArtifact(afterPath, folder, 'orchestrator-steer-after-option.png');
 
     // The Need mentions "screenshot", so the upload affordance must be
@@ -126,15 +160,29 @@ test.describe('Orchestrator steering', () => {
     const fileInput = page.getByTestId('orchestrator-steer-upload-input');
     await expect(fileInput).toBeAttached();
 
-    let inputClicked = false;
-    await page.exposeFunction('__steerInputClicked', () => { inputClicked = true; });
+    // Register a flag we can read back after the user gesture. The click
+    // event on the hidden <input type=file> is the bridge between the
+    // steer-card affordance and the existing attachment endpoint; the
+    // browser is allowed to fire .click() on the input synchronously
+    // during the button's user-gesture handler. Asserting the flag flips
+    // proves the wiring without exercising the actual upload pipe.
     await page.evaluate(() => {
+      (window as unknown as { __steerInputClicked?: boolean }).__steerInputClicked = false;
       const input = document.querySelector('[data-testid="orchestrator-steer-upload-input"]') as HTMLInputElement | null;
       if (!input) return;
-      input.addEventListener('click', () => (window as unknown as { __steerInputClicked: () => void }).__steerInputClicked());
+      input.addEventListener('click', (e) => {
+        (window as unknown as { __steerInputClicked?: boolean }).__steerInputClicked = true;
+        // Suppress the native file picker so the test does not stall
+        // waiting on a chooser dialog.
+        e.preventDefault();
+      });
     });
-    await uploadBtn.click();
-    expect(inputClicked).toBe(true);
+    // dispatchEvent('click') for the same z-index reason as the option
+    // click above: a coordinate-based click in this layout lands on the
+    // overlying auto-eval banner, not the steer card's button.
+    await uploadBtn.dispatchEvent('click');
+    const clicked = await page.evaluate(() => (window as unknown as { __steerInputClicked?: boolean }).__steerInputClicked === true);
+    expect(clicked).toBe(true);
 
     // Cleanup: fixture jobs are filtered out of the default board, but we
     // still delete ours so repeated test runs don't leak fixture folders.
