@@ -102,9 +102,10 @@ app.MapPost("/update/trigger", async (HttpContext ctx, UpdateOrchestrator orch, 
     try { body = await ctx.Request.ReadFromJsonAsync<TriggerRequest>(ct); } catch { /* empty body OK */ }
 
     var force = body?.Force ?? false;
-    var (runId, phase, message) = await orch.TriggerAsync(trigger: "manual", force: force, lifetime.ApplicationStopping);
-    var status = (phase == "failed") ? 500 : 200;
-    return Results.Json(new TriggerResponse(runId, phase, message), statusCode: status);
+    var (runId, phase, message) = orch.StartTrigger(trigger: "manual", force: force, lifetime.ApplicationStopping);
+    // 202 Accepted: orchestration is running in the background. Clients poll
+    // /update/status to watch phase transitions.
+    return Results.Json(new TriggerResponse(runId, phase, message), statusCode: 202);
 });
 
 app.Run();

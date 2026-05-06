@@ -40,21 +40,49 @@ public sealed class UpdateOrchestrator
         _logger = logger;
     }
 
-    /// <returns>
-    /// (runId, phase, message). When already running and force=false, returns
-    /// the existing runId with phase echoing the current step.
-    /// </returns>
-    public async Task<(string RunId, string Phase, string Message)> TriggerAsync(string trigger, bool force, CancellationToken ct)
+    /// <summary>
+    /// Kicks an update off in the background and returns immediately so the
+    /// caller does not block on the ~30 s orchestration. The returned tuple
+    /// reports the accepted runId and the phase the run is starting in;
+    /// follow-up phase transitions are visible via /update/status.
+    /// </summary>
+    public (string RunId, string Phase, string Message) StartTrigger(string trigger, bool force, CancellationToken ct)
     {
-        if (!await _gate.WaitAsync(0, ct))
+        if (!_gate.Wait(0, CancellationToken.None))
         {
             var current = _store.Get();
             if (!force) return (current.CurrentRunId ?? "(unknown)", current.Phase, "already running");
-            // force=true: wait for the gate, then proceed
-            await _gate.WaitAsync(ct);
+            // force=true: spin up a waiter that takes the gate when it frees
+            // up, then runs the same orchestration. We still return the new
+            // runId so callers can poll for *its* progress.
+            var queuedRunId = Guid.NewGuid().ToString("N").Substring(0, 8);
+            _ = Task.Run(async () =>
+            {
+                await _gate.WaitAsync(ct);
+                try { await RunOrchestrationAsync(queuedRunId, trigger, ct); }
+                finally { _gate.Release(); }
+            }, ct);
+            return (queuedRunId, "preparing", "queued behind in-flight run");
         }
 
         var runId = Guid.NewGuid().ToString("N").Substring(0, 8);
+        var startedAt = DateTime.UtcNow;
+        // Stamp the store synchronously so the very next /update/status read
+        // reflects the new run, even if the background Task hasn't entered
+        // its first SetPhase yet.
+        _store.SetPhase("preparing", $"run {runId}: queued", runId, startedAt);
+
+        _ = Task.Run(async () =>
+        {
+            try { await RunOrchestrationAsync(runId, trigger, ct); }
+            finally { _gate.Release(); }
+        }, ct);
+
+        return (runId, "preparing", "accepted");
+    }
+
+    private async Task RunOrchestrationAsync(string runId, string trigger, CancellationToken ct)
+    {
         var startedAt = DateTime.UtcNow;
         var headBefore = _git.HeadShort();
 
@@ -85,7 +113,7 @@ public sealed class UpdateOrchestrator
                 var error = $"update-stable.sh exit={rc}; tail={Tail(output, 600)}";
                 FinishHistory(runId, startedAt, headBefore, _git.HeadShort(), "failed", error, trigger);
                 _store.SetPhase("failed", error, runId, startedAt, finishedAt: DateTime.UtcNow);
-                return (runId, "failed", error);
+                return;
             }
 
             // 4. Wait for backend health.
@@ -96,7 +124,7 @@ public sealed class UpdateOrchestrator
                 var error = $"backend did not return healthy within {_options.HealthWaitSeconds}s";
                 FinishHistory(runId, startedAt, headBefore, _git.HeadShort(), "failed", error, trigger);
                 _store.SetPhase("failed", error, runId, startedAt, finishedAt: DateTime.UtcNow);
-                return (runId, "failed", error);
+                return;
             }
 
             // 5. Restore modes.
@@ -110,9 +138,12 @@ public sealed class UpdateOrchestrator
 
             // 6. Done.
             var headAfter = _git.HeadShort();
+            // Refresh the cached HeadLocal immediately so the very next
+            // /update/status read agrees with the message ("updated A -> B"),
+            // without waiting on the next periodic probe.
+            _store.SetHead(headAfter);
             FinishHistory(runId, startedAt, headBefore, headAfter, "ok", null, trigger);
             _store.SetPhase("done", $"updated {headBefore} -> {headAfter}", runId, startedAt, finishedAt: DateTime.UtcNow, lastSuccessAt: DateTime.UtcNow);
-            return (runId, "done", $"updated {headBefore} -> {headAfter}");
         }
         catch (Exception ex)
         {
@@ -120,11 +151,6 @@ public sealed class UpdateOrchestrator
             _logger.LogError(ex, "Run {RunId} crashed", runId);
             FinishHistory(runId, startedAt, headBefore, _git.HeadShort(), "failed", error, trigger);
             _store.SetPhase("failed", error, runId, startedAt, finishedAt: DateTime.UtcNow);
-            return (runId, "failed", error);
-        }
-        finally
-        {
-            _gate.Release();
         }
     }
 
