@@ -132,7 +132,7 @@ public sealed class UpdateOrchestrator
     {
         var psi = new ProcessStartInfo
         {
-            FileName = "bash",
+            FileName = _options.BashPath,
             WorkingDirectory = _options.DevspaceDir,
             RedirectStandardOutput = true,
             RedirectStandardError = true,

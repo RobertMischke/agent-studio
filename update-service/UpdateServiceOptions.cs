@@ -19,6 +19,13 @@ public sealed class UpdateServiceOptions
     /// <summary>Update script path (executed via bash).</summary>
     public string UpdateScript { get; set; } = "update-stable.sh";
 
+    /// <summary>
+    /// Absolute path to a POSIX bash binary. Default points at Git for
+    /// Windows so we don't accidentally hit WSL's `bash.exe` launcher,
+    /// which resolves `/bin/bash` against the Linux filesystem and fails.
+    /// </summary>
+    public string BashPath { get; set; } = @"C:\Program Files\Git\bin\bash.exe";
+
     /// <summary>Main backend base URL.</summary>
     public string BackendUrl { get; set; } = "http://127.0.0.1:5031";
 

@@ -15,6 +15,7 @@ options.UpdateScript    = Environment.GetEnvironmentVariable("ATP_UPDATE_SCRIPT"
 options.BackendUrl      = Environment.GetEnvironmentVariable("ATP_BACKEND_URL")         ?? options.BackendUrl;
 options.HistoryFile     = Environment.GetEnvironmentVariable("ATP_UPDATE_HISTORY")      ?? options.HistoryFile;
 options.TriggerToken    = Environment.GetEnvironmentVariable("ATP_UPDATE_TOKEN")        ?? options.TriggerToken;
+options.BashPath        = Environment.GetEnvironmentVariable("ATP_BASH_PATH")           ?? options.BashPath;
 
 builder.Services.AddSingleton(options);
 builder.Services.AddHttpClient();
