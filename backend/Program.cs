@@ -110,6 +110,7 @@ builder.Services.AddSingleton<StaleProgressArchiver>();
 builder.Services.AddSingleton<PickupFailureLog>();
 builder.Services.AddSingleton<AgentMessageBusStore>();
 builder.Services.AddSingleton<AgentMessageBusBridge>();
+builder.Services.AddSingleton<OrchestratorApi.Services.Runtime.ProductRuntimeEventStore>();
 builder.Services.AddSingleton<OrchestratorApi.Services.State.SupervisorAdvisoryStore>();
 builder.Services.AddSingleton<OrchestratorApi.Services.State.SupervisorInterventionStore>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Analysis.AnalysisReportStore>();

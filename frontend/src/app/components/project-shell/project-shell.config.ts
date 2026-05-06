@@ -16,6 +16,7 @@ export type ProjectRailKey =
   | 'test-quality'
   | 'token-usage'
   | 'observability'
+  | 'product-runtime'
   | 'steering'
   | 'audits'
   | 'jobs'
@@ -101,6 +102,15 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Agent communication on the message bus: timeline, participants, kinds, token usage',
     empty: 'No bus messages for this project yet. Once the orchestrator, an agent, or the supervisor speaks, the timeline and counters fill in here.',
     icon: '📡',
+  },
+  {
+    key: 'product-runtime',
+    group: 'project',
+    label: 'Product Runtime',
+    panelTitle: 'Product Runtime',
+    description: 'How the built software behaved during local runs and tests: events, errors, latency, domain timeline',
+    empty: 'No runtime events captured yet. Once the built software emits structured events to the runtime JSONL files, recent events, error groups, latency summaries, and the domain timeline appear here.',
+    icon: '📈',
   },
   {
     key: 'steering',
