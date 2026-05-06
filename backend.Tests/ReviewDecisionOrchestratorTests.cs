@@ -374,6 +374,213 @@ public class ReviewDecisionOrchestratorTests : IDisposable
             "# Add caching\n\nWrap GetJobs in an LRU cache to avoid the disk scan on every poll.\n"));
     }
 
+    [Fact]
+    public async Task TaskDone_AllAspectsPass_PromotesToHumanReview_WithoutConcernTags_AndWritesAspectMds()
+    {
+        SeedReviewJobWithDone("clean-job");
+        var orchestrator = BuildOrchestratorWithAspects(
+            aspectStub: _ => "[[ASPECT_VERDICT: status=pass; summary=ok]]\n[[TASK_DONE]]");
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        // Lane: 4-auto-review -> 5-human-review (accept-as-done).
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.HumanReview, "clean-job")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.AutoReview, "clean-job")));
+
+        // All four aspect MDs must exist with frontmatter status=pass.
+        foreach (var aspect in new[] { "requirement-fit", "code-quality", "documentation-impact", "tests-and-evidence" })
+        {
+            var path = Path.Combine(_watchPath, JobStates.HumanReview, "clean-job", $"aspect-{aspect}.md");
+            Assert.True(File.Exists(path), $"missing aspect MD: {aspect}");
+            Assert.Equal(AspectStatus.Pass, AspectVerdictParsing.ReadStatusFromReport(File.ReadAllText(path)));
+        }
+
+        // Job tags must NOT contain any *:concerns chips.
+        var tags = ReadJobTags(JobStates.HumanReview, "clean-job");
+        Assert.DoesNotContain(tags, t => t.EndsWith(":concerns", StringComparison.OrdinalIgnoreCase));
+
+        // Decision-journal records the accept-as-done with a multi-aspect reason.
+        var record = ReadOnlyDecisionRecord();
+        Assert.Equal(ReviewDecisionKind.AcceptAsDone, record.Kind);
+        Assert.Contains("Multi-aspect", record.Reason);
+    }
+
+    [Fact]
+    public async Task TaskDone_OneAspectConcerns_PromotesToHumanReview_AndAddsConcernsTag()
+    {
+        SeedReviewJobWithDone("concerns-job");
+        var orchestrator = BuildOrchestratorWithAspects(aspectStub: aspect => aspect switch
+        {
+            "code-quality" => "[[ASPECT_VERDICT: status=concerns; summary=Helper duplicated.]]\n[[TASK_DONE]]",
+            _ => "[[ASPECT_VERDICT: status=pass; summary=ok]]\n[[TASK_DONE]]"
+        });
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.HumanReview, "concerns-job")));
+
+        var tags = ReadJobTags(JobStates.HumanReview, "concerns-job");
+        Assert.Contains("quality:concerns", tags);
+
+        // The aspect MD itself records the concern.
+        var qualityMd = File.ReadAllText(Path.Combine(_watchPath, JobStates.HumanReview, "concerns-job", "aspect-code-quality.md"));
+        Assert.Equal(AspectStatus.Concerns, AspectVerdictParsing.ReadStatusFromReport(qualityMd));
+        Assert.Contains("Helper duplicated.", qualityMd);
+
+        var record = ReadOnlyDecisionRecord();
+        Assert.Equal(ReviewDecisionKind.AcceptAsDone, record.Kind);
+        Assert.Contains("concerns", record.Reason);
+    }
+
+    [Fact]
+    public async Task TaskDone_OneAspectBlocks_ReissuesToProgress_WithFollowUpFile()
+    {
+        SeedReviewJobWithDone("blocked-job");
+        var orchestrator = BuildOrchestratorWithAspects(aspectStub: aspect => aspect switch
+        {
+            "requirement-fit" => "[[ASPECT_VERDICT: status=block; summary=Acceptance criterion 2 missing.]]\n[[TASK_DONE]]",
+            _ => "[[ASPECT_VERDICT: status=pass; summary=ok]]\n[[TASK_DONE]]"
+        });
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        // A blocking aspect routes the job back to 3-progress, not human-review.
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "blocked-job")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.AutoReview, "blocked-job")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.HumanReview, "blocked-job")));
+
+        // Follow-up file lists the per-aspect findings.
+        var followUp = File.ReadAllText(Path.Combine(_watchPath, JobStates.Progress, "blocked-job", "orchestrator-follow-up.md"));
+        Assert.Contains("requirement-fit", followUp);
+        Assert.Contains("Acceptance criterion 2 missing.", followUp);
+
+        // Aspect MDs travel with the folder back to 3-progress.
+        Assert.True(File.Exists(Path.Combine(_watchPath, JobStates.Progress, "blocked-job", "aspect-requirement-fit.md")));
+
+        var record = ReadOnlyDecisionRecord();
+        Assert.Equal(ReviewDecisionKind.Reissue, record.Kind);
+        Assert.Contains("Multi-aspect block", record.Reason);
+    }
+
+    [Fact]
+    public async Task TaskDone_AspectPipelineDisabled_LeavesJobInAutoReview()
+    {
+        // Kill switch: an empty AspectRunners list disables the multi-aspect
+        // pipeline and the orchestrator falls back to the legacy "do nothing
+        // for clean DONE" behaviour.
+        SeedReviewJobWithDone("pipeline-off");
+        var calls = 0;
+        var orchestrator = BuildOrchestratorWithAspects(
+            aspectStub: _ => { calls++; return "[[ASPECT_VERDICT: status=pass; summary=ok]]\n[[TASK_DONE]]"; },
+            aspectRunners: Array.Empty<string>());
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        Assert.Equal(0, calls);
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.AutoReview, "pipeline-off")));
+        Assert.False(File.Exists(ReviewDecisionLog.DecisionsFile(_workspace, Project)));
+    }
+
+    [Fact]
+    public async Task TaskDone_OnceProcessed_DoesNotReprocessOnNextTick()
+    {
+        // The orchestrator appends an [orchestrator] line to cli-output.log
+        // when it acts on the DONE; FindUnresolvedDone must then return null
+        // so a second tick does not re-bill the aspect calls.
+        SeedReviewJobWithDone("idempotent-job");
+        var calls = 0;
+        var orchestrator = BuildOrchestratorWithAspects(aspectStub: _ =>
+        {
+            calls++;
+            return "[[ASPECT_VERDICT: status=pass; summary=ok]]\n[[TASK_DONE]]";
+        });
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+        var firstCalls = calls;
+        Assert.Equal(4, firstCalls);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+        Assert.Equal(firstCalls, calls);
+    }
+
+    private void SeedReviewJobWithDone(string slug)
+    {
+        var dir = Path.Combine(_watchPath, JobStates.AutoReview, slug);
+        Directory.CreateDirectory(Path.Combine(dir, "logs"));
+        File.WriteAllText(Path.Combine(dir, "job.json"),
+            $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{JobStates.AutoReview}\",\"order\":1,\"agent\":\"claude\"}}");
+        File.WriteAllText(Path.Combine(dir, "prompt.md"), $"# {slug}\n\nDo the thing.\n");
+        File.WriteAllText(Path.Combine(dir, "logs", "cli-output.log"),
+            $"[12:00:00.000] [stdout] starting{Environment.NewLine}" +
+            $"[12:00:01.000] [stdout] [[TASK_DONE]]{Environment.NewLine}");
+    }
+
+    private List<string> ReadJobTags(string state, string slug)
+    {
+        var jobJsonPath = Path.Combine(_watchPath, state, slug, "job.json");
+        var json = System.Text.Json.JsonDocument.Parse(File.ReadAllText(jobJsonPath));
+        var tags = new List<string>();
+        if (json.RootElement.TryGetProperty("tags", out var tagsEl) &&
+            tagsEl.ValueKind == System.Text.Json.JsonValueKind.Array)
+        {
+            foreach (var t in tagsEl.EnumerateArray())
+            {
+                if (t.ValueKind == System.Text.Json.JsonValueKind.String)
+                {
+                    var s = t.GetString();
+                    if (!string.IsNullOrWhiteSpace(s)) tags.Add(s!);
+                }
+            }
+        }
+        return tags;
+    }
+
+    private ReviewDecisionOrchestrator BuildOrchestratorWithAspects(
+        Func<string, string> aspectStub,
+        IReadOnlyList<string>? aspectRunners = null)
+    {
+        var dict = new Dictionary<string, string?>
+        {
+            ["TaskRepository"] = _workspace,
+            ["WatchPaths:0:Name"] = Project,
+            ["WatchPaths:0:Path"] = _watchPath,
+            ["WatchPaths:0:RootPath"] = _watchPath,
+            ["ReviewDecisionOrchestrator:Enabled"] = "true",
+            ["ReviewDecisionOrchestrator:CallsPerHour"] = "100",
+            ["ReviewDecisionOrchestrator:AspectsEnabled"] = "true"
+        };
+        if (aspectRunners != null)
+        {
+            for (var i = 0; i < aspectRunners.Count; i++)
+            {
+                dict[$"ReviewDecisionOrchestrator:AspectRunners:{i}"] = aspectRunners[i];
+            }
+            if (aspectRunners.Count == 0)
+            {
+                // Force the section to exist as an empty array so the kill
+                // switch path is tested. Configuration "exists" when any
+                // child key is present; we sentinel-add and remove via a
+                // placeholder so the section binds to an empty list.
+                dict["ReviewDecisionOrchestrator:AspectRunners:0"] = string.Empty;
+            }
+        }
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(dict)
+            .Build();
+        var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
+        var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
+        var stateMachine = new JobStateMachine(scanner, NullLogger<JobStateMachine>.Instance);
+        var chatLog = new OrchestratorChatLog(NullLogger<OrchestratorChatLog>.Instance);
+        var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
+        var aspectRunner = new AspectRunnerService(prompts, NullLogger<AspectRunnerService>.Instance);
+        aspectRunner.CliRunner = (aspectId, _, _, _, _, _) => Task.FromResult(aspectStub(aspectId));
+        var statusSnapshot = new AutoReviewStatusSnapshot();
+        var orchestrator = new ReviewDecisionOrchestrator(
+            scanner, stateMachine, chatLog, prompts, aspectRunner, statusSnapshot, config,
+            NullLogger<ReviewDecisionOrchestrator>.Instance);
+        return orchestrator;
+    }
+
     private void SeedReviewJobWithBlocked(string slug, string reason)
     {
         var dir = Path.Combine(_watchPath, JobStates.AutoReview, slug);
@@ -441,8 +648,10 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         var stateMachine = new JobStateMachine(scanner, NullLogger<JobStateMachine>.Instance);
         var chatLog = new OrchestratorChatLog(NullLogger<OrchestratorChatLog>.Instance);
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
+        var aspectRunner = new AspectRunnerService(prompts, NullLogger<AspectRunnerService>.Instance);
+        var statusSnapshot = new AutoReviewStatusSnapshot();
         var orchestrator = new ReviewDecisionOrchestrator(
-            scanner, stateMachine, chatLog, prompts, config,
+            scanner, stateMachine, chatLog, prompts, aspectRunner, statusSnapshot, config,
             NullLogger<ReviewDecisionOrchestrator>.Instance);
         orchestrator.CliRunner = (cli, model, prompt, timeout, ct) =>
         {

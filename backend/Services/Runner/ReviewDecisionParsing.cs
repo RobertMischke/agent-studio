@@ -30,6 +30,10 @@ public static class ReviewDecisionParsing
         @"\[\[TASK_BLOCKED(?::(?<reason>[^\]]*))?\]\]",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    private static readonly Regex DoneRegex = new(
+        @"\[\[TASK_DONE\]\]",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     private static readonly Regex DecisionRegex = new(
         @"\[\[ORCHESTRATOR_DECISION:\s*(?<body>[^\]]+)\]\]",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
@@ -74,6 +78,22 @@ public static class ReviewDecisionParsing
     {
         var hit = FindLatestUnresolvedSentinel(log, BlockedRegex);
         return hit == null ? null : new BlockedState(hit.Value.LineNumber, hit.Value.Reason);
+    }
+
+    /// <summary>
+    /// Counterpart to <see cref="FindUnresolvedNeedsInput"/> for the
+    /// <c>[[TASK_DONE]]</c> terminal sentinel. The multi-aspect
+    /// auto-review pipeline runs only when DONE is the latest unresolved
+    /// signal: that is, the agent declared the work complete and no
+    /// orchestrator/supervisor/user line has been written after it. Once
+    /// the orchestrator records its multi-aspect decision the log gets a
+    /// follow-up line and this helper stops returning a hit, preventing
+    /// duplicate aspect runs across ticks.
+    /// </summary>
+    public static DoneState? FindUnresolvedDone(string log)
+    {
+        var hit = FindLatestUnresolvedSentinel(log, DoneRegex);
+        return hit == null ? null : new DoneState(hit.Value.LineNumber);
     }
 
     private static (int LineNumber, string? Reason)? FindLatestUnresolvedSentinel(string log, Regex regex)
@@ -166,6 +186,8 @@ public sealed record NeedsInputState(int LineNumber, string? Reason);
 public sealed record NoOpState(int LineNumber, string? Reason);
 
 public sealed record BlockedState(int LineNumber, string? Reason);
+
+public sealed record DoneState(int LineNumber);
 
 public enum OrchestratorDecisionAction
 {

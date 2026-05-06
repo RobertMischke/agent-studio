@@ -179,10 +179,12 @@ if (typeof window !== 'undefined') {
         <div class="job-card__tags" data-testid="job-card-tags">
           @for (tg of tagChips(); track tg.id) {
             <span class="job-card__tag-chip"
-                  [class.job-card__tag-chip--ghost]="tg.ghost"
+                  [class.job-card__tag-chip--ghost]="tg.ghost && !tg.concern"
+                  [class.job-card__tag-chip--concern]="tg.concern"
                   [attr.data-tag-id]="tg.id"
+                  [attr.data-testid]="tg.concern ? 'job-card-concern-chip' : null"
                   [style.--tag-color]="tg.color"
-                  [title]="tg.tooltip">{{ tg.label }}</span>
+                  [title]="tg.tooltip">@if (tg.concern) { <span class="job-card__tag-chip-warn" aria-hidden="true">⚠</span> }{{ tg.label }}</span>
           }
         </div>
       }
@@ -592,6 +594,22 @@ if (typeof window !== 'undefined') {
       background: rgba(255, 255, 255, 0.02);
       border: 1px dashed rgba(148, 163, 184, 0.40);
     }
+    /* ADR-0025: ephemeral aspect-concern chips. The ⚠ glyph + amber
+       tone signals "the orchestrator looked at this and flagged
+       something" without overwhelming a card that already carries
+       ordinary tags. Tooltip names the source aspect. */
+    .job-card__tag-chip--concern {
+      color: #fde68a;
+      background: rgba(245, 158, 11, 0.12);
+      border: 1px solid rgba(245, 158, 11, 0.55);
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+    }
+    .job-card__tag-chip-warn {
+      font-size: 10px;
+      line-height: 1;
+    }
     .job-card__meta {
       display: flex;
       justify-content: space-between;
@@ -873,6 +891,23 @@ export class JobCardComponent implements OnInit, OnDestroy {
     if (ids.length === 0) return [];
     const byId = this.tagRegistry.byId();
     return ids.map(id => {
+      // Auto-review concern tags use the `<namespace>:concerns` shape and
+      // are not in the registry by design (they are ephemeral findings,
+      // not curated taxonomy). The card renders them with a small ⚠ chip
+      // so the user sees the source aspect at a glance instead of a
+      // generic "unknown tag" ghost. See ADR-0025.
+      const concernMatch = /^([a-z][a-z0-9-]*):concerns$/i.exec(id);
+      if (concernMatch) {
+        const ns = concernMatch[1];
+        return {
+          id,
+          label: `${ns}:concerns`,
+          color: '#fbbf24',
+          ghost: false,
+          concern: true,
+          tooltip: `Auto-review aspect '${ns}' flagged concerns. Open the job and read aspect-*.md for details.`
+        };
+      }
       const entry = byId.get(id);
       if (entry) {
         return {
@@ -880,6 +915,7 @@ export class JobCardComponent implements OnInit, OnDestroy {
           label: entry.label,
           color: entry.color,
           ghost: false,
+          concern: false,
           tooltip: entry.description ? `${entry.label} — ${entry.description}` : entry.label
         };
       }
@@ -888,6 +924,7 @@ export class JobCardComponent implements OnInit, OnDestroy {
         label: id,
         color: '#475569',
         ghost: true,
+        concern: false,
         tooltip: `Unknown tag '${id}' — registry entry was removed`
       };
     });

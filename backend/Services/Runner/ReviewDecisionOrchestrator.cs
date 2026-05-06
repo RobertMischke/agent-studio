@@ -86,8 +86,23 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     private readonly JobStateMachine _stateMachine;
     private readonly OrchestratorChatLog _chatLog;
     private readonly RuntimePromptService _prompts;
+    private readonly AspectRunnerService _aspectRunner;
+    private readonly AutoReviewStatusSnapshot _statusSnapshot;
     private readonly IConfiguration _configuration;
     private readonly ILogger<ReviewDecisionOrchestrator> _logger;
+
+    /// <summary>
+    /// Default aspect runner ids when <c>ReviewDecisionOrchestrator:AspectRunners</c>
+    /// is not configured. ADR-0025 slice 1 ships these four; missing
+    /// config falls back to default-on rather than no-aspects.
+    /// </summary>
+    private static readonly string[] DefaultAspectRunners =
+    {
+        "requirement-fit",
+        "code-quality",
+        "documentation-impact",
+        "tests-and-evidence"
+    };
 
     private readonly Queue<DateTime> _callTimestamps = new();
 
@@ -103,6 +118,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         JobStateMachine stateMachine,
         OrchestratorChatLog chatLog,
         RuntimePromptService prompts,
+        AspectRunnerService aspectRunner,
+        AutoReviewStatusSnapshot statusSnapshot,
         IConfiguration configuration,
         ILogger<ReviewDecisionOrchestrator> logger)
     {
@@ -110,6 +127,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _stateMachine = stateMachine;
         _chatLog = chatLog;
         _prompts = prompts;
+        _aspectRunner = aspectRunner;
+        _statusSnapshot = statusSnapshot;
         _configuration = configuration;
         _logger = logger;
     }
@@ -175,55 +194,110 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var maxPerHour = _configuration.GetValue("ReviewDecisionOrchestrator:CallsPerHour", 30);
         var cliBinary = _configuration.GetValue("ReviewDecisionOrchestrator:Cli", "claude");
         var model = _configuration.GetValue("ReviewDecisionOrchestrator:Model", "claude-haiku-4-5");
+        var aspectModel = _configuration.GetValue("ReviewDecisionOrchestrator:AspectModel", model);
+        var aspectTimeoutSeconds = _configuration.GetValue("ReviewDecisionOrchestrator:AspectTimeoutSeconds", 60);
         var maxReissues = _configuration.GetValue("ReviewDecisionOrchestrator:MaxAutoReissueAttempts", MaxAutoReissueAttempts);
+        var aspects = ResolveAspectRunners();
 
-        foreach (var entry in _scanner.GetWatchPaths())
+        _statusSnapshot.BeginTick();
+        try
         {
-            if (string.IsNullOrWhiteSpace(entry.Path)) continue;
-            if (!Directory.Exists(entry.Path)) continue;
-
-            foreach (var pending in EnumeratePending(entry))
+            foreach (var entry in _scanner.GetWatchPaths())
             {
-                if (ct.IsCancellationRequested) return;
+                if (string.IsNullOrWhiteSpace(entry.Path)) continue;
+                if (!Directory.Exists(entry.Path)) continue;
 
-                try
+                foreach (var pending in EnumeratePending(entry))
                 {
-                    if (pending.Kind == ReviewSignalKind.NoOp)
-                    {
-                        // NOOP is fully deterministic: no fast-model call,
-                        // no per-hour rate consumption.
-                        await ProcessNoOpAsync(workspace, entry, pending, maxReissues, ct);
-                        continue;
-                    }
+                    if (ct.IsCancellationRequested) return;
+                    _statusSnapshot.SetCurrent(entry.Name, pending.Job.Id);
 
-                    if (pending.Kind == ReviewSignalKind.Blocked)
+                    try
                     {
-                        // BLOCKED is also deterministic: the agent has
-                        // declared it cannot proceed, so we always
-                        // escalate to a human-decision intake rather
-                        // than spending a fast-model call to re-decide.
-                        await ProcessBlockedAsync(workspace, entry, pending, ct);
-                        continue;
-                    }
+                        if (pending.Kind == ReviewSignalKind.NoOp)
+                        {
+                            // NOOP is fully deterministic: no fast-model call,
+                            // no per-hour rate consumption.
+                            await ProcessNoOpAsync(workspace, entry, pending, maxReissues, ct);
+                            _statusSnapshot.RecordReissue();
+                            continue;
+                        }
 
-                    if (!RateLimitOk(maxPerHour))
+                        if (pending.Kind == ReviewSignalKind.Blocked)
+                        {
+                            // BLOCKED is also deterministic: the agent has
+                            // declared it cannot proceed, so we always
+                            // escalate to a human-decision intake rather
+                            // than spending a fast-model call to re-decide.
+                            await ProcessBlockedAsync(workspace, entry, pending, ct);
+                            _statusSnapshot.RecordEscalate();
+                            continue;
+                        }
+
+                        if (pending.Kind == ReviewSignalKind.Done)
+                        {
+                            // DONE: run the multi-aspect pass. ADR-0025
+                            // slice 1: form an opinion across multiple
+                            // quality aspects rather than waving the job
+                            // through silently. Rate-limited only on the
+                            // sum of aspect calls, since the per-aspect
+                            // cost is small and tests substitute a stub.
+                            if (aspects.Count == 0 ||
+                                !_configuration.GetValue("ReviewDecisionOrchestrator:AspectsEnabled", true))
+                            {
+                                continue;
+                            }
+                            if (!RateLimitOk(maxPerHour))
+                            {
+                                _logger.LogInformation(
+                                    "ReviewDecisionOrchestrator rate limit reached ({MaxPerHour}/h); deferring DONE aspects for {JobId}",
+                                    maxPerHour, pending.Job.Id);
+                                return;
+                            }
+                            await ProcessDoneAsync(workspace, entry, pending, aspects, cliBinary, aspectModel,
+                                TimeSpan.FromSeconds(aspectTimeoutSeconds), ct);
+                            _statusSnapshot.RecordAspectsRun(aspects.Count);
+                            _callTimestamps.Enqueue(DateTime.UtcNow);
+                            continue;
+                        }
+
+                        if (!RateLimitOk(maxPerHour))
+                        {
+                            _logger.LogInformation(
+                                "ReviewDecisionOrchestrator rate limit reached ({MaxPerHour}/h); deferring {JobId}",
+                                maxPerHour, pending.Job.Id);
+                            return;
+                        }
+
+                        await ProcessNeedsInputAsync(workspace, entry, pending, cliBinary, model, ct);
+                    }
+                    catch (Exception ex)
                     {
-                        _logger.LogInformation(
-                            "ReviewDecisionOrchestrator rate limit reached ({MaxPerHour}/h); deferring {JobId}",
-                            maxPerHour, pending.Job.Id);
-                        return;
+                        _logger.LogWarning(ex,
+                            "ReviewDecisionOrchestrator failed to process {Project}/{JobId}",
+                            entry.Name, pending.Job.Id);
                     }
-
-                    await ProcessNeedsInputAsync(workspace, entry, pending, cliBinary, model, ct);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex,
-                        "ReviewDecisionOrchestrator failed to process {Project}/{JobId}",
-                        entry.Name, pending.Job.Id);
                 }
             }
         }
+        finally
+        {
+            _statusSnapshot.EndTick();
+        }
+    }
+
+    private IReadOnlyList<string> ResolveAspectRunners()
+    {
+        var section = _configuration.GetSection("ReviewDecisionOrchestrator:AspectRunners");
+        if (!section.Exists()) return DefaultAspectRunners;
+        var configured = section.GetChildren()
+            .Select(c => c.Value)
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Select(s => s!.Trim())
+            .ToList();
+        // Empty configured array is the explicit kill switch
+        // (`AspectRunners: []`) - return empty rather than defaulting.
+        return configured;
     }
 
     private async Task ProcessNeedsInputAsync(
@@ -444,6 +518,196 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             Prompt: "(deterministic BLOCKED branch)",
             Response: "(no fast-model call)",
             FollowUp: string.Empty));
+    }
+
+    private async Task ProcessDoneAsync(
+        string workspace,
+        WatchPathEntry entry,
+        PendingDecision pending,
+        IReadOnlyList<string> aspects,
+        string cliBinary,
+        string aspectModel,
+        TimeSpan perAspectTimeout,
+        CancellationToken ct)
+    {
+        var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
+        var (taskBody, recentLog) = LoadTaskContext(pending);
+        var statusSummary = LoadStatusSummary(current.FolderPath);
+        var diffSummary = LoadDiffSummary(current);
+
+        var inputs = new AspectRunInputs(
+            Project: entry.Name,
+            JobId: current.Id,
+            JobTitle: current.Title ?? current.Id,
+            JobFolderPath: current.FolderPath,
+            TaskBody: taskBody,
+            RecentLog: recentLog,
+            DiffSummary: diffSummary,
+            StatusSummary: statusSummary);
+
+        var report = await _aspectRunner.RunAsync(inputs, aspects, cliBinary, aspectModel, perAspectTimeout, ct);
+
+        // Append a single chat-log line that names the aggregate verdict.
+        // This also resolves the [[TASK_DONE]] sentinel for FindUnresolvedDone
+        // so the next tick does not re-pick the same job and re-bill aspects.
+        var verdictNote = report.Overall switch
+        {
+            AspectStatus.Block =>
+                $"Decision: reissue (multi-aspect block). Aspects: {AspectSummaryLine(report)}",
+            AspectStatus.Concerns =>
+                $"Decision: accept-as-done with concerns. Aspects: {AspectSummaryLine(report)}. Tags: {string.Join(", ", report.ConcernTagIds)}",
+            _ =>
+                $"Decision: accept-as-done. Aspects: {AspectSummaryLine(report)}"
+        };
+
+        var chatKind = report.Overall == AspectStatus.Block
+            ? OrchestratorMessageKind.Reissue
+            : OrchestratorMessageKind.Decision;
+        _chatLog.Append(current, chatKind, verdictNote);
+
+        if (report.Overall == AspectStatus.Block)
+        {
+            await ReissueOnBlockAsync(workspace, entry, pending, current, report, ct);
+            return;
+        }
+
+        if (report.ConcernTagIds.Count > 0)
+        {
+            ConcernTagWriter.MergeConcernTags(current.FolderPath, report.ConcernTagIds, _logger);
+        }
+
+        // Promote to 5-human-review with or without concern tags. ADR-0025:
+        // accept-as-done routes to human-review, never directly to completed.
+        var move = _stateMachine.MoveJob(current.Id, JobStates.HumanReview, entry.Path);
+        if (move.Status != MoveJobStatus.Success)
+        {
+            _logger.LogWarning(
+                "ReviewDecisionOrchestrator: failed to move {JobId} to human-review after multi-aspect accept: {Status} {Message}",
+                current.Id, move.Status, move.Message);
+        }
+
+        // Re-merge tags after the lane move so the tags array on disk
+        // reflects the post-move folder. The state machine moves the
+        // folder atomically, so the tags written before the move travel
+        // with it; this re-merge is a defensive idempotent reapplication
+        // when the new folder lookup succeeds.
+        if (report.ConcernTagIds.Count > 0)
+        {
+            var moved = _scanner.FindJob(current.Id, entry.Path);
+            if (moved != null && !string.Equals(moved.FolderPath, current.FolderPath, StringComparison.OrdinalIgnoreCase))
+            {
+                ConcernTagWriter.MergeConcernTags(moved.FolderPath, report.ConcernTagIds, _logger);
+            }
+        }
+
+        if (report.Overall == AspectStatus.Concerns)
+        {
+            _statusSnapshot.RecordAccept();
+        }
+        else
+        {
+            _statusSnapshot.RecordAccept();
+        }
+
+        ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+            CreatedAt: DateTime.UtcNow,
+            JobId: current.Id,
+            Project: entry.Name,
+            Kind: ReviewDecisionKind.AcceptAsDone,
+            Reason: report.Overall == AspectStatus.Concerns
+                ? $"Multi-aspect: accept with concerns ({string.Join(", ", report.ConcernTagIds)})"
+                : "Multi-aspect: all aspects pass",
+            Prompt: "(multi-aspect run; per-aspect prompts written to aspect-*.md)",
+            Response: AspectSummaryLine(report),
+            FollowUp: string.Empty));
+    }
+
+    private async Task ReissueOnBlockAsync(
+        string workspace,
+        WatchPathEntry entry,
+        PendingDecision pending,
+        JobInfo current,
+        AspectRunReport report,
+        CancellationToken ct)
+    {
+        var followUp =
+            "Auto-review found one or more blocking aspect verdicts. Address each item below, " +
+            "then re-run the task and end with [[TASK_DONE]]:\n\n" +
+            report.FollowUpSummary;
+
+        var move = _stateMachine.MoveJob(current.Id, JobStates.Progress, entry.Path);
+        if (move.Status != MoveJobStatus.Success)
+        {
+            _logger.LogWarning(
+                "ReviewDecisionOrchestrator: failed to move {JobId} back to progress after multi-aspect block: {Status} {Message}",
+                current.Id, move.Status, move.Message);
+        }
+        else
+        {
+            try
+            {
+                var moved = _scanner.FindJob(current.Id, entry.Path);
+                if (moved != null)
+                {
+                    var followUpPath = Path.Combine(moved.FolderPath, "orchestrator-follow-up.md");
+                    await File.WriteAllTextAsync(
+                        followUpPath,
+                        $"# Orchestrator follow-up\n\n{followUp}\n",
+                        ct);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex,
+                    "ReviewDecisionOrchestrator: failed to write multi-aspect follow-up file for {JobId}",
+                    current.Id);
+            }
+        }
+
+        _statusSnapshot.RecordReissue();
+
+        ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
+            CreatedAt: DateTime.UtcNow,
+            JobId: current.Id,
+            Project: entry.Name,
+            Kind: ReviewDecisionKind.Reissue,
+            Reason: "Multi-aspect block: " + AspectSummaryLine(report),
+            Prompt: "(multi-aspect run; per-aspect prompts written to aspect-*.md)",
+            Response: AspectSummaryLine(report),
+            FollowUp: followUp));
+    }
+
+    private static string AspectSummaryLine(AspectRunReport report)
+    {
+        if (report.Verdicts.Count == 0) return "(no aspects ran)";
+        return string.Join(", ", report.Verdicts.Select(v =>
+            $"{v.Aspect}={AspectVerdictParsing.StatusToken(v.Status)}"));
+    }
+
+    private static string LoadStatusSummary(string folderPath)
+    {
+        var statusPath = Path.Combine(folderPath, "status.md");
+        if (!File.Exists(statusPath)) return string.Empty;
+        try { return Truncate(File.ReadAllText(statusPath), 4_000); }
+        catch { return string.Empty; }
+    }
+
+    private static string LoadDiffSummary(JobInfo job)
+    {
+        // A first-slice approximation: name the files the job touched
+        // via its commit metadata if present. Future iterations can
+        // replace this with `git diff --stat` against the run window.
+        if (job.Commit is null) return "(no commit metadata available)";
+        var c = job.Commit;
+        var sb = new StringBuilder();
+        sb.AppendLine($"Commit: {c.ShortSha}");
+        if (!string.IsNullOrWhiteSpace(c.Message))
+        {
+            var firstLine = c.Message.Split('\n', 2)[0].Trim();
+            if (firstLine.Length > 0) sb.AppendLine($"Subject: {firstLine}");
+        }
+        sb.AppendLine($"Files changed: {c.FilesChanged}");
+        return sb.ToString();
     }
 
     private static int CountPriorReissues(string workspace, string project, string jobId)
@@ -806,20 +1070,32 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             var needs = ReviewDecisionParsing.FindUnresolvedNeedsInput(log);
             var noop = ReviewDecisionParsing.FindUnresolvedNoOp(log);
             var blocked = ReviewDecisionParsing.FindUnresolvedBlocked(log);
+            var done = ReviewDecisionParsing.FindUnresolvedDone(log);
 
-            if (needs == null && noop == null && blocked == null) continue;
+            if (needs == null && noop == null && blocked == null && done == null) continue;
 
             int needsLine = needs?.LineNumber ?? -1;
             int noopLine = noop?.LineNumber ?? -1;
             int blockedLine = blocked?.LineNumber ?? -1;
+            int doneLine = done?.LineNumber ?? -1;
 
-            if (blockedLine >= needsLine && blockedLine >= noopLine && blocked != null)
+            // Priority is "latest unresolved sentinel wins". The terminal
+            // markers (BLOCKED, NOOP, DONE) all live at the same level;
+            // the latest one in the log is the one to act on. NEEDS_INPUT
+            // keeps the existing handling.
+            var maxTerminal = Math.Max(Math.Max(blockedLine, noopLine), doneLine);
+
+            if (maxTerminal >= needsLine && blockedLine == maxTerminal && blocked != null)
             {
                 yield return new PendingDecision(info, ReviewSignalKind.Blocked, blocked.LineNumber, blocked.Reason, NeedsInput: null);
             }
-            else if (noopLine > needsLine && noop != null)
+            else if (maxTerminal >= needsLine && noopLine == maxTerminal && noop != null)
             {
                 yield return new PendingDecision(info, ReviewSignalKind.NoOp, noop.LineNumber, noop.Reason, NeedsInput: null);
+            }
+            else if (maxTerminal >= needsLine && doneLine == maxTerminal && done != null)
+            {
+                yield return new PendingDecision(info, ReviewSignalKind.Done, done.LineNumber, Reason: null, NeedsInput: null);
             }
             else if (needs != null)
             {
@@ -918,7 +1194,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     {
         NeedsInput,
         NoOp,
-        Blocked
+        Blocked,
+        Done
     }
 
     private sealed record PendingDecision(

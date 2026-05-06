@@ -1,10 +1,11 @@
-import { Component, computed, input, output } from '@angular/core';
+import { Component, OnDestroy, OnInit, computed, inject, input, output, signal } from '@angular/core';
 import { JobInfo, JobOrderItem } from '../models/job.model';
 import { JobCardComponent } from './job-card';
 import { projectIdentity } from '../services/project-identity.util';
 import { cliTypeIcon } from '../services/format.util';
 import { InstantTooltipDirective } from '../directives/instant-tooltip.directive';
 import { groupReviewJobs } from './review-grouping.util';
+import { AutoReviewStatusStore } from '../services/auto-review-status.store';
 
 const ARCHIVE_VISIBLE_LIMIT = 20;
 
@@ -70,6 +71,13 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
         }
         <h2 class="column__title">{{ title() }}</h2>
         <span class="column__count">{{ jobs().length }}</span>
+        @if (isAutoReview()) {
+          <button type="button"
+                  class="column__info"
+                  data-testid="auto-review-info-btn"
+                  [appTip]="'About auto-review'"
+                  (click)="toggleAutoReviewInfo($event)">ⓘ</button>
+        }
         @if (canArchiveAll()) {
           <button type="button"
                   class="column__archive-all"
@@ -87,6 +95,41 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
                   (click)="collapseToggle.emit()">‹</button>
         }
       </div>
+      @if (isAutoReview()) {
+        <div class="column__auto-review-status"
+             data-testid="auto-review-status">
+          {{ autoReviewStatusLine() }}
+        </div>
+      }
+      @if (isAutoReview() && autoReviewInfoOpen()) {
+        <div class="column__info-drawer"
+             data-testid="auto-review-info-drawer"
+             (click)="$event.stopPropagation()">
+          <div class="column__info-drawer-head">
+            <strong>Auto-review (machine pass)</strong>
+            <button type="button"
+                    class="column__info-drawer-close"
+                    data-testid="auto-review-info-close"
+                    (click)="toggleAutoReviewInfo($event)">✕</button>
+          </div>
+          <p>
+            When a task ends with <code>[[TASK_DONE]]</code>, the orchestrator
+            runs a multi-aspect quality pass before sending it to human review.
+            Each aspect (requirement fit, code quality, documentation impact,
+            tests &amp; evidence) is a separate fast-model call that writes its
+            own <code>aspect-*.md</code> into the job folder.
+          </p>
+          <ul>
+            <li><strong>All pass</strong> &rarr; promote to human review with no flags.</li>
+            <li><strong>Some concerns</strong> &rarr; promote with a ⚠ chip on the card.</li>
+            <li><strong>Any block</strong> &rarr; reissue back to <code>3-progress</code> with a follow-up summarising the findings.</li>
+          </ul>
+          <p class="column__info-drawer-foot">
+            ADR-0025 / ADR-0026. The kill switch is
+            <code>ReviewDecisionOrchestrator:AspectsEnabled</code>.
+          </p>
+        </div>
+      }
       <div class="column__body">
         @if (isArchive()) {
           @for (job of archiveVisible(); track job.jobKey) {
@@ -377,6 +420,82 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
       font-size: 16px;
       line-height: 1;
     }
+    .column__info {
+      background: rgba(139, 92, 246, 0.10);
+      border: 1px solid rgba(139, 92, 246, 0.30);
+      color: #c4b5fd;
+      width: 22px;
+      height: 22px;
+      padding: 0;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      line-height: 1;
+      display: grid;
+      place-items: center;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .column__info:hover {
+      background: rgba(139, 92, 246, 0.22);
+      border-color: rgba(139, 92, 246, 0.55);
+      color: #ddd6fe;
+    }
+    .column__auto-review-status {
+      margin-top: -4px;
+      padding: 4px 8px;
+      border-radius: 8px;
+      background: rgba(139, 92, 246, 0.05);
+      border: 1px solid rgba(139, 92, 246, 0.15);
+      color: #c4b5fd;
+      font-size: 11px;
+      line-height: 1.4;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .column__info-drawer {
+      margin-top: 4px;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: #1f1d2c;
+      border: 1px solid rgba(139, 92, 246, 0.35);
+      color: #cbd5e1;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .column__info-drawer p { margin: 4px 0; }
+    .column__info-drawer ul { margin: 6px 0; padding-left: 18px; }
+    .column__info-drawer li { margin: 3px 0; }
+    .column__info-drawer code {
+      background: rgba(255,255,255,0.06);
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-size: 11px;
+    }
+    .column__info-drawer-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 6px;
+    }
+    .column__info-drawer-head strong { color: #e2e8f0; }
+    .column__info-drawer-close {
+      margin-left: auto;
+      background: transparent;
+      border: 0;
+      color: #94a3b8;
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .column__info-drawer-close:hover {
+      background: rgba(255,255,255,0.06);
+      color: #e2e8f0;
+    }
+    .column__info-drawer-foot { color: #64748b; font-size: 10px; margin-top: 6px; }
     .column__archive-all {
       background: rgba(100, 116, 139, 0.12);
       border: 1px solid rgba(100, 116, 139, 0.3);
@@ -585,7 +704,10 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
     }
   `]
 })
-export class JobColumnComponent {
+export class JobColumnComponent implements OnInit, OnDestroy {
+  private readonly autoReviewStatus = inject(AutoReviewStatusStore);
+  readonly autoReviewInfoOpen = signal(false);
+
   readonly title = input.required<string>();
   readonly icon = input<string>('');
   readonly state = input.required<string>();
@@ -673,6 +795,47 @@ export class JobColumnComponent {
   isFailedPickup(): boolean {
     return this.state() === '3a-failed-pickup';
   }
+
+  /** ADR-0025: 4-auto-review carries the lane-level "machine pass" controls. */
+  isAutoReview(): boolean {
+    return this.state() === '4-auto-review';
+  }
+
+  ngOnInit(): void {
+    if (this.isAutoReview()) {
+      this.autoReviewStatus.subscribe();
+    }
+  }
+
+  ngOnDestroy(): void {
+    if (this.isAutoReview()) {
+      this.autoReviewStatus.release();
+    }
+  }
+
+  toggleAutoReviewInfo(event: MouseEvent | Event): void {
+    event.stopPropagation();
+    this.autoReviewInfoOpen.update(v => !v);
+  }
+
+  /**
+   * One-line live status string for the 4-auto-review lane header. Reads
+   * the polled snapshot from {@link AutoReviewStatusStore}; falls back to
+   * a static "waiting" message before the first tick completes so the
+   * lane is never silent.
+   */
+  readonly autoReviewStatusLine = computed(() => {
+    const s = this.autoReviewStatus.status();
+    if (!s || !s.lastTickAt) {
+      return 'Auto-review: waiting for first tick';
+    }
+    const delta = Math.max(0, Math.round((Date.now() - new Date(s.lastTickAt).getTime()) / 1000));
+    const ago = delta < 60 ? `${delta}s ago` : `${Math.round(delta / 60)}m ago`;
+    if (s.currentJob) {
+      return `Reviewing ${s.currentJob}. Last tick: ${s.accept} accept · ${s.reissue} reissue · ${s.escalate} escalate (${ago})`;
+    }
+    return `Last tick: ${s.accept} accept · ${s.reissue} reissue · ${s.escalate} escalate (${ago})`;
+  });
 
   /**
    * The ADR-0025 swim-lanes are now real columns; the in-column
