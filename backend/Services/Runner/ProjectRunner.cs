@@ -634,10 +634,66 @@ public class ProjectRunner
         var lastActivity = RunPhaseTransitions.IsActivitySignal(evt) ? DateTime.UtcNow : prev.LastActivityAt;
         _phaseByJob[jobKey] = new RunPhaseSnapshot(nextPhase, lastActivity);
 
+        // Surface tool-call boundaries to disk so a post-mortem of a
+        // watchdog kill can answer "what was the last tool the agent
+        // started, with what arguments, did the result come back?".
+        // The legacy text log already contains this implicitly; the
+        // structured file makes it grep-friendly without parsing.
+        try { AppendToolCallLog(jobKey, evt); }
+        catch (Exception ex) { _logger.LogDebug(ex, "tool-calls.jsonl append failed for {JobKey}", jobKey); }
+
         // Clean up on terminal events so a later run with the same key
         // does not inherit stale phase state.
         if (evt is CliRunEvent.ProcessExited or CliRunEvent.Killed)
             _phaseByJob.TryRemove(jobKey, out _);
+    }
+
+    /// <summary>
+    /// Append one structured line to <c>logs/tool-calls.jsonl</c> per
+    /// <see cref="CliRunEvent.ToolStarted"/> / <see cref="CliRunEvent.ToolCompleted"/>
+    /// observed. Silent on other event types. The file lives next to
+    /// <c>cli-output.log</c> in the job folder so a post-mortem has both
+    /// in the same place.
+    /// </summary>
+    private void AppendToolCallLog(string jobKey, CliRunEvent evt)
+    {
+        if (evt is not CliRunEvent.ToolStarted and not CliRunEvent.ToolCompleted) return;
+
+        var jobFolder = JobKeyToFolderPath(jobKey);
+        if (jobFolder == null) return;
+        var logsDir = System.IO.Path.Combine(jobFolder, "logs");
+        try { System.IO.Directory.CreateDirectory(logsDir); } catch { return; }
+        var path = System.IO.Path.Combine(logsDir, "tool-calls.jsonl");
+
+        object record = evt switch
+        {
+            CliRunEvent.ToolStarted s   => new { ts = DateTime.UtcNow, kind = "started",   tool = s.ToolName, argument = s.Argument },
+            CliRunEvent.ToolCompleted c => new { ts = DateTime.UtcNow, kind = "completed", tool = c.ToolName, isError = c.IsError, firstLine = c.FirstLine },
+            _ => new { ts = DateTime.UtcNow, kind = "other" }
+        };
+        var json = System.Text.Json.JsonSerializer.Serialize(record);
+        try { System.IO.File.AppendAllText(path, json + Environment.NewLine); } catch { /* best-effort */ }
+    }
+
+    /// <summary>
+    /// Resolve a <c>jobKey</c> shaped as <c>watchPath::jobId</c> back into
+    /// the on-disk folder for the job. The job may currently live in any
+    /// lane; we walk the canonical lane order until one resolves.
+    /// </summary>
+    private string? JobKeyToFolderPath(string jobKey)
+    {
+        var sep = jobKey.IndexOf("::", StringComparison.Ordinal);
+        if (sep < 0) return null;
+        var watchPath = jobKey[..sep];
+        var jobId = jobKey[(sep + 2)..];
+        // Most likely to find an active job in 3-progress; fall through
+        // the rest of the lifecycle if not.
+        foreach (var lane in new[] { "3-progress", "3a-failed-pickup", "4-auto-review", "5-human-review", "1-preparation", "2-ready", "0-backlog", "6-completed", "7-archive" })
+        {
+            var candidate = System.IO.Path.Combine(watchPath, lane, jobId);
+            if (System.IO.Directory.Exists(candidate)) return candidate;
+        }
+        return null;
     }
 
     /// <summary>Set by <see cref="TaskRunnerService"/> on construction.</summary>
@@ -1523,11 +1579,39 @@ public class ProjectRunner
                         _logger.LogWarning(
                             "Runner '{Project}' halting auto-mode after {N} consecutive failures: {Offenders}",
                             ProjectName, _consecutiveAutoFailureCount, offenders);
+
+                        // If all N recent failures are the SAME job, the
+                        // offender is unambiguous — route it out of
+                        // 3-progress into 5-human-review so the user sees
+                        // a clear "needs your attention" surface instead
+                        // of a job stuck mid-pipeline. We still pause
+                        // auto-mode to protect the rest of the queue.
+                        var sameJobRepeated = _recentAutoFailureJobIds.Count >= AutoFailureHaltThreshold
+                            && _recentAutoFailureJobIds.All(id => string.Equals(id, jobId, StringComparison.Ordinal));
+
                         if (activeInfo != null)
                         {
-                            _chatLog.Append(activeInfo, OrchestratorMessageKind.Decision,
-                                $"Auto-mode paused: {AutoFailureHaltThreshold} consecutive auto-pickup runs did not reach review ({offenders}). Investigate before re-enabling.");
+                            var note = sameJobRepeated
+                                ? $"Auto-mode paused and job moved to human review: {AutoFailureHaltThreshold} consecutive runs of '{jobId}' did not reach review. Investigate before re-running."
+                                : $"Auto-mode paused: {AutoFailureHaltThreshold} consecutive auto-pickup runs did not reach review ({offenders}). Investigate before re-enabling.";
+                            _chatLog.Append(activeInfo, OrchestratorMessageKind.Decision, note);
                         }
+
+                        if (sameJobRepeated && activeInfo != null)
+                        {
+                            try
+                            {
+                                // Fire-and-forget: the move is the right
+                                // thing, but a failure here must not
+                                // prevent the auto-mode pause below.
+                                _ = _transitions.MoveAsync(jobId, JobStates.HumanReview, activeInfo.WatchPath, CancellationToken.None);
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogWarning(ex, "Loud-failure routing to human-review failed for {JobId}", jobId);
+                            }
+                        }
+
                         SetMode("manual");
                         _consecutiveAutoFailureCount = 0;
                         _recentAutoFailureJobIds.Clear();

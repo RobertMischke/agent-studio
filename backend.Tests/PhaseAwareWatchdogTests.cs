@@ -111,4 +111,22 @@ public class PhaseAwareWatchdogTests
         Assert.Contains("silence=70s", msg);
         Assert.Contains("allowed=60/180s", msg);
     }
+
+    [Fact]
+    public void SessionInitializing_BudgetIs60And120()
+    {
+        // Pattern analysis 2026-05-06: SessionInitializing was the
+        // dominant kill phase across 12+ recent live hangs, with kills
+        // landing at 31-33s under the old (30s, 60s) budget. Anthropic's
+        // API legitimately takes 30-60s to handshake under load (e.g.
+        // when a `rate_limit_event allowed_warning` is in flight). The
+        // budget is now (60s, 120s); locking it here so a future
+        // regression cannot quietly tighten it again.
+        Assert.Equal(WatchdogState.Quiet,
+            PhaseAwareWatchdog.DecideState(45, 100, RunPhase.SessionInitializing, Cfg));
+        Assert.Equal(WatchdogState.Suspicious,
+            PhaseAwareWatchdog.DecideState(65, 100, RunPhase.SessionInitializing, Cfg));
+        Assert.Equal(WatchdogState.Hung,
+            PhaseAwareWatchdog.DecideState(125, 200, RunPhase.SessionInitializing, Cfg));
+    }
 }
