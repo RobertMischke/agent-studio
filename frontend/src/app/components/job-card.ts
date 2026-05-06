@@ -4,6 +4,7 @@ import { GitSummaryService } from '../services/git-summary.service';
 import { ClientService } from '../services/client.service';
 import { cliTypeIcon } from '../services/format.util';
 import { projectIdentity } from '../services/project-identity.util';
+import { TagRegistryStore } from '../services/tag-registry.store';
 
 // Shared 'now' signal that ticks every 30s so all relative timestamps update in lockstep
 // without re-reading Date.now() during change detection (which causes NG0100).
@@ -68,6 +69,13 @@ if (typeof window !== 'undefined') {
         }
       </h3>
       <div class="job-card__badges">
+        @if (taskTypeChip(); as tt) {
+          <span class="job-card__type-pill"
+                [class]="'job-card__type-pill--' + tt.kind"
+                data-testid="job-task-type"
+                [attr.data-task-type]="tt.kind"
+                [title]="tt.tooltip">{{ tt.icon }} {{ tt.label }}</span>
+        }
         <span class="job-card__state-pill">{{ stateLabel() }}</span>
         @if (phaseBadge(); as pb) {
           <span class="job-card__phase-pill"
@@ -167,6 +175,17 @@ if (typeof window !== 'undefined') {
           </span>
         }
       </div>
+      @if (tagChips().length > 0) {
+        <div class="job-card__tags" data-testid="job-card-tags">
+          @for (tg of tagChips(); track tg.id) {
+            <span class="job-card__tag-chip"
+                  [class.job-card__tag-chip--ghost]="tg.ghost"
+                  [attr.data-tag-id]="tg.id"
+                  [style.--tag-color]="tg.color"
+                  [title]="tg.tooltip">{{ tg.label }}</span>
+          }
+        </div>
+      }
       @if (gitPill(); as g) {
         <div class="job-card__git" [title]="gitTooltip()" data-testid="job-card-git">
           <span class="job-card__git-branch">⎇ {{ g.branch || '?' }}</span>
@@ -387,7 +406,8 @@ if (typeof window !== 'undefined') {
     }
     .job-card__state-pill,
     .job-card__execution-pill,
-    .job-card__pending-pill {
+    .job-card__pending-pill,
+    .job-card__type-pill {
       display: inline-flex;
       align-items: center;
       gap: 6px;
@@ -528,6 +548,49 @@ if (typeof window !== 'undefined') {
       color: #86efac;
       background: rgba(134, 239, 172, 0.10);
       border-color: rgba(134, 239, 172, 0.30);
+    }
+    /* Backlog-lane spec: structural type chip (Bug / Story / Chore) and the
+       lightweight tag chips. The chore variant is deliberately quieter so
+       it does not steal attention from real classifications. */
+    .job-card__type-pill {
+      border: 1px solid transparent;
+      font-weight: 600;
+    }
+    .job-card__type-pill--bug {
+      color: #fca5a5;
+      background: rgba(248, 113, 113, 0.12);
+      border-color: rgba(248, 113, 113, 0.28);
+    }
+    .job-card__type-pill--story {
+      color: #93c5fd;
+      background: rgba(96, 165, 250, 0.12);
+      border-color: rgba(96, 165, 250, 0.30);
+    }
+    .job-card__type-pill--chore {
+      color: #94a3b8;
+      background: rgba(255, 255, 255, 0.04);
+      border-color: rgba(255, 255, 255, 0.10);
+    }
+    .job-card__tags {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin: 2px 0 6px;
+    }
+    .job-card__tag-chip {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      padding: 1px 7px;
+      border-radius: 999px;
+      color: #f1f5f9;
+      background: color-mix(in srgb, var(--tag-color, #94a3b8) 22%, rgba(0,0,0,0));
+      border: 1px solid var(--tag-color, #94a3b8);
+    }
+    .job-card__tag-chip--ghost {
+      color: #94a3b8;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px dashed rgba(148, 163, 184, 0.40);
     }
     .job-card__meta {
       display: flex;
@@ -784,7 +847,51 @@ export class JobCardComponent implements OnInit, OnDestroy {
   readonly deleteRequested = output<JobInfo>();
   private readonly gitSummary = inject(GitSummaryService);
   private readonly clients = inject(ClientService);
+  private readonly tagRegistry = inject(TagRegistryStore);
   private stopPolling: (() => void) | null = null;
+
+  /**
+   * Backlog-lane spec: render the structural classification as a small
+   * chip (🐞 Bug / 📖 Story / · Chore). The chip is always visible — even
+   * for the default `chore` value — so the user can scan a lane for
+   * stories vs technical work without filtering.
+   */
+  readonly taskTypeChip = computed<{ kind: string; label: string; icon: string; tooltip: string } | null>(() => {
+    const t = (this.job().taskType || 'chore').toLowerCase();
+    if (t === 'bug') return { kind: 'bug', label: 'Bug', icon: '🐞', tooltip: 'Task type: Bug' };
+    if (t === 'user-story') return { kind: 'story', label: 'Story', icon: '📖', tooltip: 'Task type: User story' };
+    return { kind: 'chore', label: 'Chore', icon: '·', tooltip: 'Task type: Chore (default)' };
+  });
+
+  /**
+   * Tag chips on the card. Looks up label + colour from the workspace
+   * registry signal; tags whose id no longer exists in the registry render
+   * as a faint "ghost" chip with the raw id so the user knows to clean up.
+   */
+  readonly tagChips = computed(() => {
+    const ids = this.job().tags ?? [];
+    if (ids.length === 0) return [];
+    const byId = this.tagRegistry.byId();
+    return ids.map(id => {
+      const entry = byId.get(id);
+      if (entry) {
+        return {
+          id,
+          label: entry.label,
+          color: entry.color,
+          ghost: false,
+          tooltip: entry.description ? `${entry.label} — ${entry.description}` : entry.label
+        };
+      }
+      return {
+        id,
+        label: id,
+        color: '#475569',
+        ghost: true,
+        tooltip: `Unknown tag '${id}' — registry entry was removed`
+      };
+    });
+  });
 
   onDeleteClick(event: MouseEvent) {
     event.stopPropagation();

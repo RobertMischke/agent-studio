@@ -655,6 +655,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     const proj = this.projectName();
     const c = (jobs: ReadonlyArray<{ projectName: string }>) => jobs.filter(j => j.projectName === proj).length;
     return [
+      { state: '0-backlog',     label: 'Backlog',     count: c(grouped.backlog ?? []) },
       { state: '1-preparation', label: 'Preparation', count: c(grouped.preparation) },
       { state: '2-ready',       label: 'Ready',       count: c(grouped.ready) },
       { state: '3-progress',    label: 'Progress',    count: c(grouped.progress) },

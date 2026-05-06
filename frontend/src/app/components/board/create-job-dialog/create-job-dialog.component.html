@@ -48,6 +48,42 @@
       </select>
     </label>
     <div class="field">
+      <span class="field__label">Type</span>
+      <div class="create-type-picker" data-testid="create-task-type">
+        <button type="button"
+                class="create-type-picker__btn"
+                [class.create-type-picker__btn--active]="newTaskType() === 'bug'"
+                data-testid="create-task-type-bug"
+                (click)="newTaskType.set('bug')">🐞 Bug</button>
+        <button type="button"
+                class="create-type-picker__btn"
+                [class.create-type-picker__btn--active]="newTaskType() === 'user-story'"
+                data-testid="create-task-type-story"
+                (click)="newTaskType.set('user-story')">📖 Story</button>
+        <button type="button"
+                class="create-type-picker__btn"
+                [class.create-type-picker__btn--active]="newTaskType() === 'chore'"
+                data-testid="create-task-type-chore"
+                (click)="newTaskType.set('chore')">· Chore</button>
+      </div>
+    </div>
+    @if (availableTags().length > 0) {
+      <div class="field">
+        <span class="field__label">Tags</span>
+        <div class="create-tag-picker" data-testid="create-tags">
+          @for (t of availableTags(); track t.id) {
+            <button type="button"
+                    class="create-tag-picker__chip"
+                    [class.create-tag-picker__chip--active]="newTags().includes(t.id)"
+                    [attr.data-testid]="'create-tag-' + t.id"
+                    [style.--tag-color]="t.color"
+                    [title]="t.description || t.label"
+                    (click)="toggleTag(t.id)">{{ t.label }}</button>
+          }
+        </div>
+      </div>
+    }
+    <div class="field">
       <span class="field__label">Agent</span>
       <div class="create-cli-picker">
         @for (t of cliTypes; track t) {

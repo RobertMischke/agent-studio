@@ -10,6 +10,7 @@ type LaneKey = keyof GroupedJobs;
 // targeting the loud-not-archived lane keep the same fast-path treatment as
 // every other lane.
 const STATE_TO_LANE: Record<string, LaneKey> = {
+  '0-backlog': 'backlog',
   '1-preparation': 'preparation',
   '1a-orchestrator-prep': 'orchestratorPrep',
   '1b-needs-human-review': 'needsHumanReview',
@@ -57,7 +58,7 @@ export class JobService {
   }
 
   readonly jobs = signal<JobInfo[]>([]);
-  readonly grouped = signal<GroupedJobs>({ preparation: [], orchestratorPrep: [], needsHumanReview: [], ready: [], progress: [], failedPickup: [], review: [], autoReview: [], humanReview: [], completed: [], archive: [] });
+  readonly grouped = signal<GroupedJobs>({ backlog: [], preparation: [], orchestratorPrep: [], needsHumanReview: [], ready: [], progress: [], failedPickup: [], review: [], autoReview: [], humanReview: [], completed: [], archive: [] });
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly runnerStatus = signal<RunnerStatus>({ projects: {} });
@@ -233,6 +234,33 @@ export class JobService {
 
   createJob(req: CreateJobRequest) {
     return this.http.post<{ id: string }>(`${this.baseUrl}/jobs`, req);
+  }
+
+  // Tag registry + per-job tag mutation. Backlog-lane spec.
+  listTags() {
+    return this.http.get<import('../models/job.model').TagRegistryEntry[]>(`${this.baseUrl}/tags`);
+  }
+
+  createTag(req: { id?: string; label: string; color?: string; description?: string }) {
+    return this.http.post<import('../models/job.model').TagRegistryEntry>(`${this.baseUrl}/tags`, req);
+  }
+
+  deleteTag(id: string) {
+    return this.http.delete(`${this.baseUrl}/tags/${encodeURIComponent(id)}`);
+  }
+
+  setJobTags(jobId: string, tags: string[], watchPath?: string) {
+    return this.http.put(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/tags`,
+      { tags },
+      this.withWatchPath(watchPath));
+  }
+
+  setJobTaskType(jobId: string, taskType: string, watchPath?: string) {
+    return this.http.put(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/task-type`,
+      { taskType },
+      this.withWatchPath(watchPath));
   }
 
   updateJobFile(jobId: string, fileName: string, content: string, watchPath?: string) {

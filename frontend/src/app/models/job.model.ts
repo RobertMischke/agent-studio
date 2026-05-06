@@ -270,6 +270,18 @@ export interface JobInfo {
    * same field but are owned by the post-processing slice.
    */
   phase?: string | null;
+  /**
+   * Structural classification of the task. One of `bug`, `user-story`, or
+   * `chore` (default for legacy and technical work). Drives the small chip
+   * rendered on the kanban card and the type filter pill in the header.
+   */
+  taskType?: string;
+  /**
+   * Workspace-level tag ids attached to this job. Look up display label /
+   * colour in the registry served at GET /api/tags. Unknown ids (entries
+   * that were soft-deleted from the registry) render as a faint ghost chip.
+   */
+  tags?: string[];
 }
 
 /**
@@ -856,6 +868,8 @@ export interface JobLogEntry {
 }
 
 export interface GroupedJobs {
+  /** Triage staging area; default landing for new jobs, never auto-picked. */
+  backlog: JobInfo[];
   preparation: JobInfo[];
   /** ADR-0026 lane: orchestrator-prep (1a-orchestrator-prep). */
   orchestratorPrep: JobInfo[];
@@ -892,6 +906,21 @@ export interface CreateJobRequest {
   targetState?: string;
   cliType?: CliType;
   model?: string;
+  /** One of `bug`, `user-story`, `chore`. Defaults to `chore` server-side. */
+  taskType?: string;
+  /** Workspace tag ids to attach on create. */
+  tags?: string[];
+}
+
+/**
+ * Workspace-level tag registry entry served by GET /api/tags. Drives the
+ * label + colour for tag chips on cards and in the filter bar.
+ */
+export interface TagRegistryEntry {
+  id: string;
+  label: string;
+  color: string;
+  description: string;
 }
 
 export interface JobOrderItem {

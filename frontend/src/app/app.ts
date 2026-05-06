@@ -23,7 +23,7 @@ import { AnalysisReportDrilldownComponent } from './components/analysis-report-d
 import { StatusBarComponent } from './components/status-bar';
 import { JobService } from './services/job.service';
 import { ClientService } from './services/client.service';
-import { JobDetail, JobInfo, GroupedJobs, WatchPathEntry, CliType, CLI_TYPES, CliModelInfo } from './models/job.model';
+import { JobDetail, JobInfo, GroupedJobs, WatchPathEntry, CliType, CLI_TYPES, CliModelInfo, TagRegistryEntry } from './models/job.model';
 import { ErrorDialogService } from './services/error-dialog.service';
 import { cliTypeLabel as fmtCliTypeLabel, formatMultiplier as fmtMultiplier } from './services/format.util';
 import { CreateJobDialogComponent, PendingAttachment } from './components/board/create-job-dialog/create-job-dialog.component';
@@ -33,6 +33,7 @@ import { projectIdentity } from './services/project-identity.util';
 import { DevToolsService } from './services/dev-tools.service';
 import { FeatureFlagsService } from './services/feature-flags.service';
 import { JobCompletionSoundService } from './services/job-completion-sound.service';
+import { TagRegistryStore } from './services/tag-registry.store';
 import { UpdateStableConsoleComponent } from './components/dev-tools/update-stable-console.component';
 import { E2ECleanupDialogComponent } from './components/dev-tools/e2e-cleanup-dialog.component';
 import { WorkspaceTokenTimelineComponent } from './components/workspace-token-timeline';
@@ -99,6 +100,47 @@ interface VerboseDebugContext {
               }
             </select>
           </label>
+          <div class="type-filter" data-testid="type-filter">
+            <button type="button"
+                    class="type-filter__pill"
+                    [class.type-filter__pill--active]="activeTypeFilter().size === 0"
+                    data-testid="type-filter-all"
+                    (click)="clearTypeFilters()">All</button>
+            <button type="button"
+                    class="type-filter__pill type-filter__pill--bug"
+                    [class.type-filter__pill--active]="activeTypeFilter().has('bug')"
+                    data-testid="type-filter-bug"
+                    (click)="toggleTypeFilter('bug')">🐞 Bugs</button>
+            <button type="button"
+                    class="type-filter__pill type-filter__pill--story"
+                    [class.type-filter__pill--active]="activeTypeFilter().has('user-story')"
+                    data-testid="type-filter-story"
+                    (click)="toggleTypeFilter('user-story')">📖 Stories</button>
+            <button type="button"
+                    class="type-filter__pill type-filter__pill--chore"
+                    [class.type-filter__pill--active]="activeTypeFilter().has('chore')"
+                    data-testid="type-filter-chore"
+                    (click)="toggleTypeFilter('chore')">· Chores</button>
+          </div>
+          @if (tagRegistry().length > 0) {
+            <div class="tag-filter" data-testid="tag-filter">
+              @for (t of tagRegistry(); track t.id) {
+                <button type="button"
+                        class="tag-filter__chip"
+                        [class.tag-filter__chip--active]="activeTagFilter().has(t.id)"
+                        [attr.data-testid]="'tag-filter-' + t.id"
+                        [style.--tag-color]="t.color"
+                        [title]="t.description || t.label"
+                        (click)="toggleTagFilter(t.id)">{{ t.label }}</button>
+              }
+            </div>
+          }
+          @if (hasActiveFilters()) {
+            <button type="button"
+                    class="filter-clear"
+                    data-testid="filter-clear-all"
+                    (click)="clearAllFilters()">Clear filters</button>
+          }
           <button class="btn btn--compact-toggle"
                   data-testid="compact-cards-toggle"
                   [class.btn--compact-toggle--active]="compactCards()"
@@ -429,6 +471,8 @@ interface VerboseDebugContext {
           [(newModel)]="newModel"
           [(newPrompt)]="newPrompt"
           [(attachments)]="newAttachments"
+          [(newTaskType)]="newTaskType"
+          [(newTags)]="newTags"
           (cliTypeChange)="onCreateCliTypeChange($event)"
           (cancel)="cancelCreate()"
           (submit)="submitCreate()" />
@@ -587,6 +631,52 @@ interface VerboseDebugContext {
     .client-filter__select:focus {
       outline: 1px solid rgba(139,92,246,0.6);
       outline-offset: 1px;
+    }
+    /* Backlog-lane spec: type / tag filter pills sit next to the owner select. */
+    .type-filter, .tag-filter {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 0 4px;
+    }
+    .type-filter__pill, .tag-filter__chip {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.10);
+      color: #cbd5e1;
+      border-radius: 999px;
+      padding: 3px 9px;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    .type-filter__pill:hover, .tag-filter__chip:hover {
+      background: rgba(255,255,255,0.10);
+      color: #e2e8f0;
+    }
+    .type-filter__pill--active {
+      background: rgba(139, 92, 246, 0.20);
+      border-color: rgba(139, 92, 246, 0.55);
+      color: #ddd6fe;
+    }
+    .tag-filter__chip--active {
+      background: color-mix(in srgb, var(--tag-color, #94a3b8) 22%, rgba(0,0,0,0));
+      border-color: var(--tag-color, #94a3b8);
+      color: #f1f5f9;
+    }
+    .filter-clear {
+      background: transparent;
+      border: 1px solid rgba(248, 113, 113, 0.30);
+      color: #fca5a5;
+      border-radius: 8px;
+      padding: 3px 8px;
+      font-size: 11px;
+      cursor: pointer;
+    }
+    .filter-clear:hover {
+      background: rgba(248, 113, 113, 0.10);
+      border-color: rgba(248, 113, 113, 0.55);
+      color: #fecaca;
     }
     .header__filters { display: flex; gap: 6px; align-items: center; }
     /* Filter chip carries each project's identity colour as a CSS variable
@@ -1285,6 +1375,42 @@ interface VerboseDebugContext {
       background: rgba(99,102,241,0.22);
       color: #c7d2fe;
     }
+    .create-type-picker {
+      display: inline-flex;
+      gap: 2px;
+      padding: 2px;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      background: rgba(0,0,0,0.3);
+    }
+    .create-type-picker__btn {
+      border: 0;
+      background: transparent;
+      color: #94a3b8;
+      padding: 5px 12px;
+      font-size: 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .create-type-picker__btn:hover { color: #e2e8f0; background: rgba(255,255,255,0.06); }
+    .create-type-picker__btn--active { background: rgba(139,92,246,0.22); color: #ddd6fe; }
+    .create-tag-picker { display: flex; flex-wrap: wrap; gap: 6px; }
+    .create-tag-picker__chip {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.10);
+      color: #cbd5e1;
+      border-radius: 999px;
+      padding: 3px 9px;
+      font-size: 11px;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    .create-tag-picker__chip--active {
+      background: color-mix(in srgb, var(--tag-color, #94a3b8) 22%, rgba(0,0,0,0));
+      border-color: var(--tag-color, #94a3b8);
+      color: #f1f5f9;
+    }
     .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
     .field__label { font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
     .field__input {
@@ -1961,12 +2087,28 @@ export class App implements OnInit {
     const grouped = this.jobService.grouped();
     const active = this.activeProjects();
     const ownerId = this.activeClientFilter();
-    if (active.size === 0 && !ownerId) return grouped;
-    const filterJobs = (jobs: JobInfo[]) => jobs.filter(j =>
-      (active.size === 0 || active.has(j.projectName))
-      && (!ownerId || j.ownerClientId === ownerId));
+    const types = this.activeTypeFilter();
+    const tagIds = this.activeTagFilter();
+    const noFilters = active.size === 0 && !ownerId && types.size === 0 && tagIds.size === 0;
+    if (noFilters) return grouped;
+    const filterJobs = (jobs: JobInfo[]) => jobs.filter(j => {
+      if (active.size > 0 && !active.has(j.projectName)) return false;
+      if (ownerId && j.ownerClientId !== ownerId) return false;
+      if (types.size > 0) {
+        // Default missing taskType to 'chore' (server-side default for legacy jobs).
+        const t = j.taskType || 'chore';
+        if (!types.has(t)) return false;
+      }
+      if (tagIds.size > 0) {
+        const jobTags = j.tags ?? [];
+        // OR-match: card needs at least one of the selected tags.
+        if (!jobTags.some(t => tagIds.has(t))) return false;
+      }
+      return true;
+    });
     const autoReviewFiltered = filterJobs(grouped.autoReview ?? grouped.review);
     return {
+      backlog: filterJobs(grouped.backlog ?? []),
       preparation: filterJobs(grouped.preparation),
       orchestratorPrep: filterJobs(grouped.orchestratorPrep ?? []),
       needsHumanReview: filterJobs(grouped.needsHumanReview ?? []),
@@ -2020,6 +2162,103 @@ export class App implements OnInit {
     return v ? v : null;
   }
 
+  /**
+   * Backlog-lane spec filter set: task-type pills (`bug` / `user-story` /
+   * `chore`) AND tag-id chips. Both are multi-select OR within their own
+   * group; the groups AND with the existing project + owner filters in
+   * `filteredGrouped`. Persisted to the URL hash so a bookmark or
+   * copy-paste reproduces what the user is looking at.
+   */
+  readonly activeTypeFilter = signal<Set<string>>(new Set());
+  readonly activeTagFilter = signal<Set<string>>(new Set());
+  readonly tagRegistry = signal<TagRegistryEntry[]>([]);
+  readonly tagRegistryById = computed(() => {
+    const m = new Map<string, TagRegistryEntry>();
+    for (const t of this.tagRegistry()) m.set(t.id, t);
+    return m;
+  });
+
+  clearTypeFilters(): void {
+    this.activeTypeFilter.set(new Set());
+    this.writeFilterHash();
+  }
+
+  toggleTypeFilter(type: string): void {
+    const next = new Set(this.activeTypeFilter());
+    if (next.has(type)) next.delete(type); else next.add(type);
+    this.activeTypeFilter.set(next);
+    this.writeFilterHash();
+  }
+
+  toggleTagFilter(id: string): void {
+    const next = new Set(this.activeTagFilter());
+    if (next.has(id)) next.delete(id); else next.add(id);
+    this.activeTagFilter.set(next);
+    this.writeFilterHash();
+  }
+
+  clearAllFilters(): void {
+    this.activeTypeFilter.set(new Set());
+    this.activeTagFilter.set(new Set());
+    this.activeClientFilter.set(null);
+    this.activeProjects.set(new Set());
+    localStorage.setItem('activeProjects', '[]');
+    this.writeFilterHash();
+  }
+
+  /** True when at least one type, tag, owner, or project filter is active. */
+  readonly hasActiveFilters = computed(() =>
+    this.activeTypeFilter().size > 0
+    || this.activeTagFilter().size > 0
+    || !!this.activeClientFilter()
+    || this.activeProjects().size > 0);
+
+  private readFilterHash(): void {
+    const hash = window.location.hash || '';
+    const m = hash.match(/[#&]filter=([^&]*)/);
+    if (!m) return;
+    const parts = decodeURIComponent(m[1]).split(',').map(p => p.trim()).filter(Boolean);
+    const types = new Set<string>();
+    const tags = new Set<string>();
+    for (const p of parts) {
+      const [k, v] = p.split(':');
+      if (!k || !v) continue;
+      if (k === 'type') types.add(v);
+      else if (k === 'tag') tags.add(v);
+    }
+    this.activeTypeFilter.set(types);
+    this.activeTagFilter.set(tags);
+  }
+
+  private writeFilterHash(): void {
+    const parts: string[] = [];
+    for (const t of this.activeTypeFilter()) parts.push(`type:${t}`);
+    for (const t of this.activeTagFilter()) parts.push(`tag:${t}`);
+    const fragment = parts.length > 0 ? `filter=${parts.join(',')}` : '';
+    // Preserve any non-filter hash content (e.g. the project route).
+    const existing = (window.location.hash || '').replace(/^#/, '');
+    const others = existing.split('&').filter(s => s && !s.startsWith('filter='));
+    const next = [fragment, ...others].filter(Boolean).join('&');
+    const target = next ? `#${next}` : '';
+    if (target !== window.location.hash) {
+      // Replace so we don't pollute history with every filter toggle.
+      history.replaceState(null, '', target || window.location.pathname + window.location.search);
+    }
+  }
+
+  loadTagRegistry(): void {
+    this.jobService.listTags().subscribe({
+      next: tags => {
+        this.tagRegistry.set(tags);
+        this.tagRegistryStore.set(tags);
+      },
+      error: () => {
+        this.tagRegistry.set([]);
+        this.tagRegistryStore.set([]);
+      }
+    });
+  }
+
   // The visible lane order is the canonical Order field, which is also what
   // ProjectRunner.GetNextReadyJob picks by. Keeping a single source of truth
   // here means "what's at the top of Ready runs first" is structurally true,
@@ -2032,7 +2271,9 @@ export class App implements OnInit {
     // pass; the eye icon is the user's "needs me" lane.
     // ADR-0026: 1a-orchestrator-prep is always rendered (rail at level 0);
     // 1b-needs-human-review is hide-when-empty.
+    // Backlog-lane spec: 0-backlog leads the focus list when populated.
     const lanes = [
+      { state: '0-backlog', title: 'Backlog', icon: '🗒️', jobs: grouped.backlog ?? [] },
       { state: '1-preparation', title: 'In Preparation', icon: '📋', jobs: grouped.preparation },
       { state: '1a-orchestrator-prep', title: 'Orch Prep', icon: '🤖', jobs: grouped.orchestratorPrep },
     ];
@@ -2073,7 +2314,10 @@ export class App implements OnInit {
     const grouped = this.displayGrouped();
     // ADR-0026: orchestrator-prep + needs-human-review join the backlog
     // bucket. The bounce lane only renders when at least one job lives there.
+    // Backlog-lane spec: 0-backlog is the leftmost lane, the default landing
+    // for new jobs and the active triage staging area.
     const backlogLanes: Array<{ state: string; title: string; icon: string; jobs: JobInfo[] }> = [
+      { state: '0-backlog', title: 'Backlog', icon: '🗒️', jobs: grouped.backlog ?? [] },
       { state: '1-preparation', title: 'In Preparation', icon: '📋', jobs: grouped.preparation },
       { state: '1a-orchestrator-prep', title: 'Orch Prep', icon: '🤖', jobs: grouped.orchestratorPrep },
     ];
@@ -2135,7 +2379,11 @@ export class App implements OnInit {
   newWatchPath = '';
   newAgent = 'copilot';
   newPrompt = '';
-  newTargetState = '1-preparation';
+  newTargetState = '0-backlog';
+  /** Backlog-lane spec: structural classification of the new task. */
+  newTaskType = 'chore';
+  /** Backlog-lane spec: tag ids attached on create. */
+  newTags: string[] = [];
   newCliType: CliType = readDefaultCliPref();
   newModel = readDefaultModelPref(readDefaultCliPref());
   newAttachments: PendingAttachment[] = [];
@@ -2149,6 +2397,7 @@ export class App implements OnInit {
     switch (this.newTargetState) {
       case '2-ready': return 'Add Task to Ready';
       case '1-preparation': return 'Add Task to Preparation';
+      case '0-backlog': return 'Add Task to Backlog';
       default: return 'Add Task';
     }
   }
@@ -2195,7 +2444,7 @@ export class App implements OnInit {
   }
 
   canAddTaskToGroup(state: string): boolean {
-    return state === '1-preparation' || state === '2-ready';
+    return state === '0-backlog' || state === '1-preparation' || state === '2-ready';
   }
 
   readonly devToolsFlags = computed(() => this.devTools.flags());
@@ -2231,6 +2480,7 @@ export class App implements OnInit {
     readonly clientService: ClientService,
     readonly featureFlags: FeatureFlagsService,
     private readonly _completionSound: JobCompletionSoundService,
+    private readonly tagRegistryStore: TagRegistryStore,
   ) {
     effect(() => {
       const selected = this.selectedJob();
@@ -2266,6 +2516,10 @@ export class App implements OnInit {
   }
 
   ngOnInit() {
+    // Backlog-lane spec: hydrate the filter bar from the URL hash before
+    // rendering so a bookmark or copy-paste lands on the same view.
+    this.readFilterHash();
+    this.loadTagRegistry();
     this.refresh();
     this.jobService.startLiveUpdates();
     this.jobService.getWatchPaths().subscribe({
@@ -2860,7 +3114,9 @@ export class App implements OnInit {
     this.newTitle = '';
     this.newPrompt = '';
     this.newAgent = 'copilot';
-    this.newTargetState = '1-preparation';
+    this.newTaskType = 'chore';
+    this.newTags = [];
+    this.newTargetState = '0-backlog';
     this.newCliType = readDefaultCliPref();
     this.newModel = readDefaultModelPref(this.newCliType);
     this.availableModels.set([]);
@@ -2886,7 +3142,9 @@ export class App implements OnInit {
       promptMarkdown: initialPrompt,
       targetState: this.newTargetState,
       cliType: this.newCliType,
-      model: this.newModel.trim() || undefined
+      model: this.newModel.trim() || undefined,
+      taskType: this.newTaskType,
+      tags: this.newTags.length > 0 ? [...this.newTags] : undefined
     }).subscribe({
       next: (res) => {
         localStorage.setItem('lastCreateWatchPath', watchPath);

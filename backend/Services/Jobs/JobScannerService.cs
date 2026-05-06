@@ -190,7 +190,9 @@ public class JobScannerService
                 PendingIntent = ReadPendingIntent(jobDir),
                 Fixture = raw.TryGetProperty("fixture", out var fix)
                     && fix.ValueKind is JsonValueKind.True,
-                Phase = ReadPhase(raw, state, jobDir)
+                Phase = ReadPhase(raw, state, jobDir),
+                TaskType = ReadTaskType(raw),
+                Tags = ReadTags(raw)
             };
         }
         catch (Exception ex)
@@ -346,6 +348,38 @@ public class JobScannerService
             return null;
         }
         return value;
+    }
+
+    /// <summary>
+    /// Reads the optional <c>taskType</c> field from <c>job.json</c>. Missing
+    /// or unknown values fall back to <see cref="TaskTypes.Chore"/>, the
+    /// safe neutral default for legacy and technical work that predates the
+    /// field. No write-back: lazy defaulting keeps boot scans cheap.
+    /// </summary>
+    private static string ReadTaskType(JsonElement raw)
+    {
+        if (!raw.TryGetProperty("taskType", out var t)) return TaskTypes.Chore;
+        if (t.ValueKind != JsonValueKind.String) return TaskTypes.Chore;
+        return TaskTypes.Normalize(t.GetString());
+    }
+
+    /// <summary>
+    /// Reads the optional <c>tags</c> string array from <c>job.json</c>. Drops
+    /// non-string entries. Returns an empty list when the field is absent or
+    /// the wrong shape; never throws on a malformed value.
+    /// </summary>
+    private static List<string> ReadTags(JsonElement raw)
+    {
+        if (!raw.TryGetProperty("tags", out var arr)) return [];
+        if (arr.ValueKind != JsonValueKind.Array) return [];
+        var list = new List<string>();
+        foreach (var item in arr.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.String) continue;
+            var s = item.GetString();
+            if (!string.IsNullOrWhiteSpace(s)) list.Add(s!);
+        }
+        return list;
     }
 
     /// <summary>

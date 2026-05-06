@@ -42,6 +42,9 @@ public static class JobCrudEndpoints
             var humanReview = jobs.Where(j => j.State == JobStates.HumanReview).OrderBy(j => j.Order).ToList();
             var grouped = new
             {
+                // Backlog: triage staging area, the leftmost lane and the
+                // default landing for new jobs.
+                Backlog = jobs.Where(j => j.State == JobStates.Backlog).OrderBy(j => j.Order).ToList(),
                 Preparation = jobs.Where(j => j.State == JobStates.Preparation).OrderBy(j => j.Order).ToList(),
                 // ADR-0026: orchestrator-prep + needs-human-review lanes.
                 // Empty by default; clients render NeedsHumanReview only when
@@ -158,6 +161,24 @@ public static class JobCrudEndpoints
                 return Results.BadRequest(new { error = "Title is required" });
 
             var success = mutations.SetJobTitle(jobId, req.Title, watchPath);
+            return success ? Results.Ok() : Results.NotFound();
+        });
+
+        group.MapPut("/{jobId}/task-type", (string jobId, string? watchPath, SetJobTaskTypeRequest req, JobMutationService mutations) =>
+        {
+            if (req is null || string.IsNullOrWhiteSpace(req.TaskType))
+                return Results.BadRequest(new { error = "taskType is required" });
+            var success = mutations.SetJobTaskType(jobId, req.TaskType, watchPath);
+            return success ? Results.Ok() : Results.NotFound();
+        });
+
+        // Replace-all: the request's Tags array becomes the new full set on
+        // the job. Empty list clears tags. Unknown ids are accepted (the
+        // registry may evolve out from under a job); ghost rendering is the
+        // FE's responsibility.
+        group.MapPut("/{jobId}/tags", (string jobId, string? watchPath, SetJobTagsRequest req, JobMutationService mutations) =>
+        {
+            var success = mutations.SetJobTags(jobId, req?.Tags ?? new List<string>(), watchPath);
             return success ? Results.Ok() : Results.NotFound();
         });
     }

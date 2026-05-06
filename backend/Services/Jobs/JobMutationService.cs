@@ -89,6 +89,58 @@ public class JobMutationService
         return true;
     }
 
+    public bool SetJobTaskType(string jobId, string taskType, string? watchPath = null)
+    {
+        var info = _scanner.FindJob(jobId, watchPath);
+        if (info == null) return false;
+        JobJsonFile.UpdateField(info.FolderPath, "taskType", TaskTypes.Normalize(taskType), _logger);
+        return true;
+    }
+
+    /// <summary>
+    /// Replace-all write of the per-job tag id array. Tag ids are normalized
+    /// via <see cref="NormalizeTagId"/> (lowercase, <c>[a-z0-9-]</c>, max 32
+    /// chars), de-duplicated case-insensitively, and the order of the
+    /// caller's list is preserved. Empty input clears the field. The registry
+    /// is consulted by readers, not writers: an unknown id is accepted at
+    /// write time and rendered as a ghost chip until it lands in
+    /// <c>tags.json</c> (or the job is re-tagged).
+    /// </summary>
+    public bool SetJobTags(string jobId, IEnumerable<string> tags, string? watchPath = null)
+    {
+        var info = _scanner.FindJob(jobId, watchPath);
+        if (info == null) return false;
+        var clean = (tags ?? Array.Empty<string>())
+            .Select(NormalizeTagId)
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        JobJsonFile.UpdateField(info.FolderPath, "tags", clean, _logger);
+        return true;
+    }
+
+    /// <summary>
+    /// Coerce arbitrary user input into the tag-id grammar: lowercase ASCII
+    /// letters, digits, and hyphens, length 1..32. Unknown characters are
+    /// dropped (the spec calls for silent server-side stripping; an empty
+    /// result is filtered upstream so an all-junk input becomes a no-op).
+    /// </summary>
+    public static string NormalizeTagId(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return string.Empty;
+        var s = raw.Trim().ToLowerInvariant();
+        var sb = new StringBuilder(Math.Min(s.Length, 32));
+        foreach (var c in s)
+        {
+            if (sb.Length >= 32) break;
+            if (c is >= 'a' and <= 'z' or >= '0' and <= '9' or '-') sb.Append(c);
+            else if (c == ' ' || c == '_') sb.Append('-');
+        }
+        // collapse runs of '-' and trim
+        var collapsed = System.Text.RegularExpressions.Regex.Replace(sb.ToString(), "-+", "-").Trim('-');
+        return collapsed;
+    }
+
     public bool SetJobTitle(string jobId, string title, string? watchPath = null)
     {
         if (string.IsNullOrWhiteSpace(title)) return false;
@@ -131,11 +183,18 @@ public class JobMutationService
 
         if (entry == null) return null;
 
+        // Backlog is the default landing lane: a job created with no explicit
+        // targetState lands in 0-backlog (triage staging) instead of 1-preparation.
+        // Callers that want the legacy "create-and-prep" or "create-and-ready"
+        // behavior pass an explicit targetState. This is the load-bearing
+        // semantics from the backlog-lane spec: preparation is for *active*
+        // prep, not raw intake.
         var targetState = req.TargetState switch
         {
+            JobStates.Backlog => JobStates.Backlog,
             JobStates.Preparation => JobStates.Preparation,
             JobStates.Ready => JobStates.Ready,
-            _ => JobStates.Preparation
+            _ => JobStates.Backlog
         };
 
         // Sanitize ID: transliterate umlauts, lowercase, replace spaces with dashes, only allow safe chars
@@ -180,6 +239,20 @@ public class JobMutationService
             jobJson["cliType"] = CliTypes.Normalize(req.CliType);
         if (req.Fixture)
             jobJson["fixture"] = true;
+
+        // taskType is always written so a fresh job.json carries an explicit
+        // value. Legacy folders without the field render as Chore (the
+        // scanner's lazy default), so we only emit it on create.
+        jobJson["taskType"] = TaskTypes.Normalize(req.TaskType);
+
+        if (req.Tags is { Count: > 0 })
+        {
+            jobJson["tags"] = req.Tags
+                .Select(NormalizeTagId)
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
 
         File.WriteAllText(Path.Combine(jobDir, "job.json"),
             JsonSerializer.Serialize(jobJson, new JsonSerializerOptions { WriteIndented = true }));

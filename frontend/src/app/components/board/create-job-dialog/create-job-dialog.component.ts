@@ -1,8 +1,9 @@
 import { ChangeDetectionStrategy, Component, ElementRef, HostListener, ViewChild, computed, inject, input, model, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { CliModelInfo, CliType, CLI_TYPES, WatchPathEntry } from '../../../models/job.model';
+import { CliModelInfo, CliType, CLI_TYPES, TagRegistryEntry, WatchPathEntry } from '../../../models/job.model';
 import { cliTypeIcon as fmtCliTypeIcon, cliTypeLabel as fmtCliTypeLabel, formatMultiplier as fmtMultiplier } from '../../../services/format.util';
 import { JobService } from '../../../services/job.service';
+import { TagRegistryStore } from '../../../services/tag-registry.store';
 
 export interface PendingAttachment {
   id: string;
@@ -46,6 +47,19 @@ export class CreateJobDialogComponent {
   readonly newModel = model<string>('');
   readonly newPrompt = model<string>('');
   readonly attachments = model<PendingAttachment[]>([]);
+  /** Backlog-lane spec: structural classification picker. */
+  readonly newTaskType = model<string>('chore');
+  /** Backlog-lane spec: tag ids attached on create. */
+  readonly newTags = model<string[]>([]);
+
+  readonly tagRegistryStore = inject(TagRegistryStore);
+  readonly availableTags = computed(() => this.tagRegistryStore.tags());
+
+  toggleTag(id: string): void {
+    const current = this.newTags();
+    const next = current.includes(id) ? current.filter(t => t !== id) : [...current, id];
+    this.newTags.set(next);
+  }
 
   readonly cliTypeChange = output<CliType>();
   readonly cancel = output<void>();

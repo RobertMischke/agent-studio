@@ -127,6 +127,49 @@ public record JobInfo
     /// without rewriting every <c>job.json</c>.
     /// </summary>
     public string? Phase { get; init; }
+
+    /// <summary>
+    /// Structural classification of the task. One of <see cref="TaskTypes.Bug"/>,
+    /// <see cref="TaskTypes.UserStory"/>, or <see cref="TaskTypes.Chore"/>
+    /// (default for legacy and technical work). Stored in <c>job.json</c> as
+    /// <c>"taskType"</c>. The kanban card renders a small chip; filters in
+    /// the header narrow the board by type.
+    /// </summary>
+    public string TaskType { get; init; } = TaskTypes.Chore;
+
+    /// <summary>
+    /// Lightweight tag identifiers attached to this job. The label and colour
+    /// for each id come from the workspace-level <c>tags.json</c> registry
+    /// served at <c>GET /api/tags</c>. Unknown ids (registry entries that
+    /// were soft-deleted) render as a faint "ghost" chip on the card so the
+    /// user can clear the stale reference. Stored in <c>job.json</c> as
+    /// <c>"tags"</c>; absent or null on disk means an empty list.
+    /// </summary>
+    public List<string> Tags { get; init; } = [];
+}
+
+/// <summary>
+/// String constants for <see cref="JobInfo.TaskType"/>. Kept as constants (not
+/// an enum) so the JSON wire format is the literal string and stable across
+/// enum renames. The default is <see cref="Chore"/>: existing technical work
+/// that predates the field migrates to the safe neutral category.
+/// </summary>
+public static class TaskTypes
+{
+    public const string Bug = "bug";
+    public const string UserStory = "user-story";
+    public const string Chore = "chore";
+
+    public static readonly string[] All = [Bug, UserStory, Chore];
+
+    public static string Normalize(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return Chore;
+        var v = value.Trim();
+        foreach (var t in All)
+            if (string.Equals(t, v, StringComparison.OrdinalIgnoreCase)) return t;
+        return Chore;
+    }
 }
 
 /// <summary>
@@ -484,6 +527,68 @@ public record CreateJobRequest
     /// on stable.
     /// </summary>
     public bool Fixture { get; init; }
+
+    /// <summary>
+    /// Structural classification (<c>bug</c>, <c>user-story</c>, <c>chore</c>).
+    /// Defaults to <see cref="TaskTypes.Chore"/> when omitted. Validated on
+    /// the server and normalized via <see cref="TaskTypes.Normalize"/>.
+    /// </summary>
+    public string? TaskType { get; init; }
+
+    /// <summary>
+    /// Optional tag ids to attach to the new job. Unknown ids are dropped
+    /// silently; the registry is the source of truth for label and colour.
+    /// </summary>
+    public List<string>? Tags { get; init; }
+}
+
+/// <summary>
+/// One entry in the workspace-level tag registry. Stored as one element of
+/// the JSON array at <c>&lt;TaskRepository&gt;/tags.json</c> and surfaced via
+/// <c>GET /api/tags</c>. The id is the lookup key referenced from each
+/// <see cref="JobInfo.Tags"/> entry; label, colour, and description are
+/// pure display metadata.
+/// </summary>
+public record TagRegistryEntry
+{
+    public string Id { get; init; } = "";
+    public string Label { get; init; } = "";
+    public string Color { get; init; } = "#94a3b8";
+    public string Description { get; init; } = "";
+}
+
+/// <summary>
+/// Body for <c>POST /api/tags</c>. When <see cref="Id"/> is omitted, the
+/// server derives it from <see cref="Label"/> by lowercasing and stripping
+/// to <c>[a-z0-9-]</c>.
+/// </summary>
+public record CreateTagRequest
+{
+    public string? Id { get; init; }
+    public string Label { get; init; } = "";
+    public string? Color { get; init; }
+    public string? Description { get; init; }
+}
+
+/// <summary>
+/// Body for <c>PUT /api/jobs/{id}/tags</c>. Replace-all: the supplied list is
+/// the new full set of tag ids on the job. Empty list clears tags. Unknown
+/// ids are accepted (the registry may evolve), but they will render as a
+/// ghost chip until the registry catches up or the job is re-tagged.
+/// </summary>
+public record SetJobTagsRequest
+{
+    public List<string> Tags { get; init; } = [];
+}
+
+/// <summary>
+/// Body for <c>PUT /api/jobs/{id}/task-type</c>. Validated via
+/// <see cref="TaskTypes.Normalize"/>; an unknown value collapses to
+/// <see cref="TaskTypes.Chore"/>.
+/// </summary>
+public record SetJobTaskTypeRequest
+{
+    public string TaskType { get; init; } = TaskTypes.Chore;
 }
 
 public record ReorderRequest
@@ -834,6 +939,15 @@ public record CliOutputLine
 
 public static class JobStates
 {
+    /// <summary>
+    /// Triage staging area for new tasks. Sits before <see cref="Preparation"/>
+    /// and is the default landing lane for <see cref="CreateJobRequest"/> when
+    /// no explicit <c>targetState</c> is supplied. Auto-pickup never reaches
+    /// into this lane: a backlog job must be promoted explicitly. The numeric
+    /// prefix sorts it before <c>1-preparation</c> on disk and in the kanban.
+    /// </summary>
+    public const string Backlog = "0-backlog";
+
     public const string Preparation = "1-preparation";
 
     // ADR-0026: orchestrator-prep + needs-human-review lanes are *additive*
@@ -875,7 +989,7 @@ public static class JobStates
     public const string Archive = "7-archive";
 
     public static readonly string[] All =
-        [Preparation, OrchestratorPrep, NeedsHumanReview, Ready, Progress, FailedPickup, AutoReview, HumanReview, Completed, Archive];
+        [Backlog, Preparation, OrchestratorPrep, NeedsHumanReview, Ready, Progress, FailedPickup, AutoReview, HumanReview, Completed, Archive];
 
     /// <summary>Maps old unnumbered folder names to new numbered ones.</summary>
     public static readonly Dictionary<string, string> LegacyFolderMap = new()

@@ -41,6 +41,7 @@ Direct folder edits are reserved for backend implementation, migrations, recover
 Each visible state is a folder, and each job is a subfolder inside one state:
 
 ```text
+0-backlog/
 1-preparation/
 2-ready/
 3-progress/
@@ -49,6 +50,8 @@ Each visible state is a folder, and each job is a subfolder inside one state:
 6-completed/
 7-archive/
 ```
+
+`0-backlog` is the triage staging area: it is the default landing lane for new jobs created via `POST /api/jobs` without an explicit `targetState`. Auto-pickup never reaches into the backlog; promoting a job to `1-preparation` or `2-ready` is an explicit user action.
 
 The two review lanes are explicit (ADR-0025): `4-auto-review` is the orchestrator's machine pass; `5-human-review` is the lane that actually waits for the user. The pre-ADR-0025 numbered lanes (`4-review`, `5-completed`, `6-archive`) are migrated automatically on backend boot.
 
@@ -74,14 +77,21 @@ Each job folder uses this structure:
   "id": "<job-name>",
   "title": "<description>",
   "createdAt": "<ISO-8601>",
-  "state": "1-preparation",
+  "state": "0-backlog",
   "order": 1,
   "agent": "agent",
-  "cliType": "codex"
+  "cliType": "codex",
+  "taskType": "chore",
+  "tags": ["architecture"]
 }
 ```
 
-**States:** `1-preparation` -> `2-ready` -> `3-progress` -> `4-auto-review` -> `5-human-review` -> `6-completed` -> `7-archive`
+**States:** `0-backlog` -> `1-preparation` -> `2-ready` -> `3-progress` -> `4-auto-review` -> `5-human-review` -> `6-completed` -> `7-archive`
+
+**Optional fields:**
+
+- `taskType` — structural classification, one of `bug`, `user-story`, or `chore` (default for legacy and technical work). Drives the small chip rendered on the kanban card and the type filter pill in the header.
+- `tags` — string array of workspace tag ids. The label and colour for each id come from `<workspace>/tags.json` served by `GET /api/tags`. Unknown ids (registry entries that were soft-deleted) render as a faint ghost chip on the card.
 
 The application owns transitions between these states. Successful CLI runs move from `3-progress` to `4-auto-review`; the orchestrator's review pass then either reissues (back to `3-progress`), accepts-as-done (forward to `5-human-review`), or escalates (also forward to `5-human-review` with a `[supervisor]` chat-note). The user always confirms the move from `5-human-review` to `6-completed`. Failed or stopped runs stay in `3-progress` for inspection, restart, or continuation.
 

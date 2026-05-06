@@ -119,6 +119,7 @@ builder.Services.AddSingleton<OrchestratorApi.Services.Drift.DriftReportStore>()
 builder.Services.AddSingleton<OrchestratorApi.Services.Drift.AdrCodeDriftAnalysisService>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Drift.DocsMarketingDriftAnalysisService>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Drift.ArchitectureElementStateStore>();
+builder.Services.AddSingleton<OrchestratorApi.Services.Tags.TagRegistryService>();
 builder.Services.AddSingleton<ProjectObservationService>();
 builder.Services.AddSingleton<SupervisorInterventionService>();
 builder.Services.AddHostedService<HardHealthCheckHostedService>();
