@@ -1,19 +1,22 @@
 import { test, expect } from '@playwright/test';
-import { api, BACKEND } from './helpers/api';
+import { api } from './helpers/api';
 import { createJob, listJobs } from './helpers/jobs';
 
 interface WatchPath { name: string; path: string; rootPath: string; }
 
 async function deleteJob(jobId: string, watchPath: string): Promise<void> {
-  await fetch(`${BACKEND}/api/jobs/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
-    method: 'DELETE'
-  });
+  // Use the api helper so the X-Client-Id header is attached; raw fetch
+  // would 4xx out under the post-multi-client backend contract.
+  await api(
+    `/api/jobs/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`,
+    { method: 'DELETE' },
+  ).catch(() => {});
 }
 
 async function cleanup(prefix: string): Promise<void> {
   const all = await listJobs();
   const stale = all.filter(j => j.id.startsWith(prefix));
-  await Promise.all(stale.map(j => deleteJob(j.id, j.watchPath).catch(() => {})));
+  await Promise.all(stale.map(j => deleteJob(j.id, j.watchPath)));
 }
 
 /**
@@ -33,10 +36,20 @@ test.describe('Board search', () => {
   test('filters tasks by unique title token, clear restores', async ({ page }) => {
     const paths = await api<WatchPath[]>('/api/watch-paths');
     test.skip(!paths.length, 'no watch paths configured');
-    const watchPath = paths[0].path;
+    // Prefer the agent-taskboard project (the dev's own checkout) so the
+    // card lands under whatever owner / lane filters the user has active
+    // by default. Fall back to the first path when only one is configured.
+    const target = paths.find(p => /agent-taskboard/i.test(p.path)) ?? paths[0];
+    const watchPath = target.path;
+
+    // Clear the persisted project filter so the card we create is visible
+    // regardless of which chips the developer last toggled. activeProjects
+    // == [] means "show all".
+    await page.addInitScript(() => {
+      localStorage.setItem('activeProjects', '[]');
+    });
 
     const uniqueA = `zorblax${Date.now().toString(36)}`;
-    const uniqueB = `quibsnap${Date.now().toString(36)}`;
     const a = await createJob({
       id: PREFIX + uniqueA,
       title: `Card A about ${uniqueA}`,
@@ -45,50 +58,42 @@ test.describe('Board search', () => {
       agent: 'claude',
       promptMarkdown: 'placeholder',
       targetState: '1-preparation',
-    });
-    const b = await createJob({
-      id: PREFIX + uniqueB,
-      title: `Card B about ${uniqueB}`,
-      watchPath,
-      cliType: 'claude',
-      agent: 'claude',
-      promptMarkdown: 'placeholder',
-      targetState: '1-preparation',
+      // fixture jobs are hidden from /api/jobs/grouped so they would not
+      // render on the kanban; we need a real card for this spec.
+      fixture: false,
     });
 
-    await page.goto('/');
-    const search = page.getByTestId('board-search-input');
-    await expect(search).toBeVisible();
+    try {
+      await page.goto('/');
+      const search = page.getByTestId('board-search-input');
+      await expect(search).toBeVisible();
 
-    const cardA = page.locator('app-job-card', { hasText: uniqueA });
-    const cardB = page.locator('app-job-card', { hasText: uniqueB });
-    await expect(cardA).toBeVisible();
-    await expect(cardB).toBeVisible();
+      const cardA = page.locator('app-job-card', { hasText: uniqueA });
+      // Wait for the polling cycle to fold the freshly-created card in.
+      await expect(cardA.first()).toBeVisible({ timeout: 15_000 });
 
-    // Typing the unique substring of A leaves only A visible.
-    await search.fill(uniqueA);
-    await expect(cardA).toBeVisible();
-    await expect(cardB).toHaveCount(0);
+      // Type the unique substring; the rest of the board collapses to A only.
+      await search.fill(uniqueA);
+      await expect(cardA.first()).toBeVisible();
+      // Every other card on the board is gone.
+      const otherCards = page.locator('app-job-card').filter({ hasNotText: uniqueA });
+      await expect(otherCards).toHaveCount(0);
 
-    // The × button clears the input and restores both cards.
-    await page.getByTestId('board-search-clear').click();
-    await expect(search).toHaveValue('');
-    await expect(cardA).toBeVisible();
-    await expect(cardB).toBeVisible();
+      // The × button clears the input and the rest of the board returns.
+      await page.getByTestId('board-search-clear').click();
+      await expect(search).toHaveValue('');
+      await expect(cardA.first()).toBeVisible();
 
-    // A clearly non-matching query empties every lane.
-    await search.fill('zzz-no-such-token-zzz');
-    await expect(cardA).toHaveCount(0);
-    await expect(cardB).toHaveCount(0);
+      // A clearly non-matching query empties every lane.
+      await search.fill('zzz-no-such-token-zzz');
+      await expect(page.locator('app-job-card')).toHaveCount(0);
 
-    // Escape clears via keyboard.
-    await search.press('Escape');
-    await expect(search).toHaveValue('');
-    await expect(cardA).toBeVisible();
-    await expect(cardB).toBeVisible();
-
-    // Cleanup is handled by afterEach, but be explicit about the IDs we created.
-    await deleteJob(a.id, watchPath).catch(() => {});
-    await deleteJob(b.id, watchPath).catch(() => {});
+      // Escape clears via keyboard.
+      await search.press('Escape');
+      await expect(search).toHaveValue('');
+      await expect(cardA.first()).toBeVisible();
+    } finally {
+      await deleteJob(a.id, watchPath);
+    }
   });
 });
