@@ -110,6 +110,18 @@ async function installMocks(
     if (p === '/api/auto-review/status') {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(status) });
     }
+    if (p.startsWith('/api/concept-docs/')) {
+      const topic = p.substring('/api/concept-docs/'.length);
+      return route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          topic,
+          title: 'Auto-Review',
+          body: 'Auto-review runs a multi-aspect quality pass on every job that ends with `[[TASK_DONE]]`. Each aspect writes its own `aspect-*.md` into the job folder.\n\nWhen all aspects pass, the orchestrator promotes the job to human review.'
+        })
+      });
+    }
     if (p === '/api/tags') {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) });
     }
@@ -172,23 +184,24 @@ test.describe('Auto-review multi-aspect surface', () => {
     await expect(statusLine).toContainText('1 reissue');
     await expect(statusLine).toContainText('0 escalate');
 
-    // Info button next to the lane title opens the drawer.
-    const infoBtn = page.getByTestId('auto-review-info-btn');
+    // Info button next to the lane title opens the side-drawer with
+    // the rendered concept doc fetched from /api/concept-docs/. The
+    // body text comes from docs/concept-docs/lane-4-auto-review.md.
+    const infoBtn = page.getByTestId('info-button-lane-4-auto-review');
     await expect(infoBtn).toBeVisible();
     await infoBtn.click();
 
-    const drawer = page.getByTestId('auto-review-info-drawer');
+    const drawer = page.getByTestId('info-button-drawer-lane-4-auto-review');
     await expect(drawer).toBeVisible();
     await expect(drawer).toContainText(/multi-aspect/i);
     await expect(drawer).toContainText(/aspect-/);
 
     // Capture lane-header evidence (status string + open drawer + info button).
     await page.setViewportSize({ width: 1400, height: 900 });
-    const lane = page.getByTestId('lane-4-auto-review');
-    await lane.screenshot({ path: 'screenshots/auto-review/auto-review-lane-header.png' });
+    await page.screenshot({ path: 'screenshots/auto-review/auto-review-lane-header.png', fullPage: false });
 
     // Close the drawer.
-    await page.getByTestId('auto-review-info-close').click();
+    await page.getByTestId('info-button-close-lane-4-auto-review').click();
     await expect(drawer).toHaveCount(0);
   });
 

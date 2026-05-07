@@ -146,6 +146,7 @@ builder.Services.AddSingleton<GitService>();
 builder.Services.AddSingleton<ProjectSettingsService>();
 builder.Services.AddSingleton<ProjectDocsService>();
 builder.Services.AddSingleton<ProjectSteeringDocsService>();
+builder.Services.AddSingleton<ConceptDocsService>();
 builder.Services.AddSingleton<SecurityReviewService>();
 // Quota probes: each CLI gets its own probe instance, all surfaced through QuotaService.
 builder.Services.AddSingleton<IQuotaProbe, CopilotQuotaProbe>();

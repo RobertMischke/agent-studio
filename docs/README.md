@@ -49,6 +49,7 @@ The repo's authoritative agent contract lives in [AGENTS.md](../AGENTS.md). This
 | [analysis-reports.md](analysis-reports.md) | Markdown-plus-structured-block report contract for any spawnable analysis (security review, drift, council critique). |
 | [drift-reports.md](drift-reports.md) | Drift dimensions, scoring, the report shape used by the project Drift surface. |
 | [companion-app-design.md](companion-app-design.md) | The outbound-only companion-app relay (ADR-0018). |
+| [concept-docs/](concept-docs/) | Short in-product explainers, one per topic. Served by `GET /api/concept-docs/{topic}` and rendered in the `<app-info-button>` side-drawer next to surfaces whose behaviour is non-obvious (e.g. lane headers). |
 
 ## Mockups (locked design references)
 

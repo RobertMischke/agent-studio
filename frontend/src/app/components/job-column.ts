@@ -6,13 +6,14 @@ import { cliTypeIcon } from '../services/format.util';
 import { InstantTooltipDirective } from '../directives/instant-tooltip.directive';
 import { groupReviewJobs } from './review-grouping.util';
 import { AutoReviewStatusStore } from '../services/auto-review-status.store';
+import { InfoButtonComponent } from './info-button/info-button.component';
 
 const ARCHIVE_VISIBLE_LIMIT = 20;
 
 @Component({
   selector: 'app-job-column',
   standalone: true,
-  imports: [JobCardComponent, InstantTooltipDirective],
+  imports: [JobCardComponent, InstantTooltipDirective, InfoButtonComponent],
   template: `
     @if (collapsed()) {
       <button type="button"
@@ -71,12 +72,8 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
         }
         <h2 class="column__title">{{ title() }}</h2>
         <span class="column__count">{{ jobs().length }}</span>
-        @if (isAutoReview()) {
-          <button type="button"
-                  class="column__info"
-                  data-testid="auto-review-info-btn"
-                  [appTip]="'About auto-review'"
-                  (click)="toggleAutoReviewInfo($event)">ⓘ</button>
+        @if (infoTopic(); as topic) {
+          <app-info-button [topic]="topic" />
         }
         @if (canArchiveAll()) {
           <button type="button"
@@ -99,35 +96,6 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
         <div class="column__auto-review-status"
              data-testid="auto-review-status">
           {{ autoReviewStatusLine() }}
-        </div>
-      }
-      @if (isAutoReview() && autoReviewInfoOpen()) {
-        <div class="column__info-drawer"
-             data-testid="auto-review-info-drawer"
-             (click)="$event.stopPropagation()">
-          <div class="column__info-drawer-head">
-            <strong>Auto-review (machine pass)</strong>
-            <button type="button"
-                    class="column__info-drawer-close"
-                    data-testid="auto-review-info-close"
-                    (click)="toggleAutoReviewInfo($event)">✕</button>
-          </div>
-          <p>
-            When a task ends with <code>[[TASK_DONE]]</code>, the orchestrator
-            runs a multi-aspect quality pass before sending it to human review.
-            Each aspect (requirement fit, code quality, documentation impact,
-            tests &amp; evidence) is a separate fast-model call that writes its
-            own <code>aspect-*.md</code> into the job folder.
-          </p>
-          <ul>
-            <li><strong>All pass</strong> &rarr; promote to human review with no flags.</li>
-            <li><strong>Some concerns</strong> &rarr; promote with a ⚠ chip on the card.</li>
-            <li><strong>Any block</strong> &rarr; reissue back to <code>3-progress</code> with a follow-up summarising the findings.</li>
-          </ul>
-          <p class="column__info-drawer-foot">
-            ADR-0025 / ADR-0026. The kill switch is
-            <code>ReviewDecisionOrchestrator:AspectsEnabled</code>.
-          </p>
         </div>
       }
       <div class="column__body">
@@ -435,26 +403,6 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
       font-size: 16px;
       line-height: 1;
     }
-    .column__info {
-      background: rgba(139, 92, 246, 0.10);
-      border: 1px solid rgba(139, 92, 246, 0.30);
-      color: #c4b5fd;
-      width: 22px;
-      height: 22px;
-      padding: 0;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 13px;
-      line-height: 1;
-      display: grid;
-      place-items: center;
-      transition: background 0.15s, color 0.15s, border-color 0.15s;
-    }
-    .column__info:hover {
-      background: rgba(139, 92, 246, 0.22);
-      border-color: rgba(139, 92, 246, 0.55);
-      color: #ddd6fe;
-    }
     .column__auto-review-status {
       margin-top: -4px;
       padding: 4px 8px;
@@ -469,48 +417,6 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
       overflow: hidden;
       text-overflow: ellipsis;
     }
-    .column__info-drawer {
-      margin-top: 4px;
-      padding: 10px 12px;
-      border-radius: 10px;
-      background: #1f1d2c;
-      border: 1px solid rgba(139, 92, 246, 0.35);
-      color: #cbd5e1;
-      font-size: 12px;
-      line-height: 1.5;
-    }
-    .column__info-drawer p { margin: 4px 0; }
-    .column__info-drawer ul { margin: 6px 0; padding-left: 18px; }
-    .column__info-drawer li { margin: 3px 0; }
-    .column__info-drawer code {
-      background: rgba(255,255,255,0.06);
-      padding: 1px 5px;
-      border-radius: 3px;
-      font-size: 11px;
-    }
-    .column__info-drawer-head {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 6px;
-    }
-    .column__info-drawer-head strong { color: #e2e8f0; }
-    .column__info-drawer-close {
-      margin-left: auto;
-      background: transparent;
-      border: 0;
-      color: #94a3b8;
-      cursor: pointer;
-      font-size: 14px;
-      line-height: 1;
-      padding: 2px 6px;
-      border-radius: 4px;
-    }
-    .column__info-drawer-close:hover {
-      background: rgba(255,255,255,0.06);
-      color: #e2e8f0;
-    }
-    .column__info-drawer-foot { color: #64748b; font-size: 10px; margin-top: 6px; }
     .column__archive-all {
       background: rgba(100, 116, 139, 0.12);
       border: 1px solid rgba(100, 116, 139, 0.3);
@@ -724,7 +630,6 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
 })
 export class JobColumnComponent implements OnInit, OnDestroy {
   private readonly autoReviewStatus = inject(AutoReviewStatusStore);
-  readonly autoReviewInfoOpen = signal(false);
 
   readonly title = input.required<string>();
   readonly icon = input<string>('');
@@ -831,10 +736,20 @@ export class JobColumnComponent implements OnInit, OnDestroy {
     }
   }
 
-  toggleAutoReviewInfo(event: MouseEvent | Event): void {
-    event.stopPropagation();
-    this.autoReviewInfoOpen.update(v => !v);
-  }
+  /**
+   * Selective info-button placement (per the design contract): only
+   * lanes whose semantics are non-obvious get the small "i" trigger.
+   * Returns the topic id under <c>docs/concept-docs/</c> for the
+   * current lane, or <c>null</c> when no concept doc exists for it.
+   * Backlog / Ready / Done deliberately have nothing here.
+   */
+  readonly infoTopic = computed<string | null>(() => {
+    switch (this.state()) {
+      case '4-auto-review': return 'lane-4-auto-review';
+      case '3-progress':    return 'lane-3-progress';
+      default:              return null;
+    }
+  });
 
   /**
    * One-line live status string for the 4-auto-review lane header. Reads
