@@ -7,7 +7,14 @@ frontend/build_log.txt
 .frontend.*.log
 .orchestrator/
 .claude/
-tools/
+# tools/ holds local binary tooling (PtyProbe, etc.). Use tools/* so we can
+# re-include specific tracked files below; a bare tools/ would prevent any
+# whitelisting under it.
+tools/*
+# Whitelisted: idempotent self-heal script that start.sh runs as a hard
+# pre-flight before the backend boots. Tracked so stable picks it up via
+# update-stable.sh; everything else under tools/ stays local.
+!tools/check-cli-shims.sh
 
 .test-output
 
