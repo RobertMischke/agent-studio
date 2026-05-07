@@ -30,6 +30,8 @@ import { CreateJobDialogComponent, PendingAttachment } from './components/board/
 import { ErrorDialogComponent } from './components/board/error-dialog/error-dialog.component';
 import { ProjectAutoInfo, ProjectTabsComponent } from './components/board/project-tabs/project-tabs.component';
 import { FiltersDropdownComponent, TypeFilterOption } from './components/board/filters-dropdown/filters-dropdown.component';
+import { BoardSearchIconComponent } from './components/board/board-search-icon/board-search-icon.component';
+import { UpdateClientService } from './services/update.service';
 import { projectIdentity } from './services/project-identity.util';
 import { DevToolsService } from './services/dev-tools.service';
 import { FeatureFlagsService } from './services/feature-flags.service';
@@ -75,7 +77,7 @@ interface ActiveFilterPill {
 
 @Component({
   selector: 'app-root',
-  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, ProjectShellComponent, SecurityPanelComponent, ProjectTokenUsagePanelComponent, ProjectObservabilityPanelComponent, ProjectProductRuntimePanelComponent, ProjectSteeringDocsSectionComponent, AnalysisReportDrilldownComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceTokenTimelineComponent, WorkspaceScreenshotsComponent, WorkspaceBannerComponent, UpdateBannerComponent, UpdateVersionBadgeComponent, UpdateCenterComponent, UpdateBlockModalComponent, VerboseDebugOverlayComponent, CliAdminPanelComponent, FiltersDropdownComponent],
+  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, ProjectShellComponent, SecurityPanelComponent, ProjectTokenUsagePanelComponent, ProjectObservabilityPanelComponent, ProjectProductRuntimePanelComponent, ProjectSteeringDocsSectionComponent, AnalysisReportDrilldownComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceTokenTimelineComponent, WorkspaceScreenshotsComponent, WorkspaceBannerComponent, UpdateBannerComponent, UpdateVersionBadgeComponent, UpdateCenterComponent, UpdateBlockModalComponent, VerboseDebugOverlayComponent, CliAdminPanelComponent, FiltersDropdownComponent, BoardSearchIconComponent],
   // Keep styles global to this subtree — the App shell still owns the
   // .header*, .filter-chip*, .overlay*, .create-dialog*, .error-dialog*
   // class rules used by the extracted dialogs and project-tabs.
@@ -124,6 +126,11 @@ interface ActiveFilterPill {
             [activeTagIds]="activeTagFilter()"
             (setType)="onSetType($event)"
             (toggleTag)="toggleTagFilter($event)" />
+          @if (boardSearchVisible() && !orchSideSheet.open()) {
+            <app-board-search-icon
+              [query]="searchQuery()"
+              (queryChange)="setSearchQuery($event)" />
+          }
           <button class="btn btn--compact-toggle"
                   data-testid="compact-cards-toggle"
                   [class.btn--compact-toggle--active]="compactCards()"
@@ -306,27 +313,6 @@ interface ActiveFilterPill {
               <span class="failed-pickup-banner__chev" aria-hidden="true">›</span>
             </button>
           }
-          <div class="board-toolbar" data-testid="board-toolbar">
-            <div class="board-toolbar__group" role="search">
-              <span class="board-toolbar__icon" aria-hidden="true">🔍</span>
-              <input class="board-toolbar__search"
-                     type="search"
-                     data-testid="board-search-input"
-                     placeholder="Search tasks…"
-                     autocomplete="off"
-                     spellcheck="false"
-                     [value]="searchQuery()"
-                     (input)="onSearchInput($event)"
-                     (keydown.escape)="clearSearch()" />
-              @if (searchQuery()) {
-                <button type="button"
-                        class="board-toolbar__clear"
-                        data-testid="board-search-clear"
-                        title="Clear search (Esc)"
-                        (click)="clearSearch()">×</button>
-              }
-            </div>
-          </div>
           <main class="dashboard" data-testid="kanban-dashboard">
             @for (g of laneGroups(); track g.id) {
               <section class="lane-group"
@@ -1521,72 +1507,6 @@ interface ActiveFilterPill {
     }
     .layout--focus {
       padding: 12px;
-    }
-    /* Toolbar above the kanban columns. The search input is the
-       primary control; sized to feel like a single, central command
-       affordance rather than a corner widget. Future grouped controls
-       (e.g. a sort toggle) belong inside .board-toolbar__group so they
-       read as one cluster. */
-    .board-toolbar {
-      display: flex;
-      justify-content: center;
-      padding: 10px 16px 0;
-    }
-    .board-toolbar__group {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(255,255,255,0.10);
-      border-radius: 999px;
-      padding: 4px 10px 4px 12px;
-      width: min(560px, 100%);
-      transition: border-color 0.15s ease, background 0.15s ease;
-    }
-    .board-toolbar__group:focus-within {
-      border-color: rgba(167,139,250,0.55);
-      background: rgba(255,255,255,0.06);
-    }
-    .board-toolbar__icon {
-      font-size: 13px;
-      opacity: 0.65;
-      line-height: 1;
-    }
-    .board-toolbar__search {
-      flex: 1 1 auto;
-      min-width: 0;
-      background: transparent;
-      border: 0;
-      outline: 0;
-      color: #e2e8f0;
-      font: inherit;
-      font-size: 13px;
-      padding: 6px 4px;
-    }
-    .board-toolbar__search::placeholder {
-      color: rgba(226,232,240,0.40);
-    }
-    /* Hide the WebKit/IE search clear glyphs; we render our own × button so
-       the icon is consistent across browsers and matches the dark theme. */
-    .board-toolbar__search::-webkit-search-cancel-button,
-    .board-toolbar__search::-webkit-search-decoration {
-      -webkit-appearance: none;
-      appearance: none;
-    }
-    .board-toolbar__clear {
-      background: transparent;
-      border: 0;
-      color: rgba(226,232,240,0.55);
-      font-size: 16px;
-      line-height: 1;
-      padding: 2px 6px;
-      border-radius: 999px;
-      cursor: pointer;
-      transition: background 0.12s ease, color 0.12s ease;
-    }
-    .board-toolbar__clear:hover {
-      background: rgba(255,255,255,0.10);
-      color: #f8fafc;
     }
     .dashboard {
       display: flex;
@@ -2799,6 +2719,7 @@ export class App implements OnInit {
     readonly featureFlags: FeatureFlagsService,
     private readonly _completionSound: JobCompletionSoundService,
     private readonly tagRegistryStore: TagRegistryStore,
+    readonly updateClient: UpdateClientService,
   ) {
     effect(() => {
       const selected = this.selectedJob();
@@ -3087,9 +3008,34 @@ export class App implements OnInit {
     this.searchQuery.set(value);
   }
 
+  setSearchQuery(value: string) {
+    this.searchQuery.set(value);
+  }
+
   clearSearch() {
     this.searchQuery.set('');
   }
+
+  /**
+   * Whether the kanban board is the visible surface and the header search
+   * icon should render. Hidden whenever any of the existing "is something
+   * else open" signals are true: a task detail page, the project chat /
+   * orchestrator side sheet, the update center, or one of the project
+   * overlays. Mirrors the conditions the @if branches in the body already
+   * use, so we don't introduce a parallel "current view" signal.
+   *
+   * `orchSideSheet.open()` is composed at the call site in the template
+   * because the side sheet is a template ref, not an injected service.
+   */
+  readonly boardSearchVisible = computed(() => {
+    if (this.selectedJob()) return false;
+    if (this.projectDetailName()) return false;
+    if (this.projectShellName()) return false;
+    if (this.analysisReportFocus()) return false;
+    if (this.orchFeedProject()) return false;
+    if (this.updateClient.centerOpen()) return false;
+    return true;
+  });
 
   /**
    * Toggle the orchestrator feed overlay. Picks the project to show by

@@ -46,13 +46,22 @@ test('board search — empty + filtered states', async ({ page }) => {
   try {
     await page.goto('/');
     await page.waitForTimeout(800);
+    // 1. Idle state: bare search icon in the header.
     await page.screenshot({ path: path.join('test-results', 'board-search-empty.png'), fullPage: false });
 
+    // 2. Expanded state with an active query.
+    await page.getByTestId('board-search-icon').click();
     await page.getByTestId('board-search-input').fill(uniqueA);
     await page.waitForTimeout(250);
     await page.screenshot({ path: path.join('test-results', 'board-search-filtered.png'), fullPage: false });
 
-    await page.getByTestId('board-search-clear').click();
+    // 3. Esc collapses to the slim chip while the query stays active.
+    await page.getByTestId('board-search-input').press('Escape');
+    await page.waitForTimeout(150);
+    await page.screenshot({ path: path.join('test-results', 'board-search-chip.png'), fullPage: false });
+
+    // 4. Chip × clears the query and the bare icon returns.
+    await page.getByTestId('board-search-chip-clear').click();
     await page.waitForTimeout(150);
     await page.screenshot({ path: path.join('test-results', 'board-search-cleared.png'), fullPage: false });
   } finally {

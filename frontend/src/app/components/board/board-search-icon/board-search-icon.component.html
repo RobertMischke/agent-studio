@@ -1,0 +1,55 @@
+<div class="board-search-icon"
+     [class.board-search-icon--expanded]="expanded()"
+     [class.board-search-icon--has-query]="hasQuery()"
+     data-testid="board-search">
+  @if (expanded()) {
+    <div class="board-search-icon__field" role="search">
+      <span class="board-search-icon__field-icon" aria-hidden="true">🔍</span>
+      <input #input
+             class="board-search-icon__input"
+             type="search"
+             data-testid="board-search-input"
+             placeholder="Search tasks…"
+             autocomplete="off"
+             spellcheck="false"
+             [value]="query()"
+             (input)="onInput($event)"
+             (keydown.escape)="onEscape($event)"
+             (blur)="onBlur()" />
+      @if (hasQuery()) {
+        <button type="button"
+                class="board-search-icon__clear"
+                data-testid="board-search-clear"
+                title="Clear search (Esc)"
+                aria-label="Clear search"
+                (mousedown)="$event.preventDefault()"
+                (click)="clearAndCollapse($event)">×</button>
+      }
+    </div>
+  } @else if (hasQuery()) {
+    <button type="button"
+            class="board-search-icon__chip"
+            data-testid="board-search-chip"
+            [attr.aria-label]="'Active search: ' + query() + '. Click to edit.'"
+            (click)="onChipClick()">
+      <span class="board-search-icon__chip-icon" aria-hidden="true">🔍</span>
+      <span class="board-search-icon__chip-label">"{{ query() }}"</span>
+      <span class="board-search-icon__chip-clear"
+            data-testid="board-search-chip-clear"
+            role="button"
+            tabindex="0"
+            aria-label="Clear search"
+            (click)="onChipClear($event)"
+            (keydown.enter)="onChipClear($event)">×</span>
+    </button>
+  } @else {
+    <button type="button"
+            class="board-search-icon__btn"
+            data-testid="board-search-icon"
+            title="Search tasks (press /)"
+            aria-label="Search tasks"
+            (click)="expand()">
+      <span class="board-search-icon__btn-glyph" aria-hidden="true">🔍</span>
+    </button>
+  }
+</div>
