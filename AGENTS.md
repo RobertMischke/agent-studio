@@ -166,6 +166,26 @@ Hard rules:
 - **Auto-intervention stays gated**: enabling it is a per-instance decision; the rate limit (`Supervisor:AutoInterventionRateLimit`, default 3/h/project) and severity threshold (`Supervisor:AutoInterventionSeverityThreshold`, default High) protect against runaway invocations.
 - **Analysis reports are evidence**: manual, scheduled, and meta-cycle analyses write Markdown plus structured JSON when parseable. They may queue follow-up tasks, but they do not silently change source or bypass review lanes.
 
+### Contract-bounded agents and loop guards (ADR-0032)
+
+When an LLM is invoked to interpret evidence on behalf of the orchestrator (failure analysis, drift classification, evidence summarization), the call sits between a typed input contract and a typed output contract. **The agent classifies; the rule engine decides.** Safety- and cost-relevant choices (halt the pipeline, requeue, escalate-human, run a self-heal command) live in deterministic code that maps `(category, confidence)` from the output contract through a fixed action table. They never live in the agent's `proposedAction` directly. The full pattern with diagram, schemas, and worked example is in [docs/agent-contract-pattern.md](docs/agent-contract-pattern.md).
+
+The pattern has three slots, each owned explicitly:
+
+1. **Pre-Guard (rule engine)** before the agent runs: budget checks (attempts/job, attempts/run-set, token spend, wall-clock, age) refuse the call when over limit. Cost circuit breaker; nothing reaches the LLM.
+2. **Agent (LLM)** receives a schema-validated `<step>-input.json`, produces a schema-validated `<step>-output.json`. May propose actions; may not execute them.
+3. **Decider + Post-Guard (rule engine)** maps the output contract to one of a fixed set of actions via a code table. Post-Guard refuses requeue when the same slug + same category has cycled more than N times; escalates to a human review banner instead.
+
+Hard rules:
+
+- **The agent never decides whether to halt the pipeline.** Halt is a deterministic mapping inside the decider, not the agent's recommendation.
+- **`selfHealCommands` are an allow-list, not free shell.** Each entry must match a registered command id in `backend/Services/SelfHeal/SelfHealCommandRegistry.cs`; arbitrary strings are rejected before dispatch.
+- **Schema-invalid output = escalate-human.** A malformed output contract is treated as the agent failing closed, never as silent retry.
+- **Every contract roundtrip writes both files.** `<run-folder>/contracts/<step>-input.json` and `<step>-output.json`; the rule engine reads back from disk so the boundary is observable, replayable, diffable.
+- **Every loop class is registered.** When you add a new place where work can re-enter itself (retry, requeue, re-trigger, replay), add an entry to [docs/loop-inventory.md](docs/loop-inventory.md), a budget constant in code, and a breaker test in `backend.Tests/Architecture/` in the same commit. CI fails if the trio is incomplete.
+
+First worked example: the `3a-failed-pickup` dead-letter (ADR-0028) gets a diagnosis step. On dead-letter, the runner writes `pickup-failure-context.json`; a diagnostic agent returns `pickup-failure-diagnosis.json`. Categories `infra-cli-broken` and `infra-network` always halt the runner and raise a banner regardless of agent confidence; `task-bad-prompt` may requeue once at confidence ≥ 0.8; everything else escalates. See [docs/agent-contract-pattern.md](docs/agent-contract-pattern.md) "Worked example: pickup-failed".
+
 ### Service & data layout (backend)
 
 - `Services/Cli/`: one driver per CLI: `ClaudeCliService`, `CodexCliService`, `CopilotCliService`, `GeminiCliService`, all extending `CliExecutionServiceBase` (except Copilot, which predates the base class). `CliRouter` picks the right one by `cliType`. The contract every driver must satisfy is documented in [docs/supported-clis.md](docs/supported-clis.md). **When you touch any of these files, also read the matching skill in [docs/cli-skills/](docs/cli-skills/) - [cli-overview](docs/cli-skills/cli-overview.md) plus the per-CLI skill ([cli-claude](docs/cli-skills/cli-claude.md), [cli-codex](docs/cli-skills/cli-codex.md), [cli-copilot](docs/cli-skills/cli-copilot.md), [cli-gemini](docs/cli-skills/cli-gemini.md)). The skills hold the operational knowledge that doesn't fit in code comments - frame catalogues, capture flows, known incidents, common-task playbooks. This is a hard rule for every CLI driving this repo (Claude Code, Codex, Copilot, Gemini): if the task touches a CLI driver, the matching skill is required reading before any code change. The pickup is enforced by two tests - a free scaffolding lock in [`backend.Tests/CliSkillFilesTests.cs`](backend.Tests/CliSkillFilesTests.cs) and a `@billable` live test in [`frontend/e2e/cli-skills-pickup.spec.ts`](frontend/e2e/cli-skills-pickup.spec.ts) that drives each CLI through the task processor and asserts it can echo back the sentinel string from the matching skill.**

@@ -18,11 +18,13 @@ The repo's authoritative agent contract lives in [AGENTS.md](../AGENTS.md). This
 
 | File | What's inside |
 |---|---|
-| [architecture-decisions.md](architecture-decisions.md) | The ADR archive (ADR-0001 … ADR-0030+). Load-bearing: product boundaries, non-goals, reasoning styles. Bug-fix-grade decisions belong in commits, not here. |
+| [architecture-decisions.md](architecture-decisions.md) | The ADR archive (ADR-0001 … ADR-0032). Load-bearing: product boundaries, non-goals, reasoning styles. Bug-fix-grade decisions belong in commits, not here. |
 | [architecture-model.md](architecture-model.md) | Marble-style architecture map: <= 10 elements per project, the contract that drift analysis runs against. |
 | [design-principles.md](design-principles.md) | UX contract: top-level summary, always-available drill-down, run-as-unit-of-conversation, calm classical style. |
 | [filesystem-contract.md](filesystem-contract.md) | Job-folder layout, lane catalog, state strings, the on-disk shape every CLI must respect. |
 | [agent-task-contract.md](agent-task-contract.md) | App-owned task lifecycle boundary copied into every watched target. The cross-product contract. |
+| [agent-contract-pattern.md](agent-contract-pattern.md) | Contract-bounded agents (ADR-0032): three-zone pattern (Pre-Guard → Agent → Decider+Post-Guard), schemas, decider table, self-heal allow-list, worked example for pickup-failed. The agent classifies, the rule engine decides. |
+| [loop-inventory.md](loop-inventory.md) | Registry of every place work can re-enter itself (retry, requeue, replay). Each entry carries kind, code anchor, budget constant, breaker test. CI-enforced via `LoopInventoryConsistencyTest`. |
 | [protocol-style.md](protocol-style.md) | `status.md` shape, Activity Log markers, `attachments/` vs `results/`, per-CLI image retention. |
 | [commit-push-doctrine.md](commit-push-doctrine.md) | Who owns the git commit + push boundary (the platform, not the CLI). When a CLI is allowed to commit (almost never). |
 | [skills-architecture.md](skills-architecture.md) | Portable-skills doctrine: central library plus per-target lookup contract. |

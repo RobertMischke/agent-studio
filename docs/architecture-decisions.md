@@ -685,3 +685,26 @@ A structured per-job tool-call log (`logs/tool-calls.jsonl`) is appended on ever
 - Codex parity smoke: confirm the same per-phase budget table applies sensibly to `CodexEventAdapter`-driven runs. The adapter already exists; a `RUN_CLI_INTEGRATION=1` codex spawn under the new budgets should pass without regression.
 
 **Status.** Accepted as the May-2026 hang-survey response. The two follow-ups above are the next iteration; both are tractable in isolation.
+
+---
+
+## ADR-0032 - Contract-bounded agents and loop guards (2026-05-07)
+
+**Decision.** When an LLM is invoked to interpret evidence on behalf of the orchestrator (failure analysis, drift classification, evidence summarization), the call sits between a typed input contract and a typed output contract. The rule engine, not the agent, decides the next action by mapping `(category, confidence)` from the output contract through a deterministic table. Cost and progress are bounded by an explicit two-sided guard: a Pre-Guard refuses the call when budget is exhausted; a Post-Guard refuses the action when the same slug plus category has cycled more than N times. Every loop class is registered in [`docs/loop-inventory.md`](loop-inventory.md) and verified by CI tests.
+
+**Context.** ADR-0002 established that prompt instructions are not load-bearing; sentinels are. ADR-0017 added a supervisor that advises but does not act. The next layer up needed an answer too: when we deliberately invoke an LLM to interpret a failure, and we will because some signals are too rich for sentinels, we need the same discipline. The 2026-05-06 incident proved the cost of the gap: a single broken `claude.exe` quietly drained 22 jobs from the `2-ready` lane through `3a-failed-pickup` in 13 minutes because the runner had no diagnosis layer at all. "No diagnosis" is operationally worse than "diagnosis with hard guardrails", but only if the diagnosis cannot itself become the failure mode.
+
+**Non-goals.**
+
+- Letting the agent's `proposedAction` become the executed action without policy mapping. The agent classifies; the code decides.
+- Free-form shell execution as part of self-heal. Self-heal commands are an allow-list keyed by stable string ids; arbitrary commands are rejected.
+- An "agent supervisor" that watches another agent for loops. Loop guards are deterministic counters in code, not LLM judgment about whether things are looping.
+- Hiding contract artifacts in memory. Both the input and the output contract are written to `<run-folder>/contracts/<step>-input.json` and `<step>-output.json`.
+- Using ADR-grade weight for every place a rule engine talks to an LLM. The contract pattern applies wherever the LLM's answer can drive automation; one-shot UI hints (e.g. inline summarize) stay out.
+- A recurrent "diagnose the diagnosis" agent. If the first diagnosis hits the Post-Guard, the next step is human review, not another LLM call.
+
+**Reasoning style.** Every agent invocation is treated as a structured RPC: input schema in, output schema out, deterministic dispatch on the output's typed fields. The agent's role is interpretation, not control. When a new loop is opened (any new place where work can re-enter itself), the developer adds an inventory entry, a budget constant, and a breaker test in the same commit. CI enforces the trio. A weekly `[Trait("Category","Weekly")]` architecture test uses an LLM to scan recent diffs against the inventory and proposes new candidate loops; the proposal is itself a contract output, reviewed by a human, never auto-applied.
+
+**Implementation pointers.** [AGENTS.md](../AGENTS.md) "Contract-bounded agents and loop guards"; [docs/agent-contract-pattern.md](agent-contract-pattern.md) (foundational doc with diagram, schemas, worked example); [docs/loop-inventory.md](loop-inventory.md) (registry + per-entry test pointer); first worked example follows ADR-0028 dead-letter at `3a-failed-pickup` (diagnostic agent reads `pickup-failure-context.json`, writes `pickup-failure-diagnosis.json`); marketing positioning in `agent-studio-marketing/06-website-planung/deterministische-guardrails-um-agenten.md`.
+
+**Status.** Accepted.
