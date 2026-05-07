@@ -1,6 +1,6 @@
-import { Component, computed, inject, input, output, signal, effect, OnDestroy, ViewEncapsulation } from '@angular/core';
+import { Component, computed, HostListener, inject, input, output, signal, effect, OnDestroy, ViewChild, ViewEncapsulation } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { JobDetail, WatchPathEntry, CliSettings, CliModelInfo, CliType, CLI_TYPES, ContinueMode } from '../models/job.model';
+import { JobDetail, JobInfo, WatchPathEntry, CliSettings, CliModelInfo, CliType, CLI_TYPES, ContinueMode } from '../models/job.model';
 import { JobService } from '../services/job.service';
 import { ErrorDialogService } from '../services/error-dialog.service';
 import { NowTickService } from '../services/now-tick.service';
@@ -30,12 +30,13 @@ import { ProtocolPaneComponent } from './job-detail/protocol-pane/protocol-pane.
 import { DetailHeaderComponent } from './job-detail/detail-header/detail-header.component';
 import { CliConfigCardComponent } from './job-detail/cli-config-card/cli-config-card.component';
 import { PaneToggleBarComponent } from './job-detail/pane-toggle-bar/pane-toggle-bar.component';
+import { TriagePanelComponent, TriageActionPayload } from './job-detail/triage-panel/triage-panel.component';
 import { markdownToHtml } from './markdown-utils';
 
 @Component({
   selector: 'app-job-detail',
   standalone: true,
-  imports: [FormsModule, GitPaneComponent, CommandDeckComponent, PromptPaneComponent, LogOverlayComponent, ProtocolPaneComponent, DetailHeaderComponent, CliConfigCardComponent, PaneToggleBarComponent],
+  imports: [FormsModule, GitPaneComponent, CommandDeckComponent, PromptPaneComponent, LogOverlayComponent, ProtocolPaneComponent, DetailHeaderComponent, CliConfigCardComponent, PaneToggleBarComponent, TriagePanelComponent],
   providers: [LayoutPanesService, ClaudeSessionPollService, SessionEventsPollService, RunTimelinePollService, ScreenshotsPollService, GitPaneService, CliOutputPollService],
   // Keep styles global to this subtree so the still-inline class rules
   // (.pane*, .detail*, .inspector*, .notes-panel*, .sidebar-card*, …)
@@ -166,6 +167,15 @@ import { markdownToHtml } from './markdown-utils';
           <div class="detail__panes-empty">All panels hidden — re-enable one above.</div>
         }
       </div>
+
+      <app-triage-panel
+        #triagePanel
+        [laneState]="detail().info.state"
+        [laneIndex]="laneIndex()"
+        [laneSize]="laneSize()"
+        [mutationsBlocked]="mutationsBlocked()"
+        [actingId]="triageActingId()"
+        (action)="onTriageAction($event)" />
 
       @if (showLogOverlay()) {
         <app-log-overlay
@@ -1371,12 +1381,29 @@ import { markdownToHtml } from './markdown-utils';
 export class JobDetailComponent implements OnDestroy {
   readonly detail = input.required<JobDetail>();
   readonly watchPaths = input<WatchPathEntry[]>([]);
+  /** Peers in the same on-disk lane as the current job, in kanban order. */
+  readonly lanePeers = input<JobInfo[]>([]);
+  /** True while the update-service is mid-update; disables triage actions. */
+  readonly mutationsBlocked = input(false);
   readonly back = output<void>();
   readonly fileSaved = output<void>();
   readonly projectChanged = output<string>();
   readonly completeAndNextReview = output<void>();
   readonly deleteRequested = output<void>();
   readonly stateChangeRequested = output<{ targetState: string }>();
+  /** Lane-move requested via the triage panel. Parent runs the API call so
+   *  it can advance to the next peer on success. */
+  readonly triageMoveRequested = output<{ targetState: string; actionId: string }>();
+  /** "Move to top" via the triage panel. */
+  readonly triageMoveToTopRequested = output<{ actionId: string }>();
+  /** "Delete" via the triage panel (already destructive-confirmed inside). */
+  readonly triageDeleteRequested = output<{ actionId: string }>();
+  /** "Run now" — start the CLI for a 2-ready job. Parent has runner state. */
+  readonly triageStartRequested = output<{ actionId: string }>();
+  /** Walk to the next peer in the current lane (j / ↓). */
+  readonly nextInLaneRequested = output<void>();
+  /** Walk to the previous peer in the current lane (k / ↑). */
+  readonly prevInLaneRequested = output<void>();
 
   readonly editingPrompt = signal(false);
 
@@ -1465,7 +1492,20 @@ export class JobDetailComponent implements OnDestroy {
   readonly completingAndNext = signal(false);
   readonly changingState = signal(false);
   readonly movingToTop = signal(false);
+  /** Stable id of the triage button currently in flight (null when idle). */
+  readonly triageActingId = signal<string | null>(null);
   readonly detailPanePercent = this.layout.detailPanePercent;
+
+  /** 0-based index of the open job in `lanePeers`. -1 when the parent has not
+   *  resolved peers yet (e.g. during the optimistic move grace window). */
+  readonly laneIndex = computed(() => {
+    const peers = this.lanePeers();
+    const key = this.detail().info.jobKey;
+    return peers.findIndex(p => p.jobKey === key);
+  });
+  readonly laneSize = computed(() => this.lanePeers().length);
+
+  @ViewChild('triagePanel') private triagePanelRef?: TriagePanelComponent;
 
   // Wall-clock tick used by relative-time formatters (e.g. formatResetIn).
   // Sourced from NowTickService — keeps the formatter stable within one
@@ -1948,6 +1988,99 @@ export class JobDetailComponent implements OnDestroy {
     // the detail-pane affordances. Legacy 4-review supported during
     // transition.
     return s === '4-auto-review' || s === '5-human-review' || s === '4-review';
+  }
+
+  /**
+   * Triage panel: route a typed lane action to the right handler. Move /
+   * delete / move-to-top go to the parent (it owns the optimistic-paint and
+   * auto-advance to the next peer); start / stop / editPrompt / showActivity
+   * are local operations against the open job.
+   */
+  onTriageAction(payload: TriageActionPayload): void {
+    if (this.mutationsBlocked() || this.triageActingId() !== null) return;
+    const { id, intent } = payload;
+    switch (intent.kind) {
+      case 'move':
+        this.triageActingId.set(id);
+        this.triageMoveRequested.emit({ targetState: intent.targetState, actionId: id });
+        return;
+      case 'moveToTop':
+        this.triageActingId.set(id);
+        this.triageMoveToTopRequested.emit({ actionId: id });
+        return;
+      case 'delete':
+        this.triageActingId.set(id);
+        this.triageDeleteRequested.emit({ actionId: id });
+        return;
+      case 'start':
+        this.triageActingId.set(id);
+        this.triageStartRequested.emit({ actionId: id });
+        return;
+      case 'stop':
+        this.triageActingId.set(id);
+        this.stopJob();
+        // Stop is local-only; clear after the request kicks off.
+        queueMicrotask(() => this.triageActingId.set(null));
+        return;
+      case 'editPrompt':
+        if (!this.panesVisible().prompt) this.togglePane('prompt');
+        this.startEdit('prompt');
+        return;
+      case 'showActivity':
+        this.activeInspectorTab.set('activity');
+        this.userTouchedInspectorTab = true;
+        return;
+    }
+  }
+
+  /** Called by the parent once a triage move/delete settles, to reset the
+   *  per-button spinner. The parent calls `clearTriageActing()` whether or
+   *  not the open job changed (auto-advance replaces the panel; same-lane
+   *  actions like Run Now leave it where it is). */
+  clearTriageActing(): void {
+    this.triageActingId.set(null);
+  }
+
+  /**
+   * Keyboard navigation for triage mode: `j` / ↓ for next, `k` / ↑ for prev,
+   * `Enter` for the lane's primary action, `Esc` for close. Suppressed while
+   * the user is typing in an input/textarea/contenteditable so chat compose
+   * and prompt edit keep working.
+   */
+  @HostListener('document:keydown', ['$event'])
+  onTriageKey(event: KeyboardEvent): void {
+    if (event.defaultPrevented) return;
+    if (event.metaKey || event.ctrlKey || event.altKey) return;
+    const target = event.target as HTMLElement | null;
+    if (target) {
+      const tag = target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (target.isContentEditable) return;
+    }
+    if (this.editingTitle() || this.editingPrompt()) return;
+    if (this.showLogOverlay() || this.showCliConfig()) return;
+
+    switch (event.key) {
+      case 'j':
+      case 'ArrowDown':
+        event.preventDefault();
+        this.nextInLaneRequested.emit();
+        return;
+      case 'k':
+      case 'ArrowUp':
+        event.preventDefault();
+        this.prevInLaneRequested.emit();
+        return;
+      case 'Enter':
+        if (this.mutationsBlocked() || this.triageActingId() !== null) return;
+        this.triagePanelRef?.triggerPrimary();
+        event.preventDefault();
+        return;
+      case 'Escape':
+        event.preventDefault();
+        this.back.emit();
+        return;
+    }
   }
 
   completeAndNext() {
