@@ -1087,7 +1087,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     }
 
     this.jobService.sendOrchestratorChat(proj, {
-      text,
+      text: text || (uploaded.length > 0 ? '(attachments)' : ''),
       attachments: uploaded.length > 0 ? uploaded : undefined
     }).subscribe({
       next: () => {
