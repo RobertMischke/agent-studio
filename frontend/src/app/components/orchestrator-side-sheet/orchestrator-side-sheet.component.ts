@@ -179,6 +179,14 @@ import { ProjectChatListComponent } from '../project-chat-list/project-chat-list
           }
 
           <div class="sheet__draft-actions" data-testid="orch-side-sheet-draft-actions">
+            <button class="sheet__draft-btn sheet__draft-btn--primary"
+                    type="button"
+                    (click)="onCreateTaskFromYourMessage()"
+                    [disabled]="!canCreateTaskFromUserMessage()"
+                    title="Open Add Task pre-filled with the text you typed (works even if the orchestrator hasn't replied yet)"
+                    data-testid="orch-side-sheet-make-task-from-yours">
+              ✦ Make a task from your message
+            </button>
             <button class="sheet__draft-btn"
                     type="button"
                     (click)="onCreateTaskFromLastReply()"
@@ -521,6 +529,16 @@ import { ProjectChatListComponent } from '../project-chat-list/project-chat-list
       opacity: 0.4;
       cursor: not-allowed;
     }
+    .sheet__draft-btn--primary {
+      background: rgba(59,130,246,0.18);
+      border-color: rgba(96,165,250,0.55);
+      color: #bfdbfe;
+    }
+    .sheet__draft-btn--primary:hover:not(:disabled) {
+      background: rgba(59,130,246,0.30);
+      color: #eff6ff;
+      border-color: rgba(147,197,253,0.7);
+    }
   `],
   host: {
     '[class.is-open]': 'open()'
@@ -692,6 +710,28 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly canCreateTaskFromReply = computed(() => {
     const last = [...this.turns()].reverse().find(
       (t) => t.role === 'orchestrator' && !!t.text && !t.errorMessage
+    );
+    return !!last;
+  });
+
+  /**
+   * "Make a task from your message" gate. Independent of the orchestrator
+   * reply so the user can convert their own typed intent into a task even
+   * when the orchestrator round-trip is slow, errors, or gets dropped on
+   * the floor by a backend hiccup. Looks at the merged turn list (server +
+   * locally-buffered pending user turn) so the button is reachable the
+   * instant the message is submitted.
+   *
+   * Why this exists: before this affordance, the only path from chat to
+   * task was "Make a task from this reply", which is gated on a non-empty
+   * non-error orchestrator turn. A failed or pending reply silently
+   * stranded the user's intent - the typed message was visible but
+   * un-actionable. This button gives the user a deterministic exit.
+   */
+  readonly canCreateTaskFromUserMessage = computed(() => {
+    const merged = [...this.turns(), ...this.localTurns()];
+    const last = [...merged].reverse().find(
+      (t) => t.role === 'user' && !!t.text && t.text.trim().length > 0
     );
     return !!last;
   });
@@ -1089,6 +1129,24 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     if (!proj) return;
     const last = [...this.turns()].reverse().find(
       (t) => t.role === 'orchestrator' && !!t.text && !t.errorMessage
+    );
+    if (!last) return;
+    this.createTaskFromDraft.emit({ projectName: proj, promptText: last.text });
+  }
+
+  /**
+   * Open the create-task dialog seeded with the user's most-recent typed
+   * message - the deterministic escape hatch for "I described a task in
+   * the chat and the orchestrator never replied / errored". Looks at
+   * server turns first, then the locally-buffered pending turn, so the
+   * affordance works the moment a message is submitted.
+   */
+  onCreateTaskFromYourMessage(): void {
+    const proj = this.activeProject();
+    if (!proj) return;
+    const merged = [...this.turns(), ...this.localTurns()];
+    const last = [...merged].reverse().find(
+      (t) => t.role === 'user' && !!t.text && t.text.trim().length > 0
     );
     if (!last) return;
     this.createTaskFromDraft.emit({ projectName: proj, promptText: last.text });

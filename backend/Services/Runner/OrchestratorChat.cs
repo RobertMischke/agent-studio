@@ -290,6 +290,26 @@ public class OrchestratorChatService
     private readonly IConfiguration _config;
     private readonly ILogger<OrchestratorChatService> _logger;
 
+    /// <summary>
+    /// Serializes concurrent <see cref="SendAsync"/> calls because the
+    /// underlying Claude session is a singleton: the resume id, the
+    /// on-disk session usage record, and the CLI's session memory are
+    /// shared. Two parallel <c>claude -r &lt;sessionId&gt;</c> invocations
+    /// race on session state and on the JSON write at
+    /// <see cref="UpdateSessionUsage"/>; the user-visible failure mode is
+    /// "sent a message in tab B while tab A was still thinking, neither
+    /// reply arrived cleanly". The semaphore makes the queueing explicit
+    /// and bounded - the user still sees their pending turn in the UI.
+    ///
+    /// <para>
+    /// This is a pragmatic correctness guard, not a parallelism win:
+    /// requests across all projects serialize on a single global session.
+    /// Real cross-project parallelism would need per-project (or
+    /// per-conversation) sessions and is out of scope for this fix.
+    /// </para>
+    /// </summary>
+    private static readonly SemaphoreSlim SessionGate = new(1, 1);
+
     public OrchestratorChatService(
         OrchestratorChat chat,
         OrchestratorRunner runner,
@@ -314,6 +334,8 @@ public class OrchestratorChatService
         SendOrchestratorChatRequest req,
         CancellationToken ct)
     {
+        // Append the user turn outside the gate so the audit log records
+        // the inbound message even if the user cancels while queued.
         var userTurn = new OrchestratorChatTurn
         {
             Role = OrchestratorChatRoles.User,
@@ -322,66 +344,87 @@ public class OrchestratorChatService
         };
         _chat.Append(watchPath, userTurn);
 
-        var session = _sessionStore.Read();
-        if (session == null || string.IsNullOrWhiteSpace(session.SessionId))
+        // Serialize on the singleton-session gate. Two concurrent resumes
+        // race on the session id, the on-disk usage record, and Claude's
+        // own session memory; the gate is the simplest correctness fix
+        // until per-conversation sessions land. The wait counter tells us
+        // when chats are actually queueing in the wild.
+        var queuedAt = DateTime.UtcNow;
+        await SessionGate.WaitAsync(ct);
+        var queueWaitMs = (DateTime.UtcNow - queuedAt).TotalMilliseconds;
+        if (queueWaitMs > 250)
         {
-            var failure = new OrchestratorChatTurn
-            {
-                Role = OrchestratorChatRoles.Orchestrator,
-                Text = "",
-                ErrorMessage = "Global orchestrator session has not booted yet. Try again in a moment, or check the backend logs."
-            };
-            _chat.Append(watchPath, failure);
-            return failure;
+            _logger.LogInformation(
+                "[orchestrator-chat] queued {WaitMs:F0}ms behind another in-flight chat for project {Project}",
+                queueWaitMs, projectName);
         }
-
-        var prompt = BuildPrompt(projectName, watchPath, req);
-        var modelId = _config["GlobalOrchestrator:Model"] ?? OrchestratorRunner.DefaultModel;
-        var workingDirectory = ResolveWorkingDirectory(watchPath);
-
-        OrchestratorDecisionResult result;
         try
         {
-            result = await _runner.ResumeAsync(session.SessionId, prompt, modelId, workingDirectory, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Orchestrator chat resume failed for project {Project}", projectName);
-            var failure = new OrchestratorChatTurn
+            var session = _sessionStore.Read();
+            if (session == null || string.IsNullOrWhiteSpace(session.SessionId))
             {
-                Role = OrchestratorChatRoles.Orchestrator,
-                Text = "",
-                ErrorMessage = ex.Message
-            };
-            _chat.Append(watchPath, failure);
-            return failure;
-        }
+                var failure = new OrchestratorChatTurn
+                {
+                    Role = OrchestratorChatRoles.Orchestrator,
+                    Text = "",
+                    ErrorMessage = "Global orchestrator session has not booted yet. Try again in a moment, or check the backend logs."
+                };
+                _chat.Append(watchPath, failure);
+                return failure;
+            }
 
-        if (!result.Success)
-        {
-            var failure = new OrchestratorChatTurn
+            var prompt = BuildPrompt(projectName, watchPath, req);
+            var modelId = _config["GlobalOrchestrator:Model"] ?? OrchestratorRunner.DefaultModel;
+            var workingDirectory = ResolveWorkingDirectory(watchPath);
+
+            OrchestratorDecisionResult result;
+            try
+            {
+                result = await _runner.ResumeAsync(session.SessionId, prompt, modelId, workingDirectory, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Orchestrator chat resume failed for project {Project}", projectName);
+                var failure = new OrchestratorChatTurn
+                {
+                    Role = OrchestratorChatRoles.Orchestrator,
+                    Text = "",
+                    ErrorMessage = ex.Message
+                };
+                _chat.Append(watchPath, failure);
+                return failure;
+            }
+
+            if (!result.Success)
+            {
+                var failure = new OrchestratorChatTurn
+                {
+                    Role = OrchestratorChatRoles.Orchestrator,
+                    Text = result.ReplyText ?? "",
+                    Model = result.Model,
+                    TokenUsage = result.TokenUsage,
+                    ErrorMessage = result.ErrorMessage ?? "Orchestrator reply was empty."
+                };
+                _chat.Append(watchPath, failure);
+                UpdateSessionUsage(session, result);
+                return failure;
+            }
+
+            var reply = new OrchestratorChatTurn
             {
                 Role = OrchestratorChatRoles.Orchestrator,
-                Text = result.ReplyText ?? "",
+                Text = result.ReplyText,
                 Model = result.Model,
-                TokenUsage = result.TokenUsage,
-                ErrorMessage = result.ErrorMessage ?? "Orchestrator reply was empty."
+                TokenUsage = result.TokenUsage
             };
-            _chat.Append(watchPath, failure);
+            _chat.Append(watchPath, reply);
             UpdateSessionUsage(session, result);
-            return failure;
+            return reply;
         }
-
-        var reply = new OrchestratorChatTurn
+        finally
         {
-            Role = OrchestratorChatRoles.Orchestrator,
-            Text = result.ReplyText,
-            Model = result.Model,
-            TokenUsage = result.TokenUsage
-        };
-        _chat.Append(watchPath, reply);
-        UpdateSessionUsage(session, result);
-        return reply;
+            SessionGate.Release();
+        }
     }
 
     private void UpdateSessionUsage(GlobalOrchestratorSession previous, OrchestratorDecisionResult result)
