@@ -79,6 +79,14 @@ test.beforeAll(() => {
   fs.mkdirSync(SCREENSHOT_DIR, { recursive: true });
 });
 
+async function dismissErrorDialogIfPresent(page: Page): Promise<void> {
+  const overlay = page.locator('app-error-dialog .overlay--error');
+  if (await overlay.isVisible().catch(() => false)) {
+    const close = page.locator('app-error-dialog button').first();
+    await close.click({ trial: false }).catch(() => { /* best-effort */ });
+  }
+}
+
 async function installMocks(page: Page, jobs: JobInfoStub[]): Promise<void> {
   await page.route('**/api/**', async (route) => {
     const url = new URL(route.request().url());
@@ -149,6 +157,12 @@ async function installMocks(page: Page, jobs: JobInfoStub[]): Promise<void> {
     if (p === '/api/cli/usage') {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ at: new Date().toISOString(), sections: [] }) });
     }
+    if (p.match(/^\/api\/cli\/[^/]+\/models$/)) {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ models: [], defaultModel: null }) });
+    }
+    if (p === '/api/settings/cli/models') {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ models: [] }) });
+    }
     if (p.startsWith('/api/runner')) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ projects: {} }) });
     }
@@ -180,6 +194,7 @@ test.describe('Info button on lane headers (selective placement)', () => {
     ]);
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
+    await dismissErrorDialogIfPresent(page);
 
     const trigger = page.getByTestId('info-button-lane-4-auto-review');
     await expect(trigger).toBeVisible({ timeout: 10_000 });
@@ -205,6 +220,7 @@ test.describe('Info button on lane headers (selective placement)', () => {
     ]);
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
+    await dismissErrorDialogIfPresent(page);
 
     const trigger = page.getByTestId('info-button-lane-3-progress');
     await expect(trigger).toBeVisible({ timeout: 10_000 });
