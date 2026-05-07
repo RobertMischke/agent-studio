@@ -1,0 +1,191 @@
+.filters-dropdown {
+  position: relative;
+  display: inline-flex;
+}
+
+.filters-dropdown__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #cbd5e1;
+  padding: 4px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.filters-dropdown__trigger:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.22);
+  color: #e2e8f0;
+}
+.filters-dropdown__trigger--active {
+  background: rgba(139, 92, 246, 0.20);
+  border-color: rgba(139, 92, 246, 0.55);
+  color: #ddd6fe;
+}
+.filters-dropdown__trigger--open {
+  background: rgba(139, 92, 246, 0.28);
+  border-color: rgba(139, 92, 246, 0.65);
+  color: #f5f3ff;
+}
+.filters-dropdown__icon { font-size: 11px; line-height: 1; }
+.filters-dropdown__label { line-height: 1; }
+.filters-dropdown__badge {
+  background: rgba(167, 139, 250, 0.85);
+  color: #0b1020;
+  border-radius: 999px;
+  padding: 1px 6px;
+  font-size: 10px;
+  font-weight: 800;
+  min-width: 16px;
+  text-align: center;
+}
+
+.filters-dropdown__backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: transparent;
+}
+.filters-dropdown__panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 100;
+  min-width: 280px;
+  max-width: 360px;
+  background: #181825;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  padding: 10px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.filters-dropdown__section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.filters-dropdown__section-title {
+  margin: 0;
+  font-size: 10px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: #64748b;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px;
+}
+.filters-dropdown__section-hint {
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: #475569;
+  text-transform: none;
+}
+
+.filters-dropdown__type-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+/* Type pill colours mirror the on-card task-type chips so the filter UI
+   reads with the same visual vocabulary as the kanban cards. */
+.type-filter__pill {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  color: #cbd5e1;
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.type-filter__pill:hover {
+  background: rgba(255, 255, 255, 0.10);
+  color: #e2e8f0;
+}
+.type-filter__pill--active {
+  background: rgba(139, 92, 246, 0.22);
+  border-color: rgba(139, 92, 246, 0.65);
+  color: #ddd6fe;
+}
+.type-filter__pill--bug.type-filter__pill--active {
+  background: rgba(248, 113, 113, 0.18);
+  border-color: rgba(248, 113, 113, 0.55);
+  color: #fecaca;
+}
+.type-filter__pill--story.type-filter__pill--active,
+.type-filter__pill--feature.type-filter__pill--active {
+  background: rgba(96, 165, 250, 0.18);
+  border-color: rgba(96, 165, 250, 0.55);
+  color: #bfdbfe;
+}
+.type-filter__pill--chore.type-filter__pill--active {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.30);
+  color: #e2e8f0;
+}
+
+.filters-dropdown__tags {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.filters-dropdown__tag-row { padding: 0; }
+.filters-dropdown__tag-label {
+  display: grid;
+  grid-template-columns: 14px 12px 1fr;
+  align-items: start;
+  gap: 8px;
+  padding: 4px 4px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.filters-dropdown__tag-label:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+.filters-dropdown__tag-checkbox {
+  margin: 3px 0 0;
+  accent-color: #a78bfa;
+  cursor: pointer;
+}
+.filters-dropdown__tag-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  margin-top: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.20);
+}
+.filters-dropdown__tag-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.filters-dropdown__tag-name {
+  color: #e2e8f0;
+  font-size: 12px;
+  font-weight: 600;
+}
+.filters-dropdown__tag-desc {
+  color: #94a3b8;
+  font-size: 11px;
+  line-height: 1.3;
+}

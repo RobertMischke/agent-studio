@@ -165,6 +165,9 @@ test.describe('Backlog lane + task types + tags', () => {
     }
 
     await page.goto('/?includeFixtures=true');
+    // After the header-filter-dropdown refactor, type/tag controls live
+    // inside the Filters dropdown; open it before clicking the pill.
+    await page.getByTestId('filters-dropdown-trigger').click();
     const bugBtn = page.getByTestId('type-filter-bug');
     await expect(bugBtn).toBeVisible();
     await bugBtn.click();
@@ -174,9 +177,11 @@ test.describe('Backlog lane + task types + tags', () => {
     await expect(page.locator('[data-testid="job-card"]', { hasText: 'Filter story-card' })).toHaveCount(0);
 
     // The URL hash records the active filter so a copy-paste reproduces the view.
-    await expect.poll(() => page.url()).toMatch(/filter=type:bug/);
+    await expect.poll(() => page.url()).toMatch(/filters=/);
+    expect(decodeURIComponent(new URL(page.url()).hash)).toContain('type:bug');
 
-    // Clearing returns the story card to the board.
+    // Clearing returns the story card to the board (Clear all sits in the
+    // active-filter strip below the header).
     await page.getByTestId('filter-clear-all').click();
     await expect(page.locator('[data-testid="job-card"]', { hasText: 'Filter story-card' })).toBeVisible();
   });

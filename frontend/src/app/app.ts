@@ -29,6 +29,7 @@ import { cliTypeLabel as fmtCliTypeLabel, formatMultiplier as fmtMultiplier } fr
 import { CreateJobDialogComponent, PendingAttachment } from './components/board/create-job-dialog/create-job-dialog.component';
 import { ErrorDialogComponent } from './components/board/error-dialog/error-dialog.component';
 import { ProjectAutoInfo, ProjectTabsComponent } from './components/board/project-tabs/project-tabs.component';
+import { FiltersDropdownComponent, TypeFilterOption } from './components/board/filters-dropdown/filters-dropdown.component';
 import { projectIdentity } from './services/project-identity.util';
 import { DevToolsService } from './services/dev-tools.service';
 import { FeatureFlagsService } from './services/feature-flags.service';
@@ -56,9 +57,25 @@ interface VerboseDebugContext {
   job: JobInfo | null;
 }
 
+/**
+ * One pill in the active-filter strip below the header. Each pill
+ * carries enough context for `removeFilterPill` to undo just this one
+ * filter without disturbing the others.
+ */
+interface ActiveFilterPill {
+  kind: 'owner' | 'project' | 'type' | 'tag';
+  kindLabel: string;
+  /** Identifier used by the remove handler. */
+  value: string;
+  /** Visible label shown on the pill. */
+  label: string;
+  /** Optional CSS colour for the leading swatch (tag colour, project colour). */
+  swatch: string | null;
+}
+
 @Component({
   selector: 'app-root',
-  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, ProjectShellComponent, SecurityPanelComponent, ProjectTokenUsagePanelComponent, ProjectObservabilityPanelComponent, ProjectProductRuntimePanelComponent, ProjectSteeringDocsSectionComponent, AnalysisReportDrilldownComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceTokenTimelineComponent, WorkspaceScreenshotsComponent, WorkspaceBannerComponent, UpdateBannerComponent, UpdateVersionBadgeComponent, UpdateCenterComponent, UpdateBlockModalComponent, VerboseDebugOverlayComponent, CliAdminPanelComponent],
+  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, ProjectShellComponent, SecurityPanelComponent, ProjectTokenUsagePanelComponent, ProjectObservabilityPanelComponent, ProjectProductRuntimePanelComponent, ProjectSteeringDocsSectionComponent, AnalysisReportDrilldownComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceTokenTimelineComponent, WorkspaceScreenshotsComponent, WorkspaceBannerComponent, UpdateBannerComponent, UpdateVersionBadgeComponent, UpdateCenterComponent, UpdateBlockModalComponent, VerboseDebugOverlayComponent, CliAdminPanelComponent, FiltersDropdownComponent],
   // Keep styles global to this subtree — the App shell still owns the
   // .header*, .filter-chip*, .overlay*, .create-dialog*, .error-dialog*
   // class rules used by the extracted dialogs and project-tabs.
@@ -100,47 +117,13 @@ interface VerboseDebugContext {
               }
             </select>
           </label>
-          <div class="type-filter" data-testid="type-filter">
-            <button type="button"
-                    class="type-filter__pill"
-                    [class.type-filter__pill--active]="activeTypeFilter().size === 0"
-                    data-testid="type-filter-all"
-                    (click)="clearTypeFilters()">All</button>
-            <button type="button"
-                    class="type-filter__pill type-filter__pill--bug"
-                    [class.type-filter__pill--active]="activeTypeFilter().has('bug')"
-                    data-testid="type-filter-bug"
-                    (click)="toggleTypeFilter('bug')">🐞 Bugs</button>
-            <button type="button"
-                    class="type-filter__pill type-filter__pill--story"
-                    [class.type-filter__pill--active]="activeTypeFilter().has('user-story')"
-                    data-testid="type-filter-story"
-                    (click)="toggleTypeFilter('user-story')">📖 Stories</button>
-            <button type="button"
-                    class="type-filter__pill type-filter__pill--chore"
-                    [class.type-filter__pill--active]="activeTypeFilter().has('chore')"
-                    data-testid="type-filter-chore"
-                    (click)="toggleTypeFilter('chore')">· Chores</button>
-          </div>
-          @if (tagRegistry().length > 0) {
-            <div class="tag-filter" data-testid="tag-filter">
-              @for (t of tagRegistry(); track t.id) {
-                <button type="button"
-                        class="tag-filter__chip"
-                        [class.tag-filter__chip--active]="activeTagFilter().has(t.id)"
-                        [attr.data-testid]="'tag-filter-' + t.id"
-                        [style.--tag-color]="t.color"
-                        [title]="t.description || t.label"
-                        (click)="toggleTagFilter(t.id)">{{ t.label }}</button>
-              }
-            </div>
-          }
-          @if (hasActiveFilters()) {
-            <button type="button"
-                    class="filter-clear"
-                    data-testid="filter-clear-all"
-                    (click)="clearAllFilters()">Clear filters</button>
-          }
+          <app-filters-dropdown
+            [typeOptions]="typeFilterOptions"
+            [activeType]="activeType()"
+            [tags]="tagRegistry()"
+            [activeTagIds]="activeTagFilter()"
+            (setType)="onSetType($event)"
+            (toggleTag)="toggleTagFilter($event)" />
           <button class="btn btn--compact-toggle"
                   data-testid="compact-cards-toggle"
                   [class.btn--compact-toggle--active]="compactCards()"
@@ -188,6 +171,36 @@ interface VerboseDebugContext {
           }
         </div>
       </header>
+
+      @if (activeFilterPills().length > 0) {
+        <div class="active-filter-strip"
+             data-testid="active-filter-strip"
+             role="region"
+             aria-label="Active filters">
+          @for (pill of activeFilterPills(); track pill.kind + ':' + pill.value) {
+            <span class="active-filter-strip__pill"
+                  [class]="'active-filter-strip__pill--' + pill.kind"
+                  [attr.data-testid]="'active-filter-pill-' + pill.kind + '-' + pill.value">
+              <span class="active-filter-strip__pill-kind">{{ pill.kindLabel }}:</span>
+              @if (pill.swatch) {
+                <span class="active-filter-strip__pill-swatch"
+                      aria-hidden="true"
+                      [style.background]="pill.swatch"></span>
+              }
+              <span class="active-filter-strip__pill-label">{{ pill.label }}</span>
+              <button type="button"
+                      class="active-filter-strip__pill-remove"
+                      [attr.data-testid]="'active-filter-remove-' + pill.kind + '-' + pill.value"
+                      [attr.aria-label]="'Remove ' + pill.kindLabel + ' filter ' + pill.label"
+                      (click)="removeFilterPill(pill)">×</button>
+            </span>
+          }
+          <button type="button"
+                  class="active-filter-strip__clear-all"
+                  data-testid="filter-clear-all"
+                  (click)="clearAllFilters()">Clear all</button>
+        </div>
+      }
 
       <app-update-banner />
       <app-update-center />
@@ -653,48 +666,101 @@ interface VerboseDebugContext {
       outline: 1px solid rgba(139,92,246,0.6);
       outline-offset: 1px;
     }
-    /* Backlog-lane spec: type / tag filter pills sit next to the owner select. */
-    .type-filter, .tag-filter {
+    /* Active-filter pill strip: a single line below the header showing every
+       active filter (Owner / Project / Type / Tags) with a per-pill × and a
+       trailing "Clear all". Collapses to zero height when no filter is set. */
+    .active-filter-strip {
+      flex: 0 0 auto;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      background: rgba(15, 15, 26, 0.60);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      font-size: 11px;
+    }
+    .active-filter-strip__pill {
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      padding: 0 4px;
-    }
-    .type-filter__pill, .tag-filter__chip {
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(255,255,255,0.10);
-      color: #cbd5e1;
-      border-radius: 999px;
-      padding: 3px 9px;
-      font-size: 11px;
-      font-weight: 500;
-      cursor: pointer;
-      transition: background 0.15s, border-color 0.15s, color 0.15s;
-    }
-    .type-filter__pill:hover, .tag-filter__chip:hover {
-      background: rgba(255,255,255,0.10);
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid rgba(255, 255, 255, 0.14);
       color: #e2e8f0;
+      border-radius: 999px;
+      padding: 2px 4px 2px 8px;
+      font-weight: 600;
     }
-    .type-filter__pill--active {
-      background: rgba(139, 92, 246, 0.20);
+    .active-filter-strip__pill--owner {
+      background: rgba(56, 189, 248, 0.10);
+      border-color: rgba(56, 189, 248, 0.45);
+      color: #bae6fd;
+    }
+    .active-filter-strip__pill--project {
+      background: rgba(167, 139, 250, 0.12);
+      border-color: rgba(167, 139, 250, 0.55);
+      color: #ddd6fe;
+    }
+    .active-filter-strip__pill--type {
+      background: rgba(139, 92, 246, 0.18);
       border-color: rgba(139, 92, 246, 0.55);
       color: #ddd6fe;
     }
-    .tag-filter__chip--active {
-      background: color-mix(in srgb, var(--tag-color, #94a3b8) 22%, rgba(0,0,0,0));
-      border-color: var(--tag-color, #94a3b8);
+    .active-filter-strip__pill--tag {
+      background: rgba(255, 255, 255, 0.04);
+      border-color: rgba(255, 255, 255, 0.20);
       color: #f1f5f9;
     }
-    .filter-clear {
+    .active-filter-strip__pill-kind {
+      font-size: 10px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: #94a3b8;
+      font-weight: 700;
+    }
+    .active-filter-strip__pill-swatch {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.20);
+    }
+    .active-filter-strip__pill-label {
+      max-width: 220px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .active-filter-strip__pill-remove {
+      background: transparent;
+      border: 0;
+      color: inherit;
+      opacity: 0.65;
+      cursor: pointer;
+      width: 18px;
+      height: 18px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      font-size: 14px;
+      line-height: 1;
+      padding: 0;
+    }
+    .active-filter-strip__pill-remove:hover {
+      opacity: 1;
+      background: rgba(255, 255, 255, 0.08);
+    }
+    .active-filter-strip__clear-all {
+      margin-left: auto;
       background: transparent;
       border: 1px solid rgba(248, 113, 113, 0.30);
       color: #fca5a5;
       border-radius: 8px;
-      padding: 3px 8px;
+      padding: 2px 10px;
       font-size: 11px;
+      font-weight: 600;
       cursor: pointer;
     }
-    .filter-clear:hover {
+    .active-filter-strip__clear-all:hover {
       background: rgba(248, 113, 113, 0.10);
       border-color: rgba(248, 113, 113, 0.55);
       color: #fecaca;
@@ -2219,9 +2285,10 @@ export class App implements OnInit {
         if (!types.has(t)) return false;
       }
       if (tagIds.size > 0) {
-        const jobTags = j.tags ?? [];
-        // OR-match: card needs at least one of the selected tags.
-        if (!jobTags.some(t => tagIds.has(t))) return false;
+        const jobTags = new Set(j.tags ?? []);
+        // AND-match: a job needs ALL selected tags
+        // (header-filter-dropdown spec: "Selecting two tags ANDs them").
+        for (const tid of tagIds) if (!jobTags.has(tid)) return false;
       }
       if (!matchesQuery(j)) return false;
       return true;
@@ -2274,6 +2341,7 @@ export class App implements OnInit {
   readonly activeClientFilter = signal<string | null>(null);
   setClientFilter(id: string | null): void {
     this.activeClientFilter.set(id || null);
+    this.writeFilterHash();
   }
   /** Read the new value out of the (change) event so the template stays terse. */
   clientFilterChange(event: Event): string | null {
@@ -2283,14 +2351,26 @@ export class App implements OnInit {
   }
 
   /**
-   * Backlog-lane spec filter set: task-type pills (`bug` / `user-story` /
-   * `chore`) AND tag-id chips. Both are multi-select OR within their own
-   * group; the groups AND with the existing project + owner filters in
-   * `filteredGrouped`. Persisted to the URL hash so a bookmark or
-   * copy-paste reproduces what the user is looking at.
+   * Backlog-lane spec filter set, refactored for the dropdown header
+   * (`header-filter-dropdown-for-type-and-tags-plus-card-chip`).
+   *
+   * - Type filter is single-select: a job has exactly one task type, so two
+   *   types ANDed would always be empty. The Set wrapper is preserved for
+   *   compatibility with the `filteredGrouped` membership check, but the
+   *   set always contains zero or one entry.
+   * - Tag filter is multi-select with AND semantics: the user is narrowing
+   *   ("things tagged ui-ux AND performance"), not broadening.
+   * - All four filter sources (Owner / Project / Type / Tags) round-trip
+   *   through the URL hash so a bookmark reproduces the view.
    */
   readonly activeTypeFilter = signal<Set<string>>(new Set());
   readonly activeTagFilter = signal<Set<string>>(new Set());
+  /** Single-select view of the type filter. Null = no type filter. */
+  readonly activeType = computed<string | null>(() => {
+    const s = this.activeTypeFilter();
+    if (s.size === 0) return null;
+    return s.values().next().value as string;
+  });
   readonly tagRegistry = signal<TagRegistryEntry[]>([]);
   readonly tagRegistryById = computed(() => {
     const m = new Map<string, TagRegistryEntry>();
@@ -2298,16 +2378,28 @@ export class App implements OnInit {
     return m;
   });
 
+  /** Static option list for the type filter dropdown. */
+  readonly typeFilterOptions: readonly TypeFilterOption[] = [
+    { value: 'bug', label: 'Bugs', icon: '🐞', kind: 'bug' },
+    { value: 'user-story', label: 'Stories', icon: '📖', kind: 'story' },
+    { value: 'chore', label: 'Chores', icon: '·', kind: 'chore' },
+  ];
+
   clearTypeFilters(): void {
     this.activeTypeFilter.set(new Set());
     this.writeFilterHash();
   }
 
-  toggleTypeFilter(type: string): void {
-    const next = new Set(this.activeTypeFilter());
-    if (next.has(type)) next.delete(type); else next.add(type);
-    this.activeTypeFilter.set(next);
+  /** Single-select set of the type filter (called from the dropdown). */
+  onSetType(type: string | null): void {
+    this.activeTypeFilter.set(type ? new Set([type]) : new Set());
     this.writeFilterHash();
+  }
+
+  toggleTypeFilter(type: string): void {
+    // Single-select: same value clears, otherwise replace.
+    const current = this.activeType();
+    this.onSetType(current === type ? null : type);
   }
 
   toggleTagFilter(id: string): void {
@@ -2333,35 +2425,141 @@ export class App implements OnInit {
     || !!this.activeClientFilter()
     || this.activeProjects().size > 0);
 
+  /**
+   * Active-filter pill data for the strip below the header. One pill per
+   * active filter; clicking the × calls `removeFilterPill`. Owner and
+   * Project are surfaced here even though their primary controls remain
+   * inline so the user has one consistent place to undo any narrowing.
+   */
+  readonly activeFilterPills = computed<ActiveFilterPill[]>(() => {
+    const pills: ActiveFilterPill[] = [];
+    const owner = this.activeClientFilter();
+    if (owner) {
+      const c = this.clientService.resolve(owner);
+      pills.push({
+        kind: 'owner', kindLabel: 'Owner', value: owner,
+        label: c.displayName || owner,
+        swatch: c.colour || null,
+      });
+    }
+    for (const name of this.activeProjects()) {
+      const id = projectIdentity(name);
+      pills.push({
+        kind: 'project', kindLabel: 'Project', value: name,
+        label: name, swatch: id.color,
+      });
+    }
+    const t = this.activeType();
+    if (t) {
+      const opt = this.typeFilterOptions.find(o => o.value === t);
+      pills.push({
+        kind: 'type', kindLabel: 'Type', value: t,
+        label: opt ? `${opt.icon} ${opt.label}` : t,
+        swatch: null,
+      });
+    }
+    const byId = this.tagRegistryById();
+    for (const id of this.activeTagFilter()) {
+      const entry = byId.get(id);
+      pills.push({
+        kind: 'tag', kindLabel: 'Tag', value: id,
+        label: entry?.label ?? id,
+        swatch: entry?.color ?? null,
+      });
+    }
+    return pills;
+  });
+
+  removeFilterPill(pill: ActiveFilterPill): void {
+    switch (pill.kind) {
+      case 'owner':
+        this.setClientFilter(null);
+        this.writeFilterHash();
+        break;
+      case 'project':
+        this.toggleProject(pill.value);
+        this.writeFilterHash();
+        break;
+      case 'type':
+        this.onSetType(null);
+        break;
+      case 'tag':
+        this.toggleTagFilter(pill.value);
+        break;
+    }
+  }
+
   private readFilterHash(): void {
     const hash = window.location.hash || '';
-    const m = hash.match(/[#&]filter=([^&]*)/);
-    if (!m) return;
-    const parts = decodeURIComponent(m[1]).split(',').map(p => p.trim()).filter(Boolean);
-    const types = new Set<string>();
-    const tags = new Set<string>();
-    for (const p of parts) {
-      const [k, v] = p.split(':');
-      if (!k || !v) continue;
-      if (k === 'type') types.add(v);
-      else if (k === 'tag') tags.add(v);
+    // New format: #filters=owner:X;projects:A,B;type:bug;tags:t1,t2 with `;`
+    // separating top-level keys. The legacy format `#filter=type:bug,tag:perf`
+    // is still understood so old bookmarks keep working.
+    const newM = hash.match(/[#&]filters=([^&]*)/);
+    if (newM) {
+      const decoded = decodeURIComponent(newM[1]);
+      const parts = decoded.split(';').map(p => p.trim()).filter(Boolean);
+      let owner: string | null = null;
+      const projects = new Set<string>();
+      const types = new Set<string>();
+      const tags = new Set<string>();
+      for (const p of parts) {
+        const idx = p.indexOf(':');
+        if (idx <= 0) continue;
+        const k = p.slice(0, idx).trim();
+        const v = p.slice(idx + 1).trim();
+        if (!v) continue;
+        if (k === 'owner') owner = v;
+        else if (k === 'projects') v.split(',').filter(Boolean).forEach(x => projects.add(x));
+        else if (k === 'type') types.add(v);
+        else if (k === 'tags') v.split(',').filter(Boolean).forEach(x => tags.add(x));
+      }
+      this.activeClientFilter.set(owner);
+      this.activeProjects.set(projects);
+      localStorage.setItem('activeProjects', JSON.stringify([...projects]));
+      // Type filter is single-select: keep at most one entry.
+      const oneType = types.size > 0 ? new Set([types.values().next().value as string]) : new Set<string>();
+      this.activeTypeFilter.set(oneType);
+      this.activeTagFilter.set(tags);
+      return;
     }
-    this.activeTypeFilter.set(types);
-    this.activeTagFilter.set(tags);
+    const legacyM = hash.match(/[#&]filter=([^&]*)/);
+    if (legacyM) {
+      const parts = decodeURIComponent(legacyM[1]).split(',').map(p => p.trim()).filter(Boolean);
+      const types = new Set<string>();
+      const tags = new Set<string>();
+      for (const p of parts) {
+        const [k, v] = p.split(':');
+        if (!k || !v) continue;
+        if (k === 'type') types.add(v);
+        else if (k === 'tag') tags.add(v);
+      }
+      const oneType = types.size > 0 ? new Set([types.values().next().value as string]) : new Set<string>();
+      this.activeTypeFilter.set(oneType);
+      this.activeTagFilter.set(tags);
+    }
   }
 
   private writeFilterHash(): void {
-    const parts: string[] = [];
-    for (const t of this.activeTypeFilter()) parts.push(`type:${t}`);
-    for (const t of this.activeTagFilter()) parts.push(`tag:${t}`);
-    const fragment = parts.length > 0 ? `filter=${parts.join(',')}` : '';
-    // Preserve any non-filter hash content (e.g. the project route).
+    const segments: string[] = [];
+    const owner = this.activeClientFilter();
+    if (owner) segments.push(`owner:${owner}`);
+    const projects = [...this.activeProjects()];
+    if (projects.length > 0) segments.push(`projects:${projects.join(',')}`);
+    const t = this.activeType();
+    if (t) segments.push(`type:${t}`);
+    const tags = [...this.activeTagFilter()];
+    if (tags.length > 0) segments.push(`tags:${tags.join(',')}`);
+    const fragment = segments.length > 0 ? `filters=${encodeURIComponent(segments.join(';'))}` : '';
+    // Preserve any non-filter hash content (e.g. the project route) and
+    // strip both the new (`filters=`) and legacy (`filter=`) keys so we
+    // don't accumulate duplicates.
     const existing = (window.location.hash || '').replace(/^#/, '');
-    const others = existing.split('&').filter(s => s && !s.startsWith('filter='));
+    const others = existing
+      .split('&')
+      .filter(s => s && !s.startsWith('filters=') && !s.startsWith('filter='));
     const next = [fragment, ...others].filter(Boolean).join('&');
     const target = next ? `#${next}` : '';
     if (target !== window.location.hash) {
-      // Replace so we don't pollute history with every filter toggle.
       history.replaceState(null, '', target || window.location.pathname + window.location.search);
     }
   }
@@ -3355,6 +3553,7 @@ export class App implements OnInit {
     }
     this.activeProjects.set(current);
     localStorage.setItem('activeProjects', JSON.stringify([...current]));
+    this.writeFilterHash();
   }
 
   isProjectActive(name: string): boolean {
