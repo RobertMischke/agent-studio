@@ -235,6 +235,21 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
       flex-direction: column;
       gap: 12px;
       transition: outline 0.15s;
+      /*
+       * CSS containment: scrolling a single lane's body or polling a
+       * single lane's status (4-auto-review header line) must not
+       * trigger layout/paint work in sibling lanes. The "layout" scope
+       * keeps descendants' size/position changes from invalidating
+       * ancestors; the "paint" scope clips the column's painting to
+       * its own border box. The default style/size scopes are
+       * intentionally left untouched so descendant counters and
+       * viewport units still resolve.
+       *
+       * This is the perf intervention that brings the long-task
+       * budget during a dense-board 5 s scroll below the 50 ms
+       * acceptance criterion in the lane-overlap regression spec.
+       */
+      contain: layout paint;
     }
     /* Drag-over signal: outline ring only. We deliberately do NOT tint the
        column background because a transient overlay that snaps off on drop
@@ -555,6 +570,9 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
       cursor: pointer;
       color: #cbd5e1;
       transition: outline 0.15s, background 0.15s;
+      /* Same containment rationale as .column: a rail's running-pulse
+         animation must not invalidate sibling lanes. */
+      contain: layout paint;
     }
     .column-rail:hover {
       background: #1a1a2b;

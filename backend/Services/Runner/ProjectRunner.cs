@@ -65,6 +65,13 @@ public class ProjectRunner
     // session id, watchdog regression) cannot cascade through every queued
     // job. Reset on any auto-issued run that reaches Review.
     private int _consecutiveAutoFailureCount;
+
+    // Per-job latch: have we already issued the sentinel-detected stop for
+    // this run? claude-code can emit multiple TurnCompleted frames in a
+    // single run if the model produces several result-shaped responses; we
+    // only want to kill once on the first sentinel-bearing one. Cleared on
+    // ProcessExited / Killed in OnRunEventReceived.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> _sentinelStopRequested = new();
     internal const int AutoFailureHaltThreshold = 3;
     // Job ids of the recent auto-failures, kept so the halt message can name
     // the offenders without re-scanning.
@@ -642,10 +649,67 @@ public class ProjectRunner
         try { AppendToolCallLog(jobKey, evt); }
         catch (Exception ex) { _logger.LogDebug(ex, "tool-calls.jsonl append failed for {JobKey}", jobKey); }
 
+        // Sentinel-on-TurnCompleted gate. claude-code in stream-json mode
+        // emits a `result:success` frame (mapped to TurnCompleted) and can
+        // then linger indefinitely without exiting; AgentOutcomeAnalyzer
+        // only fires from OnCliFinished, which only fires on OS exit, so a
+        // job whose agent already wrote [[TASK_DONE]] hangs forever in
+        // 3-progress until the watchdog or operator intervenes. Detect the
+        // sentinel here and kill the lingering process so the existing exit
+        // handler runs the analyzer + policy.
+        if (evt is CliRunEvent.TurnCompleted && _sentinelStopRequested.TryAdd(jobKey, 1))
+        {
+            try { TryStopOnSentinel(jobKey); }
+            catch (Exception ex) { _logger.LogWarning(ex, "Sentinel-stop check failed for {JobKey}", jobKey); }
+        }
+
         // Clean up on terminal events so a later run with the same key
         // does not inherit stale phase state.
         if (evt is CliRunEvent.ProcessExited or CliRunEvent.Killed)
+        {
             _phaseByJob.TryRemove(jobKey, out _);
+            _sentinelStopRequested.TryRemove(jobKey, out _);
+        }
+    }
+
+    /// <summary>
+    /// Scan the buffered CLI output for a typed sentinel; if one is present
+    /// AND the run's owning project is this one (active job match), ask the
+    /// CLI service to kill the still-alive process tree. The kill flows back
+    /// through the existing ProcessExited path, which fires
+    /// <see cref="OnCliFinished"/> and lets the analyzer + policy do their
+    /// usual work. Marker reason <see cref="RunStopReason.SentinelDetected"/>
+    /// keeps the run-status classifier from labelling the kill as "stopped".
+    /// </summary>
+    private void TryStopOnSentinel(string jobKey)
+    {
+        // Only act for the run we're currently tracking. A stale TurnCompleted
+        // from a previous run should never reach here, but guard anyway.
+        if (GetActiveJobKey() != jobKey) return;
+        var cliType = _activeCliType;
+        if (string.IsNullOrEmpty(cliType)) return;
+
+        var cli = _router.Get(cliType);
+        var snapshot = cli.GetOutput(jobKey);
+        if (snapshot == null || snapshot.Count == 0) return;
+
+        // Use the same regex the analyzer uses, so detection here matches
+        // the post-run path exactly. SentinelRegex is the published surface.
+        var found = false;
+        for (var i = snapshot.Count - 1; i >= 0; i--)
+        {
+            if (AgentOutcomeAnalyzer.SentinelRegex.IsMatch(snapshot[i].Text ?? string.Empty))
+            {
+                found = true;
+                break;
+            }
+        }
+        if (!found) return;
+
+        _logger.LogInformation(
+            "TurnCompleted with sentinel for {JobKey}; killing lingering {Cli} process so OnCliFinished can run.",
+            jobKey, cliType);
+        cli.Stop(jobKey, RunStopReason.SentinelDetected);
     }
 
     /// <summary>

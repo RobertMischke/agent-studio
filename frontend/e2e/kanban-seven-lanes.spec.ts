@@ -141,6 +141,14 @@ test.describe('ADR-0025 seven-lane kanban', () => {
     // this gesture the test would also pass when the lane-overflow guard
     // (paired task) is broken - we want the screenshot to reflect the
     // user's real default-collapses.
+    //
+    // 6-completed joins the rail set because the lane-overlap fix
+    // (`bug-lane-overlap-and-sluggish-with-many-lanes`) restored the
+    // 220 px min-width contract for expanded columns. Five expanded
+    // columns no longer fit alongside the task-nav at 1440 px without
+    // horizontal scroll; the previous "fits at 1440" was a side effect
+    // of lane-groups silently shrinking past their content's min-width
+    // and visually leaking lanes into each other.
     await page.addInitScript(() => {
       window.localStorage.setItem(
         'collapsedLanes',
@@ -180,14 +188,38 @@ test.describe('ADR-0025 seven-lane kanban', () => {
     await expect(page.getByRole('heading', { name: 'Auto Review' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Human Review' })).toBeVisible();
 
-    // Horizontal overflow guard: the kanban dashboard must fit inside
-    // the 1440px viewport without producing a horizontal scroll bar.
-    const overflow = await page.evaluate(() => {
-      const el = document.querySelector('[data-testid="kanban-dashboard"]') as HTMLElement | null;
-      if (!el) return { scroll: 0, client: 0 };
-      return { scroll: el.scrollWidth, client: el.clientWidth };
-    });
-    expect(overflow.scroll).toBeLessThanOrEqual(overflow.client + 1);
+    // Lane-overlap guard: the post-ADR-0025/0026/0028 lane catalog
+    // mandates 0-backlog, 1-preparation, 1a-orchestrator-prep, and
+    // 2-ready in the Backlog group plus 3-progress, 4-auto-review,
+    // 5-human-review in Active and 6-completed, 7-archive in Done -
+    // nine columns at minimum. Five expanded columns at 220 px floor no
+    // longer fit at 1440 px next to the task-nav (the previous "fits"
+    // was a side effect of the lane-group min-width: 0 bug in
+    // `bug-lane-overlap-and-sluggish-with-many-lanes`); horizontal
+    // scroll is the correct behavior. The invariant we still need is
+    // that no two lanes share a horizontal pixel range. The dedicated
+    // `kanban-lane-overlap.spec.ts` covers this exhaustively at three
+    // widths; the cheap pairwise check below keeps this seven-lane
+    // contract anchored.
+    const laneRects = await page.evaluate((laneIds: readonly string[]) => {
+      const rects: Array<{ id: string; left: number; right: number }> = [];
+      for (const id of laneIds) {
+        const el =
+          document.querySelector(`[data-testid="lane-${id}"]`) ??
+          document.querySelector(`[data-testid="lane-rail-${id}"]`);
+        if (!el) continue;
+        const r = (el as HTMLElement).getBoundingClientRect();
+        if (r.width === 0 && r.height === 0) continue;
+        rects.push({ id, left: r.left, right: r.right });
+      }
+      return rects.sort((a, b) => a.left - b.left);
+    }, lanes);
+    for (let i = 0; i < laneRects.length - 1; i++) {
+      expect(
+        laneRects[i].right,
+        `lane ${laneRects[i].id} (right=${laneRects[i].right.toFixed(1)}) overlaps lane ${laneRects[i + 1].id} (left=${laneRects[i + 1].left.toFixed(1)})`,
+      ).toBeLessThanOrEqual(laneRects[i + 1].left + 0.5);
+    }
 
     await page.screenshot({ path: 'test-results/kanban-seven-lanes-1440x900.png', fullPage: false });
   });

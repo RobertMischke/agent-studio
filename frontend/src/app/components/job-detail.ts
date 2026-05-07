@@ -1064,21 +1064,27 @@ import { markdownToHtml } from './markdown-utils';
       padding-right: 4px;
     }
     .log--overlay {
-      max-height: calc(100vh - 340px);
+      flex: 1;
+      min-height: 0;
       overflow-y: auto;
+      overflow-x: hidden;
       padding-right: 6px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
     }
     .log__row {
       display: flex;
       flex-wrap: wrap;
-      gap: 12px;
+      gap: 10px;
       align-items: baseline;
-      padding: 8px 12px;
+      padding: 6px 10px;
       background: rgba(0,0,0,0.15);
-      border-radius: 10px;
+      border-radius: 6px;
       font-size: 13px;
+      line-height: 1.4;
     }
-    .log__time { font-size: 11px; color: #64748b; min-width: 70px; font-variant-numeric: tabular-nums; }
+    .log__time { font-size: 11px; color: #64748b; min-width: 56px; font-variant-numeric: tabular-nums; }
     .log__event { color: #e2e8f0; font-weight: 600; }
     .log__detail { color: #94a3b8; font-size: 12px; }
 
@@ -1268,36 +1274,49 @@ import { markdownToHtml } from './markdown-utils';
       z-index: 200;
     }
     .log-overlay__panel {
-      width: min(1200px, calc(100vw - 48px));
-      max-height: calc(100vh - 48px);
+      width: min(1280px, calc(100vw - 40px));
+      max-height: calc(100vh - 40px);
       overflow: hidden;
       background: #11111b;
       border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 24px;
-      padding: 24px;
+      border-radius: 16px;
+      padding: 20px 24px 24px;
       display: flex;
       flex-direction: column;
-      gap: 18px;
+      gap: 14px;
       box-shadow: 0 24px 80px rgba(0,0,0,0.55);
+      min-height: 0;
     }
     .log-overlay__header {
       display: flex;
       justify-content: space-between;
-      align-items: flex-start;
+      align-items: center;
       gap: 16px;
     }
     .log-overlay__title {
       margin: 0;
-      font-size: 26px;
+      font-size: 18px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
       color: #f8fafc;
     }
+    /* Wider Activity log (the dense column), narrower Protocol (just timestamps).
+       Was 1.15fr / 0.85fr — now Activity gets ~70% of the room so the markdown
+       wraps at a comfortable measure instead of fighting with a half-empty
+       sidebar. Each section scrolls independently — overflow: hidden on the
+       grid + min-height: 0 inside the cards keeps the chrome from scrolling
+       with the content. */
     .log-overlay__content {
       display: grid;
-      grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr);
-      gap: 18px;
+      grid-template-columns: minmax(0, 2.2fr) minmax(260px, 0.9fr);
+      gap: 14px;
       min-height: 0;
-      overflow: auto;
-      padding-right: 4px;
+      flex: 1;
+      overflow: hidden;
+    }
+    .log-overlay__content > .sidebar-card {
+      min-height: 0;
+      overflow: hidden;
     }
     @keyframes fadeIn {
       from { opacity: 0; transform: translateY(-4px); }

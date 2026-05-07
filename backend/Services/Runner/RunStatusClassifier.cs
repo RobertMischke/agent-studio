@@ -22,7 +22,17 @@ public enum RunStopReason
     /// <summary>Host is shutting down or the run's cancellation token fired.</summary>
     Cancelled,
     /// <summary>The CLI's user-configured quota cap was exceeded mid-run.</summary>
-    QuotaCapExceeded
+    QuotaCapExceeded,
+    /// <summary>
+    /// The agent emitted a typed sentinel ([[TASK_DONE]] / [[TASK_BLOCKED]] /
+    /// [[TASK_NEEDS_INPUT]] / [[TASK_NOOP]]) and a TurnCompleted frame, but
+    /// the OS process did not exit. Stream-json mode can leave claude-code
+    /// alive after the result frame; without this kill, the orchestrator
+    /// would wait forever for an exit and never run AgentOutcomeAnalyzer.
+    /// Treated as a successful completion by the classifier - the agent did
+    /// its job, only the lingering process was killed.
+    /// </summary>
+    SentinelDetected
 }
 
 /// <summary>String constants for <see cref="Models.CliExecution.Status"/>. Persisted; keep stable.</summary>
@@ -54,6 +64,10 @@ public static class RunStatusClassifier
 {
     public static string Classify(int? exitCode, RunStopReason reason)
     {
+        // SentinelDetected means the agent finished its work and emitted a
+        // typed sentinel; we killed only the lingering process. Treat as a
+        // successful completion regardless of the kill-induced exit code.
+        if (reason == RunStopReason.SentinelDetected) return RunStatuses.Completed;
         if (reason != RunStopReason.None) return RunStatuses.Stopped;
         return exitCode == 0 ? RunStatuses.Completed : RunStatuses.Failed;
     }

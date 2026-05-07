@@ -51,4 +51,21 @@ public class RunStatusClassifierTests
     {
         Assert.Equal(RunStatuses.Failed, RunStatusClassifier.Classify(exitCode, RunStopReason.None));
     }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    [InlineData(1)]
+    [InlineData(137)]
+    [InlineData(null)]
+    public void SentinelDetected_AnyExitCode_IsCompleted(int? exitCode)
+    {
+        // claude-code in stream-json mode lingers after the result frame; we
+        // kill the OS process so OnCliFinished can run, but the agent's job
+        // succeeded. The kill produces exitCode = -1 on Windows, but the
+        // status must reflect the agent's outcome (completed), not the kill.
+        Assert.Equal(
+            RunStatuses.Completed,
+            RunStatusClassifier.Classify(exitCode, RunStopReason.SentinelDetected));
+    }
 }

@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, computed, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, output, signal } from '@angular/core';
 import { AutoLoopSnapshot, JobInfo, JobTokenSummary, PendingIntent } from '../models/job.model';
 import { GitSummaryService } from '../services/git-summary.service';
 import { ClientService } from '../services/client.service';
@@ -16,6 +16,13 @@ if (typeof window !== 'undefined') {
 @Component({
   selector: 'app-job-card',
   standalone: true,
+  // OnPush + signal-based reactivity. With ~30+ cards in a single
+  // 4-auto-review lane, default Zone CD on every microtask was cumulating
+  // into 80-100 ms long tasks during scroll/poll bursts. The component's
+  // template only reads signal inputs, computed signals, and the shared
+  // `nowTick` signal, so OnPush updates remain correct without any
+  // explicit `markForCheck` calls.
+  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="job-card"
          [class]="'job-card--' + job().state"

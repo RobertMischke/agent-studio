@@ -638,14 +638,21 @@ interface RenderedTurn {
     .convo-turn__body--system { color: #fecaca; white-space: pre-wrap; }
     .convo-turn__body--agent { color: #ede9fe; }
 
-    /* Markdown rendering inside the agent bubble */
+    /* Markdown rendering inside the agent bubble.
+       Tuned for read-the-result density: agent reports often consist of bullet
+       lists punctuated by lone-bold-line "section headers" (e.g. **Fixes**,
+       **Evidence**) rather than real h1/h2/h3. The line-height and list
+       spacing below make those breathe, and the :has() selector below treats
+       a paragraph that is just one <strong> as the section break it actually
+       is, with a real top margin. */
+    .markdown { line-height: 1.55; }
     .markdown :first-child { margin-top: 0; }
     .markdown :last-child  { margin-bottom: 0; }
     .markdown p {
-      margin: 0 0 0.8em;
+      margin: 0.5em 0 0.8em;
     }
     .markdown h1, .markdown h2, .markdown h3 {
-      margin: 0.8em 0 0.4em;
+      margin: 1.2em 0 0.4em;
       color: #f5f3ff;
       font-weight: 700;
       line-height: 1.3;
@@ -654,12 +661,24 @@ interface RenderedTurn {
     .markdown h2 { font-size: 1.15em; }
     .markdown h3 { font-size: 1.05em; }
     .markdown ul, .markdown ol {
-      margin: 0 0 0.8em;
+      margin: 0.5em 0 0.9em;
       padding-left: 1.4em;
     }
-    .markdown li { margin: 0.2em 0; }
+    .markdown li { margin: 0.4em 0; }
+    .markdown li > p { margin: 0.25em 0; }
+    .markdown li > ul, .markdown li > ol { margin: 0.3em 0; }
     .markdown strong { color: #fafaff; font-weight: 700; }
     .markdown em { color: #ddd6fe; }
+    /* Lone-bold paragraph = section header in agent prose. Modern browsers
+       all ship :has() now; the fallback is just no extra spacing, which is
+       the previous behaviour. */
+    .markdown p:has(> strong:only-child) {
+      margin-top: 1.3em;
+      margin-bottom: 0.4em;
+      color: #f5f3ff;
+      font-size: 1.02em;
+    }
+    .markdown p:has(> strong:only-child):first-child { margin-top: 0; }
     .markdown a {
       color: #a5b4fc;
       text-decoration: underline;

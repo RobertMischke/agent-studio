@@ -1607,7 +1607,6 @@ interface VerboseDebugContext {
       display: flex;
       flex-direction: column;
       gap: 8px;
-      min-width: 0;
       padding: 6px 6px 0;
       border: 1px solid rgba(255,255,255,0.04);
       border-radius: 18px;
@@ -1618,6 +1617,15 @@ interface VerboseDebugContext {
        * .column children are flex: 1 1 220px and split the group's
        * width between them. Below the sum-of-min-widths the dashboard's
        * overflow-x: auto scrolls horizontally.
+       *
+       * No min-width: 0 here. Default min-width: auto on a flex item
+       * resolves to its min-content size, which is the sum of the
+       * inner .column min-widths plus gaps. Forcing min-width: 0
+       * lets the inner columns visually leak past the group's box
+       * into the next group's space (the lane-overlap symptom);
+       * preserving the auto value keeps each group at least as wide
+       * as its lanes need and pushes the overflow into the
+       * dashboard's horizontal scroll, where it belongs.
        */
       flex: 1 1 auto;
     }
@@ -1643,8 +1651,12 @@ interface VerboseDebugContext {
       display: flex;
       gap: 12px;
       flex: 1;
-      min-width: 0;
       align-items: stretch;
+      /* No min-width: 0. See the .lane-group block above for the
+         reasoning - the inner .column elements have min-width: 220px
+         and their sum (plus gaps) is the natural floor of this row.
+         Allowing it to shrink below that floor is exactly the
+         lane-overlap regression. */
     }
     /* The app-job-column host is transparent to flex layout so the
        inner .column div participates as the actual flex item with its
