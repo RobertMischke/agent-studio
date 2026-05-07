@@ -188,11 +188,22 @@ test.describe('ADR-0025 seven-lane kanban', () => {
     await expect(page.getByRole('heading', { name: 'Auto Review' })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Human Review' })).toBeVisible();
 
+    // Container shape: Backlog / Active / Done & Decide. The
+    // 5-human-review lane lives inside the Done & Decide container,
+    // not Active.
+    await expect(page.getByTestId('lane-group-backlog')).toBeVisible();
+    await expect(page.getByTestId('lane-group-active')).toBeVisible();
+    await expect(page.getByTestId('lane-group-decide')).toBeVisible();
+    const decide = page.getByTestId('lane-group-decide');
+    await expect(decide.locator('[data-testid="lane-5-human-review"], [data-testid="lane-rail-5-human-review"]')).toHaveCount(1);
+    const active = page.getByTestId('lane-group-active');
+    await expect(active.locator('[data-testid="lane-5-human-review"], [data-testid="lane-rail-5-human-review"]')).toHaveCount(0);
+
     // Lane-overlap guard: the post-ADR-0025/0026/0028 lane catalog
     // mandates 0-backlog, 1-preparation, 1a-orchestrator-prep, and
-    // 2-ready in the Backlog group plus 3-progress, 4-auto-review,
-    // 5-human-review in Active and 6-completed, 7-archive in Done -
-    // nine columns at minimum. Five expanded columns at 220 px floor no
+    // 2-ready in the Backlog group plus 3-progress, 4-auto-review in
+    // Active and 5-human-review, 6-completed, 7-archive in
+    // Done & Decide - nine columns at minimum. Five expanded columns at 220 px floor no
     // longer fit at 1440 px next to the task-nav (the previous "fits"
     // was a side effect of the lane-group min-width: 0 bug in
     // `bug-lane-overlap-and-sluggish-with-many-lanes`); horizontal

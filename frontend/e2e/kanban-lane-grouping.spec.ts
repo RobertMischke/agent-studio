@@ -3,10 +3,14 @@ import { test, expect, Page } from '@playwright/test';
 /**
  * Kanban lane grouping and per-lane collapse.
  *
- * The board's six lifecycle columns are now wrapped in three contiguous
- * groups (Backlog / Active / Done) so the workflow reads as phases, and
- * any individual lane can be collapsed into a narrow rail that still
- * surfaces task count plus running / needs-input / error / CLI badges.
+ * The board's lifecycle columns are wrapped in three contiguous
+ * containers (Backlog / Active / Done & Decide) so the workflow reads
+ * as phases. The Active container holds machine-driven lanes
+ * (3-progress, 3a-failed-pickup, 4-auto-review); the Done & Decide
+ * container holds the user-owned tail (5-human-review, 6-completed,
+ * 7-archive). Any individual lane can also be collapsed into a narrow
+ * rail that still surfaces task count plus running / needs-input /
+ * error / CLI badges.
  *
  * The spec is API-mocked: it stubs `/api/jobs/grouped` (and supporting
  * read endpoints) with a deterministic fixture that exercises all four
@@ -171,23 +175,29 @@ test.describe('Kanban lane grouping and collapse', () => {
     await page.goto('/');
     await expect(page.getByTestId('kanban-dashboard')).toBeVisible({ timeout: 10_000 });
 
-    const groups = page.locator('[data-testid^="lane-group-"]');
+    // The lane group ids are the three top-level kanban containers
+    // (the focus-mode keyboard targets `1`/`2`/`3`). The chip strip
+    // lives inside `lane-group-strip-*` when the container is
+    // collapsed, so filter that nested testid out.
+    const groups = page.locator('[data-testid^="lane-group-"]:not([data-testid*="-strip-"]):not([data-testid*="-toggle-"]):not([data-testid*="-focus-"]):not([data-testid*="-chip-"])');
     await expect(groups).toHaveCount(3);
     await expect(page.getByTestId('lane-group-backlog')).toBeVisible();
     await expect(page.getByTestId('lane-group-active')).toBeVisible();
-    await expect(page.getByTestId('lane-group-done')).toBeVisible();
+    await expect(page.getByTestId('lane-group-decide')).toBeVisible();
 
     await expect(page.getByTestId('lane-group-backlog')).toContainText('Backlog');
     await expect(page.getByTestId('lane-group-active')).toContainText('Active');
-    await expect(page.getByTestId('lane-group-done')).toContainText('Done');
+    await expect(page.getByTestId('lane-group-decide')).toContainText('Done & Decide');
 
-    // Axis labels separate human-facing from agent-facing buckets.
-    await expect(page.getByTestId('lane-group-backlog')).toContainText('human');
-    await expect(page.getByTestId('lane-group-active')).toContainText('agent');
-
-    // Sanity-check ordering: Backlog must sit left of Active, Active left of Done.
+    // Sanity-check ordering: Backlog left of Active, Active left of Decide.
     const ids = await groups.evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')));
-    expect(ids).toEqual(['lane-group-backlog', 'lane-group-active', 'lane-group-done']);
+    expect(ids).toEqual(['lane-group-backlog', 'lane-group-active', 'lane-group-decide']);
+
+    // 5-human-review is part of the Done & Decide container, not Active.
+    const decide = page.getByTestId('lane-group-decide');
+    await expect(decide.locator('[data-testid="lane-5-human-review"], [data-testid="lane-rail-5-human-review"]')).toHaveCount(1);
+    const active = page.getByTestId('lane-group-active');
+    await expect(active.locator('[data-testid="lane-5-human-review"], [data-testid="lane-rail-5-human-review"]')).toHaveCount(0);
 
     await page.screenshot({ path: 'test-results/kanban-board-expanded.png', fullPage: true });
   });

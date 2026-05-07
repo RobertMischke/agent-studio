@@ -313,33 +313,63 @@ interface ActiveFilterPill {
               <span class="failed-pickup-banner__chev" aria-hidden="true">›</span>
             </button>
           }
-          <main class="dashboard" data-testid="kanban-dashboard">
+          <main class="dashboard" data-testid="kanban-dashboard"
+                [class.dashboard--has-focus]="focusedContainer() !== null">
             @for (g of laneGroups(); track g.id) {
               <section class="lane-group"
                        [attr.data-testid]="'lane-group-' + g.id"
-                       [attr.data-axis]="g.axis">
+                       [class.lane-group--collapsed]="isContainerCollapsed(g.id)"
+                       [class.lane-group--focused]="isContainerFocused(g.id)">
                 <header class="lane-group__head">
+                  <button type="button"
+                          class="lane-group__toggle"
+                          [attr.data-testid]="'lane-group-toggle-' + g.id"
+                          [attr.aria-expanded]="!isContainerCollapsed(g.id)"
+                          [attr.aria-label]="(isContainerCollapsed(g.id) ? 'Expand ' : 'Collapse ') + g.label"
+                          (click)="toggleContainerCollapse(g.id)">
+                    {{ isContainerCollapsed(g.id) ? '▶' : '▼' }}
+                  </button>
                   <span class="lane-group__label">{{ g.label }}</span>
-                  <span class="lane-group__axis">{{ g.axis }}</span>
-                </header>
-                <div class="lane-group__lanes">
-                  @for (lane of g.lanes; track lane.state) {
-                    <app-job-column
-                      [title]="lane.title"
-                      [icon]="lane.icon"
-                      [state]="lane.state"
-                      [jobs]="lane.jobs"
-                      [collapsed]="isLaneCollapsed(lane.state)"
-                      [compact]="compactCards()"
-                      (collapseToggle)="toggleLaneCollapse(lane.state)"
-                      (jobClick)="openDetail($event)"
-                      (jobDrop)="onJobDrop($event)"
-                      (jobReorder)="onJobReorder($event)"
-                      (jobDeleteRequest)="onDeleteFromBoard($event)"
-                      (addTask)="openCreate($event)"
-                      (archiveAll)="onArchiveAll()" />
+                  @if (isContainerCollapsed(g.id)) {
+                    <span class="lane-group__strip"
+                          [attr.data-testid]="'lane-group-strip-' + g.id">
+                      @for (chip of containerSummary(g.id); track chip.state) {
+                        <span class="lane-group__chip"
+                              [attr.data-testid]="'lane-group-chip-' + chip.state"
+                              [title]="chip.title">
+                          <span class="lane-group__chip-icon" aria-hidden="true">{{ chip.icon }}</span>
+                          <span class="lane-group__chip-count">×{{ chip.count }}</span>
+                        </span>
+                      }
+                    </span>
                   }
-                </div>
+                  <button type="button"
+                          class="lane-group__focus"
+                          [attr.data-testid]="'lane-group-focus-' + g.id"
+                          [attr.aria-pressed]="isContainerFocused(g.id)"
+                          [attr.aria-label]="(isContainerFocused(g.id) ? 'Exit focus on ' : 'Focus ') + g.label"
+                          (click)="toggleContainerFocus(g.id)">⤢</button>
+                </header>
+                @if (!isContainerCollapsed(g.id)) {
+                  <div class="lane-group__lanes">
+                    @for (lane of g.lanes; track lane.state) {
+                      <app-job-column
+                        [title]="lane.title"
+                        [icon]="lane.icon"
+                        [state]="lane.state"
+                        [jobs]="lane.jobs"
+                        [collapsed]="isLaneCollapsed(lane.state)"
+                        [compact]="compactCards()"
+                        (collapseToggle)="toggleLaneCollapse(lane.state)"
+                        (jobClick)="openDetail($event)"
+                        (jobDrop)="onJobDrop($event)"
+                        (jobReorder)="onJobReorder($event)"
+                        (jobDeleteRequest)="onDeleteFromBoard($event)"
+                        (addTask)="openCreate($event)"
+                        (archiveAll)="onArchiveAll()" />
+                    }
+                  </div>
+                }
               </section>
             }
           </main>
@@ -1617,7 +1647,7 @@ interface ActiveFilterPill {
     }
     .lane-group__head {
       display: flex;
-      align-items: baseline;
+      align-items: center;
       gap: 8px;
       padding: 4px 8px 0;
       color: #94a3b8;
@@ -1629,9 +1659,67 @@ interface ActiveFilterPill {
       font-weight: 700;
       color: #cbd5e1;
     }
-    .lane-group__axis {
-      font-weight: 500;
-      color: rgba(148,163,184,0.65);
+    .lane-group__toggle,
+    .lane-group__focus {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
+      color: #94a3b8;
+      width: 20px;
+      height: 20px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 11px;
+      line-height: 1;
+      display: grid;
+      place-items: center;
+      padding: 0;
+      flex: 0 0 auto;
+    }
+    .lane-group__focus { margin-left: auto; }
+    .lane-group__toggle:hover,
+    .lane-group__focus:hover {
+      background: rgba(255,255,255,0.10);
+      color: #f8fafc;
+    }
+    .lane-group--focused .lane-group__focus {
+      background: rgba(148,163,184,0.20);
+      color: #f8fafc;
+      border-color: rgba(148,163,184,0.35);
+    }
+    .lane-group__strip {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      min-height: 24px;
+      padding: 0 4px;
+      flex: 1 1 auto;
+      text-transform: none;
+      letter-spacing: 0;
+    }
+    .lane-group__chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 3px;
+      padding: 2px 6px;
+      font-size: 11px;
+      color: #cbd5e1;
+      white-space: nowrap;
+    }
+    .lane-group__chip-icon { font-size: 12px; line-height: 1; }
+    .lane-group__chip-count {
+      color: #94a3b8;
+      font-variant-numeric: tabular-nums;
+    }
+    .lane-group--collapsed {
+      flex: 0 0 auto;
+    }
+    .lane-group--focused {
+      flex: 1 1 100%;
     }
     .lane-group__lanes {
       display: flex;
@@ -2137,6 +2225,7 @@ export class App implements OnInit {
   readonly workspaceScreenshotsOpen = signal<boolean>(false);
   private readonly workspaceScreenshotsHash = '#/workspace/screenshots';
   private hashListener: (() => void) | null = null;
+  private kanbanKeyListener: ((ev: KeyboardEvent) => void) | null = null;
   readonly watchPaths = signal<WatchPathEntry[]>([]);
   readonly activeProjects = signal<Set<string>>(new Set(JSON.parse(localStorage.getItem('activeProjects') ?? '[]')));
   /** Active project names as a plain readonly array for the workspace banner input. */
@@ -2151,6 +2240,34 @@ export class App implements OnInit {
    * to keep the first-run board useful before any customisation.
    */
   readonly collapsedLanes = signal<Set<string>>(new Set(JSON.parse(localStorage.getItem('collapsedLanes') ?? '[]')));
+  /**
+   * Per-container collapse state for the three top-level kanban buckets
+   * (`backlog` / `active` / `decide`). Collapsed containers render as a
+   * single thin summary strip with `<icon>×N` chips per lane; expanded
+   * containers render their full lane row. Default = all expanded.
+   * Persisted under the `atp.kanban.containers.*` namespace.
+   */
+  readonly collapsedContainers = signal<Set<string>>(
+    new Set(JSON.parse(localStorage.getItem('atp.kanban.containers.collapsed') ?? '[]')) as Set<string>
+  );
+  /**
+   * When non-null, names the container the user has focus-expanded. The
+   * other two containers are auto-collapsed until focus is released. The
+   * pre-focus collapse snapshot lives in `prefocusCollapsedContainers`
+   * so a second click on the same focus button restores whatever state
+   * the user had before. Persisted so a reload keeps the focused view.
+   */
+  readonly focusedContainer = signal<string | null>(
+    localStorage.getItem('atp.kanban.containers.focused') || null
+  );
+  private prefocusCollapsedContainers: string[] | null = (() => {
+    const raw = localStorage.getItem('atp.kanban.containers.prefocus');
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed.map(String) : null;
+    } catch { return null; }
+  })();
   readonly taskNavCollapsed = signal<boolean>(localStorage.getItem('taskNavCollapsed') === '1');
   /**
    * Compact-card mode trades the full per-card metadata (model badge,
@@ -2248,6 +2365,15 @@ export class App implements OnInit {
    * cheaper than a routing change.
    */
   scrollToFailedPickupLane(): void {
+    // The failed-pickup lane lives inside the Active container. If the
+    // user has collapsed Active (or focus-expanded another container),
+    // the lane element is not in the DOM and a scroll target would be
+    // silently missing. Reset focus and expand Active before we look.
+    if (this.focusedContainer() !== null && this.focusedContainer() !== 'active') {
+      this.resetContainers();
+    } else if (this.isContainerCollapsed('active')) {
+      this.toggleContainerCollapse('active');
+    }
     queueMicrotask(() => {
       const el = document.querySelector('[data-testid="lane-3a-failed-pickup"]') as HTMLElement | null;
       if (!el) return;
@@ -2537,16 +2663,18 @@ export class App implements OnInit {
   });
 
   /**
-   * Board lane groups. Three contiguous buckets keep the existing left-to-
-   * right state flow intact while letting the user read the board as a
-   * workflow rather than six independent columns:
+   * Board lane groups. Three contiguous containers map the workflow:
    *
-   *  - backlog (human): Preparation, Ready
-   *  - active  (agent): In Progress, Review
-   *  - done           : Completed, Archive
+   *  - backlog: 0-backlog, 1-preparation, 1a-orchestrator-prep,
+   *             1b-needs-human-review, 2-ready
+   *  - active:  3-progress, 3a-failed-pickup, 4-auto-review
+   *  - decide:  5-human-review, 6-completed, 7-archive ("Done & Decide" -
+   *             the user-owned tail of the pipeline; sign-off plus the
+   *             archive sit together because they all wait on the user.)
    *
-   * If the lifecycle-lanes expansion adds Intake / Post Processing they
-   * land in the `active` bucket; the grouping shape does not change.
+   * The previous human/agent axis suffix was misleading (Backlog mixes
+   * agent prep with human triage; Active sometimes pauses on
+   * 3a-failed-pickup waiting for the user) and is removed.
    */
   readonly laneGroups = computed(() => {
     const grouped = this.displayGrouped();
@@ -2572,39 +2700,32 @@ export class App implements OnInit {
     if (readySplit.intake.length > 0) {
       backlogLanes.push({ state: '2-ready-intake', title: 'Orch Intake', icon: '🛂', jobs: readySplit.intake });
     }
+    const activeLanes: Array<{ state: string; title: string; icon: string; jobs: JobInfo[] }> = [
+      { state: '3-progress', title: 'In Progress', icon: '🔵', jobs: grouped.progress },
+    ];
+    // ADR-0028: 3a-failed-pickup is hide-when-empty.
+    if ((grouped.failedPickup ?? []).length > 0) {
+      activeLanes.push({ state: '3a-failed-pickup', title: 'Failed Pickup', icon: '⚠️', jobs: grouped.failedPickup });
+    }
+    activeLanes.push({ state: '4-auto-review', title: 'Auto Review', icon: '🤖', jobs: grouped.autoReview });
     return [
       {
         id: 'backlog',
         label: 'Backlog',
-        axis: 'human',
         lanes: backlogLanes
       },
       {
         id: 'active',
         label: 'Active',
-        axis: 'agent',
-        // ADR-0028: 3a-failed-pickup slots between 3-progress and 4-auto-review,
-        // hide-when-empty. Renders with the amber loud-not-archived treatment.
-        lanes: ((grouped.failedPickup ?? []).length > 0
-          ? [
-              { state: '3-progress', title: 'In Progress', icon: '🔵', jobs: grouped.progress },
-              { state: '3a-failed-pickup', title: 'Failed Pickup', icon: '⚠️', jobs: grouped.failedPickup },
-              // ADR-0025: explicit auto-review (orchestrator-managed) and
-              // human-review (waiting on the user) lanes.
-              { state: '4-auto-review', title: 'Auto Review', icon: '🤖', jobs: grouped.autoReview },
-              { state: '5-human-review', title: 'Human Review', icon: '👁️', jobs: grouped.humanReview }
-            ]
-          : [
-              { state: '3-progress', title: 'In Progress', icon: '🔵', jobs: grouped.progress },
-              { state: '4-auto-review', title: 'Auto Review', icon: '🤖', jobs: grouped.autoReview },
-              { state: '5-human-review', title: 'Human Review', icon: '👁️', jobs: grouped.humanReview }
-            ])
+        lanes: activeLanes
       },
       {
-        id: 'done',
-        label: 'Done',
-        axis: 'human',
+        id: 'decide',
+        label: 'Done & Decide',
         lanes: [
+          // ADR-0025: human-review waits on the user; it sits alongside
+          // completed and archive in the user-owned tail.
+          { state: '5-human-review', title: 'Human Review', icon: '👁️', jobs: grouped.humanReview },
           { state: '6-completed', title: 'Completed', icon: '🟢', jobs: grouped.completed },
           { state: '7-archive', title: 'Archive', icon: '🗄️', jobs: grouped.archive ?? [] }
         ]
@@ -2798,12 +2919,40 @@ export class App implements OnInit {
     applyHash();
     this.hashListener = applyHash;
     window.addEventListener('hashchange', this.hashListener);
+
+    // Keyboard shortcuts for kanban container focus-expand: 1/2/3 focus
+    // the corresponding container, 0 resets all. Suppressed while the
+    // user is typing in an input/textarea/contenteditable and while a
+    // detail/overlay is open (the kanban isn't visible then).
+    this.kanbanKeyListener = (ev: KeyboardEvent) => {
+      if (ev.defaultPrevented || ev.metaKey || ev.ctrlKey || ev.altKey) return;
+      if (this.selectedJob() !== null) return;
+      if (this.showCreate()) return;
+      if (this.workspaceTokensOpen() || this.workspaceScreenshotsOpen()) return;
+      if (this.projectShellName() !== null) return;
+      const target = ev.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+        if ((target as HTMLElement).isContentEditable) return;
+      }
+      const ids = this.laneGroups().map(g => g.id);
+      if (ev.key === '1' && ids[0]) { this.toggleContainerFocus(ids[0]); ev.preventDefault(); return; }
+      if (ev.key === '2' && ids[1]) { this.toggleContainerFocus(ids[1]); ev.preventDefault(); return; }
+      if (ev.key === '3' && ids[2]) { this.toggleContainerFocus(ids[2]); ev.preventDefault(); return; }
+      if (ev.key === '0') { this.resetContainers(); ev.preventDefault(); return; }
+    };
+    window.addEventListener('keydown', this.kanbanKeyListener);
   }
 
   ngOnDestroy() {
     if (this.hashListener) {
       window.removeEventListener('hashchange', this.hashListener);
       this.hashListener = null;
+    }
+    if (this.kanbanKeyListener) {
+      window.removeEventListener('keydown', this.kanbanKeyListener);
+      this.kanbanKeyListener = null;
     }
   }
 
@@ -3664,6 +3813,109 @@ export class App implements OnInit {
 
   isLaneCollapsed(state: string): boolean {
     return this.collapsedLanes().has(state);
+  }
+
+  /**
+   * Container collapse / focus-expand for the three kanban buckets.
+   * Containers persist under `atp.kanban.containers.*`. Default state is
+   * all expanded. Focus-expand on a container collapses the OTHER two
+   * to the summary strip; clicking the same focus button restores the
+   * pre-focus snapshot.
+   */
+  isContainerCollapsed(id: string): boolean {
+    return this.collapsedContainers().has(id);
+  }
+
+  toggleContainerCollapse(id: string): void {
+    // A direct toggle drops focus mode if it was active for this id
+    // (the user is taking manual control), but leaves focus alone if
+    // the toggle targets a container that was already collapsed by
+    // focus mode - they're just toggling a non-focused container.
+    if (this.focusedContainer() === id) {
+      this.clearFocus();
+    }
+    const current = new Set(this.collapsedContainers());
+    if (current.has(id)) current.delete(id);
+    else current.add(id);
+    this.collapsedContainers.set(current);
+    this.persistContainerState();
+  }
+
+  isContainerFocused(id: string): boolean {
+    return this.focusedContainer() === id;
+  }
+
+  toggleContainerFocus(id: string): void {
+    if (this.focusedContainer() === id) {
+      // Second click on the same focus button: restore the pre-focus
+      // snapshot so a tap is reversible.
+      const restored = new Set(this.prefocusCollapsedContainers ?? []);
+      this.collapsedContainers.set(restored);
+      this.focusedContainer.set(null);
+      this.prefocusCollapsedContainers = null;
+      localStorage.removeItem('atp.kanban.containers.focused');
+      localStorage.removeItem('atp.kanban.containers.prefocus');
+      this.persistContainerState();
+      return;
+    }
+    // Snapshot the current collapse set so the toggle is reversible.
+    if (this.focusedContainer() === null) {
+      this.prefocusCollapsedContainers = [...this.collapsedContainers()];
+      localStorage.setItem(
+        'atp.kanban.containers.prefocus',
+        JSON.stringify(this.prefocusCollapsedContainers)
+      );
+    }
+    const allIds = this.laneGroups().map(g => g.id);
+    const next = new Set<string>();
+    for (const other of allIds) {
+      if (other !== id) next.add(other);
+    }
+    this.collapsedContainers.set(next);
+    this.focusedContainer.set(id);
+    localStorage.setItem('atp.kanban.containers.focused', id);
+    this.persistContainerState();
+  }
+
+  resetContainers(): void {
+    this.collapsedContainers.set(new Set());
+    this.focusedContainer.set(null);
+    this.prefocusCollapsedContainers = null;
+    localStorage.removeItem('atp.kanban.containers.focused');
+    localStorage.removeItem('atp.kanban.containers.prefocus');
+    this.persistContainerState();
+  }
+
+  private clearFocus(): void {
+    if (this.focusedContainer() !== null) {
+      this.focusedContainer.set(null);
+      this.prefocusCollapsedContainers = null;
+      localStorage.removeItem('atp.kanban.containers.focused');
+      localStorage.removeItem('atp.kanban.containers.prefocus');
+    }
+  }
+
+  private persistContainerState(): void {
+    localStorage.setItem(
+      'atp.kanban.containers.collapsed',
+      JSON.stringify([...this.collapsedContainers()])
+    );
+  }
+
+  /**
+   * Per-container summary chips shown when the container is collapsed.
+   * One chip per lane: `<icon>×<count>`. Empty lanes are kept so the
+   * shape of the container stays readable at a glance.
+   */
+  containerSummary(id: string): Array<{ state: string; icon: string; title: string; count: number }> {
+    const group = this.laneGroups().find(g => g.id === id);
+    if (!group) return [];
+    return group.lanes.map(l => ({
+      state: l.state,
+      icon: l.icon,
+      title: l.title,
+      count: l.jobs.length
+    }));
   }
 
   setTaskNavCollapsed(collapsed: boolean) {
