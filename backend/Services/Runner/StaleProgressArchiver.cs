@@ -22,8 +22,12 @@ namespace OrchestratorApi.Services.Runner;
 ///
 /// Decision shape per folder:
 /// <list type="bullet">
-///   <item>Latest activity = <c>logs/cli-output.log</c> mtime, falling back
-///   to <c>job.json</c> mtime. Folders with neither are treated as
+///   <item>Latest activity = max mtime across <c>job.json</c> and every file
+///   under <c>logs/</c> (<c>cli-output.log</c>, <c>tool-calls.jsonl</c>,
+///   <c>session-events.jsonl</c>, future log types). Reading any single file
+///   as the liveness signal misclassifies a session that is currently emitting
+///   only tool-use events into <c>tool-calls.jsonl</c> while <c>cli-output.log</c>
+///   stays quiet. Folders with no files at all are treated as
 ///   <c>epoch 0</c>.</item>
 ///   <item>If younger than <c>Supervisor:StuckResumeWindowMinutes</c> (default
 ///   60), the progress-first pickup will resume it and the sweep leaves it
@@ -218,30 +222,62 @@ public sealed class StaleProgressArchiver
 
     private static (DateTime LastActivity, bool IsEmpty) MeasureFolder(string jobFolder)
     {
-        var cliLog = JobPaths.CliOutputLog(jobFolder);
+        // Activity signature is the union of every file the runner may append
+        // to during a live session: job.json, logs/cli-output.log,
+        // logs/tool-calls.jsonl, logs/session-events.jsonl, plus any future
+        // log file the runner adds. Reading only cli-output.log misses
+        // sessions that emit primarily tool-use events into tool-calls.jsonl
+        // and stays quiet on stdout for tens of minutes; that
+        // misclassification let actively-working folders be moved to
+        // failed-pickup with `-orphan-`. The union catches every form of
+        // runner-side append without coupling the sweep to a specific file
+        // name.
         var jobJson = Path.Combine(jobFolder, "job.json");
-        var hasLog = File.Exists(cliLog);
+        var logsDir = Path.Combine(jobFolder, "logs");
         var hasJson = File.Exists(jobJson);
+        var hasAnyLogFile = false;
+        var maxStamp = DateTime.MinValue.ToUniversalTime();
 
-        if (!hasLog && !hasJson)
+        if (Directory.Exists(logsDir))
         {
-            // Either truly empty, or holds only stray files. Treat as empty
-            // for archival purposes; lastActivity = epoch so it always crosses
-            // the threshold.
+            foreach (var file in Directory.EnumerateFiles(logsDir))
+            {
+                try
+                {
+                    var stamp = File.GetLastWriteTimeUtc(file);
+                    if (stamp > maxStamp) maxStamp = stamp;
+                    hasAnyLogFile = true;
+                }
+                catch
+                {
+                    // Best-effort: an unreadable file does not contribute to
+                    // the signature but does not disqualify the folder either.
+                }
+            }
+        }
+
+        if (!hasAnyLogFile && !hasJson)
+        {
+            // Truly empty folder: nothing for the runner to resume from.
+            // lastActivity = epoch so it always crosses any configured
+            // threshold; the FailureKind.Empty branch handles the placard.
             return (DateTime.MinValue.ToUniversalTime(), IsEmpty: true);
         }
 
-        DateTime stamp;
-        if (hasLog)
+        if (hasJson)
         {
-            try { stamp = File.GetLastWriteTimeUtc(cliLog); }
-            catch { stamp = File.GetLastWriteTimeUtc(jobJson); }
+            try
+            {
+                var stamp = File.GetLastWriteTimeUtc(jobJson);
+                if (stamp > maxStamp) maxStamp = stamp;
+            }
+            catch
+            {
+                // Same best-effort policy as above.
+            }
         }
-        else
-        {
-            stamp = File.GetLastWriteTimeUtc(jobJson);
-        }
-        return (stamp, IsEmpty: false);
+
+        return (maxStamp, IsEmpty: false);
     }
 
     private static readonly Regex SentinelRegex = new(

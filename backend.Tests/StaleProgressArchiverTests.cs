@@ -177,6 +177,59 @@ public sealed class StaleProgressArchiverTests : IDisposable
     }
 
     [Fact]
+    public async Task Sweep_StaleCliLogButFreshToolCalls_IsLeftAlone()
+    {
+        // Regression guard for the suchbox-orphan incident (2026-05-07): a
+        // claude-code session emitted only tool-use events into
+        // logs/tool-calls.jsonl for tens of minutes while logs/cli-output.log
+        // stayed quiet. Reading cli-output.log alone misclassified the live
+        // folder as orphan and the sweep moved it. The activity signature now
+        // spans every file in logs/, so a fresh tool-calls.jsonl keeps the
+        // verdict at Fresh.
+        WriteJob(JobStates.Progress, "tool-calling");
+        var folder = Path.Combine(_watchPath, JobStates.Progress, "tool-calling");
+        WriteCliLog(folder, "long-quiet stdout");
+        SetMtimeOldEnough(Path.Combine(folder, "logs", "cli-output.log"));
+        SetMtimeOldEnough(Path.Combine(folder, "job.json"));
+
+        // tool-calls.jsonl mtime defaults to "now" since we just wrote it.
+        var toolCalls = Path.Combine(folder, "logs", "tool-calls.jsonl");
+        File.WriteAllText(toolCalls, "{\"ts\":\"now\",\"kind\":\"started\",\"tool\":\"Bash\"}\n");
+
+        var (archiver, _) = Build();
+        var decisions = await archiver.SweepAsync();
+
+        Assert.True(Directory.Exists(folder), "fresh tool-calls.jsonl must keep the folder alive");
+        var d = Assert.Single(decisions);
+        Assert.Equal(StaleProgressDecisionKinds.Fresh, d.Kind);
+        Assert.False(File.Exists(Path.Combine(_workspaceRoot, "logs", "orphan-recoveries.jsonl")));
+    }
+
+    [Fact]
+    public async Task Sweep_StaleCliLogButFreshSessionEvents_IsLeftAlone()
+    {
+        // Sister case to the tool-calls path: the runner writes a one-line
+        // start/continue event into logs/session-events.jsonl at every
+        // pickup attempt. A folder where session-events.jsonl was just
+        // appended must count as fresh even when cli-output.log mtime is
+        // stale (e.g. claude-code session emitted no stdout yet).
+        WriteJob(JobStates.Progress, "just-resumed");
+        var folder = Path.Combine(_watchPath, JobStates.Progress, "just-resumed");
+        WriteCliLog(folder, "old stdout from a previous attempt");
+        SetMtimeOldEnough(Path.Combine(folder, "logs", "cli-output.log"));
+        SetMtimeOldEnough(Path.Combine(folder, "job.json"));
+
+        var sessionEvents = Path.Combine(folder, "logs", "session-events.jsonl");
+        File.WriteAllText(sessionEvents, "{\"Ts\":\"now\",\"Kind\":\"continue\",\"Cli\":\"claude\"}\n");
+
+        var (archiver, _) = Build();
+        var decisions = await archiver.SweepAsync();
+
+        Assert.True(Directory.Exists(folder));
+        Assert.Equal(StaleProgressDecisionKinds.Fresh, Assert.Single(decisions).Kind);
+    }
+
+    [Fact]
     public async Task Sweep_IsIdempotentAcrossRuns()
     {
         WriteJob(JobStates.Progress, "first-orphan");

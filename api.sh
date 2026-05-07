@@ -17,15 +17,32 @@
 set -u
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
-# Default port differs per checkout so calling api.sh directly inside one
-# checkout does not collide with the other. Stable runs on 5031, dev on
-# 5030. The env var `PORT` overrides this for both. The parent
-# start-stable.sh / start-dev.sh scripts set PORT explicitly; this default
-# matches the same convention for direct local invocations.
+# Default port is pinned to the checkout folder name: stable runs on 5031,
+# dev on 5030. This matters because a coding-agent session running INSIDE
+# one backend may invoke api.sh from a SIBLING checkout (e.g. claude doing
+# `bash api.sh restart` from inside the dev folder while it was spawned by
+# the stable backend). The child process inherits PORT from its parent;
+# without a guard, dev's api.sh would happily start dev's exe on stable's
+# port 5031 - exactly what happened during the suchbox-orphan incident on
+# 2026-05-07. The guard below refuses any inherited PORT that disagrees
+# with this checkout's pinned default unless API_PORT_OVERRIDE=1 is set,
+# which is the explicit "I know what I'm doing" escape hatch.
 case "$(basename "${SCRIPT_DIR}")" in
   *-stable) DEFAULT_PORT=5031 ;;
   *)        DEFAULT_PORT=5030 ;;
 esac
+
+if [[ -n "${PORT:-}" && "${PORT}" != "${DEFAULT_PORT}" ]]; then
+  if [[ "${API_PORT_OVERRIDE:-}" != "1" ]]; then
+    echo "ERROR: api.sh in ${SCRIPT_DIR}" >&2
+    echo "       has DEFAULT_PORT=${DEFAULT_PORT} (pinned by checkout folder name)" >&2
+    echo "       but the environment carries PORT=${PORT}." >&2
+    echo "       Refusing to bind a sibling checkout's exe onto this port." >&2
+    echo "       If this is intentional, re-run with API_PORT_OVERRIDE=1." >&2
+    exit 1
+  fi
+  echo "WARN: API_PORT_OVERRIDE=1; using non-default PORT=${PORT}." >&2
+fi
 PORT="${PORT:-${DEFAULT_PORT}}"
 BASE_URL="http://127.0.0.1:${PORT}"
 HEALTH_URL="${BASE_URL}/healthz"

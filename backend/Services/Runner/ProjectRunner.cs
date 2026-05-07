@@ -2032,19 +2032,49 @@ public class ProjectRunner
 
     /// <summary>
     /// mtime measurement matching <see cref="StaleProgressArchiver.MeasureFolder"/>:
-    /// prefer <c>logs/cli-output.log</c>, fall back to <c>job.json</c>, fall
-    /// back to the directory itself. Folders with neither file return
+    /// max mtime across <c>job.json</c> and every file under <c>logs/</c>
+    /// (<c>cli-output.log</c>, <c>tool-calls.jsonl</c>,
+    /// <c>session-events.jsonl</c>, future log types). Falls back to the
+    /// directory mtime when no files exist. Folders with nothing return
     /// <see cref="DateTime.MinValue"/> so they sort to the head of the
-    /// oldest-first iteration.
+    /// oldest-first iteration. Reading any single file misses sessions that
+    /// emit primarily tool-use events while <c>cli-output.log</c> stays quiet.
     /// </summary>
     internal static DateTime MeasureProgressFolderMtime(string folder)
     {
         try
         {
-            var cliLog = JobPaths.CliOutputLog(folder);
-            if (File.Exists(cliLog)) return File.GetLastWriteTimeUtc(cliLog);
+            var maxStamp = DateTime.MinValue.ToUniversalTime();
+            var hasAny = false;
+
+            var logsDir = Path.Combine(folder, "logs");
+            if (Directory.Exists(logsDir))
+            {
+                foreach (var file in Directory.EnumerateFiles(logsDir))
+                {
+                    try
+                    {
+                        var stamp = File.GetLastWriteTimeUtc(file);
+                        if (stamp > maxStamp) maxStamp = stamp;
+                        hasAny = true;
+                    }
+                    catch { /* skip unreadable files */ }
+                }
+            }
+
             var jobJson = Path.Combine(folder, "job.json");
-            if (File.Exists(jobJson)) return File.GetLastWriteTimeUtc(jobJson);
+            if (File.Exists(jobJson))
+            {
+                try
+                {
+                    var stamp = File.GetLastWriteTimeUtc(jobJson);
+                    if (stamp > maxStamp) maxStamp = stamp;
+                    hasAny = true;
+                }
+                catch { /* skip */ }
+            }
+
+            if (hasAny) return maxStamp;
             if (Directory.Exists(folder)) return Directory.GetLastWriteTimeUtc(folder);
         }
         catch { /* best-effort: an unreadable folder sorts to the head */ }
