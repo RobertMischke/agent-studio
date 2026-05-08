@@ -9,6 +9,7 @@ import { OrchestratorSideSheetComponent } from './components/orchestrator-side-s
 import { ProjectDetailComponent } from './components/project-detail';
 import { ProjectShellComponent } from './components/project-shell/project-shell.component';
 import { SecurityPanelComponent } from './components/security-panel/security-panel.component';
+import { UxuiPanelComponent } from './components/uxui-panel/uxui-panel.component';
 import { ProjectTokenUsagePanelComponent } from './components/project-token-usage/project-token-usage-panel.component';
 import { ProjectObservabilityPanelComponent } from './components/project-observability/project-observability-panel.component';
 import { ProjectProductRuntimePanelComponent } from './components/project-product-runtime/project-product-runtime-panel.component';
@@ -77,7 +78,7 @@ interface ActiveFilterPill {
 
 @Component({
   selector: 'app-root',
-  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, ProjectShellComponent, SecurityPanelComponent, ProjectTokenUsagePanelComponent, ProjectObservabilityPanelComponent, ProjectProductRuntimePanelComponent, ProjectSteeringDocsSectionComponent, AnalysisReportDrilldownComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceTokenTimelineComponent, WorkspaceScreenshotsComponent, WorkspaceBannerComponent, UpdateBannerComponent, UpdateVersionBadgeComponent, UpdateCenterComponent, UpdateBlockModalComponent, VerboseDebugOverlayComponent, CliAdminPanelComponent, FiltersDropdownComponent, BoardSearchIconComponent],
+  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, ProjectShellComponent, SecurityPanelComponent, UxuiPanelComponent, ProjectTokenUsagePanelComponent, ProjectObservabilityPanelComponent, ProjectProductRuntimePanelComponent, ProjectSteeringDocsSectionComponent, AnalysisReportDrilldownComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceTokenTimelineComponent, WorkspaceScreenshotsComponent, WorkspaceBannerComponent, UpdateBannerComponent, UpdateVersionBadgeComponent, UpdateCenterComponent, UpdateBlockModalComponent, VerboseDebugOverlayComponent, CliAdminPanelComponent, FiltersDropdownComponent, BoardSearchIconComponent],
   // Keep styles global to this subtree — the App shell still owns the
   // .header*, .filter-chip*, .overlay*, .create-dialog*, .error-dialog*
   // class rules used by the extracted dialogs and project-tabs.
@@ -447,7 +448,7 @@ interface ActiveFilterPill {
             <app-project-shell
               [projectName]="projShell"
               [activeRail]="projectShellRail()"
-              [hasCustomPanel]="projectShellRail() === 'security' || projectShellRail() === 'token-usage' || projectShellRail() === 'observability' || projectShellRail() === 'product-runtime' || projectShellRail() === 'steering'"
+              [hasCustomPanel]="projectShellRail() === 'security' || projectShellRail() === 'uxui' || projectShellRail() === 'token-usage' || projectShellRail() === 'observability' || projectShellRail() === 'product-runtime' || projectShellRail() === 'steering'"
               (railChange)="onProjectShellRailChange($event)"
               (openFeed)="onOpenFeedFromShell()"
               (closeShell)="closeProjectShell()">
@@ -458,6 +459,14 @@ interface ActiveFilterPill {
                     (createFollowUp)="onSecurityFollowUp($event)"
                     (openEvidence)="onSecurityOpenEvidence($event)"
                     (auditQueuedEvent)="onSecurityAuditQueued($event)" />
+                }
+              }
+              @defer (when projectShellRail() === 'uxui') {
+                @if (projectShellRail() === 'uxui') {
+                  <app-uxui-panel
+                    [projectName]="projShell"
+                    (createFollowUp)="onUxuiFollowUp($event)"
+                    (actionQueuedEvent)="onUxuiActionQueued($event)" />
                 }
               }
               @defer (when projectShellRail() === 'token-usage') {
@@ -3634,6 +3643,29 @@ export class App implements OnInit {
 
   /** Refresh the kanban after a security audit was queued so the new job appears. */
   onSecurityAuditQueued(_event: { projectName: string; jobId: string }): void {
+    this.refresh();
+  }
+
+  /**
+   * Project UX/UI panel "Create follow-up task" / per-row "Task" action
+   * (slice 6 of the quality-system mockup). Opens the existing create-job
+   * dialog pre-filled with a prompt body the panel composed from the
+   * council note or the design overview. The user picks model /
+   * target-state / title before submitting.
+   */
+  onUxuiFollowUp(event: { projectName: string; prefill: string; title: string }): void {
+    const watchEntry = this.watchPaths().find((wp) => wp.name === event.projectName);
+    if (!watchEntry) return;
+    this.newTargetState = '1-preparation';
+    this.newWatchPath = watchEntry.path;
+    this.newPrompt = event.prefill;
+    this.newTitle = event.title;
+    this.loadCreateModels(this.newCliType);
+    this.showCreate.set(true);
+  }
+
+  /** Refresh the kanban after a UX/UI design action was queued so the new job appears. */
+  onUxuiActionQueued(_event: { projectName: string; action: string; jobId: string }): void {
     this.refresh();
   }
 

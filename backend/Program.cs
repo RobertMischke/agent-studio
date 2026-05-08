@@ -149,6 +149,7 @@ builder.Services.AddSingleton<ProjectSteeringDocsService>();
 builder.Services.AddSingleton<SkillReadinessService>();
 builder.Services.AddSingleton<ConceptDocsService>();
 builder.Services.AddSingleton<SecurityReviewService>();
+builder.Services.AddSingleton<OrchestratorApi.Services.Design.DesignEvidenceService>();
 // Quota probes: each CLI gets its own probe instance, all surfaced through QuotaService.
 builder.Services.AddSingleton<IQuotaProbe, CopilotQuotaProbe>();
 builder.Services.AddSingleton<IQuotaProbe, ClaudeQuotaProbe>();
