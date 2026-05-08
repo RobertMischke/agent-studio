@@ -46,6 +46,7 @@ import { WorkspaceBannerComponent } from './components/workspace-banner';
 import { UpdateBannerComponent } from './components/update-banner/update-banner.component';
 import { UpdateVersionBadgeComponent } from './components/update-version-badge/update-version-badge.component';
 import { UpdateCenterComponent } from './components/update-center/update-center.component';
+import { OrchestratorConfigPanelComponent } from './components/orchestrator-config-panel/orchestrator-config-panel.component';
 import { UpdateBlockModalComponent } from './components/update-block-modal/update-block-modal.component';
 import { CliAdminPanelComponent } from './components/cli-admin-panel';
 import { JobScreenshot, RunTimeline, JobTokenSummary, CliOutputLine } from './models/job.model'; // verbose-debug overlay context types
@@ -78,7 +79,7 @@ interface ActiveFilterPill {
 
 @Component({
   selector: 'app-root',
-  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, ProjectShellComponent, SecurityPanelComponent, UxuiPanelComponent, ProjectTokenUsagePanelComponent, ProjectObservabilityPanelComponent, ProjectProductRuntimePanelComponent, ProjectSteeringDocsSectionComponent, AnalysisReportDrilldownComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceTokenTimelineComponent, WorkspaceScreenshotsComponent, WorkspaceBannerComponent, UpdateBannerComponent, UpdateVersionBadgeComponent, UpdateCenterComponent, UpdateBlockModalComponent, VerboseDebugOverlayComponent, CliAdminPanelComponent, FiltersDropdownComponent, BoardSearchIconComponent],
+  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, ProjectShellComponent, SecurityPanelComponent, UxuiPanelComponent, ProjectTokenUsagePanelComponent, ProjectObservabilityPanelComponent, ProjectProductRuntimePanelComponent, ProjectSteeringDocsSectionComponent, AnalysisReportDrilldownComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceTokenTimelineComponent, WorkspaceScreenshotsComponent, WorkspaceBannerComponent, UpdateBannerComponent, UpdateVersionBadgeComponent, UpdateCenterComponent, OrchestratorConfigPanelComponent, UpdateBlockModalComponent, VerboseDebugOverlayComponent, CliAdminPanelComponent, FiltersDropdownComponent, BoardSearchIconComponent],
   // Keep styles global to this subtree — the App shell still owns the
   // .header*, .filter-chip*, .overlay*, .create-dialog*, .error-dialog*
   // class rules used by the extracted dialogs and project-tabs.
@@ -145,39 +146,47 @@ interface ActiveFilterPill {
           <button class="btn btn--create" (click)="openCreate()">
             ＋ Add Task
           </button>
-          @if (anyDevTool()) {
-            <div class="devtools-menu">
-              <button class="devtools-menu__trigger"
-                      data-testid="devtools-menu-trigger"
-                      title="Dev tools"
-                      [class.devtools-menu__trigger--open]="devToolsMenuOpen()"
-                      (click)="devToolsMenuOpen.set(!devToolsMenuOpen()); $event.stopPropagation()">⋮</button>
-              @if (devToolsMenuOpen()) {
-                <div class="devtools-menu__backdrop" (click)="devToolsMenuOpen.set(false)"></div>
-                <div class="devtools-menu__panel" (click)="$event.stopPropagation()">
+          <div class="devtools-menu">
+            <button class="devtools-menu__trigger"
+                    data-testid="devtools-menu-trigger"
+                    title="Dev tools"
+                    [class.devtools-menu__trigger--open]="devToolsMenuOpen()"
+                    (click)="devToolsMenuOpen.set(!devToolsMenuOpen()); $event.stopPropagation()">⋮</button>
+            @if (devToolsMenuOpen()) {
+              <div class="devtools-menu__backdrop" (click)="devToolsMenuOpen.set(false)"></div>
+              <div class="devtools-menu__panel" (click)="$event.stopPropagation()">
+                <div class="devtools-menu__header">System</div>
+                <button class="devtools-menu__item"
+                        data-testid="devtool-orch-config"
+                        (click)="onPickOrchestratorConfig()">
+                  <span class="devtools-menu__icon">⚙</span>
+                  <span class="devtools-menu__label">Orchestrator config</span>
+                  <span class="devtools-menu__hint">supervisor + meta-cycle flags</span>
+                </button>
+                @if (devToolsFlags().updateStableEnabled || devToolsFlags().deleteE2EJobsEnabled) {
                   <div class="devtools-menu__header">Dev tools</div>
-                  @if (devToolsFlags().updateStableEnabled) {
-                    <button class="devtools-menu__item"
-                            data-testid="devtool-update-stable"
-                            (click)="onPickUpdateStable()">
-                      <span class="devtools-menu__icon">⟳</span>
-                      <span class="devtools-menu__label">Update Stable</span>
-                      <span class="devtools-menu__hint">pull main, restart instance</span>
-                    </button>
-                  }
-                  @if (devToolsFlags().deleteE2EJobsEnabled) {
-                    <button class="devtools-menu__item devtools-menu__item--danger"
-                            data-testid="devtool-delete-e2e"
-                            (click)="onPickDeleteE2E()">
-                      <span class="devtools-menu__icon">🧹</span>
-                      <span class="devtools-menu__label">Delete E2E Jobs</span>
-                      <span class="devtools-menu__hint">across all projects</span>
-                    </button>
-                  }
-                </div>
-              }
-            </div>
-          }
+                }
+                @if (devToolsFlags().updateStableEnabled) {
+                  <button class="devtools-menu__item"
+                          data-testid="devtool-update-stable"
+                          (click)="onPickUpdateStable()">
+                    <span class="devtools-menu__icon">⟳</span>
+                    <span class="devtools-menu__label">Update Stable</span>
+                    <span class="devtools-menu__hint">pull main, restart instance</span>
+                  </button>
+                }
+                @if (devToolsFlags().deleteE2EJobsEnabled) {
+                  <button class="devtools-menu__item devtools-menu__item--danger"
+                          data-testid="devtool-delete-e2e"
+                          (click)="onPickDeleteE2E()">
+                    <span class="devtools-menu__icon">🧹</span>
+                    <span class="devtools-menu__label">Delete E2E Jobs</span>
+                    <span class="devtools-menu__hint">across all projects</span>
+                  </button>
+                }
+              </div>
+            }
+          </div>
         </div>
       </header>
 
@@ -213,6 +222,7 @@ interface ActiveFilterPill {
 
       <app-update-banner />
       <app-update-center />
+      <app-orchestrator-config-panel #orchConfigPanel />
       <app-update-block-modal />
       <app-workspace-banner [projects]="bannerProjects()" />
 
@@ -2296,6 +2306,7 @@ export class App implements OnInit {
   private triageToastTimer: ReturnType<typeof setTimeout> | null = null;
 
   @ViewChild('jobDetail') private jobDetailRef?: JobDetailComponent;
+  @ViewChild('orchConfigPanel') private orchConfigPanelRef?: OrchestratorConfigPanelComponent;
   /** Records the lane the user was triaging in. When the open job's state
    *  diverges from this (e.g. an external client moved it) we treat that as
    *  an auto-advance and toast accordingly. */
@@ -2954,10 +2965,6 @@ export class App implements OnInit {
   }
 
   readonly devToolsFlags = computed(() => this.devTools.flags());
-  readonly anyDevTool = computed(() => {
-    const f = this.devTools.flags();
-    return f.updateStableEnabled || f.deleteE2EJobsEnabled;
-  });
 
   onPickUpdateStable(): void {
     this.devToolsMenuOpen.set(false);
@@ -2977,6 +2984,11 @@ export class App implements OnInit {
   onPickDeleteE2E(): void {
     this.devToolsMenuOpen.set(false);
     this.showE2ECleanup.set(true);
+  }
+
+  onPickOrchestratorConfig(): void {
+    this.devToolsMenuOpen.set(false);
+    void this.orchConfigPanelRef?.openPanel();
   }
 
   constructor(

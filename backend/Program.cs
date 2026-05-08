@@ -6,6 +6,7 @@ using OrchestratorApi.Services.Bus;
 using OrchestratorApi.Services.Cli;
 using OrchestratorApi.Services.Clients;
 using OrchestratorApi.Services.Companion;
+using OrchestratorApi.Services.Configuration;
 using OrchestratorApi.Services.Diagnostics;
 using OrchestratorApi.Services.Jobs;
 using OrchestratorApi.Services.ProjectChat;
@@ -68,6 +69,7 @@ AppDomain.CurrentDomain.UnhandledException += (_, e) =>
 };
 
 builder.Services.AddSingleton<ClientIdentityStore>();
+builder.Services.AddSingleton<OrchestratorConfigService>();
 builder.Services.AddSingleton<JobScannerService>();
 builder.Services.AddSingleton<ScreenshotIndexService>();
 builder.Services.AddSingleton<JobStateMachine>();
