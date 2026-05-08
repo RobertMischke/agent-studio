@@ -105,18 +105,59 @@ public class BacklogLaneAndTagsTests : IDisposable
     }
 
     [Fact]
-    public void TagRegistry_FirstRead_SeedsThreeDefaults()
+    public void TagRegistry_FirstRead_SeedsSevenDefaults()
     {
         var (_, _, _) = Build();
         var tags = NewTagRegistry();
         var entries = tags.GetAll();
-        Assert.Equal(3, entries.Count);
-        Assert.Contains(entries, t => t.Id == "architecture");
-        Assert.Contains(entries, t => t.Id == "performance");
-        Assert.Contains(entries, t => t.Id == "quality");
+        Assert.Equal(7, entries.Count);
+        foreach (var id in new[] { "ui-ux", "performance", "quality", "architecture", "security", "docs", "observability" })
+            Assert.Contains(entries, t => t.Id == id);
+        // Every seed entry must carry a non-empty description so the UI can
+        // surface the "wofür" line on hover and in the registry manager.
+        Assert.All(entries, t => Assert.False(string.IsNullOrWhiteSpace(t.Description)));
         // The seed must be persisted so a second instance reads the same set
         // without re-seeding (idempotency on boot).
         Assert.True(File.Exists(Path.Combine(_workspace, "tags.json")));
+    }
+
+    [Fact]
+    public void TagRegistry_SecondBoot_IsIdempotent_AndMergesNewSeedsOnly()
+    {
+        // First boot: seed file written with the full default set.
+        var first = NewTagRegistry();
+        var firstEntries = first.GetAll();
+        Assert.Equal(7, firstEntries.Count);
+
+        // Second boot: re-reading should produce exactly the same rows; no
+        // duplicates appended on subsequent loads.
+        var second = NewTagRegistry();
+        var secondEntries = second.GetAll();
+        Assert.Equal(7, secondEntries.Count);
+        Assert.Equal(
+            firstEntries.Select(t => t.Id).OrderBy(s => s, StringComparer.Ordinal).ToArray(),
+            secondEntries.Select(t => t.Id).OrderBy(s => s, StringComparer.Ordinal).ToArray());
+
+        // Custom user labels survive: simulate an older registry by writing
+        // only a subset to disk, with a custom label/colour, and confirm the
+        // missing seeds are merged in while the user's row is left untouched.
+        var path = Path.Combine(_workspace, "tags.json");
+        File.WriteAllText(path, """
+            [
+              { "id": "architecture", "label": "My Custom Arch", "color": "#abcdef", "description": "user note" }
+            ]
+            """);
+
+        var third = NewTagRegistry();
+        var thirdEntries = third.GetAll();
+        Assert.Equal(7, thirdEntries.Count);
+        var arch = thirdEntries.Single(t => t.Id == "architecture");
+        Assert.Equal("My Custom Arch", arch.Label);
+        Assert.Equal("#abcdef", arch.Color);
+        Assert.Equal("user note", arch.Description);
+        // The new seeds (ui-ux, security, docs, observability) were appended.
+        foreach (var id in new[] { "ui-ux", "security", "docs", "observability" })
+            Assert.Contains(thirdEntries, t => t.Id == id);
     }
 
     [Fact]
@@ -188,7 +229,10 @@ public class BacklogLaneAndTagsTests : IDisposable
         Assert.Equal(TaskTypes.Chore, TaskTypes.Normalize(""));
         Assert.Equal(TaskTypes.Chore, TaskTypes.Normalize("garbage"));
         Assert.Equal(TaskTypes.Bug, TaskTypes.Normalize("Bug"));
-        Assert.Equal(TaskTypes.UserStory, TaskTypes.Normalize("user-story"));
+        Assert.Equal(TaskTypes.Feature, TaskTypes.Normalize("feature"));
+        // Migration: legacy "user-story" on disk silently maps to "feature".
+        Assert.Equal(TaskTypes.Feature, TaskTypes.Normalize("user-story"));
+        Assert.Equal(TaskTypes.Feature, TaskTypes.Normalize("User-Story"));
     }
 
     private (JobStateMachine machine, JobScannerService scanner, JobMutationService mutations) Build()

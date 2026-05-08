@@ -2517,7 +2517,7 @@ export class App implements OnInit {
   /** Static option list for the type filter dropdown. */
   readonly typeFilterOptions: readonly TypeFilterOption[] = [
     { value: 'bug', label: 'Bugs', icon: '🐞', kind: 'bug' },
-    { value: 'user-story', label: 'Stories', icon: '📖', kind: 'story' },
+    { value: 'feature', label: 'Features', icon: '✨', kind: 'feature' },
     { value: 'chore', label: 'Chores', icon: '·', kind: 'chore' },
   ];
 

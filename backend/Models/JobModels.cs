@@ -130,10 +130,11 @@ public record JobInfo
 
     /// <summary>
     /// Structural classification of the task. One of <see cref="TaskTypes.Bug"/>,
-    /// <see cref="TaskTypes.UserStory"/>, or <see cref="TaskTypes.Chore"/>
+    /// <see cref="TaskTypes.Feature"/>, or <see cref="TaskTypes.Chore"/>
     /// (default for legacy and technical work). Stored in <c>job.json</c> as
     /// <c>"taskType"</c>. The kanban card renders a small chip; filters in
-    /// the header narrow the board by type.
+    /// the header narrow the board by type. Legacy <c>"user-story"</c> values
+    /// on disk are silently normalised to <see cref="TaskTypes.Feature"/> on read.
     /// </summary>
     public string TaskType { get; init; } = TaskTypes.Chore;
 
@@ -157,15 +158,21 @@ public record JobInfo
 public static class TaskTypes
 {
     public const string Bug = "bug";
-    public const string UserStory = "user-story";
+    public const string Feature = "feature";
     public const string Chore = "chore";
 
-    public static readonly string[] All = [Bug, UserStory, Chore];
+    /// <summary>Legacy on-disk value for <see cref="Feature"/>; silently mapped on read.</summary>
+    public const string LegacyUserStory = "user-story";
+
+    public static readonly string[] All = [Bug, Feature, Chore];
 
     public static string Normalize(string? value)
     {
         if (string.IsNullOrWhiteSpace(value)) return Chore;
         var v = value.Trim();
+        // Migration: existing job.json files written as "user-story" map to
+        // "feature" silently on read so no bulk re-write of disk is needed.
+        if (string.Equals(v, LegacyUserStory, StringComparison.OrdinalIgnoreCase)) return Feature;
         foreach (var t in All)
             if (string.Equals(t, v, StringComparison.OrdinalIgnoreCase)) return t;
         return Chore;
@@ -529,9 +536,10 @@ public record CreateJobRequest
     public bool Fixture { get; init; }
 
     /// <summary>
-    /// Structural classification (<c>bug</c>, <c>user-story</c>, <c>chore</c>).
+    /// Structural classification (<c>bug</c>, <c>feature</c>, <c>chore</c>).
     /// Defaults to <see cref="TaskTypes.Chore"/> when omitted. Validated on
-    /// the server and normalized via <see cref="TaskTypes.Normalize"/>.
+    /// the server and normalized via <see cref="TaskTypes.Normalize"/>; legacy
+    /// <c>"user-story"</c> input maps to <see cref="TaskTypes.Feature"/>.
     /// </summary>
     public string? TaskType { get; init; }
 

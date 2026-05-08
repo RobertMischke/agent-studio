@@ -271,9 +271,11 @@ export interface JobInfo {
    */
   phase?: string | null;
   /**
-   * Structural classification of the task. One of `bug`, `user-story`, or
+   * Structural classification of the task. One of `bug`, `feature`, or
    * `chore` (default for legacy and technical work). Drives the small chip
    * rendered on the kanban card and the type filter pill in the header.
+   * Legacy `user-story` values on disk are normalised to `feature` server-side
+   * on read.
    */
   taskType?: string;
   /**
@@ -963,7 +965,7 @@ export interface CreateJobRequest {
   targetState?: string;
   cliType?: CliType;
   model?: string;
-  /** One of `bug`, `user-story`, `chore`. Defaults to `chore` server-side. */
+  /** One of `bug`, `feature`, `chore`. Defaults to `chore` server-side. */
   taskType?: string;
   /** Workspace tag ids to attach on create. */
   tags?: string[];

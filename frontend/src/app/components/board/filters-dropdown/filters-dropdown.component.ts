@@ -2,12 +2,12 @@ import { ChangeDetectionStrategy, Component, computed, input, output, signal } f
 import { TagRegistryEntry } from '../../../models/job.model';
 
 export interface TypeFilterOption {
-  /** Backend-side value, e.g. `bug`, `user-story`, `chore`. */
+  /** Backend-side value, e.g. `bug`, `feature`, `chore`. */
   value: string;
   /** Visible chip label, e.g. `Bugs`. */
   label: string;
   icon: string;
-  /** CSS modifier suffix (`bug` / `story` / `chore`). */
+  /** CSS modifier suffix (`bug` / `feature` / `chore`). */
   kind: string;
 }
 

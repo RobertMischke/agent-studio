@@ -90,8 +90,8 @@ Each job folder uses this structure:
 
 **Optional fields:**
 
-- `taskType` — structural classification, one of `bug`, `user-story`, or `chore` (default for legacy and technical work). Drives the small chip rendered on the kanban card and the type filter pill in the header.
-- `tags` — string array of workspace tag ids. The label and colour for each id come from `<workspace>/tags.json` served by `GET /api/tags`. Unknown ids (registry entries that were soft-deleted) render as a faint ghost chip on the card.
+- `taskType` - structural classification, one of `bug`, `feature`, or `chore` (default for legacy and technical work). Drives the small chip rendered on the kanban card and the type filter pill in the header. Legacy `user-story` values on disk are silently normalised to `feature` on read; no bulk re-write is performed.
+- `tags` - string array of workspace tag ids. The label and colour for each id come from `<workspace>/tags.json` served by `GET /api/tags`. The registry seeds seven default tags on first read (`ui-ux`, `performance`, `quality`, `architecture`, `security`, `docs`, `observability`), each carrying a `description` field that surfaces in tooltips and the filter dropdown. On boot, missing seed ids are merged into an existing registry by id; user-customised rows are never overwritten. Unknown ids on a job (registry entries that were soft-deleted) render as a faint ghost chip on the card.
 
 The application owns transitions between these states. Successful CLI runs move from `3-progress` to `4-auto-review`; the orchestrator's review pass then either reissues (back to `3-progress`), accepts-as-done (forward to `5-human-review`), or escalates (also forward to `5-human-review` with a `[supervisor]` chat-note). The user always confirms the move from `5-human-review` to `6-completed`. Failed or stopped runs stay in `3-progress` for inspection, restart, or continuation.
 

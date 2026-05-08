@@ -46,10 +46,19 @@ test.describe('Backlog lane + task types + tags', () => {
     await cleanup(PREFIX, wp.path);
   });
 
-  test('GET /api/tags seeds three default tags on first read', async () => {
-    const tags = await api<Array<{ id: string; label: string; color: string }>>('/api/tags');
+  test('GET /api/tags seeds the seven default tags on first read', async () => {
+    const tags = await api<Array<{ id: string; label: string; color: string; description: string }>>('/api/tags');
     const ids = tags.map(t => t.id);
-    expect(ids).toEqual(expect.arrayContaining(['architecture', 'performance', 'quality']));
+    expect(ids).toEqual(expect.arrayContaining([
+      'ui-ux', 'performance', 'quality', 'architecture', 'security', 'docs', 'observability'
+    ]));
+    // Each seed entry must carry a non-empty description so the UI can show
+    // the wofür hint on hover and in the registry manager.
+    for (const id of ['ui-ux', 'performance', 'quality', 'architecture', 'security', 'docs', 'observability']) {
+      const entry = tags.find(t => t.id === id);
+      expect(entry, `seed entry ${id}`).toBeDefined();
+      expect(entry!.description.trim().length).toBeGreaterThan(0);
+    }
   });
 
   test('a new job created without targetState lands in 0-backlog', async () => {
@@ -152,7 +161,7 @@ test.describe('Backlog lane + task types + tags', () => {
   test('type filter pill narrows the kanban', async ({ page }) => {
     const wp = await firstWatchPath();
     // Seed two jobs of different types so we can prove the filter narrows.
-    for (const [slug, taskType] of [['bug-card', 'bug'], ['story-card', 'user-story']] as const) {
+    for (const [slug, taskType] of [['bug-card', 'bug'], ['feature-card', 'feature']] as const) {
       await fetch(`${BACKEND}/api/jobs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -172,17 +181,17 @@ test.describe('Backlog lane + task types + tags', () => {
     await expect(bugBtn).toBeVisible();
     await bugBtn.click();
 
-    // After filtering to Bug, the bug card stays visible and the story card disappears.
+    // After filtering to Bug, the bug card stays visible and the feature card disappears.
     await expect(page.locator('[data-testid="job-card"]', { hasText: 'Filter bug-card' })).toBeVisible();
-    await expect(page.locator('[data-testid="job-card"]', { hasText: 'Filter story-card' })).toHaveCount(0);
+    await expect(page.locator('[data-testid="job-card"]', { hasText: 'Filter feature-card' })).toHaveCount(0);
 
     // The URL hash records the active filter so a copy-paste reproduces the view.
     await expect.poll(() => page.url()).toMatch(/filters=/);
     expect(decodeURIComponent(new URL(page.url()).hash)).toContain('type:bug');
 
-    // Clearing returns the story card to the board (Clear all sits in the
+    // Clearing returns the feature card to the board (Clear all sits in the
     // active-filter strip below the header).
     await page.getByTestId('filter-clear-all').click();
-    await expect(page.locator('[data-testid="job-card"]', { hasText: 'Filter story-card' })).toBeVisible();
+    await expect(page.locator('[data-testid="job-card"]', { hasText: 'Filter feature-card' })).toBeVisible();
   });
 });

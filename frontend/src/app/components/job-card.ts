@@ -558,7 +558,7 @@ if (typeof window !== 'undefined') {
       background: rgba(134, 239, 172, 0.10);
       border-color: rgba(134, 239, 172, 0.30);
     }
-    /* Backlog-lane spec: structural type chip (Bug / Story / Chore) and the
+    /* Backlog-lane spec: structural type chip (Bug / Feature / Chore) and the
        lightweight tag chips. The chore variant is deliberately quieter so
        it does not steal attention from real classifications. */
     .job-card__type-pill {
@@ -570,7 +570,7 @@ if (typeof window !== 'undefined') {
       background: rgba(248, 113, 113, 0.12);
       border-color: rgba(248, 113, 113, 0.28);
     }
-    .job-card__type-pill--story {
+    .job-card__type-pill--feature {
       color: #93c5fd;
       background: rgba(96, 165, 250, 0.12);
       border-color: rgba(96, 165, 250, 0.30);
@@ -877,14 +877,16 @@ export class JobCardComponent implements OnInit, OnDestroy {
 
   /**
    * Backlog-lane spec: render the structural classification as a small
-   * chip (🐞 Bug / 📖 Story / · Chore). The chip is always visible — even
+   * chip (🐞 Bug / ✨ Feature / · Chore). The chip is always visible — even
    * for the default `chore` value — so the user can scan a lane for
-   * stories vs technical work without filtering.
+   * features vs technical work without filtering. Legacy `user-story`
+   * values render as Feature so cards predating the rename keep a stable
+   * chip.
    */
   readonly taskTypeChip = computed<{ kind: string; label: string; icon: string; tooltip: string } | null>(() => {
     const t = (this.job().taskType || 'chore').toLowerCase();
     if (t === 'bug') return { kind: 'bug', label: 'Bug', icon: '🐞', tooltip: 'Task type: Bug' };
-    if (t === 'user-story') return { kind: 'story', label: 'Story', icon: '📖', tooltip: 'Task type: User story' };
+    if (t === 'feature' || t === 'user-story') return { kind: 'feature', label: 'Feature', icon: '✨', tooltip: 'Task type: Feature' };
     return { kind: 'chore', label: 'Chore', icon: '·', tooltip: 'Task type: Chore (default)' };
   });
 
@@ -923,7 +925,7 @@ export class JobCardComponent implements OnInit, OnDestroy {
           color: entry.color,
           ghost: false,
           concern: false,
-          tooltip: entry.description ? `${entry.label} — ${entry.description}` : entry.label
+          tooltip: entry.description ? `${entry.label}: ${entry.description}` : entry.label
         };
       }
       return {
@@ -932,7 +934,7 @@ export class JobCardComponent implements OnInit, OnDestroy {
         color: '#475569',
         ghost: true,
         concern: false,
-        tooltip: `Unknown tag '${id}' — registry entry was removed`
+        tooltip: `Unknown tag '${id}'; registry entry was removed`
       };
     });
   });

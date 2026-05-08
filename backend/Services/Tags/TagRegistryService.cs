@@ -8,9 +8,11 @@ namespace OrchestratorApi.Services.Tags;
 /// <summary>
 /// Workspace-level tag registry. Tags are a flat namespace shared across the
 /// watched projects in one workspace and stored as a single JSON array at
-/// <c>&lt;TaskRepository&gt;/tags.json</c>. The file is seeded with three
-/// default tags (architecture, performance, quality) on first read so a
-/// fresh workspace already has something to attach.
+/// <c>&lt;TaskRepository&gt;/tags.json</c>. On boot the file is merged-by-id
+/// with a curated seed of seven default tags (ui-ux, performance, quality,
+/// architecture, security, docs, observability) so a fresh workspace already
+/// has the standard taxonomy. Existing rows are never overwritten: a user's
+/// custom label / colour / description for a seed id wins over the seed.
 /// </summary>
 /// <remarks>
 /// Concurrency: a process-wide lock protects the in-memory cache and the
@@ -24,9 +26,13 @@ public sealed class TagRegistryService
 
     private static readonly TagRegistryEntry[] Seed =
     [
-        new() { Id = "architecture", Label = "Architecture", Color = "#89b4fa", Description = "" },
-        new() { Id = "performance",  Label = "Performance",  Color = "#fab387", Description = "" },
-        new() { Id = "quality",      Label = "Quality",      Color = "#a6e3a1", Description = "" }
+        new() { Id = "ui-ux",         Label = "UI / UX",       Color = "#cba6f7", Description = "Frontend look-and-feel, layout, click paths, visual polish." },
+        new() { Id = "performance",   Label = "Performance",   Color = "#fab387", Description = "Long-task budgets, API latency, polling load, render speed." },
+        new() { Id = "quality",       Label = "Quality",       Color = "#a6e3a1", Description = "Tests, regressions, robustness, logging, observability of bugs." },
+        new() { Id = "architecture",  Label = "Architecture",  Color = "#89b4fa", Description = "Load-bearing structure decisions; ADR-worthy changes." },
+        new() { Id = "security",      Label = "Security",      Color = "#f38ba8", Description = "Auth, secrets, data boundaries, sandboxing." },
+        new() { Id = "docs",          Label = "Docs",          Color = "#94e2d5", Description = "README / AGENTS / ADR / skill files / lookup index updates." },
+        new() { Id = "observability", Label = "Observability", Color = "#f9e2af", Description = "Logs, metrics, drift reports, token aggregates, supervisor signals." }
     ];
 
     private readonly ILogger<TagRegistryService> _logger;
@@ -144,6 +150,17 @@ public sealed class TagRegistryService
                 _cache = doc?.Where(t => !string.IsNullOrWhiteSpace(t.Id) && IdPattern.IsMatch(t.Id))
                               .ToList()
                           ?? Seed.Select(Clone).ToList();
+
+                // Merge new seed defaults by id: existing rows are never
+                // overwritten (the user's label / colour / description for a
+                // seed id wins), but missing seed ids are appended so a
+                // workspace from before the expanded taxonomy gains the new
+                // standard tags on next boot.
+                if (MergeMissingSeeds())
+                {
+                    Persist();
+                    _logger.LogInformation("Merged missing default tags into registry at {Path}", path);
+                }
             }
             catch (Exception ex)
             {
@@ -151,6 +168,28 @@ public sealed class TagRegistryService
                 _cache = Seed.Select(Clone).ToList();
             }
         }
+    }
+
+    /// <summary>
+    /// Append every seed entry whose id is not already in <see cref="_cache"/>.
+    /// Returns true when at least one row was added so the caller can persist.
+    /// Pure addition: rows already present in the cache are left untouched
+    /// (the user's customisations win over the seed defaults).
+    /// </summary>
+    private bool MergeMissingSeeds()
+    {
+        if (_cache == null) return false;
+        var existing = new HashSet<string>(
+            _cache.Select(e => e.Id),
+            StringComparer.OrdinalIgnoreCase);
+        var added = false;
+        foreach (var seed in Seed)
+        {
+            if (existing.Contains(seed.Id)) continue;
+            _cache.Add(Clone(seed));
+            added = true;
+        }
+        return added;
     }
 
     private void Persist()

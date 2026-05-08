@@ -36,9 +36,9 @@ test.describe('Header filter dropdown', () => {
     await expect(panel).toBeVisible();
     await expect(panel.getByTestId('type-filter-all')).toBeVisible();
     await expect(panel.getByTestId('type-filter-bug')).toBeVisible();
-    await expect(panel.getByTestId('type-filter-story')).toBeVisible();
+    await expect(panel.getByTestId('type-filter-feature')).toBeVisible();
     await expect(panel.getByTestId('type-filter-chore')).toBeVisible();
-    // The seeded tag taxonomy ships at least these three default tags.
+    // The seeded tag taxonomy ships seven default tags; assert at least one row.
     await expect(panel.locator('[data-testid^="tag-filter-row-"]').first()).toBeVisible();
   });
 
@@ -91,7 +91,7 @@ test.describe('Header filter dropdown', () => {
     await expect(firstCard).toBeVisible({ timeout: 15_000 });
     const chip = firstCard.getByTestId('job-task-type');
     await expect(chip).toBeVisible();
-    await expect(chip).toHaveAttribute('data-task-type', /bug|user-story|chore/);
+    await expect(chip).toHaveAttribute('data-task-type', /bug|feature|chore/);
     const title = await chip.getAttribute('title');
     expect(title ?? '').toMatch(/Task type/i);
   });

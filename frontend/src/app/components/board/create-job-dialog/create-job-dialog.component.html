@@ -57,9 +57,9 @@
                 (click)="newTaskType.set('bug')">🐞 Bug</button>
         <button type="button"
                 class="create-type-picker__btn"
-                [class.create-type-picker__btn--active]="newTaskType() === 'user-story'"
-                data-testid="create-task-type-story"
-                (click)="newTaskType.set('user-story')">📖 Story</button>
+                [class.create-type-picker__btn--active]="newTaskType() === 'feature'"
+                data-testid="create-task-type-feature"
+                (click)="newTaskType.set('feature')">✨ Feature</button>
         <button type="button"
                 class="create-type-picker__btn"
                 [class.create-type-picker__btn--active]="newTaskType() === 'chore'"
@@ -77,7 +77,7 @@
                     [class.create-tag-picker__chip--active]="newTags().includes(t.id)"
                     [attr.data-testid]="'create-tag-' + t.id"
                     [style.--tag-color]="t.color"
-                    [title]="t.description || t.label"
+                    [title]="t.description ? t.label + ': ' + t.description : t.label"
                     (click)="toggleTag(t.id)">{{ t.label }}</button>
           }
         </div>
