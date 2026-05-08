@@ -3,6 +3,26 @@ import { projectIdentity } from '../../../services/project-identity.util';
 
 export interface ProjectRunnerIndicator { icon: string; cls: string; }
 
+/**
+ * Compact token rollup rendered next to the project name on the board's
+ * project chip strip. Aggregated client-side from every `JobInfo.tokenSummary`
+ * for the project so it reflects the same per-task numbers the kanban card
+ * popover shows; the orchestrator-log-based `/api/projects/.../token-summary`
+ * endpoint feeds the deeper drill-down on the project page.
+ */
+export interface ProjectTokenChipInfo {
+  totalTokens: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  jobsWithTokens: number;
+  /** De-duplicated list of models seen across this project's jobs, most-recent first when available. */
+  models: string[];
+  label: string;
+  tooltip: string;
+}
+
 export interface ProjectAutoInfo {
   /** off = manual / paused-without-active. on = auto-continuous. stopping = paused while a task is still running. */
   state: 'off' | 'on' | 'stopping';
@@ -29,6 +49,7 @@ export class ProjectTabsComponent {
   readonly isActive = input.required<(name: string) => boolean>();
   readonly runnerIndicator = input.required<(name: string) => ProjectRunnerIndicator | null>();
   readonly autoInfo = input.required<(name: string) => ProjectAutoInfo>();
+  readonly projectTokens = input<((name: string) => ProjectTokenChipInfo | null) | null>(null);
 
   readonly toggle = output<string>();
   readonly toggleAuto = output<string>();

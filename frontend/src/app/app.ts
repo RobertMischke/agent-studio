@@ -29,7 +29,7 @@ import { ErrorDialogService } from './services/error-dialog.service';
 import { cliTypeLabel as fmtCliTypeLabel, formatMultiplier as fmtMultiplier } from './services/format.util';
 import { CreateJobDialogComponent, PendingAttachment } from './components/board/create-job-dialog/create-job-dialog.component';
 import { ErrorDialogComponent } from './components/board/error-dialog/error-dialog.component';
-import { ProjectAutoInfo, ProjectTabsComponent } from './components/board/project-tabs/project-tabs.component';
+import { ProjectAutoInfo, ProjectTabsComponent, ProjectTokenChipInfo } from './components/board/project-tabs/project-tabs.component';
 import { FiltersDropdownComponent, TypeFilterOption } from './components/board/filters-dropdown/filters-dropdown.component';
 import { BoardSearchIconComponent } from './components/board/board-search-icon/board-search-icon.component';
 import { UpdateClientService } from './services/update.service';
@@ -102,6 +102,7 @@ interface ActiveFilterPill {
           [isActive]="isProjectActiveFn"
           [runnerIndicator]="getRunnerIndicatorFn"
           [autoInfo]="getAutoInfoFn"
+          [projectTokens]="getProjectTokenChipFn"
           (toggle)="toggleProject($event)"
           (toggleAuto)="onToggleAuto($event)"
           (openDetail)="openProjectDetail($event)"
@@ -858,6 +859,35 @@ interface ActiveFilterPill {
     }
     .runner-dot { font-size: 10px; margin-right: 2px; }
     .runner-dot--running { animation: pulse-runner 1.5s infinite; }
+    /* Per-project token total badge in the chip. Aggregates every job's
+       token count for the project so the user sees AI spend at the board
+       level without opening any drilldown. The badge only renders when the
+       project has accumulated tokens, so projects without any AI activity
+       stay visually quiet. Tooltip carries the per-input/output split,
+       cache amounts, and the model list. */
+    .filter-chip__tokens {
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      margin-left: 4px;
+      padding: 1px 6px 1px 5px;
+      border-radius: 999px;
+      background: rgba(148, 163, 184, 0.18);
+      color: #cbd5e1;
+      font-size: 10px;
+      font-weight: 600;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.02em;
+      cursor: help;
+    }
+    .filter-chip--active .filter-chip__tokens {
+      background: rgba(255, 255, 255, 0.18);
+      color: #ffffff;
+    }
+    .filter-chip__tokens-icon {
+      opacity: 0.7;
+      font-size: 9px;
+    }
     @keyframes pulse-runner {
       0%, 100% { opacity: 1; }
       50% { opacity: 0.4; }
@@ -4036,7 +4066,89 @@ export class App implements OnInit {
   readonly isProjectActiveFn = (name: string) => this.isProjectActive(name);
   readonly getRunnerIndicatorFn = (name: string) => this.getRunnerIndicator(name);
   readonly getAutoInfoFn = (name: string) => this.getAutoInfo(name);
+  readonly getProjectTokenChipFn = (name: string) => this.getProjectTokenChip(name);
   readonly identityFor = (name: string) => projectIdentity(name);
+
+  /**
+   * Aggregates `JobInfo.tokenSummary` across every job for `name` so the
+   * project chip on the board can show total tokens without an extra
+   * round-trip. Returns null when the project has no tokens at all - the
+   * chip stays clean for AI-untouched projects. The tooltip (hover) and
+   * the badge label use the same `formatTokens` shorthand the per-card
+   * popover uses, so totals read consistently across the surfaces.
+   */
+  private getProjectTokenChip(name: string): ProjectTokenChipInfo | null {
+    const jobs = this.jobService.jobs();
+    let totalTokens = 0;
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let cacheReadTokens = 0;
+    let cacheCreationTokens = 0;
+    let jobsWithTokens = 0;
+    const modelLastSeen = new Map<string, number>();
+    for (const j of jobs) {
+      if (j.projectName !== name) continue;
+      const ts = j.tokenSummary;
+      if (!ts || ts.totalTokens <= 0) continue;
+      jobsWithTokens++;
+      totalTokens += ts.totalTokens;
+      inputTokens += ts.inputTokens;
+      outputTokens += ts.outputTokens;
+      cacheReadTokens += ts.cacheReadTokens;
+      cacheCreationTokens += ts.cacheCreationTokens;
+      // Walk per-call entries so we capture model switches (meta-tasks),
+      // not just the last model. We rank by the entry timestamp so the
+      // most recently used model lands first in the chip tooltip.
+      for (const e of ts.entries ?? []) {
+        const m = (e.model ?? '').trim();
+        if (!m) continue;
+        const t = Date.parse(e.ts) || 0;
+        const prev = modelLastSeen.get(m) ?? 0;
+        if (t > prev) modelLastSeen.set(m, t);
+      }
+      if (ts.lastModel) {
+        const m = ts.lastModel.trim();
+        if (m) {
+          const t = Date.parse(ts.lastUpdate ?? '') || 0;
+          const prev = modelLastSeen.get(m) ?? 0;
+          if (t > prev) modelLastSeen.set(m, t);
+        }
+      }
+    }
+    if (totalTokens <= 0 || jobsWithTokens === 0) return null;
+    const models = [...modelLastSeen.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([m]) => m);
+    const fmt = this.formatTokensCompact;
+    const tooltipParts: string[] = [
+      `↑ ${fmt(inputTokens)} input · ↓ ${fmt(outputTokens)} output`
+    ];
+    if (cacheReadTokens > 0) tooltipParts.push(`⚡ ${fmt(cacheReadTokens)} cache read`);
+    if (cacheCreationTokens > 0) tooltipParts.push(`+ ${fmt(cacheCreationTokens)} cache write`);
+    tooltipParts.push(`${jobsWithTokens} ${jobsWithTokens === 1 ? 'task' : 'tasks'} with AI activity`);
+    if (models.length > 0) tooltipParts.push(`Models: ${models.join(', ')}`);
+    return {
+      totalTokens,
+      inputTokens,
+      outputTokens,
+      cacheReadTokens,
+      cacheCreationTokens,
+      jobsWithTokens,
+      models,
+      label: fmt(totalTokens),
+      tooltip: tooltipParts.join('\n')
+    };
+  }
+
+  /** Same shorthand as `JobCardComponent.formatTokens` - keeps surfaces consistent. */
+  private formatTokensCompact = (n: number): string => {
+    if (!Number.isFinite(n) || n <= 0) return '0';
+    if (n < 1_000) return Math.round(n).toString();
+    if (n < 10_000) return (n / 1_000).toFixed(1) + 'k';
+    if (n < 1_000_000) return Math.round(n / 1_000) + 'k';
+    if (n < 10_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+    return Math.round(n / 1_000_000) + 'M';
+  };
 
   getRunnerIndicator(name: string): { icon: string; cls: string } | null {
     const status = this.jobService.runnerStatus();

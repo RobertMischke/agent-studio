@@ -14,6 +14,16 @@
           <span class="runner-dot" [class]="'runner-dot--' + indicator.cls">{{ indicator.icon }}</span>
         }
         {{ name }}
+        @if (projectTokens(); as fn) {
+          @if (fn(name); as tk) {
+            <span class="filter-chip__tokens"
+                  [attr.data-testid]="'project-tokens-' + name"
+                  [attr.data-token-total]="tk.totalTokens"
+                  [title]="tk.tooltip">
+              <span class="filter-chip__tokens-icon" aria-hidden="true">◇</span>{{ tk.label }}
+            </span>
+          }
+        }
       </button>
       @if (autoInfo()(name); as info) {
         <button class="auto-toggle"
