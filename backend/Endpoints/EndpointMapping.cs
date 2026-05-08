@@ -39,6 +39,7 @@ public static class EndpointMapping
         app.MapAdminConfigEndpoints();
         app.MapSupervisorEndpoints();
         app.MapDiagnosticsEndpoints();
+        app.MapInternalProbeEndpoints();
         app.MapRoadmapIntakeEndpoints();
         app.MapTitleGenerationEndpoints();
         app.MapPromptEnhancementEndpoints();

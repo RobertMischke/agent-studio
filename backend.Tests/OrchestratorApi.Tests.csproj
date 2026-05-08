@@ -21,6 +21,9 @@
 
   <ItemGroup>
     <ProjectReference Include="..\backend\OrchestratorApi.csproj" />
+    <ProjectReference Include="..\update-service\UpdateService.csproj">
+      <Aliases>UpdSvc</Aliases>
+    </ProjectReference>
   </ItemGroup>
 
 </Project>

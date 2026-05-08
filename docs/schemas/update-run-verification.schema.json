@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/agent-taskboard/agent-taskboard/docs/schemas/update-run-verification.schema.json",
+  "title": "Update-run verification check row",
+  "description": "One row per check appended to <RunsDirectory>/<runId>/verification.jsonl by the phase-6 verifier. ADR-0031.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["runId", "step", "ok", "at", "durationMs"],
+  "properties": {
+    "runId": { "type": "string", "minLength": 1 },
+    "step": {
+      "enum": ["healthz-stable", "runner-status", "jobs-grouped", "clients", "cli-quota", "db-touch"]
+    },
+    "ok": { "type": "boolean" },
+    "observed": { "type": ["string", "null"] },
+    "expected": { "type": ["string", "null"] },
+    "at": { "type": "string", "format": "date-time" },
+    "durationMs": { "type": "integer", "minimum": 0 }
+  }
+}

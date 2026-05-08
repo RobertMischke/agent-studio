@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Text.Json;
 
 namespace AgentTaskboard.UpdateService;
 
@@ -22,19 +23,28 @@ public sealed class BackendProbe
         _logger = logger;
     }
 
-    public async Task<bool> IsHealthyAsync(CancellationToken ct = default)
+    public string BaseUrl => _baseUrl;
+
+    public async Task<HealthzResult> ProbeHealthzAsync(CancellationToken ct = default)
     {
         try
         {
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             cts.CancelAfter(TimeSpan.FromSeconds(2));
             var resp = await _http.GetAsync($"{_baseUrl}/healthz", cts.Token);
-            return resp.IsSuccessStatusCode;
+            var body = await resp.Content.ReadAsStringAsync(cts.Token);
+            return new HealthzResult((int)resp.StatusCode, resp.IsSuccessStatusCode, body);
         }
         catch (Exception)
         {
-            return false;
+            return new HealthzResult(0, false, null);
         }
+    }
+
+    public async Task<bool> IsHealthyAsync(CancellationToken ct = default)
+    {
+        var r = await ProbeHealthzAsync(ct);
+        return r.Ok;
     }
 
     public async Task<bool> WaitForHealthyAsync(TimeSpan timeout, CancellationToken ct = default)
@@ -61,7 +71,7 @@ public sealed class BackendProbe
             if (!resp.IsSuccessStatusCode) return null;
 
             using var stream = await resp.Content.ReadAsStreamAsync(cts.Token);
-            using var doc = await System.Text.Json.JsonDocument.ParseAsync(stream, cancellationToken: cts.Token);
+            using var doc = await JsonDocument.ParseAsync(stream, cancellationToken: cts.Token);
             var root = doc.RootElement;
             if (!root.TryGetProperty("projects", out var projects)) return null;
 
@@ -69,9 +79,7 @@ public sealed class BackendProbe
             foreach (var prop in projects.EnumerateObject())
             {
                 if (prop.Value.TryGetProperty("mode", out var mode))
-                {
                     modes[prop.Name] = mode.GetString() ?? "unknown";
-                }
             }
             return modes;
         }
@@ -103,4 +111,53 @@ public sealed class BackendProbe
             return false;
         }
     }
+
+    /// <summary>
+    /// GET <paramref name="path"/> with the standard X-Client-Id header.
+    /// Returns (httpStatus, body). httpStatus=0 on transport failure.
+    /// Used by phase-6 verification for arbitrary endpoints.
+    /// </summary>
+    public async Task<(int Status, string Body)> GetAsync(string path, TimeSpan timeout, CancellationToken ct = default)
+    {
+        try
+        {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(timeout);
+            using var req = new HttpRequestMessage(HttpMethod.Get, _baseUrl + path);
+            req.Headers.Add("X-Client-Id", _clientId);
+            using var resp = await _http.SendAsync(req, cts.Token);
+            var body = await resp.Content.ReadAsStringAsync(cts.Token);
+            return ((int)resp.StatusCode, body);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "GET {Path} failed", path);
+            return (0, "");
+        }
+    }
+
+    /// <summary>POST a JSON body to the internal probe endpoint and read the echo back.</summary>
+    public async Task<(int Status, string Body)> PostJsonAsync(string path, object body, TimeSpan timeout, CancellationToken ct = default)
+    {
+        try
+        {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(timeout);
+            using var req = new HttpRequestMessage(HttpMethod.Post, _baseUrl + path)
+            {
+                Content = JsonContent.Create(body)
+            };
+            req.Headers.Add("X-Client-Id", _clientId);
+            using var resp = await _http.SendAsync(req, cts.Token);
+            var content = await resp.Content.ReadAsStringAsync(cts.Token);
+            return ((int)resp.StatusCode, content);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "POST {Path} failed", path);
+            return (0, "");
+        }
+    }
 }
+
+public sealed record HealthzResult(int HttpStatus, bool Ok, string? Body);

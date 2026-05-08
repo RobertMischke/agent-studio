@@ -7,21 +7,30 @@ var builder = WebApplication.CreateBuilder(args);
 var options = new UpdateServiceOptions();
 builder.Configuration.GetSection("UpdateService").Bind(options);
 
-// Env-var overrides (so the launcher script can pin paths without writing JSON).
 options.ListenUrl       = Environment.GetEnvironmentVariable("ATP_UPDATE_LISTEN")      ?? options.ListenUrl;
 options.StableCheckoutDir = Environment.GetEnvironmentVariable("ATP_STABLE_CHECKOUT")  ?? options.StableCheckoutDir;
 options.DevspaceDir     = Environment.GetEnvironmentVariable("ATP_DEVSPACE_DIR")        ?? options.DevspaceDir;
 options.UpdateScript    = Environment.GetEnvironmentVariable("ATP_UPDATE_SCRIPT")       ?? options.UpdateScript;
+options.StopScript      = Environment.GetEnvironmentVariable("ATP_STOP_SCRIPT")         ?? options.StopScript;
+options.StartScript     = Environment.GetEnvironmentVariable("ATP_START_SCRIPT")        ?? options.StartScript;
 options.BackendUrl      = Environment.GetEnvironmentVariable("ATP_BACKEND_URL")         ?? options.BackendUrl;
 options.HistoryFile     = Environment.GetEnvironmentVariable("ATP_UPDATE_HISTORY")      ?? options.HistoryFile;
+options.RunsDirectory   = Environment.GetEnvironmentVariable("ATP_UPDATE_RUNS_DIR")     ?? options.RunsDirectory;
 options.TriggerToken    = Environment.GetEnvironmentVariable("ATP_UPDATE_TOKEN")        ?? options.TriggerToken;
 options.BashPath        = Environment.GetEnvironmentVariable("ATP_BASH_PATH")           ?? options.BashPath;
 options.VersionFile     = Environment.GetEnvironmentVariable("ATP_VERSION_FILE")        ?? options.VersionFile;
 
+// ADR-0031: opt-in auto-rollback. Only the env flag set to "1" / "true" turns
+// it on; anything else (incl. unset) means failure stays loud and operator-
+// driven. Default is OFF on purpose.
+options.AutoRollback = string.Equals(
+    Environment.GetEnvironmentVariable("ATP_UPDATE_AUTO_ROLLBACK"), "1", StringComparison.Ordinal)
+    || string.Equals(
+        Environment.GetEnvironmentVariable("ATP_UPDATE_AUTO_ROLLBACK"), "true", StringComparison.OrdinalIgnoreCase);
+
 builder.Services.AddSingleton(options);
 builder.Services.AddHttpClient();
 
-// --- service wiring ----------------------------------------------------------
 builder.Services.AddSingleton(sp =>
 {
     var logger = sp.GetRequiredService<ILogger<GitProbe>>();
@@ -35,15 +44,14 @@ builder.Services.AddSingleton(sp =>
     return new BackendProbe(http, options.BackendUrl, options.BackendClientId, logger);
 });
 
+builder.Services.AddSingleton<UpdateVerifier>();
+
 builder.Services.AddSingleton(sp =>
 {
     var logger = sp.GetRequiredService<ILogger<UpdateStatusStore>>();
     var git = sp.GetRequiredService<GitProbe>();
     Func<string> readVersion = () =>
     {
-        // First non-empty trimmed line of the VERSION file. The function
-        // is invoked from inside the store every time the snapshot moves,
-        // so we accept the file IO cost (it's <100 bytes).
         var path = options.VersionFile;
         if (!File.Exists(path)) return "unknown";
         foreach (var line in File.ReadAllLines(path))
@@ -59,9 +67,6 @@ builder.Services.AddSingleton(sp =>
 builder.Services.AddSingleton<UpdateOrchestrator>();
 builder.Services.AddHostedService<PeriodicProbeService>();
 
-// CORS: the UpdateService must be reachable from the FE during a stable
-// restart, when the main backend's /api proxy is dark. We are running on
-// localhost only, so a wide-open CORS policy is fine.
 builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
     p.SetIsOriginAllowed(_ => true).AllowAnyHeader().AllowAnyMethod().AllowCredentials()));
 
@@ -72,38 +77,17 @@ app.UseCors();
 
 // --- endpoints ---------------------------------------------------------------
 
-// Plain liveness probe: the main backend's /healthz semantics. Always 200
-// while the process is alive — that is the whole reason this service exists.
 app.MapGet("/healthz", () => Results.Text("\"ok\"", "application/json"));
 app.MapGet("/update/health", () => Results.Text("\"ok\"", "application/json"));
 
-// Full snapshot. Cheap, lock-protected read; safe to poll every 1-30 s.
+var jsonOpts = new JsonSerializerOptions { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
+
 app.MapGet("/update/status", (UpdateStatusStore store) =>
-{
-    return Results.Json(store.Get(), new JsonSerializerOptions
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-    });
-});
+    Results.Json(store.Get(), jsonOpts));
 
-// Tail of the append-only history (latest N entries).
 app.MapGet("/update/history", (UpdateStatusStore store, int? max) =>
-{
-    var n = max.GetValueOrDefault(20);
-    return Results.Json(store.ReadHistory(n), new JsonSerializerOptions
-    {
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase
-    });
-});
+    Results.Json(store.ReadHistory(max.GetValueOrDefault(20)), jsonOpts));
 
-// Manual trigger.
-//   - Honours optional ATP_UPDATE_TOKEN: send as X-Update-Token header.
-//   - Body { reason?, force? } is recorded in history.
-//   - The orchestration is intentionally decoupled from the HTTP request's
-//     cancellation: a client that gives up (e.g. Playwright's 30 s default)
-//     must not abort an in-flight stable restart. We tie cancellation to
-//     the application's stopping token so the only thing that can cancel
-//     the run is a process shutdown.
 app.MapPost("/update/trigger", async (HttpContext ctx, UpdateOrchestrator orch, UpdateServiceOptions opt, IHostApplicationLifetime lifetime, CancellationToken ct) =>
 {
     if (!string.IsNullOrEmpty(opt.TriggerToken))
@@ -115,12 +99,28 @@ app.MapPost("/update/trigger", async (HttpContext ctx, UpdateOrchestrator orch, 
 
     TriggerRequest? body = null;
     try { body = await ctx.Request.ReadFromJsonAsync<TriggerRequest>(ct); } catch { /* empty body OK */ }
-
     var force = body?.Force ?? false;
     var (runId, phase, message) = orch.StartTrigger(trigger: "manual", force: force, lifetime.ApplicationStopping);
-    // 202 Accepted: orchestration is running in the background. Clients poll
-    // /update/status to watch phase transitions.
     return Results.Json(new TriggerResponse(runId, phase, message), statusCode: 202);
+});
+
+// ADR-0031 manual-rollback endpoint. Same auth/token gating as /update/trigger.
+app.MapPost("/update/rollback", async (HttpContext ctx, UpdateOrchestrator orch, UpdateServiceOptions opt, IHostApplicationLifetime lifetime, CancellationToken ct) =>
+{
+    if (!string.IsNullOrEmpty(opt.TriggerToken))
+    {
+        var sent = ctx.Request.Headers["X-Update-Token"].FirstOrDefault();
+        if (sent != opt.TriggerToken)
+            return Results.Json(new { error = "unauthorized" }, statusCode: 401);
+    }
+
+    RollbackRequest? body = null;
+    try { body = await ctx.Request.ReadFromJsonAsync<RollbackRequest>(ct); } catch { /* fall through */ }
+    if (body == null || string.IsNullOrWhiteSpace(body.RunId))
+        return Results.Json(new { error = "missing runId" }, statusCode: 400);
+
+    var (runId, phase, message) = orch.StartManualRollback(body.RunId, lifetime.ApplicationStopping);
+    return Results.Json(new RollbackResponse(runId, phase, message), statusCode: 202);
 });
 
 app.Run();

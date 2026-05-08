@@ -4,39 +4,45 @@ namespace AgentTaskboard.UpdateService;
 /// What the update service tells the frontend on every poll. Designed to be
 /// stable across versions of the main backend so the FE banner keeps
 /// working even when /api/* is unreachable mid-update.
+///
+/// Phase vocabulary (additive across versions; FE must tolerate unknown
+/// strings): idle | preparing | pausing-runners | pulling | building |
+/// restarting | verifying-after-restart | resuming | rolling-back | done |
+/// failed.
 /// </summary>
 public sealed record UpdateStatus(
-    string Phase,                    // idle | preparing | pausing-runners | pulling | building | restarting | resuming | done | failed
+    string Phase,
+    string? PhaseLabel,              // human-readable gerund for the FE; ADR-0031.
     string? Message,                 // human-readable detail for the current phase
-    string? CurrentRunId,            // null if no run in flight
+    string? CurrentRunId,
     DateTime? StartedAt,
     DateTime? FinishedAt,
-    string HeadLocal,                // short SHA, e.g. "9973f03"
+    string HeadLocal,                // short SHA, current
     string? HeadOrigin,              // short SHA from last fetch, null until first fetch
-    int BehindBy,                    // commits stable is behind origin/main; 0 = up to date
-    IReadOnlyList<CommitInfo> PendingCommits, // up to 50 commits HEAD..origin/main, newest first
+    int BehindBy,
+    IReadOnlyList<CommitInfo> PendingCommits,
     DateTime? LastFetchAt,
-    DateTime? LastUpdateAt,          // last time an update completed (any status)
-    DateTime? LastSuccessAt,         // last time an update completed with status=ok
-    bool IsRunning,                  // shorthand: Phase != idle && Phase != done && Phase != failed
-    bool BackendReachable,           // last health probe of the main backend
-    string ServiceVersion,           // UpdateService assembly version (was Version)
-    string ProductVersion,           // semver from the VERSION file at repo root
-    string Mode                      // "manual" | "scheduled"; phase-2 will use this
+    DateTime? LastUpdateAt,
+    DateTime? LastSuccessAt,
+    DateTime? LastRunFinishedAt,     // ADR-0031: FE renders the green completion toast for 60 s after this.
+    string? LastRunHeadBefore,       // SHA before the most recent run (for hard-reload toast).
+    string? LastRunHeadAfter,        // SHA after the most recent run.
+    bool IsRunning,                  // true for every in-flight phase incl. verifying / rolling-back.
+    bool BackendReachable,
+    string ServiceVersion,
+    string ProductVersion,
+    string Mode,                     // "manual" | "scheduled"
+    IReadOnlyList<VerificationFailure>? VerificationFailures, // populated when phase=failed after verifying.
+    bool AutoRollbackEnabled         // mirrors UpdateServiceOptions.AutoRollback so the FE can show the right copy.
 );
 
-/// <summary>
-/// One git commit summary, used for "what's new in this update" lists.
-/// </summary>
-public sealed record CommitInfo(
-    string Sha,                      // short SHA
-    string Subject,                  // first line of the commit message
-    string Author,                   // author name
-    DateTime AuthorDate              // author date in UTC
-);
+public sealed record CommitInfo(string Sha, string Subject, string Author, DateTime AuthorDate);
 
 /// <summary>
 /// One historical record per completed update attempt, append-only on disk.
+/// Backwards-compat note (ADR-0031): older readers may only know about
+/// (RunId, StartedAt, FinishedAt, Status, HeadBefore, HeadAfter,
+/// DurationSeconds, Error, Trigger). New optional fields go at the end.
 /// </summary>
 public sealed record UpdateHistoryEntry(
     string RunId,
@@ -47,12 +53,60 @@ public sealed record UpdateHistoryEntry(
     string HeadAfter,
     int DurationSeconds,
     string? Error,
-    string Trigger                   // "manual" | "scheduled" | "api"
+    string Trigger,                  // "manual" | "scheduled" | "api"
+    IReadOnlyList<VerificationFailure>? VerificationFailures = null,
+    string? RollbackStatus = null,   // "ok" | "failed" | null (no rollback ran)
+    string? RunFolder = null
 );
 
-public sealed record TriggerRequest(
-    string? Reason,                  // optional caller-supplied note for the history
-    bool Force                       // override "already running" / "no commits behind" guards
-);
+public sealed record TriggerRequest(string? Reason, bool Force);
 
 public sealed record TriggerResponse(string RunId, string Phase, string Message);
+
+public sealed record RollbackRequest(string RunId);
+
+public sealed record RollbackResponse(string RunId, string Phase, string Message);
+
+// ─── Run-folder artefact shapes (ADR-0031) ────────────────────────────────
+
+/// <summary>
+/// Snapshot of state captured before phase 2 (pre) and again at phase 8
+/// (post). Schema: docs/schemas/update-run-snapshot.schema.json.
+/// </summary>
+public sealed record UpdateRunSnapshot(
+    string Kind,                       // "pre" | "post"
+    string RunId,
+    DateTime CapturedAt,
+    string Head,                       // short SHA
+    Dictionary<string, string> ProjectModes,
+    bool HealthzOk,
+    string? HealthzBody,
+    int? RunnerStatusHttp,
+    int? JobsRecentCount,
+    int? ClientsCount,
+    bool CliQuotaReachable
+);
+
+/// <summary>One row in <run-folder>/verification.jsonl. Schema: update-run-verification.schema.json.</summary>
+public sealed record VerificationCheck(
+    string RunId,
+    string Step,                       // healthz-stable | runner-status | jobs-grouped | clients | cli-quota | db-touch
+    bool Ok,
+    string? Observed,
+    string? Expected,
+    DateTime At,
+    int DurationMs
+);
+
+/// <summary>Compact failure summary surfaced on UpdateStatus and UpdateHistoryEntry.</summary>
+public sealed record VerificationFailure(string Step, string? Observed, string? Expected);
+
+public sealed record RollbackResult(
+    string RunId,
+    string Status,                     // "ok" | "failed"
+    string HeadBefore,
+    string HeadAfter,
+    DateTime StartedAt,
+    DateTime FinishedAt,
+    string? Error
+);

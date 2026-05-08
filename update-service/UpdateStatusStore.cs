@@ -26,6 +26,7 @@ public sealed class UpdateStatusStore
         _serviceVersion = typeof(UpdateStatusStore).Assembly.GetName().Version?.ToString() ?? "0.0.0";
         _status = new UpdateStatus(
             Phase: "idle",
+            PhaseLabel: null,
             Message: null,
             CurrentRunId: null,
             StartedAt: null,
@@ -37,11 +38,16 @@ public sealed class UpdateStatusStore
             LastFetchAt: null,
             LastUpdateAt: null,
             LastSuccessAt: HydrateLastSuccess(),
+            LastRunFinishedAt: null,
+            LastRunHeadBefore: null,
+            LastRunHeadAfter: null,
             IsRunning: false,
             BackendReachable: false,
             ServiceVersion: _serviceVersion,
             ProductVersion: SafeReadVersion(),
-            Mode: "manual"
+            Mode: "manual",
+            VerificationFailures: null,
+            AutoRollbackEnabled: false
         );
     }
 
@@ -59,10 +65,6 @@ public sealed class UpdateStatusStore
     {
         lock (_lock)
         {
-            // Refresh ProductVersion alongside HEAD so a `git pull` that
-            // changes the VERSION file is reflected at the same instant
-            // the new SHA is published. Otherwise the FE can briefly see
-            // "new HEAD, old version" which looks like a bug.
             _status = _status with { HeadLocal = headLocal, ProductVersion = SafeReadVersion() };
         }
     }
@@ -71,13 +73,12 @@ public sealed class UpdateStatusStore
     {
         lock (_lock)
         {
-            var now = DateTime.UtcNow;
             _status = _status with
             {
                 HeadOrigin = headOrigin,
                 BehindBy = behindBy,
                 PendingCommits = pending,
-                LastFetchAt = now,
+                LastFetchAt = DateTime.UtcNow,
                 ProductVersion = SafeReadVersion(),
             };
         }
@@ -93,7 +94,24 @@ public sealed class UpdateStatusStore
         }
     }
 
-    public void SetPhase(string phase, string? message, string? runId, DateTime? startedAt, DateTime? finishedAt = null, DateTime? lastSuccessAt = null)
+    /// <summary>
+    /// Phase transition. Phases that imply "in-flight" (anything that is not
+    /// idle / done / failed) flip <c>IsRunning=true</c> so the FE block-modal
+    /// stays mounted across the full pipeline.
+    /// </summary>
+    public void SetPhase(
+        string phase,
+        string? message,
+        string? runId,
+        DateTime? startedAt,
+        DateTime? finishedAt = null,
+        DateTime? lastSuccessAt = null,
+        DateTime? lastRunFinishedAt = null,
+        string? lastRunHeadBefore = null,
+        string? lastRunHeadAfter = null,
+        IReadOnlyList<VerificationFailure>? verificationFailures = null,
+        string? phaseLabel = null,
+        bool? autoRollbackEnabled = null)
     {
         lock (_lock)
         {
@@ -101,6 +119,7 @@ public sealed class UpdateStatusStore
             _status = _status with
             {
                 Phase = phase,
+                PhaseLabel = phaseLabel ?? _status.PhaseLabel,
                 Message = message,
                 CurrentRunId = runId,
                 StartedAt = startedAt,
@@ -108,6 +127,11 @@ public sealed class UpdateStatusStore
                 IsRunning = running,
                 LastUpdateAt = (phase == "done" || phase == "failed") ? DateTime.UtcNow : _status.LastUpdateAt,
                 LastSuccessAt = lastSuccessAt ?? _status.LastSuccessAt,
+                LastRunFinishedAt = lastRunFinishedAt ?? _status.LastRunFinishedAt,
+                LastRunHeadBefore = lastRunHeadBefore ?? _status.LastRunHeadBefore,
+                LastRunHeadAfter = lastRunHeadAfter ?? _status.LastRunHeadAfter,
+                VerificationFailures = verificationFailures ?? _status.VerificationFailures,
+                AutoRollbackEnabled = autoRollbackEnabled ?? _status.AutoRollbackEnabled,
             };
         }
     }

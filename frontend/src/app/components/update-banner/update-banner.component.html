@@ -2,16 +2,49 @@
   @case ('done') {
     <div class="update-banner update-banner--done" data-testid="update-banner-done" role="status" aria-live="polite">
       <span class="update-banner__text">
-        Updated to <strong>{{ status()!.headLocal }}</strong> ({{ status()!.message }}).
+        Update finished:
+        <code class="update-banner__head">{{ headBefore() }}</code>
+        <span class="update-banner__arrow"> → </span>
+        <code class="update-banner__head">{{ headAfter() }}</code>.
+        Reload required for the FE to pick up new code.
+      </span>
+      <button
+        type="button"
+        class="update-banner__btn update-banner__btn--primary"
+        data-testid="update-banner-reload"
+        (click)="hardReload()">Reload</button>
+      <button type="button" class="update-banner__btn" data-testid="update-banner-dismiss" (click)="dismiss()">Dismiss</button>
+    </div>
+  }
+  @case ('done-no-change') {
+    <div class="update-banner update-banner--done" data-testid="update-banner-done-no-change" role="status" aria-live="polite">
+      <span class="update-banner__text">
+        Update finished. No code change ({{ headAfter() }}); reload not required.
       </span>
       <button type="button" class="update-banner__btn" data-testid="update-banner-dismiss" (click)="dismiss()">Dismiss</button>
     </div>
   }
   @case ('failed') {
     <div class="update-banner update-banner--failed" data-testid="update-banner-failed" role="alert">
-      <span class="update-banner__text">
+      <div class="update-banner__text">
         Update failed: {{ status()?.message }}
-      </span>
+        @if (verificationFailures().length > 0) {
+          <ul class="update-banner__failures" data-testid="update-banner-verification-failures">
+            @for (f of verificationFailures(); track f.step) {
+              <li>
+                <strong>{{ f.step }}</strong>:
+                <span class="update-banner__observed">{{ f.observed }}</span>
+                <span class="update-banner__expected"> (expected {{ f.expected }})</span>
+              </li>
+            }
+          </ul>
+        }
+      </div>
+      <button
+        type="button"
+        class="update-banner__btn update-banner__btn--primary"
+        data-testid="update-banner-rollback"
+        (click)="rollback()">Roll back</button>
       <button type="button" class="update-banner__btn" (click)="dismiss()">Dismiss</button>
     </div>
   }

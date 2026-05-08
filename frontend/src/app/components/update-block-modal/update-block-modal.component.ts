@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { UpdateClientService } from '../../services/update.service';
+import { UpdatePhase } from '../../models/update-service.model';
 
 /**
  * Full-screen, click-blocking modal that takes over the UI while an update
@@ -8,9 +9,14 @@ import { UpdateClientService } from '../../services/update.service';
  * polling the standalone UpdateService on :5039 — even when the main
  * backend is mid-restart, isRunning stays true, the modal stays mounted.
  *
- * Renders the orchestrator phase as a human-readable line plus a small
- * spinning indicator. No "cancel" button: an in-flight stable restart
- * must run to completion (see UpdateOrchestrator.RunOrchestrationAsync).
+ * ADR-0031: the modal stays mounted across the full 9-phase pipeline
+ * (`phase ∈ {preparing, pausing-runners, pulling, building, restarting,
+ * verifying-after-restart, resuming, rolling-back}`). Each phase emits a
+ * server-side `phaseLabel` (gerund) which we render verbatim; a fallback
+ * map covers older Update Service builds that don't ship the label yet.
+ *
+ * No "cancel" button: an in-flight stable restart must run to completion
+ * (see UpdateOrchestrator.RunOrchestrationAsync).
  */
 @Component({
   selector: 'app-update-block-modal',
@@ -24,7 +30,7 @@ import { UpdateClientService } from '../../services/update.service';
           <div class="upd-block__spinner" aria-hidden="true">
             <span class="upd-block__spinner-ring"></span>
           </div>
-          <h2 class="upd-block__title">Updating Stable</h2>
+          <h2 class="upd-block__title" data-testid="update-block-title">{{ titleLine() }}</h2>
           <p class="upd-block__phase" data-testid="update-block-phase">{{ phaseLine() }}</p>
           @if (status()?.headLocal && status()?.headOrigin) {
             <p class="upd-block__heads">
@@ -50,7 +56,6 @@ import { UpdateClientService } from '../../services/update.service';
       align-items: center;
       justify-content: center;
       z-index: 500;
-      // Block all pointer events on the rest of the page.
       pointer-events: auto;
     }
     .upd-block__panel {
@@ -64,30 +69,16 @@ import { UpdateClientService } from '../../services/update.service';
       text-align: center;
       box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
     }
-    .upd-block__spinner {
-      width: 38px;
-      height: 38px;
-      margin: 0 auto 0.75rem;
-      display: grid;
-      place-items: center;
-    }
+    .upd-block__spinner { width: 38px; height: 38px; margin: 0 auto 0.75rem; display: grid; place-items: center; }
     .upd-block__spinner-ring {
-      width: 100%;
-      height: 100%;
+      width: 100%; height: 100%;
       border-radius: 50%;
       border: 3px solid rgba(137, 180, 250, 0.2);
       border-top-color: #89b4fa;
       animation: upd-block-spin 0.9s linear infinite;
     }
-    .upd-block__title {
-      margin: 0 0 0.5rem;
-      font-size: 1.05rem;
-      font-weight: 600;
-    }
-    .upd-block__phase {
-      margin: 0 0 0.5rem;
-      color: rgba(205, 214, 244, 0.85);
-    }
+    .upd-block__title { margin: 0 0 0.5rem; font-size: 1.05rem; font-weight: 600; }
+    .upd-block__phase { margin: 0 0 0.5rem; color: rgba(205, 214, 244, 0.85); }
     .upd-block__heads {
       margin: 0 0 0.25rem;
       font-family: var(--mono-stack, ui-monospace, monospace);
@@ -95,11 +86,7 @@ import { UpdateClientService } from '../../services/update.service';
       color: rgba(205, 214, 244, 0.7);
     }
     .upd-block__arrow { margin: 0 0.4rem; opacity: 0.6; }
-    .upd-block__hint {
-      margin: 0.75rem 0 0;
-      font-size: 0.75rem;
-      color: rgba(205, 214, 244, 0.55);
-    }
+    .upd-block__hint { margin: 0.75rem 0 0; font-size: 0.75rem; color: rgba(205, 214, 244, 0.55); }
     @keyframes upd-block-spin { to { transform: rotate(360deg); } }
   `]
 })
@@ -111,24 +98,34 @@ export class UpdateBlockModalComponent {
 
   readonly backendReachable = computed(() => this.status()?.backendReachable ?? false);
 
+  readonly titleLine = computed(() => {
+    const s = this.status();
+    if (s?.phase === 'rolling-back') return 'Rolling back update';
+    return 'Updating Stable';
+  });
+
   readonly phaseLine = computed(() => {
     const s = this.status();
     if (!s) return 'Starting…';
-    const phase = humanPhase(s.phase);
-    return s.message ? `${phase} — ${s.message}` : phase;
+    // Server-supplied label takes precedence (ADR-0031); fall back to a
+    // local map so older Update Service builds still render readable text.
+    const label = s.phaseLabel ?? humanPhase(s.phase);
+    return s.message ? `${label} — ${s.message}` : label;
   });
 }
 
-function humanPhase(phase: string): string {
+function humanPhase(phase: UpdatePhase | string): string {
   switch (phase) {
-    case 'preparing':       return 'Preparing update';
-    case 'pausing-runners': return 'Pausing runners';
-    case 'pulling':         return 'Pulling and restarting';
-    case 'building':        return 'Building';
-    case 'restarting':      return 'Waiting for backend';
-    case 'resuming':        return 'Resuming runners';
-    case 'done':            return 'Done';
-    case 'failed':          return 'Failed';
-    default:                return phase;
+    case 'preparing':                 return 'Preparing snapshot';
+    case 'pausing-runners':           return 'Pausing runners';
+    case 'pulling':                   return 'Pulling and rebuilding';
+    case 'building':                  return 'Building';
+    case 'restarting':                return 'Restarting backend';
+    case 'verifying-after-restart':   return 'Verifying restart';
+    case 'resuming':                  return 'Resuming runners';
+    case 'rolling-back':              return 'Rolling back';
+    case 'done':                      return 'Update verified';
+    case 'failed':                    return 'Update failed';
+    default:                          return String(phase);
   }
 }

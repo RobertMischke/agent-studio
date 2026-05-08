@@ -688,6 +688,46 @@ A structured per-job tool-call log (`logs/tool-calls.jsonl`) is appended on ever
 
 ---
 
+## ADR-0031 - Update Service end-to-end pipeline with verification, snapshots, and rollback (2026-05-08)
+
+**Decision.** The Update Service grows from a 4-step shell (`pause → pull → restart → resume`) into a 9-phase pipeline with structured artefacts at every stage. The block-modal stays mounted across the entire pipeline; phase transitions are explicit and FE-visible. A new `verifying-after-restart` phase (phase 6) replaces the single `/healthz=200` check with a six-step matrix; ANY failure flips the run to `phase=failed` with a typed `verificationFailures` array. A `rolling-back` phase exists as an explicit branch when verification fails. Each run writes a per-run folder under `<workspace>/logs/update-service-runs/<run-id>/` containing pre/post snapshots, captured stdout/stderr, a JSONL verification stream, and a human-readable `summary.md`. The legacy `<workspace>/logs/stable-updates.jsonl` row keeps its old shape with new optional fields appended; old consumers stay green.
+
+The 9 phases: `preparing` (snapshot pre-state) → `pausing-runners` → `pulling` (`git fetch && git pull --ff-only`) → `building` (`npm install` only when `frontend/package-lock.json` changed in the pulled diff) → `restarting` (`stop-stable.sh` + `start-stable.sh DETACH=1`) → `verifying-after-restart` (six checks, all must pass) → `resuming` (restore each project's pre mode) → `done` (write post-snapshot + summary, append history) → `idle`. Failure of any phase routes to `failed`, with rollback as opt-in (env `ATP_UPDATE_AUTO_ROLLBACK=1`) or operator-triggered (`POST /update/rollback { runId }`).
+
+The verification matrix:
+
+| Step | Pass criterion |
+|---|---|
+| `healthz-stable` | 5× `GET /healthz` with 3 s spacing, all 200 + body `"ok"` |
+| `runner-status` | 200 + every project from the pre-snapshot present |
+| `jobs-grouped` | 200 + JSON parses |
+| `clients` | 200 + at least 1 client (the `local-default` invariant) |
+| `cli-quota` | 200; degraded payload acceptable |
+| `db-touch` | `POST /api/_internal/probe` round-trips its sentinel; endpoint is gated by `Environment:IsDev=true` and returns 404 otherwise |
+
+The bar is intentionally strict: 5 of 6 still flips to `failed`. Soft-passing this would defeat the whole point - the live evidence on 2026-05-06 was a `phase=done` reported while a hosted service had just crashed seconds later. Loud failure beats silent success.
+
+The block-modal stays mounted while `phase ∈ {preparing, pausing-runners, pulling, building, restarting, verifying-after-restart, resuming, rolling-back}` - everything except `idle`, `done`, `failed`. After `done`, the block-modal dismisses on a 1 s hold; a green completion strip lingers for `DoneLingerSeconds` (default 60 s, driven by `lastRunFinishedAt`) so a previously-idle FE that started polling at 30 s cadence still observes the success. When `lastRunHeadAfter !== lastRunHeadBefore` the strip surfaces a "Reload" button - the explicit cure for the broken-HMR symptom seen on 2026-05-06, where HMR-swapped Angular components had orphaned click handlers and the user had no in-app signal that a hard reload was required.
+
+**Context.** Phase 1+2 of the Update Service shipped in commits `46f3b8f`, `2e89ee1`, `ca2aa06`. The 4-step shell returned `phase=done` after a single `/healthz=200`. On 2026-05-06 the user observed that stable backend printed `/healthz=200` once, the orchestrator marked `status=ok`, and a hosted service crashed seconds later - the user found the backend dead while the Update Service confidently claimed success. Separately, an update that completed in 165 s flipped `done` faster than the FE's 30 s idle poll, so the block-modal sometimes never mounted during a real run, leaving HMR-swapped Angular components broken with no clear signal that a hard reload was required. ADR-0021 (stable does not restart itself) and ADR-0030 (watchdog tuning + loud-failure routing) frame why this layer matters: there is no other process watching the Update Service, so its self-proof has to be inside the run itself.
+
+**Non-goals.**
+
+- Watchdog process. The pipeline runs in the existing UpdateService process; spawning a watchdog adds a third lifecycle layer with its own supervision needs.
+- Automatic rollback by default. Rollback hides bugs - if verification failed once, the most informative state is the failed state, not a silently-restored one. Auto-rollback is opt-in via env flag; manual rollback is the default expectation.
+- Partial verification (5 of 6 passes still soft-fails). The whole point of the strict bar is that any single sentinel breakage means the run lied; covering it up with "mostly ok" reproduces the original failure mode.
+- Mid-pipeline cancellation by the operator. The block-modal has no cancel button. Stop / start / rollback are explicit operator actions taken AFTER a run finishes (or fails); during a run the orchestrator owns the lifecycle.
+- Per-job dependency analysis (e.g. compute which projects need restarting based on file diff). The pipeline restarts the whole stable backend; this matches ADR-0021's "external watcher restarts at quiet boundaries".
+- New SignalR push for phase transitions. The FE already polls `/update/status` every 2 s during a run; adding a push channel would duplicate the surface. The existing `IsRunning` poll cadence covers all phase transitions.
+
+**Reasoning style.** Operationalise the AGENTS.md "Regression-proofing: data, then five-whys, then test-then-fix" workflow at the pipeline layer. Every successful update writes the full run folder; every failed update writes the partial run folder up to the failure point. A future drift between dev and stable is observable in `O(seconds)` from `<workspace>/logs/update-service-runs/` rather than reconstructed from chat. The verification matrix mirrors the load-bearing surface of the main backend: if the matrix passes, the user-visible app works; if it fails, we know which surface failed and can fix the right thing instead of restarting and hoping.
+
+**Implementation pointers.** [`update-service/UpdateOrchestrator.cs`](../update-service/UpdateOrchestrator.cs) (9-phase pipeline, rollback, summary writer); [`update-service/UpdateVerifier.cs`](../update-service/UpdateVerifier.cs) (six-check matrix, pure `EvaluateChecks` exposed for tests); [`update-service/RunFolder.cs`](../update-service/RunFolder.cs) (per-run artefact writer); [`update-service/Models.cs`](../update-service/Models.cs) (typed contract: `UpdateStatus`, `UpdateRunSnapshot`, `VerificationCheck`, `VerificationFailure`, `RollbackResult`); [`update-service/Program.cs`](../update-service/Program.cs) (`POST /update/rollback`); [`backend/Endpoints/InternalProbeEndpoints.cs`](../backend/Endpoints/InternalProbeEndpoints.cs) (`/api/_internal/probe` gated by `Environment:IsDev`); [`frontend/src/app/components/update-block-modal/update-block-modal.component.ts`](../frontend/src/app/components/update-block-modal/update-block-modal.component.ts) (phase labels); [`frontend/src/app/components/update-banner/update-banner.component.ts`](../frontend/src/app/components/update-banner/update-banner.component.ts) (60 s green linger, hard-reload affordance, manual rollback button); [`docs/schemas/update-run-snapshot.schema.json`](schemas/update-run-snapshot.schema.json); [`docs/schemas/update-run-verification.schema.json`](schemas/update-run-verification.schema.json).
+
+**Status.** Accepted.
+
+---
+
 ## ADR-0032 - Contract-bounded agents and loop guards (2026-05-07)
 
 **Decision.** When an LLM is invoked to interpret evidence on behalf of the orchestrator (failure analysis, drift classification, evidence summarization), the call sits between a typed input contract and a typed output contract. The rule engine, not the agent, decides the next action by mapping `(category, confidence)` from the output contract through a deterministic table. Cost and progress are bounded by an explicit two-sided guard: a Pre-Guard refuses the call when budget is exhausted; a Post-Guard refuses the action when the same slug plus category has cycled more than N times. Every loop class is registered in [`docs/loop-inventory.md`](loop-inventory.md) and verified by CI tests.

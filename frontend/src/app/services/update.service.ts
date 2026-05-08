@@ -1,7 +1,7 @@
 import { computed, effect, inject, Injectable, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
-import { TriggerRequest, TriggerResponse, UpdateHistoryEntry, UpdateStatus } from '../models/update-service.model';
+import { RollbackRequest, RollbackResponse, TriggerRequest, TriggerResponse, UpdateHistoryEntry, UpdateStatus } from '../models/update-service.model';
 
 /**
  * Talks to the standalone UpdateService (default port 5039). The endpoint
@@ -90,6 +90,19 @@ export class UpdateClientService {
     return await firstValueFrom(
       this.http.get<UpdateHistoryEntry[]>(`${this.baseUrl}/update/history?max=${max}`)
     );
+  }
+
+  /**
+   * ADR-0031 manual rollback. Replays phases 5+6+7 against the SHA recorded
+   * in the named run's pre-snapshot. Operator-driven; no automatic call.
+   */
+  async rollback(runId: string): Promise<RollbackResponse> {
+    const body: RollbackRequest = { runId };
+    const resp = await firstValueFrom(
+      this.http.post<RollbackResponse>(`${this.baseUrl}/update/rollback`, body)
+    );
+    this.refreshNow();
+    return resp;
   }
 
   // ─── internals ──────────────────────────────────────────────────────────
