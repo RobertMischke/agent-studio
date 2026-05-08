@@ -10,6 +10,7 @@ import {
 } from '@angular/core';
 import { JobService } from '../services/job.service';
 import {
+  AdHocUsageAggregate,
   CliType,
   QuotaReport,
   QuotaSnapshot,
@@ -283,6 +284,104 @@ interface QuotaRow {
               <p class="uhp__empty">No orchestrator activity recorded yet.</p>
             }
           </section>
+
+          <section class="uhp__sec uhp__sec--adhoc" data-testid="hquota-modal-adhoc">
+            <h4 class="uhp__sec-title">
+              Ad-hoc CLI usage
+              @if (adhoc(); as a) {
+                <span class="uhp__sec-sub">
+                  {{ a.calls }} call{{ a.calls === 1 ? '' : 's' }} · title-generate, summary, enhance, commit-msg, soft-reasoning, review-decision
+                </span>
+              }
+            </h4>
+
+            @if (adhoc(); as a) {
+              @if (a.calls === 0) {
+                <p class="uhp__empty">No ad-hoc Haiku calls recorded yet.</p>
+              } @else {
+                <div class="uhp__tot">
+                  <div class="uhp__tot-cell">
+                    <span class="uhp__tot-num">↑ {{ formatTokens(a.inputTokens) }}</span>
+                    <span class="uhp__tot-lbl">input</span>
+                  </div>
+                  <div class="uhp__tot-cell">
+                    <span class="uhp__tot-num">↓ {{ formatTokens(a.outputTokens) }}</span>
+                    <span class="uhp__tot-lbl">output</span>
+                  </div>
+                  <div class="uhp__tot-cell uhp__tot-cell--cost">
+                    <span class="uhp__tot-num">{{ formatUsd(a.estimatedApiCostUsd) }}</span>
+                    <span class="uhp__tot-lbl">theoretical API cost</span>
+                  </div>
+                </div>
+
+                @if (a.bySource.length > 0) {
+                  <details class="uhp__det" open>
+                    <summary>Per-source breakdown</summary>
+                    <table class="uhp__btab" data-testid="adhoc-by-source">
+                      <thead>
+                        <tr>
+                          <th>Source</th>
+                          <th class="uhp__num">Calls</th>
+                          <th class="uhp__num">Input</th>
+                          <th class="uhp__num">Output</th>
+                          <th class="uhp__num">API cost</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        @for (s of a.bySource; track s.source) {
+                          <tr>
+                            <td><code>{{ s.source }}</code></td>
+                            <td class="uhp__num">{{ s.calls }}</td>
+                            <td class="uhp__num">{{ formatTokens(s.inputTokens) }}</td>
+                            <td class="uhp__num">{{ formatTokens(s.outputTokens) }}</td>
+                            <td class="uhp__num">{{ formatUsd(s.estimatedApiCostUsd) }}</td>
+                          </tr>
+                        }
+                      </tbody>
+                    </table>
+                  </details>
+                }
+
+                @if (a.byDay.length > 0) {
+                  <details class="uhp__det">
+                    <summary>Per-day breakdown</summary>
+                    <table class="uhp__btab" data-testid="adhoc-by-day">
+                      <thead>
+                        <tr>
+                          <th>Date (UTC)</th>
+                          <th class="uhp__num">Calls</th>
+                          <th class="uhp__num">Input</th>
+                          <th class="uhp__num">Output</th>
+                          <th class="uhp__num">API cost</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        @for (d of a.byDay; track d.date) {
+                          <tr>
+                            <td>{{ d.date }}</td>
+                            <td class="uhp__num">{{ d.calls }}</td>
+                            <td class="uhp__num">{{ formatTokens(d.inputTokens) }}</td>
+                            <td class="uhp__num">{{ formatTokens(d.outputTokens) }}</td>
+                            <td class="uhp__num">{{ formatUsd(d.estimatedApiCostUsd) }}</td>
+                          </tr>
+                        }
+                      </tbody>
+                    </table>
+                  </details>
+                }
+
+                <p class="uhp__adhoc-log">
+                  Log:
+                  <code class="uhp__adhoc-path" [title]="a.logPath">{{ a.logPath }}</code>
+                  @if (a.logSizeBytes > 0) {
+                    <span class="uhp__sub-block">{{ formatBytes(a.logSizeBytes) }}, last write {{ formatLogModified(a.logModifiedAt) }}</span>
+                  }
+                </p>
+              }
+            } @else {
+              <p class="uhp__empty">Ad-hoc usage data unavailable.</p>
+            }
+          </section>
         </div>
       }
     </div>
@@ -492,6 +591,21 @@ interface QuotaRow {
     }
     .uhp__na { color: rgba(255,255,255,0.40); font-style: italic; }
 
+    .uhp__adhoc-log {
+      margin: 8px 0 0;
+      font-size: 11px;
+      color: rgba(255,255,255,0.55);
+      word-break: break-all;
+    }
+    .uhp__adhoc-path {
+      font-family: ui-monospace, "SF Mono", Consolas, monospace;
+      font-size: 10px;
+      color: rgba(205, 214, 244, 0.85);
+      background: rgba(255,255,255,0.06);
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+
     .uhp__disc {
       margin: 6px 0 0;
       padding: 6px 10px;
@@ -511,12 +625,14 @@ export class UsageHoverPanelComponent implements OnInit, OnDestroy {
   readonly open = signal(false);
   readonly report = signal<QuotaReport | null>(null);
   readonly tokens = signal<TokenSummaryAggregate | null>(null);
+  readonly adhoc = signal<AdHocUsageAggregate | null>(null);
   readonly refreshing = signal<{ [k: string]: boolean }>({});
   readonly refreshingAll = signal(false);
   readonly nowTick = signal(Date.now());
 
   private quotaPollTimer: ReturnType<typeof setInterval> | null = null;
   private tokenPollTimer: ReturnType<typeof setInterval> | null = null;
+  private adhocPollTimer: ReturnType<typeof setInterval> | null = null;
   private tickTimer: ReturnType<typeof setInterval> | null = null;
   private openTimer: ReturnType<typeof setTimeout> | null = null;
   private closeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -533,14 +649,17 @@ export class UsageHoverPanelComponent implements OnInit, OnDestroy {
     this.fetchQuota();
     this.fetchTokensCached();
     this.fetchTokensFresh();
+    this.fetchAdHoc();
     this.quotaPollTimer = setInterval(() => this.fetchQuota(), 60_000);
     this.tokenPollTimer = setInterval(() => this.fetchTokensFresh(), 30_000);
+    this.adhocPollTimer = setInterval(() => this.fetchAdHoc(), 60_000);
     this.tickTimer = setInterval(() => this.nowTick.set(Date.now()), 1_000);
   }
 
   ngOnDestroy(): void {
     if (this.quotaPollTimer != null) clearInterval(this.quotaPollTimer);
     if (this.tokenPollTimer != null) clearInterval(this.tokenPollTimer);
+    if (this.adhocPollTimer != null) clearInterval(this.adhocPollTimer);
     if (this.tickTimer != null) clearInterval(this.tickTimer);
     if (this.openTimer != null) clearTimeout(this.openTimer);
     if (this.closeTimer != null) clearTimeout(this.closeTimer);
@@ -566,6 +685,7 @@ export class UsageHoverPanelComponent implements OnInit, OnDestroy {
       // Refresh on open so the user sees a current view, not a stale poll.
       this.fetchQuota();
       this.fetchTokensFresh();
+      this.fetchAdHoc();
     }, 120);
   }
   private scheduleClose(): void {
@@ -602,6 +722,13 @@ export class UsageHoverPanelComponent implements OnInit, OnDestroy {
   fetchTokensFresh(): void {
     this.jobService.getTokenSummaryAggregate().subscribe({
       next: (a) => this.tokens.set(a),
+      error: () => { /* keep last value */ },
+    });
+  }
+
+  fetchAdHoc(): void {
+    this.jobService.getAdHocUsage().subscribe({
+      next: (a) => this.adhoc.set(a),
       error: () => { /* keep last value */ },
     });
   }
@@ -651,6 +778,20 @@ export class UsageHoverPanelComponent implements OnInit, OnDestroy {
     if (n < 0.1) return '$' + n.toFixed(4);
     if (n < 1)   return '$' + n.toFixed(3);
     return '$' + n.toFixed(2);
+  }
+
+  formatBytes(n: number): string {
+    if (!Number.isFinite(n) || n <= 0) return '0 B';
+    if (n < 1024) return n + ' B';
+    if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB';
+    return (n / 1024 / 1024).toFixed(1) + ' MB';
+  }
+
+  formatLogModified(iso: string | null): string {
+    if (!iso) return 'never';
+    const ms = Date.parse(iso);
+    if (!Number.isFinite(ms)) return 'never';
+    return this.formatAgo(Date.now() - ms);
   }
 
   private buildRow(s: QuotaSnapshot, ttlMs: number, now: number): QuotaRow {

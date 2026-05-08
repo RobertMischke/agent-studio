@@ -113,6 +113,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     public Func<string, string, string, TimeSpan, CancellationToken, Task<string>> CliRunner { get; set; }
         = DefaultRunCliAsync;
 
+    private readonly OrchestratorApi.Services.AdHoc.AdHocUsageRecorder? _usage;
+
     public ReviewDecisionOrchestrator(
         JobScannerService scanner,
         JobStateMachine stateMachine,
@@ -121,7 +123,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         AspectRunnerService aspectRunner,
         AutoReviewStatusSnapshot statusSnapshot,
         IConfiguration configuration,
-        ILogger<ReviewDecisionOrchestrator> logger)
+        ILogger<ReviewDecisionOrchestrator> logger,
+        OrchestratorApi.Services.AdHoc.AdHocUsageRecorder? usage = null)
     {
         _scanner = scanner;
         _stateMachine = stateMachine;
@@ -131,6 +134,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _statusSnapshot = statusSnapshot;
         _configuration = configuration;
         _logger = logger;
+        _usage = usage;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -312,7 +316,20 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         string response = string.Empty;
         try
         {
-            response = await CliRunner(cliBinary, model, prompt, TimeSpan.FromSeconds(120), ct);
+            var sw = OrchestratorApi.Services.AdHoc.AdHocClaudeInvoker.StartTiming();
+            var rawResponse = await CliRunner(cliBinary, model, prompt, TimeSpan.FromSeconds(120), ct);
+            sw.Stop();
+            var (parsedText, callUsage) = OrchestratorApi.Services.AdHoc.AdHocClaudeInvoker.ParseOrFallback(rawResponse, model);
+            OrchestratorApi.Services.AdHoc.AdHocClaudeInvoker.Record(
+                _usage,
+                OrchestratorApi.Models.AdHocUsageSources.ReviewDecision,
+                model,
+                callUsage,
+                sw.ElapsedMilliseconds,
+                ok: true,
+                project: entry.Name,
+                jobId: pending.Job.Id);
+            response = parsedText;
             _callTimestamps.Enqueue(DateTime.UtcNow);
         }
         catch (Exception ex)
@@ -1162,6 +1179,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         psi.ArgumentList.Add("--dangerously-skip-permissions");
         psi.ArgumentList.Add("--model");
         psi.ArgumentList.Add(model);
+        psi.ArgumentList.Add("--output-format");
+        psi.ArgumentList.Add("json");
         psi.ArgumentList.Add("-p");
         psi.ArgumentList.Add(prompt);
 

@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using OrchestratorApi.Models;
+using OrchestratorApi.Services.AdHoc;
 using OrchestratorApi.Services.Cli;
 
 namespace OrchestratorApi.Services;
@@ -21,21 +22,24 @@ public sealed class SummaryGenerationService
     private readonly ILogger<SummaryGenerationService> _logger;
     private readonly IConfiguration _configuration;
     private readonly RuntimePromptService _prompts;
+    private readonly AdHocUsageRecorder? _usage;
     private readonly ConcurrentDictionary<string, JobSummaryState> _states = new();
 
     public SummaryGenerationService(ILogger<SummaryGenerationService> logger, IConfiguration configuration)
-        : this(logger, configuration, new RuntimePromptService(configuration, NullLogger<RuntimePromptService>.Instance))
+        : this(logger, configuration, new RuntimePromptService(configuration, NullLogger<RuntimePromptService>.Instance), null)
     {
     }
 
     public SummaryGenerationService(
         ILogger<SummaryGenerationService> logger,
         IConfiguration configuration,
-        RuntimePromptService prompts)
+        RuntimePromptService prompts,
+        AdHocUsageRecorder? usage = null)
     {
         _logger = logger;
         _configuration = configuration;
         _prompts = prompts;
+        _usage = usage;
     }
 
     public JobSummaryState? GetState(string jobKey)
@@ -165,10 +169,9 @@ public sealed class SummaryGenerationService
             StandardOutputEncoding = System.Text.Encoding.UTF8,
             StandardErrorEncoding = System.Text.Encoding.UTF8
         };
-        psi.ArgumentList.Add("-p");
-        psi.ArgumentList.Add("--model"); psi.ArgumentList.Add(model);
-        psi.ArgumentList.Add("--dangerously-skip-permissions");
+        foreach (var arg in AdHocClaudeInvoker.BuildArgs(model)) psi.ArgumentList.Add(arg);
 
+        var sw = Stopwatch.StartNew();
         try
         {
             using var p = Process.Start(psi);
@@ -188,10 +191,16 @@ public sealed class SummaryGenerationService
 
             var stdout = await stdoutTask;
             var stderr = await stderrTask;
+            sw.Stop();
             if (p.ExitCode != 0)
+            {
+                AdHocClaudeInvoker.Record(_usage, AdHocUsageSources.SummaryGeneration, model, null, sw.ElapsedMilliseconds, ok: false);
                 return (false, null, $"claude exited {p.ExitCode}: {stderr.Trim()}");
+            }
 
-            return (true, SanitizeMarkdown(stdout), null);
+            var (text, usage) = AdHocClaudeInvoker.ParseOrFallback(stdout, model);
+            AdHocClaudeInvoker.Record(_usage, AdHocUsageSources.SummaryGeneration, model, usage, sw.ElapsedMilliseconds, ok: true);
+            return (true, SanitizeMarkdown(text), null);
         }
         catch (OperationCanceledException)
         {

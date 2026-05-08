@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport, QuotaReport, QuotaSnapshot, GitStatus, ClaudeSessionResponse, JobCommitDetail, SessionEventsResponse, ContinueMode, ContinueJobResponse, OrchestratorLogResponse, TokenSummary, TokenSummaryAggregate, TokenTimeline, OrchestratorSessionResponse, OrchestratorChatResponse, OrchestratorChatTurn, ProjectChatScrollResponse, ProjectChatSearchResponse, ProjectChatTurnResponse, RunTimeline, RunCommitsResponse, RunFilesResponse, RunDiffResponse, RoadmapIntakeCandidate, RoadmapIntakeResponse, RoadmapIntakeConfirmResponse, JobScreenshotsResponse, WorkspaceScreenshotsResponse, ProjectTokenUsageSummary, ProjectTokenHeatmap, ProjectExpensiveJobsResponse, ProjectJobTokenDetail } from '../models/job.model';
+import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport, QuotaReport, QuotaSnapshot, GitStatus, ClaudeSessionResponse, JobCommitDetail, SessionEventsResponse, ContinueMode, ContinueJobResponse, OrchestratorLogResponse, TokenSummary, TokenSummaryAggregate, TokenTimeline, AdHocUsageAggregate, OrchestratorSessionResponse, OrchestratorChatResponse, OrchestratorChatTurn, ProjectChatScrollResponse, ProjectChatSearchResponse, ProjectChatTurnResponse, RunTimeline, RunCommitsResponse, RunFilesResponse, RunDiffResponse, RoadmapIntakeCandidate, RoadmapIntakeResponse, RoadmapIntakeConfirmResponse, JobScreenshotsResponse, WorkspaceScreenshotsResponse, ProjectTokenUsageSummary, ProjectTokenHeatmap, ProjectExpensiveJobsResponse, ProjectJobTokenDetail } from '../models/job.model';
 import { ErrorDialogService } from './error-dialog.service';
 
 type LaneKey = keyof GroupedJobs;
@@ -634,6 +634,15 @@ export class JobService {
       `${this.baseUrl}/runner/token-summary-aggregate/cached`,
       { observe: 'response' }
     );
+  }
+
+  /**
+   * Workspace-wide ad-hoc Haiku usage rollup. Powers the "Ad-hoc CLI usage"
+   * section in the status-bar hover panel. Cheap (reads one JSONL file);
+   * safe to poll alongside the project-token aggregate.
+   */
+  getAdHocUsage() {
+    return this.http.get<AdHocUsageAggregate>(`${this.baseUrl}/adhoc-usage/`);
   }
 
   /**

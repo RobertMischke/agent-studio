@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.Text;
+using OrchestratorApi.Models;
+using OrchestratorApi.Services.AdHoc;
 using OrchestratorApi.Services.Bus;
 
 namespace OrchestratorApi.Services.Supervisor;
@@ -26,6 +28,7 @@ public sealed class SoftReasoningHostedService : BackgroundService
     private readonly IConfiguration _configuration;
     private readonly ILogger<SoftReasoningHostedService> _logger;
     private readonly AgentMessageBusBridge? _bus;
+    private readonly AdHocUsageRecorder? _usage;
 
     private readonly Queue<DateTime> _callTimestamps = new();
 
@@ -35,7 +38,8 @@ public sealed class SoftReasoningHostedService : BackgroundService
         RuntimePromptService prompts,
         IConfiguration configuration,
         ILogger<SoftReasoningHostedService> logger,
-        AgentMessageBusBridge? bus = null)
+        AgentMessageBusBridge? bus = null,
+        AdHocUsageRecorder? usage = null)
     {
         _taskRunner = taskRunner;
         _observe = observe;
@@ -43,6 +47,7 @@ public sealed class SoftReasoningHostedService : BackgroundService
         _configuration = configuration;
         _logger = logger;
         _bus = bus;
+        _usage = usage;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -98,7 +103,11 @@ public sealed class SoftReasoningHostedService : BackgroundService
                 var observation = await _observe.ObserveAsync(project, ct);
                 if (string.IsNullOrEmpty(observation.CurrentJobId)) continue; // nothing to reason about while idle
                 var prompt = BuildPrompt(project, observation);
-                var output = await RunCliAsync(cliBinary, model, prompt, TimeSpan.FromSeconds(120), ct);
+                var sw = AdHocClaudeInvoker.StartTiming();
+                var rawOutput = await RunCliAsync(cliBinary, model, prompt, TimeSpan.FromSeconds(120), ct);
+                sw.Stop();
+                var (output, callUsage) = AdHocClaudeInvoker.ParseOrFallback(rawOutput, model);
+                AdHocClaudeInvoker.Record(_usage, AdHocUsageSources.SoftReasoning, model, callUsage, sw.ElapsedMilliseconds, ok: true, project: project, jobId: observation.CurrentJobId);
                 _callTimestamps.Enqueue(DateTime.UtcNow);
                 var advisories = SoftReasoningParsing.Parse(output, project, DateTime.UtcNow, observation.CurrentJobId);
                 foreach (var advisory in advisories)
@@ -167,6 +176,8 @@ public sealed class SoftReasoningHostedService : BackgroundService
         psi.ArgumentList.Add("--dangerously-skip-permissions");
         psi.ArgumentList.Add("--model");
         psi.ArgumentList.Add(model);
+        psi.ArgumentList.Add("--output-format");
+        psi.ArgumentList.Add("json");
         psi.ArgumentList.Add("-p");
         psi.ArgumentList.Add(prompt);
 

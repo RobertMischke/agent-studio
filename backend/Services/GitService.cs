@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using OrchestratorApi.Models;
+using OrchestratorApi.Services.AdHoc;
 using OrchestratorApi.Services.Cli;
 using OrchestratorApi.Services.Jobs;
 
@@ -112,17 +113,20 @@ public class GitService
     private readonly JobScannerService _scanner;
     private readonly IConfiguration _config;
     private readonly RuntimePromptService _prompts;
+    private readonly AdHocUsageRecorder? _usage;
 
     public GitService(
         ILogger<GitService> logger,
         JobScannerService scanner,
         IConfiguration config,
-        RuntimePromptService? prompts = null)
+        RuntimePromptService? prompts = null,
+        AdHocUsageRecorder? usage = null)
     {
         _logger = logger;
         _scanner = scanner;
         _config = config;
         _prompts = prompts ?? new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
+        _usage = usage;
     }
 
     private readonly object _summaryLock = new();
@@ -622,10 +626,9 @@ public class GitService
             StandardOutputEncoding = System.Text.Encoding.UTF8,
             StandardErrorEncoding = System.Text.Encoding.UTF8
         };
-        psi.ArgumentList.Add("-p");
-        psi.ArgumentList.Add("--model"); psi.ArgumentList.Add(model);
-        psi.ArgumentList.Add("--dangerously-skip-permissions");
+        foreach (var arg in AdHocClaudeInvoker.BuildArgs(model)) psi.ArgumentList.Add(arg);
 
+        var sw = Stopwatch.StartNew();
         try
         {
             using var p = Process.Start(psi)!;
@@ -638,10 +641,17 @@ public class GitService
             await p.WaitForExitAsync(cts.Token);
             var stdout = await stdoutTask;
             var stderr = await stderrTask;
+            sw.Stop();
             if (p.ExitCode != 0)
+            {
+                AdHocClaudeInvoker.Record(_usage, AdHocUsageSources.CommitMessage, model, null, sw.ElapsedMilliseconds, ok: false, jobId: jobId);
                 return new GenerateMessageResult(null, $"claude exited {p.ExitCode}: {stderr.Trim()}");
+            }
 
-            var msg = SanitizeCommitMessage(stdout);
+            var (text, callUsage) = AdHocClaudeInvoker.ParseOrFallback(stdout, model);
+            AdHocClaudeInvoker.Record(_usage, AdHocUsageSources.CommitMessage, model, callUsage, sw.ElapsedMilliseconds, ok: true, jobId: jobId);
+
+            var msg = SanitizeCommitMessage(text);
             if (string.IsNullOrWhiteSpace(msg))
                 return new GenerateMessageResult(null, "claude returned an empty message.");
             return new GenerateMessageResult(msg, null);

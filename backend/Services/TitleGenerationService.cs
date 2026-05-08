@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using OrchestratorApi.Models;
+using OrchestratorApi.Services.AdHoc;
 using OrchestratorApi.Services.Cli;
 
 namespace OrchestratorApi.Services;
@@ -30,15 +32,18 @@ public class TitleGenerationService
     private readonly ILogger<TitleGenerationService> _logger;
     private readonly IConfiguration _configuration;
     private readonly RuntimePromptService _prompts;
+    private readonly AdHocUsageRecorder? _usage;
 
     public TitleGenerationService(
         ILogger<TitleGenerationService> logger,
         IConfiguration configuration,
-        RuntimePromptService prompts)
+        RuntimePromptService prompts,
+        AdHocUsageRecorder? usage = null)
     {
         _logger = logger;
         _configuration = configuration;
         _prompts = prompts;
+        _usage = usage;
     }
 
     /// <summary>
@@ -58,11 +63,20 @@ public class TitleGenerationService
         var prompt = _prompts.Render(TemplateName,
             new Dictionary<string, string?> { ["input"] = bounded });
 
+        var sw = AdHocClaudeInvoker.StartTiming();
         var (ok, raw, error) = await InvokeAsync(prompt, ct);
-        if (!ok || string.IsNullOrWhiteSpace(raw))
+        sw.Stop();
+
+        var fallbackModel = _configuration["TitleGeneration:Model"]
+                            ?? _configuration["ClaudeCli:SummaryModel"]
+                            ?? "claude-haiku-4-5";
+        var (text, usage) = AdHocClaudeInvoker.ParseOrFallback(raw, fallbackModel);
+        AdHocClaudeInvoker.Record(_usage, AdHocUsageSources.TitleGeneration, fallbackModel, usage, sw.ElapsedMilliseconds, ok);
+
+        if (!ok || string.IsNullOrWhiteSpace(text))
             throw new InvalidOperationException(error ?? "Title generator returned empty response");
 
-        return SanitizeTitle(raw!);
+        return SanitizeTitle(text);
     }
 
     /// <summary>
@@ -138,9 +152,7 @@ public class TitleGenerationService
             StandardOutputEncoding = System.Text.Encoding.UTF8,
             StandardErrorEncoding = System.Text.Encoding.UTF8
         };
-        psi.ArgumentList.Add("-p");
-        psi.ArgumentList.Add("--model"); psi.ArgumentList.Add(model);
-        psi.ArgumentList.Add("--dangerously-skip-permissions");
+        foreach (var arg in AdHocClaudeInvoker.BuildArgs(model)) psi.ArgumentList.Add(arg);
 
         var sw = Stopwatch.StartNew();
         try

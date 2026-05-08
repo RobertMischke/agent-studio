@@ -542,6 +542,63 @@ export interface TokenSummaryByProject {
 }
 
 /**
+ * Workspace-wide rollup of ad-hoc Claude Haiku CLI calls (title-generate,
+ * status.md summary, prompt enhance, commit-message, supervisor soft
+ * reasoning, etc.). These calls live outside the per-project orchestrator
+ * log; the status-bar usage modal renders this aggregate in its own
+ * section so the user can see the ambient Haiku spend the orchestrator
+ * incurs on top of the main pipeline. Mirrors backend
+ * `AdHocUsageAggregate`.
+ */
+export interface AdHocUsageAggregate {
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  estimatedApiCostUsd: number;
+  allModelsPriced: boolean;
+  bySource: AdHocUsageBySource[];
+  byDay: AdHocUsageByDay[];
+  byModel: AdHocUsageByModel[];
+  logPath: string;
+  logSizeBytes: number;
+  logModifiedAt: string | null;
+  disclaimer: string;
+}
+
+export interface AdHocUsageBySource {
+  source: string;
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  estimatedApiCostUsd: number;
+}
+
+export interface AdHocUsageByDay {
+  date: string;
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  estimatedApiCostUsd: number;
+}
+
+export interface AdHocUsageByModel {
+  model: string;
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  estimatedApiCostUsd: number;
+  modelPriced: boolean;
+}
+
+/**
  * Workspace token-usage timeline. Mirrors backend `TokenTimeline`.
  * Powers the workspace token view at `#/workspace/tokens`. Each cell is
  * a (project, time-bucket) datum that the chart stacks on the y axis.

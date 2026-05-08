@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
+using OrchestratorApi.Models;
+using OrchestratorApi.Services.AdHoc;
 using OrchestratorApi.Services.Cli;
 
 namespace OrchestratorApi.Services;
@@ -30,15 +32,18 @@ public class PromptEnhancementService
     private readonly ILogger<PromptEnhancementService> _logger;
     private readonly IConfiguration _configuration;
     private readonly RuntimePromptService _prompts;
+    private readonly AdHocUsageRecorder? _usage;
 
     public PromptEnhancementService(
         ILogger<PromptEnhancementService> logger,
         IConfiguration configuration,
-        RuntimePromptService prompts)
+        RuntimePromptService prompts,
+        AdHocUsageRecorder? usage = null)
     {
         _logger = logger;
         _configuration = configuration;
         _prompts = prompts;
+        _usage = usage;
     }
 
     public record EnhanceResult(string RefinedPrompt, string Intent, IReadOnlyList<string> Tags);
@@ -61,11 +66,21 @@ public class PromptEnhancementService
         var prompt = _prompts.Render(TemplateName,
             new Dictionary<string, string?> { ["input"] = bounded });
 
+        var sw = AdHocClaudeInvoker.StartTiming();
         var (ok, raw, error) = await InvokeAsync(prompt, ct);
-        if (!ok || string.IsNullOrWhiteSpace(raw))
+        sw.Stop();
+
+        var fallbackModel = _configuration["PromptEnhancement:Model"]
+                            ?? _configuration["TitleGeneration:Model"]
+                            ?? _configuration["ClaudeCli:SummaryModel"]
+                            ?? "claude-haiku-4-5";
+        var (text, usage) = AdHocClaudeInvoker.ParseOrFallback(raw, fallbackModel);
+        AdHocClaudeInvoker.Record(_usage, AdHocUsageSources.PromptEnhancement, fallbackModel, usage, sw.ElapsedMilliseconds, ok);
+
+        if (!ok || string.IsNullOrWhiteSpace(text))
             throw new InvalidOperationException(error ?? "Prompt enhancer returned empty response");
 
-        return Parse(raw!);
+        return Parse(text);
     }
 
     /// <summary>
@@ -206,9 +221,7 @@ public class PromptEnhancementService
             StandardOutputEncoding = System.Text.Encoding.UTF8,
             StandardErrorEncoding = System.Text.Encoding.UTF8
         };
-        psi.ArgumentList.Add("-p");
-        psi.ArgumentList.Add("--model"); psi.ArgumentList.Add(model);
-        psi.ArgumentList.Add("--dangerously-skip-permissions");
+        foreach (var arg in AdHocClaudeInvoker.BuildArgs(model)) psi.ArgumentList.Add(arg);
 
         var sw = Stopwatch.StartNew();
         try

@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using OrchestratorApi.Models;
+using OrchestratorApi.Services.AdHoc;
 using OrchestratorApi.Services.Jobs;
 
 namespace OrchestratorApi.Services.Runner;
@@ -42,10 +43,13 @@ public sealed class AspectRunnerService
     public Func<string, string, string, string, TimeSpan, CancellationToken, Task<string>> CliRunner { get; set; }
         = DefaultRunCliAsync;
 
-    public AspectRunnerService(RuntimePromptService prompts, ILogger<AspectRunnerService> logger)
+    private readonly AdHocUsageRecorder? _usage;
+
+    public AspectRunnerService(RuntimePromptService prompts, ILogger<AspectRunnerService> logger, AdHocUsageRecorder? usage = null)
     {
         _prompts = prompts;
         _logger = logger;
+        _usage = usage;
     }
 
     /// <summary>
@@ -112,7 +116,12 @@ public sealed class AspectRunnerService
             string response;
             try
             {
-                response = await CliRunner(def.Id, cliBinary, model, prompt, perAspectTimeout, ct);
+                var sw = AdHocClaudeInvoker.StartTiming();
+                var rawResponse = await CliRunner(def.Id, cliBinary, model, prompt, perAspectTimeout, ct);
+                sw.Stop();
+                var (parsedText, callUsage) = AdHocClaudeInvoker.ParseOrFallback(rawResponse, model);
+                AdHocClaudeInvoker.Record(_usage, AdHocUsageSources.ReviewDecision, model, callUsage, sw.ElapsedMilliseconds, ok: true, project: inputs.Project, jobId: inputs.JobId);
+                response = parsedText;
             }
             catch (Exception ex)
             {
@@ -260,6 +269,8 @@ public sealed class AspectRunnerService
         psi.ArgumentList.Add("--dangerously-skip-permissions");
         psi.ArgumentList.Add("--model");
         psi.ArgumentList.Add(model);
+        psi.ArgumentList.Add("--output-format");
+        psi.ArgumentList.Add("json");
         psi.ArgumentList.Add("-p");
         psi.ArgumentList.Add(prompt);
 

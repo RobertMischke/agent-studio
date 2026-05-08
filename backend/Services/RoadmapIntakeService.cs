@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 using OrchestratorApi.Models;
+using OrchestratorApi.Services.AdHoc;
 using OrchestratorApi.Services.Cli;
 using OrchestratorApi.Services.Jobs;
 
@@ -33,17 +34,20 @@ public class RoadmapIntakeService
     private readonly IConfiguration _configuration;
     private readonly RuntimePromptService _prompts;
     private readonly JobMutationService _mutations;
+    private readonly AdHocUsageRecorder? _usage;
 
     public RoadmapIntakeService(
         ILogger<RoadmapIntakeService> logger,
         IConfiguration configuration,
         RuntimePromptService prompts,
-        JobMutationService mutations)
+        JobMutationService mutations,
+        AdHocUsageRecorder? usage = null)
     {
         _logger = logger;
         _configuration = configuration;
         _prompts = prompts;
         _mutations = mutations;
+        _usage = usage;
     }
 
     public const string TemplateName = "roadmap-intake.md";
@@ -66,11 +70,20 @@ public class RoadmapIntakeService
         var prompt = _prompts.Render(TemplateName,
             new Dictionary<string, string?> { ["input"] = bounded });
 
+        var sw = AdHocClaudeInvoker.StartTiming();
         var (ok, raw, error) = await InvokeSplitterAsync(prompt, ct);
-        if (!ok || string.IsNullOrWhiteSpace(raw))
+        sw.Stop();
+
+        var fallbackModel = _configuration["RoadmapIntake:Model"]
+                            ?? _configuration["ClaudeCli:SummaryModel"]
+                            ?? "claude-haiku-4-5";
+        var (resultText, usage) = AdHocClaudeInvoker.ParseOrFallback(raw, fallbackModel);
+        AdHocClaudeInvoker.Record(_usage, AdHocUsageSources.RoadmapIntake, fallbackModel, usage, sw.ElapsedMilliseconds, ok);
+
+        if (!ok || string.IsNullOrWhiteSpace(resultText))
             throw new InvalidOperationException(error ?? "Splitter returned empty response");
 
-        return ParseSplitterJson(raw!);
+        return ParseSplitterJson(resultText);
     }
 
     /// <summary>
@@ -239,9 +252,7 @@ public class RoadmapIntakeService
             StandardOutputEncoding = System.Text.Encoding.UTF8,
             StandardErrorEncoding = System.Text.Encoding.UTF8
         };
-        psi.ArgumentList.Add("-p");
-        psi.ArgumentList.Add("--model"); psi.ArgumentList.Add(model);
-        psi.ArgumentList.Add("--dangerously-skip-permissions");
+        foreach (var arg in AdHocClaudeInvoker.BuildArgs(model)) psi.ArgumentList.Add(arg);
 
         try
         {
