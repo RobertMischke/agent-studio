@@ -67,7 +67,7 @@ Every message is small (target under 4 KB), append-only, and immutable once writ
 ### 3.2 Consumers
 
 - **Frontend project view**: subscribes to a per-project SignalR stream and renders the timeline + participant graph.
-- **System-review monitor (Layer 3)**: tail-reads `logs/bus/<project>/<date>.jsonl`, joins on `runId`, and writes a Markdown health report.
+- **System-review monitor (Layer 3)**: tail-reads `logs/bus/<project>/<date>.jsonl`, joins on `runId`, and writes a Markdown health report. The skill prompt at [`scripts/supervisor/system-review.md`](../scripts/supervisor/system-review.md) and the helper at [`scripts/supervisor/system-health-check.mjs`](../scripts/supervisor/system-health-check.mjs) implement eight structured checks (long silent periods, repeated interventions, repeated failed/cancelled runs, token spikes, supporting jobs without accepted review, stuck loops, weak review evidence, backend crash markers); the helper accepts an exported JSONL fixture too, so the monitor is exercisable before every producer is wired into the live bus.
 - **Companion app relay**: serves the most recent N messages per project to the phone PWA, filtered to `decision`, `intervention`, and `question` kinds for the small surface.
 - **Backend in-memory store**: keeps the last K messages per project hot for `/api/projects/{id}/bus` queries; older messages stay on disk and are paged in lazily.
 

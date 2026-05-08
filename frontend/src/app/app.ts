@@ -339,7 +339,8 @@ interface ActiveFilterPill {
               <section class="lane-group"
                        [attr.data-testid]="'lane-group-' + g.id"
                        [class.lane-group--collapsed]="isContainerCollapsed(g.id)"
-                       [class.lane-group--focused]="isContainerFocused(g.id)">
+                       [class.lane-group--focused]="isContainerFocused(g.id)"
+                       [style.flex-grow]="expandedLaneCount(g)">
                 <header class="lane-group__head">
                   <button type="button"
                           class="lane-group__toggle"
@@ -1663,6 +1664,28 @@ interface ActiveFilterPill {
        * width between them. Below the sum-of-min-widths the dashboard's
        * overflow-x: auto scrolls horizontally.
        *
+       * flex-grow is overridden inline in the template via
+       * [style.flex-grow]="expandedLaneCount(g)" so every group grows
+       * in proportion to the number of expanded lanes it owns. With a
+       * uniform flex-grow: 1 the dashboard's leftover horizontal space
+       * was split evenly across the three groups, which then divided
+       * their share over different lane counts: lanes inside smaller
+       * groups (e.g. Ready when Backlog held three expanded lanes,
+       * vs. five elsewhere) ended up visibly wider than lanes
+       * elsewhere on the board, with a phantom horizontal scroll
+       * indicator at the bottom of the dashboard once the resulting
+       * sub-pixel rounding pushed total content width past viewport.
+       *
+       * flex-basis is 0 (not auto): with auto the basis is the
+       * group's preferred content width, and the content is dominated
+       * by per-lane card max-content sizes that vary across groups
+       * (Auto Review with running cards is wider than In Preparation
+       * with placeholder copy). Equal-share growth then produced
+       * unequal final widths because the bases were unequal. With
+       * basis: 0 the entire dashboard width is distributed by
+       * flex-grow alone, so every expanded lane lands on the same
+       * width regardless of which group it lives in.
+       *
        * No min-width: 0 here. Default min-width: auto on a flex item
        * resolves to its min-content size, which is the sum of the
        * inner .column min-widths plus gaps. Forcing min-width: 0
@@ -1672,7 +1695,7 @@ interface ActiveFilterPill {
        * as its lanes need and pushes the overflow into the
        * dashboard's horizontal scroll, where it belongs.
        */
-      flex: 1 1 auto;
+      flex: 1 1 0;
     }
     .lane-group__head {
       display: flex;
@@ -4165,6 +4188,22 @@ export class App implements OnInit {
 
   isLaneCollapsed(state: string): boolean {
     return this.collapsedLanes().has(state);
+  }
+
+  /**
+   * Flex-grow factor for a lane group. The dashboard distributes its
+   * leftover horizontal space across the three groups; if every group
+   * grew by the same factor (`flex: 1 1 auto`) groups with fewer
+   * expanded lanes ended up with wider lanes than groups with more
+   * expanded lanes (e.g. Ready in a 3-lane Backlog became visibly
+   * wider than In Progress in a 2-lane Active stretch). Growing each
+   * group in proportion to its expanded-lane count makes every
+   * expanded lane settle at the same rendered width regardless of
+   * which group it lives in. Zero is intentional when every lane in
+   * the group is collapsed: the group then sizes to its rails only.
+   */
+  expandedLaneCount(group: { lanes: Array<{ state: string }> }): number {
+    return group.lanes.reduce((n, l) => n + (this.isLaneCollapsed(l.state) ? 0 : 1), 0);
   }
 
   /**

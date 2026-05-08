@@ -6,11 +6,27 @@ The doctrine for the layer: stable is the single state-machine authority over it
 
 ## Scripts
 
-### `run-system-review.sh` + `system-review.md`
+### `run-system-review.sh` + `system-review.md` + `system-health-check.mjs`
 
 A read-only review skill for the running stable instance. Drives the `system-review` skill via a CLI (`claude` by default) and writes one Markdown review file under `<workspace>/logs/system-review/<YYYY-MM-DD-HHmm>.md`. See `system-review.md` for the skill itself.
 
-Run cadence: every 4-8 hours. Scheduling is the user's concern; this script is the entry point a cron / Task Scheduler entry can call.
+The skill reads **Agent Message Bus** evidence first (`<workspace>/logs/bus/<scope>/<date>.jsonl`, schema in [`docs/schemas/agent-message.schema.json`](../../docs/schemas/agent-message.schema.json)) and falls back to the legacy raw streams (`logs/meta/<project>/observations.jsonl`, `interventions.jsonl`, per-job `cli-output.log`) when the bus is empty or absent. The eight structured health checks (long silent periods, repeated interventions, repeated failed/cancelled runs, token spikes, supporting jobs without accepted review, stuck loops, weak review evidence, backend crash markers) are implemented in `system-health-check.mjs` so they can run without the CLI session.
+
+Three invocation modes:
+
+```sh
+# Full CLI-driven review (default).
+./scripts/supervisor/run-system-review.sh
+
+# Dry-run, structured checks only - reads the live workspace bus directory.
+# Writes a Markdown report and exits without invoking claude / codex / copilot.
+./scripts/supervisor/run-system-review.sh --dry-run
+
+# Dry-run against a hand-built or post-incident JSONL export.
+./scripts/supervisor/run-system-review.sh --dry-run --fixture path/to/bus.jsonl
+```
+
+A bundled sample fixture lives at `scripts/supervisor/fixtures/sample-bus.jsonl` and exercises every health check; `scripts/supervisor/test-system-health-check.sh` runs the dry-run against it and asserts each check fires. Run cadence: every 4-8 hours. Scheduling is the user's concern; this script is the entry point a cron / Task Scheduler entry can call.
 
 ### `dev-lifecycle.sh`
 
