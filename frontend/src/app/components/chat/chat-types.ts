@@ -89,4 +89,11 @@ export interface ChatEvent {
   detail?: string;
   /** Higher severity flips the card chrome to the error-coloured palette. */
   severity?: 'info' | 'warn' | 'error';
+  /**
+   * Optional inline action button rendered next to the timestamp in the
+   * card head. The chat surface emits {@link ChatComponent.eventAction}
+   * with this event's id so the host can navigate without a page reload
+   * (Slice E click-through to the new bug task's detail panel).
+   */
+  actionLabel?: string;
 }

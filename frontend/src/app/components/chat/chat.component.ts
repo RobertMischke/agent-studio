@@ -162,6 +162,14 @@ const COLLAPSE_LINE_THRESHOLD = 24;
                   <span class="chat__event-caret" aria-hidden="true">{{ item.expanded ? '▴' : '▾' }}</span>
                 }
               </button>
+              @if (item.event.actionLabel) {
+                <button type="button"
+                        class="chat__event-action"
+                        [attr.data-testid]="'chat-event-action-' + item.event.id"
+                        (click)="onEventAction($event, item.event.id)">
+                  {{ item.event.actionLabel }} →
+                </button>
+              }
               @if (item.expanded && item.detailHtml) {
                 <div class="chat__event-detail"
                      data-testid="chat-event-detail"
@@ -546,6 +554,25 @@ const COLLAPSE_LINE_THRESHOLD = 24;
       font-size: 12.5px;
       line-height: 1.55;
     }
+    .chat__event-action {
+      align-self: flex-start;
+      margin: 0 10px 8px;
+      padding: 3px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      color: #c7d2fe;
+      background: rgba(99,102,241,0.18);
+      border: 1px solid rgba(165,180,252,0.55);
+      border-radius: 999px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .chat__event-action:hover {
+      background: rgba(99,102,241,0.35);
+      color: #ede9fe;
+      border-color: rgba(196,181,253,0.85);
+    }
     /* Reuse the markdown styles defined for messages so code blocks /
        headings / lists in event details look identical to agent turns. */
     .chat__event-detail :first-child { margin-top: 0; }
@@ -784,6 +811,13 @@ export class ChatComponent implements AfterViewInit, OnDestroy {
   readonly maxAttachmentBytes = input<number>(10 * 1024 * 1024);
 
   readonly submitMessage = output<ChatSubmitEvent>();
+  /**
+   * Slice E: emitted when the user clicks an inline event card's
+   * action affordance (e.g. "Open task" on a /bug confirmation card).
+   * The host uses the event id to look up the right payload it queued
+   * and routes the click in-app rather than via a new browser tab.
+   */
+  readonly eventAction = output<{ eventId: string }>();
 
   readonly drafts = signal<ChatDraftAttachment[]>([]);
   readonly attachmentError = signal<string | null>(null);
@@ -1001,6 +1035,12 @@ export class ChatComponent implements AfterViewInit, OnDestroy {
       next.add(messageId);
     }
     this.expandedIds.set(next);
+  }
+
+  onEventAction(event: Event, eventId: string): void {
+    event.preventDefault();
+    event.stopPropagation();
+    this.eventAction.emit({ eventId });
   }
 
   toggleEventExpanded(eventId: string): void {

@@ -173,9 +173,10 @@ import { ProjectChatListComponent } from '../project-chat-list/project-chat-list
               [events]="events()"
               [pending]="sending()"
               [disabled]="sending()"
-              [placeholder]="'Ask the orchestrator about this project…'"
+              [placeholder]="'Ask the orchestrator… try /bug &lt;description&gt; to file a bug'"
               [emptyState]="emptyStateText()"
-              (submitMessage)="onSubmit($event)" />
+              (submitMessage)="onSubmit($event)"
+              (eventAction)="onChatEventAction($event)" />
           }
 
           <div class="sheet__draft-actions" data-testid="orch-side-sheet-draft-actions">
@@ -580,6 +581,14 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
    * shared `<app-verbose-debug-overlay>` component.
    */
   readonly openVerboseDebug = output<{ jobId: string; watchPath: string; jobTitle: string | null }>();
+
+  /**
+   * Slice E: opens the kanban detail panel for the new bug job created
+   * via the chat's `/bug` directive. The host (app shell) wires this to
+   * its existing `openDetail` flow so the click-through stays in-tab and
+   * the detail panel reuses the same fetch / URL-sync path it always has.
+   */
+  readonly openJobDetail = output<{ jobId: string; watchPath: string }>();
 
   readonly open = signal(false);
   readonly activeProject = signal<string | null>(null);
@@ -1048,11 +1057,30 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     });
   }
 
+  /**
+   * Slice E: lookup table from inline event card id to the job it was
+   * filed for. Populated when a `/bug ...` directive succeeds; consumed
+   * by {@link onChatEventAction} to open the detail panel of that job
+   * without parsing the rendered markdown back out.
+   */
+  private readonly bugEventTargets = new Map<string, { jobId: string; watchPath: string }>();
+
   async onSubmit(event: ChatSubmitEvent): Promise<void> {
     const proj = this.activeProject();
     if (!proj) return;
     const text = event.text.trim();
     if (!text && event.attachments.length === 0) return;
+
+    // Slice E: chat-level slash directive. The parser lives here in the
+    // chat host (not a global registry) because the directive borrows
+    // the chat's X-Client-Id (via the HttpClient interceptor) and the
+    // active-project watch-path lookup, and routes its outcome into the
+    // existing `events` stream so the confirmation card appears in the
+    // chat at the user's turn position.
+    if (text === '/bug' || text.startsWith('/bug ') || text.startsWith('/bug\n')) {
+      this.handleBugDirective(text, event, proj);
+      return;
+    }
 
     // Render the user's turn immediately so the chat doesn't sit silent
     // while the orchestrator thinks (Opus replies often take 30-60s).
@@ -1111,6 +1139,120 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     });
   }
 
+  /**
+   * Slice E: parse `/bug <description>` and create a backlog task via
+   * the existing `POST /api/jobs` endpoint. The directive must land in
+   * `0-backlog` with `taskType=bug` so it goes through triage instead of
+   * skipping straight into `2-ready`. Hashtag patterns at the start of
+   * any line in the description are parsed into workspace tag ids.
+   */
+  private handleBugDirective(text: string, event: ChatSubmitEvent, project: string): void {
+    const description = text.replace(/^\/bug\s*/, '').trim();
+    const ts = new Date().toISOString();
+
+    // Always render the user's directive locally so the card appears at
+    // the user's turn position even though we never round-trip through
+    // the orchestrator chat write-path.
+    const localId = `bug-local:${Date.now()}`;
+    this.localTurns.update((curr) => [
+      ...curr,
+      { id: localId, ts, role: 'user', text }
+    ]);
+    for (const att of event.attachments) URL.revokeObjectURL(att.previewUrl);
+
+    if (!description) {
+      this.appendBugEvent({
+        id: `bug-err:empty:${Date.now()}`,
+        kind: 'task',
+        timestamp: new Date().toISOString(),
+        severity: 'error',
+        summary: 'Bug not filed: description is empty',
+        detail: 'Add a description after `/bug`, e.g. `/bug Frontend chips overlap on narrow viewport`.'
+      });
+      return;
+    }
+
+    const watchPath = this.watchPaths().find((wp) => wp.name === project)?.path;
+    if (!watchPath) {
+      this.appendBugEvent({
+        id: `bug-err:no-watchpath:${Date.now()}`,
+        kind: 'task',
+        timestamp: new Date().toISOString(),
+        severity: 'error',
+        summary: 'Bug not filed: no watch path for this project',
+        detail: `Could not resolve a watch path for project \`${project}\`. Check the workspace configuration.`
+      });
+      return;
+    }
+
+    const tags = parseBugHashtags(description);
+    const firstLine = description.split('\n')[0].trim();
+    const title = firstLine.length > 80 ? firstLine.slice(0, 77) + '...' : firstLine;
+    const promptMarkdown = `${description}\n\n---\n\nReported via /bug from project chat`;
+
+    this.jobService
+      .createJob({
+        title,
+        agent: 'copilot',
+        watchPath,
+        promptMarkdown,
+        targetState: '0-backlog',
+        taskType: 'bug',
+        tags: tags.length > 0 ? tags : undefined
+      })
+      .subscribe({
+        next: (resp) => {
+          const jobId = resp.id;
+          const eventId = `bug-ok:${jobId}`;
+          this.bugEventTargets.set(eventId, { jobId, watchPath });
+          const tagSuffix = tags.length > 0 ? `\n\nTags: ${tags.map((t) => '`' + t + '`').join(' ')}` : '';
+          this.appendBugEvent({
+            id: eventId,
+            kind: 'task',
+            timestamp: new Date().toISOString(),
+            summary: `Bug filed in 0-backlog: ${title}`,
+            detail:
+              `**Lane:** \`0-backlog\`  \n` +
+              `**Task type:** \`bug\`  \n` +
+              `**Job ID:** \`${jobId}\`${tagSuffix}\n\n` +
+              `The new task is in triage. Open the detail panel to refine the prompt before promoting it to \`2-ready\`.`,
+            actionLabel: 'Open task'
+          });
+          // Refresh the kanban so the new card surfaces in the backlog
+          // lane without waiting for the next poll tick.
+          this.jobService.refresh(true);
+        },
+        error: (err) => {
+          const message =
+            err?.error?.error || (typeof err?.error === 'string' ? err.error : null) || err?.message || 'Failed to file bug';
+          this.appendBugEvent({
+            id: `bug-err:${Date.now()}`,
+            kind: 'task',
+            timestamp: new Date().toISOString(),
+            severity: 'error',
+            summary: `Bug not filed: ${title || '(empty title)'}`,
+            detail: `**Error:** ${message}`
+          });
+        }
+      });
+  }
+
+  private appendBugEvent(ev: ChatEvent): void {
+    this.events.update((curr) => [...curr, ev]);
+  }
+
+  /**
+   * Slice E: route an inline event-card action click. Currently the
+   * only consumer is the bug-confirmation card's "Open task" button,
+   * which opens the kanban detail panel for the newly-filed job in the
+   * same tab via the host's existing `openDetail` flow.
+   */
+  onChatEventAction(action: { eventId: string }): void {
+    const target = this.bugEventTargets.get(action.eventId);
+    if (!target) return;
+    this.openJobDetail.emit(target);
+  }
+
   private uploadOne(projectName: string, file: File): Promise<{ relativePath: string; url: string }> {
     return new Promise((resolve, reject) => {
       this.jobService.uploadOrchestratorChatAttachment(projectName, file).subscribe({
@@ -1152,4 +1294,26 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     this.createTaskFromDraft.emit({ projectName: proj, promptText: last.text });
   }
 
+}
+
+/**
+ * Slice E: parse `#tag1 #tag2` patterns at the start of any line in the
+ * `/bug` description. A tag word is `[A-Za-z][\w-]*`; a leading `# ` (with
+ * a space) is treated as Markdown heading syntax and skipped, so the
+ * common case where the user opens the description with a heading does
+ * not capture the heading text as a tag.
+ */
+function parseBugHashtags(description: string): string[] {
+  const found: string[] = [];
+  for (const line of description.split('\n')) {
+    const trimmed = line.trim();
+    if (!/^#[A-Za-z]/.test(trimmed)) continue;
+    const matches = trimmed.match(/#[A-Za-z][\w-]*/g);
+    if (!matches) continue;
+    for (const m of matches) {
+      const tag = m.substring(1);
+      if (!found.includes(tag)) found.push(tag);
+    }
+  }
+  return found;
 }

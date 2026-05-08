@@ -406,7 +406,8 @@ interface ActiveFilterPill {
           [activeJobTitle]="selectedJob()?.info?.title ?? null"
           [activeWatchPath]="selectedJob()?.info?.watchPath ?? null"
           (createTaskFromDraft)="onCreateTaskFromOrchestratorDraft($event)"
-          (openVerboseDebug)="onOpenVerboseDebugFromSheet($event)" />
+          (openVerboseDebug)="onOpenVerboseDebugFromSheet($event)"
+          (openJobDetail)="onOpenJobDetailFromSheet($event)" />
       </div>
 
       <app-status-bar
@@ -3566,6 +3567,37 @@ export class App implements OnInit {
 
   closeVerboseDebug(): void {
     this.verboseDebugContext.set(null);
+  }
+
+  /**
+   * Slice E: route a click on the bug-confirmation card's "Open task"
+   * action to the kanban detail panel. Uses the same `getDetail` +
+   * `selectedJob.set` flow as `openDetail` (and the URL-restore path)
+   * so the task lands in the same focus view, with the URL synced for
+   * deep-link reload, regardless of whether the new job has appeared
+   * in the local kanban list yet.
+   */
+  onOpenJobDetailFromSheet(event: { jobId: string; watchPath: string }): void {
+    history.replaceState(
+      null,
+      '',
+      `?job=${encodeURIComponent(event.jobId)}&watchPath=${encodeURIComponent(event.watchPath)}`
+    );
+    const token = ++this.openDetailToken;
+    this.jobService.getDetail(event.jobId, event.watchPath).subscribe({
+      next: (detail) => {
+        if (token !== this.openDetailToken) return;
+        this.selectedJob.set(detail);
+      },
+      error: (err) => {
+        if (token !== this.openDetailToken) return;
+        history.replaceState(null, '', window.location.pathname);
+        this.errorDialog.show(err, {
+          title: 'Failed to open task',
+          source: `task ${event.jobId}`
+        });
+      }
+    });
   }
 
   /**
