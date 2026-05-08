@@ -322,6 +322,34 @@ Hard boundary: supervision is advice-first, force-rare. The deterministic post-r
 
 The full conceptual analysis - loop-to-loop control options, communication contract sketch, execution-model tradeoffs (in-process vs sidecar vs CLI-driven), open conceptual problems, and recommended task spinout - lives in [docs/research/orchestrator-meta-loop-analysis-2026-05-04.md](docs/research/orchestrator-meta-loop-analysis-2026-05-04.md). The recommended first slice is the system review monitor (Layer 3) because it ships value immediately on stable without touching the runtime.
 
+### Agent Workforce and Role Specialization
+
+Treat the active agents in a project as a **workforce of specialized roles**, not as one generic CLI invocation per task. The human operator is the manager; the workforce is LLM-based. Different work needs different system prompts, different tool sets, different budgets, sometimes different models.
+
+Realistic role catalogue, derived from observed work patterns:
+
+- **Task Executor** - the primary coding agent (Claude Code, Codex, Copilot, Gemini); makes the file edits and runs the tools.
+- **Code Reviewer** - audits diffs from Task Executor runs; different system prompt, often a different model tier.
+- **Architecture Custodian** - periodic; checks code against ADRs and the architecture marble; surfaces drift.
+- **Security Auditor** - on-demand or scheduled; checks diffs for secrets, unsafe patterns, dependency risks.
+- **Test Author** - reads tool-calls from the Task Executor and adds the coverage the executor missed.
+- **Documentation Maintainer** - keeps doc-vs-code consistency, proposes updates.
+- **Plan Curator** - in plan-mode workflows: reviews plan proposals, suggests variants.
+- **Diagnostician** - on pickup-failure or hang: reads logs, classifies, proposes action under the contract pattern (ADR-0032).
+- **Health Officer** - periodic, system-wide: what looks unhealthy, where does the human need attention.
+
+Hard rules:
+
+- **Sequential rotation per task, not parallel.** Within one task, roles run one after another on the same artifact: Task Executor writes, Code Reviewer audits, Architecture Custodian checks drift, Security Auditor inspects last. Parallel within a task produces conflicts that erase the throughput gain. The parallelism axis is across projects or across worktrees, consistent with ADR-0001.
+- **The human stays the manager.** Role architecture (which roles exist, what they own, who escalates to whom) and tradeoff decisions (more security vs more speed, refactor phase vs feature phase) stay human. The workforce executes; the manager structures.
+- **Roles are versioned artifacts in the repository**, like skills (ADR-0026). Not config, not prompts on the fly. A role definition that lives in the repo is reviewable, diffable, comparable across runs.
+- **Per-role budgets and routing.** Each role declares a token-budget tier, a wall-clock cap per run, an allowed model list, and a downgrade strategy when quota is tight. First-class, code-level constants; not implicit.
+- **Operator allowance per phase.** Same role, different importance per project phase. Before a release: Security Auditor turns up, runs on every diff. In a refactor phase: Architecture Custodian turns up, Security Auditor turns down. The operator's allowance setting is the lever; the runner respects it.
+
+Today's state: building blocks exist (per-job token spend in `tool-calls.jsonl`, cliType per job, Subagent concept in skills architecture, Aspect Runner for multi-aspect review). What is not yet a first-class surface: per-role budgets as configuration, per-role performance dashboards, per-role model routing as a deliberate setting, and the allowance-per-phase lever.
+
+The full marketing context lives in `agent-studio-marketing/06-website-planung/agent-workforce-und-rollen.md`. The roadmap entry here is the engineering counterpart: build the missing surfaces incrementally, in a sequence that always respects the sequential-per-task rule from ADR-0001.
+
 ### Analysis Reports and Meta-Actions
 
 Make manual and scheduled analyses first-class product output. The user should be able to ask a project-level question such as "are we on track?", "which jobs are stale?", "does the queue match the roadmap?", "which docs need sync?", "what changed in the last few hours?", or "what should become a follow-up task?" The orchestrator, a supporting agent, the meta-cycle, or an external monitor can answer, but the result lands in the same report system.
