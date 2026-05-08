@@ -431,6 +431,115 @@ public record JobDetail
     public ContextUsageSnapshot? ContextUsage { get; init; }
     public List<JobLogEntry> Log { get; init; } = [];
     public JobSummaryState? SummaryState { get; init; }
+    /// <summary>
+    /// Task-level review evidence parsed from
+    /// <c>results/review-evidence.jsonl</c>. Findings produced by security
+    /// audits, code-review passes, task checks, or human reviewer notes.
+    /// Empty when the file is absent or only contained malformed lines.
+    /// Findings are evidence for review, not blockers: their presence does
+    /// not gate any state transition. See
+    /// <c>docs/filesystem-contract.md</c> "results/review-evidence.jsonl".
+    /// </summary>
+    public List<ReviewEvidenceEntry> ReviewEvidence { get; init; } = [];
+}
+
+/// <summary>
+/// One finding in <c>results/review-evidence.jsonl</c>. The wire shape mirrors
+/// the on-disk shape one-to-one so a producer can write the same record it
+/// reads back. The producer is responsible for stable <see cref="Id"/> values
+/// across appends so readers can fold the file into latest-per-id.
+/// </summary>
+public record ReviewEvidenceEntry
+{
+    public string Id { get; init; } = "";
+    /// <summary>One of <see cref="ReviewEvidenceSources"/>. Unknown values are normalized to <c>other</c>.</summary>
+    public string Source { get; init; } = ReviewEvidenceSources.Other;
+    /// <summary>One of <see cref="ReviewEvidenceSeverities"/>. Unknown values are normalized to <c>info</c>.</summary>
+    public string Severity { get; init; } = ReviewEvidenceSeverities.Info;
+    public string Title { get; init; } = "";
+    public string? Body { get; init; }
+    public DateTime CreatedAt { get; init; }
+    /// <summary>1-based run index this finding belongs to (matches <c>RunRecord.Index</c>). Null when not tied to a specific run.</summary>
+    public int? RunIndex { get; init; }
+    /// <summary>Paths relative to the job folder, e.g. <c>results/foo.png</c>.</summary>
+    public List<string> Artifacts { get; init; } = [];
+    /// <summary>Repository-relative file references, optionally <c>path:line</c>.</summary>
+    public List<string> FileRefs { get; init; } = [];
+    public bool Acknowledged { get; init; }
+    /// <summary>Job id of a queued follow-up created from this finding (set by the "Create follow-up task" action).</summary>
+    public string? FollowupJobId { get; init; }
+}
+
+/// <summary>
+/// Allowed source slugs on <see cref="ReviewEvidenceEntry.Source"/>.
+/// Producers should write one of these literals. Unknown values are accepted
+/// on read and normalised to <see cref="Other"/> so a malformed file never
+/// breaks the endpoint.
+/// </summary>
+public static class ReviewEvidenceSources
+{
+    public const string SecurityAudit = "security-audit";
+    public const string CodeReview = "code-review";
+    public const string TaskCheck = "task-check";
+    public const string HumanNote = "human-note";
+    public const string Other = "other";
+
+    public static readonly string[] All = [SecurityAudit, CodeReview, TaskCheck, HumanNote, Other];
+
+    public static string Normalize(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return Other;
+        var v = value.Trim();
+        foreach (var s in All)
+            if (string.Equals(s, v, StringComparison.OrdinalIgnoreCase)) return s;
+        return Other;
+    }
+}
+
+/// <summary>
+/// Allowed severities on <see cref="ReviewEvidenceEntry.Severity"/>. Same
+/// permissive-on-read contract as <see cref="ReviewEvidenceSources"/>.
+/// </summary>
+public static class ReviewEvidenceSeverities
+{
+    public const string Info = "info";
+    public const string Warn = "warn";
+    public const string High = "high";
+
+    public static readonly string[] All = [Info, Warn, High];
+
+    public static string Normalize(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return Info;
+        var v = value.Trim();
+        foreach (var s in All)
+            if (string.Equals(s, v, StringComparison.OrdinalIgnoreCase)) return s;
+        return Info;
+    }
+}
+
+/// <summary>
+/// Body for <c>POST /api/jobs/{id}/review-evidence/{evidenceId}/follow-up</c>.
+/// Optional title override; the endpoint defaults to the finding's title when
+/// omitted. The created task is queued in the same project as the source job
+/// and lands in <c>1-preparation</c>; the user promotes it to <c>2-ready</c>
+/// when they want auto-pickup to run it.
+/// </summary>
+public record CreateFollowupFromEvidenceRequest
+{
+    public string? Title { get; init; }
+    public string? TargetState { get; init; }
+}
+
+/// <summary>
+/// Response shape for the follow-up endpoint. <c>JobId</c> is the slug
+/// assigned to the new task; the frontend uses it to route the user to the
+/// new card.
+/// </summary>
+public record CreateFollowupFromEvidenceResponse
+{
+    public string JobId { get; init; } = "";
+    public string TargetState { get; init; } = "1-preparation";
 }
 
 /// <summary>

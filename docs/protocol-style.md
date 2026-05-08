@@ -106,7 +106,7 @@ Two folders, two purposes. Keep them separate:
 | Folder | Direction | Lifetime | Used by |
 |--------|-----------|----------|---------|
 | `<job>/attachments/` | **Input.** Pasted/dropped into the prompt editor before the run. | Created lazily, persists with the job. | The CLI agent reads them via the relative path baked into `prompt.md`. |
-| `<job>/results/` | **Output.** Screenshots produced *during* the run that prove the change. | Created on demand by the agent, persists with the job. | The protocol pane renders them; the reviewer reads them. |
+| `<job>/results/` | **Output.** Screenshots produced *during* the run that prove the change, plus the optional `review-evidence.jsonl` audit/review findings file. | Created on demand by the agent or reviewer, persists with the job. | The protocol pane renders screenshots inline and lists findings in the evidence panel; the reviewer reads both. |
 
 Bare filenames in `status.md` (e.g. `![](foo.png)` with no folder prefix) are resolved against `results/` in the local reader as a fallback for older protocols. New work should always include the prefix.
 

@@ -264,6 +264,35 @@ export class JobService {
       this.withWatchPath(watchPath));
   }
 
+  /**
+   * Acknowledge or un-acknowledge a review-evidence finding. Append-only:
+   * the backend writes a new line into `results/review-evidence.jsonl`
+   * with the same `id` and the updated `acknowledged` flag.
+   */
+  acknowledgeReviewEvidence(jobId: string, evidenceId: string, acknowledged: boolean, watchPath?: string) {
+    return this.http.post(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/review-evidence/${encodeURIComponent(evidenceId)}/acknowledge`,
+      { acknowledged },
+      this.withWatchPath(watchPath));
+  }
+
+  /**
+   * Create a queued follow-up task in the same project, prefilled with the
+   * finding's title + body + linked artifacts/file refs. Returns the new
+   * job's id so the UI can route the user to the new card.
+   */
+  createReviewEvidenceFollowup(
+    jobId: string,
+    evidenceId: string,
+    body: { title?: string; targetState?: string },
+    watchPath?: string
+  ) {
+    return this.http.post<{ jobId: string; targetState: string }>(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/review-evidence/${encodeURIComponent(evidenceId)}/follow-up`,
+      body,
+      this.withWatchPath(watchPath));
+  }
+
   setJobTaskType(jobId: string, taskType: string, watchPath?: string) {
     return this.http.put(
       `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/task-type`,

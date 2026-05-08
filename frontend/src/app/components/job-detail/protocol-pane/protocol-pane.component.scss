@@ -592,3 +592,45 @@
   background: rgba(148, 163, 184, 0.18);
   border-color: rgba(196, 181, 253, 0.45);
 }
+
+.evidence-followup-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(166, 227, 161, 0.10);
+  border: 1px solid rgba(166, 227, 161, 0.35);
+  color: #a6e3a1;
+  font-size: 0.85rem;
+
+  code {
+    background: rgba(255, 255, 255, 0.08);
+    color: #cdd6f4;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 0.78rem;
+  }
+
+  &__open {
+    background: rgba(166, 227, 161, 0.20);
+    color: #a6e3a1;
+    border: 1px solid rgba(166, 227, 161, 0.50);
+    padding: 3px 10px;
+    border-radius: 5px;
+    font-size: 0.78rem;
+    cursor: pointer;
+  }
+  &__open:hover { background: rgba(166, 227, 161, 0.32); }
+
+  &__dismiss {
+    margin-left: auto;
+    background: transparent;
+    border: none;
+    color: rgba(166, 227, 161, 0.7);
+    font-size: 1rem;
+    cursor: pointer;
+  }
+  &__dismiss:hover { color: #a6e3a1; }
+}

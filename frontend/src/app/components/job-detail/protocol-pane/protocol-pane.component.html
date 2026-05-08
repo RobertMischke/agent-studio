@@ -98,6 +98,27 @@
         [screenshots]="screenshots()"
         variant="task" />
     }
+    <app-review-evidence-panel
+      #evidencePanel
+      [entries]="detail().reviewEvidence"
+      [job]="detail().info"
+      (acknowledge)="onEvidenceAcknowledge($event, evidencePanel)"
+      (createFollowup)="onEvidenceCreateFollowup($event, evidencePanel)" />
+    @if (followupCreated(); as fc) {
+      <div class="evidence-followup-banner"
+           data-testid="review-evidence-followup-banner">
+        <span aria-hidden="true">✓</span>
+        Created follow-up task <code>{{ fc.jobId }}</code> in <code>{{ fc.targetState }}</code>.
+        <button type="button"
+                class="evidence-followup-banner__open"
+                data-testid="review-evidence-followup-open"
+                (click)="onOpenFollowup(fc.jobId)">Open</button>
+        <button type="button"
+                class="evidence-followup-banner__dismiss"
+                data-testid="review-evidence-followup-dismiss"
+                (click)="dismissFollowupBanner()">×</button>
+      </div>
+    }
     <section class="inspector">
       <div class="inspector__header">
         <div class="inspector__tabs inspector__tabs--pill"

@@ -146,7 +146,9 @@ import { markdownToHtml } from './markdown-utils';
             (openLogOverlay)="showLogOverlay.set(true)"
             (sendChat)="sendChatMessage()"
             (stopJob)="stopJob()"
-            (regenerateSummary)="regenerateProtocol()" />
+            (regenerateSummary)="regenerateProtocol()"
+            (evidenceMutated)="fileSaved.emit()"
+            (followupCreatedFromEvidence)="fileSaved.emit()" />
         }
 
         @if (!maximizedPane() && panesVisible().protocol && panesVisible().git) {

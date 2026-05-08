@@ -1,5 +1,5 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, computed, inject, input, output, signal } from '@angular/core';
-import { CliOutputLine, ContinueMode, JobDetail, JobSummaryStatus, RunRecord } from '../../../models/job.model';
+import { ChangeDetectionStrategy, Component, OnDestroy, computed, inject, input, output, signal, ViewChild } from '@angular/core';
+import { CliOutputLine, ContinueMode, JobDetail, JobSummaryStatus, ReviewEvidenceEntry, RunRecord } from '../../../models/job.model';
 import { deriveWatchdogPill } from './watchdog-state';
 import { ActivityLogViewComponent } from '../../activity-log-view';
 import { markdownToHtml, MarkdownImageOptions } from '../../markdown-utils';
@@ -25,6 +25,8 @@ import { CommonModule } from '@angular/common';
 import { FeatureFlagsService } from '../../../services/feature-flags.service';
 import { VerboseDebugOverlayComponent } from '../../verbose-debug/verbose-debug-overlay.component';
 import { HygieneStripComponent } from '../hygiene-strip/hygiene-strip.component';
+import { ReviewEvidencePanelComponent } from './review-evidence-panel.component';
+import { JobService } from '../../../services/job.service';
 import type { RawLineRange } from '../../chat/conversation-event';
 
 export type InspectorTab = 'protocol' | 'activity';
@@ -39,7 +41,7 @@ export type InspectorTab = 'protocol' | 'activity';
   selector: 'app-protocol-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, ActivityLogViewComponent, RunTimelineComponent, RunGitViewerComponent, ScreenshotStripComponent, VerboseDebugOverlayComponent, HygieneStripComponent],
+  imports: [CommonModule, ActivityLogViewComponent, RunTimelineComponent, RunGitViewerComponent, ScreenshotStripComponent, VerboseDebugOverlayComponent, HygieneStripComponent, ReviewEvidencePanelComponent],
   templateUrl: './protocol-pane.component.html',
   styleUrls: ['./protocol-pane.component.scss']
 })
@@ -59,6 +61,10 @@ export class ProtocolPaneComponent implements OnDestroy {
 
   readonly maximizeToggle = output<void>();
   readonly hide = output<void>();
+  /** Emitted after a follow-up task was created from a review-evidence finding so the parent can refetch the detail and (optionally) navigate to the new job. */
+  readonly followupCreatedFromEvidence = output<{ jobId: string; targetState: string }>();
+  /** Emitted after a finding was acknowledged so the parent can refetch the detail. */
+  readonly evidenceMutated = output<void>();
 
   readonly activeInspectorTabChange = output<InspectorTab>();
   readonly followupPromptChange = output<string>();
@@ -76,6 +82,10 @@ export class ProtocolPaneComponent implements OnDestroy {
   private readonly runTimelinePoll = inject(RunTimelinePollService);
   private readonly screenshotsPoll = inject(ScreenshotsPollService);
   private readonly nowTick = inject(NowTickService).now;
+  private readonly jobs = inject(JobService);
+
+  /** Set after "Create follow-up" returns; used to render the success banner. */
+  readonly followupCreated = signal<{ jobId: string; targetState: string } | null>(null);
 
   readonly claudeSession = this.claudePoll.session;
   readonly claudeRateLimit = this.claudePoll.rateLimit;
@@ -482,6 +492,55 @@ export class ProtocolPaneComponent implements OnDestroy {
     } catch {
       /* upload failure is best-effort; the user retains the steer card
          so they can try again or send a follow-up message instead */
+    }
+  }
+
+  onEvidenceAcknowledge(
+    payload: { entry: ReviewEvidenceEntry; acknowledged: boolean },
+    panel: { clearBusy(): void }
+  ): void {
+    const job = this.detail().info;
+    this.jobs
+      .acknowledgeReviewEvidence(job.id, payload.entry.id, payload.acknowledged, job.watchPath)
+      .subscribe({
+        next: () => {
+          panel.clearBusy();
+          this.evidenceMutated.emit();
+        },
+        error: () => panel.clearBusy()
+      });
+  }
+
+  onEvidenceCreateFollowup(
+    entry: ReviewEvidenceEntry,
+    panel: { clearBusy(): void }
+  ): void {
+    const job = this.detail().info;
+    this.jobs
+      .createReviewEvidenceFollowup(job.id, entry.id, {}, job.watchPath)
+      .subscribe({
+        next: (resp) => {
+          panel.clearBusy();
+          this.followupCreated.set({ jobId: resp.jobId, targetState: resp.targetState });
+          this.followupCreatedFromEvidence.emit(resp);
+          this.evidenceMutated.emit();
+        },
+        error: () => panel.clearBusy()
+      });
+  }
+
+  dismissFollowupBanner(): void {
+    this.followupCreated.set(null);
+  }
+
+  onOpenFollowup(jobId: string): void {
+    const watch = this.detail().info.watchPath;
+    const url = `/?job=${encodeURIComponent(jobId)}&watchPath=${encodeURIComponent(watch)}`;
+    // Use full navigation: the protocol pane is mounted inside a job-detail
+    // view that owns its own routing state, and a follow-up task is in a
+    // different `?job=` slot. A full navigation re-mounts cleanly.
+    if (typeof window !== 'undefined') {
+      window.location.href = url;
     }
   }
 

@@ -1,0 +1,174 @@
+using OrchestratorApi.Models;
+using OrchestratorApi.Services.Jobs;
+
+namespace OrchestratorApi.Endpoints.Jobs;
+
+/// <summary>
+/// Endpoints around the per-job review-evidence file
+/// (<c>results/review-evidence.jsonl</c>). The findings themselves are
+/// already exposed inside <see cref="JobDetail.ReviewEvidence"/> by
+/// <c>GET /api/jobs/{jobId}</c>; these routes are the small set of
+/// mutations the UI needs:
+///
+/// - acknowledge / un-acknowledge a finding,
+/// - turn a finding into a queued follow-up task in the same project.
+///
+/// All mutations are append-only writes to the JSONL file. Readers fold
+/// the file into latest-per-id, so re-acknowledging or re-creating a
+/// follow-up just appends a new row with the updated fields. The file
+/// stays diff-friendly and the orchestrator never needs an exclusive
+/// writer lock.
+/// </summary>
+public static class JobReviewEvidenceEndpoints
+{
+    public static void MapJobReviewEvidenceEndpoints(this RouteGroupBuilder group)
+    {
+        // POST /api/jobs/{jobId}/review-evidence/{evidenceId}/acknowledge
+        // Body: { "acknowledged": true|false } — defaults to true.
+        group.MapPost("/{jobId}/review-evidence/{evidenceId}/acknowledge",
+            (string jobId, string evidenceId, string? watchPath, AcknowledgeEvidenceRequest? body, JobScannerService scanner) =>
+        {
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info == null) return Results.NotFound();
+
+            var existing = ReviewEvidenceLog.ReadLatestPerId(info.FolderPath)
+                .FirstOrDefault(e => e.Id == evidenceId);
+            if (existing == null) return Results.NotFound(new { error = $"No evidence with id '{evidenceId}'." });
+
+            var updated = existing with
+            {
+                Acknowledged = body?.Acknowledged ?? true,
+                CreatedAt = DateTime.UtcNow
+            };
+            ReviewEvidenceLog.Append(info.FolderPath, updated);
+            return Results.Ok(updated);
+        });
+
+        // POST /api/jobs/{jobId}/review-evidence/{evidenceId}/follow-up
+        // Body: { "title"?: string, "targetState"?: string }
+        // Creates a normal queued task in the same project, prefilled with
+        // the finding's title + body + linked artifacts/file refs. Default
+        // landing lane is 1-preparation so the user reviews and promotes.
+        group.MapPost("/{jobId}/review-evidence/{evidenceId}/follow-up",
+            (string jobId, string evidenceId, string? watchPath, CreateFollowupFromEvidenceRequest? body, JobScannerService scanner, JobMutationService mutations) =>
+        {
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info == null) return Results.NotFound();
+
+            var entry = ReviewEvidenceLog.ReadLatestPerId(info.FolderPath)
+                .FirstOrDefault(e => e.Id == evidenceId);
+            if (entry == null) return Results.NotFound(new { error = $"No evidence with id '{evidenceId}'." });
+
+            var targetState = body?.TargetState switch
+            {
+                JobStates.Preparation => JobStates.Preparation,
+                JobStates.Ready => JobStates.Ready,
+                JobStates.Backlog => JobStates.Backlog,
+                _ => JobStates.Preparation
+            };
+
+            var title = !string.IsNullOrWhiteSpace(body?.Title)
+                ? body!.Title!
+                : $"Follow-up: {entry.Title}";
+
+            var prompt = BuildFollowupPrompt(jobId, info.Title, entry);
+
+            var req = new CreateJobRequest
+            {
+                Title = title,
+                Agent = info.Agent,
+                CliType = info.CliType,
+                WatchPath = info.WatchPath,
+                PromptMarkdown = prompt,
+                TargetState = targetState,
+                TaskType = TaskTypes.Chore,
+                OwnerClientId = info.OwnerClientId
+            };
+
+            var newId = mutations.CreateJob(req);
+            if (newId is null) return Results.Conflict(new { error = "Failed to create follow-up task (slug collision or invalid input)." });
+
+            // Stamp the new job id back onto the source finding so the panel
+            // can render a "follow-up: <id>" chip and so a second click does
+            // not silently spawn a second task.
+            var stamped = entry with
+            {
+                FollowupJobId = newId,
+                CreatedAt = DateTime.UtcNow
+            };
+            ReviewEvidenceLog.Append(info.FolderPath, stamped);
+
+            return Results.Ok(new CreateFollowupFromEvidenceResponse
+            {
+                JobId = newId,
+                TargetState = targetState
+            });
+        });
+    }
+
+    private static string BuildFollowupPrompt(string sourceJobId, string sourceTitle, ReviewEvidenceEntry entry)
+    {
+        var lines = new List<string>
+        {
+            $"# Follow-up from review evidence",
+            "",
+            $"This task was created from a finding on the job **{sourceTitle}** (`{sourceJobId}`).",
+            "",
+            $"- Source: `{entry.Source}`",
+            $"- Severity: `{entry.Severity}`",
+            $"- Evidence id: `{entry.Id}`",
+            $"- Recorded at: {entry.CreatedAt:yyyy-MM-ddTHH:mm:ssZ}",
+            ""
+        };
+
+        if (entry.RunIndex.HasValue)
+        {
+            lines.Add($"- Run index: {entry.RunIndex.Value}");
+            lines.Add("");
+        }
+
+        lines.Add("## Finding");
+        lines.Add("");
+        lines.Add($"**{entry.Title}**");
+        if (!string.IsNullOrWhiteSpace(entry.Body))
+        {
+            lines.Add("");
+            lines.Add(entry.Body!);
+        }
+        lines.Add("");
+
+        if (entry.FileRefs.Count > 0)
+        {
+            lines.Add("## Files referenced");
+            lines.Add("");
+            foreach (var f in entry.FileRefs) lines.Add($"- `{f}`");
+            lines.Add("");
+        }
+
+        if (entry.Artifacts.Count > 0)
+        {
+            lines.Add("## Linked artifacts");
+            lines.Add("");
+            foreach (var a in entry.Artifacts) lines.Add($"- `{a}`");
+            lines.Add("");
+        }
+
+        lines.Add("## Constraints");
+        lines.Add("");
+        lines.Add("- Verify and fix only the finding scope above. Do not expand the work without flagging it first.");
+        lines.Add("- When you finish, write a short note back into the source job's `results/review-evidence.jsonl` referencing this follow-up.");
+        lines.Add("");
+
+        return string.Join("\n", lines);
+    }
+}
+
+/// <summary>
+/// Body for <c>POST /api/jobs/{jobId}/review-evidence/{evidenceId}/acknowledge</c>.
+/// Optional; an empty body or omitted <c>acknowledged</c> field defaults to
+/// <c>true</c> so the simple "I read this" click does not need a payload.
+/// </summary>
+public record AcknowledgeEvidenceRequest
+{
+    public bool? Acknowledged { get; init; }
+}

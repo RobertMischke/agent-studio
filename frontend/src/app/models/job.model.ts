@@ -897,6 +897,32 @@ export interface JobDetail {
   contextUsage: ContextUsageSnapshot | null;
   log: JobLogEntry[];
   summaryState: JobSummaryState | null;
+  /**
+   * Task-level review evidence. Populated from
+   * `<job>/results/review-evidence.jsonl`. Findings produced by security
+   * audits, code-review passes, task checks, or human notes. Empty when
+   * the file is absent. Findings are evidence for review, not blockers:
+   * the lane transitions never gate on them. See
+   * `docs/filesystem-contract.md` "results/review-evidence.jsonl".
+   */
+  reviewEvidence: ReviewEvidenceEntry[];
+}
+
+export type ReviewEvidenceSource = 'security-audit' | 'code-review' | 'task-check' | 'human-note' | 'other';
+export type ReviewEvidenceSeverity = 'info' | 'warn' | 'high';
+
+export interface ReviewEvidenceEntry {
+  id: string;
+  source: ReviewEvidenceSource;
+  severity: ReviewEvidenceSeverity;
+  title: string;
+  body: string | null;
+  createdAt: string;
+  runIndex: number | null;
+  artifacts: string[];
+  fileRefs: string[];
+  acknowledged: boolean;
+  followupJobId: string | null;
 }
 
 export interface ContextUsageSnapshot {

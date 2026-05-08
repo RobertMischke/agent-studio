@@ -241,7 +241,8 @@ public class JobScannerService
             StatusMarkdown = statusMd,
             ContextUsage = ReadContextUsage(dir),
             Log = BuildLog(dir),
-            SummaryState = ResolveSummaryState(info.JobKey, statusMd)
+            SummaryState = ResolveSummaryState(info.JobKey, statusMd),
+            ReviewEvidence = ReviewEvidenceLog.ReadLatestPerId(dir, _logger)
         };
     }
 

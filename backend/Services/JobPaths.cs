@@ -10,8 +10,12 @@ internal static class JobPaths
     public const string CliOutputLogFileName = "cli-output.log";
     public const string SessionEventsLogFileName = "session-events.jsonl";
     public const string LogsDirName = "logs";
+    public const string ResultsDirName = "results";
+    public const string ReviewEvidenceFileName = "review-evidence.jsonl";
 
     public static string LogsDir(string jobFolder) => Path.Combine(jobFolder, LogsDirName);
     public static string CliOutputLog(string jobFolder) => Path.Combine(jobFolder, LogsDirName, CliOutputLogFileName);
     public static string SessionEventsLog(string jobFolder) => Path.Combine(jobFolder, LogsDirName, SessionEventsLogFileName);
+    public static string ResultsDir(string jobFolder) => Path.Combine(jobFolder, ResultsDirName);
+    public static string ReviewEvidenceLog(string jobFolder) => Path.Combine(jobFolder, ResultsDirName, ReviewEvidenceFileName);
 }

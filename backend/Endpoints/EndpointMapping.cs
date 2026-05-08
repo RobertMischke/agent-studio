@@ -21,6 +21,7 @@ public static class EndpointMapping
         jobs.MapJobRunnerEndpoints();
         jobs.MapJobGitEndpoints();
         jobs.MapJobClaudeEndpoints();
+        jobs.MapJobReviewEvidenceEndpoints();
 
         app.MapRunnerEndpoints();
         app.MapWorkspaceEndpoints();
