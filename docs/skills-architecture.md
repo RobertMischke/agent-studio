@@ -163,3 +163,16 @@ Start with project-level skill readiness:
 - Offer to create a task that updates the selected project to the skill lookup contract.
 
 This can be built after the project detail screen exists.
+
+### v1 implementation
+
+The first naive flow ships under the project detail panel as `app-project-skill-readiness-section`:
+
+- Backend: [`backend/Services/SkillReadinessService.cs`](../backend/Services/SkillReadinessService.cs) parses `README.md`, `AGENTS.md`, and `.github/copilot-instructions.md` for an H2/H3 heading whose title contains "skill" plus four required phrases (`standardSkills`, `projectSkills`, `skillsPath`, `processorReference`). Verdicts are `pass` (heading + every phrase), `warning` (heading + at least one missing phrase), `fail` (no heading). The check is deterministic and never delegates to an LLM.
+- Endpoints (under [`backend/Endpoints/SkillReadinessEndpoints.cs`](../backend/Endpoints/SkillReadinessEndpoints.cs)):
+  - `GET /api/projects/{name}/skill-readiness` returns the verdict.
+  - `GET /api/projects/{name}/skill-readiness/fix-task-preview` returns the title + prompt the fix path would queue.
+  - `POST /api/projects/{name}/skill-readiness/fix-task` queues a normal `2-ready` task whose prompt embeds the canonical lookup snippet. The watched project's source tree is **never** edited from the endpoint - the agent updates the README through the regular pipeline.
+  - `GET /api/projects/{name}/skills` returns the catalog of standard skills (under `.agents/skills/`) and project-specific skills (under `.agents/projects/<key>/skills/`), each tagged `selected` or `suggested`.
+- Frontend: [`frontend/src/app/components/project-skill-readiness-section.ts`](../frontend/src/app/components/project-skill-readiness-section.ts) renders the button and modal; the panel embeds it after Steering Docs.
+- Tests: [`backend.Tests/SkillReadinessServiceTests.cs`](../backend.Tests/SkillReadinessServiceTests.cs) pins the parser matrix, the fail / warning / pass verdicts, and the invariant that `CreateFixTask` queues a `2-ready` task without writing into the watched project.

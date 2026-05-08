@@ -13,6 +13,7 @@ import { ProjectSupervisorSectionComponent } from './project-supervisor-section'
 import { ProjectMetaCycleSectionComponent } from './project-meta-cycle-section';
 import { ProjectAnalysisReportsSectionComponent } from './project-analysis-reports-section';
 import { ProjectSteeringDocsSectionComponent } from './project-steering-docs-section';
+import { ProjectSkillReadinessSectionComponent } from './project-skill-readiness-section';
 import { AutonomySliderComponent } from './autonomy-slider';
 import { AnalysisReport } from '../models/analysis-report.model';
 
@@ -47,6 +48,7 @@ interface ProjectSettingsRow {
     ProjectMetaCycleSectionComponent,
     ProjectAnalysisReportsSectionComponent,
     ProjectSteeringDocsSectionComponent,
+    ProjectSkillReadinessSectionComponent,
     AutonomySliderComponent
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -223,6 +225,8 @@ interface ProjectSettingsRow {
         (openReport)="openReport.emit($event)" />
 
       <app-project-steering-docs-section [projectName]="projectName()" />
+
+      <app-project-skill-readiness-section [projectName]="projectName()" />
 
       <app-project-security-section [projectName]="projectName()" />
 

@@ -117,7 +117,7 @@ Numbering is monotonic. Never reuse a number; never silently delete history.
 
 **Reasoning style.** Separate ownership from reach. The task processor owns the canonical skill library and deterministic attachment during managed runs. Watched projects own a small lookup contract that makes those skills visible to direct CLI sessions. Native CLI exports are adapters, not the source of truth.
 
-**Implementation pointers.** [docs/skills-architecture.md](skills-architecture.md); [README.md](../README.md) "Portable skills, not CLI-local silos"; [AGENTS.md](../AGENTS.md) "Portable Skills"; existing proto-skill files in [docs/cli-skills/](cli-skills/).
+**Implementation pointers.** [docs/skills-architecture.md](skills-architecture.md); [README.md](../README.md) "Portable skills, not CLI-local silos"; [AGENTS.md](../AGENTS.md) "Portable Skills"; existing proto-skill files in [docs/cli-skills/](cli-skills/); v1 project-level readiness flow at [backend/Services/SkillReadinessService.cs](../backend/Services/SkillReadinessService.cs), [backend/Endpoints/SkillReadinessEndpoints.cs](../backend/Endpoints/SkillReadinessEndpoints.cs), and [frontend/src/app/components/project-skill-readiness-section.ts](../frontend/src/app/components/project-skill-readiness-section.ts).
 
 **Status.** Accepted.
 

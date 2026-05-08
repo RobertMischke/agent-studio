@@ -27,6 +27,7 @@ public static class EndpointMapping
         app.MapProjectSettingsEndpoints();
         app.MapProjectDocsEndpoints();
         app.MapProjectSteeringDocsEndpoints();
+        app.MapSkillReadinessEndpoints();
         app.MapSecurityReviewEndpoints();
         app.MapProjectTokenUsageEndpoints();
         app.MapReviewDecisionsEndpoints();
