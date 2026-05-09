@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject
 import { Observable, map } from 'rxjs';
 import { DriftService } from '../services/drift.service';
 import { JobService } from '../services/job.service';
+import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../utils/visible-interval';
 import {
   DriftDimension,
   DriftDimensionType,
@@ -763,15 +764,15 @@ export class ProjectDriftOverviewSectionComponent implements OnInit, OnDestroy {
     return this.dimensionRows().find(r => r.type === t && r.dimension) ?? null;
   });
 
-  private timer?: ReturnType<typeof setInterval>;
+  private timer?: VisibleIntervalHandle;
 
   ngOnInit(): void {
     this.refresh();
-    this.timer = setInterval(() => this.refresh(true), 15_000);
+    this.timer = setVisibleInterval(() => this.refresh(true), 15_000);
   }
 
   ngOnDestroy(): void {
-    if (this.timer) clearInterval(this.timer);
+    if (this.timer) clearVisibleInterval(this.timer);
   }
 
   refresh(silent = false): void {

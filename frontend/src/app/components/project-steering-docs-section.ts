@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, effect
 import { Observable, map } from 'rxjs';
 import { SteeringDocsService } from '../services/steering-docs.service';
 import { JobService } from '../services/job.service';
+import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../utils/visible-interval';
 import {
   SteeringDocsOverview,
   SteeringDocsSource,
@@ -506,7 +507,7 @@ export class ProjectSteeringDocsSectionComponent implements OnInit, OnDestroy {
     return buckets;
   });
 
-  private timer?: ReturnType<typeof setInterval>;
+  private timer?: VisibleIntervalHandle;
 
   constructor() {
     effect(() => {
@@ -523,11 +524,11 @@ export class ProjectSteeringDocsSectionComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.refresh();
-    this.timer = setInterval(() => this.refresh(true), 30_000);
+    this.timer = setVisibleInterval(() => this.refresh(true), 30_000);
   }
 
   ngOnDestroy(): void {
-    if (this.timer) clearInterval(this.timer);
+    if (this.timer) clearVisibleInterval(this.timer);
   }
 
   refresh(silent = false): void {

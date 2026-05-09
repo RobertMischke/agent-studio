@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { SupervisorService } from '../services/supervisor.service';
+import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../utils/visible-interval';
 import {
   SupervisorAdvisory,
   SupervisorIntervention,
@@ -137,7 +138,7 @@ export class ProjectSupervisorSectionComponent implements OnInit, OnDestroy {
   readonly projectName = input.required<string>();
 
   private readonly svc = inject(SupervisorService);
-  private timer?: ReturnType<typeof setInterval>;
+  private timer?: VisibleIntervalHandle;
 
   readonly observation = signal<SupervisorObservation | null>(null);
   readonly advisories = signal<SupervisorAdvisory[]>([]);
@@ -147,11 +148,11 @@ export class ProjectSupervisorSectionComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.refresh();
-    this.timer = setInterval(() => this.refresh(), 5000);
+    this.timer = setVisibleInterval(() => this.refresh(), 5000);
   }
 
   ngOnDestroy(): void {
-    if (this.timer) clearInterval(this.timer);
+    if (this.timer) clearVisibleInterval(this.timer);
   }
 
   private refresh(): void {

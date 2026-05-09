@@ -6,6 +6,7 @@ import {
   ANALYSIS_TOPICS,
   AnalysisReport,
 } from '../models/analysis-report.model';
+import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../utils/visible-interval';
 
 /**
  * Project-level Analysis Reports surface (ROADMAP "Analysis Reports and
@@ -291,7 +292,7 @@ export class ProjectAnalysisReportsSectionComponent implements OnInit, OnDestroy
   readonly openReport = output<AnalysisReport>();
 
   private readonly svc = inject(AnalysisReportService);
-  private timer?: ReturnType<typeof setInterval>;
+  private timer?: VisibleIntervalHandle;
 
   readonly topics = ANALYSIS_TOPICS;
   readonly cadences = ANALYSIS_CADENCES;
@@ -306,11 +307,11 @@ export class ProjectAnalysisReportsSectionComponent implements OnInit, OnDestroy
 
   ngOnInit(): void {
     this.refresh();
-    this.timer = setInterval(() => this.refresh(true), 10_000);
+    this.timer = setVisibleInterval(() => this.refresh(true), 10_000);
   }
 
   ngOnDestroy(): void {
-    if (this.timer) clearInterval(this.timer);
+    if (this.timer) clearVisibleInterval(this.timer);
   }
 
   refresh(silent = false): void {

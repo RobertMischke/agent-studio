@@ -13,6 +13,28 @@ interface JobRef { id: string; watchPath: string; }
  * Provided locally on JobDetailComponent so each detail instance has
  * its own state and timers.
  */
+/**
+ * Cycle 4 bounded buffer: the polled output is capped at the last
+ * MAX_RENDERED_LINES entries before we stash it into the signal. The full
+ * log stays on disk (cli-output.log); the browser holds only what the
+ * activity-log can reasonably render. A long-running job that emits 50k
+ * lines used to balloon the JS heap with every poll because we set the
+ * full buffer back into a signal that change detection traversed on every
+ * tick. With the cap, the heap stays bounded and Angular's render cost
+ * stops growing with run duration. The boundary is generous (2000 entries
+ * is roughly 200 KB of plain text - still scrollable in the activity log)
+ * but tight enough that an hours-long run cannot OOM the tab.
+ */
+const MAX_RENDERED_LINES = 2000;
+
+function capLines(lines: CliOutputLine[]): CliOutputLine[] {
+  if (lines.length <= MAX_RENDERED_LINES) return lines;
+  // Drop the oldest entries; the activity log shows newest at the bottom,
+  // so the cap takes the tail. The user can still scroll the log up to
+  // the trim boundary; full history lives on disk in cli-output.log.
+  return lines.slice(-MAX_RENDERED_LINES);
+}
+
 @Injectable()
 export class CliOutputPollService implements OnDestroy {
   // The polled buffer is what GET /api/jobs/{id}/output returns — it's the
@@ -147,7 +169,7 @@ export class CliOutputPollService implements OnDestroy {
       this.jobService.getJobOutput(job.id, job.watchPath).subscribe({
         next: (output) => {
           if (generation !== this.pollGeneration) return;
-          this.polledOutput.set(output);
+          this.polledOutput.set(capLines(output));
           this.pollTimeout = setTimeout(poll, 2000);
         },
         error: () => {
@@ -164,7 +186,7 @@ export class CliOutputPollService implements OnDestroy {
   /** Hydrate the buffer from a prior run's logs (called by detail-effect). */
   hydrateOutput(output: CliOutputLine[], execStartedAt?: string | null): void {
     if (output.length === 0) return;
-    this.polledOutput.set(output);
+    this.polledOutput.set(capLines(output));
     if (!this.startedAt() && execStartedAt) {
       this.startedAt.set(new Date(execStartedAt));
     }

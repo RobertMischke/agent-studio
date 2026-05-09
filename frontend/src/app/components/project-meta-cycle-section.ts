@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, signal } from '@angular/core';
 import { SupervisorService } from '../services/supervisor.service';
+import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../utils/visible-interval';
 import {
   MetaCycleActionKind,
   MetaCycleConfigDto,
@@ -128,7 +129,7 @@ export class ProjectMetaCycleSectionComponent implements OnInit, OnDestroy {
   readonly projectName = input.required<string>();
 
   private readonly svc = inject(SupervisorService);
-  private timer?: ReturnType<typeof setInterval>;
+  private timer?: VisibleIntervalHandle;
 
   readonly enabled = signal<boolean>(false);
   readonly config = signal<MetaCycleConfigDto | null>(null);
@@ -151,11 +152,11 @@ export class ProjectMetaCycleSectionComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.refresh();
-    this.timer = setInterval(() => this.refresh(), 10_000);
+    this.timer = setVisibleInterval(() => this.refresh(), 10_000);
   }
 
   ngOnDestroy(): void {
-    if (this.timer) clearInterval(this.timer);
+    if (this.timer) clearVisibleInterval(this.timer);
   }
 
   refresh(): void {
