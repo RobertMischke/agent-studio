@@ -284,3 +284,278 @@ test.describe('Frontend stress: render perf at scale', () => {
     });
   }
 });
+
+/**
+ * Cycle 7h: detail-page stress. The board test above measures the
+ * kanban-shell render cost; this one opens a single card and measures
+ * what the user pays once they're INSIDE the detail view: long chat
+ * history (activity log), 10-file diff in the git pane, polling
+ * services that the protocol pane mounts. The user reported "Git-Viewer
+ * teilweise hakelig" + "lange Chat-Historie" as the two most painful
+ * surfaces; this test instruments both.
+ *
+ * Per N (chat lines): mock the board with one card, mock the detail
+ * endpoint with N cli-output lines + 10 git file changes + a synthetic
+ * diff for the first file. Click the card, wait for the detail panes
+ * to settle, then measure the same render+steady-state metrics as the
+ * board stress, plus a focused activity-log scroll FPS reading.
+ *
+ * Files mocked here that the board test left to the dev backend:
+ *   /api/jobs/{id}?watchPath=...           - JobDetail
+ *   /api/jobs/{id}/output?watchPath=...    - CliOutputLine[]
+ *   /api/jobs/{id}/runs?watchPath=...      - empty timeline
+ *   /api/jobs/{id}/git/status?watchPath=... - 10 file changes
+ *   /api/jobs/{id}/git/diff?path=...       - synthetic unified diff
+ *   /api/jobs/{id}/git/hygiene?watchPath=...- empty hygiene
+ *   /api/jobs/{id}/session-events          - empty
+ *   /api/jobs/{id}/screenshots             - empty
+ *   /api/jobs/{id}/claude/session-info     - null session
+ *   /api/jobs/{id}/git/commit-detail/...   - null
+ */
+
+const DETAIL_JOB_ID = 'stress-detail-target';
+
+function makeDetailJob(lane: string) {
+  return {
+    ...makeJob(0, lane),
+    id: DETAIL_JOB_ID,
+    jobKey: `${WATCH_PATH}::${DETAIL_JOB_ID}`,
+    title: 'Detail Stress Test - long chat, 10 file diff',
+  };
+}
+
+function makeOutputLines(count: number) {
+  // Mix of [user] / [assistant] / [orchestrator] streams to exercise
+  // the conversation-turn parser inside activity-log-view. Tool-call
+  // markers sprinkled so the tool-burst grouping path runs too.
+  const streams = ['user', 'stdout', 'stdout', 'stdout', 'orchestrator'];
+  const lines: { timestamp: string; stream: string; text: string }[] = [];
+  const now = Date.now();
+  for (let i = 0; i < count; i++) {
+    const stream = streams[i % streams.length];
+    let text: string;
+    if (i % 17 === 0) {
+      text = `[tool] Read file=src/app/services/some-service-${i}.ts`;
+    } else if (i % 11 === 0) {
+      text = `## Heading ${i}\n\nLorem ipsum dolor sit amet, consectetur adipiscing elit. Quisque ut nibh massa.`;
+    } else if (stream === 'user') {
+      text = `Could you also handle the case for ${i}? Make sure to update the tests.`;
+    } else {
+      text = `Working on item ${i}. Here's a longer paragraph that simulates a real assistant turn with multiple sentences. The cost of rendering hundreds of these adds up; that's exactly what the test is measuring.`;
+    }
+    lines.push({ timestamp: new Date(now - (count - i) * 1000).toISOString(), stream, text });
+  }
+  return lines;
+}
+
+function makeGitStatus(fileCount: number) {
+  const files = [];
+  for (let i = 0; i < fileCount; i++) {
+    files.push({
+      status: i % 4 === 0 ? 'A' : i % 4 === 1 ? 'M' : i % 4 === 2 ? 'D' : 'R',
+      path: `src/app/components/stress-${i.toString().padStart(2, '0')}/some-component.ts`,
+      added: 5 + (i * 7) % 50,
+      removed: 2 + (i * 3) % 30,
+    });
+  }
+  return {
+    isRepo: true,
+    branch: 'stress-test',
+    filesChanged: fileCount,
+    totalAdded: files.reduce((s, f) => s + f.added, 0),
+    totalRemoved: files.reduce((s, f) => s + f.removed, 0),
+    files,
+    error: null,
+  };
+}
+
+function makeUnifiedDiff(filePath: string) {
+  // Realistic-ish unified diff ~50 lines so diff2html does real work.
+  const lines = [
+    `diff --git a/${filePath} b/${filePath}`,
+    `index 0000000..1111111 100644`,
+    `--- a/${filePath}`,
+    `+++ b/${filePath}`,
+    `@@ -1,40 +1,42 @@`,
+  ];
+  for (let i = 0; i < 40; i++) {
+    if (i % 11 === 0) lines.push(`-  const oldName = ${i};`);
+    else if (i % 11 === 1) lines.push(`+  const newName = ${i};  // renamed for clarity`);
+    else lines.push(` // unchanged context line ${i} - lorem ipsum dolor`);
+  }
+  return lines.join('\n');
+}
+
+async function installDetailRoutes(page: import('@playwright/test').Page, chatLines: number) {
+  const detailJob = makeDetailJob('3-progress');
+  const grouped = {
+    backlog: [], preparation: [], orchestratorPrep: [], needsHumanReview: [],
+    ready: [], progress: [detailJob], failedPickup: [],
+    autoReview: [], humanReview: [], review: [], completed: [], archive: [],
+  };
+
+  // Board: one card, makes click target obvious.
+  await page.route(/\/api\/jobs\/grouped/, async route => route.fulfill({ json: grouped }));
+  await page.route(/\/api\/jobs(\?|$)/, async route => route.fulfill({ json: [detailJob] }));
+
+  // JobDetail.
+  const log = makeOutputLines(chatLines);
+  const detail = {
+    info: detailJob,
+    promptMarkdown: `# Stress test prompt\n\nPretend this is a long task description that the user wrote. ${'Lorem ipsum. '.repeat(20)}`,
+    promptHistory: [],
+    statusMarkdown: null,
+    contextUsage: null,
+    log: log.map(l => ({ timestamp: l.timestamp, event: l.stream, detail: l.text })),
+    summaryState: null,
+    reviewEvidence: [],
+  };
+  await page.route(new RegExp(`/api/jobs/${DETAIL_JOB_ID}(\\?|$)`), async route =>
+    route.fulfill({ json: detail }));
+
+  // Output buffer that activity-log-view actually reads.
+  await page.route(new RegExp(`/api/jobs/${DETAIL_JOB_ID}/output`), async route =>
+    route.fulfill({ json: log }));
+
+  // Git status with 10 changes.
+  const gitStatus = makeGitStatus(10);
+  await page.route(new RegExp(`/api/jobs/${DETAIL_JOB_ID}/git/status`), async route =>
+    route.fulfill({ json: gitStatus }));
+
+  // Diff for any path - the same synthetic diff for whichever file the
+  // user clicks.
+  await page.route(new RegExp(`/api/jobs/${DETAIL_JOB_ID}/git/diff`), async route => {
+    const url = new URL(route.request().url());
+    const p = url.searchParams.get('path') ?? gitStatus.files[0].path;
+    await route.fulfill({ contentType: 'text/plain', body: makeUnifiedDiff(p) });
+  });
+
+  // Hygiene + commit-detail empty.
+  await page.route(new RegExp(`/api/jobs/${DETAIL_JOB_ID}/git/hygiene`), async route =>
+    route.fulfill({ json: { project: PROJECT_NAME, dirty: true, unpushed: 0, branch: 'stress-test' } }));
+  await page.route(new RegExp(`/api/jobs/${DETAIL_JOB_ID}/git/commit-detail`), async route =>
+    route.fulfill({ json: null }));
+
+  // Other per-job pollers - empty so they don't bias the measurement.
+  await page.route(new RegExp(`/api/jobs/${DETAIL_JOB_ID}/runs`), async route =>
+    route.fulfill({ json: { runs: [], runCount: 0, firstStartedAt: null, lastActivityAt: null, hasActiveRun: false } }));
+  await page.route(new RegExp(`/api/jobs/${DETAIL_JOB_ID}/session-events`), async route =>
+    route.fulfill({ json: { events: [], sessionChain: [] } }));
+  await page.route(new RegExp(`/api/jobs/${DETAIL_JOB_ID}/screenshots`), async route =>
+    route.fulfill({ json: { screenshots: [] } }));
+  await page.route(new RegExp(`/api/jobs/${DETAIL_JOB_ID}/claude/session-info`), async route =>
+    route.fulfill({ json: { sessionInfo: null, rateLimit: null } }));
+}
+
+test.describe('Frontend stress: detail page (long chat + 10-file diff)', () => {
+  test.beforeAll(() => {
+    if (process.env.RUN_PERF_BASELINE !== '1') {
+      test.skip(true, 'Set RUN_PERF_BASELINE=1 to capture detail stress data.');
+    }
+  });
+
+  for (const N of [100, 500, 2000]) {
+    test(`chat=${N}: open detail + steady state + git pane`, async ({ page, context }) => {
+      await installDetailRoutes(page, N);
+
+      await page.goto('/');
+      await page.getByTestId('job-card').first().waitFor({ state: 'visible', timeout: 15_000 });
+
+      // 1. Click-to-detail-visible
+      const card = page.getByTestId('job-card').first();
+      const t0 = Date.now();
+      await card.click();
+      await page.getByTestId('detail-panes').waitFor({ state: 'visible', timeout: 10_000 });
+      record(N, 'click-to-detail-visible', 'ms', Date.now() - t0);
+
+      // Settle so detail-pane pollers have fired their first call.
+      await page.waitForTimeout(1500);
+
+      // 2a. DOM count after detail open.
+      const domCount = await page.evaluate(() => document.querySelectorAll('*').length);
+      record(N, 'detail-dom-node-count', 'count', domCount);
+
+      // 2b. Activity-log lines actually rendered.
+      const visibleLogLines = await page.evaluate(() =>
+        document.querySelectorAll('.activity-log__body .activity-log__line, .activity-log__body [data-testid*="activity"]').length
+      );
+      record(N, 'activity-log-rendered-lines', 'count', visibleLogLines,
+        visibleLogLines < N ? 'fewer rendered than fixture - virtualization or windowing in effect' : 'all lines rendered');
+
+      // 2c. Heap.
+      try {
+        const cdp = await context.newCDPSession(page);
+        await cdp.send('Performance.enable');
+        const metrics = await cdp.send('Performance.getMetrics');
+        const heap = metrics.metrics.find(m => m.name === 'JSHeapUsedSize')?.value || 0;
+        const nodes = metrics.metrics.find(m => m.name === 'Nodes')?.value || 0;
+        record(N, 'detail-js-heap-bytes', 'bytes', heap);
+        record(N, 'detail-cdp-node-count', 'count', nodes);
+      } catch {}
+
+      // 3. Long task during 5 s steady-state on detail pane.
+      const recorder = await startLongTaskRecorder(page);
+      await page.waitForTimeout(5_000);
+      const longTotal = await recorder.totalMs();
+      const longCount = await recorder.count();
+      await recorder.stop();
+      record(N, 'detail-long-tasks-during-5s-idle', 'ms', longTotal,
+        `${longCount} long task(s)`);
+
+      // 4. Activity-log scroll FPS - 2 s programmatic scroll INSIDE the
+      //    .activity-log__body container (not window).
+      const fps = await page.evaluate(async () => {
+        const scroller = document.querySelector('.activity-log__body') as HTMLElement | null;
+        if (!scroller) return 0;
+        return await new Promise<number>(resolve => {
+          let frames = 0;
+          const startMark = performance.now();
+          let dir = 1;
+          function tick() {
+            frames++;
+            const now = performance.now();
+            const elapsed = now - startMark;
+            if (elapsed > 2000) { resolve(frames / (elapsed / 1000)); return; }
+            scroller!.scrollBy({ top: 16 * dir });
+            if (Math.floor(elapsed / 250) % 2 === 1) dir = -1; else dir = 1;
+            requestAnimationFrame(tick);
+          }
+          requestAnimationFrame(tick);
+        });
+      });
+      record(N, 'activity-log-scroll-fps-2s', 'fps', fps);
+
+      // 5. Git pane diff render: click git-diff-col first file, time
+      //    until the rendered diff content appears. The git pane lazy-
+      //    loads diff2html on first non-empty diff (Cycle 7f).
+      try {
+        // The git tree is on the left of the git view body. Find a file row.
+        // We don't know the exact testid; click the first list item under
+        // [data-testid="git-tree-col"]. If diff2html is lazy-loaded, the
+        // first render takes longer than subsequent ones.
+        const treeCol = page.getByTestId('git-tree-col');
+        if (await treeCol.isVisible().catch(() => false)) {
+          const firstFile = treeCol.locator('[data-testid^="git-file-"], button, [role="button"]').first();
+          if (await firstFile.isVisible().catch(() => false)) {
+            const tDiff = Date.now();
+            await firstFile.click();
+            // Diff content lands inside the git-diff-col. Wait for any
+            // diff2html-rendered element (their root has class
+            // d2h-file-wrapper) or fallback to a non-empty <pre>.
+            await page.locator('.d2h-file-wrapper, .git-view__diff pre').first()
+              .waitFor({ state: 'visible', timeout: 10_000 });
+            record(N, 'git-diff-render-ms', 'ms', Date.now() - tDiff);
+          }
+        }
+      } catch (err) {
+        // Git pane may not be visible by default in this layout - record
+        // a sentinel so the report can show "not measured" rather than
+        // implying success.
+        record(N, 'git-diff-render-ms', 'ms', -1, 'git pane not reachable in this run');
+      }
+
+      console.log(`[detail chat=${N}] click=${Date.now() - t0}ms log-lines=${visibleLogLines}/${N} dom=${domCount} ` +
+        `longtask=${longTotal.toFixed(0)}ms fps=${fps.toFixed(1)}`);
+    });
+  }
+});
