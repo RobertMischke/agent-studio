@@ -458,15 +458,43 @@ test.describe('Frontend stress: detail page (long chat + 10-file diff)', () => {
     test(`chat=${N}: open detail + steady state + git pane`, async ({ page, context }) => {
       await installDetailRoutes(page, N);
 
+      page.on('console', msg => {
+        if (msg.type() === 'error') {
+          const text = msg.text();
+          if (!text.includes('favicon') && !text.includes('SignalR') && !text.includes('ERR_CONNECTION')) {
+            console.log(`CONSOLE.error: ${text.slice(0, 250)}`);
+          }
+        }
+      });
+      page.on('response', resp => {
+        if (resp.status() === 404 && resp.url().includes('/api/')) {
+          console.log(`HTTP 404: ${resp.url()}`);
+        }
+      });
+
       await page.goto('/');
       await page.getByTestId('job-card').first().waitFor({ state: 'visible', timeout: 15_000 });
 
-      // 1. Click-to-detail-visible
+      // 1. Click-to-detail-visible. Split into:
+      //    - network: time from click to /api/jobs/{id}? response received
+      //    - render:  time from response to detail-panes visible
       const card = page.getByTestId('job-card').first();
+      // Settle a little so any pending polls don't queue behind the click.
+      await page.waitForTimeout(200);
       const t0 = Date.now();
+      const responsePromise = page.waitForResponse(
+        r => r.url().includes(`/api/jobs/${DETAIL_JOB_ID}?`) || r.url().includes(`/api/jobs/${DETAIL_JOB_ID}`),
+        { timeout: 10_000 }
+      );
       await card.click();
+      const tNetEnd = await responsePromise.then(() => Date.now());
       await page.getByTestId('detail-panes').waitFor({ state: 'visible', timeout: 10_000 });
-      record(N, 'click-to-detail-visible', 'ms', Date.now() - t0);
+      const tDetailVisible = Date.now();
+      record(N, 'click-to-detail-visible', 'ms', tDetailVisible - t0);
+      record(N, 'click-to-detail-network-ms', 'ms', tNetEnd - t0,
+        'time from click to /api/jobs/{id} response');
+      record(N, 'click-to-detail-render-ms', 'ms', tDetailVisible - tNetEnd,
+        'time from response to detail-panes visible');
 
       // Settle so detail-pane pollers have fired their first call.
       await page.waitForTimeout(1500);
@@ -476,9 +504,13 @@ test.describe('Frontend stress: detail page (long chat + 10-file diff)', () => {
       record(N, 'detail-dom-node-count', 'count', domCount);
 
       // 2b. Activity-log lines actually rendered.
-      const visibleLogLines = await page.evaluate(() =>
-        document.querySelectorAll('.activity-log__body .activity-log__line, .activity-log__body [data-testid*="activity"]').length
-      );
+      // Activity log renders conversation turns (one per turn) inside
+       // the .convo container, NOT one DOM node per CLI line. Count
+       // direct children of .convo as a "rendered turn" proxy.
+      const visibleLogLines = await page.evaluate(() => {
+        const convo = document.querySelector('[data-testid="activity-log-conversation"]');
+        return convo ? convo.children.length : 0;
+      });
       record(N, 'activity-log-rendered-lines', 'count', visibleLogLines,
         visibleLogLines < N ? 'fewer rendered than fixture - virtualization or windowing in effect' : 'all lines rendered');
 
@@ -554,8 +586,8 @@ test.describe('Frontend stress: detail page (long chat + 10-file diff)', () => {
         record(N, 'git-diff-render-ms', 'ms', -1, 'git pane not reachable in this run');
       }
 
-      console.log(`[detail chat=${N}] click=${Date.now() - t0}ms log-lines=${visibleLogLines}/${N} dom=${domCount} ` +
-        `longtask=${longTotal.toFixed(0)}ms fps=${fps.toFixed(1)}`);
+      console.log(`[detail chat=${N}] click-to-visible=${tDetailVisible - t0}ms (net=${tNetEnd - t0}ms render=${tDetailVisible - tNetEnd}ms) ` +
+        `log-lines=${visibleLogLines}/${N} dom=${domCount} longtask=${longTotal.toFixed(0)}ms log-scroll-fps=${fps.toFixed(1)}`);
     });
   }
 });
