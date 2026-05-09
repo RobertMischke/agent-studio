@@ -1,4 +1,4 @@
-import { Component, computed, HostListener, inject, input, output, signal, effect, OnDestroy, ViewChild, ViewEncapsulation } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, HostListener, inject, input, output, signal, effect, OnDestroy, ViewChild, ViewEncapsulation } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { JobDetail, JobInfo, WatchPathEntry, CliSettings, CliModelInfo, CliType, CLI_TYPES, ContinueMode } from '../models/job.model';
 import { JobService } from '../services/job.service';
@@ -38,6 +38,13 @@ import { markdownToHtml } from './markdown-utils';
   standalone: true,
   imports: [FormsModule, GitPaneComponent, CommandDeckComponent, PromptPaneComponent, LogOverlayComponent, ProtocolPaneComponent, DetailHeaderComponent, CliConfigCardComponent, PaneToggleBarComponent, TriagePanelComponent],
   providers: [LayoutPanesService, ClaudeSessionPollService, SessionEventsPollService, RunTimelinePollService, ScreenshotsPollService, GitPaneService, CliOutputPollService],
+  // Cycle 7b: OnPush. The detail panel mounts seven polling services
+  // (claude session, session events, run timeline, screenshots,
+  // git pane, cli output, hygiene strip) plus the protocol/log/git
+  // panes; each poll tick used to trigger a default-CD pass over the
+  // whole subtree. Signals already mark themselves dirty, so OnPush
+  // prunes the unrelated work without changing behavior.
+  changeDetection: ChangeDetectionStrategy.OnPush,
   // Keep styles global to this subtree so the still-inline class rules
   // (.pane*, .detail*, .inspector*, .notes-panel*, .sidebar-card*, …)
   // continue to reach the now-extracted sub-components without having

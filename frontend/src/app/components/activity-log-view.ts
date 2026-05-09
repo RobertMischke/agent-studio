@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, ElementRef, OnDestroy, computed, effect, input, output, signal, viewChild, inject } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, OnDestroy, computed, effect, input, output, signal, viewChild, inject } from '@angular/core';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { CliOutputLine } from '../models/job.model';
 import { copyTextToClipboard } from '../services/clipboard.util';
@@ -72,6 +72,12 @@ interface RenderedTurn {
 @Component({
   selector: 'app-activity-log-view',
   standalone: true,
+  // Cycle 7b: OnPush. The activity log re-derives conversation turns
+  // from a capped lines() signal whenever new CLI output arrives. With
+  // default CD, every parent change-detection pass also walked through
+  // the full template (markdown blocks, tool chips, scroll anchor) -
+  // measurable lag during a busy run with hundreds of log lines.
+  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <div class="activity-log" [class.activity-log--embedded]="variant() === 'embedded'">
       <div class="activity-log__toolbar">

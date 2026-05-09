@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, computed, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, output, signal } from '@angular/core';
 import { JobInfo, JobOrderItem } from '../models/job.model';
 import { JobCardComponent } from './job-card';
 import { projectIdentity } from '../services/project-identity.util';
@@ -14,6 +14,13 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
   selector: 'app-job-column',
   standalone: true,
   imports: [JobCardComponent, InstantTooltipDirective, InfoButtonComponent],
+  // Cycle 7b: OnPush. The board mounts ~10 columns and re-renders the
+  // full @for of cards every CD pass under Default. JobCard is already
+  // OnPush; promoting the column propagates that benefit upward so a
+  // poll tick that didn't change THIS lane's jobs() input doesn't
+  // walk the lane's children either. Inputs are signal-based so OnPush
+  // marks dirty correctly without needing markForCheck.
+  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     @if (collapsed()) {
       <button type="button"

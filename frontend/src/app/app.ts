@@ -1,4 +1,4 @@
-import { Component, computed, effect, OnInit, signal, untracked, ViewChild, ViewEncapsulation } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, OnInit, signal, untracked, ViewChild, ViewEncapsulation } from '@angular/core';
 import { forkJoin } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { JobColumnComponent } from './components/job-column';
@@ -80,6 +80,15 @@ interface ActiveFilterPill {
 @Component({
   selector: 'app-root',
   imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, ProjectShellComponent, SecurityPanelComponent, UxuiPanelComponent, ProjectTokenUsagePanelComponent, ProjectObservabilityPanelComponent, ProjectProductRuntimePanelComponent, ProjectSteeringDocsSectionComponent, AnalysisReportDrilldownComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceTokenTimelineComponent, WorkspaceScreenshotsComponent, WorkspaceBannerComponent, UpdateBannerComponent, UpdateVersionBadgeComponent, UpdateCenterComponent, OrchestratorConfigPanelComponent, UpdateBlockModalComponent, VerboseDebugOverlayComponent, CliAdminPanelComponent, FiltersDropdownComponent, KanbanFilterSidesheetComponent],
+  // Cycle 7b: OnPush. The shell mounts kanban + detail panel + many
+  // sheets; default (Default) change detection re-checked the whole
+  // tree on every async event (every poll tick, every signal write).
+  // OnPush means CD only runs when an @Input changes (signals already
+  // mark themselves dirty), or an event handler in the template fires.
+  // The board sub-tree was already covered indirectly by JobCard's
+  // OnPush; promoting the shell ensures the sibling sheets and the
+  // header don't trigger whole-app passes during a 2 s grouped poll.
+  changeDetection: ChangeDetectionStrategy.OnPush,
   // Keep styles global to this subtree — the App shell still owns the
   // .header*, .filter-chip*, .overlay*, .create-dialog*, .error-dialog*
   // class rules used by the extracted dialogs and project-tabs.
