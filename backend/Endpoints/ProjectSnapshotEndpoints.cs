@@ -23,6 +23,19 @@ namespace OrchestratorApi.Endpoints;
 /// </summary>
 public static class ProjectSnapshotEndpoints
 {
+    // Cycle 5 review-decisions cache. The 4-auto-review scan walks every
+    // job folder in the lane and reads cli-output.log to find unresolved
+    // [[TASK_NEEDS_INPUT]] sentinels - that's ~225 ms p95 against the
+    // real workspace and dominates the snapshot's response time. The
+    // frontend polls the snapshot every 5 s, so a TTL just under that
+    // means the second poll always hits cache, the first polls
+    // through, and a fresh sentinel still appears within 5 s.
+    // Per-(workspace, project, lane-mtime) key so the cache invalidates
+    // automatically when the lane folder content changes.
+    private sealed record ReviewCacheEntry(DateTime CapturedAt, long LaneMtimeTicks, List<object> Items);
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, ReviewCacheEntry> ReviewCache = new();
+    private static readonly TimeSpan ReviewCacheTtl = TimeSpan.FromSeconds(3);
+
     public static void MapProjectSnapshotEndpoints(this WebApplication app)
     {
         app.MapGet("/api/projects/{projectName}/snapshot", (
@@ -63,40 +76,13 @@ public static class ProjectSnapshotEndpoints
             // 4) Orchestrator session.
             var session = sessionStore.Read(entry.Path);
 
-            // 5) Post-run pending review decisions (4-auto-review jobs whose
-            //    cli-output.log carries an unresolved [[TASK_NEEDS_INPUT]]).
-            //    Inlined from ReviewDecisionsEndpoints so the snapshot stays
-            //    a single round-trip; the standalone endpoint remains for
-            //    existing callers.
-            var reviewDecisions = new List<object>();
-            var reviewDir = Path.Combine(entry.Path, JobStates.AutoReview);
-            if (Directory.Exists(reviewDir))
-            {
-                foreach (var jobDir in Directory.GetDirectories(reviewDir))
-                {
-                    var logPath = JobPaths.CliOutputLog(jobDir);
-                    if (!File.Exists(logPath)) continue;
-                    string body;
-                    try { body = File.ReadAllText(logPath); } catch { continue; }
-                    var needs = ReviewDecisionParsing.FindUnresolvedNeedsInput(body);
-                    if (needs == null) continue;
-
-                    string id = Path.GetFileName(jobDir);
-                    string title = id;
-                    var jobJsonPath = Path.Combine(jobDir, "job.json");
-                    if (File.Exists(jobJsonPath))
-                    {
-                        try
-                        {
-                            var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(jobJsonPath));
-                            if (doc.RootElement.TryGetProperty("id", out var idEl)) id = idEl.GetString() ?? id;
-                            if (doc.RootElement.TryGetProperty("title", out var tEl)) title = tEl.GetString() ?? id;
-                        }
-                        catch { /* best-effort metadata */ }
-                    }
-                    reviewDecisions.Add(new { jobId = id, title, reason = needs.Reason });
-                }
-            }
+            // 5) Post-run pending review decisions. Cached at endpoint
+            //    level on (workspace, project, lane-mtime) for 3 s - the
+            //    frontend polls every 5 s, so the second poll hits cache,
+            //    the first pays the disk walk, and a fresh sentinel still
+            //    surfaces within one poll cycle. Without the cache this
+            //    one scan dominated the snapshot at ~225 ms p95.
+            var reviewDecisions = ReadReviewDecisionsCached(entry.Path);
 
             // 6) Live runner pending decisions (during an active run, the
             //    sentinel emitted by the in-flight job).
@@ -139,5 +125,53 @@ public static class ProjectSnapshotEndpoints
                 runnerPendingDecisions = liveItems
             });
         });
+    }
+
+    private static List<object> ReadReviewDecisionsCached(string watchPath)
+    {
+        var reviewDir = Path.Combine(watchPath, JobStates.AutoReview);
+        if (!Directory.Exists(reviewDir)) return new List<object>();
+
+        long laneMtime;
+        try { laneMtime = Directory.GetLastWriteTimeUtc(reviewDir).Ticks; }
+        catch { laneMtime = 0; }
+
+        if (ReviewCache.TryGetValue(watchPath, out var cached))
+        {
+            if (cached.LaneMtimeTicks == laneMtime
+                && DateTime.UtcNow - cached.CapturedAt < ReviewCacheTtl)
+            {
+                return cached.Items;
+            }
+        }
+
+        var items = new List<object>();
+        foreach (var jobDir in Directory.GetDirectories(reviewDir))
+        {
+            var logPath = JobPaths.CliOutputLog(jobDir);
+            if (!File.Exists(logPath)) continue;
+            string body;
+            try { body = File.ReadAllText(logPath); } catch { continue; }
+            var needs = ReviewDecisionParsing.FindUnresolvedNeedsInput(body);
+            if (needs == null) continue;
+
+            string id = Path.GetFileName(jobDir);
+            string title = id;
+            var jobJsonPath = Path.Combine(jobDir, "job.json");
+            if (File.Exists(jobJsonPath))
+            {
+                try
+                {
+                    var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(jobJsonPath));
+                    if (doc.RootElement.TryGetProperty("id", out var idEl)) id = idEl.GetString() ?? id;
+                    if (doc.RootElement.TryGetProperty("title", out var tEl)) title = tEl.GetString() ?? id;
+                }
+                catch { /* best-effort metadata */ }
+            }
+            items.Add(new { jobId = id, title, reason = needs.Reason });
+        }
+
+        ReviewCache[watchPath] = new ReviewCacheEntry(DateTime.UtcNow, laneMtime, items);
+        return items;
     }
 }
