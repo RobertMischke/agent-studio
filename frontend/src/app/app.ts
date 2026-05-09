@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, OnInit, signal, untracked, ViewChild, ViewEncapsulation } from '@angular/core';
 import { LaneCollapseService } from './features/board/state/lane-collapse.service';
+import { UiPreferencesService } from './features/shell/state/ui-preferences.service';
 import { forkJoin } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { JobColumnComponent } from './components/job-column';
@@ -2455,7 +2456,9 @@ export class App implements OnInit {
   readonly activeProjects = signal<Set<string>>(new Set(JSON.parse(localStorage.getItem('activeProjects') ?? '[]')));
   /** Active project names as a plain readonly array for the workspace banner input. */
   readonly bannerProjects = computed<readonly string[]>(() => [...this.activeProjects()]);
-  readonly sideSheetWidth = signal<number>(parseInt(localStorage.getItem('sideSheetWidth') ?? '280'));
+  // Cycle 9: side-sheet width owned by UiPreferencesService.
+  private readonly uiPrefs = inject(UiPreferencesService);
+  readonly sideSheetWidth = this.uiPrefs.sideSheetWidth;
   readonly collapsedGroups = signal<Set<string>>(new Set(JSON.parse(localStorage.getItem('collapsedGroups') ?? '[]')));
   /**
    * Per-lane collapse preference for the main board. Values are state ids
@@ -2476,7 +2479,7 @@ export class App implements OnInit {
   readonly collapsedLanes = this.laneCollapse.collapsedLanes;
   readonly collapsedContainers = this.laneCollapse.collapsedContainers;
   readonly focusedContainer = this.laneCollapse.focusedContainer;
-  readonly taskNavCollapsed = signal<boolean>(localStorage.getItem('taskNavCollapsed') === '1');
+  readonly taskNavCollapsed = this.uiPrefs.taskNavCollapsed;
   /**
    * Compact-card mode trades the full per-card metadata (model badge,
    * agent line, git pill, commit pill, last-activity line) for a dense
@@ -2484,7 +2487,7 @@ export class App implements OnInit {
    * the user fit many more cards on screen when they're scanning for a
    * task by name. Persisted across reloads.
    */
-  readonly compactCards = signal<boolean>(localStorage.getItem('compactCards') === '1');
+  readonly compactCards = this.uiPrefs.compactCards;
   readonly showUpdateStable = signal(false);
   readonly showE2ECleanup = signal(false);
   readonly devToolsMenuOpen = signal(false);
@@ -3123,8 +3126,6 @@ export class App implements OnInit {
 
   readonly cliTypes = CLI_TYPES;
   readonly availableModels = signal<CliModelInfo[]>([]);
-  
-  private resizing = false;
 
   createDialogTitle(): string {
     switch (this.newTargetState) {
@@ -4541,43 +4542,11 @@ export class App implements OnInit {
     return this.laneCollapse.containerSummary(this.laneGroups().find(g => g.id === id));
   }
 
-  setTaskNavCollapsed(collapsed: boolean) {
-    this.taskNavCollapsed.set(collapsed);
-    localStorage.setItem('taskNavCollapsed', collapsed ? '1' : '0');
-  }
+  // Cycle 9: UI-pref methods delegate to UiPreferencesService.
+  setTaskNavCollapsed(collapsed: boolean): void { this.uiPrefs.setTaskNavCollapsed(collapsed); }
+  toggleCompactCards(): void { this.uiPrefs.toggleCompactCards(); }
+  startResize(event: MouseEvent): void { this.uiPrefs.startResize(event); }
 
-  toggleCompactCards(): void {
-    const next = !this.compactCards();
-    this.compactCards.set(next);
-    localStorage.setItem('compactCards', next ? '1' : '0');
-  }
-
-  startResize(event: MouseEvent) {
-    event.preventDefault();
-    this.resizing = true;
-    document.body.classList.add('resizing');
-
-    const startX = event.clientX;
-    const startWidth = this.sideSheetWidth();
-
-    const onMouseMove = (e: MouseEvent) => {
-      if (!this.resizing) return;
-      const deltaX = e.clientX - startX;
-      const newWidth = Math.max(200, startWidth + deltaX); // No maximum limit
-      this.sideSheetWidth.set(newWidth);
-    };
-
-    const onMouseUp = () => {
-      this.resizing = false;
-      document.body.classList.remove('resizing');
-      localStorage.setItem('sideSheetWidth', this.sideSheetWidth().toString());
-      document.removeEventListener('mousemove', onMouseMove);
-      document.removeEventListener('mouseup', onMouseUp);
-    };
-
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
-  }
 }
 
 function readDefaultCliPref(): CliType {
