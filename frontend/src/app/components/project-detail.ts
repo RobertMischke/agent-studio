@@ -702,45 +702,42 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
 
   refreshAll(silent = false): void {
     void silent;
-    this.jobService.getAllProjectSettings().subscribe({
-      next: (all) => {
-        const row = all[this.projectName()] ?? { autoCommit: false, runnerMode: null, orchestratorModel: null };
+    // Cycle 5: 1 round-trip instead of 6. /api/projects/{name}/snapshot
+    // returns settings + runner-status + orchestrator-log-tail +
+    // orchestrator-session + review-decisions-pending + runner-pending-
+    // decisions all together. The standalone endpoints stay live for
+    // other consumers (CLI usage sheet, board, etc.).
+    this.jobService.getProjectSnapshot(this.projectName()).subscribe({
+      next: (snap) => {
+        const row = {
+          autoCommit: snap.settings.autoCommit,
+          runnerMode: snap.settings.runnerMode,
+          orchestratorModel: snap.settings.orchestratorModel
+        };
         this.settings.set(row);
-        // Sync drafts only when the server-known value differs (so a
-        // user mid-edit isn't yanked back to a stale value).
         if (this.autoCommitDraft !== row.autoCommit) this.autoCommitDraft = row.autoCommit;
         const wantedModel = row.orchestratorModel ?? '';
         if (this.orchModelDraft !== wantedModel) this.orchModelDraft = wantedModel;
+
+        // RunnerStatus signal expects the full RunnerStatus shape; the
+        // snapshot only ships this project's slot, so wrap it. Other
+        // projects' status comes from board polling and is irrelevant
+        // here.
+        if (snap.runnerStatus) {
+          this.runnerStatus.set({ projects: { [this.projectName()]: snap.runnerStatus } });
+        }
+
+        this.recentEntries.set(snap.orchestratorLogTail ?? []);
+        this.orchSession.set(snap.orchestratorSession ?? null);
+        this.pendingDecisions.set(snap.reviewDecisionsPending ?? []);
+        this.livePendingDecisions.set(snap.runnerPendingDecisions ?? []);
       },
-      error: () => { /* silent; keep last value */ }
+      error: () => { /* silent; keep last snapshot */ }
     });
-    this.jobService.getRunnerStatus().subscribe({
-      next: (s) => this.runnerStatus.set(s),
-      error: () => {}
-    });
+    // Board feed stays separate (it covers all projects, not just this
+    // one) and is owned by JobService's own 2 s poll. We just nudge it.
     this.jobService.refresh(true);
-    // Read latest grouped from the service signal one tick later.
     setTimeout(() => this.grouped.set(this.jobService.grouped()), 50);
-    this.jobService.getOrchestratorLog(this.projectName()).subscribe({
-      next: (resp) => {
-        // Show the last 5 entries newest-first.
-        const all = resp.entries ?? [];
-        this.recentEntries.set(all.slice(-5).reverse());
-      },
-      error: () => {}
-    });
-    this.jobService.getOrchestratorSession(this.projectName()).subscribe({
-      next: (resp) => this.orchSession.set(resp.session),
-      error: () => {}
-    });
-    this.jobService.getReviewDecisionsPending(this.projectName()).subscribe({
-      next: (resp) => this.pendingDecisions.set(resp.items ?? []),
-      error: () => this.pendingDecisions.set([])
-    });
-    this.jobService.getRunnerPendingDecisions(this.projectName()).subscribe({
-      next: (resp) => this.livePendingDecisions.set(resp.items ?? []),
-      error: () => this.livePendingDecisions.set([])
-    });
   }
 
   /**

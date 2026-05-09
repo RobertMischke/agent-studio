@@ -33,6 +33,7 @@ public static class EndpointMapping
         app.MapDesignSurfaceEndpoints();
         app.MapProjectTokenUsageEndpoints();
         app.MapReviewDecisionsEndpoints();
+        app.MapProjectSnapshotEndpoints();
         app.MapSystemEndpoints();
         app.MapCliEndpoints();
         app.MapDevToolsEndpoints();

@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport, QuotaReport, QuotaSnapshot, GitFileChange, GitStatus, ClaudeSessionResponse, JobCommitDetail, SessionEventsResponse, ContinueMode, ContinueJobResponse, OrchestratorLogResponse, TokenSummary, TokenSummaryAggregate, TokenTimeline, AdHocUsageAggregate, OrchestratorSessionResponse, OrchestratorChatResponse, OrchestratorChatTurn, ProjectChatScrollResponse, ProjectChatSearchResponse, ProjectChatTurnResponse, RunTimeline, RunCommitsResponse, RunFilesResponse, RunDiffResponse, RoadmapIntakeCandidate, RoadmapIntakeResponse, RoadmapIntakeConfirmResponse, JobScreenshotsResponse, WorkspaceScreenshotsResponse, ProjectTokenUsageSummary, ProjectTokenHeatmap, ProjectExpensiveJobsResponse, ProjectJobTokenDetail } from '../models/job.model';
+import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport, QuotaReport, QuotaSnapshot, GitFileChange, GitStatus, ClaudeSessionResponse, JobCommitDetail, SessionEventsResponse, ContinueMode, ContinueJobResponse, OrchestratorLogResponse, TokenSummary, TokenSummaryAggregate, TokenTimeline, AdHocUsageAggregate, OrchestratorSessionResponse, OrchestratorChatResponse, OrchestratorChatTurn, ProjectChatScrollResponse, ProjectChatSearchResponse, ProjectChatTurnResponse, RunTimeline, RunCommitsResponse, RunFilesResponse, RunDiffResponse, RoadmapIntakeCandidate, RoadmapIntakeResponse, RoadmapIntakeConfirmResponse, JobScreenshotsResponse, WorkspaceScreenshotsResponse, ProjectTokenUsageSummary, ProjectTokenHeatmap, ProjectExpensiveJobsResponse, ProjectJobTokenDetail, ProjectSnapshot } from '../models/job.model';
 import { ErrorDialogService } from './error-dialog.service';
 
 type LaneKey = keyof GroupedJobs;
@@ -568,6 +568,21 @@ export class JobService {
   getRunnerPendingDecisions(projectName: string) {
     return this.http.get<{ project: string; items: { jobId: string; title: string; kind: string; reason: string | null; detectedAt: string }[] }>(
       `${this.baseUrl}/runner/${encodeURIComponent(projectName)}/pending-decisions`
+    );
+  }
+
+  /**
+   * Cycle 5: single-round-trip per-project snapshot. Returns settings,
+   * runner status, orchestrator log tail (last 5), orchestrator session,
+   * post-run pending review decisions, and live runner pending decisions
+   * in one response. project-detail.refreshAll uses this to replace the
+   * 6+ parallel polled GETs that pre-Cycle-5 produced ~42 requests every
+   * 10 s of idle on this panel alone. Standalone endpoints stay live for
+   * other consumers.
+   */
+  getProjectSnapshot(projectName: string) {
+    return this.http.get<ProjectSnapshot>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/snapshot`
     );
   }
 

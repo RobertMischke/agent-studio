@@ -1113,6 +1113,29 @@ export interface RunnerStatus {
   projects: { [key: string]: ProjectRunnerStatus };
 }
 
+/**
+ * Cycle 5 single-round-trip snapshot for the project-detail panel.
+ * Returned by GET /api/projects/{projectName}/snapshot. Matches the
+ * anonymous-object shape that ProjectSnapshotEndpoints emits; the
+ * standalone endpoints (settings, runner-status, orchestrator-log,
+ * orchestrator-session, review-decisions-pending, runner-pending-decisions)
+ * remain available so other consumers don't churn.
+ */
+export interface ProjectSnapshot {
+  project: string;
+  capturedAt: string;
+  settings: {
+    autoCommit: boolean;
+    runnerMode: string | null;
+    orchestratorModel: string | null;
+  };
+  runnerStatus: ProjectRunnerStatus | null;
+  orchestratorLogTail: OrchestratorLogEntry[];
+  orchestratorSession: OrchestratorSession | null;
+  reviewDecisionsPending: { jobId: string; title: string; reason: string | null }[];
+  runnerPendingDecisions: { jobId: string; title: string; kind: string; reason: string | null; detectedAt: string }[];
+}
+
 export interface CliSettings {
   path: string;
   available: boolean;
