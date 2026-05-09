@@ -507,10 +507,12 @@ test.describe('Frontend stress: detail page (long chat + 10-file diff)', () => {
       // Activity log renders conversation turns (one per turn) inside
        // the .convo container, NOT one DOM node per CLI line. Count
        // direct children of .convo as a "rendered turn" proxy.
-      const visibleLogLines = await page.evaluate(() => {
-        const convo = document.querySelector('[data-testid="activity-log-conversation"]');
-        return convo ? convo.children.length : 0;
-      });
+      // Cycle 7i: under CDK virtual scroll the convo container holds
+      // a wrapper plus only the visible turns; counting `.convo-turn`
+      // descendants gives the truth either way.
+      const visibleLogLines = await page.evaluate(() =>
+        document.querySelectorAll('[data-testid="activity-log-conversation"] .convo-turn').length
+      );
       record(N, 'activity-log-rendered-lines', 'count', visibleLogLines,
         visibleLogLines < N ? 'fewer rendered than fixture - virtualization or windowing in effect' : 'all lines rendered');
 
@@ -537,7 +539,11 @@ test.describe('Frontend stress: detail page (long chat + 10-file diff)', () => {
       // 4. Activity-log scroll FPS - 2 s programmatic scroll INSIDE the
       //    .activity-log__body container (not window).
       const fps = await page.evaluate(async () => {
-        const scroller = document.querySelector('.activity-log__body') as HTMLElement | null;
+        // Cycle 7i: the CDK virtual scroll viewport is the actual
+        // scroller now; falls back to .activity-log__body for the
+        // pre-Cycle-7i measurement runs.
+        const scroller = (document.querySelector('cdk-virtual-scroll-viewport.activity-log__virtual')
+          ?? document.querySelector('.activity-log__body')) as HTMLElement | null;
         if (!scroller) return 0;
         return await new Promise<number>(resolve => {
           let frames = 0;
