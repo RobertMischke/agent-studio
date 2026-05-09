@@ -56,6 +56,11 @@ public class JobStateMachine
         {
             Directory.Move(info.FolderPath, targetDir);
             JobJsonFile.UpdateField(targetDir, "state", targetState, _logger);
+            // Cycle 2: invalidate the cache synchronously so a POST-then-GET
+            // sequence (e.g. drag a card, frontend re-polls) never sees the
+            // pre-move snapshot. The 250 ms FileSystemWatcher debounce alone
+            // is too slow for that round-trip.
+            _scanner.InvalidateCache();
             return new MoveJobOutcome(MoveJobStatus.Success);
         }
         catch (Exception ex)
@@ -114,6 +119,7 @@ public class JobStateMachine
         {
             JobJsonFile.UpdateOrder(ordered[i].FolderPath, (i + 1) * step, _logger);
         }
+        _scanner.InvalidateCache();
 
         return ordered.FindIndex(j => j.Id == jobId) + 1;
     }
@@ -193,6 +199,7 @@ public class JobStateMachine
                 var placeholder = $"{{\"id\":\"{newSlug}\",\"title\":\"{newSlug}\",\"state\":\"{targetState}\",\"order\":1,\"agent\":\"unknown\"}}";
                 File.WriteAllText(jobJsonPath, placeholder);
             }
+            _scanner.InvalidateCache();
             return new MoveJobOutcome(MoveJobStatus.Success);
         }
         catch (Exception ex)
@@ -210,6 +217,7 @@ public class JobStateMachine
         try
         {
             Directory.Delete(info.FolderPath, true);
+            _scanner.InvalidateCache();
             return true;
         }
         catch (Exception ex)
@@ -239,6 +247,7 @@ public class JobStateMachine
             Directory.CreateDirectory(Path.GetDirectoryName(targetDir)!);
             CopyDirectory(info.FolderPath, targetDir);
             Directory.Delete(info.FolderPath, true);
+            _scanner.InvalidateCache();
             return true;
         }
         catch (Exception ex)
@@ -444,6 +453,7 @@ public class JobStateMachine
             }
             JobJsonFile.UpdateOrder(folder, i + 1, _logger);
         }
+        _scanner.InvalidateCache();
         return true;
     }
 }

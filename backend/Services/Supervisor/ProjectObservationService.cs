@@ -80,11 +80,25 @@ public sealed class ProjectObservationService
             }
         }
 
+        // Cycle 2c: LastProgressAt must reflect the union of every file the
+        // runner may append to during a live session, not just cli-output.log.
+        // Sessions whose CLI primarily emits tool-use events write
+        // logs/tool-calls.jsonl while cli-output.log stays nearly empty; the
+        // pre-Cycle-2 path read only cli-output.log, classified those sessions
+        // as no-progress (the supervisor wrote 1830 false no-progress
+        // advisories on 2026-05-09 against a session that was actively
+        // streaming tool calls), and looped the bus + observations.jsonl with
+        // duplicate "stalled" warnings every 10 s. The union pattern lives in
+        // StaleProgressArchiver.MeasureFolder for the same reason; this
+        // mirrors it for the live observation path.
         var lastProgressAt = ObservationParsing.LatestTimestamp(lines);
-        if (lastProgressAt == null && logPath != null && File.Exists(logPath))
+        if (info != null)
         {
-            try { lastProgressAt = File.GetLastWriteTimeUtc(logPath); }
-            catch { /* swallow; observation is best-effort */ }
+            var folderMtime = MaxMtimeAcrossActivityFiles(info.FolderPath);
+            if (folderMtime != null && (lastProgressAt == null || folderMtime > lastProgressAt))
+            {
+                lastProgressAt = folderMtime;
+            }
         }
 
         var recentDecisions = ObservationParsing.ExtractRecentDecisions(lines);
@@ -112,6 +126,46 @@ public sealed class ProjectObservationService
             _logger.LogWarning(ex, "ProjectObservationService FindJob failed for {JobId}", jobId);
             return null;
         }
+    }
+
+    /// <summary>
+    /// Returns the latest mtime across every file the runner writes to
+    /// during an active session: <c>job.json</c>, anything under
+    /// <c>logs/</c> (cli-output.log, tool-calls.jsonl, session-events.jsonl,
+    /// future log files). Mirrors
+    /// <c>StaleProgressArchiver.MeasureFolder</c>'s "any append counts"
+    /// heuristic so the supervisor's progress detection stays aligned with
+    /// the boot-time orphan classifier and never disagrees on whether a
+    /// folder is making progress. Best-effort: an unreadable file or
+    /// missing folder is just skipped.
+    /// </summary>
+    private static DateTime? MaxMtimeAcrossActivityFiles(string jobFolder)
+    {
+        var maxStamp = DateTime.MinValue;
+        try
+        {
+            var jobJson = Path.Combine(jobFolder, "job.json");
+            if (File.Exists(jobJson))
+            {
+                var stamp = File.GetLastWriteTimeUtc(jobJson);
+                if (stamp > maxStamp) maxStamp = stamp;
+            }
+            var logsDir = Path.Combine(jobFolder, "logs");
+            if (Directory.Exists(logsDir))
+            {
+                foreach (var file in Directory.EnumerateFiles(logsDir))
+                {
+                    try
+                    {
+                        var stamp = File.GetLastWriteTimeUtc(file);
+                        if (stamp > maxStamp) maxStamp = stamp;
+                    }
+                    catch { /* skip unreadable */ }
+                }
+            }
+        }
+        catch { /* best-effort */ }
+        return maxStamp == DateTime.MinValue ? null : maxStamp;
     }
 
     private static SupervisorObservation IdleObservation(string project, DateTime capturedAt) => new(

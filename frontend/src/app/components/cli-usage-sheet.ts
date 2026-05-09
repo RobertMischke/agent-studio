@@ -425,11 +425,21 @@ export class CliUsageSheetComponent implements OnInit, OnDestroy {
   toggle() { this.open() ? this.hide() : this.show(); }
 
   ngOnInit() {
+    // Cycle-2 perf: /api/cli/usage walks every CLI's session history on
+    // disk; each call costs ~2 s of backend CPU. CLI sessions don't change
+    // every 15 s (minutes-to-hours scale), so polling that fast paid 13 %
+    // backend CPU continuously while the sheet was open for no real-time
+    // benefit. Three guards now:
+    //   - 60 s base interval (still picks up new sessions within a minute)
+    //   - skip when document.hidden (other tab / minimised window)
+    //   - existing guards: only when sheet open AND sessions segment open
+    //     AND not already loading
     this.refreshTimer = setInterval(() => {
+      if (typeof document !== 'undefined' && document.hidden) return;
       if (this.open() && !this.loading() && !this.isSegmentCollapsed('sessions')) {
         this.refreshSessions(true);
       }
-    }, 15000);
+    }, 60_000);
   }
 
   ngOnDestroy() {

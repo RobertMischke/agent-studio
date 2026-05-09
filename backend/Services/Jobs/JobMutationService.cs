@@ -30,12 +30,21 @@ public class JobMutationService
         _logger = logger;
     }
 
+    /// <summary>
+    /// Cycle 2: every public mutation that writes to disk routes its
+    /// success return through this helper so the in-memory snapshot is
+    /// invalidated synchronously. Without this, a POST-then-GET sequence
+    /// (e.g. SetJobTitle then refresh) could see the pre-write snapshot
+    /// for up to 250 ms (the FileSystemWatcher debounce window).
+    /// </summary>
+    private bool Updated() { _scanner.InvalidateCache(); return true; }
+
     public bool SetJobModel(string jobId, string? model, string? watchPath = null)
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return false;
         JobJsonFile.UpdateField(info.FolderPath, "model", model ?? "", _logger);
-        return true;
+        return Updated();
     }
 
     public bool SetJobCliType(string jobId, string cliType, string? watchPath = null)
@@ -49,7 +58,7 @@ public class JobMutationService
         {
             JobJsonFile.UpdateField(info.FolderPath, "sessionName", "", _logger);
         }
-        return true;
+        return Updated();
     }
 
     public bool SetJobUseOwnSession(string jobId, bool useOwn, string? watchPath = null)
@@ -57,7 +66,7 @@ public class JobMutationService
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return false;
         JobJsonFile.UpdateField(info.FolderPath, "useOwnSession", useOwn, _logger);
-        return true;
+        return Updated();
     }
 
     public bool SetJobCommit(string jobId, JobCommitInfo commit, string? watchPath = null)
@@ -71,7 +80,7 @@ public class JobMutationService
     {
         if (!Directory.Exists(folderPath)) return false;
         AppendJobCommitOnFolder(folderPath, commit);
-        return true;
+        return Updated();
     }
 
     /// <summary>
@@ -125,7 +134,7 @@ public class JobMutationService
 
             JobJsonFile.UpdateField(folderPath, "commit", chain[^1], _logger);
             JobJsonFile.UpdateField(folderPath, "commits", chain, _logger);
-            return true;
+            return Updated();
         }
         catch (Exception ex)
         {
@@ -145,6 +154,11 @@ public class JobMutationService
         if (!Directory.Exists(folderPath)) return false;
         JobJsonFile.UpdateField(folderPath, "lastProgressAt",
             utcNow.ToString("o", System.Globalization.CultureInfo.InvariantCulture), _logger);
+        // Intentionally NOT calling Updated(): this is the per-CLI-flush
+        // heartbeat (called every few seconds during an active run), and
+        // lastProgressAt does not surface in JobInfo (the kanban card
+        // reads LastActivity from disk mtime via GetLastActivityTime).
+        // Invalidating here would force a full rescan on every CLI line.
         return true;
     }
 
@@ -153,7 +167,7 @@ public class JobMutationService
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return false;
         JobJsonFile.UpdateField(info.FolderPath, "taskType", TaskTypes.Normalize(taskType), _logger);
-        return true;
+        return Updated();
     }
 
     /// <summary>
@@ -175,7 +189,7 @@ public class JobMutationService
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
         JobJsonFile.UpdateField(info.FolderPath, "tags", clean, _logger);
-        return true;
+        return Updated();
     }
 
     /// <summary>
@@ -206,7 +220,7 @@ public class JobMutationService
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return false;
         JobJsonFile.UpdateField(info.FolderPath, "title", title.Trim(), _logger);
-        return true;
+        return Updated();
     }
 
     public bool UpdateContextUsage(string jobId, ContextUsageSnapshot snapshot, string? watchPath = null)
@@ -214,6 +228,8 @@ public class JobMutationService
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return false;
         JobJsonFile.UpdateField(info.FolderPath, "contextUsage", snapshot, _logger);
+        // Skip Updated(): contextUsage is not surfaced on the kanban card and
+        // updates fire on every CLI activity flush during an active run.
         return true;
     }
 
@@ -230,7 +246,7 @@ public class JobMutationService
     {
         if (!Directory.Exists(folderPath)) return false;
         JobJsonFile.UpdateField(folderPath, "phase", phase ?? "", _logger);
-        return true;
+        return Updated();
     }
 
     public string? CreateJob(CreateJobRequest req)
@@ -319,6 +335,7 @@ public class JobMutationService
         if (!string.IsNullOrWhiteSpace(req.PromptMarkdown))
             File.WriteAllText(Path.Combine(jobDir, "prompt.md"), req.PromptMarkdown);
 
+        _scanner.InvalidateCache();
         return jobId;
     }
 
@@ -336,7 +353,10 @@ public class JobMutationService
 
         var filePath = Path.Combine(info.FolderPath, fileName);
         WriteAllTextWithRetry(filePath, content);
-        return true;
+        // prompt.md does not affect kanban-card fields, but UpdateJobFile is
+        // user-initiated (edit prompt) and the next read should see the
+        // change for any consumer that pulls JobDetail with the prompt body.
+        return Updated();
     }
 
     /// <summary>
@@ -460,6 +480,9 @@ public class JobMutationService
             File.WriteAllText(path,
                 JsonSerializer.Serialize(intent, _pendingIntentWriteOpts),
                 Encoding.UTF8);
+            // PendingIntent appears on JobInfo (kanban card shows the intent),
+            // so the snapshot must be invalidated for the next read to see it.
+            _scanner.InvalidateCache();
             return intent;
         }
         catch (Exception ex)
@@ -494,6 +517,8 @@ public class JobMutationService
             var stash = Path.Combine(jobFolder, "pending-intent.consumed.json");
             if (File.Exists(stash)) File.Delete(stash);
             File.Move(path, stash);
+            // pending-intent.json gone → JobInfo.PendingIntent should be null.
+            _scanner.InvalidateCache();
             return intent;
         }
         catch (Exception ex)
@@ -539,6 +564,7 @@ public class JobMutationService
             {
                 File.Move(stash, canonical);
             }
+            _scanner.InvalidateCache();
         }
         catch (Exception ex)
         {

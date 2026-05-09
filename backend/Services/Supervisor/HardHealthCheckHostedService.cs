@@ -28,6 +28,23 @@ public sealed class HardHealthCheckHostedService : BackgroundService
     private readonly ILogger<HardHealthCheckHostedService> _logger;
     private readonly AgentMessageBusBridge? _bus;
 
+    /// <summary>
+    /// Cycle 2d advisory dedupe table. Key = (project, topic, jobId);
+    /// value = last emit timestamp. The supervisor used to write the same
+    /// no-progress / error-burst advisory every 10 s for the duration of
+    /// the failure (1830 no-progress + 1555 error-burst rows accumulated
+    /// against one wedged session in the 2026-05-09 incident); the bus
+    /// mirror was the worst offender because every tick re-rendered
+    /// timeline rows on every connected client. Cooldown suppresses the
+    /// rebroadcast while the underlying condition keeps firing; the
+    /// canonical observations.jsonl gets a single compact "still active"
+    /// row at every cooldown boundary instead of N full duplicates.
+    /// In-memory only; restarts of the host clear the table, which is
+    /// fine because the first tick after restart re-fires the advisory.
+    /// </summary>
+    private readonly Dictionary<(string project, string topic, string? jobId), DateTime> _advisoryCooldown = new();
+    private readonly Lock _cooldownLock = new();
+
     public HardHealthCheckHostedService(
         TaskRunnerService taskRunner,
         ProjectObservationService observe,
@@ -84,8 +101,16 @@ public sealed class HardHealthCheckHostedService : BackgroundService
             try
             {
                 var observation = await _observe.ObserveAsync(project, ct);
+                var cooldown = TimeSpan.FromSeconds(_configuration.GetValue("Supervisor:AdvisoryCooldownSeconds", 300));
                 foreach (var advisory in HardHealthChecks.RunAll(observation, thresholds))
                 {
+                    if (IsWithinCooldown(advisory, cooldown))
+                    {
+                        // Same condition still active; skip both the durable
+                        // append and the bus mirror so the project screen
+                        // does not see N copies of the same warning.
+                        continue;
+                    }
                     AppendObservationRecord(workspace, advisory);
                     // Mirror to the Agent Message Bus. The legacy
                     // observations.jsonl remains canonical (auto-intervention,
@@ -103,6 +128,28 @@ public sealed class HardHealthCheckHostedService : BackgroundService
                 _logger.LogWarning(ex, "HardHealthCheck failed for project {Project}", project);
             }
         }
+    }
+
+    /// <summary>
+    /// Returns true if an advisory with the same (project, topic, jobId)
+    /// was already emitted within the cooldown window. Updates the table
+    /// in the same call so subsequent ticks within the window also skip.
+    /// quota-critical advisories bypass cooldown because they encode a
+    /// budget the operator must see every tick.
+    /// </summary>
+    private bool IsWithinCooldown(SupervisorAdvisory advisory, TimeSpan cooldown)
+    {
+        if (advisory.Topic == "quota-critical") return false; // never suppress
+        var key = (advisory.Project, advisory.Topic, advisory.JobId);
+        lock (_cooldownLock)
+        {
+            if (_advisoryCooldown.TryGetValue(key, out var lastAt))
+            {
+                if (advisory.CreatedAt - lastAt < cooldown) return true;
+            }
+            _advisoryCooldown[key] = advisory.CreatedAt;
+        }
+        return false;
     }
 
     /// <summary>
