@@ -94,6 +94,11 @@ builder.Services.AddSingleton<WorkspaceTokensTimelineService>();
 builder.Services.AddSingleton<WorkspaceSummaryService>();
 builder.Services.AddSingleton<JobTransitionService>();
 builder.Services.AddSingleton<JobWatcherService>();
+// Cycle 1: in-memory snapshot of all jobs across watch paths. Reads from
+// JobScannerService.ScanAllJobsRaw on miss, invalidated by JobWatcherService
+// events and by mutation services. Wired into JobScannerService below via
+// SetIndexCache so existing ScanAllJobs callers transparently benefit.
+builder.Services.AddSingleton<JobIndexCache>();
 builder.Services.AddSingleton<CopilotCliEnvironment>();
 builder.Services.AddSingleton<CopilotModelDiscovery>();
 builder.Services.AddSingleton<CodexModelDiscovery>();
@@ -304,6 +309,15 @@ _ = Task.Run(() =>
 var watcher = app.Services.GetRequiredService<JobWatcherService>();
 var hubContext = app.Services.GetRequiredService<IHubContext<JobHub>>();
 watcher.OnJobChanged += _ => hubContext.Clients.All.SendAsync("jobsChanged");
+
+// Cycle 1: bind the in-memory snapshot cache. JobScannerService.ScanAllJobs
+// now serves from cache; JobWatcherService.OnJobChanged invalidates it on
+// external file changes, mutation services invalidate it on API writes.
+// Without this two-line bridge the cache exists but nothing fills or
+// invalidates it, and ScanAllJobs falls back to per-call disk walks.
+var jobIndexCache = app.Services.GetRequiredService<JobIndexCache>();
+app.Services.GetRequiredService<JobScannerService>().SetIndexCache(jobIndexCache);
+watcher.OnJobChanged += _ => jobIndexCache.Invalidate(JobIndexCache.InvalidationSource.External);
 
 // Wire JobTransitionService move events to atomically clear the per-project
 // runner's _activeJobId when the active job is moved out of 3-progress.

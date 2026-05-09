@@ -56,6 +56,10 @@ public class BackendBaselineTests
         }
 
         var scenario = Environment.GetEnvironmentVariable("PERF_SCENARIO") ?? "baseline";
+        // Cycle 1+: PERF_USE_CACHE=1 wires the JobIndexCache so the test
+        // measures cached hot paths. Default false keeps the baseline runs
+        // (Cycle 0) honest — they reflect ScanAllJobs going through disk.
+        var withCache = Environment.GetEnvironmentVariable("PERF_USE_CACHE") == "1";
         var nValues = new[] { 10, 50, 200, 500 };
         var iterations = 30;
         var warmup = 3;
@@ -63,7 +67,7 @@ public class BackendBaselineTests
 
         foreach (var n in nValues)
         {
-            using var fx = new PerfBaselineFixture(n, scenarioTag: scenario);
+            using var fx = new PerfBaselineFixture(n, scenarioTag: scenario, withCache: withCache);
 
             // 1) ScanAllJobs - the foundation of every polled endpoint today.
             metrics.Add(Measure($"ScanAllJobs", fx, n, iterations, warmup,

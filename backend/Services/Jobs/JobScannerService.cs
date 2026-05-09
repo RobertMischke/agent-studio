@@ -23,12 +23,39 @@ public class JobScannerService
     private readonly ILogger<JobScannerService> _logger;
     private readonly SummaryGenerationService _summaryService;
 
+    /// <summary>
+    /// Optional in-memory snapshot cache. Wired by DI through
+    /// <see cref="SetIndexCache"/> after both services are constructed
+    /// (avoids the constructor cycle: cache needs scanner for raw reads,
+    /// scanner needs cache for hot-path reads).
+    /// </summary>
+    private JobIndexCache? _indexCache;
+
     public JobScannerService(IConfiguration config, ILogger<JobScannerService> logger, SummaryGenerationService summaryService)
     {
         _config = config;
         _logger = logger;
         _summaryService = summaryService;
     }
+
+    /// <summary>
+    /// Late-binds the cache so <see cref="ScanAllJobs"/> can serve from
+    /// memory. Called once at startup from Program.cs after the cache
+    /// singleton has been resolved. Without this call the scanner stays
+    /// in pre-Cycle-1 disk-walk-on-every-read mode (the existing tests
+    /// that build a scanner directly continue to work without a cache).
+    /// </summary>
+    public void SetIndexCache(JobIndexCache cache) => _indexCache = cache;
+
+    /// <summary>
+    /// Invalidates the in-memory snapshot, if a cache is wired. Mutation
+    /// services call this right after a folder move / job.json rewrite so
+    /// the next read sees the change synchronously rather than waiting for
+    /// the FileSystemWatcher's debounce window. No-op when no cache is
+    /// registered (test fixtures that build the scanner directly).
+    /// </summary>
+    public void InvalidateCache() =>
+        _indexCache?.Invalidate(JobIndexCache.InvalidationSource.Mutation);
 
     public List<WatchPathEntry> GetWatchPaths()
     {
@@ -99,7 +126,31 @@ public class JobScannerService
         return new OrchestratorPointer(projectKey);
     }
 
+    /// <summary>
+    /// Returns all jobs across configured watch paths. Cycle-1 hot-path
+    /// optimization: when a <see cref="JobIndexCache"/> is registered (the
+    /// production case), this returns the cached snapshot in O(1); the
+    /// cache refreshes itself on FileSystemWatcher events and on explicit
+    /// invalidation from mutation services. Tests that build the scanner
+    /// directly (no cache wired) keep the original disk-walk semantics.
+    /// </summary>
     public List<JobInfo> ScanAllJobs()
+    {
+        if (_indexCache != null)
+        {
+            // ImmutableList -> List materialization is cheap (copy of refs).
+            // Callers that mutate the result still get isolation.
+            return _indexCache.GetSnapshot().ToList();
+        }
+        return ScanAllJobsRaw();
+    }
+
+    /// <summary>
+    /// The uncached disk walk. Always reads from disk; used by
+    /// <see cref="JobIndexCache"/> for refresh and by callers that want to
+    /// bypass the cache (tests, recovery paths).
+    /// </summary>
+    public List<JobInfo> ScanAllJobsRaw()
     {
         var jobs = new List<JobInfo>();
         foreach (var entry in GetWatchPaths())

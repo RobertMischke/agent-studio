@@ -29,7 +29,9 @@ internal sealed class PerfBaselineFixture : IDisposable
     public JobStateMachine States { get; }
     public ProjectTokenUsageService TokenUsage { get; }
 
-    public PerfBaselineFixture(int jobCount, string scenarioTag = "perf")
+    public JobIndexCache? IndexCache { get; }
+
+    public PerfBaselineFixture(int jobCount, string scenarioTag = "perf", bool withCache = false)
     {
         ProjectName = $"perf-{scenarioTag}-{jobCount}";
         WatchPath = Path.Combine(Path.GetTempPath(), $"atp-{scenarioTag}-{Guid.NewGuid():N}");
@@ -73,6 +75,11 @@ internal sealed class PerfBaselineFixture : IDisposable
 
         Summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, Config);
         Scanner = new JobScannerService(Config, NullLogger<JobScannerService>.Instance, Summary);
+        if (withCache)
+        {
+            IndexCache = new JobIndexCache(Scanner, NullLogger<JobIndexCache>.Instance, Config);
+            Scanner.SetIndexCache(IndexCache);
+        }
         States = new JobStateMachine(Scanner, NullLogger<JobStateMachine>.Instance);
         var sessions = new JobSessionLog(Scanner, NullLogger<JobSessionLog>.Instance);
         var mutations = new JobMutationService(Scanner, NullLogger<JobMutationService>.Instance);
