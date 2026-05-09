@@ -1,6 +1,7 @@
 import { Injectable, OnDestroy, signal } from '@angular/core';
 import { JobInfo, JobScreenshot } from '../../models/job.model';
 import { JobService } from '../../services/job.service';
+import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../utils/visible-interval';
 
 /**
  * Polls the per-job screenshot listing (`/api/jobs/{id}/screenshots`)
@@ -16,7 +17,7 @@ import { JobService } from '../../services/job.service';
 export class ScreenshotsPollService implements OnDestroy {
   readonly screenshots = signal<JobScreenshot[]>([]);
 
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private timer: VisibleIntervalHandle | null = null;
   private currentJob: { id: string; watchPath: string } | null = null;
   private currentKey = '';
 
@@ -33,7 +34,7 @@ export class ScreenshotsPollService implements OnDestroy {
     }
     this.currentJob = { id: info.id, watchPath: info.watchPath };
     this.refresh();
-    this.timer = setInterval(() => this.refresh(), 10_000);
+    this.timer = setVisibleInterval(() => this.refresh(), 10_000);
   }
 
   refresh(): void {
@@ -50,7 +51,7 @@ export class ScreenshotsPollService implements OnDestroy {
 
   stop(): void {
     if (this.timer) {
-      clearInterval(this.timer);
+      clearVisibleInterval(this.timer);
       this.timer = null;
     }
   }

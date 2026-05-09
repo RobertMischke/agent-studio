@@ -21,6 +21,7 @@ The repo's authoritative agent contract lives in [AGENTS.md](../AGENTS.md). This
 | [architecture-decisions.md](architecture-decisions.md) | The ADR archive (ADR-0001 … ADR-0032). Load-bearing: product boundaries, non-goals, reasoning styles. Bug-fix-grade decisions belong in commits, not here. |
 | [architecture-model.md](architecture-model.md) | Marble-style architecture map: <= 10 elements per project, the contract that drift analysis runs against. |
 | [design-principles.md](design-principles.md) | UX contract: top-level summary, always-available drill-down, run-as-unit-of-conversation, calm classical style. |
+| [perf-frontend.md](perf-frontend.md) | Frontend perf playbook: visibility-aware polling, cache-first reads, bounded buffers, measurement recipe, anti-patterns. |
 | [filesystem-contract.md](filesystem-contract.md) | Job-folder layout, lane catalog, state strings, the on-disk shape every CLI must respect. |
 | [agent-task-contract.md](agent-task-contract.md) | App-owned task lifecycle boundary copied into every watched target. The cross-product contract. |
 | [agent-contract-pattern.md](agent-contract-pattern.md) | Contract-bounded agents (ADR-0032): three-zone pattern (Pre-Guard → Agent → Decider+Post-Guard), schemas, decider table, self-heal allow-list, worked example for pickup-failed. The agent classifies, the rule engine decides. |

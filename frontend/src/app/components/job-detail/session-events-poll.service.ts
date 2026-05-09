@@ -1,6 +1,7 @@
 import { Injectable, OnDestroy, computed, signal } from '@angular/core';
 import { JobInfo, SessionEventsResponse } from '../../models/job.model';
 import { JobService } from '../../services/job.service';
+import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../utils/visible-interval';
 
 /**
  * Polls the per-job session-event log every 10 s. Drives the
@@ -40,7 +41,7 @@ export class SessionEventsPollService implements OnDestroy {
     return r.sessionChain.filter((s) => s && s !== '(recovery)').length;
   });
 
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private timer: VisibleIntervalHandle | null = null;
   private currentJob: { id: string; watchPath: string } | null = null;
   private currentKey = '';
 
@@ -57,7 +58,7 @@ export class SessionEventsPollService implements OnDestroy {
     }
     this.currentJob = { id: info.id, watchPath: info.watchPath };
     this.refresh();
-    this.timer = setInterval(() => this.refresh(), 10_000);
+    this.timer = setVisibleInterval(() => this.refresh(), 10_000);
   }
 
   refresh(): void {
@@ -74,7 +75,7 @@ export class SessionEventsPollService implements OnDestroy {
 
   stop(): void {
     if (this.timer) {
-      clearInterval(this.timer);
+      clearVisibleInterval(this.timer);
       this.timer = null;
     }
   }

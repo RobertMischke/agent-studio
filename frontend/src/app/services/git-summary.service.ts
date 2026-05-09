@@ -1,6 +1,7 @@
 import { Injectable, computed, signal, inject, DestroyRef } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { GitProjectSummary } from '../models/job.model';
+import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../utils/visible-interval';
 
 /**
  * Shared store for the per-project git summary used by the board's tile pills.
@@ -16,7 +17,7 @@ export class GitSummaryService {
   private readonly summaries = signal<GitProjectSummary[]>([]);
   readonly value = this.summaries.asReadonly();
 
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private timer: VisibleIntervalHandle | null = null;
   private subscribers = 0;
 
   /** Returns a computed pill state for a given project name, or null. */
@@ -28,13 +29,13 @@ export class GitSummaryService {
   ensurePolling(): () => void {
     if (this.subscribers === 0) {
       this.refresh();
-      this.timer = setInterval(() => this.refresh(), 15_000);
+      this.timer = setVisibleInterval(() => this.refresh(), 15_000);
     }
     this.subscribers++;
     return () => {
       this.subscribers = Math.max(0, this.subscribers - 1);
       if (this.subscribers === 0 && this.timer) {
-        clearInterval(this.timer);
+        clearVisibleInterval(this.timer);
         this.timer = null;
       }
     };

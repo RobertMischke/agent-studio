@@ -2,6 +2,7 @@ import { Injectable, OnDestroy, computed, signal } from '@angular/core';
 import { GitFileChange, GitStatus, JobCommitDetail, JobCommitInfo, JobInfo } from '../../models/job.model';
 import { JobService } from '../../services/job.service';
 import { ErrorDialogService } from '../../services/error-dialog.service';
+import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../utils/visible-interval';
 
 /**
  * Owns the Git pane state and API calls for a single job-detail
@@ -43,7 +44,7 @@ export class GitPaneService implements OnDestroy {
   readonly selectedCommitSha = signal<string | null>(null);
 
   private currentJob: JobInfo | null = null;
-  private refreshTimer: ReturnType<typeof setInterval> | null = null;
+  private refreshTimer: VisibleIntervalHandle | null = null;
 
   constructor(
     private jobService: JobService,
@@ -53,7 +54,7 @@ export class GitPaneService implements OnDestroy {
   /** Start polling git status every `intervalMs` ms. No-op if already running. */
   startAutoRefresh(intervalMs = 5000): void {
     if (this.refreshTimer) return;
-    this.refreshTimer = setInterval(() => {
+    this.refreshTimer = setVisibleInterval(() => {
       // In commit mode the displayed snapshot is historical — polling the
       // working tree would just churn for nothing.
       if (this.viewMode() === 'commit') return;
@@ -66,7 +67,7 @@ export class GitPaneService implements OnDestroy {
   /** Stop the auto-refresh polling loop. */
   stopAutoRefresh(): void {
     if (this.refreshTimer) {
-      clearInterval(this.refreshTimer);
+      clearVisibleInterval(this.refreshTimer);
       this.refreshTimer = null;
     }
   }

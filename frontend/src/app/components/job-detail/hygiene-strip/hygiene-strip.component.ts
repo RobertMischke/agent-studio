@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { GitHygieneStatus, JobInfo } from '../../../models/job.model';
 import { GitHygieneService } from '../../../services/git-hygiene.service';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
+import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../utils/visible-interval';
 
 /**
  * Repository-hygiene strip rendered at the top of the protocol pane for
@@ -158,7 +159,7 @@ export class HygieneStripComponent implements OnDestroy {
     return '✓';
   }
 
-  private pollTimer: ReturnType<typeof setInterval> | null = null;
+  private pollTimer: VisibleIntervalHandle | null = null;
   private currentJobKey: string | null = null;
 
   constructor() {
@@ -205,7 +206,7 @@ export class HygieneStripComponent implements OnDestroy {
   private startPolling(j: JobInfo): void {
     this.stopPolling();
     this.refreshOnce(j);
-    this.pollTimer = setInterval(() => this.refreshOnce(j), 15_000);
+    this.pollTimer = setVisibleInterval(() => this.refreshOnce(j), 15_000);
   }
 
   private refreshOnce(j: JobInfo): void {
@@ -217,7 +218,7 @@ export class HygieneStripComponent implements OnDestroy {
 
   private stopPolling(): void {
     if (this.pollTimer) {
-      clearInterval(this.pollTimer);
+      clearVisibleInterval(this.pollTimer);
       this.pollTimer = null;
     }
   }

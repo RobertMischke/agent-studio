@@ -1,5 +1,6 @@
 import { Injectable, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
+import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../utils/visible-interval';
 
 /**
  * Live status snapshot of the multi-aspect auto-review tick. Surfaced
@@ -26,7 +27,7 @@ export interface AutoReviewStatusView {
 @Injectable({ providedIn: 'root' })
 export class AutoReviewStatusStore {
   private readonly http = inject(HttpClient);
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private timer: VisibleIntervalHandle | null = null;
   private subscribers = 0;
 
   readonly status = signal<AutoReviewStatusView | null>(null);
@@ -40,14 +41,14 @@ export class AutoReviewStatusStore {
     this.subscribers++;
     if (this.subscribers === 1) {
       this.refresh();
-      this.timer = setInterval(() => this.refresh(), intervalMs);
+      this.timer = setVisibleInterval(() => this.refresh(), intervalMs);
     }
   }
 
   release(): void {
     if (this.subscribers > 0) this.subscribers--;
     if (this.subscribers === 0 && this.timer !== null) {
-      clearInterval(this.timer);
+      clearVisibleInterval(this.timer);
       this.timer = null;
     }
   }

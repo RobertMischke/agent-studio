@@ -1,6 +1,7 @@
 import { Injectable, OnDestroy, signal } from '@angular/core';
 import { ClaudeRateLimitSnapshot, ClaudeSessionInfo, JobInfo } from '../../models/job.model';
 import { JobService } from '../../services/job.service';
+import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../utils/visible-interval';
 
 /**
  * Polls live Claude session telemetry every 5 s for the currently-open
@@ -18,7 +19,7 @@ export class ClaudeSessionPollService implements OnDestroy {
   readonly session = signal<ClaudeSessionInfo | null>(null);
   readonly rateLimit = signal<ClaudeRateLimitSnapshot | null>(null);
 
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private timer: VisibleIntervalHandle | null = null;
   private currentJob: { id: string; watchPath: string } | null = null;
   /** Tracks the currently-polled job so we can re-arm when it changes. */
   private currentKey = '';
@@ -41,7 +42,7 @@ export class ClaudeSessionPollService implements OnDestroy {
     }
     this.currentJob = { id: info.id, watchPath: info.watchPath };
     this.refresh();
-    this.timer = setInterval(() => this.refresh(), 5_000);
+    this.timer = setVisibleInterval(() => this.refresh(), 5_000);
   }
 
   refresh(): void {
@@ -62,7 +63,7 @@ export class ClaudeSessionPollService implements OnDestroy {
 
   stop(): void {
     if (this.timer) {
-      clearInterval(this.timer);
+      clearVisibleInterval(this.timer);
       this.timer = null;
     }
   }

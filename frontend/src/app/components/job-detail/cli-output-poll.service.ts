@@ -136,6 +136,14 @@ export class CliOutputPollService implements OnDestroy {
     const poll = () => {
       const job = this.currentJob;
       if (!this.isRunning() || generation !== this.pollGeneration || !job) return;
+      // Cycle 3: skip the fetch (but keep the timer) when the tab is
+      // backgrounded - re-arm so we resume cleanly when the user comes
+      // back, without burning a request every 2 s for a buffer nobody
+      // is reading right now.
+      if (typeof document !== 'undefined' && document.hidden) {
+        this.pollTimeout = setTimeout(poll, 2000);
+        return;
+      }
       this.jobService.getJobOutput(job.id, job.watchPath).subscribe({
         next: (output) => {
           if (generation !== this.pollGeneration) return;

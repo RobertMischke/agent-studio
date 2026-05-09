@@ -1,6 +1,7 @@
 import { DestroyRef, Injectable, computed, inject, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { GitHygieneStatus } from '../models/job.model';
+import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../utils/visible-interval';
 
 /**
  * Shared store for the per-project repository hygiene snapshot used by:
@@ -31,10 +32,10 @@ export class GitHygieneService {
    */
   ensurePolling(projectName: string, intervalMs = 15_000): () => void {
     if (!projectName) return () => {};
-    const tracker = this.subscribers.get(projectName) ?? { count: 0, timer: null as ReturnType<typeof setInterval> | null };
+    const tracker = this.subscribers.get(projectName) ?? { count: 0, timer: null as VisibleIntervalHandle | null };
     if (tracker.count === 0) {
       this.refresh(projectName);
-      tracker.timer = setInterval(() => this.refresh(projectName), intervalMs);
+      tracker.timer = setVisibleInterval(() => this.refresh(projectName), intervalMs);
     }
     tracker.count++;
     this.subscribers.set(projectName, tracker);
@@ -43,7 +44,7 @@ export class GitHygieneService {
       if (!t) return;
       t.count = Math.max(0, t.count - 1);
       if (t.count === 0 && t.timer) {
-        clearInterval(t.timer);
+        clearVisibleInterval(t.timer);
         t.timer = null;
         this.subscribers.delete(projectName);
       }
@@ -88,5 +89,5 @@ export class GitHygieneService {
       {});
   }
 
-  private subscribers = new Map<string, { count: number; timer: ReturnType<typeof setInterval> | null }>();
+  private subscribers = new Map<string, { count: number; timer: VisibleIntervalHandle | null }>();
 }

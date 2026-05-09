@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { JobService } from '../services/job.service';
+import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../utils/visible-interval';
 import { GroupedJobs, OrchestratorLogEntry, OrchestratorSession, RunnerStatus } from '../models/job.model';
 import { OrchestratorRunner_KnownModels } from './project-detail.models';
 import { TokenSummaryBlockComponent } from './token-summary-block';
@@ -683,15 +684,19 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     return `${entries.length} entries; ${count} orchestrator LLM call${count === 1 ? '' : 's'}: ↑${input.toLocaleString()} / ↓${output.toLocaleString()} tokens.`;
   });
 
-  private pollTimer: ReturnType<typeof setInterval> | null = null;
+  private pollTimer: VisibleIntervalHandle | null = null;
 
   ngOnInit(): void {
     this.refreshAll();
-    this.pollTimer = setInterval(() => this.refreshAll(true), 5_000);
+    // Cycle 3: skip the 6-endpoint refreshAll fan-out when the panel is in
+    // a backgrounded tab. The pre-Cycle-3 cadence put 42 requests over a
+    // 10 s window from the project-detail panel alone (see logs/perf
+    // baseline); this drops to zero when the tab is hidden.
+    this.pollTimer = setVisibleInterval(() => this.refreshAll(true), 5_000);
   }
 
   ngOnDestroy(): void {
-    if (this.pollTimer != null) clearInterval(this.pollTimer);
+    if (this.pollTimer != null) clearVisibleInterval(this.pollTimer);
     this.pollTimer = null;
   }
 

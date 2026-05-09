@@ -1,6 +1,7 @@
 import { Injectable, OnDestroy, computed, signal } from '@angular/core';
 import { JobInfo, RunTimeline } from '../../models/job.model';
 import { JobService } from '../../services/job.service';
+import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../utils/visible-interval';
 
 /**
  * Polls the per-job run timeline (`/api/jobs/{id}/runs`) every 5 s
@@ -25,7 +26,7 @@ export class RunTimelinePollService implements OnDestroy {
   /** True while the most recent run is still streaming output. */
   readonly hasActiveRun = computed(() => this.timeline()?.hasActiveRun === true);
 
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private timer: VisibleIntervalHandle | null = null;
   private currentJob: { id: string; watchPath: string } | null = null;
   private currentKey = '';
 
@@ -42,7 +43,7 @@ export class RunTimelinePollService implements OnDestroy {
     }
     this.currentJob = { id: info.id, watchPath: info.watchPath };
     this.refresh();
-    this.timer = setInterval(() => this.refresh(), 5_000);
+    this.timer = setVisibleInterval(() => this.refresh(), 5_000);
   }
 
   refresh(): void {
@@ -59,7 +60,7 @@ export class RunTimelinePollService implements OnDestroy {
 
   stop(): void {
     if (this.timer) {
-      clearInterval(this.timer);
+      clearVisibleInterval(this.timer);
       this.timer = null;
     }
   }
