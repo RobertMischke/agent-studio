@@ -777,3 +777,32 @@ This frames bundle bloat as a cost to monitor (we still want to notice if a dep 
 **Implementation pointers.** [`frontend/angular.json`](../frontend/angular.json) production budgets (`initial maximumError` raised to 5 MB, `maximumWarning` to 3 MB); [`docs/perf-frontend.md`](perf-frontend.md) (frontend playbook anchored to the same axis: visibility-aware polling, bounded buffers, OnPush, virtualization). The Cycle 7 stress measurement infrastructure ([`frontend/e2e/perf-stress.spec.ts`](../frontend/e2e/perf-stress.spec.ts)) measures the runtime axis directly: initial-render is one of seven metrics, the other six (DOM count, JS heap, scroll FPS, longtask budget over idle window, click-to-visible, network bytes) are all steady-state.
 
 **Status.** Accepted.
+
+---
+
+## ADR-0034 - Component-size budget + service-extraction doctrine (2026-05-09)
+
+**Decision.** Single-file Angular component files target ≤ 600 LOC, hard cap "must split" at 2000 LOC. Long-lived state (filters, selected job, viewport mode, draft buffers, polling state) lives in injectable services with signal exposure, NOT in the root component. New feature work that would add fields to a mega-component instead lands in (or extracts) a sibling service. Service files target ≤ 600 LOC; types-only files (interfaces) are exempt. The full audit and ranked extraction plan lives in [docs/frontend-architecture-review-2026-05-09.md](frontend-architecture-review-2026-05-09.md).
+
+**Context.** Cycle 7 of the perf overhaul (commits beginning at `c38fb54`) found that the components struggling under load were the same ones that had grown past the point one human can hold in their head. `app.ts` at 4734 LOC owns 170 fields/methods and 32 signals; `job-detail.ts` at 2449 LOC has been gradually split but still owns ~30 layout-state fields. The runtime fixes (OnPush, virtual scroll, memoization) bought 60 FPS at 2000 chat lines, but every future feature that lands in those files compounds the maintainability tax that gave us the perf problem in the first place. ADR-0033 fixed the bundle-budget axis; this ADR fixes the source-file-size axis.
+
+The user's explicit request on 2026-05-09: *"Komponenten-Größe noch mal im Blick behalten, damit die ganze Software noch ein bisschen wartbar wird."*
+
+**Non-goals.**
+
+- A lint rule that fails CI on file size. The cap is a review bar, not a wall; a 700-LOC component that genuinely is one cohesive widget is fine.
+- A state-management library (NgRx, signals-store, etc.). The code already uses signals + injectable services well; a library would be net negative until we have multiple bounded contexts that need to share derived state.
+- Module boundaries via `nx` or library projects. Today the app is one Angular project; the size justifies splits but not a multi-project workspace, which would slow iteration without a corresponding payoff.
+- A "rewrite" PR that splits everything at once. The plan is one PR per Tier 1 service extraction so each lands with a clear before/after diff.
+- Co-locating template, style, and spec into a `*.component.{ts,html,scss,spec.ts}` quartet. Inline templates and inline styles are fine; they help OnPush + signals work without extra `markForCheck` paperwork.
+
+**Reasoning style.** Two questions to apply when sizing a component:
+
+1. *Can a new contributor find the state for any feature in this file's directory without grepping?* If they have to search a 4000-line file to find where a filter is stored, the file is too big.
+2. *Is a feature change one PR with a small diff, or a rewrite of a god-component?* If the same five files always show up in every PR, the abstraction is wrong.
+
+Polling, bounded buffers, and visibility-aware timers are already enforced by [`docs/perf-frontend.md`](perf-frontend.md) (the frontend perf playbook); this ADR adds the structural pair to that doctrine. Together: tiny components doing one thing, polling that pauses when invisible, services owning the state that survives across views.
+
+**Implementation pointers.** [`docs/frontend-architecture-review-2026-05-09.md`](frontend-architecture-review-2026-05-09.md) (the audit + ranked extraction plan with per-file Tier 1/2/3 targets); [`docs/perf-frontend.md`](perf-frontend.md) (perf rules that pair with this ADR); the existing per-job-detail polling services (`cli-output-poll.service`, `git-pane.service`, `claude-session-poll.service`, `run-timeline-poll.service`, `session-events-poll.service`, `screenshots-poll.service`, `hygiene-strip` polling) are the reference shape for service extraction.
+
+**Status.** Accepted.

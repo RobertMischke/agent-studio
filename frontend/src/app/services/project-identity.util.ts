@@ -32,12 +32,24 @@ function hashName(name: string): number {
   return Math.abs(h);
 }
 
+// Cycle 7d memoization. The kanban template binds 4-5 properties of
+// projectIdentity per visible job-card and per task-nav row; without
+// the cache the function's hash + string interpolation re-ran on
+// every change-detection pass for every card. The set of project
+// names is small (single digits) and stable across sessions, so a
+// module-level Map is a perfect fit. Identities are immutable; cache
+// hits return the same reference, which lets OnPush components see
+// reference-equal style bindings and skip dirty checks.
+const IDENTITY_CACHE = new Map<string, ProjectIdentity>();
+
 export function projectIdentity(name: string | null | undefined): ProjectIdentity {
   const trimmed = (name ?? '').trim();
+  const cached = IDENTITY_CACHE.get(trimmed);
+  if (cached) return cached;
   const alpha = trimmed.replace(/[^A-Za-z0-9]/g, '');
   const initial = (alpha[0] ?? '?').toUpperCase();
   const hue = trimmed ? HUES[hashName(trimmed) % HUES.length] : 220;
-  return {
+  const id: ProjectIdentity = {
     initial,
     hue,
     color: `hsl(${hue} 78% 72%)`,
@@ -45,4 +57,6 @@ export function projectIdentity(name: string | null | undefined): ProjectIdentit
     soft: `hsla(${hue}, 70%, 60%, 0.16)`,
     onColor: '#0b1020'
   };
+  IDENTITY_CACHE.set(trimmed, id);
+  return id;
 }
