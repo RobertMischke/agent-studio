@@ -23,6 +23,7 @@ The repo's authoritative agent contract lives in [AGENTS.md](../AGENTS.md). This
 | [design-principles.md](design-principles.md) | UX contract: top-level summary, always-available drill-down, run-as-unit-of-conversation, calm classical style. |
 | [perf-frontend.md](perf-frontend.md) | Frontend perf playbook: visibility-aware polling, cache-first reads, bounded buffers, measurement recipe, anti-patterns. |
 | [frontend-architecture-review-2026-05-09.md](frontend-architecture-review-2026-05-09.md) | Maintainability audit: target component size, mega-component split plan (Tier 1/2/3), service-extraction doctrine. Pairs with ADR-0034. |
+| [cli-startup-cost-analysis-2026-05-09.md](cli-startup-cost-analysis-2026-05-09.md) | Per-CLI spawn / probe / discovery costs (Claude / Codex / Copilot / Gemini), `/api/cli/usage` breakdown, ranked optimisation opportunities. Analysis-only. |
 | [filesystem-contract.md](filesystem-contract.md) | Job-folder layout, lane catalog, state strings, the on-disk shape every CLI must respect. |
 | [agent-task-contract.md](agent-task-contract.md) | App-owned task lifecycle boundary copied into every watched target. The cross-product contract. |
 | [agent-contract-pattern.md](agent-contract-pattern.md) | Contract-bounded agents (ADR-0032): three-zone pattern (Pre-Guard → Agent → Decider+Post-Guard), schemas, decider table, self-heal allow-list, worked example for pickup-failed. The agent classifies, the rule engine decides. |
