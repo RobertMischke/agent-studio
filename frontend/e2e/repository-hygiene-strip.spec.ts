@@ -149,7 +149,8 @@ async function installFixtureRoutes(
   target: { id: string; watchPath: string },
   state: string,
   hasCommit: boolean,
-  hygiene: HygieneShape
+  hygiene: HygieneShape,
+  options: { isActiveJob?: boolean } = {}
 ) {
   const detail = JSON.stringify(makeJobDetail(target.id, target.watchPath, state, hasCommit));
   const projectHygiene = JSON.stringify({ ...hygiene, job: null });
@@ -195,6 +196,25 @@ async function installFixtureRoutes(
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [] }) }));
   await page.route('**/api/cli/quota**', (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ items: [] }) }));
+  // Runner-status is consulted by the worktree-isolation rule so the
+  // hygiene "Accepted task work uncommitted" warning only fires on the
+  // runner's active job. Tests that exercise the warning must mark the
+  // fixture job active here; the default keeps the project idle.
+  await page.route(/\/api\/runner\/status(\?|$)/, (route) =>
+    route.fulfill({
+      status: 200, contentType: 'application/json',
+      body: JSON.stringify({
+        projects: {
+          fixture: {
+            projectName: 'fixture',
+            mode: 'manual',
+            activeJobId: options.isActiveJob ? target.id : null,
+            activeExecution: null,
+            queuedJobIds: []
+          }
+        }
+      })
+    }));
 
   // Targeted job reads - registered last so they win over the catch-all.
   // Playwright's glob mode treats `?` as a single-character wildcard, so
@@ -289,7 +309,10 @@ test.describe('Repository hygiene - review/completed strip', () => {
 
   test('dirty accepted task: ⚠ no task commit, ⚠ working tree dirty, manual-commit action visible', async ({ page }) => {
     const target = TARGET;
-    await installFixtureRoutes(page, target, '5-human-review', false, makeHygiene('5-human-review', 'dirty-after-accept'));
+    // The "Accepted task work uncommitted" warning only fires on the
+    // runner's active job (worktree-isolation rule). Mark the fixture
+    // active so the original "dirty after accept" assertion still holds.
+    await installFixtureRoutes(page, target, '5-human-review', false, makeHygiene('5-human-review', 'dirty-after-accept'), { isActiveJob: true });
 
     await page.goto(`/?job=${encodeURIComponent(target.id)}&watchPath=${encodeURIComponent(target.watchPath)}`);
     await ensureProtocolPaneOpen(page);
