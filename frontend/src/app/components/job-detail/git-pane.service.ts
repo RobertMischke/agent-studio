@@ -1,5 +1,5 @@
 import { Injectable, OnDestroy, computed, signal } from '@angular/core';
-import { GitStatus, JobCommitDetail, JobInfo } from '../../models/job.model';
+import { GitFileChange, GitStatus, JobCommitDetail, JobCommitInfo, JobInfo } from '../../models/job.model';
 import { JobService } from '../../services/job.service';
 import { ErrorDialogService } from '../../services/error-dialog.service';
 
@@ -31,6 +31,16 @@ export class GitPaneService implements OnDestroy {
   readonly viewMode = computed<'commit' | 'worktree'>(() =>
     this.commitDetail()?.commit ? 'commit' : 'worktree'
   );
+
+  /**
+   * Ordered chain of commits attributed to this task (oldest -&gt; newest).
+   * Mirrors <c>JobInfo.commits</c>; surfaces an in-memory list so the
+   * git-pane can render a multi-commit strip and let the user pick which
+   * commit's detail to display.
+   */
+  readonly commitChain = signal<JobCommitInfo[]>([]);
+  /** SHA of the commit currently rendered in the commit detail view. Defaults to the newest entry. */
+  readonly selectedCommitSha = signal<string | null>(null);
 
   private currentJob: JobInfo | null = null;
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
@@ -76,11 +86,22 @@ export class GitPaneService implements OnDestroy {
       && this.currentJob.watchPath === info.watchPath;
     if (sameJob) {
       const hadCommit = !!this.currentJob!.commit;
+      const oldChainLen = this.commitChain().length;
       this.currentJob = info!;
+      this.commitChain.set(info!.commits ?? (info!.commit ? [info!.commit] : []));
       // The auto-commit lands on the progress→review transition, so a
       // refresh of the same job can flip from "no commit" to "has commit".
-      // Load the snapshot lazily when that happens.
-      if (!hadCommit && info!.commit) this.loadCommitDetail();
+      // Load the snapshot lazily when that happens. Also reload when a
+      // new commit lands on the chain (continue-mode follow-up, recovery
+      // commit, operator-driven steer).
+      const newChainLen = this.commitChain().length;
+      if ((!hadCommit && info!.commit) || newChainLen > oldChainLen) {
+        const newest = this.commitChain()[newChainLen - 1] ?? null;
+        if (newest) {
+          this.selectedCommitSha.set(newest.sha);
+        }
+        this.loadCommitDetail();
+      }
       return;
     }
     this.currentJob = info ?? null;
@@ -92,7 +113,42 @@ export class GitPaneService implements OnDestroy {
     this.loading.set(false);
     this.committing.set(false);
     this.generatingMsg.set(false);
-    if (info?.commit) this.loadCommitDetail();
+    const chain = info?.commits ?? (info?.commit ? [info.commit] : []);
+    this.commitChain.set(chain);
+    this.selectedCommitSha.set(chain.length > 0 ? chain[chain.length - 1].sha : null);
+    if (info?.commit || chain.length > 0) this.loadCommitDetail();
+  }
+
+  /**
+   * Switch the commit detail view to a specific commit on the task's
+   * chain. Validates the SHA against the chain to keep this method's
+   * blast radius bounded - it cannot be coaxed into loading arbitrary
+   * repository commits even before the backend's IsKnownJobCommit
+   * gate refuses unrelated SHAs.
+   */
+  selectChainCommit(sha: string): void {
+    const info = this.currentJob;
+    if (!info) return;
+    const entry = this.commitChain().find(c => c.sha === sha);
+    if (!entry) return;
+    if (this.selectedCommitSha() === sha) return;
+    this.selectedCommitSha.set(sha);
+    this.selectedDiffPath.set(null);
+    this.diffText.set('');
+    // Compose a JobCommitDetail header from the chain entry directly,
+    // then load the file list from the per-sha endpoint. We don't have
+    // a single "commit by sha" endpoint that returns both, so we shape
+    // the same object here for the template's sake.
+    this.commitDetail.set({ commit: entry, files: [] });
+    this.jobService.getJobCommitFilesBySha(info.id, sha, info.watchPath).subscribe({
+      next: (res) => {
+        const files: GitFileChange[] = res?.files ?? [];
+        this.commitDetail.set({ commit: entry, files });
+        const first = files[0]?.path ?? null;
+        if (first) this.selectDiffPath(first);
+      },
+      error: () => this.commitDetail.set({ commit: entry, files: [] })
+    });
   }
 
   /**
@@ -151,11 +207,33 @@ export class GitPaneService implements OnDestroy {
     this.diffText.set('');
     // In commit mode the diff comes from `git show <sha> -- <path>` so we
     // see the historical change, not whatever the working tree looks like
-    // right now.
-    const stream$ = this.viewMode() === 'commit'
-      ? this.jobService.getJobCommitDiff(info.id, path, info.watchPath)
-      : this.jobService.getGitDiff(info.id, path, info.watchPath);
-    stream$.subscribe({
+    // right now. When the selected commit is one of the older entries on
+    // the chain (not the newest singular commit), route to the per-sha
+    // diff endpoint instead so the displayed diff matches the picked
+    // commit, not whichever one happens to be on `JobInfo.commit`.
+    if (this.viewMode() === 'commit') {
+      const selectedSha = this.selectedCommitSha();
+      const newest = this.commitChain()[this.commitChain().length - 1]?.sha ?? null;
+      const useShaEndpoint = selectedSha != null && selectedSha !== newest;
+      const setDiff = (res: unknown) => {
+        if (typeof res === 'string') this.diffText.set(res);
+        else if (res && typeof res === 'object' && 'diff' in (res as Record<string, unknown>)) {
+          const d = (res as { diff?: string }).diff;
+          this.diffText.set(typeof d === 'string' ? d : '');
+        } else this.diffText.set('');
+      };
+      const handlers = {
+        next: setDiff,
+        error: () => this.diffText.set('(failed to load diff)')
+      };
+      if (useShaEndpoint) {
+        this.jobService.getJobCommitDiffBySha(info.id, selectedSha!, path, info.watchPath).subscribe(handlers);
+      } else {
+        this.jobService.getJobCommitDiff(info.id, path, info.watchPath).subscribe(handlers);
+      }
+      return;
+    }
+    this.jobService.getGitDiff(info.id, path, info.watchPath).subscribe({
       next: (text: unknown) => this.diffText.set(typeof text === 'string' ? text : ''),
       error: () => this.diffText.set('(failed to load diff)')
     });

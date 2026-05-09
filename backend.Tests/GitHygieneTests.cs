@@ -180,7 +180,11 @@ public class GitHygieneTests : IDisposable
         File.WriteAllText(Path.Combine(repo, "leaked.txt"), "evidence");
 
         var git = BuildGitService(("Leaky", repo));
-        var hygiene = git.GetJobHygiene("leaky-task", null);
+        // Worktree-isolation rule: AcceptedTaskUncommitted only fires
+        // when the task is the runner's currently-active job. The legitimate
+        // "accepted task left dirty" warning is the active-task case here;
+        // the non-active case is covered separately by WorktreeIsolationTests.
+        var hygiene = git.GetJobHygiene("leaky-task", null, isActiveJob: true);
 
         Assert.NotNull(hygiene.Job);
         Assert.False(hygiene.Job!.JobInfoCommitPresent);

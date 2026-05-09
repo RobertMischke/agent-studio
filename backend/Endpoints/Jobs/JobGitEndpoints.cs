@@ -114,9 +114,24 @@ public static class JobGitEndpoints
         // job carries a platform-owned commit stamp and whether accepted task
         // work appears uncommitted. The job-detail review/completed strip
         // polls this; the project header polls /api/git/hygiene instead.
-        group.MapGet("/{jobId}/git/hygiene", (string jobId, string? watchPath, GitService git) =>
+        //
+        // Worktree-isolation rule: the working tree is shared across the
+        // whole repository, so `acceptedTaskUncommitted` must only fire on
+        // the task that owns whatever the agent is currently editing -
+        // i.e. the runner's active job for the project. We resolve that
+        // via TaskRunnerService and pass `isActiveJob` to GitService so
+        // non-active tasks get the warning suppressed at the data layer,
+        // not just hidden in the UI.
+        group.MapGet("/{jobId}/git/hygiene", (
+            string jobId, string? watchPath,
+            GitService git, JobScannerService scanner, TaskRunnerService runner) =>
         {
-            var hygiene = git.GetJobHygiene(jobId, watchPath);
+            var info = scanner.FindJob(jobId, watchPath);
+            var status = runner.GetStatus();
+            var isActive = info != null
+                && status.Projects.TryGetValue(info.ProjectName, out var project)
+                && string.Equals(project.ActiveJobId, info.Id, StringComparison.Ordinal);
+            var hygiene = git.GetJobHygiene(jobId, watchPath, isActive);
             return string.IsNullOrEmpty(hygiene.Error)
                 ? Results.Ok(hygiene)
                 : Results.NotFound(new { error = hygiene.Error });

@@ -1,10 +1,11 @@
 <section class="pane pane--git"
          [class.pane--git-split]="maximized()"
          [style.flex]="maximized() ? '1 1 100%' : weight()"
-         data-testid="pane-git">
+         data-testid="pane-git"
+         [attr.data-active-job]="isActiveJob() ? 'true' : 'false'">
   <header class="pane__header">
-    <h3 class="pane__title">{{ git.viewMode() === 'commit' ? '⏺ Task commit' : '⎇ Git view' }}</h3>
-    @if (git.viewMode() === 'worktree') {
+    <h3 class="pane__title">{{ paneTitle() }}</h3>
+    @if (git.viewMode() === 'worktree' && isActiveJob()) {
       <button class="btn-sm" (click)="git.refresh()" [disabled]="git.loading()" title="Refresh git status">↻</button>
     }
     <button class="pane__maximize"
@@ -19,6 +20,30 @@
        [class.git-view--split]="maximized()"
        data-testid="git-view-body">
     @if (git.viewMode() === 'commit') {
+      @if (git.commitChain().length > 1) {
+        <ol class="git-view__commit-chain"
+            data-testid="git-commit-chain"
+            role="list"
+            aria-label="Commits attributed to this task (oldest first)">
+          @for (entry of git.commitChain(); track entry.sha; let i = $index) {
+            <li class="git-view__commit-chain-item"
+                [class.git-view__commit-chain-item--selected]="git.selectedCommitSha() === entry.sha"
+                [attr.data-testid]="'git-commit-chain-item'"
+                [attr.data-sha]="entry.sha">
+              <button type="button"
+                      class="git-view__commit-chain-button"
+                      [attr.aria-pressed]="git.selectedCommitSha() === entry.sha"
+                      [title]="(i + 1) + '/' + git.commitChain().length + ' · ' + entry.shortSha + ' · ' + entry.message"
+                      (click)="git.selectChainCommit(entry.sha)">
+                <span class="git-view__commit-chain-step">#{{ i + 1 }}</span>
+                <span class="git-view__commit-chain-sha">{{ entry.shortSha }}</span>
+                <span class="git-view__commit-chain-subject">{{ entry.message?.split('\n')?.[0] }}</span>
+                <span class="git-view__commit-chain-meta">{{ entry.filesChanged }}f · {{ entry.at | date:'shortTime' }}</span>
+              </button>
+            </li>
+          }
+        </ol>
+      }
       @if (git.commitDetail()?.commit; as c) {
         <div class="git-view__commit-header" data-testid="git-commit-header">
           <div class="git-view__commit-row">
@@ -75,6 +100,14 @@
       } @else {
         <div class="git-view__empty">Loading commit…</div>
       }
+    } @else if (!isActiveJob()) {
+      <div class="git-view__empty" data-testid="git-view-suppressed-non-active">
+        <p>No committed evidence yet for this task.</p>
+        <p class="git-view__empty-hint">
+          Working-tree changes belong to whichever task the agent is currently editing.
+          They are only shown on the active task.
+        </p>
+      </div>
     } @else if (git.status(); as g) {
       @if (g.error) {
         <div class="git-view__empty">{{ g.error }}</div>

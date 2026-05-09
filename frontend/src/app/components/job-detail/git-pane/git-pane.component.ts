@@ -34,6 +34,16 @@ export class GitPaneComponent {
   readonly weight = input<number>(1);
   /** Whether the job's CLI is currently running — disables commit/generate. */
   readonly isRunning = input(false);
+  /**
+   * Whether this job is the runner's currently-active job for its
+   * project. Worktree-isolation rule: the working tree is shared
+   * across the whole repository, so live `git status` output belongs to
+   * whichever task the agent is currently editing - i.e. the active
+   * one. On non-active tasks this pane suppresses the working-tree
+   * view entirely and renders a placeholder; only `git show <sha>`-
+   * derived diffs from this task's own commits are still shown.
+   */
+  readonly isActiveJob = input<boolean>(false);
 
   readonly maximizeToggle = output<void>();
   readonly hide = output<void>();
@@ -43,6 +53,20 @@ export class GitPaneComponent {
 
   /** Diff section fullscreen toggle, scoped to this component. */
   readonly diffMaximized = signal(false);
+
+  /**
+   * Title rendered in the pane header. Surfaces the multi-commit case
+   * ("3 task commits") so the user sees at a glance that the chain has
+   * more than one entry.
+   */
+  readonly paneTitle = computed<string>(() => {
+    if (this.git.viewMode() === 'commit') {
+      const n = this.git.commitChain().length;
+      if (n > 1) return `⏺ ${n} task commits`;
+      return '⏺ Task commit';
+    }
+    return '⎇ Git view';
+  });
 
   readonly diffHtml = computed<SafeHtml | null>(() => {
     const text = this.git.diffText();

@@ -225,6 +225,14 @@ export interface JobInfo {
   lastUsage: SessionUsage | null;
   execution: CliExecution | null;
   commit: JobCommitInfo | null;
+  /**
+   * Ordered chain of commits attributed to this task (oldest -> newest).
+   * Tasks regularly produce more than one commit across iterations
+   * (continue-mode follow-up, crash-recovery + repair, operator-driven
+   * steers). Backwards compat: when only the legacy singular `commit`
+   * is on disk, the backend surfaces it here as `[commit]`.
+   */
+  commits?: JobCommitInfo[];
   /** Saved user intent waiting for the auto-pickup loop. Surfaces in the UI as a ⏳ badge. */
   pendingIntent?: PendingIntent | null;
   /**

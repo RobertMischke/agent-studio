@@ -31,7 +31,7 @@ import { CreateJobDialogComponent, PendingAttachment } from './components/board/
 import { ErrorDialogComponent } from './components/board/error-dialog/error-dialog.component';
 import { ProjectAutoInfo, ProjectTabsComponent, ProjectTokenChipInfo } from './components/board/project-tabs/project-tabs.component';
 import { FiltersDropdownComponent, TypeFilterOption } from './components/board/filters-dropdown/filters-dropdown.component';
-import { BoardSearchIconComponent } from './components/board/board-search-icon/board-search-icon.component';
+import { KanbanFilterSidesheetComponent } from './components/board/kanban-filter-sidesheet/kanban-filter-sidesheet.component';
 import { UpdateClientService } from './services/update.service';
 import { projectIdentity } from './services/project-identity.util';
 import { DevToolsService } from './services/dev-tools.service';
@@ -79,7 +79,7 @@ interface ActiveFilterPill {
 
 @Component({
   selector: 'app-root',
-  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, ProjectShellComponent, SecurityPanelComponent, UxuiPanelComponent, ProjectTokenUsagePanelComponent, ProjectObservabilityPanelComponent, ProjectProductRuntimePanelComponent, ProjectSteeringDocsSectionComponent, AnalysisReportDrilldownComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceTokenTimelineComponent, WorkspaceScreenshotsComponent, WorkspaceBannerComponent, UpdateBannerComponent, UpdateVersionBadgeComponent, UpdateCenterComponent, OrchestratorConfigPanelComponent, UpdateBlockModalComponent, VerboseDebugOverlayComponent, CliAdminPanelComponent, FiltersDropdownComponent, BoardSearchIconComponent],
+  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, ProjectShellComponent, SecurityPanelComponent, UxuiPanelComponent, ProjectTokenUsagePanelComponent, ProjectObservabilityPanelComponent, ProjectProductRuntimePanelComponent, ProjectSteeringDocsSectionComponent, AnalysisReportDrilldownComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceTokenTimelineComponent, WorkspaceScreenshotsComponent, WorkspaceBannerComponent, UpdateBannerComponent, UpdateVersionBadgeComponent, UpdateCenterComponent, OrchestratorConfigPanelComponent, UpdateBlockModalComponent, VerboseDebugOverlayComponent, CliAdminPanelComponent, FiltersDropdownComponent, KanbanFilterSidesheetComponent],
   // Keep styles global to this subtree — the App shell still owns the
   // .header*, .filter-chip*, .overlay*, .create-dialog*, .error-dialog*
   // class rules used by the extracted dialogs and project-tabs.
@@ -130,9 +130,24 @@ interface ActiveFilterPill {
             (setType)="onSetType($event)"
             (toggleTag)="toggleTagFilter($event)" />
           @if (boardSearchVisible() && !orchSideSheet.open()) {
-            <app-board-search-icon
-              [query]="searchQuery()"
-              (queryChange)="setSearchQuery($event)" />
+            <button type="button"
+                    class="header__filter-trigger"
+                    data-testid="kanban-filter-sidesheet-trigger"
+                    [class.header__filter-trigger--active]="kanbanFilterSidesheetOpen() || hasActiveFiltersOrSearch()"
+                    [attr.aria-pressed]="kanbanFilterSidesheetOpen()"
+                    [attr.aria-label]="'Open filter and view panel'"
+                    title="Filters &amp; view (press /)"
+                    (click)="toggleKanbanFilterSidesheet()">
+              <span aria-hidden="true">🔍</span>
+              @if (searchQuery().trim().length > 0) {
+                <span class="header__filter-trigger__chip"
+                      data-testid="kanban-filter-sidesheet-trigger-chip">"{{ searchQuery() }}"</span>
+              }
+              @if (activeFilterCount() > 0) {
+                <span class="header__filter-trigger__count"
+                      data-testid="kanban-filter-sidesheet-trigger-count">{{ activeFilterCount() }}</span>
+              }
+            </button>
           }
           <button class="btn btn--compact-toggle"
                   data-testid="compact-cards-toggle"
@@ -408,6 +423,28 @@ interface ActiveFilterPill {
         }
       </div>
 
+        <app-kanban-filter-sidesheet
+          #kanbanFilterSheet
+          class="app__sidesheet"
+          [open]="kanbanFilterSidesheetOpen()"
+          [query]="searchQuery()"
+          [typeOptions]="typeFilterOptions"
+          [activeType]="activeType()"
+          [tags]="tagRegistry()"
+          [activeTagIds]="activeTagFilter()"
+          [owners]="clientService.clients()"
+          [activeOwnerId]="activeClientFilter()"
+          [compactCards]="compactCards()"
+          [hitCount]="filteredJobCount()"
+          [totalCount]="totalJobCount()"
+          [hasAnyFilter]="hasActiveFiltersOrSearch()"
+          (queryChange)="setSearchQuery($event)"
+          (setType)="onSetType($event)"
+          (toggleTag)="toggleTagFilter($event)"
+          (setOwner)="setClientFilter($event)"
+          (toggleCompactCards)="toggleCompactCards()"
+          (clearAll)="onSidesheetClearAll()"
+          (closed)="closeKanbanFilterSidesheet()" />
         <app-cli-usage-sheet #usageSheet class="app__sidesheet" />
         <app-orchestrator-side-sheet
           #orchSideSheet
@@ -1026,6 +1063,53 @@ interface ActiveFilterPill {
       border-color: rgba(56,189,248,0.75);
     }
     .btn--compact-toggle__label { font-weight: 600; }
+    .header__filter-trigger {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 6px;
+      color: #cbd5e1;
+      cursor: pointer;
+      font-size: 12px;
+      transition: background 0.12s, color 0.12s, border-color 0.12s;
+    }
+    .header__filter-trigger:hover {
+      background: rgba(255,255,255,0.10);
+      color: #f8fafc;
+    }
+    .header__filter-trigger--active {
+      background: rgba(59,130,246,0.20);
+      border-color: rgba(96,165,250,0.55);
+      color: #bfdbfe;
+    }
+    .header__filter-trigger--active:hover {
+      background: rgba(59,130,246,0.30);
+      border-color: rgba(147,197,253,0.75);
+    }
+    .header__filter-trigger__chip {
+      max-width: 160px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-style: italic;
+      color: inherit;
+    }
+    .header__filter-trigger__count {
+      min-width: 18px;
+      padding: 0 6px;
+      height: 18px;
+      border-radius: 999px;
+      background: rgba(99,102,241,0.55);
+      color: #ffffff;
+      font-size: 11px;
+      font-weight: 700;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
     .devtools-menu { position: relative; display: inline-flex; }
     .devtools-menu__trigger {
       background: transparent;
@@ -2421,6 +2505,57 @@ export class App implements OnInit {
    */
   readonly searchQuery = signal<string>('');
 
+  /**
+   * VS Code-style filter sidesheet that hosts search + faceted filters +
+   * visibility toggles in one place. Closed by default — the board uses
+   * the full width unless the user actively opens it. Persisted across
+   * reloads under `atp.kanban.filterSidesheetOpen` so a user who keeps it
+   * open (a common power-user posture) doesn't have to reopen on every
+   * reload.
+   */
+  readonly kanbanFilterSidesheetOpen = signal<boolean>(
+    localStorage.getItem('atp.kanban.filterSidesheetOpen') === '1'
+  );
+
+  toggleKanbanFilterSidesheet(): void {
+    const next = !this.kanbanFilterSidesheetOpen();
+    this.kanbanFilterSidesheetOpen.set(next);
+    localStorage.setItem('atp.kanban.filterSidesheetOpen', next ? '1' : '0');
+  }
+
+  closeKanbanFilterSidesheet(): void {
+    this.kanbanFilterSidesheetOpen.set(false);
+    localStorage.setItem('atp.kanban.filterSidesheetOpen', '0');
+  }
+
+  onSidesheetClearAll(): void {
+    this.searchQuery.set('');
+    // clearAllFilters already calls writeFilterHash which mirrors to query params.
+    this.clearAllFilters();
+  }
+
+  /**
+   * Unified count of active filter/search affordances for the header
+   * trigger badge. Mirrors `hasActiveFilters` plus a `+1` for an active
+   * search query so the user sees one number on the trigger and never
+   * has to remember which surface introduced the narrowing.
+   */
+  readonly activeFilterCount = computed(() => {
+    let n = 0;
+    if (this.activeClientFilter()) n += 1;
+    n += this.activeProjects().size;
+    if (this.activeType()) n += 1;
+    n += this.activeTagFilter().size;
+    return n;
+  });
+
+  readonly hasActiveFiltersOrSearch = computed(() =>
+    this.searchQuery().trim().length > 0
+    || this.activeClientFilter() !== null
+    || this.activeProjects().size > 0
+    || this.activeType() !== null
+    || this.activeTagFilter().size > 0);
+
   readonly projectNames = computed(() => {
     return this.watchPaths().map(wp => wp.name);
   });
@@ -2478,6 +2613,47 @@ export class App implements OnInit {
       completed: filterJobs(grouped.completed),
       archive: filterJobs(grouped.archive ?? []),
     } as GroupedJobs;
+  });
+
+  /**
+   * Total visible jobs after the current search + facet filter is
+   * applied. Drives the sidesheet's "X / Y jobs match" footer. We sum
+   * across the lanes that the board renders rather than the full
+   * grouped DTO so the counter matches what the user actually sees.
+   */
+  readonly filteredJobCount = computed(() => {
+    const g = this.filteredGrouped();
+    return (
+      (g.preparation?.length ?? 0)
+      + (g.orchestratorPrep?.length ?? 0)
+      + (g.needsHumanReview?.length ?? 0)
+      + (g.backlog?.length ?? 0)
+      + (g.ready?.length ?? 0)
+      + (g.progress?.length ?? 0)
+      + (g.failedPickup?.length ?? 0)
+      + (g.autoReview?.length ?? 0)
+      + (g.humanReview?.length ?? 0)
+      + (g.completed?.length ?? 0)
+      + (g.archive?.length ?? 0)
+    );
+  });
+
+  /** Total job count, pre-filter, summed across the same lanes. */
+  readonly totalJobCount = computed(() => {
+    const g = this.jobService.grouped();
+    return (
+      (g.preparation?.length ?? 0)
+      + (g.orchestratorPrep?.length ?? 0)
+      + (g.needsHumanReview?.length ?? 0)
+      + (g.backlog?.length ?? 0)
+      + (g.ready?.length ?? 0)
+      + (g.progress?.length ?? 0)
+      + (g.failedPickup?.length ?? 0)
+      + (g.autoReview?.length ?? (g.review?.length ?? 0))
+      + (g.humanReview?.length ?? 0)
+      + (g.completed?.length ?? 0)
+      + (g.archive?.length ?? 0)
+    );
   });
 
   /**
@@ -2738,6 +2914,53 @@ export class App implements OnInit {
     const target = next ? `#${next}` : '';
     if (target !== window.location.hash) {
       history.replaceState(null, '', target || window.location.pathname + window.location.search);
+    }
+    this.writeFiltersToQueryParams();
+  }
+
+  /**
+   * Bookmark / shareable-link support for the kanban-filter sidesheet:
+   * sync the live search query (and a redundant copy of the active
+   * facet selection) to URL query params so a copy-pasted address
+   * reproduces the filtered view. The faceted filters keep their
+   * existing `#filters=` hash sync; `?q=` lives in the query string
+   * because that's what people copy out of the address bar without
+   * thinking, and the hash is owned by routes elsewhere.
+   */
+  private readFiltersFromQueryParams(): void {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const q = params.get('q');
+    if (q != null) this.searchQuery.set(q);
+    const owner = params.get('owner');
+    if (owner) this.activeClientFilter.set(owner);
+    const tagsCsv = params.get('tag');
+    if (tagsCsv) {
+      const tags = new Set(tagsCsv.split(',').filter(Boolean));
+      if (tags.size > 0) this.activeTagFilter.set(tags);
+    }
+    const type = params.get('type');
+    if (type) this.activeTypeFilter.set(new Set([type]));
+  }
+
+  private writeFiltersToQueryParams(): void {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const q = this.searchQuery();
+    if (q) params.set('q', q); else params.delete('q');
+    const owner = this.activeClientFilter();
+    if (owner) params.set('owner', owner); else params.delete('owner');
+    const tags = [...this.activeTagFilter()];
+    if (tags.length > 0) params.set('tag', tags.join(',')); else params.delete('tag');
+    const type = this.activeType();
+    if (type) params.set('type', type); else params.delete('type');
+    const qs = params.toString();
+    const target =
+      window.location.pathname
+      + (qs ? `?${qs}` : '')
+      + (window.location.hash || '');
+    if (target !== window.location.pathname + window.location.search + (window.location.hash || '')) {
+      history.replaceState(null, '', target);
     }
   }
 
@@ -3054,6 +3277,7 @@ export class App implements OnInit {
     // Backlog-lane spec: hydrate the filter bar from the URL hash before
     // rendering so a bookmark or copy-paste lands on the same view.
     this.readFilterHash();
+    this.readFiltersFromQueryParams();
     this.loadTagRegistry();
     this.refresh();
     this.jobService.startLiveUpdates();
@@ -3522,10 +3746,12 @@ export class App implements OnInit {
 
   setSearchQuery(value: string) {
     this.searchQuery.set(value);
+    this.writeFiltersToQueryParams();
   }
 
   clearSearch() {
     this.searchQuery.set('');
+    this.writeFiltersToQueryParams();
   }
 
   /**

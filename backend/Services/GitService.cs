@@ -231,8 +231,19 @@ public class GitService
     /// and whether the stamped commit is still ahead of the upstream
     /// (committed but unpushed). Used by the job-detail review/completed
     /// hygiene strip.
+    ///
+    /// <para>
+    /// Worktree-isolation rule: <c>AcceptedTaskUncommitted</c> only fires
+    /// when the task is the runner's currently-active job for its project
+    /// (<paramref name="isActiveJob"/> = true). The working tree is shared
+    /// across the whole repository, so a dirty tree on a non-active task
+    /// is by definition not that task's concern - it belongs to whichever
+    /// task the agent is currently editing. Surfacing the warning on the
+    /// non-active task produces false alarms and trains operators to
+    /// ignore hygiene warnings, which masks the real ones.
+    /// </para>
     /// </summary>
-    public GitHygieneStatus GetJobHygiene(string jobId, string? watchPath)
+    public GitHygieneStatus GetJobHygiene(string jobId, string? watchPath, bool isActiveJob = false)
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null)
@@ -247,13 +258,16 @@ public class GitService
         // and the working tree still has a dirty diff that wasn't recorded
         // on the job. We don't gate on the auto-commit setting - the user's
         // contract is that accepted task work must not silently sit dirty.
+        // We DO gate on whether this task is the active one (see method
+        // docstring): a non-active task can't be responsible for whatever
+        // the agent is currently leaving in the worktree.
         var lane = info.State;
         var isPostProgress =
             lane == JobStates.AutoReview ||
             lane == JobStates.HumanReview ||
             lane == JobStates.Completed ||
             lane == JobStates.Archive;
-        var acceptedUncommitted = isPostProgress && project.IsRepo && project.IsDirty;
+        var acceptedUncommitted = isActiveJob && isPostProgress && project.IsRepo && project.IsDirty;
 
         // "Committed but unpushed": a stamped SHA exists *and* the project
         // has an upstream that is behind by at least one commit. With no

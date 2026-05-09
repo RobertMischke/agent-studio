@@ -1,6 +1,6 @@
 import { Injectable, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport, QuotaReport, QuotaSnapshot, GitStatus, ClaudeSessionResponse, JobCommitDetail, SessionEventsResponse, ContinueMode, ContinueJobResponse, OrchestratorLogResponse, TokenSummary, TokenSummaryAggregate, TokenTimeline, AdHocUsageAggregate, OrchestratorSessionResponse, OrchestratorChatResponse, OrchestratorChatTurn, ProjectChatScrollResponse, ProjectChatSearchResponse, ProjectChatTurnResponse, RunTimeline, RunCommitsResponse, RunFilesResponse, RunDiffResponse, RoadmapIntakeCandidate, RoadmapIntakeResponse, RoadmapIntakeConfirmResponse, JobScreenshotsResponse, WorkspaceScreenshotsResponse, ProjectTokenUsageSummary, ProjectTokenHeatmap, ProjectExpensiveJobsResponse, ProjectJobTokenDetail } from '../models/job.model';
+import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport, QuotaReport, QuotaSnapshot, GitFileChange, GitStatus, ClaudeSessionResponse, JobCommitDetail, SessionEventsResponse, ContinueMode, ContinueJobResponse, OrchestratorLogResponse, TokenSummary, TokenSummaryAggregate, TokenTimeline, AdHocUsageAggregate, OrchestratorSessionResponse, OrchestratorChatResponse, OrchestratorChatTurn, ProjectChatScrollResponse, ProjectChatSearchResponse, ProjectChatTurnResponse, RunTimeline, RunCommitsResponse, RunFilesResponse, RunDiffResponse, RoadmapIntakeCandidate, RoadmapIntakeResponse, RoadmapIntakeConfirmResponse, JobScreenshotsResponse, WorkspaceScreenshotsResponse, ProjectTokenUsageSummary, ProjectTokenHeatmap, ProjectExpensiveJobsResponse, ProjectJobTokenDetail } from '../models/job.model';
 import { ErrorDialogService } from './error-dialog.service';
 
 type LaneKey = keyof GroupedJobs;
@@ -360,6 +360,31 @@ export class JobService {
     const params = (opts.params as Record<string, string> | undefined) ?? {};
     if (path) params['path'] = path;
     return this.http.get(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/commit/diff`, { ...opts, params, responseType: 'text' });
+  }
+
+  /**
+   * File list for a specific commit in this task's commit chain. Validates
+   * server-side that the SHA actually belongs to this job, so the endpoint
+   * cannot be coaxed into showing arbitrary repository history.
+   */
+  getJobCommitFilesBySha(jobId: string, sha: string, watchPath?: string) {
+    return this.http.get<{ sha: string; files: GitFileChange[] }>(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/commits/${encodeURIComponent(sha)}/files`,
+      this.withWatchPath(watchPath));
+  }
+
+  /**
+   * Diff text for a specific commit in this task's commit chain, optionally
+   * scoped to one path. Drives the multi-commit detail view when the user
+   * picks any commit other than the latest.
+   */
+  getJobCommitDiffBySha(jobId: string, sha: string, path: string | null, watchPath?: string) {
+    const opts = this.withWatchPath(watchPath);
+    const params = (opts.params as Record<string, string> | undefined) ?? {};
+    if (path) params['path'] = path;
+    return this.http.get<{ diff: string }>(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/commits/${encodeURIComponent(sha)}/diff`,
+      { ...opts, params });
   }
 
   openInVsCode(jobId: string, watchPath?: string) {

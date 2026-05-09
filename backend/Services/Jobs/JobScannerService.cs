@@ -158,6 +158,7 @@ public class JobScannerService
             var resolvedId = folderId;
 
             var ownerClientId = ResolveOwnerClientId(raw, jobDir);
+            var (commitChain, legacyCommit) = ReadCommitChain(raw);
 
             return new JobInfo
             {
@@ -182,9 +183,8 @@ public class JobScannerService
                 UseOwnSession = raw.TryGetProperty("useOwnSession", out var uos) && uos.ValueKind is JsonValueKind.True or JsonValueKind.False
                     ? uos.GetBoolean()
                     : null,
-                Commit = raw.TryGetProperty("commit", out var commit) && commit.ValueKind == JsonValueKind.Object
-                    ? JsonSerializer.Deserialize<JobCommitInfo>(commit.GetRawText(), JobJsonFile.ReadOpts)
-                    : null,
+                Commit = legacyCommit,
+                Commits = commitChain,
                 CommitCount = ComputeCommitCountHint(raw, jobDir),
                 SessionChain = ReadSessionChain(raw),
                 PendingIntent = ReadPendingIntent(jobDir),
@@ -459,6 +459,52 @@ public class JobScannerService
     /// field is missing but a legacy <c>sessionName</c> exists, return a single-
     /// element chain. Anything else returns an empty list.
     /// </summary>
+    /// <summary>
+    /// Reads the task's commit chain from <c>job.json</c>. Returns a tuple
+    /// <c>(chain, legacy)</c> where <c>chain</c> is the ordered list of
+    /// commits this task has produced (oldest -&gt; newest) and <c>legacy</c>
+    /// is the singular <see cref="JobInfo.Commit"/> value kept for
+    /// backwards compatibility with consumers that have not been
+    /// migrated. Reads three shapes:
+    /// <list type="bullet">
+    /// <item><c>commits</c> is an array of objects -&gt; chain = array,
+    ///   legacy = last entry.</item>
+    /// <item><c>commits</c> is missing but <c>commit</c> is an object -&gt;
+    ///   chain = [commit], legacy = commit (the legacy single-commit
+    ///   shape that predates this work).</item>
+    /// <item>Neither field present -&gt; chain = [], legacy = null.</item>
+    /// </list>
+    /// </summary>
+    private static (List<JobCommitInfo> chain, JobCommitInfo? legacy) ReadCommitChain(JsonElement raw)
+    {
+        var chain = new List<JobCommitInfo>();
+        if (raw.TryGetProperty("commits", out var commitsEl) && commitsEl.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in commitsEl.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.Object) continue;
+                var parsed = JsonSerializer.Deserialize<JobCommitInfo>(item.GetRawText(), JobJsonFile.ReadOpts);
+                if (parsed != null && !string.IsNullOrWhiteSpace(parsed.Sha)) chain.Add(parsed);
+            }
+        }
+        JobCommitInfo? legacy = null;
+        if (raw.TryGetProperty("commit", out var commitEl) && commitEl.ValueKind == JsonValueKind.Object)
+        {
+            legacy = JsonSerializer.Deserialize<JobCommitInfo>(commitEl.GetRawText(), JobJsonFile.ReadOpts);
+        }
+        if (chain.Count == 0 && legacy != null && !string.IsNullOrWhiteSpace(legacy.Sha))
+        {
+            chain.Add(legacy);
+        }
+        if (chain.Count > 0)
+        {
+            // Singular field always tracks the newest entry so legacy
+            // consumers see the latest commit, not a stale first one.
+            legacy = chain[^1];
+        }
+        return (chain, legacy);
+    }
+
     private static List<string> ReadSessionChain(JsonElement raw)
     {
         if (raw.TryGetProperty("sessionChain", out var chain) && chain.ValueKind == JsonValueKind.Array)

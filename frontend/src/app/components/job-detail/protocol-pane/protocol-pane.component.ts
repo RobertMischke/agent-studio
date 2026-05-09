@@ -50,6 +50,8 @@ export class ProtocolPaneComponent implements OnDestroy {
   readonly maximized = input(false);
   readonly weight = input<number>(1);
   readonly isRunning = input(false);
+  /** Whether this job is the runner's currently-active job for its project. Forwarded to the hygiene strip so the worktree-isolation rule kicks in. */
+  readonly isActiveJob = input<boolean>(false);
 
   readonly activeInspectorTab = input<InspectorTab>('protocol');
   readonly followupPrompt = input<string>('');

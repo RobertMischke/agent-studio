@@ -132,6 +132,7 @@ import { markdownToHtml } from './markdown-utils';
             [maximized]="maximizedPane() === 'protocol'"
             [weight]="paneWeights().protocol"
             [isRunning]="isRunning()"
+            [isActiveJob]="isActiveJob()"
             [activeInspectorTab]="activeInspectorTab()"
             [followupPrompt]="followupPrompt()"
             [continueMode]="continueMode()"
@@ -161,6 +162,7 @@ import { markdownToHtml } from './markdown-utils';
             [maximized]="maximizedPane() === 'git'"
             [weight]="paneWeights().git"
             [isRunning]="isRunning()"
+            [isActiveJob]="isActiveJob()"
             (maximizeToggle)="toggleMaximize('git')"
             (hide)="togglePane('git')" />
         }
@@ -1699,7 +1701,11 @@ export class JobDetailComponent implements OnDestroy {
     this.openCliConfig();
   });
   private gitAutoRefreshEffect = effect(() => {
-    if (this.panesVisible().git) {
+    // Only the active task's detail view shows the working tree; polling
+    // git status on a non-active task would just churn for nothing and
+    // would also pull working-tree state for a task that, by the
+    // worktree-isolation rule, doesn't get to render that data.
+    if (this.panesVisible().git && this.isActiveJob()) {
       this.git.startAutoRefresh();
     } else {
       this.git.stopAutoRefresh();
@@ -1807,6 +1813,22 @@ export class JobDetailComponent implements OnDestroy {
     const activeId = project.activeJobId;
     if (!activeId || activeId === info.id) return null;
     return `Project "${info.projectName}" is already running ${activeId}. Stop the active run first or wait for it to finish.`;
+  });
+
+  /**
+   * Whether the displayed task is the runner's currently-active job for
+   * its project. Drives the worktree-isolation rule: working-tree info
+   * (live `git status`, the "Accepted task work uncommitted" hygiene
+   * warning) is only shown on the active task. Non-active tasks see only
+   * their committed evidence; their detail view never speaks for changes
+   * that belong to whichever task the agent is currently editing.
+   */
+  readonly isActiveJob = computed<boolean>(() => {
+    const info = this.detail()?.info;
+    if (!info) return false;
+    const status = this.jobService.runnerStatus();
+    const project = status?.projects?.[info.projectName];
+    return project?.activeJobId === info.id;
   });
 
   startJob(): void {

@@ -64,15 +64,74 @@ public class JobMutationService
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return false;
-        JobJsonFile.UpdateField(info.FolderPath, "commit", commit, _logger);
-        return true;
+        return AppendJobCommitOnFolder(info.FolderPath, commit);
     }
 
     public bool SetJobCommitOnFolder(string folderPath, JobCommitInfo commit)
     {
         if (!Directory.Exists(folderPath)) return false;
-        JobJsonFile.UpdateField(folderPath, "commit", commit, _logger);
+        AppendJobCommitOnFolder(folderPath, commit);
         return true;
+    }
+
+    /// <summary>
+    /// Append a new commit to the task's commit chain in <c>job.json</c>.
+    /// Existing entries are preserved (oldest -&gt; newest); the singular
+    /// legacy <c>commit</c> field is also updated to mirror the newest
+    /// entry so consumers that still read the old shape see the latest
+    /// commit, not a stale first one. Dedupes by SHA so a re-stamp from
+    /// the same SHA does not bloat the chain - in that case we replace
+    /// the existing entry in place to refresh metadata
+    /// (file count, message, timestamp) without re-ordering.
+    ///
+    /// <para>
+    /// Tasks regularly produce more than one commit across iterations:
+    /// continue-mode adds a follow-up, crash-recovery leaves a recovery
+    /// commit plus a follow-up, operator-driven steers ("change this and
+    /// continue") often add a separate commit. Each of those goes
+    /// through this method so the detail view can render the full chain.
+    /// </para>
+    /// </summary>
+    public bool AppendJobCommitOnFolder(string folderPath, JobCommitInfo commit)
+    {
+        if (!Directory.Exists(folderPath)) return false;
+        var jobJsonPath = Path.Combine(folderPath, "job.json");
+        if (!File.Exists(jobJsonPath)) return false;
+        try
+        {
+            var json = File.ReadAllText(jobJsonPath);
+            var doc = JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json, JobJsonFile.ReadOpts)
+                      ?? new Dictionary<string, JsonElement>();
+
+            var chain = new List<JobCommitInfo>();
+            if (doc.TryGetValue("commits", out var commitsEl) && commitsEl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in commitsEl.EnumerateArray())
+                {
+                    if (item.ValueKind != JsonValueKind.Object) continue;
+                    var parsed = JsonSerializer.Deserialize<JobCommitInfo>(item.GetRawText(), JobJsonFile.ReadOpts);
+                    if (parsed != null && !string.IsNullOrWhiteSpace(parsed.Sha)) chain.Add(parsed);
+                }
+            }
+            else if (doc.TryGetValue("commit", out var legacyEl) && legacyEl.ValueKind == JsonValueKind.Object)
+            {
+                var parsed = JsonSerializer.Deserialize<JobCommitInfo>(legacyEl.GetRawText(), JobJsonFile.ReadOpts);
+                if (parsed != null && !string.IsNullOrWhiteSpace(parsed.Sha)) chain.Add(parsed);
+            }
+
+            var existingIdx = chain.FindIndex(c => string.Equals(c.Sha, commit.Sha, StringComparison.OrdinalIgnoreCase));
+            if (existingIdx >= 0) chain[existingIdx] = commit;
+            else chain.Add(commit);
+
+            JobJsonFile.UpdateField(folderPath, "commit", chain[^1], _logger);
+            JobJsonFile.UpdateField(folderPath, "commits", chain, _logger);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to append commit to {Folder}", folderPath);
+            return false;
+        }
     }
 
     /// <summary>

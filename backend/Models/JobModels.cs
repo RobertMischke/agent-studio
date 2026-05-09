@@ -35,8 +35,24 @@ public record JobInfo
     /// <summary>Last token / cost summary parsed from CLI output (best-effort).</summary>
     public SessionUsage? LastUsage { get; init; }
     public CliExecution? Execution { get; init; }
-    /// <summary>Auto-commit produced on the progress→review transition; null when no commit recorded.</summary>
+    /// <summary>
+    /// Auto-commit produced on the progress→review transition; null when no commit recorded.
+    /// Kept for backwards compatibility - when <see cref="Commits"/> is non-empty this
+    /// mirrors its last (newest) entry. Read paths should prefer <see cref="Commits"/>;
+    /// legacy <c>job.json</c> files that only carry a singular <c>commit</c> object are
+    /// migrated on the fly by the scanner so consumers can rely on either field.
+    /// </summary>
     public JobCommitInfo? Commit { get; init; }
+    /// <summary>
+    /// Ordered chain of commits attributed to this task across iterations
+    /// (oldest -&gt; newest). Tasks regularly produce more than one commit:
+    /// continue-mode adds a new commit on top of the original, crash-recovery
+    /// leaves a recovery commit plus a follow-up, operator-driven steers
+    /// often produce a separate commit. Backwards compatible with the
+    /// singular <see cref="Commit"/> field: legacy <c>job.json</c> files
+    /// without <c>commits</c> are surfaced as <c>[commit]</c> by the scanner.
+    /// </summary>
+    public List<JobCommitInfo> Commits { get; init; } = [];
     /// <summary>
     /// Client identity that owns this job. References
     /// <see cref="ClientIdentity.Id"/>. Defaults to

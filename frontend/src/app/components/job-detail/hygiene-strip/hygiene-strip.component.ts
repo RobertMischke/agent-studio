@@ -60,7 +60,7 @@ import { ErrorDialogService } from '../../../services/error-dialog.service';
           }
         </div>
 
-        @if (hygiene()?.job?.acceptedTaskUncommitted) {
+        @if (hygiene()?.job?.acceptedTaskUncommitted && isActiveJob()) {
           <div class="hygiene-strip__warning" data-testid="hygiene-warning-dirty-after-accept">
             <span class="hygiene-strip__warning-icon" aria-hidden="true">⚠</span>
             <div class="hygiene-strip__warning-body">
@@ -101,6 +101,17 @@ import { ErrorDialogService } from '../../../services/error-dialog.service';
 })
 export class HygieneStripComponent implements OnDestroy {
   readonly job = input.required<JobInfo>();
+  /**
+   * Whether this job is the runner's currently-active job for its
+   * project. Worktree-isolation rule: the "Accepted task work is
+   * sitting uncommitted" warning only fires when the job owns whatever
+   * the agent is currently editing. The backend's
+   * <c>acceptedTaskUncommitted</c> flag is already gated on this on the
+   * data side; we belt-and-suspender it here so the warning never
+   * shows on a non-active task even if the cached hygiene snapshot
+   * arrived before the runner status flip.
+   */
+  readonly isActiveJob = input<boolean>(false);
 
   private readonly hygieneSvc = inject(GitHygieneService);
   private readonly errorDialog = inject(ErrorDialogService);
