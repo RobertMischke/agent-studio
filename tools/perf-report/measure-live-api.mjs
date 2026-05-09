@@ -112,6 +112,9 @@ function gitOut(args) {
     const enc = encodeURIComponent(project);
     endpoints.push({ name: `GET /api/runner/${project}/pending-decisions`, url: `${baseUrl}/api/runner/${enc}/pending-decisions` });
     endpoints.push({ name: `GET /api/runner/${project}/orchestrator-log`,  url: `${baseUrl}/api/runner/${enc}/orchestrator-log` });
+    // Cycle 5 snapshot: project-detail panel polls this single endpoint
+    // instead of fanning out across 6+ separate GETs every 5 s.
+    endpoints.push({ name: `GET /api/projects/${project}/snapshot`,        url: `${baseUrl}/api/projects/${enc}/snapshot` });
   }
 
   const results = [];
