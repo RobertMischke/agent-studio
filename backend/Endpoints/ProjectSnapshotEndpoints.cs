@@ -35,6 +35,8 @@ public static class ProjectSnapshotEndpoints
     private sealed record ReviewCacheEntry(DateTime CapturedAt, long LaneMtimeTicks, List<object> Items);
     private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, ReviewCacheEntry> ReviewCache = new();
     private static readonly TimeSpan ReviewCacheTtl = TimeSpan.FromSeconds(3);
+    public static long ReviewCacheHits;
+    public static long ReviewCacheMisses;
 
     public static void MapProjectSnapshotEndpoints(this WebApplication app)
     {
@@ -122,7 +124,8 @@ public static class ProjectSnapshotEndpoints
                 orchestratorLogTail = logTail,
                 orchestratorSession = session,
                 reviewDecisionsPending = reviewDecisions,
-                runnerPendingDecisions = liveItems
+                runnerPendingDecisions = liveItems,
+                _diag = new { reviewHits = ReviewCacheHits, reviewMisses = ReviewCacheMisses }
             });
         });
     }
@@ -141,9 +144,11 @@ public static class ProjectSnapshotEndpoints
             if (cached.LaneMtimeTicks == laneMtime
                 && DateTime.UtcNow - cached.CapturedAt < ReviewCacheTtl)
             {
+                Interlocked.Increment(ref ReviewCacheHits);
                 return cached.Items;
             }
         }
+        Interlocked.Increment(ref ReviewCacheMisses);
 
         var items = new List<object>();
         foreach (var jobDir in Directory.GetDirectories(reviewDir))
