@@ -326,16 +326,20 @@ for (const d of data) sections.push(`<h3>${escapeHtml(d.scn)}</h3>${renderScenar
 
 sections.push(`<h2>Top offenders (live HTTP, ${escapeHtml(primary.scn)})</h2>${renderHotspots(primary)}`);
 
-// User targets / acceptance bar for the perf overhaul.
-sections.push(`<h2>Targets &amp; verdict</h2>`);
+// User targets / acceptance bar for the perf overhaul. Verdict reflects
+// the most recent scenario in the run, so a "baseline vs after-cycle-N"
+// report grades by the after-cycle-N numbers (where progress lands).
+const verdictScn = data[data.length - 1];
+sections.push(`<h2>Targets &amp; verdict (vs <code>${escapeHtml(verdictScn.scn)}</code>)</h2>`);
+const findStats = name => verdictScn.live?.endpoints?.find(e => e.name === name || e.name.includes(name))?.stats;
 const targetRows = [
-  ['/api/runner/status p95',         '50ms',  primary.live?.endpoints?.find(e => e.name.includes('runner/status'))?.stats],
-  ['/api/jobs/grouped p95',          '100ms', primary.live?.endpoints?.find(e => e.name.includes('jobs/grouped'))?.stats],
-  ['/api/jobs p95',                  '100ms', primary.live?.endpoints?.find(e => e.name === 'GET /api/jobs')?.stats],
-  ['/api/jobs/{id} p95',             '50ms',  primary.live?.endpoints?.find(e => e.name === 'GET /api/jobs/{id}')?.stats],
-  ['/api/jobs/{id}/output p95',      '50ms',  primary.live?.endpoints?.find(e => e.name.includes('output'))?.stats],
-  ['/api/jobs/{id}/runs p95',        '50ms',  primary.live?.endpoints?.find(e => e.name.includes('/runs'))?.stats],
-  ['/api/cli/usage p95',             '50ms',  primary.live?.endpoints?.find(e => e.name.includes('cli/usage'))?.stats],
+  ['/api/runner/status p95',         '50ms',  findStats('runner/status')],
+  ['/api/jobs/grouped p95',          '100ms', findStats('jobs/grouped')],
+  ['/api/jobs p95',                  '100ms', verdictScn.live?.endpoints?.find(e => e.name === 'GET /api/jobs')?.stats],
+  ['/api/jobs/{id} p95',             '50ms',  verdictScn.live?.endpoints?.find(e => e.name === 'GET /api/jobs/{id}')?.stats],
+  ['/api/jobs/{id}/output p95',      '50ms',  findStats('output')],
+  ['/api/jobs/{id}/runs p95',        '50ms',  findStats('/runs')],
+  ['/api/cli/usage p95',             '50ms',  findStats('cli/usage')],
 ];
 const targetTrs = targetRows.map(([label, target, st]) => {
   const cur = (st?.p95Ms ?? st?.p95);
