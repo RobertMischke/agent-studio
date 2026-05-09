@@ -1,22 +1,17 @@
 export type CliType = 'copilot' | 'claude' | 'codex' | 'gemini';
 export const CLI_TYPES: CliType[] = ['copilot', 'claude', 'codex', 'gemini'];
 
-export interface GitFileChange {
-  status: string;
-  path: string;
-  added: number;
-  removed: number;
-}
-
-export interface GitStatus {
-  isRepo: boolean;
-  branch: string | null;
-  filesChanged: number;
-  totalAdded: number;
-  totalRemoved: number;
-  files: GitFileChange[];
-  error: string | null;
-}
+// Cycle 9: git types live under features/git/models/git.model.ts.
+// Re-exported here so existing imports keep working; new code should
+// import from the feature folder directly.
+export type {
+  GitFileChange, GitStatus, GitProjectSummary, GitHygieneStatus,
+  JobHygieneContext, JobCommitInfo, JobCommitDetail
+} from '../features/git/models/git.model';
+// Internal aliases: re-export above is for external consumers; this
+// import lets the still-in-this-file types (e.g. JobInfo) reference
+// JobCommitInfo without the alias prefix.
+import type { JobCommitInfo, GitFileChange } from '../features/git/models/git.model';
 
 export interface ClaudeSessionInfo {
   sessionId: string;
@@ -148,56 +143,7 @@ export interface RunDiffResponse {
   note?: string;
 }
 
-export interface GitProjectSummary {
-  projectName: string;
-  rootPath: string;
-  isRepo: boolean;
-  branch: string | null;
-  filesChanged: number;
-  totalAdded: number;
-  totalRemoved: number;
-}
-
-/**
- * Repository hygiene snapshot. Mirrors backend `GitHygieneStatus`.
- *
- * Used by:
- *  - the project header dirty/unpushed badge (project-level fields only),
- *  - the job-detail review/completed hygiene strip (with the `job` overlay).
- *
- * Fetched from `GET /api/git/hygiene?project=<name>` (project) and
- * `GET /api/jobs/{id}/git/hygiene` (job). Both endpoints cache server-side
- * for ~3 s.
- */
-export interface GitHygieneStatus {
-  projectName: string;
-  repoRoot: string | null;
-  isRepo: boolean;
-  branch: string | null;
-  upstream: string | null;
-  hasUpstream: boolean;
-  ahead: number;
-  behind: number;
-  isDirty: boolean;
-  stagedCount: number;
-  unstagedCount: number;
-  untrackedCount: number;
-  lastCommitSha: string | null;
-  lastCommitShortSha: string | null;
-  lastCommitSubject: string | null;
-  lastCommitAtUtc: string | null;
-  job: JobHygieneContext | null;
-  error: string | null;
-}
-
-export interface JobHygieneContext {
-  jobId: string;
-  state: string;
-  jobInfoCommitPresent: boolean;
-  stampedCommitSha: string | null;
-  acceptedTaskUncommitted: boolean;
-  commitUnpushed: boolean;
-}
+// (GitProjectSummary, GitHygieneStatus, JobHygieneContext now in features/git/models/git.model.ts; re-exported above)
 
 export interface JobInfo {
   id: string;
@@ -348,19 +294,7 @@ export interface AutoLoopSnapshot {
   lastError?: string | null;
 }
 
-export interface JobCommitInfo {
-  sha: string;
-  shortSha: string;
-  message: string;
-  filesChanged: number;
-  files: string[];
-  at: string;
-}
-
-export interface JobCommitDetail {
-  commit: JobCommitInfo | null;
-  files: GitFileChange[];
-}
+// (JobCommitInfo, JobCommitDetail now in features/git/models/git.model.ts; re-exported above)
 
 export interface SessionUsage {
   at: string;
@@ -1148,33 +1082,8 @@ export interface CliSettings {
 // 5h+weekly buckets for Codex, rate-limit reset for Claude when over-quota).
 // usedPct above 100 means the user has overshot the included allotment.
 
-export interface QuotaWindow {
-  label: string;
-  usedPct: number | null;
-  used: number | null;
-  limit: number | null;
-  unit: string | null;
-  resetAt: string | null;
-  resetLabel: string | null;
-}
-
-export interface QuotaSnapshot {
-  cliType: CliType;
-  fetchedAt: string;
-  plan: string | null;
-  windows: QuotaWindow[];
-  source: string | null;
-  rawSample: string | null;
-  error: string | null;
-}
-
-export interface QuotaReport {
-  at: string;
-  /**
-   * Cache TTL in seconds. The UI computes the "stale" badge as
-   * `now - snapshot.fetchedAt > ttlSeconds`. When the field is missing
-   * (older backends), treat as 600.
-   */
-  ttlSeconds?: number;
-  snapshots: QuotaSnapshot[];
-}
+// Cycle 9: quota types live under features/quota/models/quota.model.ts.
+// Re-exported here so existing imports keep working; new code should
+// import from the feature folder directly so the boundary stays
+// visible. The canonical home is the feature folder.
+export type { QuotaWindow, QuotaSnapshot, QuotaReport } from '../features/quota/models/quota.model';
