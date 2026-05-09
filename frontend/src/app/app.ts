@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, effect, OnInit, signal, untracked, ViewChild, ViewEncapsulation } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, OnInit, signal, untracked, ViewChild, ViewEncapsulation } from '@angular/core';
+import { LaneCollapseService } from './features/board/state/lane-collapse.service';
 import { forkJoin } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { JobColumnComponent } from './components/job-column';
@@ -2463,35 +2464,18 @@ export class App implements OnInit {
    * user's layout survives reloads. Default is empty (everything expanded)
    * to keep the first-run board useful before any customisation.
    */
-  readonly collapsedLanes = signal<Set<string>>(new Set(JSON.parse(localStorage.getItem('collapsedLanes') ?? '[]')));
   /**
-   * Per-container collapse state for the three top-level kanban buckets
-   * (`backlog` / `active` / `decide`). Collapsed containers render as a
-   * single thin summary strip with `<icon>×N` chips per lane; expanded
-   * containers render their full lane row. Default = all expanded.
-   * Persisted under the `atp.kanban.containers.*` namespace.
+   * Cycle 9 / ADR-0034: lane and container collapse state lives in
+   * LaneCollapseService (features/board/state/lane-collapse.service.ts).
+   * The shell exposes the same `collapsedLanes` / `collapsedContainers`
+   * / `focusedContainer` signal references so existing template
+   * bindings and computeds keep working unchanged. Methods further
+   * down delegate to the service.
    */
-  readonly collapsedContainers = signal<Set<string>>(
-    new Set(JSON.parse(localStorage.getItem('atp.kanban.containers.collapsed') ?? '[]')) as Set<string>
-  );
-  /**
-   * When non-null, names the container the user has focus-expanded. The
-   * other two containers are auto-collapsed until focus is released. The
-   * pre-focus collapse snapshot lives in `prefocusCollapsedContainers`
-   * so a second click on the same focus button restores whatever state
-   * the user had before. Persisted so a reload keeps the focused view.
-   */
-  readonly focusedContainer = signal<string | null>(
-    localStorage.getItem('atp.kanban.containers.focused') || null
-  );
-  private prefocusCollapsedContainers: string[] | null = (() => {
-    const raw = localStorage.getItem('atp.kanban.containers.prefocus');
-    if (!raw) return null;
-    try {
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed.map(String) : null;
-    } catch { return null; }
-  })();
+  private readonly laneCollapse = inject(LaneCollapseService);
+  readonly collapsedLanes = this.laneCollapse.collapsedLanes;
+  readonly collapsedContainers = this.laneCollapse.collapsedContainers;
+  readonly focusedContainer = this.laneCollapse.focusedContainer;
   readonly taskNavCollapsed = signal<boolean>(localStorage.getItem('taskNavCollapsed') === '1');
   /**
    * Compact-card mode trades the full per-card metadata (model badge,
@@ -4537,135 +4521,24 @@ export class App implements OnInit {
     return this.collapsedGroups().has(state);
   }
 
-  toggleLaneCollapse(state: string) {
-    const current = new Set(this.collapsedLanes());
-    if (current.has(state)) current.delete(state);
-    else current.add(state);
-    this.collapsedLanes.set(current);
-    localStorage.setItem('collapsedLanes', JSON.stringify([...current]));
-  }
+  // Cycle 9: collapse + focus methods delegate to LaneCollapseService.
+  // The shell forwards the lane-id list so the service stays free of
+  // the kanban catalogue shape; everything else is straight pass-through.
 
-  isLaneCollapsed(state: string): boolean {
-    return this.collapsedLanes().has(state);
-  }
-
-  /**
-   * Flex-grow factor for a lane group. The dashboard distributes its
-   * leftover horizontal space across the three groups; if every group
-   * grew by the same factor (`flex: 1 1 auto`) groups with fewer
-   * expanded lanes ended up with wider lanes than groups with more
-   * expanded lanes (e.g. Ready in a 3-lane Backlog became visibly
-   * wider than In Progress in a 2-lane Active stretch). Growing each
-   * group in proportion to its expanded-lane count makes every
-   * expanded lane settle at the same rendered width regardless of
-   * which group it lives in. Zero is intentional when every lane in
-   * the group is collapsed: the group then sizes to its rails only.
-   */
+  toggleLaneCollapse(state: string): void { this.laneCollapse.toggleLaneCollapse(state); }
+  isLaneCollapsed(state: string): boolean { return this.laneCollapse.isLaneCollapsed(state); }
   expandedLaneCount(group: { lanes: Array<{ state: string }> }): number {
-    return group.lanes.reduce((n, l) => n + (this.isLaneCollapsed(l.state) ? 0 : 1), 0);
+    return this.laneCollapse.expandedLaneCount(group);
   }
-
-  /**
-   * Container collapse / focus-expand for the three kanban buckets.
-   * Containers persist under `atp.kanban.containers.*`. Default state is
-   * all expanded. Focus-expand on a container collapses the OTHER two
-   * to the summary strip; clicking the same focus button restores the
-   * pre-focus snapshot.
-   */
-  isContainerCollapsed(id: string): boolean {
-    return this.collapsedContainers().has(id);
-  }
-
-  toggleContainerCollapse(id: string): void {
-    // A direct toggle drops focus mode if it was active for this id
-    // (the user is taking manual control), but leaves focus alone if
-    // the toggle targets a container that was already collapsed by
-    // focus mode - they're just toggling a non-focused container.
-    if (this.focusedContainer() === id) {
-      this.clearFocus();
-    }
-    const current = new Set(this.collapsedContainers());
-    if (current.has(id)) current.delete(id);
-    else current.add(id);
-    this.collapsedContainers.set(current);
-    this.persistContainerState();
-  }
-
-  isContainerFocused(id: string): boolean {
-    return this.focusedContainer() === id;
-  }
-
+  isContainerCollapsed(id: string): boolean { return this.laneCollapse.isContainerCollapsed(id); }
+  toggleContainerCollapse(id: string): void { this.laneCollapse.toggleContainerCollapse(id); }
+  isContainerFocused(id: string): boolean { return this.laneCollapse.isContainerFocused(id); }
   toggleContainerFocus(id: string): void {
-    if (this.focusedContainer() === id) {
-      // Second click on the same focus button: restore the pre-focus
-      // snapshot so a tap is reversible.
-      const restored = new Set(this.prefocusCollapsedContainers ?? []);
-      this.collapsedContainers.set(restored);
-      this.focusedContainer.set(null);
-      this.prefocusCollapsedContainers = null;
-      localStorage.removeItem('atp.kanban.containers.focused');
-      localStorage.removeItem('atp.kanban.containers.prefocus');
-      this.persistContainerState();
-      return;
-    }
-    // Snapshot the current collapse set so the toggle is reversible.
-    if (this.focusedContainer() === null) {
-      this.prefocusCollapsedContainers = [...this.collapsedContainers()];
-      localStorage.setItem(
-        'atp.kanban.containers.prefocus',
-        JSON.stringify(this.prefocusCollapsedContainers)
-      );
-    }
-    const allIds = this.laneGroups().map(g => g.id);
-    const next = new Set<string>();
-    for (const other of allIds) {
-      if (other !== id) next.add(other);
-    }
-    this.collapsedContainers.set(next);
-    this.focusedContainer.set(id);
-    localStorage.setItem('atp.kanban.containers.focused', id);
-    this.persistContainerState();
+    this.laneCollapse.toggleContainerFocus(id, this.laneGroups().map(g => g.id));
   }
-
-  resetContainers(): void {
-    this.collapsedContainers.set(new Set());
-    this.focusedContainer.set(null);
-    this.prefocusCollapsedContainers = null;
-    localStorage.removeItem('atp.kanban.containers.focused');
-    localStorage.removeItem('atp.kanban.containers.prefocus');
-    this.persistContainerState();
-  }
-
-  private clearFocus(): void {
-    if (this.focusedContainer() !== null) {
-      this.focusedContainer.set(null);
-      this.prefocusCollapsedContainers = null;
-      localStorage.removeItem('atp.kanban.containers.focused');
-      localStorage.removeItem('atp.kanban.containers.prefocus');
-    }
-  }
-
-  private persistContainerState(): void {
-    localStorage.setItem(
-      'atp.kanban.containers.collapsed',
-      JSON.stringify([...this.collapsedContainers()])
-    );
-  }
-
-  /**
-   * Per-container summary chips shown when the container is collapsed.
-   * One chip per lane: `<icon>×<count>`. Empty lanes are kept so the
-   * shape of the container stays readable at a glance.
-   */
+  resetContainers(): void { this.laneCollapse.resetContainers(); }
   containerSummary(id: string): Array<{ state: string; icon: string; title: string; count: number }> {
-    const group = this.laneGroups().find(g => g.id === id);
-    if (!group) return [];
-    return group.lanes.map(l => ({
-      state: l.state,
-      icon: l.icon,
-      title: l.title,
-      count: l.jobs.length
-    }));
+    return this.laneCollapse.containerSummary(this.laneGroups().find(g => g.id === id));
   }
 
   setTaskNavCollapsed(collapsed: boolean) {
