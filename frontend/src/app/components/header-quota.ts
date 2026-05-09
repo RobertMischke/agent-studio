@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { JobService } from '../services/job.service';
+import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../utils/visible-interval';
 import { CliType, QuotaReport, QuotaSnapshot, QuotaWindow } from '../models/job.model';
 import { cliTypeIcon } from '../services/format.util';
 
@@ -279,7 +280,9 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
   /** Re-evaluated every second so the freshness label ticks live. */
   readonly nowTick = signal(Date.now());
 
-  private pollTimer: ReturnType<typeof setInterval> | null = null;
+  private pollTimer: VisibleIntervalHandle | null = null;
+  // tickTimer stays raw - 1 s relative-time refresh; pause-on-hidden
+  // would show stale "5 min ago" the moment the user comes back.
   private tickTimer: ReturnType<typeof setInterval> | null = null;
 
   readonly cards = computed<QuotaCardModel[]>(() => {
@@ -295,12 +298,12 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
     // Poll the backend every 60s. The backend serves from cache and
     // background-refreshes stale entries, so we get fresh data without
     // forcing a re-probe.
-    this.pollTimer = setInterval(() => this.fetch(), 60_000);
+    this.pollTimer = setVisibleInterval(() => this.fetch(), 60_000);
     this.tickTimer = setInterval(() => this.nowTick.set(Date.now()), 1_000);
   }
 
   ngOnDestroy(): void {
-    if (this.pollTimer != null) clearInterval(this.pollTimer);
+    if (this.pollTimer != null) clearVisibleInterval(this.pollTimer);
     if (this.tickTimer != null) clearInterval(this.tickTimer);
   }
 

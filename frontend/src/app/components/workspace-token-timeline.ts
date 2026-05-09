@@ -8,6 +8,7 @@ import {
   signal,
 } from '@angular/core';
 import { JobService } from '../services/job.service';
+import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../utils/visible-interval';
 import {
   TokenTimeline,
   TokenTimelineCell,
@@ -523,15 +524,15 @@ export class WorkspaceTokenTimelineComponent implements OnInit, OnDestroy {
   readonly hoverCell = signal<TokenTimelineCell | null>(null);
   readonly disabledProjects = signal<Set<string>>(this.readSavedDisabled());
 
-  private pollTimer: ReturnType<typeof setInterval> | null = null;
+  private pollTimer: VisibleIntervalHandle | null = null;
 
   ngOnInit(): void {
     this.refresh();
-    this.pollTimer = setInterval(() => this.refresh(), 10_000);
+    this.pollTimer = setVisibleInterval(() => this.refresh(), 10_000);
   }
 
   ngOnDestroy(): void {
-    if (this.pollTimer != null) clearInterval(this.pollTimer);
+    if (this.pollTimer != null) clearVisibleInterval(this.pollTimer);
     this.pollTimer = null;
   }
 

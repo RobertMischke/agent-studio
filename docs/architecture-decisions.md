@@ -748,3 +748,32 @@ The block-modal stays mounted while `phase ∈ {preparing, pausing-runners, pull
 **Implementation pointers.** [AGENTS.md](../AGENTS.md) "Contract-bounded agents and loop guards"; [docs/agent-contract-pattern.md](agent-contract-pattern.md) (foundational doc with diagram, schemas, worked example); [docs/loop-inventory.md](loop-inventory.md) (registry + per-entry test pointer); first worked example follows ADR-0028 dead-letter at `3a-failed-pickup` (diagnostic agent reads `pickup-failure-context.json`, writes `pickup-failure-diagnosis.json`); marketing positioning in `agent-studio-marketing/06-website-planung/deterministische-guardrails-um-agenten.md`.
 
 **Status.** Accepted.
+
+---
+
+## ADR-0033 - Optimise for runtime, not initial bundle size (2026-05-09)
+
+**Decision.** The frontend perf budget targets runtime cost (steady-state CPU, memory, render time, scroll smoothness, click-to-paint) and explicitly does not target initial JavaScript bundle size. Initial-bundle limits in `angular.json` are raised to a generous ceiling (5 MB) so the budget is a sanity check against accidental boot-time bloat, not an active compression pressure. Lazy-loading remains a fine pattern when it improves a specific runtime path (open the Git pane → load diff2html), but it is never required just to keep the initial bundle small.
+
+**Context.** Cycle 7 of the perf overhaul started installing `@angular/cdk/scrolling` for kanban virtualization. The pre-Cycle-7 `angular.json` had a 1.05 MB initial-bundle hard limit and the bundle was already 1.36 MB (warning, then error). This forced bundle-shrinking work that distracts from the actual perf goal: the app loads once per session and then runs for hours. Initial JS size is paid for once at app start; render cost, change-detection cost, polling cost, and DOM size are paid for every tick the user has the tab open. Optimising the wrong axis is worse than not optimising.
+
+The product context reinforces it: Agent Software Studio is an always-on workbench (Stable + Dev each loaded as a PWA, often kept open all day), not a public web property where time-to-interactive on a cold visit is the dominant metric. There is no SEO ranking pressure, no ad-funnel conversion gate, no LCP target tied to revenue. The user will always pay the boot cost once, and load-pitting / preload of common surfaces can soak it without affecting the perceived runtime.
+
+**Non-goals.**
+
+- A bundle budget tight enough to refuse a runtime-helping dependency (e.g. `@angular/cdk` for virtual scrolling, ag-grid for a dense data table, monaco for an editor). Adding these is fine when they shave runtime; we do not gate them on KB.
+- Code-splitting the kanban shell for first-paint optics. The board is the home screen; loading it lazily would only add a transition flicker.
+- Tree-shake-driven refactors of legacy code purely to reduce import surface. We refactor when a runtime hot path needs it.
+- Service-worker pre-caching as a substitute for actual runtime perf work. Pre-caching makes a slow boot feel less slow on the second visit; it does not make the running app smoother.
+- Aggressive `import()` on routes the user always opens. Lazy-loading the per-tab/per-panel surfaces that the user uses every minute trades steady-state perf for one cold-load latency, the wrong direction.
+
+**Reasoning style.** Optimise for the metric the user pays for during the time they are using the app, not the metric they pay for once. Two questions to apply:
+
+1. *Per session, how often does the cost fire?* Boot = 1×. Polling tick / scroll frame / change detection = 100,000×. The 100,000× metric wins.
+2. *Does the optimisation help the steady state?* If it only helps the first few seconds and never again, defer it.
+
+This frames bundle bloat as a cost to monitor (we still want to notice if a dep adds 5 MB unintentionally) but not to optimise against unless a runtime path needs the same dep removed.
+
+**Implementation pointers.** [`frontend/angular.json`](../frontend/angular.json) production budgets (`initial maximumError` raised to 5 MB, `maximumWarning` to 3 MB); [`docs/perf-frontend.md`](perf-frontend.md) (frontend playbook anchored to the same axis: visibility-aware polling, bounded buffers, OnPush, virtualization). The Cycle 7 stress measurement infrastructure ([`frontend/e2e/perf-stress.spec.ts`](../frontend/e2e/perf-stress.spec.ts)) measures the runtime axis directly: initial-render is one of seven metrics, the other six (DOM count, JS heap, scroll FPS, longtask budget over idle window, click-to-visible, network bytes) are all steady-state.
+
+**Status.** Accepted.

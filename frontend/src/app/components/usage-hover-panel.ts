@@ -9,6 +9,7 @@ import {
   signal,
 } from '@angular/core';
 import { JobService } from '../services/job.service';
+import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../utils/visible-interval';
 import {
   AdHocUsageAggregate,
   CliType,
@@ -630,9 +631,12 @@ export class UsageHoverPanelComponent implements OnInit, OnDestroy {
   readonly refreshingAll = signal(false);
   readonly nowTick = signal(Date.now());
 
-  private quotaPollTimer: ReturnType<typeof setInterval> | null = null;
-  private tokenPollTimer: ReturnType<typeof setInterval> | null = null;
-  private adhocPollTimer: ReturnType<typeof setInterval> | null = null;
+  private quotaPollTimer: VisibleIntervalHandle | null = null;
+  private tokenPollTimer: VisibleIntervalHandle | null = null;
+  private adhocPollTimer: VisibleIntervalHandle | null = null;
+  // tickTimer stays as raw setInterval - it's a 1 s relative-time
+  // refresh, paused-on-hidden would show a stale "5 min ago" the moment
+  // the user comes back to the tab. Same exception as NowTickService.
   private tickTimer: ReturnType<typeof setInterval> | null = null;
   private openTimer: ReturnType<typeof setTimeout> | null = null;
   private closeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -650,16 +654,16 @@ export class UsageHoverPanelComponent implements OnInit, OnDestroy {
     this.fetchTokensCached();
     this.fetchTokensFresh();
     this.fetchAdHoc();
-    this.quotaPollTimer = setInterval(() => this.fetchQuota(), 60_000);
-    this.tokenPollTimer = setInterval(() => this.fetchTokensFresh(), 30_000);
-    this.adhocPollTimer = setInterval(() => this.fetchAdHoc(), 60_000);
+    this.quotaPollTimer = setVisibleInterval(() => this.fetchQuota(), 60_000);
+    this.tokenPollTimer = setVisibleInterval(() => this.fetchTokensFresh(), 30_000);
+    this.adhocPollTimer = setVisibleInterval(() => this.fetchAdHoc(), 60_000);
     this.tickTimer = setInterval(() => this.nowTick.set(Date.now()), 1_000);
   }
 
   ngOnDestroy(): void {
-    if (this.quotaPollTimer != null) clearInterval(this.quotaPollTimer);
-    if (this.tokenPollTimer != null) clearInterval(this.tokenPollTimer);
-    if (this.adhocPollTimer != null) clearInterval(this.adhocPollTimer);
+    if (this.quotaPollTimer != null) clearVisibleInterval(this.quotaPollTimer);
+    if (this.tokenPollTimer != null) clearVisibleInterval(this.tokenPollTimer);
+    if (this.adhocPollTimer != null) clearVisibleInterval(this.adhocPollTimer);
     if (this.tickTimer != null) clearInterval(this.tickTimer);
     if (this.openTimer != null) clearTimeout(this.openTimer);
     if (this.closeTimer != null) clearTimeout(this.closeTimer);

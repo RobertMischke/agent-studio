@@ -13,6 +13,7 @@ import {
   viewChild,
 } from '@angular/core';
 import { JobService } from '../../services/job.service';
+import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../utils/visible-interval';
 import { OrchestratorChatTurn, WatchPathEntry } from '../../models/job.model';
 import { ChatComponent } from '../chat/chat.component';
 import { ChatEvent, ChatMessage, ChatSubmitEvent } from '../chat/chat-types';
@@ -677,7 +678,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly events = signal<ChatEvent[]>([]);
 
   private readonly jobService = inject(JobService);
-  private pollTimer: ReturnType<typeof setInterval> | null = null;
+  private pollTimer: VisibleIntervalHandle | null = null;
 
   /**
    * Convert chat turns into the chat-component's message shape. Failed
@@ -798,7 +799,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     // Slow poll: the chat history only changes when the user sends a
     // message (which we already refresh after) or when something else
     // appends a turn. 30s keeps the UI honest without burning quota.
-    this.pollTimer = setInterval(() => {
+    this.pollTimer = setVisibleInterval(() => {
       if (this.open() && this.activeProject() && !this.loading() && !this.sending()) {
         this.refresh(true);
       }
@@ -868,7 +869,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   }
 
   ngOnDestroy(): void {
-    if (this.pollTimer != null) clearInterval(this.pollTimer);
+    if (this.pollTimer != null) clearVisibleInterval(this.pollTimer);
     this.pollTimer = null;
   }
 

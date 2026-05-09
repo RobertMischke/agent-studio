@@ -1,4 +1,5 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, output, signal } from '@angular/core';
+import { ScrollingModule } from '@angular/cdk/scrolling';
 import { JobInfo, JobOrderItem } from '../models/job.model';
 import { JobCardComponent } from './job-card';
 import { projectIdentity } from '../services/project-identity.util';
@@ -10,10 +11,24 @@ import { InfoButtonComponent } from './info-button/info-button.component';
 
 const ARCHIVE_VISIBLE_LIMIT = 20;
 
+/**
+ * Cycle 7c2: virtualization kicks in once a non-archive, non-review
+ * lane crosses VIRTUAL_SCROLL_THRESHOLD cards. Below that, the
+ * existing per-card drop-zone path stays in place so day-to-day
+ * reorder UX is unchanged. The estimate VIRTUAL_ITEM_SIZE_PX is the
+ * average non-compact card height; CDK's FixedSize strategy uses it
+ * to compute the scroll buffer + which range to render. Real cards
+ * may be slightly taller (extra commit chips, longer titles) - the
+ * size estimate just needs to be in the right ballpark; mismatches
+ * cause a small visual jump on scroll, never wrong content.
+ */
+const VIRTUAL_SCROLL_THRESHOLD = 50;
+const VIRTUAL_ITEM_SIZE_PX = 160;
+
 @Component({
   selector: 'app-job-column',
   standalone: true,
-  imports: [JobCardComponent, InstantTooltipDirective, InfoButtonComponent],
+  imports: [JobCardComponent, InstantTooltipDirective, InfoButtonComponent, ScrollingModule],
   // Cycle 7b: OnPush. The board mounts ~10 columns and re-renders the
   // full @for of cards every CD pass under Default. JobCard is already
   // OnPush; promoting the column propagates that benefit upward so a
@@ -151,6 +166,46 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
                 <div class="column__empty column__empty--subsection">No jobs</div>
               }
             </section>
+          }
+        } @else if (useVirtualScroll()) {
+          <!-- Cycle 7c2: virtualised path for big lanes (>VIRTUAL_SCROLL_THRESHOLD).
+               Per-card drop zones are dropped because the virtualizer
+               only renders the visible window; we keep top + bottom
+               drop zones so drag-to-this-lane still works at scale.
+               Below the threshold, the path below preserves the full
+               drop-zone-per-card UX so day-to-day reorder is unchanged. -->
+          @if (!reorderDisabled()) {
+            <div class="column__drop-zone column__drop-zone--first"
+                 [class.column__drop-zone--active]="dropIndex === 0"
+                 (dragover)="onCardDragOver($event, 0)"
+                 (dragleave)="onCardDragLeave()"
+                 (drop)="onCardDrop($event, 0)">
+            </div>
+          }
+          <cdk-virtual-scroll-viewport [itemSize]="VIRTUAL_ITEM_SIZE_PX"
+                                       [minBufferPx]="VIRTUAL_ITEM_SIZE_PX * 4"
+                                       [maxBufferPx]="VIRTUAL_ITEM_SIZE_PX * 8"
+                                       class="column__virtual-scroll">
+            <app-job-card *cdkVirtualFor="let job of jobs(); trackBy: trackByJobKey"
+              [job]="job"
+              [compact]="compact()"
+              (click)="jobClick.emit(job)"
+              draggable="true"
+              (dragstart)="onDragStart($event, job)" />
+          </cdk-virtual-scroll-viewport>
+          @if (!reorderDisabled()) {
+            <div class="column__drop-zone column__drop-zone--last"
+                 [class.column__drop-zone--active]="dropIndex === jobs().length"
+                 (dragover)="onCardDragOver($event, jobs().length)"
+                 (dragleave)="onCardDragLeave()"
+                 (drop)="onCardDrop($event, jobs().length)">
+            </div>
+          }
+          @if (canAddTask()) {
+            <button type="button" class="column__add" (click)="addTask.emit(state())">
+              <span class="column__add-icon">＋</span>
+              <span>Add task</span>
+            </button>
           }
         } @else {
           @for (job of jobs(); track job.jobKey; let i = $index) {
@@ -295,6 +350,24 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
       flex-direction: column;
       gap: 8px;
       flex: 1;
+      min-height: 0; /* let virtual viewport child claim available space */
+    }
+    /* Cycle 7c2: CDK virtual scroll viewport. Needs explicit height
+       so the virtualizer knows how many items fit; flex:1 + min-height:0
+       on the parent gives it the lane's remaining space. The internal
+       cdk-virtual-scroll-content-wrapper handles overflow itself, so we
+       hide overflow at the viewport. */
+    .column__virtual-scroll {
+      flex: 1;
+      min-height: 200px;
+      width: 100%;
+      contain: strict;
+    }
+    .column__virtual-scroll ::ng-deep .cdk-virtual-scroll-content-wrapper {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      width: 100%;
     }
     .column__empty {
       text-align: center;
@@ -638,6 +711,10 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
 export class JobColumnComponent implements OnInit, OnDestroy {
   private readonly autoReviewStatus = inject(AutoReviewStatusStore);
 
+  // Template literals exposed as instance fields so the component
+  // template can bind them without going through computeds.
+  readonly VIRTUAL_ITEM_SIZE_PX = VIRTUAL_ITEM_SIZE_PX;
+
   readonly title = input.required<string>();
   readonly icon = input<string>('');
   readonly state = input.required<string>();
@@ -645,6 +722,19 @@ export class JobColumnComponent implements OnInit, OnDestroy {
   readonly reorderDisabled = input<boolean>(false);
   readonly collapsed = input<boolean>(false);
   readonly compact = input<boolean>(false);
+
+  /** True when this lane should render its cards through CDK virtual
+   *  scrolling instead of the default @for. Archive and review have
+   *  their own templates and stay on the legacy path. */
+  readonly useVirtualScroll = computed(() =>
+    !this.isArchive()
+    && !this.isReview()
+    && this.jobs().length > VIRTUAL_SCROLL_THRESHOLD
+  );
+
+  /** trackBy for *cdkVirtualFor: stable key per row keeps DOM nodes
+   *  reused on lane updates instead of full re-create. */
+  readonly trackByJobKey = (_: number, job: JobInfo) => job.jobKey;
   readonly jobClick = output<JobInfo>();
   readonly jobDrop = output<{ jobId: string; watchPath: string; targetState: string }>();
   readonly jobReorder = output<{ state: string; jobs: JobOrderItem[] }>();
