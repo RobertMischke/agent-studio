@@ -9,21 +9,21 @@ import { JobDetailComponent } from './features/job-detail/job-detail';
 import { CliUsageSheetComponent } from './features/cli/components/cli-usage-sheet';
 import { OrchestratorFeedComponent } from './features/orchestrator/components/orchestrator-feed';
 import { OrchestratorSideSheetComponent } from './features/orchestrator/components/orchestrator-side-sheet/orchestrator-side-sheet.component';
-import { ProjectDetailComponent } from './components/project-detail';
-import { ProjectShellComponent } from './components/project-shell/project-shell.component';
-import { SecurityPanelComponent } from './components/security-panel/security-panel.component';
-import { UxuiPanelComponent } from './components/uxui-panel/uxui-panel.component';
+import { ProjectDetailComponent } from './features/project-detail/components/project-detail';
+import { ProjectShellComponent } from './features/project-detail/components/project-shell/project-shell.component';
+import { SecurityPanelComponent } from './features/project-detail/components/security-panel/security-panel.component';
+import { UxuiPanelComponent } from './features/project-detail/components/uxui-panel/uxui-panel.component';
 import { ProjectTokenUsagePanelComponent } from './features/project-token-usage/components/project-token-usage-panel.component';
-import { ProjectObservabilityPanelComponent } from './components/project-observability/project-observability-panel.component';
-import { ProjectProductRuntimePanelComponent } from './components/project-product-runtime/project-product-runtime-panel.component';
-import { ProjectSteeringDocsSectionComponent } from './components/project-steering-docs-section';
+import { ProjectObservabilityPanelComponent } from './features/project-detail/components/project-observability/project-observability-panel.component';
+import { ProjectProductRuntimePanelComponent } from './features/project-detail/components/project-product-runtime/project-product-runtime-panel.component';
+import { ProjectSteeringDocsSectionComponent } from './features/project-detail/components/project-steering-docs-section';
 import {
   DEFAULT_PROJECT_RAIL_KEY,
   isProjectRailKey,
   ProjectRailKey,
   toProjectSlug,
-} from './components/project-shell/project-shell.config';
-import { AnalysisReportDrilldownComponent } from './components/analysis-report-drilldown';
+} from './features/project-detail/components/project-shell/project-shell.config';
+import { AnalysisReportDrilldownComponent } from './features/project-detail/components/analysis-report-drilldown';
 import { StatusBarComponent } from './components/status-bar';
 import { JobService } from './services/job.service';
 import { ClientService } from './services/client.service';

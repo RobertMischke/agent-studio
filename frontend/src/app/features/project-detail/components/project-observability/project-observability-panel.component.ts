@@ -10,14 +10,14 @@ import {
   signal,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { AgentBusService, AgentBusFixture } from '../../services/agent-bus.service';
+import { AgentBusService, AgentBusFixture } from '../../../../services/agent-bus.service';
 import {
   AGENT_MESSAGE_KINDS,
   AGENT_MESSAGE_SEVERITIES,
   AgentMessage,
   AgentMessageQuery,
   AgentMessageSummary,
-} from '../../models/agent-bus.model';
+} from '../../../../models/agent-bus.model';
 
 interface FilterState {
   participantId: string;

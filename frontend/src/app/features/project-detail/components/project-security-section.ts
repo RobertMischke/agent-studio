@@ -1,8 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ProjectDocsService } from '../services/project-docs.service';
-import { SecurityMeta, SecurityOverview } from '../models/project-docs.model';
-import { markdownToHtml } from './markdown-utils';
+import { ProjectDocsService } from '../../../services/project-docs.service';
+import { SecurityMeta, SecurityOverview } from '../../../models/project-docs.model';
+import { markdownToHtml } from '../../../components/markdown-utils';
 
 /**
  * Project-level Security section: meta header (last review, rating,

@@ -9,7 +9,7 @@ import {
   signal,
 } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
-import { DesignService } from '../../services/design.service';
+import { DesignService } from '../../../../services/design.service';
 import {
   DesignActionKind,
   DesignCouncilNote,

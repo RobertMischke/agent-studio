@@ -1,16 +1,16 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Observable, map } from 'rxjs';
-import { DriftService } from '../services/drift.service';
-import { JobService } from '../services/job.service';
-import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../utils/visible-interval';
+import { DriftService } from '../../../services/drift.service';
+import { JobService } from '../../../services/job.service';
+import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../utils/visible-interval';
 import {
   DriftArchitectureElement,
   DriftArchitectureModel,
   DriftFindingStatus,
   DriftSeverity,
   ElementStateOverride,
-} from '../models/drift.model';
+} from '../../../models/drift.model';
 
 interface MarbleRow {
   element: DriftArchitectureElement;

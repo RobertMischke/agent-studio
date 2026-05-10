@@ -13,13 +13,13 @@ import { FormsModule } from '@angular/forms';
 import {
   ProductRuntimeFixture,
   ProductRuntimeService,
-} from '../../services/product-runtime.service';
+} from '../../../../services/product-runtime.service';
 import {
   PRODUCT_RUNTIME_LEVELS,
   ProductRuntimeEvent,
   ProductRuntimeLevel,
   RuntimeEventParseWarning,
-} from '../../models/product-runtime.model';
+} from '../../../../models/product-runtime.model';
 
 interface FilterState {
   level: ProductRuntimeLevel | '';

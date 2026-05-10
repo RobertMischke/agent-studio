@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, OnInit, inject, input, output, signal } from '@angular/core';
-import { AnalysisReportService } from '../services/analysis-report.service';
-import { AnalysisReport, AnalysisReportReference } from '../models/analysis-report.model';
+import { AnalysisReportService } from '../../../services/analysis-report.service';
+import { AnalysisReport, AnalysisReportReference } from '../../../models/analysis-report.model';
 
 /**
  * Drill-down overlay for one analysis report. Renders the full Markdown body,

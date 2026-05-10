@@ -8,7 +8,7 @@ import {
   DesignCouncilResponse,
   DesignOverviewResponse,
   DesignReferencesResponse,
-} from '../components/uxui-panel/uxui-panel.types';
+} from '../features/project-detail/components/uxui-panel/uxui-panel.types';
 
 /**
  * Read + manual-trigger surface for the project UX/UI panel (slice 6 of

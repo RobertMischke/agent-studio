@@ -1,11 +1,11 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { JobService } from '../services/job.service';
-import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../utils/visible-interval';
-import { GroupedJobs, OrchestratorLogEntry, OrchestratorSession, RunnerStatus } from '../models/job.model';
+import { JobService } from '../../../services/job.service';
+import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../utils/visible-interval';
+import { GroupedJobs, OrchestratorLogEntry, OrchestratorSession, RunnerStatus } from '../../../models/job.model';
 import { OrchestratorRunner_KnownModels } from './project-detail.models';
-import { TokenSummaryBlockComponent } from '../features/tokens/components/token-summary-block';
-import { GlobalOrchestratorCardComponent } from '../features/orchestrator/components/global-orchestrator-card';
+import { TokenSummaryBlockComponent } from '../../../features/tokens/components/token-summary-block';
+import { GlobalOrchestratorCardComponent } from '../../../features/orchestrator/components/global-orchestrator-card';
 import { ProjectSecuritySectionComponent } from './project-security-section';
 import { ProjectArchitectureSectionComponent } from './project-architecture-section';
 import { ProjectDriftSectionComponent } from './project-drift-section';
@@ -15,8 +15,8 @@ import { ProjectMetaCycleSectionComponent } from './project-meta-cycle-section';
 import { ProjectAnalysisReportsSectionComponent } from './project-analysis-reports-section';
 import { ProjectSteeringDocsSectionComponent } from './project-steering-docs-section';
 import { ProjectSkillReadinessSectionComponent } from './project-skill-readiness-section';
-import { AutonomySliderComponent } from './autonomy-slider';
-import { AnalysisReport } from '../models/analysis-report.model';
+import { AutonomySliderComponent } from '../../../components/autonomy-slider';
+import { AnalysisReport } from '../../../models/analysis-report.model';
 
 interface ProjectSettingsRow {
   autoCommit: boolean;

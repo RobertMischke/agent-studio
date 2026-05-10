@@ -5,7 +5,7 @@ import {
   SecurityAuditQueueResponse,
   SecurityBaselineResponse,
   SecurityReviewListResponse,
-} from '../components/security-panel/security-panel.types';
+} from '../features/project-detail/components/security-panel/security-panel.types';
 
 /**
  * Read + manual-trigger surface for the project Security panel (slice 1

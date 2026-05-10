@@ -9,14 +9,14 @@ import {
   signal,
 } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
-import { SecurityService } from '../../services/security.service';
+import { SecurityService } from '../../../../services/security.service';
 import {
   SecurityBaselineBadge,
   SecurityBaselineResponse,
   SecurityReviewListResponse,
   SecurityReviewSummary,
 } from './security-panel.types';
-import { ConceptHelpComponent } from '../concept-help/concept-help.component';
+import { ConceptHelpComponent } from '../../../../components/concept-help/concept-help.component';
 
 /**
  * Project Security panel (slice 1 of the quality-system mockup,
