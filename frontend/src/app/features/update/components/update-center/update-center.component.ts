@@ -1,9 +1,9 @@
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { UpdateClientService } from '../../services/update.service';
-import { DevToolsService } from '../../services/dev-tools.service';
-import { ErrorDialogService } from '../../services/error-dialog.service';
-import { UpdateHistoryEntry } from '../../models/update-service.model';
+import { UpdateClientService } from '../../../../services/update.service';
+import { DevToolsService } from '../../../../services/dev-tools.service';
+import { ErrorDialogService } from '../../../../services/error-dialog.service';
+import { UpdateHistoryEntry } from '../../../../models/update-service.model';
 
 /**
  * Drawer-style overlay opened from the version badge. Three sections:

@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { UpdateClientService } from '../../services/update.service';
+import { UpdateClientService } from '../../../../services/update.service';
 
 /**
  * Tiny header chip:  v0.1.0  bd05f36   plus an orange dot when origin/main

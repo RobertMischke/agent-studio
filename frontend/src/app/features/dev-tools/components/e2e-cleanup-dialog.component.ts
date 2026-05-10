@@ -1,6 +1,6 @@
 import { Component, EventEmitter, OnInit, Output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { DevToolsService, E2EJob, DeleteE2EReport } from '../../services/dev-tools.service';
+import { DevToolsService, E2EJob, DeleteE2EReport } from '../../../services/dev-tools.service';
 
 type Phase = 'loading' | 'list' | 'deleting' | 'report' | 'error';
 

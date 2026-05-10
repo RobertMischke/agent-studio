@@ -14,15 +14,15 @@ import {
   JobTokenSummary,
   RunRecord,
   RunTimeline
-} from '../../models/job.model';
-import { projectConversation } from '../chat/conversation-projection';
+} from '../../../models/job.model';
+import { projectConversation } from '../../../components/chat/conversation-projection';
 import type {
   ConversationEvent,
   RawLineRange,
   ToolFamily,
   WorkbenchDebugEvent
-} from '../chat/conversation-event';
-import { formatTokens as fmtTokens } from '../../services/format.util';
+} from '../../../components/chat/conversation-event';
+import { formatTokens as fmtTokens } from '../../../services/format.util';
 
 export type VerboseDebugTab =
   | 'overview'

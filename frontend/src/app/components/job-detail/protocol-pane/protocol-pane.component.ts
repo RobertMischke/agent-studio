@@ -23,7 +23,7 @@ import { RunTimelineComponent } from './run-timeline.component';
 import { RunGitViewerComponent } from './run-git-viewer.component';
 import { CommonModule } from '@angular/common';
 import { FeatureFlagsService } from '../../../services/feature-flags.service';
-import { VerboseDebugOverlayComponent } from '../../verbose-debug/verbose-debug-overlay.component';
+import { VerboseDebugOverlayComponent } from '../../../features/verbose-debug/components/verbose-debug-overlay.component';
 import { HygieneStripComponent } from '../hygiene-strip/hygiene-strip.component';
 import { ReviewEvidencePanelComponent } from './review-evidence-panel.component';
 import { JobService } from '../../../services/job.service';

@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { UpdateClientService } from '../../services/update.service';
-import { UpdatePhase } from '../../models/update-service.model';
+import { UpdateClientService } from '../../../../services/update.service';
+import { UpdatePhase } from '../../../../models/update-service.model';
 
 /**
  * Full-screen, click-blocking modal that takes over the UI while an update

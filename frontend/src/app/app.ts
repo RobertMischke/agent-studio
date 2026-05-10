@@ -41,19 +41,19 @@ import { DevToolsService } from './services/dev-tools.service';
 import { FeatureFlagsService } from './services/feature-flags.service';
 import { JobCompletionSoundService } from './services/job-completion-sound.service';
 import { TagRegistryStore } from './services/tag-registry.store';
-import { UpdateStableConsoleComponent } from './components/dev-tools/update-stable-console.component';
-import { E2ECleanupDialogComponent } from './components/dev-tools/e2e-cleanup-dialog.component';
+import { UpdateStableConsoleComponent } from './features/dev-tools/components/update-stable-console.component';
+import { E2ECleanupDialogComponent } from './features/dev-tools/components/e2e-cleanup-dialog.component';
 import { WorkspaceTokenTimelineComponent } from './features/tokens/components/workspace-token-timeline';
 import { WorkspaceScreenshotsComponent } from './features/screenshots/components/workspace-screenshots';
-import { WorkspaceBannerComponent } from './components/workspace-banner';
-import { UpdateBannerComponent } from './components/update-banner/update-banner.component';
-import { UpdateVersionBadgeComponent } from './components/update-version-badge/update-version-badge.component';
-import { UpdateCenterComponent } from './components/update-center/update-center.component';
+import { WorkspaceBannerComponent } from './features/shell/components/workspace-banner';
+import { UpdateBannerComponent } from './features/update/components/update-banner/update-banner.component';
+import { UpdateVersionBadgeComponent } from './features/update/components/update-version-badge/update-version-badge.component';
+import { UpdateCenterComponent } from './features/update/components/update-center/update-center.component';
 import { OrchestratorConfigPanelComponent } from './features/orchestrator/components/orchestrator-config-panel/orchestrator-config-panel.component';
-import { UpdateBlockModalComponent } from './components/update-block-modal/update-block-modal.component';
+import { UpdateBlockModalComponent } from './features/update/components/update-block-modal/update-block-modal.component';
 import { CliAdminPanelComponent } from './features/cli/components/cli-admin-panel';
 import { JobScreenshot, RunTimeline, JobTokenSummary, CliOutputLine } from './models/job.model'; // verbose-debug overlay context types
-import { VerboseDebugOverlayComponent } from './components/verbose-debug/verbose-debug-overlay.component';
+import { VerboseDebugOverlayComponent } from './features/verbose-debug/components/verbose-debug-overlay.component';
 import { splitReadyByPhase } from './components/ready-lane-split.util';
 
 interface VerboseDebugContext {

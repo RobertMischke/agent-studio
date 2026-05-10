@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { UpdateClientService } from '../../services/update.service';
+import { UpdateClientService } from '../../../../services/update.service';
 
 /**
  * Always-mounted banner for finished-run notifications. The 'running'
