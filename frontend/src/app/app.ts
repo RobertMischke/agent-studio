@@ -17,7 +17,7 @@ import {
   CreateJobFormService,
   splitReadyByPhase,
 } from './features/board';
-import { JobDetailComponent, JobSelectionService } from './features/job-detail';
+import { JobDetailComponent, JobSelectionService, TriageController } from './features/job-detail';
 import { CliUsageSheetComponent } from './features/cli';
 import { OrchestratorConfigPanelComponent, OrchestratorSideSheetComponent } from './features/orchestrator';
 import {
@@ -2311,6 +2311,8 @@ export class App implements OnInit {
   readonly createJobForm = inject(CreateJobFormService);
   /** Cycle 10b: board-mutation handlers (drag/drop, reorder, delete, archive, etc.) live here. */
   private readonly boardMutations = inject(BoardMutationsService);
+  /** Cycle 10c: triage panel + j/k navigation + auto-advance live here. */
+  private readonly triage = inject(TriageController);
   readonly showCreate = this.createJobForm.visible;
   readonly availableModels = this.createJobForm.availableModels;
   /**
@@ -2671,6 +2673,12 @@ export class App implements OnInit {
     // because that orchestration concern lives here.
     this.createJobForm.submitted$.subscribe(() => this.refresh());
 
+    // Cycle 10c: bridge TriageController to the JobDetailComponent's
+    // "acting" highlight via a closure so the ViewChild can resolve
+    // lazily at call time. The closure is fine to register here because
+    // it doesn't dereference jobDetailRef until invoked.
+    this.triage.setClearActingCallback(() => this.jobDetailRef?.clearTriageActing());
+
     effect(() => {
       const selected = this.selectedJob();
       const jobs = this.jobService.jobs();
@@ -2716,7 +2724,7 @@ export class App implements OnInit {
       if (this.jobDetailRef?.triageActingId() != null) return;
       const peers = untracked(() => this.triageLanePeers());
       // The job no longer matches the lane it was being triaged in; advance.
-      untracked(() => this.advanceToNextInLane(lane, sel.info.jobKey, peers, /*external*/ true));
+      untracked(() => this.triage.advanceToNextInLane(lane, sel.info.jobKey, peers, /*external*/ true));
     });
   }
 
@@ -2808,172 +2816,15 @@ export class App implements OnInit {
   closeDetail() { this.jobSelection.closeDetail(); }
   isSelectedJob(job: JobInfo): boolean { return this.jobSelection.isSelected(job); }
 
-  /** Triage panel: lane-specific move action. Same path as a drag-and-drop
-   *  move (optimistic paint + persist + revert-on-error), but on success we
-   *  also auto-advance to the next peer in the lane the user was triaging. */
-  onTriageMove(info: JobInfo, ev: { targetState: string; actionId: string }) {
-    const lane = this.jobSelection.triageLaneState ?? info.state;
-    const peers = this.triageLanePeers();
-    const snapshot = this.jobService.applyOptimisticMove(info.id, info.watchPath, ev.targetState);
-    this.jobService.beginOptimisticPersist();
-    this.jobService.moveJob(info.id, ev.targetState, info.watchPath).subscribe({
-      next: () => {
-        this.jobService.endOptimisticPersist();
-        this.advanceToNextInLane(lane, info.jobKey, peers);
-      },
-      error: (err) => {
-        this.jobService.endOptimisticPersist();
-        if (snapshot) this.jobService.revertOptimisticMove(snapshot);
-        this.jobDetailRef?.clearTriageActing();
-        this.errorDialog.show(err, {
-          title: 'Failed to move task',
-          fallbackMessage: 'Failed to move task',
-          source: `Task ${info.id}`
-        });
-      }
-    });
-  }
-
-  /** Triage "Move to top" (only on 2-ready). Stays in lane; clear acting. */
-  onTriageMoveToTop(info: JobInfo, _ev: { actionId: string }) {
-    this.jobService.beginOptimisticPersist();
-    this.jobService.moveJobToTop(info.id, info.watchPath).subscribe({
-      next: () => {
-        this.jobService.endOptimisticPersist();
-        this.jobDetailRef?.clearTriageActing();
-      },
-      error: (err) => {
-        this.jobService.endOptimisticPersist();
-        this.jobDetailRef?.clearTriageActing();
-        this.errorDialog.show(err, {
-          title: 'Failed to move task to top',
-          fallbackMessage: 'Failed to move task to the top of the Ready queue',
-          source: `Task ${info.id}`
-        });
-      }
-    });
-  }
-
-  /** Triage "Delete". Confirm-on-first-click already happened in the panel,
-   *  but we still surface the standard system confirm to match the menu's
-   *  delete flow (so the user does not lose the safety net by accident). */
-  onTriageDelete(info: JobInfo, _ev: { actionId: string }) {
-    const lane = this.jobSelection.triageLaneState ?? info.state;
-    const peers = this.triageLanePeers();
-    const label = info.title || info.id;
-    const message =
-      `Delete this task?\n\n"${label}"\n\nThis removes the job folder and all its files (prompt, logs, results). Do you really want this?`;
-    if (typeof window !== 'undefined' && !window.confirm(message)) {
-      this.jobDetailRef?.clearTriageActing();
-      return;
-    }
-    this.jobService.deleteJob(info.id, info.watchPath).subscribe({
-      next: () => {
-        this.refresh();
-        this.advanceToNextInLane(lane, info.jobKey, peers);
-      },
-      error: (err) => {
-        this.jobDetailRef?.clearTriageActing();
-        this.errorDialog.show(err, {
-          title: 'Failed to delete task',
-          fallbackMessage: 'Failed to delete task',
-          source: `Task ${info.id}`
-        });
-      }
-    });
-  }
-
-  /** Triage "Run now": kick the start path then leave the panel on the same
-   *  job (it will transition to 3-progress on its own). */
-  onTriageStart(info: JobInfo, _ev: { actionId: string }) {
-    this.jobService.startJob(info.id, info.watchPath).subscribe({
-      next: () => this.jobDetailRef?.clearTriageActing(),
-      error: (err) => {
-        this.jobDetailRef?.clearTriageActing();
-        this.errorDialog.show(err, {
-          title: 'Failed to start task',
-          fallbackMessage: 'Failed to start task',
-          source: `Task ${info.id}`
-        });
-      }
-    });
-  }
-
-  /** j / ↓: walk to the next peer in the current lane. */
-  onTriageNext(info: JobInfo) {
-    const peers = this.triageLanePeers();
-    if (peers.length === 0) return;
-    const idx = peers.findIndex(p => p.jobKey === info.jobKey);
-    const nextIdx = idx < 0 ? 0 : Math.min(peers.length - 1, idx + 1);
-    if (nextIdx === idx) return;
-    this.openDetail(peers[nextIdx]);
-  }
-
-  /** k / ↑: walk to the previous peer in the current lane. */
-  onTriagePrev(info: JobInfo) {
-    const peers = this.triageLanePeers();
-    if (peers.length === 0) return;
-    const idx = peers.findIndex(p => p.jobKey === info.jobKey);
-    const prevIdx = idx < 0 ? 0 : Math.max(0, idx - 1);
-    if (prevIdx === idx) return;
-    this.openDetail(peers[prevIdx]);
-  }
-
-  /**
-   * After a triage decision (or external move), find the next peer in the
-   * lane the user was triaging in, excluding the job that just left. If the
-   * lane is empty, close the panel and toast.
-   *
-   * `external` flips the toast wording so the user can tell whether the
-   * advance was their click or someone else's reshuffle.
-   */
-  private advanceToNextInLane(lane: string, departingJobKey: string, peersBefore: JobInfo[], external = false): void {
-    this.jobDetailRef?.clearTriageActing();
-    // Compute the candidate from the snapshot of peers we had before the
-    // mutation: optimistic-persist may have already filtered out the moving
-    // job, but we want the next peer that was after it in the original list.
-    const idx = peersBefore.findIndex(p => p.jobKey === departingJobKey);
-    let next: JobInfo | null = null;
-    if (idx >= 0) {
-      // Try the entry directly after the departing job; fall back to the
-      // entry before it if it was the tail.
-      next = peersBefore[idx + 1] ?? peersBefore[idx - 1] ?? null;
-    } else if (peersBefore.length > 0) {
-      next = peersBefore[0];
-    }
-    // Filter out the departing job itself (the snapshot may include it; we
-    // also want to skip jobs that have since been moved out of the lane).
-    const live = this.triageLanePeers().filter(p => p.jobKey !== departingJobKey && p.state === lane);
-    const candidate = (next && live.find(p => p.jobKey === next!.jobKey)) ?? live[0] ?? null;
-    if (candidate) {
-      // Re-anchor lane to the new job's state (same lane unless poll drift)
-      this.jobSelection.triageLaneState = candidate.state;
-      const token = this.jobSelection.bumpOpenDetailToken();
-      this.jobService.getDetail(candidate.id, candidate.watchPath).subscribe({
-        next: (detail) => {
-          history.replaceState(null, '', `?job=${encodeURIComponent(candidate.id)}&watchPath=${encodeURIComponent(candidate.watchPath)}`);
-          this.jobSelection.setSelectedFromAdvance(detail, token);
-        },
-        error: () => { /* leave panel on the previous job; the parent effect will reconcile */ }
-      });
-      if (external) this.jobSelection.showTriageToast('Job was moved externally; advancing.');
-      return;
-    }
-    // Lane cleared — close the panel and toast.
-    this.closeDetail();
-    this.jobSelection.showTriageToast('Lane cleared.');
-  }
-
-  onCompleteAndNextReview() {
-    const currentJobKey = this.selectedJob()?.info.jobKey;
-    const reviewJobs = this.jobService.grouped().review.filter(j => j.jobKey !== currentJobKey);
-    this.refresh();
-    if (reviewJobs.length > 0) {
-      this.openDetail(reviewJobs[0]);
-    } else {
-      this.closeDetail();
-    }
-  }
+  // Cycle 10c: triage panel + j/k navigation + auto-advance delegated
+  // to TriageController. The shell forwards events from JobDetailComponent.
+  onTriageMove(info: JobInfo, ev: { targetState: string; actionId: string }) { this.triage.move(info, ev); }
+  onTriageMoveToTop(info: JobInfo, ev: { actionId: string }) { this.triage.moveToTop(info, ev); }
+  onTriageDelete(info: JobInfo, ev: { actionId: string }) { this.triage.delete(info, ev); }
+  onTriageStart(info: JobInfo, ev: { actionId: string }) { this.triage.start(info, ev); }
+  onTriageNext(info: JobInfo) { this.triage.next(info); }
+  onTriagePrev(info: JobInfo) { this.triage.prev(info); }
+  onCompleteAndNextReview() { this.triage.completeAndNextReview(); }
 
   // Cycle 10b: board-mutation handlers delegate to BoardMutationsService.
   onJobDrop(event: { jobId: string; watchPath: string; targetState: string }) { this.boardMutations.moveJob(event); }

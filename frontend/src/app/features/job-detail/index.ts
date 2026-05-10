@@ -8,6 +8,7 @@
  */
 export { JobDetailComponent } from './job-detail';
 export { JobSelectionService } from './state/job-selection.service';
+export { TriageController } from './state/triage-controller.service';
 export { HygieneStripComponent } from './components/hygiene-strip/hygiene-strip.component';
 export { ProjectHygieneBadgeComponent } from './components/hygiene-strip/project-hygiene-badge.component';
 export { ActivityLogViewComponent } from './components/activity-log-view';
