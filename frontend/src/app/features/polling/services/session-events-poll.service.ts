@@ -1,8 +1,8 @@
-import { Injectable, OnDestroy, computed, signal } from '@angular/core';
-import type { JobInfo } from '../../../models/job.model';
+import { Injectable, computed, inject, signal } from '@angular/core';
+import { Observable } from 'rxjs';
 import type { SessionEventsResponse } from '../../../features/session-events';
 import { JobService } from '../../../services/job.service';
-import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../utils/visible-interval';
+import { JobBackgroundPoller } from './job-background-poller';
 
 /**
  * Polls the per-job session-event log every 10 s. Drives the
@@ -14,7 +14,11 @@ import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from 
  * session events only flip on start/continue/recovery, not per turn.
  */
 @Injectable()
-export class SessionEventsPollService implements OnDestroy {
+export class SessionEventsPollService extends JobBackgroundPoller<SessionEventsResponse | null> {
+  private readonly jobService = inject(JobService);
+
+  protected readonly intervalMs = 10_000;
+
   readonly response = signal<SessionEventsResponse | null>(null);
 
   /** The most recent event in the log, or null when there is none. */
@@ -42,46 +46,15 @@ export class SessionEventsPollService implements OnDestroy {
     return r.sessionChain.filter((s) => s && s !== '(recovery)').length;
   });
 
-  private timer: VisibleIntervalHandle | null = null;
-  private currentJob: { id: string; watchPath: string } | null = null;
-  private currentKey = '';
-
-  constructor(private jobService: JobService) {}
-
-  syncTo(info: JobInfo | null | undefined): void {
-    const key = info ? `${info.watchPath}::${info.id}` : '';
-    if (key === this.currentKey) return;
-    this.currentKey = key;
-    this.stop();
-    if (!info) {
-      this.response.set(null);
-      return;
-    }
-    this.currentJob = { id: info.id, watchPath: info.watchPath };
-    this.refresh();
-    this.timer = setVisibleInterval(() => this.refresh(), 10_000);
+  protected fetch(jobId: string, watchPath: string): Observable<SessionEventsResponse | null> {
+    return this.jobService.getSessionEvents(jobId, watchPath);
   }
 
-  refresh(): void {
-    const job = this.currentJob;
-    if (!job) {
-      this.response.set(null);
-      return;
-    }
-    this.jobService.getSessionEvents(job.id, job.watchPath).subscribe({
-      next: (res) => this.response.set(res ?? null),
-      error: () => { /* non-fatal — keep previous snapshot */ }
-    });
+  protected applyResponse(res: SessionEventsResponse | null): void {
+    this.response.set(res ?? null);
   }
 
-  stop(): void {
-    if (this.timer) {
-      clearVisibleInterval(this.timer);
-      this.timer = null;
-    }
-  }
-
-  ngOnDestroy(): void {
-    this.stop();
+  protected clearValue(): void {
+    this.response.set(null);
   }
 }

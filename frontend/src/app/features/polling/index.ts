@@ -5,6 +5,7 @@
  * service owns one logical poll (5s for live CLI telemetry, 10s for
  * orchestrator log, etc.) and exposes signals consumers bind to.
  */
+export { JobBackgroundPoller } from './services/job-background-poller';
 export { ClaudeSessionPollService } from './services/claude-session-poll.service';
 export { CliOutputPollService } from './services/cli-output-poll.service';
 export { RunTimelinePollService } from './services/run-timeline-poll.service';
