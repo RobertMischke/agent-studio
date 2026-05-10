@@ -1,0 +1,155 @@
+<aside class="sheet"
+       [class.sheet--open]="open()"
+       data-testid="kanban-filter-sidesheet"
+       role="dialog"
+       aria-label="Board filters">
+  <header class="sheet__header">
+    <div class="sheet__title-block">
+      <span class="sheet__eyebrow">Board</span>
+      <h2 class="sheet__title">Filter &amp; view</h2>
+    </div>
+    <button class="sheet__close"
+            type="button"
+            (click)="close()"
+            title="Close panel (Esc)"
+            aria-label="Close filter panel"
+            data-testid="kanban-filter-sidesheet-close">✕</button>
+  </header>
+
+  <section class="sheet__section">
+    <div class="sheet__search-row">
+      <span class="sheet__search-icon" aria-hidden="true">🔍</span>
+      <input #searchInput
+             type="search"
+             class="sheet__search-input"
+             data-testid="kanban-filter-sidesheet-search"
+             placeholder="Search title, slug, tag, owner…"
+             autocomplete="off"
+             spellcheck="false"
+             [value]="query()"
+             (input)="onInput($event)"
+             (keydown.escape)="onEscape($event)" />
+      @if (query().length > 0) {
+        <button type="button"
+                class="sheet__search-clear"
+                title="Clear search"
+                aria-label="Clear search"
+                data-testid="kanban-filter-sidesheet-search-clear"
+                (click)="onClear()">×</button>
+      }
+    </div>
+  </section>
+
+  @if (typeOptions().length > 0) {
+    <section class="sheet__section">
+      <h3 class="sheet__section-title">Task type</h3>
+      <div class="sheet__chips">
+        @for (opt of typeOptions(); track opt.value) {
+          <button type="button"
+                  class="sheet__chip"
+                  [class.sheet__chip--active]="activeType() === opt.value"
+                  [attr.data-testid]="'kanban-filter-type-' + opt.value"
+                  [attr.aria-pressed]="activeType() === opt.value"
+                  (click)="onPickType(opt.value)">
+            <span class="sheet__chip-icon" aria-hidden="true">{{ opt.icon }}</span>
+            <span>{{ opt.label }}</span>
+          </button>
+        }
+      </div>
+    </section>
+  }
+
+  <section class="sheet__section">
+    <h3 class="sheet__section-title">
+      Tags
+      @if (activeTagIds().size > 0) {
+        <span class="sheet__count" data-testid="kanban-filter-tag-active-count">{{ activeTagIds().size }} active</span>
+      }
+    </h3>
+    @if (tags().length === 0) {
+      <p class="sheet__empty">No tags on this board.</p>
+    } @else {
+      <ul class="sheet__list" data-testid="kanban-filter-tag-list">
+        @for (tag of tags(); track tag.id) {
+          <li>
+            <label class="sheet__checkbox"
+                   [attr.data-testid]="'kanban-filter-tag-' + tag.id"
+                   [attr.title]="tag.description || tag.label">
+              <input type="checkbox"
+                     [checked]="activeTagIds().has(tag.id)"
+                     (change)="onToggleTag(tag.id)" />
+              <span class="sheet__swatch" [style.background]="tag.color" aria-hidden="true"></span>
+              <span class="sheet__checkbox-label">{{ tag.label }}</span>
+            </label>
+          </li>
+        }
+      </ul>
+    }
+  </section>
+
+  <section class="sheet__section">
+    <h3 class="sheet__section-title">
+      Owner
+      @if (activeOwnerId()) {
+        <span class="sheet__count">1 active</span>
+      }
+    </h3>
+    @if (owners().length === 0) {
+      <p class="sheet__empty">No owners registered.</p>
+    } @else {
+      <ul class="sheet__list" data-testid="kanban-filter-owner-list">
+        <li>
+          <label class="sheet__checkbox" data-testid="kanban-filter-owner-all">
+            <input type="radio"
+                   name="owner-radio"
+                   [checked]="activeOwnerId() === null"
+                   (change)="onSetOwner(null)" />
+            <span class="sheet__swatch sheet__swatch--blank" aria-hidden="true"></span>
+            <span class="sheet__checkbox-label">All owners</span>
+          </label>
+        </li>
+        @for (owner of owners(); track owner.id) {
+          <li>
+            <label class="sheet__checkbox"
+                   [attr.data-testid]="'kanban-filter-owner-' + owner.id">
+              <input type="radio"
+                     name="owner-radio"
+                     [checked]="activeOwnerId() === owner.id"
+                     (change)="onSetOwner(owner.id)" />
+              <span class="sheet__swatch"
+                    [style.background]="owner.colour || 'rgba(255,255,255,0.12)'"
+                    aria-hidden="true">{{ owner.emoji || '·' }}</span>
+              <span class="sheet__checkbox-label">{{ owner.displayName || owner.id }}</span>
+            </label>
+          </li>
+        }
+      </ul>
+    }
+  </section>
+
+  <section class="sheet__section">
+    <h3 class="sheet__section-title">Visibility</h3>
+    <ul class="sheet__list">
+      <li>
+        <label class="sheet__checkbox" data-testid="kanban-filter-visibility-compact">
+          <input type="checkbox"
+                 [checked]="compactCards()"
+                 (change)="onToggleCompact()" />
+          <span class="sheet__swatch sheet__swatch--blank" aria-hidden="true">▤</span>
+          <span class="sheet__checkbox-label">Compact cards (titles only)</span>
+        </label>
+      </li>
+    </ul>
+  </section>
+
+  <footer class="sheet__footer" data-testid="kanban-filter-sidesheet-footer">
+    <span class="sheet__hits"
+          data-testid="kanban-filter-sidesheet-hitcount">{{ hitCount() }} / {{ totalCount() }} jobs match</span>
+    <button type="button"
+            class="sheet__clear-all"
+            data-testid="kanban-filter-sidesheet-clear-all"
+            [disabled]="!hasAnyFilter()"
+            (click)="onClearAll()">Clear filters</button>
+  </footer>
+</aside>
+  

@@ -1,0 +1,264 @@
+<section class="ux-panel" data-testid="uxui-panel">
+  <header class="ux-panel__head">
+    <div class="ux-panel__title-row">
+      <h2 class="ux-panel__title">
+        <span class="ux-panel__icon" aria-hidden="true">🎨</span>
+        UX/UI
+      </h2>
+      @if (loading()) {
+        <span class="ux-panel__loading" data-testid="uxui-loading">Loading…</span>
+      }
+    </div>
+    <p class="ux-panel__sub">Design references, screenshots, council critique, and next-version actions.</p>
+  </header>
+
+  @if (loadError(); as err) {
+    <div class="ux-panel__error" data-testid="uxui-load-error">
+      Could not load design data: {{ err }}
+    </div>
+  }
+
+  <div class="ux-panel__cards" data-testid="uxui-metric-grid">
+    <article class="ux-panel__card" data-testid="uxui-card-status">
+      <h3 class="ux-panel__card-title">Design status</h3>
+      <p class="ux-panel__card-value" data-testid="uxui-card-status-value">{{ overview()?.status ?? '—' }}</p>
+      <p class="ux-panel__card-detail">
+        @if (overview()?.lastReviewDate) {
+          Last council {{ overview()?.lastReviewDate }}
+        } @else {
+          No council run yet
+        }
+      </p>
+    </article>
+
+    <article class="ux-panel__card" data-testid="uxui-card-references">
+      <h3 class="ux-panel__card-title">References</h3>
+      <p class="ux-panel__card-value ux-panel__card-value--big" data-testid="uxui-card-references-value">
+        {{ overview()?.referencesCount ?? 0 }}
+      </p>
+      <p class="ux-panel__card-detail">screens, markdown briefs, images</p>
+    </article>
+
+    <article class="ux-panel__card" data-testid="uxui-card-screenshots">
+      <h3 class="ux-panel__card-title">Screenshots</h3>
+      <p class="ux-panel__card-value ux-panel__card-value--big" data-testid="uxui-card-screenshots-value">
+        {{ totalScreenshots() }}
+      </p>
+      <p class="ux-panel__card-detail">
+        <span class="ux-panel__chip ux-panel__chip--ok" data-testid="uxui-screenshots-accepted">
+          {{ overview()?.screenshotsAcceptedCount ?? 0 }} accepted
+        </span>
+        <span class="ux-panel__chip ux-panel__chip--bad" data-testid="uxui-screenshots-rejected">
+          {{ overview()?.screenshotsRejectedCount ?? 0 }} rejected
+        </span>
+      </p>
+    </article>
+
+    <article class="ux-panel__card" data-testid="uxui-card-council">
+      <h3 class="ux-panel__card-title">Council notes</h3>
+      <p class="ux-panel__card-value ux-panel__card-value--big" data-testid="uxui-card-council-value">
+        {{ overview()?.councilOpenCount ?? 0 }}
+      </p>
+      <p class="ux-panel__card-detail">
+        {{ overview()?.councilAcceptedCount ?? 0 }} accepted, product / visual / interaction / a11y
+      </p>
+    </article>
+  </div>
+
+  <section class="ux-panel__group" data-testid="uxui-references">
+    <header class="ux-panel__group-head">
+      <h3 class="ux-panel__group-title">Design references</h3>
+      <span class="ux-panel__group-meta">{{ overview()?.referencesCount ?? 0 }} artifacts</span>
+      <button type="button" class="ux-panel__btn ux-panel__btn--ghost"
+              data-testid="uxui-add-reference"
+              (click)="onCreateFollowUp('add-reference')">
+        ＋ Add reference
+      </button>
+    </header>
+    <div class="ux-panel__ref-grid">
+      <article class="ux-panel__ref-card ux-panel__ref-card--brief" data-testid="uxui-ref-brief">
+        <h4>Markdown brief</h4>
+        @if (overview()?.briefExists) {
+          <p>{{ overview()?.briefSummary || 'Brief on file. Open the design folder to read.' }}</p>
+        } @else {
+          <p class="ux-panel__empty">No brief.md yet.</p>
+        }
+      </article>
+      <article class="ux-panel__ref-card ux-panel__ref-card--accepted" data-testid="uxui-ref-accepted">
+        <h4>Accepted screenshots</h4>
+        @if (acceptedRefs().length === 0) {
+          <p class="ux-panel__empty">No accepted variants yet.</p>
+        } @else {
+          <ul class="ux-panel__ref-list">
+            @for (r of acceptedRefs(); track r.fileName) {
+              <li>
+                <span class="ux-panel__ref-name">{{ r.title ?? r.fileName }}</span>
+                @if (r.summary) {
+                  <span class="ux-panel__ref-sum">{{ r.summary }}</span>
+                }
+              </li>
+            }
+          </ul>
+        }
+      </article>
+      <article class="ux-panel__ref-card ux-panel__ref-card--external" data-testid="uxui-ref-external">
+        <h4>External inspiration</h4>
+        @if (externalRefs().length === 0) {
+          <p class="ux-panel__empty">No external references.</p>
+        } @else {
+          <ul class="ux-panel__ref-list">
+            @for (r of externalRefs(); track r.fileName) {
+              <li>
+                <span class="ux-panel__ref-name">{{ r.title ?? r.fileName }}</span>
+                @if (r.summary) {
+                  <span class="ux-panel__ref-sum">{{ r.summary }}</span>
+                }
+              </li>
+            }
+          </ul>
+        }
+      </article>
+      <article class="ux-panel__ref-card ux-panel__ref-card--rejected" data-testid="uxui-ref-rejected">
+        <h4>Rejected alternatives</h4>
+        @if (rejectedRefs().length === 0) {
+          <p class="ux-panel__empty">No rejected alternatives.</p>
+        } @else {
+          <ul class="ux-panel__ref-list">
+            @for (r of rejectedRefs(); track r.fileName) {
+              <li>
+                <span class="ux-panel__ref-name">{{ r.title ?? r.fileName }}</span>
+                @if (r.summary) {
+                  <span class="ux-panel__ref-sum">{{ r.summary }}</span>
+                }
+              </li>
+            }
+          </ul>
+        }
+      </article>
+    </div>
+  </section>
+
+  <section class="ux-panel__group" data-testid="uxui-loop">
+    <header class="ux-panel__group-head">
+      <h3 class="ux-panel__group-title">Current design loop</h3>
+      <span class="ux-panel__group-meta">action-driven</span>
+    </header>
+    <p class="ux-panel__hint">
+      The user chooses when to run each step. Skills produce Markdown plus structured JSON; failed parsing still leaves the raw report visible.
+    </p>
+    <div class="ux-panel__actions" data-testid="uxui-action-buttons">
+      <button type="button"
+              class="ux-panel__btn ux-panel__btn--primary"
+              data-testid="uxui-run-screenshot-critique"
+              [disabled]="busyAction() !== null"
+              (click)="onRunAction('screenshot-critique')">
+        {{ busyAction() === 'screenshot-critique' ? 'Queueing…' : 'Run screenshot critique' }}
+      </button>
+      <button type="button"
+              class="ux-panel__btn"
+              data-testid="uxui-run-council-review"
+              [disabled]="busyAction() !== null"
+              (click)="onRunAction('council-review')">
+        {{ busyAction() === 'council-review' ? 'Queueing…' : 'Run council review' }}
+      </button>
+      <button type="button"
+              class="ux-panel__btn"
+              data-testid="uxui-request-next-version"
+              [disabled]="busyAction() !== null"
+              (click)="onRunAction('request-next-version')">
+        {{ busyAction() === 'request-next-version' ? 'Queueing…' : 'Request next version' }}
+      </button>
+      <button type="button"
+              class="ux-panel__btn ux-panel__btn--ghost"
+              data-testid="uxui-create-followup"
+              (click)="onCreateFollowUp('design-followup')">
+        Create follow-up task
+      </button>
+      @if (actionError(); as err) {
+        <span class="ux-panel__chip ux-panel__chip--error"
+              role="status"
+              data-testid="uxui-action-error">{{ err }}</span>
+      }
+      @if (actionQueued(); as ok) {
+        <span class="ux-panel__chip ux-panel__chip--ok"
+              role="status"
+              data-testid="uxui-action-queued">{{ ok }}</span>
+      }
+    </div>
+  </section>
+
+  <section class="ux-panel__group" data-testid="uxui-council-notes">
+    <header class="ux-panel__group-head">
+      <h3 class="ux-panel__group-title">Council critique</h3>
+      <span class="ux-panel__group-meta">
+        {{ overview()?.councilOpenCount ?? 0 }} open
+        @if ((overview()?.councilAcceptedCount ?? 0) > 0) {
+          · {{ overview()?.councilAcceptedCount }} accepted
+        }
+      </span>
+    </header>
+    @if (councilNotes().length === 0) {
+      <p class="ux-panel__empty" data-testid="uxui-council-empty">
+        No council notes recorded yet. Click "Run council review" to queue one.
+      </p>
+    } @else {
+      <ul class="ux-panel__council-list">
+        @for (n of councilNotes(); track n.fileName) {
+          <li class="ux-panel__council-row"
+              [class.ux-panel__council-row--accepted]="!!n.acceptedAt"
+              [class.ux-panel__council-row--unstructured]="!n.parseOk"
+              [attr.data-testid]="'uxui-council-row'"
+              [attr.data-rel-path]="n.relPath"
+              [attr.data-parse-ok]="n.parseOk"
+              [attr.data-accepted]="!!n.acceptedAt">
+            <div class="ux-panel__council-main">
+              @if (n.category) {
+                <span class="ux-panel__tag"
+                      [class]="'ux-panel__tag--' + categoryTone(n.category)">{{ n.category }}</span>
+              }
+              <span class="ux-panel__council-title">{{ n.title ?? n.fileName }}</span>
+              @if (n.noteDate) {
+                <span class="ux-panel__council-date">{{ n.noteDate }}</span>
+              }
+              @if (n.acceptedAt) {
+                <span class="ux-panel__chip ux-panel__chip--ok" data-testid="uxui-council-accepted-chip">accepted</span>
+              }
+            </div>
+            @if (!n.parseOk) {
+              <p class="ux-panel__warning" data-testid="uxui-unstructured-warning">
+                ⚠ unstructured report ({{ n.parseError ?? 'no structured block detected' }}). Raw Markdown shown below.
+              </p>
+              @if (rawCache()[n.fileName]; as raw) {
+                <pre class="ux-panel__raw" data-testid="uxui-council-raw">{{ raw }}</pre>
+              } @else {
+                <button type="button"
+                        class="ux-panel__btn ux-panel__btn--ghost"
+                        data-testid="uxui-council-load-raw"
+                        (click)="loadRaw(n.fileName)">Load raw Markdown</button>
+              }
+            } @else if (n.summary) {
+              <p class="ux-panel__council-summary">{{ n.summary }}</p>
+            }
+            <div class="ux-panel__council-actions">
+              <button type="button"
+                      class="ux-panel__btn ux-panel__btn--ghost"
+                      data-testid="uxui-council-task"
+                      (click)="onCreateFollowUp('council', n)">
+                Task
+              </button>
+              <button type="button"
+                      class="ux-panel__btn ux-panel__btn--ghost"
+                      [disabled]="!!n.acceptedAt || acceptingFile() === n.fileName"
+                      [attr.data-testid]="'uxui-council-accept'"
+                      [attr.data-file-name]="n.fileName"
+                      (click)="onAccept(n.fileName)">
+                {{ n.acceptedAt ? 'Accepted' : (acceptingFile() === n.fileName ? 'Accepting…' : 'Accept') }}
+              </button>
+            </div>
+          </li>
+        }
+      </ul>
+    }
+  </section>
+</section>
+  

@@ -1,0 +1,134 @@
+:host { display: inline-flex; }
+.hquota { display: inline-flex; gap: 8px; align-items: stretch; }
+.hquota__card {
+  position: relative;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(255,255,255,0.03);
+  cursor: help;
+  min-width: 96px;
+}
+.hquota__card:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.20); }
+.hquota__card--stale { border-color: rgba(249, 226, 175, 0.40); }
+.hquota__card--error { border-color: rgba(244, 63, 94, 0.40); }
+.hquota__head {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  color: rgba(255,255,255,0.75);
+  letter-spacing: 0.04em;
+}
+.hquota__icon { font-size: 0.85rem; }
+.hquota__label { font-weight: 600; }
+.hquota__stale-dot { color: #fcd34d; }
+.hquota__empty { color: rgba(255,255,255,0.50); padding: 6px 0; font-size: 0.85rem; }
+
+.hquota__donuts { display: inline-flex; gap: 8px; align-items: center; }
+.hquota__donut {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.hquota__svg { width: 36px; height: 36px; }
+.hquota__svg-track { fill: none; stroke: rgba(255,255,255,0.10); stroke-width: 3; }
+.hquota__svg-fill { fill: none; stroke-width: 3; stroke-linecap: round; transition: stroke-dasharray 0.3s ease; }
+.hquota__donut[data-tone="ok"] .hquota__svg-fill { stroke: #86efac; }
+.hquota__donut[data-tone="warn"] .hquota__svg-fill { stroke: #fcd34d; }
+.hquota__donut[data-tone="hot"] .hquota__svg-fill { stroke: #fda4af; }
+.hquota__donut[data-tone="unknown"] .hquota__svg-fill { stroke: rgba(255,255,255,0.20); }
+.hquota__svg-text {
+  fill: #cdd6f4;
+  font-size: 9px;
+  font-weight: 700;
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+.hquota__donut-label {
+  font-size: 0.62rem;
+  color: rgba(255,255,255,0.55);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.hquota__pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 320px;
+  max-width: 480px;
+  background: #1e1e2e;
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 10px;
+  padding: 10px 12px;
+  box-shadow: 0 12px 36px rgba(0,0,0,0.55);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
+  transition: opacity 0.10s ease, transform 0.10s ease;
+  z-index: 50;
+}
+.hquota__card:hover .hquota__pop {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+.hquota__pop-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+  color: #cdd6f4;
+}
+.hquota__pop-plan {
+  font-size: 0.72rem;
+  color: rgba(255,255,255,0.55);
+}
+.hquota__pop-refresh {
+  margin-left: auto;
+  background: rgba(255,255,255,0.06);
+  color: #cdd6f4;
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 6px;
+  padding: 2px 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+}
+.hquota__pop-refresh:hover:not(:disabled) { background: rgba(255,255,255,0.12); }
+.hquota__pop-refresh:disabled { opacity: 0.5; cursor: progress; }
+.hquota__pop-meta {
+  font-size: 0.72rem;
+  color: rgba(255,255,255,0.55);
+  margin-bottom: 6px;
+}
+.hquota__pop-meta--stale { color: #fcd34d; font-weight: 600; }
+.hquota__pop-error {
+  color: #fda4af;
+  background: rgba(244, 63, 94, 0.10);
+  border: 1px solid rgba(244, 63, 94, 0.25);
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 0.74rem;
+  margin-bottom: 6px;
+}
+.hquota__pop-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+.hquota__pop-table td {
+  padding: 3px 4px;
+  vertical-align: top;
+  color: #cdd6f4;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.hquota__pop-table tr:last-child td { border-bottom: 0; }
+.hquota__pop-num { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+.hquota__pop-sub { color: rgba(255,255,255,0.50); font-size: 0.72rem; margin-left: 4px; }
+.hquota__pop-reset { color: rgba(255,255,255,0.55); font-size: 0.72rem; }
+  

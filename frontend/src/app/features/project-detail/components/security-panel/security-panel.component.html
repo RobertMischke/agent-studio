@@ -1,0 +1,172 @@
+<section class="sec-panel" data-testid="security-panel">
+  <header class="sec-panel__head">
+    <div class="sec-panel__title-row">
+      <h2 class="sec-panel__title">
+        <span class="sec-panel__icon" aria-hidden="true">🔒</span>
+        Security
+        <app-concept-help concept="audits-and-checks" />
+      </h2>
+      <span class="sec-panel__badge"
+            [class]="'sec-panel__badge--' + baselineBadge()"
+            data-testid="security-baseline-badge">
+        {{ baselineBadgeLabel() }}
+      </span>
+      <span class="sec-panel__spacer"></span>
+      @if (loading()) {
+        <span class="sec-panel__loading" data-testid="security-loading">Loading…</span>
+      }
+    </div>
+    <p class="sec-panel__sub">Baseline, reviews, and active findings for this project.</p>
+  </header>
+
+  @if (loadError(); as err) {
+    <div class="sec-panel__error" data-testid="security-load-error">
+      Could not load security data: {{ err }}
+    </div>
+  }
+
+  <div class="sec-panel__cards">
+    <article class="sec-panel__card" data-testid="security-card-last-review">
+      <h3 class="sec-panel__card-title">Last review</h3>
+      @if (lastReview(); as r) {
+        <p class="sec-panel__card-value">
+          <span class="sec-panel__card-date">{{ r.reviewDate ?? formatDate(r.updatedAt) }}</span>
+          <span class="sec-panel__card-verdict"
+                [class]="'sec-panel__card-verdict--' + verdictTone(r.verdict)">
+            {{ r.verdict ?? 'no verdict' }}
+          </span>
+        </p>
+        @if (r.title) {
+          <p class="sec-panel__card-detail">{{ r.title }}</p>
+        }
+      } @else {
+        <p class="sec-panel__card-empty">No reviews yet.</p>
+      }
+    </article>
+
+    <article class="sec-panel__card" data-testid="security-card-open-findings">
+      <h3 class="sec-panel__card-title">Open findings</h3>
+      @if (lastReview()?.openFindings !== null && lastReview()?.openFindings !== undefined) {
+        <p class="sec-panel__card-value sec-panel__card-value--big">{{ lastReview()?.openFindings }}</p>
+        @if (severitySplitEntries().length > 0) {
+          <ul class="sec-panel__sev-list">
+            @for (s of severitySplitEntries(); track s.label) {
+              <li class="sec-panel__sev"
+                  [class]="'sec-panel__sev--' + s.tone">
+                <span class="sec-panel__sev-label">{{ s.label }}</span>
+                <span class="sec-panel__sev-count">{{ s.count }}</span>
+              </li>
+            }
+          </ul>
+        }
+      } @else {
+        <p class="sec-panel__card-empty">No findings reported.</p>
+      }
+    </article>
+
+    <article class="sec-panel__card" data-testid="security-card-baseline-def">
+      <h3 class="sec-panel__card-title">Baseline definition</h3>
+      @if (baseline()?.exists) {
+        <p class="sec-panel__card-value">
+          {{ baseline()?.status ?? 'no status' }}
+          @if (baseline()?.lastVerified) {
+            <span class="sec-panel__card-detail">verified {{ baseline()?.lastVerified }}</span>
+          }
+        </p>
+        @if (baseline()?.definitionRef; as ref) {
+          <p class="sec-panel__card-link">
+            <span class="sec-panel__card-link-label">Definition:</span>
+            <code data-testid="security-baseline-def-ref">{{ ref }}</code>
+          </p>
+        } @else {
+          <p class="sec-panel__card-detail">No definition record linked yet.</p>
+        }
+      } @else {
+        <p class="sec-panel__card-empty">No baseline file yet ({{ baseline()?.filePath || 'not configured' }}).</p>
+      }
+    </article>
+  </div>
+
+  <div class="sec-panel__actions" data-testid="security-actions">
+    <button type="button"
+            class="sec-panel__btn sec-panel__btn--primary"
+            data-testid="security-run-audit"
+            [disabled]="auditBusy()"
+            (click)="onRunAudit()">
+      {{ auditBusy() ? 'Queueing…' : 'Run security audit' }}
+    </button>
+    <button type="button"
+            class="sec-panel__btn"
+            data-testid="security-open-evidence"
+            [disabled]="!lastReview()"
+            (click)="onOpenEvidence()">
+      Open evidence
+    </button>
+    <button type="button"
+            class="sec-panel__btn"
+            data-testid="security-create-followup"
+            (click)="onCreateFollowUp()">
+      Create follow-up task
+    </button>
+    @if (auditError(); as err) {
+      <span class="sec-panel__chip sec-panel__chip--error"
+            role="status"
+            data-testid="security-audit-error">{{ err }}</span>
+    }
+    @if (auditQueued(); as ok) {
+      <span class="sec-panel__chip sec-panel__chip--ok"
+            role="status"
+            data-testid="security-audit-queued">{{ ok }}</span>
+    }
+  </div>
+
+  <section class="sec-panel__history" data-testid="security-history">
+    <h3 class="sec-panel__history-title">Review history</h3>
+    @if (reviews().length === 0) {
+      <p class="sec-panel__history-empty" data-testid="security-history-empty">
+        No security reviews recorded yet.
+        Click "Run security audit" to queue one.
+      </p>
+    } @else {
+      <ul class="sec-panel__history-list">
+        @for (r of reviews(); track r.fileName) {
+          <li class="sec-panel__row"
+              [class.sec-panel__row--unstructured]="!r.parseOk"
+              [attr.data-testid]="'security-history-row'"
+              [attr.data-rel-path]="r.relPath"
+              [attr.data-parse-ok]="r.parseOk">
+            <div class="sec-panel__row-main">
+              <span class="sec-panel__row-date">{{ r.reviewDate ?? formatDate(r.updatedAt) }}</span>
+              <span class="sec-panel__row-name">{{ r.title ?? r.fileName }}</span>
+              @if (r.verdict) {
+                <span class="sec-panel__row-verdict"
+                      [class]="'sec-panel__row-verdict--' + verdictTone(r.verdict)">
+                  {{ r.verdict }}
+                </span>
+              }
+            </div>
+            @if (!r.parseOk) {
+              <p class="sec-panel__warning" data-testid="security-unstructured-warning">
+                ⚠ unstructured report ({{ r.parseError ?? 'no structured block detected' }}). Raw Markdown shown below.
+              </p>
+              @if (rawCache()[r.fileName]; as raw) {
+                <pre class="sec-panel__raw" data-testid="security-raw-md">{{ raw }}</pre>
+              } @else {
+                <button type="button"
+                        class="sec-panel__btn sec-panel__btn--ghost"
+                        data-testid="security-row-load-raw"
+                        (click)="loadRaw(r.fileName)">Load raw Markdown</button>
+              }
+            } @else if (r.summary) {
+              <p class="sec-panel__row-summary">{{ r.summary }}</p>
+            }
+            <p class="sec-panel__row-link">
+              <code>{{ r.relPath }}</code>
+            </p>
+          </li>
+        }
+      </ul>
+    }
+  </section>
+</section>
+  

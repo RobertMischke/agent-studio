@@ -1,0 +1,90 @@
+<div class="md-editor"
+     [class.md-editor--dirty]="state() === 'dirty'"
+     [class.md-editor--saved]="state() === 'saved'"
+     [class.md-editor--readonly]="readOnly()"
+     [class.md-editor--drag]="isDragging()"
+     [attr.data-state]="state()"
+     data-testid="prompt-editor"
+     (dragover)="onDragOver($event)"
+     (dragleave)="onDragLeave($event)"
+     (drop)="onDrop($event)">
+  @if (readOnly()) {
+    <div class="md-editor__lock" data-testid="prompt-editor-lock">
+      🔒 {{ readOnlyReason() || 'Editing disabled while the CLI is running for this task. Stop it first.' }}
+    </div>
+  }
+  <!--
+    Chat-first redesign: the toolbar is a tight icon strip; tooltips
+    carry the labels the verbose row used to render in visible text.
+    Save state is a small coloured dot rather than a long pill. -->
+  <div class="md-editor__bar md-editor__bar--compact">
+    <div class="md-editor__tabs">
+      <button class="md-editor__tab md-editor__tab--icon"
+              [class.md-editor__tab--active]="mode() === 'rich'"
+              (click)="setMode('rich')"
+              aria-label="Rich text editor"
+              title="Rich text editor">P</button>
+      <button class="md-editor__tab md-editor__tab--icon"
+              [class.md-editor__tab--active]="mode() === 'source'"
+              (click)="setMode('source')"
+              aria-label="Markdown source editor"
+              title="Markdown source editor">M</button>
+      @if (canAttach()) {
+        <button class="md-editor__tab md-editor__tab--icon md-editor__tab--upload"
+                type="button"
+                [disabled]="readOnly() || uploading()"
+                (click)="triggerFilePicker()"
+                data-testid="prompt-editor-attach"
+                [attr.aria-label]="uploading() ? 'Uploading image' : 'Insert image'"
+                [title]="uploading() ? 'Uploading…' : 'Insert image (Ctrl+V also works)'">
+          {{ uploading() ? '⏳' : '📎' }}
+        </button>
+      }
+    </div>
+    <div class="md-editor__status" data-testid="prompt-editor-status">
+      @switch (state()) {
+        @case ('dirty') {
+          <span class="md-editor__dot md-editor__dot--dirty" title="Unsaved changes" aria-label="Unsaved changes"></span>
+        }
+        @case ('saved') {
+          <span class="md-editor__dot md-editor__dot--saved" title="Saved" aria-label="Saved"></span>
+        }
+        @default {
+          <span class="md-editor__dot" title="Saved" aria-label="Saved"></span>
+        }
+      }
+      <button class="md-editor__save md-editor__save--icon"
+              (click)="emitSave()"
+              [disabled]="readOnly()"
+              data-testid="prompt-editor-save"
+              aria-label="Save (Ctrl+S)"
+              title="Save (Ctrl+S)">💾</button>
+    </div>
+  </div>
+
+  <div class="md-editor__content">
+    <div #editorHost class="md-editor__rich" [class.md-editor__rich--hidden]="mode() !== 'rich'"></div>
+    @if (mode() === 'source') {
+      <textarea class="md-editor__source"
+                data-testid="prompt-editor-source"
+                [ngModel]="sourceValue()"
+                (ngModelChange)="updateSource($event)"
+                (keydown)="handleKeydown($event)"
+                (paste)="handleSourcePaste($event)"
+                [readonly]="readOnly()"></textarea>
+    }
+  </div>
+
+  @if (uploadError()) {
+    <div class="md-editor__error" data-testid="prompt-editor-upload-error">
+      ⚠ {{ uploadError() }}
+    </div>
+  }
+
+  <input #fileInput
+         type="file"
+         accept="image/png,image/jpeg,image/gif,image/webp"
+         class="md-editor__file"
+         (change)="onFileInputChange($event)" />
+</div>
+  

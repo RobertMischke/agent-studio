@@ -1,0 +1,199 @@
+<section class="wtt" data-testid="workspace-token-timeline">
+  <header class="wtt__head">
+    <div>
+      <h2 class="wtt__title">Workspace token usage</h2>
+      <p class="wtt__sub">
+        Orchestrator LLM calls across every watched project, bucketed
+        on the wall clock.
+        @if (timeline(); as t) {
+          <span class="wtt__sub-stats">
+            · {{ totalCalls() }} call{{ totalCalls() === 1 ? '' : 's' }}
+            · {{ formatTokens(grandTotalTokens()) }} tokens
+          </span>
+        }
+      </p>
+    </div>
+    <div class="wtt__controls">
+      <div class="wtt__win" role="radiogroup" aria-label="Window">
+        @for (opt of windowOptions; track opt.hours) {
+          <button type="button"
+                  class="wtt__win-btn"
+                  [class.wtt__win-btn--active]="windowHours() === opt.hours"
+                  [attr.data-testid]="'wtt-win-' + opt.testId"
+                  role="radio"
+                  [attr.aria-checked]="windowHours() === opt.hours"
+                  (click)="setWindow(opt.hours)">
+            {{ opt.label }}
+          </button>
+        }
+      </div>
+      <button type="button"
+              class="wtt__refresh"
+              data-testid="wtt-refresh"
+              [disabled]="loading()"
+              (click)="refresh()">
+        {{ loading() ? '⏳' : '↻' }}
+      </button>
+    </div>
+  </header>
+
+  <div class="wtt__chart" data-testid="wtt-chart" (mouseleave)="hoverCell.set(null)">
+    @if (loading() && !timeline()) {
+      <div class="wtt__empty">Loading timeline...</div>
+    } @else if (!hasAnyData()) {
+      <div class="wtt__empty">No orchestrator activity in this window.</div>
+    } @else {
+      <svg class="wtt__svg"
+           role="img"
+           aria-label="Workspace token-usage timeline"
+           [attr.viewBox]="'0 0 ' + svgW + ' ' + svgH"
+           preserveAspectRatio="none">
+        <!-- Y-axis grid lines + labels -->
+        @for (g of gridLines(); track g.pct) {
+          <line class="wtt__grid"
+                [attr.x1]="padL"
+                [attr.x2]="svgW - padR"
+                [attr.y1]="yFromPct(g.pct)"
+                [attr.y2]="yFromPct(g.pct)" />
+          <text class="wtt__y-lbl"
+                [attr.x]="padL - 6"
+                [attr.y]="yFromPct(g.pct) + 3">{{ g.label }}</text>
+        }
+
+        <!-- X-axis tick labels -->
+        @for (tk of xTicks(); track tk.iso) {
+          <text class="wtt__x-lbl"
+                [attr.x]="xFromPct(tk.pct)"
+                [attr.y]="svgH - 6"
+                text-anchor="middle">{{ tk.label }}</text>
+        }
+
+        <!-- Stacked bars -->
+        @for (bar of bars(); track bar.bucketStart) {
+          <g class="wtt__bar"
+             [attr.data-testid]="'wtt-bar-' + bar.bucketStart">
+            @for (seg of bar.segments; track seg.project) {
+              <rect class="wtt__seg"
+                    [attr.data-testid]="'wtt-seg-' + seg.project"
+                    [attr.x]="xFromPct(bar.xPct)"
+                    [attr.y]="yFromPct(seg.yPct + seg.hPct)"
+                    [attr.width]="widthFromPct(bar.widthPct)"
+                    [attr.height]="heightFromPct(seg.hPct)"
+                    [attr.fill]="seg.color"
+                    (mouseenter)="hoverCell.set(seg.cell)" />
+            }
+          </g>
+        }
+      </svg>
+
+      @if (hoverCell(); as c) {
+        <div class="wtt__pop" data-testid="wtt-popover" role="status">
+          <div class="wtt__pop-head">
+            <span class="wtt__pop-disk"
+                  [style.background]="colorFor(c.project)"></span>
+            <strong>{{ c.project }}</strong>
+            <span class="wtt__pop-time">{{ formatBucketRange(c) }}</span>
+          </div>
+          <div class="wtt__pop-grid">
+            <div><span class="wtt__pop-lbl">↑ input</span><span class="wtt__pop-num">{{ formatTokens(c.input) }}</span></div>
+            <div><span class="wtt__pop-lbl">↓ output</span><span class="wtt__pop-num">{{ formatTokens(c.output) }}</span></div>
+            @if (c.cacheRead > 0) {
+              <div><span class="wtt__pop-lbl">⚡ cache read</span><span class="wtt__pop-num">{{ formatTokens(c.cacheRead) }}</span></div>
+            }
+            @if (c.cacheWrite > 0) {
+              <div><span class="wtt__pop-lbl">+ cache write</span><span class="wtt__pop-num">{{ formatTokens(c.cacheWrite) }}</span></div>
+            }
+            <div><span class="wtt__pop-lbl">total</span><span class="wtt__pop-num">{{ formatTokens(c.total) }}</span></div>
+            <div><span class="wtt__pop-lbl">calls</span><span class="wtt__pop-num">{{ c.calls }}</span></div>
+            <div>
+              <span class="wtt__pop-lbl">$ theoretical</span>
+              <span class="wtt__pop-num">
+                @if (c.dollars !== null) {
+                  {{ formatUsd(c.dollars) }}
+                  @if (!c.allModelsPriced) {
+                    <span class="wtt__pop-partial">(partial)</span>
+                  }
+                } @else {
+                  <span class="wtt__na">n/a</span>
+                }
+              </span>
+            </div>
+          </div>
+        </div>
+      }
+    }
+  </div>
+
+  @if (timeline(); as t) {
+    @if (t.projects.length > 0) {
+      <div class="wtt__legend" data-testid="wtt-legend">
+        @for (p of t.projects; track p.project) {
+          <button type="button"
+                  class="wtt__chip"
+                  [class.wtt__chip--off]="isProjectDisabled(p.project)"
+                  [attr.data-testid]="'wtt-legend-' + p.project"
+                  [attr.aria-pressed]="!isProjectDisabled(p.project)"
+                  (click)="toggleProject(p.project)">
+            <span class="wtt__chip-dot"
+                  [style.background]="colorFor(p.project)"></span>
+            <span class="wtt__chip-name">{{ p.project }}</span>
+            <span class="wtt__chip-num">{{ formatTokens(p.total) }}</span>
+          </button>
+        }
+      </div>
+    }
+
+    <table class="wtt__tab" data-testid="wtt-table">
+      <thead>
+        <tr>
+          <th>Project</th>
+          <th class="wtt__num">Calls</th>
+          <th class="wtt__num">Total tokens</th>
+          <th class="wtt__num">$ theoretical</th>
+          <th>Peak bucket</th>
+          <th>Last activity</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (p of t.projects; track p.project) {
+          <tr [class.wtt__row--off]="isProjectDisabled(p.project)">
+            <td>
+              <span class="wtt__row-dot" [style.background]="colorFor(p.project)"></span>
+              {{ p.project }}
+            </td>
+            <td class="wtt__num">{{ p.calls }}</td>
+            <td class="wtt__num">{{ formatTokens(p.total) }}</td>
+            <td class="wtt__num">
+              @if (p.dollars !== null) {
+                {{ formatUsd(p.dollars) }}
+                @if (!p.allModelsPriced) {
+                  <span class="wtt__pop-partial">(partial)</span>
+                }
+              } @else {
+                <span class="wtt__na">n/a</span>
+              }
+            </td>
+            <td>
+              @if (p.peakBucketStart) {
+                {{ formatTime(p.peakBucketStart) }}
+                <span class="wtt__row-sub">{{ formatTokens(p.peakBucketTotal) }}</span>
+              } @else {
+                <span class="wtt__na">none</span>
+              }
+            </td>
+            <td>
+              @if (p.lastActivity) {
+                {{ formatAgo(p.lastActivity) }}
+              } @else {
+                <span class="wtt__na">none</span>
+              }
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+
+    <p class="wtt__disc">{{ t.disclaimer }}</p>
+  }
+</section>
+  

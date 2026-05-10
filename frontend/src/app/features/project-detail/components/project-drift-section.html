@@ -1,0 +1,195 @@
+<section class="proj-detail__group" data-testid="project-drift-section">
+  <h3>
+    <span class="pdrift__icon">🧭</span>
+    Architecture marble drift
+    @if (model(); as m) {
+      <span class="pdrift__count" data-testid="project-drift-element-count">
+        {{ m.elements.length }} / 10 elements
+      </span>
+    }
+  </h3>
+
+  <p class="proj-detail__hint">
+    High-level architecture map for the project. Scores compare each
+    element to recent code, schemas, tests, runtime evidence, and recent
+    job evidence; lower means more drift risk. Up to ten elements per
+    report so the surface stays scan-friendly.
+  </p>
+
+  @if (loading() && !model() && !error()) {
+    <p class="proj-detail__empty" data-testid="project-drift-loading">Loading architecture map…</p>
+  }
+
+  @if (error(); as e) {
+    <div class="pdrift__error" data-testid="project-drift-error">
+      <strong>Drift report unreadable.</strong>
+      <span>{{ e }}</span>
+      <button class="pdrift__btn pdrift__btn--ghost"
+              data-testid="project-drift-retry"
+              (click)="refresh()">Retry</button>
+    </div>
+  }
+
+  @if (!error() && !loading() && !model()) {
+    <p class="proj-detail__empty" data-testid="project-drift-empty">
+      No architecture model carried by any drift report yet.
+      Run an architecture-aware drift action (for example
+      <code>ADR / Code Drift</code>) to produce one. The marble surface
+      shows up here as soon as a report carries an
+      <code>architectureModel</code>.
+    </p>
+  }
+
+  @if (model(); as m) {
+    <div class="pdrift__map" data-testid="project-drift-map">
+      @for (row of marbleRows(); track row.element.elementId) {
+        <button class="pdrift__marble"
+                [class.pdrift__marble--info]="band(row.element.severity) === 'info'"
+                [class.pdrift__marble--warn]="band(row.element.severity) === 'warn'"
+                [class.pdrift__marble--high]="band(row.element.severity) === 'high'"
+                [class.pdrift__marble--critical]="band(row.element.severity) === 'critical'"
+                [class.pdrift__marble--active]="openedId() === row.element.elementId"
+                [attr.data-testid]="'project-drift-marble-' + row.element.elementId"
+                [attr.data-severity]="titleCase(row.element.severity)"
+                (click)="toggle(row.element.elementId)">
+          <header>
+            <span class="pdrift__marble-label">{{ row.element.label }}</span>
+            <span class="pdrift__marble-score"
+                  [attr.data-testid]="'project-drift-score-' + row.element.elementId">
+              {{ row.element.score }}
+            </span>
+          </header>
+          <p class="pdrift__marble-role">{{ row.element.expectedRole }}</p>
+          <footer>
+            <span class="pdrift__sev pdrift__sev--{{ band(row.element.severity) }}"
+                  [attr.data-testid]="'project-drift-severity-' + row.element.elementId">{{ titleCase(row.element.severity) }}</span>
+            <span class="pdrift__cov" title="Source coverage (fraction of expected sources actually inspected)">
+              cov {{ formatCoverage(row.element.sourceCoverage) }}
+            </span>
+            <span class="pdrift__status pdrift__status--{{ row.effectiveStatus.toLowerCase() }}"
+                  [attr.data-testid]="'project-drift-status-' + row.element.elementId">{{ titleCase(row.effectiveStatus) }}</span>
+          </footer>
+        </button>
+      }
+    </div>
+
+    <p class="pdrift__source">
+      Source: report
+      <code data-testid="project-drift-source-report">{{ sourceReportId() ?? '(unknown)' }}</code>
+      @if (sourceReportCreatedAt(); as ts) {
+        <span> · {{ formatTime(ts) }}</span>
+      }
+      · model
+      <code>{{ m.modelId }}</code>
+    </p>
+
+    @if (openedRow(); as row) {
+      <section class="pdrift__panel" data-testid="project-drift-drilldown">
+        <header>
+          <h4>{{ row.element.label }}</h4>
+          <button class="pdrift__close"
+                  data-testid="project-drift-drilldown-close"
+                  (click)="close()"
+                  title="Close">×</button>
+        </header>
+
+        <dl class="pdrift__panel-meta">
+          <div><dt>Score</dt><dd>{{ row.element.score }} ({{ titleCase(row.element.severity) }})</dd></div>
+          <div><dt>Source coverage</dt><dd>{{ formatCoverage(row.element.sourceCoverage) }}</dd></div>
+          <div><dt>Tracking</dt><dd>{{ titleCase(row.effectiveStatus) }}</dd></div>
+          <div><dt>Expected role</dt><dd>{{ row.element.expectedRole }}</dd></div>
+        </dl>
+
+        @if (row.element.summary) {
+          <p class="pdrift__panel-summary">{{ row.element.summary }}</p>
+        }
+
+        @if (row.element.guidelines && row.element.guidelines.length > 0) {
+          <details class="pdrift__panel-details" open>
+            <summary>Guidelines</summary>
+            <ul>
+              @for (g of row.element.guidelines; track g) { <li>{{ g }}</li> }
+            </ul>
+          </details>
+        }
+
+        @if (row.element.allowedDependencies && row.element.allowedDependencies.length > 0) {
+          <details class="pdrift__panel-details">
+            <summary>Allowed dependencies</summary>
+            <ul>
+              @for (d of row.element.allowedDependencies; track d) { <li><code>{{ d }}</code></li> }
+            </ul>
+          </details>
+        }
+
+        <details class="pdrift__panel-details" open>
+          <summary>
+            Evidence ({{ row.element.evidenceRefs.length }})
+          </summary>
+          @if (row.element.evidenceRefs.length === 0) {
+            <p class="proj-detail__empty">No evidence references on this element.</p>
+          } @else {
+            <ul data-testid="project-drift-evidence">
+              @for (ref of row.element.evidenceRefs; track ref) {
+                <li><code>{{ ref }}</code></li>
+              }
+            </ul>
+          }
+        </details>
+
+        @if (row.element.sourceRefs && row.element.sourceRefs.length > 0) {
+          <details class="pdrift__panel-details">
+            <summary>Source set ({{ row.element.sourceRefs.length }})</summary>
+            <ul>
+              @for (ref of row.element.sourceRefs; track ref) {
+                <li><code>{{ ref }}</code></li>
+              }
+            </ul>
+          </details>
+        }
+
+        @if (row.element.followUpTaskSuggestions && row.element.followUpTaskSuggestions.length > 0) {
+          <details class="pdrift__panel-details">
+            <summary>Follow-up suggestions</summary>
+            <ul>
+              @for (f of row.element.followUpTaskSuggestions; track f) {
+                <li>{{ f }}</li>
+              }
+            </ul>
+          </details>
+        }
+
+        <div class="pdrift__actions" data-testid="project-drift-actions">
+          <button class="pdrift__btn"
+                  [attr.data-testid]="'project-drift-action-analyze-' + row.element.elementId"
+                  [disabled]="busy() === 'analyze'"
+                  (click)="analyzeElement(row.element)">
+            Analyze this element
+          </button>
+          <button class="pdrift__btn"
+                  [attr.data-testid]="'project-drift-action-followup-' + row.element.elementId"
+                  [disabled]="busy() === 'followup'"
+                  (click)="createFollowUp(row.element)">
+            Create follow-up task
+          </button>
+          <span class="pdrift__action-divider"></span>
+          <span class="pdrift__action-label">Mark</span>
+          @for (s of statuses; track s) {
+            <button class="pdrift__btn pdrift__btn--status"
+                    [class.pdrift__btn--active]="titleCase(row.effectiveStatus) === s"
+                    [attr.data-testid]="'project-drift-action-mark-' + s.toLowerCase() + '-' + row.element.elementId"
+                    [disabled]="busy() === 'status'"
+                    (click)="markStatus(row.element, s)">
+              {{ s }}
+            </button>
+          }
+        </div>
+
+        @if (actionMessage(); as msg) {
+          <p class="pdrift__action-msg" data-testid="project-drift-action-msg">{{ msg }}</p>
+        }
+      </section>
+    }
+  }
+</section>
+  

@@ -1,0 +1,105 @@
+<div class="pchat" data-testid="project-chat-list">
+  <div class="pchat__search-bar" data-testid="pchat-search-bar">
+    <span class="pchat__chip" [class.pchat__chip--active]="mode() === 'search'">
+      {{ mode() === 'search' ? '🔍 search' : '💬 live' }}
+    </span>
+    <input
+      #searchInput
+      class="pchat__search-input"
+      type="text"
+      placeholder="Search chat history…"
+      data-testid="pchat-search-input"
+      [value]="searchQuery()"
+      (input)="onSearchInput($event)"
+      (keydown.enter)="runSearch()"
+      (keydown.escape)="exitSearch()" />
+    @if (mode() === 'search') {
+      <button
+        type="button"
+        class="pchat__chip-btn"
+        data-testid="pchat-back-to-live"
+        (click)="exitSearch()">
+        ← back to live
+      </button>
+    }
+  </div>
+
+  @if (errorMsg(); as e) {
+    <div class="pchat__error" data-testid="pchat-error">{{ e }}</div>
+  }
+
+  <div class="pchat__body-row">
+    <div
+      #scrollHost
+      class="pchat__scroll"
+      data-testid="pchat-scroll"
+      (scroll)="onScroll()">
+      @if (mode() === 'live') {
+        <div
+          class="pchat__spacer pchat__spacer--top"
+          [style.height.px]="topSpacerPx()"></div>
+
+        @for (turn of windowedTurns(); track turn.turnId) {
+          <article
+            class="pchat__turn"
+            [attr.data-testid]="'pchat-turn'"
+            [attr.data-turnid]="turn.turnId"
+            [class.pchat__turn--user]="turn.author === 'user'"
+            [class.pchat__turn--event]="turn.kind !== 'turn'"
+            [class.pchat__turn--flash]="turn.turnId === flashTurnId()">
+            <header class="pchat__turn-head">
+              <span class="pchat__author">{{ turn.author }}</span>
+              <span class="pchat__kind">{{ turn.kind }}</span>
+              <time class="pchat__ts" [attr.datetime]="turn.ts">{{ formatTs(turn.ts) }}</time>
+            </header>
+            <div class="pchat__body" [innerHTML]="renderBody(turn.body)"></div>
+          </article>
+        }
+
+        <div
+          class="pchat__spacer pchat__spacer--bottom"
+          [style.height.px]="bottomSpacerPx()"></div>
+
+        @if (loadingOlder()) {
+          <div class="pchat__hint" data-testid="pchat-loading-older">Loading older turns…</div>
+        }
+        @if (allTurns().length === 0 && !loadingInitial()) {
+          <div class="pchat__empty">No conversation yet.</div>
+        }
+      } @else {
+        <div class="pchat__results" data-testid="pchat-search-results">
+          @if (searching()) {
+            <div class="pchat__hint">Searching…</div>
+          }
+          @for (hit of searchHits(); track hit.turnId) {
+            <button
+              type="button"
+              class="pchat__hit"
+              [attr.data-testid]="'pchat-hit'"
+              [attr.data-turnid]="hit.turnId"
+              (click)="openHit(hit)">
+              <span class="pchat__hit-meta">
+                <span class="pchat__author">{{ hit.author }}</span>
+                <span class="pchat__kind">{{ hit.kind }}</span>
+                <time class="pchat__ts">{{ formatTs(hit.ts) }}</time>
+              </span>
+              <span class="pchat__hit-snippet" [innerHTML]="renderSnippet(hit.snippet)"></span>
+            </button>
+          }
+          @if (!searching() && searchHits().length === 0 && searchQuery().trim()) {
+            <div class="pchat__hint">No matches.</div>
+          }
+        </div>
+      }
+    </div>
+
+    @if (mode() === 'live') {
+      <app-project-chat-rail
+        [turns]="allTurns()"
+        [visibleStart]="visibleStart()"
+        [visibleEnd]="visibleEnd()"
+        (chipSelect)="onRailChipSelect($event)" />
+    }
+  </div>
+</div>
+  

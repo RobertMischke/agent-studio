@@ -1,0 +1,116 @@
+<section class="proj-detail__group" data-testid="project-analysis-reports-section">
+  <h3>
+    <span class="par__icon">📋</span>
+    Analysis reports
+    <span class="par__pill" data-testid="project-analysis-reports-count">
+      {{ reports().length }} {{ reports().length === 1 ? 'report' : 'reports' }}
+    </span>
+  </h3>
+
+  <p class="proj-detail__hint">
+    Durable inspection records from manual buttons, scheduled cadences, the meta-cycle, and external monitors.
+    Markdown is the human artifact; JSON is the additive convenience. Failed parses do not hide the body.
+  </p>
+
+  <h4 class="par__sub">Run an inspection</h4>
+  <div class="par__triggers" data-testid="project-analysis-reports-triggers">
+    @for (t of topics; track t.slug) {
+      <button class="par__btn"
+              [attr.data-testid]="'project-analysis-trigger-' + t.slug"
+              [title]="t.description"
+              [disabled]="triggering() === t.slug"
+              (click)="trigger(t.slug)">
+        {{ t.label }}
+        @if (triggering() === t.slug) {
+          <span class="par__btn-spin">…</span>
+        }
+      </button>
+    }
+  </div>
+  @if (lastError()) {
+    <p class="par__error" data-testid="project-analysis-reports-error">{{ lastError() }}</p>
+  }
+
+  <h4 class="par__sub">Schedule</h4>
+  <p class="proj-detail__hint">
+    Default is off. Scheduled execution is opt-in and never auto-runs without your explicit choice.
+  </p>
+  <table class="par__schedule" data-testid="project-analysis-reports-schedule">
+    <thead>
+      <tr><th>Topic</th><th>Cadence</th></tr>
+    </thead>
+    <tbody>
+      @for (t of topics; track t.slug) {
+        <tr>
+          <td>
+            <span class="par__topic-label">{{ t.label }}</span>
+            <span class="par__topic-desc">{{ t.description }}</span>
+          </td>
+          <td>
+            <select class="par__select"
+                    [attr.data-testid]="'project-analysis-schedule-' + t.slug"
+                    [ngModel]="scheduleFor(t.slug)"
+                    (ngModelChange)="onScheduleChange(t.slug, $event)">
+              @for (c of cadences; track c.id) {
+                <option [value]="c.id" [title]="c.tooltip">{{ c.label }}</option>
+              }
+            </select>
+          </td>
+        </tr>
+      }
+    </tbody>
+  </table>
+
+  <h4 class="par__sub">History</h4>
+  @if (loading() && reports().length === 0) {
+    <p class="proj-detail__empty">Loading…</p>
+  } @else if (reports().length === 0) {
+    <p class="proj-detail__empty" data-testid="project-analysis-reports-empty">
+      No reports yet. Click an inspection button above to produce the first one.
+    </p>
+  } @else {
+    <ul class="par__list" data-testid="project-analysis-reports-list">
+      @for (r of reports(); track r.reportId) {
+        <li class="par__item"
+            [class.par__item--info]="r.severity === 'Info'"
+            [class.par__item--warn]="r.severity === 'Warn'"
+            [class.par__item--high]="r.severity === 'High'"
+            [class.par__item--critical]="r.severity === 'Critical'"
+            [attr.data-testid]="'project-analysis-report-row'"
+            (click)="openReport.emit(r)">
+          <header>
+            <span class="par__sev par__sev--{{ r.severity.toLowerCase() }}">{{ r.severity }}</span>
+            <span class="par__topic">{{ r.topic }}</span>
+            <span class="par__trigger" [title]="'Trigger: ' + r.trigger">{{ triggerLabel(r.trigger) }}</span>
+            @if (r.parseStatus !== 'Structured') {
+              <span class="par__parse par__parse--bad"
+                    [attr.data-testid]="'project-analysis-report-parse-' + r.parseStatus.toLowerCase()"
+                    [title]="parseTooltip(r)">
+                ⚠️ {{ parseLabel(r.parseStatus) }}
+              </span>
+            }
+            <span class="par__ts">{{ formatTime(r.createdAt) }}</span>
+          </header>
+          <p class="par__summary">{{ r.summary }}</p>
+          <footer>
+            <span class="par__meta">scope: {{ scopeLabel(r) }}</span>
+            <span class="par__meta">producer: {{ producerLabel(r) }}</span>
+            @if (r.followUpTaskSuggestions.length > 0) {
+              <span class="par__meta par__meta--accent">{{ r.followUpTaskSuggestions.length }} follow-up{{ r.followUpTaskSuggestions.length === 1 ? '' : 's' }}</span>
+            }
+            @if (r.references.length > 0) {
+              <span class="par__meta">{{ r.references.length }} ref{{ r.references.length === 1 ? '' : 's' }}</span>
+            }
+          </footer>
+        </li>
+      }
+    </ul>
+  }
+
+  <div class="par__actions">
+    <button class="par__btn par__btn--ghost"
+            data-testid="project-analysis-reports-refresh"
+            (click)="refresh()">Refresh</button>
+  </div>
+</section>
+  

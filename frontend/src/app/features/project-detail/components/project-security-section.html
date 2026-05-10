@@ -1,0 +1,115 @@
+<section class="proj-detail__group" data-testid="project-security-section">
+  <h3>
+    <span class="psec__icon">🔒</span>
+    Security
+    @if (overview()?.meta; as m) {
+      @if (m.rating) {
+        <span class="psec__pill"
+              [class.psec__pill--good]="ratingClass(m.rating) === 'good'"
+              [class.psec__pill--warn]="ratingClass(m.rating) === 'warn'"
+              [class.psec__pill--bad]="ratingClass(m.rating) === 'bad'"
+              data-testid="project-security-rating">{{ m.rating }}</span>
+      }
+    }
+  </h3>
+
+  @if (loading()) {
+    <p class="proj-detail__empty">Loading…</p>
+  } @else if (!overview()) {
+    <p class="proj-detail__empty">No data.</p>
+  } @else {
+    <div class="psec__meta" data-testid="project-security-meta">
+      <div>
+        <span class="psec__meta-label">Last review</span>
+        <span class="psec__meta-value">{{ overview()!.meta.lastReviewDate || '— never recorded —' }}</span>
+      </div>
+      @if (overview()!.meta.summary) {
+        <p class="psec__meta-summary">{{ overview()!.meta.summary }}</p>
+      }
+      <details class="psec__meta-edit">
+        <summary>Edit assessment</summary>
+        <div class="psec__meta-form">
+          <label>Last review (YYYY-MM-DD)
+            <input type="text" [(ngModel)]="metaDraft.lastReviewDate" placeholder="2026-05-03">
+          </label>
+          <label>Rating
+            <select [(ngModel)]="metaDraft.rating">
+              <option [ngValue]="null">— none —</option>
+              <option value="Baseline OK">Baseline OK</option>
+              <option value="Needs review">Needs review</option>
+              <option value="At risk">At risk</option>
+            </select>
+          </label>
+          <label>Summary
+            <textarea rows="2" [(ngModel)]="metaDraft.summary"
+                      placeholder="One-line take. Why is the project where it is, security-wise?"></textarea>
+          </label>
+          <button class="psec__meta-save" (click)="saveMeta()">Save</button>
+        </div>
+      </details>
+    </div>
+
+    @if (overview()!.files.length === 0) {
+      <p class="proj-detail__empty">
+        No documents yet. Files live under
+        <code>{{ overview()!.baseDir }}</code>.
+        Use “New document” to start the archive.
+      </p>
+    } @else {
+      <ul class="psec__files" data-testid="project-security-files">
+        @for (f of overview()!.files; track f.relPath) {
+          <li class="psec__file"
+              [class.psec__file--active]="openedRel() === f.relPath">
+            <button class="psec__file-btn"
+                    (click)="openFile(f.relPath)"
+                    [attr.data-testid]="'project-security-file-' + f.relPath">
+              <span class="psec__file-name">{{ f.relPath }}</span>
+              <span class="psec__file-ts">{{ formatTime(f.updatedAt) }}</span>
+            </button>
+          </li>
+        }
+      </ul>
+    }
+
+    <div class="psec__new">
+      <button class="psec__new-btn" (click)="startNewFile()" data-testid="project-security-new">
+        ＋ New document
+      </button>
+      @if (newFileMode()) {
+        <div class="psec__new-form">
+          <input type="text" [(ngModel)]="newFileName"
+                 placeholder="reviews/2026-05-03-baseline.md"
+                 data-testid="project-security-new-name">
+          <button (click)="createNewFile()" data-testid="project-security-new-create">Create</button>
+          <button (click)="cancelNewFile()">Cancel</button>
+        </div>
+      }
+    </div>
+
+    @if (openedRel(); as rel) {
+      <div class="psec__viewer" data-testid="project-security-viewer">
+        <header class="psec__viewer-head">
+          <code>{{ rel }}</code>
+          <div class="psec__viewer-actions">
+            @if (!editing()) {
+              <button (click)="startEdit()" data-testid="project-security-edit">Edit</button>
+            } @else {
+              <button (click)="saveEdit()" data-testid="project-security-save">Save</button>
+              <button (click)="cancelEdit()">Cancel</button>
+            }
+            <button (click)="closeFile()">Close</button>
+          </div>
+        </header>
+        @if (!editing()) {
+          <div class="psec__viewer-body" [innerHTML]="renderedHtml()"></div>
+        } @else {
+          <textarea class="psec__viewer-editor"
+                    rows="18"
+                    [(ngModel)]="editorDraft"
+                    data-testid="project-security-editor"></textarea>
+        }
+      </div>
+    }
+  }
+</section>
+  

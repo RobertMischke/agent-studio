@@ -1,0 +1,108 @@
+<div class="cli-admin" data-testid="cli-admin-panel">
+  <header class="cli-admin__header">
+    <div>
+      <h2 class="cli-admin__title">CLI Management</h2>
+      <p class="cli-admin__subtitle">
+        Per-CLI usage caps. The runner blocks pickup and stops in-flight
+        runs when the configured percentage is reached, so manual ad-hoc
+        work outside the orchestrator keeps a buffer.
+      </p>
+    </div>
+    <button class="cli-admin__refresh"
+            type="button"
+            data-testid="cli-admin-refresh"
+            [disabled]="loading()"
+            (click)="reload()">
+      {{ loading() ? '⏳' : '↻' }}
+      <span>Reload</span>
+    </button>
+  </header>
+
+  @if (errorMsg(); as err) {
+    <div class="cli-admin__error" data-testid="cli-admin-error">{{ err }}</div>
+  }
+
+  <section class="cli-admin__section">
+    <header class="cli-admin__section-head">
+      <h3>Usage caps</h3>
+      <span class="cli-admin__hint">default {{ defaultCapPct() }}%</span>
+    </header>
+
+    @if (rows().length === 0) {
+      <div class="cli-admin__empty">
+        No quota windows reported yet. Open the CLI Usage panel and
+        refresh to populate quota data.
+      </div>
+    }
+
+    @for (cli of cliGroups(); track cli.cliType) {
+      <article class="cli-card" [attr.data-cli]="cli.cliType">
+        <header class="cli-card__head">
+          <span class="cli-card__icon" aria-hidden="true">{{ icon(cli.cliType) }}</span>
+          <span class="cli-card__name">{{ label(cli.cliType) }}</span>
+          @if (cli.plan) {
+            <span class="cli-card__plan">{{ cli.plan }}</span>
+          }
+        </header>
+
+        @for (row of cli.rows; track row.windowLabel) {
+          <div class="cap-row" [attr.data-window]="row.windowLabel">
+            <div class="cap-row__head">
+              <span class="cap-row__label">{{ row.windowLabel }}</span>
+              <span class="cap-row__used"
+                    [class.cap-row__used--blocked]="row.usedPct !== null && row.usedPct >= row.pendingCapPct">
+                used
+                <strong>{{ formatPct(row.usedPct) }}</strong>
+              </span>
+            </div>
+            <div class="cap-row__slider">
+              <input type="range"
+                     [attr.data-testid]="'cap-slider-' + row.cliType + '-' + slugify(row.windowLabel)"
+                     min="50" max="100" step="1"
+                     [ngModel]="row.pendingCapPct"
+                     (ngModelChange)="onSliderChange(row, $event)"
+                     (change)="onSliderCommit(row)"
+                     [disabled]="row.saving"
+                     [attr.aria-label]="'Cap percent for ' + label(row.cliType) + ' ' + row.windowLabel" />
+              <span class="cap-row__cap">
+                cap <strong [attr.data-testid]="'cap-value-' + row.cliType + '-' + slugify(row.windowLabel)">{{ row.pendingCapPct }}%</strong>
+                @if (row.saving) { <span class="cap-row__saving">saving…</span> }
+              </span>
+            </div>
+            @if (row.usedPct !== null) {
+              <div class="cap-row__bar">
+                <span class="cap-row__bar-fill"
+                      [style.width.%]="barWidth(row.usedPct)"
+                      [class.cap-row__bar-fill--over]="row.usedPct >= row.pendingCapPct"></span>
+                <span class="cap-row__bar-marker"
+                      [style.left.%]="barWidth(row.pendingCapPct)"
+                      aria-hidden="true"></span>
+              </div>
+            }
+          </div>
+        }
+      </article>
+    }
+  </section>
+
+  <section class="cli-admin__section cli-admin__section--placeholder">
+    <header class="cli-admin__section-head">
+      <h3>Statistics</h3>
+      <span class="cli-admin__hint">coming soon</span>
+    </header>
+    <p class="cli-admin__placeholder">
+      Token spend, run counts, quota-cap blocks per day. Placeholder for now.
+    </p>
+  </section>
+
+  <section class="cli-admin__section cli-admin__section--placeholder">
+    <header class="cli-admin__section-head">
+      <h3>Diagnostics</h3>
+      <span class="cli-admin__hint">coming soon</span>
+    </header>
+    <p class="cli-admin__placeholder">
+      CLI version reports, PATH resolution, last quota probe error. Placeholder.
+    </p>
+  </section>
+</div>
+  

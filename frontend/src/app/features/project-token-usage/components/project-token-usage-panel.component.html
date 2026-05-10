@@ -1,0 +1,209 @@
+<section class="tup" data-testid="project-token-usage-panel">
+  <header class="tup__head">
+    <div class="tup__title-row">
+      <h2 class="tup__title">
+        <span class="tup__icon" aria-hidden="true">▦</span>
+        Token Usage
+      </h2>
+      <span class="tup__spacer"></span>
+      @if (loading()) {
+        <span class="tup__loading" data-testid="token-usage-loading">Loading…</span>
+      }
+    </div>
+    <p class="tup__sub">
+      Inference spend by job, supporting runs, orchestrator turns, and time window.
+    </p>
+  </header>
+
+  @if (loadError(); as err) {
+    <div class="tup__error" data-testid="token-usage-load-error">
+      Could not load token usage: {{ err }}
+    </div>
+  }
+
+  @if (summary()?.hasData === false) {
+    <div class="tup__empty" data-testid="token-usage-empty">
+      <p>No token activity recorded for this project yet.</p>
+      <p class="tup__empty-detail">
+        Once the orchestrator (or a supporting analysis loop like a
+        security audit) makes an LLM call here, the totals,
+        heatmap, and expensive-jobs list will appear.
+      </p>
+    </div>
+  } @else {
+    <div class="tup__cards" data-testid="token-usage-cards">
+      @for (card of cards(); track card.testid) {
+        <article class="tup__card"
+                 [class]="'tup__card--' + card.category"
+                 [attr.data-testid]="card.testid">
+          <h3 class="tup__card-title">{{ card.label }}</h3>
+          <p class="tup__card-value">{{ formatTokens(card.primary) }}</p>
+          @if (card.secondary; as s) {
+            <p class="tup__card-detail">
+              <span class="tup__card-detail-label">{{ s.label }}:</span>
+              <span class="tup__card-detail-value">{{ formatTokens(s.value) }}</span>
+            </p>
+          }
+        </article>
+      }
+    </div>
+
+    <section class="tup__timeline" data-testid="token-usage-timeline" aria-label="Recent token spend">
+      <h3 class="tup__section-title">Recent activity</h3>
+      @if (timelineBuckets().length === 0) {
+        <p class="tup__section-empty">No daily activity in the heatmap window.</p>
+      } @else {
+        <div class="tup__timeline-bars" role="list">
+          @for (b of timelineBuckets(); track b.day) {
+            <div class="tup__timeline-bar" role="listitem"
+                 [attr.data-day]="b.day"
+                 [title]="b.day + ': ' + formatTokens(b.total) + ' tokens (' + b.calls + ' call' + (b.calls === 1 ? '' : 's') + ')'"
+                 [style.height.%]="b.heightPct">
+              <span class="tup__timeline-bar-day">{{ b.shortDay }}</span>
+            </div>
+          }
+        </div>
+      }
+    </section>
+
+    <section class="tup__heatmap-section" aria-label="Per-job heatmap">
+      <h3 class="tup__section-title">Heatmap (top jobs × days)</h3>
+      @if (heatmap()?.hasData) {
+        <div class="tup__heatmap-scroll">
+          <table class="tup__heatmap" data-testid="token-usage-heatmap">
+            <thead>
+              <tr>
+                <th class="tup__heatmap-corner" scope="col">Job</th>
+                @for (day of heatmap()!.days; track day) {
+                  <th scope="col" class="tup__heatmap-day-th">{{ shortDay(day) }}</th>
+                }
+              </tr>
+            </thead>
+            <tbody>
+              @for (row of heatmapTopRows(); track row.jobId) {
+                <tr [attr.data-testid]="'heatmap-row'"
+                    [attr.data-job-id]="row.jobId">
+                  <th scope="row" class="tup__heatmap-row-th"
+                      [class.tup__heatmap-row-th--active]="row.jobId === selectedJobId()">
+                    <button type="button"
+                            class="tup__heatmap-row-btn"
+                            [attr.data-testid]="'heatmap-row-btn-' + row.jobId"
+                            [attr.aria-pressed]="row.jobId === selectedJobId()"
+                            (click)="onSelectJob(row.jobId)">
+                      <span class="tup__heatmap-row-cat"
+                            [class]="'tup__heatmap-row-cat--' + row.category">{{ catGlyph(row.category) }}</span>
+                      <span class="tup__heatmap-row-title">{{ row.title }}</span>
+                      <span class="tup__heatmap-row-total">{{ formatTokens(row.total) }}</span>
+                    </button>
+                  </th>
+                  @for (cell of row.cells; track cell.day) {
+                    <td class="tup__heatmap-cell"
+                        [attr.data-testid]="'heatmap-cell'"
+                        [attr.data-job-id]="row.jobId"
+                        [attr.data-day]="cell.day"
+                        [attr.data-total]="cell.total"
+                        [class]="'tup__heatmap-cell--' + heatLevel(cell.total)"
+                        [title]="row.title + ' · ' + cell.day + ': ' + formatTokens(cell.total) + ' tokens'"
+                        (click)="onSelectJob(row.jobId)"></td>
+                  }
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      } @else {
+        <p class="tup__section-empty" data-testid="heatmap-empty">
+          No per-job activity in the last {{ heatmap()?.days?.length ?? 30 }} days.
+        </p>
+      }
+    </section>
+
+    <section class="tup__expensive-section" aria-label="Expensive jobs">
+      <h3 class="tup__section-title">Most expensive jobs</h3>
+      @if (expensive().length === 0) {
+        <p class="tup__section-empty" data-testid="expensive-empty">
+          No jobs have recorded orchestrator token spend yet.
+        </p>
+      } @else {
+        <ul class="tup__expensive-list" data-testid="token-usage-expensive">
+          @for (j of expensive(); track j.jobId) {
+            <li class="tup__expensive-row"
+                [class.tup__expensive-row--active]="j.jobId === selectedJobId()"
+                [attr.data-testid]="'expensive-row'"
+                [attr.data-job-id]="j.jobId">
+              <button type="button"
+                      class="tup__expensive-btn"
+                      [attr.data-testid]="'expensive-btn-' + j.jobId"
+                      (click)="onSelectJob(j.jobId)">
+                <span class="tup__expensive-cat"
+                      [class]="'tup__expensive-cat--' + j.category">{{ j.category }}</span>
+                <span class="tup__expensive-title">{{ j.title }}</span>
+                <span class="tup__expensive-meta">
+                  <span>{{ formatTokens(j.totalTokens) }}</span>
+                  <span class="tup__expensive-meta-sep">·</span>
+                  <span>{{ j.calls }} call{{ j.calls === 1 ? '' : 's' }}</span>
+                </span>
+              </button>
+            </li>
+          }
+        </ul>
+      }
+    </section>
+
+    @if (selectedJobId(); as jid) {
+      <section class="tup__drill" data-testid="token-usage-drill" aria-label="Per-run drill-down">
+        <header class="tup__drill-head">
+          <h3 class="tup__section-title">Drill-down: {{ drilldown()?.title ?? jid }}</h3>
+          <button type="button"
+                  class="tup__drill-close"
+                  data-testid="drill-close"
+                  (click)="onClearSelection()">Close</button>
+        </header>
+        @if (drilldownError(); as err) {
+          <p class="tup__error" data-testid="drill-error">{{ err }}</p>
+        } @else if (!drilldown()) {
+          <p class="tup__section-empty" data-testid="drill-loading">Loading drill-down…</p>
+        } @else if (drilldown()!.runs.length === 0) {
+          <p class="tup__section-empty" data-testid="drill-empty">No orchestrator calls recorded for this job.</p>
+        } @else {
+          <div class="tup__drill-summary">
+            <span class="tup__drill-summary-cat"
+                  [class]="'tup__drill-summary-cat--' + drilldown()!.category">{{ drilldown()!.category }}</span>
+            <span class="tup__drill-summary-total">{{ formatTokens(drilldown()!.totalTokens) }} tokens</span>
+            <span class="tup__drill-summary-calls">· {{ drilldown()!.calls }} run{{ drilldown()!.calls === 1 ? '' : 's' }}</span>
+            @if (drilldown()!.lastModel; as m) {
+              <span class="tup__drill-summary-model">· {{ m }}</span>
+            }
+          </div>
+          <ol class="tup__drill-runs">
+            @for (r of drilldown()!.runs; track r.index) {
+              <li class="tup__drill-run" [attr.data-testid]="'drill-run'">
+                <span class="tup__drill-run-idx">#{{ r.index + 1 }}</span>
+                <span class="tup__drill-run-ts">{{ formatTs(r.ts) }}</span>
+                <span class="tup__drill-run-model">{{ r.model ?? '—' }}</span>
+                <span class="tup__drill-run-total">{{ formatTokens(r.total) }}</span>
+                <span class="tup__drill-run-delta"
+                      [class.tup__drill-run-delta--up]="(r.deltaVsPrev ?? 0) > 0"
+                      [class.tup__drill-run-delta--down]="(r.deltaVsPrev ?? 0) < 0">
+                  @if (r.deltaVsPrev === null || r.deltaVsPrev === undefined) {
+                    first run
+                  } @else {
+                    {{ r.deltaVsPrev > 0 ? '+' : '' }}{{ formatTokens(r.deltaVsPrev) }}
+                  }
+                </span>
+                @if (r.summary; as s) {
+                  <span class="tup__drill-run-summary">{{ s }}</span>
+                }
+              </li>
+            }
+          </ol>
+        }
+      </section>
+    }
+  }
+
+  @if (summary()?.disclaimer; as d) {
+    <p class="tup__disclaimer">{{ d }}</p>
+  }
+</section>
+  

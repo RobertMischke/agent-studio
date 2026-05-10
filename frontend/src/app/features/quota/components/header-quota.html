@@ -1,0 +1,87 @@
+<div class="hquota">
+  @for (card of cards(); track card.cliType) {
+    <div class="hquota__card"
+         [attr.data-testid]="'hquota-card-' + card.cliType"
+         [class.hquota__card--error]="!!card.error"
+         [class.hquota__card--stale]="card.stale">
+      <div class="hquota__head">
+        <span class="hquota__icon" aria-hidden="true">{{ card.icon }}</span>
+        <span class="hquota__label">{{ card.label }}</span>
+        @if (card.stale) {
+          <span class="hquota__stale-dot" title="Stale: snapshot is older than the cache TTL.">●</span>
+        }
+      </div>
+
+      @if (card.donuts.length === 0) {
+        <span class="hquota__empty">{{ card.error ? '⚠' : '…' }}</span>
+      } @else {
+        <div class="hquota__donuts">
+          @for (d of card.donuts; track d.short) {
+            <div class="hquota__donut" [attr.data-tone]="d.tone">
+              <svg viewBox="0 0 36 36" class="hquota__svg">
+                <circle class="hquota__svg-track" cx="18" cy="18" r="15.9155" />
+                @if (d.pct !== null) {
+                  <circle class="hquota__svg-fill"
+                          cx="18" cy="18" r="15.9155"
+                          [attr.stroke-dasharray]="dashFor(d.pct)"
+                          transform="rotate(-90 18 18)" />
+                }
+                <text class="hquota__svg-text" x="18" y="20" text-anchor="middle">
+                  {{ d.pct === null ? '?' : (d.pct + '%') }}
+                </text>
+              </svg>
+              <span class="hquota__donut-label">{{ d.short }}</span>
+            </div>
+          }
+        </div>
+      }
+
+      <!--
+        Rich hover overlay: pure CSS (:hover), no JS state, no flicker.
+        Carries the full window list, the source, the freshness, and a
+        ↻ button that triggers a per-CLI re-probe.
+      -->
+      <div class="hquota__pop" role="tooltip">
+        <div class="hquota__pop-head">
+          <strong>{{ card.label }}</strong>
+          @if (card.plan) { <span class="hquota__pop-plan">{{ card.plan }}</span> }
+          <button type="button"
+                  class="hquota__pop-refresh"
+                  [disabled]="refreshing()[card.cliType]"
+                  (click)="refresh(card.cliType, $event)"
+                  title="Re-probe {{ card.label }} now (slow, several seconds)">
+            {{ refreshing()[card.cliType] ? '⏳' : '↻' }}
+          </button>
+        </div>
+        <div class="hquota__pop-meta">
+          <span [class.hquota__pop-meta--stale]="card.stale">{{ card.freshness }}</span>
+          @if (card.source) { <span> · source: {{ card.source }}</span> }
+        </div>
+        @if (card.error) {
+          <div class="hquota__pop-error">{{ card.error }}</div>
+        }
+        @if (card.windows.length > 0) {
+          <table class="hquota__pop-table">
+            <tbody>
+              @for (w of card.windows; track w.label) {
+                <tr>
+                  <td>{{ w.label }}</td>
+                  <td class="hquota__pop-num">
+                    @if (w.usedPct !== null) { {{ w.usedPct }}% }
+                    @if (w.used !== null && w.limit !== null) {
+                      <span class="hquota__pop-sub">({{ w.used }} / {{ w.limit }}{{ w.unit ? ' ' + w.unit : '' }})</span>
+                    }
+                  </td>
+                  <td class="hquota__pop-reset">
+                    @if (w.resetLabel) { resets {{ w.resetLabel }} }
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        }
+      </div>
+    </div>
+  }
+</div>
+  

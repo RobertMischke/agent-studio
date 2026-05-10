@@ -1,0 +1,216 @@
+:host { display: block; }
+
+.burst {
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, currentColor 4%, transparent);
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-size: 12.5px;
+  line-height: 1.45;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.burst--open {
+  border-color: color-mix(in srgb, currentColor 32%, transparent);
+  background: color-mix(in srgb, currentColor 6%, transparent);
+}
+.burst--error {
+  border-color: rgba(239, 68, 68, 0.55);
+  background: rgba(239, 68, 68, 0.08);
+}
+.burst--error.burst--open {
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.burst__row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto auto 1fr auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.burst__row:hover { background: color-mix(in srgb, currentColor 8%, transparent); border-radius: 8px; }
+.burst__row:focus-visible {
+  outline: 2px solid #6366f1;
+  outline-offset: -2px;
+  border-radius: 8px;
+}
+
+.burst__icon { font-size: 14px; line-height: 1; opacity: 0.9; }
+.burst__count { display: flex; gap: 8px; align-items: baseline; }
+.burst__count strong { font-weight: 700; letter-spacing: 0.01em; }
+.burst__fail {
+  font-style: normal;
+  font-weight: 700;
+  color: #f87171;
+  font-size: 11.5px;
+}
+.burst__families {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  align-items: center;
+  min-width: 0;
+}
+.burst__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.burst__chip--time { background: color-mix(in srgb, currentColor 4%, transparent); }
+.burst__chip--art { background: rgba(56,189,248,0.14); border-color: rgba(125,211,252,0.45); }
+.burst__chip--file { background: rgba(167,139,250,0.14); border-color: rgba(196,181,253,0.45); }
+.burst__chip[data-family='read'] { background: rgba(94,234,212,0.14); border-color: rgba(45,212,191,0.45); }
+.burst__chip[data-family='search'] { background: rgba(250,204,21,0.14); border-color: rgba(234,179,8,0.45); }
+.burst__chip[data-family='edit'] { background: rgba(196,181,253,0.16); border-color: rgba(167,139,250,0.45); }
+.burst__chip[data-family='command'] { background: rgba(248,113,113,0.14); border-color: rgba(239,68,68,0.45); }
+.burst__chip[data-family='task'] { background: rgba(125,211,252,0.16); border-color: rgba(56,189,248,0.45); }
+.burst__chip[data-family='todo'] { background: rgba(186,230,253,0.16); border-color: rgba(56,189,248,0.45); }
+
+.burst__caret {
+  font-size: 11px;
+  opacity: 0.65;
+  font-variant-numeric: tabular-nums;
+}
+
+.burst__details {
+  padding: 6px 10px 10px;
+  border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.burst__details-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  opacity: 0.65;
+}
+.burst__details-head code {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 11px;
+  opacity: 0.7;
+}
+
+.burst__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+.burst__detail-row {
+  display: grid;
+  grid-template-columns: 64px 80px 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 3px 6px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+.burst__detail-row:nth-child(odd) {
+  background: color-mix(in srgb, currentColor 4%, transparent);
+}
+.burst__detail-row[data-status='fail'] {
+  background: rgba(239,68,68,0.10);
+}
+.burst__detail-time { font-variant-numeric: tabular-nums; opacity: 0.6; font-size: 11px; }
+.burst__detail-tool {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+.burst__detail-target {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 11.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.burst__detail-status { font-size: 11px; letter-spacing: 0.05em; }
+.burst__detail-row[data-status='ok'] .burst__detail-status { color: #10b981; }
+.burst__detail-row[data-status='fail'] .burst__detail-status { color: #f87171; }
+.burst__detail-meta { font-size: 11px; opacity: 0.6; }
+
+.burst__sub {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 4px 6px;
+  border: 1px dashed color-mix(in srgb, currentColor 18%, transparent);
+  border-radius: 6px;
+}
+.burst__sub header {
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  opacity: 0.6;
+}
+.burst__sub ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.burst__sub li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 11.5px;
+}
+.burst__sub li code {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.burst__sub li[data-status='pass'] strong { color: #10b981; }
+.burst__sub li[data-status='fail'] strong { color: #f87171; }
+.burst__sub li[data-status='unknown'] strong { color: #94a3b8; }
+
+/* Compact density: hide secondary chips first so the row stays one line. */
+.burst[data-density='compact'] .burst__chip--time,
+.burst[data-density='compact'] .burst__chip--file {
+  display: none;
+}
+.burst[data-density='compact'] .burst__row {
+  grid-template-columns: auto auto 1fr auto;
+  padding: 4px 8px;
+  gap: 6px;
+  font-size: 11.5px;
+}
+
+/* Mobile collapse: drop the family chips strip; the header still
+   shows total + failure count, and the details panel still owns the
+   per-tool table. The summary strip carries family rollups elsewhere. */
+@media (max-width: 520px) {
+  .burst__row {
+    grid-template-columns: auto auto 1fr auto;
+  }
+  .burst__families .burst__chip:not(.burst__chip--art):not([data-family='__leading__']) {
+    display: none;
+  }
+  .burst__detail-row {
+    grid-template-columns: 1fr auto;
+    gap: 4px;
+  }
+  .burst__detail-time,
+  .burst__detail-tool,
+  .burst__detail-meta {
+    display: none;
+  }
+}
+  

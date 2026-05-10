@@ -1,0 +1,118 @@
+<div class="statusbar" data-testid="status-bar">
+  <div class="statusbar__group statusbar__group--left">
+    <span class="statusbar__item statusbar__item--ro" [title]="runningTooltip()">
+      <span class="statusbar__icon" [class.statusbar__icon--pulse]="runningCount() > 0">●</span>
+      <span>{{ runningCount() }} running</span>
+    </span>
+    <span class="statusbar__item statusbar__item--ro" [title]="autoTooltip()">
+      <span class="statusbar__icon">🔁</span>
+      <span>{{ autoCount() }}/{{ projectCount() }} auto</span>
+    </span>
+  </div>
+
+  <!-- The embedded quota cards are tall by default; the
+       statusbar__quota overrides shrink them to fit the bar.
+       Hovering anywhere in this group surfaces a large usage modal
+       with full quota detail and a workspace-wide token rollup. -->
+  <div class="statusbar__group statusbar__group--center statusbar__quota">
+    <app-usage-hover-panel />
+  </div>
+
+  <div class="statusbar__group statusbar__group--right">
+    <button class="statusbar__item statusbar__item--btn"
+            title="CLI sessions"
+            (click)="toggleUsage.emit()">
+      <span class="statusbar__icon">🪙</span><span>Usage</span>
+    </button>
+    <button class="statusbar__item statusbar__item--btn"
+            data-testid="orch-side-sheet-toggle"
+            title="Orchestrator chat"
+            (click)="toggleOrchestrator.emit()">
+      <span class="statusbar__icon">🤖</span><span>Orchestrator</span>
+    </button>
+    <button class="statusbar__item statusbar__item--btn"
+            title="Orchestrator feed"
+            (click)="toggleFeed.emit()">
+      <span class="statusbar__icon">📜</span><span>Feed</span>
+    </button>
+    <button class="statusbar__item statusbar__item--btn"
+            data-testid="status-bar-visual-evidence"
+            title="Workspace visual evidence (screenshots across projects)"
+            (click)="toggleVisualEvidence.emit()">
+      <span class="statusbar__icon">📷</span><span>Visual evidence</span>
+    </button>
+    <button class="statusbar__item statusbar__item--btn"
+            data-testid="status-bar-cli-admin"
+            title="Manage CLIs (usage caps, admin)"
+            (click)="toggleCliAdmin.emit()">
+      <span class="statusbar__icon">⚙</span><span>Manage CLIs</span>
+    </button>
+
+    <span class="statusbar__sep" aria-hidden="true"></span>
+
+    <div class="statusbar__pickers">
+      <button class="statusbar__item statusbar__item--btn"
+              data-testid="status-bar-cli-picker"
+              [title]="'Default CLI for new tasks: ' + cliLabel(defaultCli())"
+              (click)="toggleCliMenu($event)">
+        <span class="statusbar__icon">{{ cliIcon(defaultCli()) }}</span>
+        <span>{{ cliLabel(defaultCli()) }}</span>
+        <span class="statusbar__caret">▾</span>
+      </button>
+
+      @if (cliMenuOpen()) {
+        <div class="statusbar__menu" (click)="$event.stopPropagation()">
+          <div class="statusbar__menu-title">Default CLI for new tasks</div>
+          @for (t of cliTypes; track t) {
+            <button class="statusbar__menu-item"
+                    [class.statusbar__menu-item--active]="t === defaultCli()"
+                    (click)="setDefaultCli(t)">
+              <span class="statusbar__icon">{{ cliIcon(t) }}</span>
+              <span>{{ cliLabel(t) }}</span>
+            </button>
+          }
+        </div>
+      }
+    </div>
+
+    <div class="statusbar__pickers">
+      <button class="statusbar__item statusbar__item--btn"
+              data-testid="status-bar-model-picker"
+              [disabled]="models().length === 0"
+              [title]="'Default model for ' + cliLabel(defaultCli())"
+              (click)="toggleModelMenu($event)">
+        <span class="statusbar__icon">⚙</span>
+        <span>{{ defaultModelLabel() }}</span>
+        <span class="statusbar__caret">▾</span>
+      </button>
+
+      @if (modelMenuOpen()) {
+        <div class="statusbar__menu" (click)="$event.stopPropagation()">
+          <div class="statusbar__menu-title">
+            Default model · {{ cliLabel(defaultCli()) }}
+          </div>
+          @if (models().length === 0) {
+            <div class="statusbar__menu-empty">No models reported</div>
+          } @else {
+            <button class="statusbar__menu-item"
+                    [class.statusbar__menu-item--active]="!defaultModel()"
+                    (click)="setDefaultModel('')">
+              <span class="statusbar__icon">·</span>
+              <span>CLI default</span>
+            </button>
+            @for (m of models(); track m.id) {
+              <button class="statusbar__menu-item"
+                      [class.statusbar__menu-item--active]="m.id === defaultModel()"
+                      [title]="m.id"
+                      (click)="setDefaultModel(m.id)">
+                <span class="statusbar__icon">{{ m.isDefault ? '★' : '·' }}</span>
+                <span>{{ m.label || m.id }}</span>
+              </button>
+            }
+          }
+        </div>
+      }
+    </div>
+  </div>
+</div>
+  

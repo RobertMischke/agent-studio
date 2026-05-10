@@ -1,0 +1,172 @@
+:host {
+  display: block;
+  flex: 0 0 auto;
+}
+.statusbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 8px;
+  height: 30px;
+  background: #11111b;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  font-size: 11px;
+  color: rgba(255,255,255,0.70);
+  letter-spacing: 0.02em;
+}
+.statusbar__group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.statusbar__group--center {
+  flex: 1 1 auto;
+  justify-content: center;
+  overflow: hidden;
+}
+.statusbar__group--right {
+  gap: 2px;
+}
+/* Compact the embedded <app-header-quota> so the donut+label cards
+   collapse to a single horizontal row that fits the 28px bar.
+   Selector chains include .statusbar to outweigh Angular's emulated-
+   encapsulation attribute selectors on the inner component's rules. */
+.statusbar .statusbar__quota .hquota__card {
+  flex-direction: row;
+  gap: 4px;
+  padding: 0 8px;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  border-radius: 6px;
+}
+.statusbar .statusbar__quota .hquota__card:hover {
+  background: rgba(255,255,255,0.06);
+  border: 0;
+}
+.statusbar .statusbar__quota .hquota__head {
+  font-size: 10px;
+  gap: 3px;
+}
+.statusbar .statusbar__quota .hquota__label {
+  font-weight: 500;
+  color: rgba(255,255,255,0.55);
+}
+.statusbar .statusbar__quota .hquota__icon { font-size: 10px; }
+.statusbar .statusbar__quota .hquota__svg { width: 18px; height: 18px; }
+.statusbar .statusbar__quota .hquota__svg-text { font-size: 11px; }
+.statusbar .statusbar__quota .hquota__donut { gap: 0; }
+.statusbar .statusbar__quota .hquota__donut-label {
+  display: none;
+}
+.statusbar .statusbar__quota .hquota__donuts { gap: 4px; }
+/* The new usage-hover-panel owns the big hover modal. Suppress the
+   per-card popover that <app-header-quota> would otherwise render so
+   the two don't fight for the same airspace. */
+.statusbar .statusbar__quota .hquota__pop { display: none !important; }
+.statusbar .statusbar__quota .hquota__card { cursor: pointer; }
+.statusbar__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 7px;
+  border-radius: 4px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  line-height: 1;
+  white-space: nowrap;
+}
+.statusbar__item--ro {
+  color: rgba(255,255,255,0.55);
+}
+.statusbar__item--btn {
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+.statusbar__item--btn:hover {
+  background: rgba(255,255,255,0.10);
+  color: #f8fafc;
+}
+.statusbar__item--btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.statusbar__icon {
+  font-size: 11px;
+  line-height: 1;
+}
+.statusbar__icon--pulse {
+  color: #4ade80;
+  animation: statusbar-pulse 1.4s infinite;
+}
+@keyframes statusbar-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.statusbar__caret {
+  font-size: 8px;
+  opacity: 0.7;
+  margin-left: 1px;
+}
+.statusbar__sep {
+  width: 1px;
+  height: 16px;
+  background: rgba(255,255,255,0.10);
+  margin: 0 4px;
+}
+.statusbar__pickers {
+  position: relative;
+}
+.statusbar__menu {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  right: 0;
+  min-width: 220px;
+  max-height: 60vh;
+  overflow-y: auto;
+  background: #1e1e2e;
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 10px;
+  box-shadow: 0 -12px 40px rgba(0,0,0,0.55);
+  padding: 6px;
+  z-index: 80;
+}
+.statusbar__menu-title {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.50);
+  padding: 4px 8px 6px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  margin-bottom: 4px;
+}
+.statusbar__menu-empty {
+  padding: 8px;
+  color: rgba(255,255,255,0.55);
+  font-size: 12px;
+}
+.statusbar__menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: #cdd6f4;
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+}
+.statusbar__menu-item:hover {
+  background: rgba(255,255,255,0.08);
+}
+.statusbar__menu-item--active {
+  background: rgba(99,102,241,0.22);
+  color: #ffffff;
+}
+  

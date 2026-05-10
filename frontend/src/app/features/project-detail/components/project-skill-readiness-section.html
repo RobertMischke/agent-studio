@@ -1,0 +1,166 @@
+<section class="proj-detail__group" data-testid="project-skill-readiness-section">
+  <h3>
+    <span class="psr__icon">🧰</span>
+    Skill readiness
+  </h3>
+
+  <p class="proj-detail__hint">
+    Standard and project-specific skills live centrally in Agent Software Studio.
+    This check confirms the watched project's README / AGENTS exposes the lookup
+    section direct CLI sessions need to find them.
+  </p>
+
+  <div class="psr__row">
+    <button type="button"
+            class="psr__check-btn"
+            data-testid="project-skill-readiness-open"
+            (click)="openModal()">
+      Check skill readiness
+    </button>
+    @if (lastReport(); as r) {
+      <span class="psr__badge psr__badge--{{ r.status }}"
+            data-testid="project-skill-readiness-badge">
+        {{ statusLabel(r.status) }}
+      </span>
+    }
+  </div>
+</section>
+
+@if (open()) {
+  <div class="psr-modal__backdrop"
+       data-testid="project-skill-readiness-modal"
+       (click)="closeModal()">
+    <div class="psr-modal"
+         role="dialog"
+         aria-label="Skill readiness"
+         (click)="$event.stopPropagation()">
+      <header class="psr-modal__head">
+        <h3>Skill readiness · {{ projectName() }}</h3>
+        <button type="button"
+                class="psr-modal__close"
+                data-testid="project-skill-readiness-close"
+                aria-label="Close"
+                (click)="closeModal()">×</button>
+      </header>
+
+      <section class="psr-modal__section">
+        <h4>README / AGENTS lookup</h4>
+        @if (loading()) {
+          <p class="psr-modal__empty" data-testid="project-skill-readiness-loading">Checking…</p>
+        } @else if (error(); as e) {
+          <p class="psr-modal__error" data-testid="project-skill-readiness-error">{{ e }}</p>
+        } @else if (report(); as r) {
+          <p class="psr-modal__verdict psr-modal__verdict--{{ r.status }}"
+             [attr.data-testid]="'project-skill-readiness-status-' + r.status">
+            <strong>{{ statusLabel(r.status) }}</strong> — {{ r.summary }}
+          </p>
+
+          <ul class="psr-modal__files" data-testid="project-skill-readiness-files">
+            @for (f of r.checkedFiles; track f.relPath) {
+              <li [class.psr-modal__file--match]="f.headingFound"
+                  [class.psr-modal__file--missing]="!f.exists">
+                <code>{{ f.relPath }}</code>
+                @if (f.headingFound) {
+                  <span class="psr-modal__file-tag psr-modal__file-tag--match">heading found</span>
+                } @else if (!f.exists) {
+                  <span class="psr-modal__file-tag psr-modal__file-tag--missing">not present</span>
+                } @else {
+                  <span class="psr-modal__file-tag">no heading</span>
+                }
+              </li>
+            }
+          </ul>
+
+          @if (r.matchedPhrases.length > 0 || r.missingPhrases.length > 0) {
+            <p class="psr-modal__phrases">
+              <span>Hits:</span>
+              @for (p of r.matchedPhrases; track p) {
+                <code class="psr-modal__phrase psr-modal__phrase--hit">{{ p }}</code>
+              }
+              @for (p of r.missingPhrases; track p) {
+                <code class="psr-modal__phrase psr-modal__phrase--miss">{{ p }}</code>
+              }
+            </p>
+          }
+
+          @if (r.status !== 'pass') {
+            <div class="psr-modal__fix">
+              <button type="button"
+                      class="psr-modal__fix-btn"
+                      data-testid="project-skill-readiness-fix"
+                      [disabled]="creating()"
+                      (click)="createFixTask()">
+                {{ creating() ? 'Queueing…' : 'Create README update task' }}
+              </button>
+              <p class="psr-modal__fix-hint">
+                Queues a normal task in <code>2-ready</code> for this project. The agent updates
+                the README through the regular pipeline. No watched project file is edited from here.
+              </p>
+              @if (createdJobId(); as jid) {
+                <p class="psr-modal__fix-ok"
+                   data-testid="project-skill-readiness-fix-ok">
+                  Task <code>{{ jid }}</code> queued in <code>2-ready</code>.
+                </p>
+              }
+              @if (createError(); as ce) {
+                <p class="psr-modal__fix-err"
+                   data-testid="project-skill-readiness-fix-err">{{ ce }}</p>
+              }
+            </div>
+          }
+        }
+      </section>
+
+      <section class="psr-modal__section">
+        <h4>Standard skills <span class="psr-modal__sublabel">suggested</span></h4>
+        @if (catalog(); as c) {
+          @if (c.standard.length === 0) {
+            <p class="psr-modal__empty">
+              No standard skills found. The task processor exposes skills under
+              <code>.agents/skills/</code>; this list is empty when the runtime
+              cannot resolve that tree.
+            </p>
+          } @else {
+            <ul class="psr-modal__skills" data-testid="project-skill-readiness-standard">
+              @for (s of c.standard; track s.id) {
+                <li>
+                  <span class="psr-modal__skill-name">{{ s.name }}</span>
+                  <span class="psr-modal__skill-tag psr-modal__skill-tag--suggested">suggested</span>
+                  @if (s.description) {
+                    <p class="psr-modal__skill-desc">{{ s.description }}</p>
+                  }
+                  <code class="psr-modal__skill-path">{{ s.relPath }}</code>
+                </li>
+              }
+            </ul>
+          }
+        }
+      </section>
+
+      <section class="psr-modal__section">
+        <h4>Project skills <span class="psr-modal__sublabel">selected</span></h4>
+        @if (catalog(); as c) {
+          @if (c.projectSpecific.length === 0) {
+            <p class="psr-modal__empty" data-testid="project-skill-readiness-project-empty">
+              No project-specific skills configured for this project yet.
+            </p>
+          } @else {
+            <ul class="psr-modal__skills" data-testid="project-skill-readiness-project">
+              @for (s of c.projectSpecific; track s.id) {
+                <li>
+                  <span class="psr-modal__skill-name">{{ s.name }}</span>
+                  <span class="psr-modal__skill-tag psr-modal__skill-tag--selected">selected</span>
+                  @if (s.description) {
+                    <p class="psr-modal__skill-desc">{{ s.description }}</p>
+                  }
+                  <code class="psr-modal__skill-path">{{ s.relPath }}</code>
+                </li>
+              }
+            </ul>
+          }
+        }
+      </section>
+    </div>
+  </div>
+}
+  
