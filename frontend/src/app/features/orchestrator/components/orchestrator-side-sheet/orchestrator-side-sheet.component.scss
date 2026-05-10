@@ -1,0 +1,337 @@
+    /* The host participates in flex layout (same as cli-usage-sheet). When
+       closed it collapses to zero width so the main board reclaims the
+       space; when open it animates to a comfortable reading width. */
+    :host {
+      display: block;
+      width: 0;
+      transition: width 0.22s ease;
+      overflow: hidden;
+      flex: 0 0 auto;
+    }
+    :host(.is-open) { width: min(460px, 92vw); }
+
+    .sheet {
+      width: min(460px, 92vw);
+      height: 100%;
+      background: #11111b;
+      border-left: 1px solid rgba(255,255,255,0.08);
+      display: flex;
+      flex-direction: column;
+      color: #e2e8f0;
+    }
+    .sheet__header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 12px 14px 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      background:
+        radial-gradient(circle at top left, rgba(139, 92, 246, 0.16), transparent 60%),
+        rgba(255,255,255,0.02);
+    }
+    .sheet__title-block { display: flex; flex-direction: column; gap: 2px; }
+    .sheet__eyebrow {
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #c4b5fd;
+      font-weight: 700;
+    }
+    .sheet__title {
+      margin: 0;
+      font-size: 15px;
+      color: #f8fafc;
+      font-weight: 600;
+    }
+    .sheet__header-actions { display: flex; gap: 6px; align-items: center; }
+    .sheet__btn {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.08);
+      color: #cbd5e1;
+      padding: 4px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .sheet__btn:hover:not(:disabled) { background: rgba(255,255,255,0.10); }
+    .sheet__btn:disabled { opacity: 0.5; cursor: progress; }
+    .sheet__close {
+      background: rgba(255,255,255,0.06);
+      border: 0;
+      color: #cbd5e1;
+      width: 26px; height: 26px;
+      border-radius: 999px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .sheet__close:hover { background: rgba(255,255,255,0.12); }
+
+    .sheet__tabs {
+      display: flex;
+      gap: 6px;
+      padding: 6px 10px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      align-items: center;
+      flex-wrap: nowrap;
+      min-width: 0;
+    }
+    /* Project picker is a real <select> so it scales past pills/tabs to
+       ~10+ projects without overflow. The wrap renders our pill chrome
+       around the native control; the active tab indicator still glows. */
+    .sheet__select-wrap {
+      flex: 1 1 auto;
+      min-width: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 10px 3px 11px;
+      background: linear-gradient(135deg, rgba(124,58,237,0.55), rgba(99,102,241,0.55));
+      border: 1px solid rgba(196,181,253,0.95);
+      border-radius: 999px;
+      color: #ffffff;
+      font-weight: 600;
+      font-size: 12px;
+      cursor: pointer;
+      box-shadow: 0 0 0 1px rgba(196,181,253,0.35), 0 1px 4px rgba(99,102,241,0.35);
+      transition: opacity 0.15s;
+    }
+    .sheet__select-wrap:not(.sheet__select-wrap--active) {
+      background: rgba(255,255,255,0.04);
+      border-color: rgba(255,255,255,0.08);
+      box-shadow: none;
+      color: #cbd5e1;
+      font-weight: 500;
+    }
+    .sheet__select-icon { flex: 0 0 auto; opacity: 0.85; }
+    .sheet__select {
+      flex: 1 1 auto;
+      min-width: 0;
+      background: transparent;
+      border: 0;
+      color: inherit;
+      font: inherit;
+      cursor: pointer;
+      padding: 0;
+      appearance: none;
+      -webkit-appearance: none;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    .sheet__select:focus { outline: none; }
+    .sheet__select option {
+      color: #0f172a;
+      background: #f8fafc;
+    }
+    .sheet__select-caret { flex: 0 0 auto; opacity: 0.85; font-size: 10px; }
+
+    /* Searchable combobox: pill chrome around an editable input plus a
+       floating list. Lets the user filter ~10+ projects by typing instead
+       of scanning a flat dropdown. The native <select> stays in the DOM
+       (hidden) for accessibility/test continuity. */
+    .sheet__combo-wrap {
+      position: relative;
+      flex: 1 1 auto;
+      min-width: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 10px 3px 11px;
+      background: linear-gradient(135deg, rgba(124,58,237,0.55), rgba(99,102,241,0.55));
+      border: 1px solid rgba(196,181,253,0.95);
+      border-radius: 999px;
+      color: #ffffff;
+      font-weight: 600;
+      font-size: 12px;
+      box-shadow: 0 0 0 1px rgba(196,181,253,0.35), 0 1px 4px rgba(99,102,241,0.35);
+      transition: opacity 0.15s, border-color 0.15s;
+    }
+    .sheet__combo-wrap:not(.sheet__combo-wrap--active) {
+      background: rgba(255,255,255,0.04);
+      border-color: rgba(255,255,255,0.08);
+      box-shadow: none;
+      color: #cbd5e1;
+      font-weight: 500;
+    }
+    .sheet__combo-wrap--open {
+      border-color: rgba(196,181,253,1);
+      box-shadow: 0 0 0 1px rgba(196,181,253,0.5), 0 4px 14px rgba(15,23,42,0.55);
+    }
+    .sheet__combo-input {
+      flex: 1 1 auto;
+      min-width: 0;
+      background: transparent;
+      border: 0;
+      color: inherit;
+      font: inherit;
+      padding: 0;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      overflow: hidden;
+    }
+    .sheet__combo-input::placeholder {
+      color: inherit;
+      opacity: 0.85;
+    }
+    .sheet__combo-input:focus { outline: none; }
+    .sheet__combo-list {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      right: 0;
+      max-height: 280px;
+      overflow-y: auto;
+      margin: 0;
+      padding: 4px;
+      list-style: none;
+      background: #0f172a;
+      border: 1px solid rgba(196,181,253,0.35);
+      border-radius: 12px;
+      box-shadow: 0 8px 24px rgba(2,6,23,0.55);
+      z-index: 30;
+    }
+    .sheet__combo-option {
+      padding: 6px 10px;
+      border-radius: 8px;
+      color: #cbd5e1;
+      font-weight: 500;
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: background 0.1s, color 0.1s;
+    }
+    .sheet__combo-option:hover,
+    .sheet__combo-option--active {
+      background: rgba(124,58,237,0.35);
+      color: #ffffff;
+    }
+    .sheet__combo-option--current {
+      color: #c4b5fd;
+      font-weight: 600;
+    }
+    .sheet__combo-option--current::before {
+      content: '✓ ';
+      opacity: 0.8;
+    }
+    .sheet__tab {
+      flex: 0 0 auto;
+      max-width: 60%;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      color: #94a3b8;
+      padding: 3px 11px;
+      border-radius: 999px;
+      font-size: 12px;
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .sheet__tab:hover {
+      background: rgba(255,255,255,0.08);
+      color: #cbd5e1;
+    }
+    .sheet__tab--active {
+      background: linear-gradient(135deg, rgba(124,58,237,0.55), rgba(99,102,241,0.55));
+      color: #ffffff;
+      border-color: rgba(196,181,253,0.95);
+      font-weight: 600;
+      box-shadow: 0 0 0 1px rgba(196,181,253,0.35), 0 1px 4px rgba(99,102,241,0.35);
+    }
+    .sheet__tab--task {
+      background: rgba(20,184,166,0.10);
+      border-color: rgba(94,234,212,0.30);
+      color: #a7f3d0;
+    }
+    .sheet__tab--task.sheet__tab--active {
+      background: linear-gradient(135deg, rgba(20,184,166,0.55), rgba(13,148,136,0.55));
+      border-color: rgba(94,234,212,0.95);
+      color: #ffffff;
+      box-shadow: 0 0 0 1px rgba(94,234,212,0.35), 0 1px 4px rgba(13,148,136,0.35);
+    }
+    .sheet__tab--intake {
+      background: rgba(217,119,6,0.10);
+      border-color: rgba(252,211,77,0.30);
+      color: #fde68a;
+    }
+    .sheet__tab--intake.sheet__tab--active {
+      background: linear-gradient(135deg, rgba(234,88,12,0.55), rgba(217,119,6,0.55));
+      border-color: rgba(252,211,77,0.95);
+      color: #ffffff;
+      box-shadow: 0 0 0 1px rgba(252,211,77,0.35), 0 1px 4px rgba(217,119,6,0.35);
+    }
+    .sheet__tab--intake:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .sheet__only-project {
+      padding: 6px 14px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      font-size: 11px;
+      color: #94a3b8;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+
+    .sheet__error {
+      margin: 8px 12px 0;
+      padding: 6px 10px;
+      background: rgba(244,63,94,0.1);
+      border: 1px solid rgba(244,63,94,0.18);
+      color: #fda4af;
+      border-radius: 8px;
+      font-size: 12px;
+    }
+
+    .sheet__chat {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      padding: 10px 12px 12px;
+      gap: 8px;
+    }
+    .sheet__no-project {
+      padding: 28px 12px;
+      color: #64748b;
+      text-align: center;
+      font-style: italic;
+    }
+    .sheet__draft-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 6px;
+    }
+    .sheet__draft-btn {
+      background: rgba(139,92,246,0.16);
+      border: 1px solid rgba(167,139,250,0.45);
+      color: #ddd6fe;
+      padding: 5px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .sheet__draft-btn:hover:not(:disabled) {
+      background: rgba(139,92,246,0.28);
+      color: #f5f3ff;
+      border-color: rgba(196,181,253,0.7);
+    }
+    .sheet__draft-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .sheet__draft-btn--primary {
+      background: rgba(59,130,246,0.18);
+      border-color: rgba(96,165,250,0.55);
+      color: #bfdbfe;
+    }
+    .sheet__draft-btn--primary:hover:not(:disabled) {
+      background: rgba(59,130,246,0.30);
+      color: #eff6ff;
+      border-color: rgba(147,197,253,0.7);
+    }
+  

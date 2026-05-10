@@ -1,0 +1,172 @@
+    <div class="chat" [class.chat--embedded]="variant() === 'embedded'">
+      <div #body
+           class="chat__body"
+           [style.max-height]="bodyMaxHeight()"
+           data-testid="chat-body"
+           (scroll)="onBodyScroll()">
+        @if (!stickToBottom()) {
+          <button type="button"
+                  class="chat__jump"
+                  data-testid="chat-jump-bottom"
+                  (click)="jumpToBottom()">↓ Jump to latest</button>
+        }
+
+        @if (rendered().length === 0) {
+          <div class="chat__empty" data-testid="chat-empty">{{ emptyState() }}</div>
+        } @else {
+          @for (item of rendered(); track item.id) {
+            @if (item.kind === 'message') {
+            <article class="chat__msg"
+                     [class.chat__msg--user]="item.message.role === 'user'"
+                     [class.chat__msg--agent]="item.message.role === 'agent'"
+                     [class.chat__msg--orchestrator]="item.message.role === 'orchestrator'"
+                     [class.chat__msg--system]="item.message.role === 'system'"
+                     [class.chat__msg--pending]="item.message.pending"
+                     [class.chat__msg--error]="!!item.message.error"
+                     [class.chat__msg--collapsible]="item.collapsible"
+                     [class.chat__msg--collapsed]="item.collapsed"
+                     [attr.data-testid]="'chat-msg-' + item.message.role"
+                     [attr.data-turn-id]="item.message.id"
+                     [attr.data-collapsed]="item.collapsed ? 'true' : 'false'">
+              <header class="chat__msg-head">
+                <span class="chat__msg-role">{{ roleLabel(item.message.role) }}</span>
+                <span class="chat__msg-time">{{ formatTime(item.message.timestamp) }}</span>
+              </header>
+              <div class="chat__msg-body"
+                   [class.chat__msg-body--markdown]="item.message.role !== 'user'"
+                   [class.chat__msg-body--collapsed]="item.collapsed"
+                   [attr.data-testid]="item.message.role !== 'user' ? 'chat-turn-md' : null"
+                   [innerHTML]="item.bodyHtml"></div>
+              @if (item.collapsible) {
+                <button type="button"
+                        class="chat__msg-toggle"
+                        [attr.data-testid]="'chat-msg-toggle-' + item.message.id"
+                        [attr.aria-expanded]="!item.collapsed"
+                        (click)="toggleCollapsed(item.message.id)">
+                  {{ item.collapsed ? '▾ Show more' : '▴ Show less' }}
+                </button>
+              }
+              @if (item.message.attachments?.length) {
+                <ul class="chat__msg-attachments">
+                  @for (att of item.message.attachments; track att.url) {
+                    <li class="chat__msg-attachment" [class.chat__msg-attachment--pending]="att.pending">
+                      <img [src]="att.url" [alt]="att.alt" />
+                      <span class="chat__msg-attachment-name">{{ att.alt }}</span>
+                    </li>
+                  }
+                </ul>
+              }
+              @if (item.message.error) {
+                <div class="chat__msg-error">{{ item.message.error }}</div>
+              }
+            </article>
+            } @else {
+            <article class="chat__event"
+                     [class.chat__event--warn]="item.event.severity === 'warn'"
+                     [class.chat__event--error]="item.event.severity === 'error'"
+                     [class.chat__event--expanded]="item.expanded"
+                     [attr.data-testid]="'chat-event-' + item.event.kind"
+                     [attr.data-event-id]="item.event.id"
+                     [attr.data-expanded]="item.expanded ? 'true' : 'false'">
+              <button type="button"
+                      class="chat__event-head"
+                      [attr.data-testid]="'chat-event-toggle-' + item.event.id"
+                      [attr.aria-expanded]="item.expanded"
+                      [disabled]="!item.detailHtml"
+                      (click)="toggleEventExpanded(item.event.id)">
+                <span class="chat__event-icon" aria-hidden="true">{{ eventIcon(item.event.kind) }}</span>
+                <span class="chat__event-kind">{{ eventLabel(item.event.kind) }}</span>
+                <span class="chat__event-summary">{{ item.event.summary }}</span>
+                <span class="chat__event-time">{{ formatTime(item.event.timestamp) }}</span>
+                @if (item.detailHtml) {
+                  <span class="chat__event-caret" aria-hidden="true">{{ item.expanded ? '▴' : '▾' }}</span>
+                }
+              </button>
+              @if (item.event.actionLabel) {
+                <button type="button"
+                        class="chat__event-action"
+                        [attr.data-testid]="'chat-event-action-' + item.event.id"
+                        (click)="onEventAction($event, item.event.id)">
+                  {{ item.event.actionLabel }} →
+                </button>
+              }
+              @if (item.expanded && item.detailHtml) {
+                <div class="chat__event-detail"
+                     data-testid="chat-event-detail"
+                     [innerHTML]="item.detailHtml"></div>
+              }
+            </article>
+            }
+          }
+          @if (pending()) {
+            <div class="chat__typing" data-testid="chat-typing">
+              <span></span><span></span><span></span>
+            </div>
+          }
+        }
+      </div>
+
+      <form class="chat__composer"
+            [class.chat__composer--drag]="isDragging()"
+            (submit)="onSubmit($event)"
+            (dragover)="onDragOver($event)"
+            (dragleave)="onDragLeave($event)"
+            (drop)="onDrop($event)">
+
+        @if (drafts().length > 0) {
+          <ul class="chat__drafts" data-testid="chat-drafts">
+            @for (att of drafts(); track att.id) {
+              <li class="chat__draft">
+                <img [src]="att.previewUrl" [alt]="att.alt" />
+                <span class="chat__draft-name">{{ att.alt }}</span>
+                <button type="button"
+                        class="chat__draft-remove"
+                        title="Remove attachment"
+                        (click)="removeDraftAttachment(att.id)">×</button>
+              </li>
+            }
+          </ul>
+        }
+
+        @if (attachmentError()) {
+          <div class="chat__attachment-error">{{ attachmentError() }}</div>
+        }
+
+        <div class="chat__composer-row">
+          <textarea #input
+                    class="chat__input"
+                    data-testid="chat-input"
+                    rows="2"
+                    [placeholder]="placeholder()"
+                    [disabled]="disabled()"
+                    [(ngModel)]="draftText"
+                    [ngModelOptions]="{ standalone: true }"
+                    (paste)="onPaste($event)"
+                    (keydown)="onInputKeydown($event)"></textarea>
+
+          <div class="chat__composer-actions">
+            @if (allowAttachments()) {
+              <button type="button"
+                      class="chat__icon-btn"
+                      title="Attach image"
+                      data-testid="chat-attach"
+                      [disabled]="disabled()"
+                      (click)="triggerFilePicker()">📎</button>
+              <input #fileInput
+                     type="file"
+                     accept="image/*"
+                     multiple
+                     class="chat__file-input"
+                     (change)="onFileInputChange($event)" />
+            }
+            <button type="submit"
+                    class="chat__send-btn"
+                    data-testid="chat-send"
+                    [disabled]="disabled() || !canSend()">
+              {{ pending() ? '…' : submitLabel() }}
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  

@@ -1,0 +1,357 @@
+    <section class="obs" data-testid="project-observability-panel">
+      <header class="obs__head">
+        <div class="obs__title-row">
+          <h2 class="obs__title">
+            <span class="obs__icon" aria-hidden="true">📡</span>
+            Observability
+          </h2>
+          <span class="obs__spacer"></span>
+          @if (loading()) {
+            <span class="obs__chip obs__chip--info" data-testid="observability-loading">Loading…</span>
+          }
+          @if (sourceLabel(); as src) {
+            <span class="obs__chip" [class.obs__chip--fixture]="usingFixture()" data-testid="observability-source">{{ src }}</span>
+          }
+          <button type="button"
+                  class="obs__refresh"
+                  data-testid="observability-refresh"
+                  (click)="refresh()">⟳ Refresh</button>
+        </div>
+        <p class="obs__sub">
+          Communication on the Agent Message Bus for this project. Read-only; the bus does not move state.
+        </p>
+      </header>
+
+      @if (loadError(); as err) {
+        <div class="obs__error" data-testid="observability-load-error">
+          Could not load bus messages: {{ err }}
+        </div>
+      }
+
+      @if (!loading() && messages().length === 0) {
+        <div class="obs__empty" data-testid="observability-empty">
+          <p>No bus messages for this project yet.</p>
+          <p class="obs__empty-detail">
+            The Agent Message Bus captures orchestrator decisions, agent
+            observations, supervisor advisories, token usage, and lifecycle
+            events. Once any of those land on this project, the timeline,
+            matrix, counters, and heatmap appear here.
+          </p>
+          <button type="button"
+                  class="obs__fixture-btn"
+                  data-testid="observability-load-fixture"
+                  (click)="loadFixture()">Load sample dataset</button>
+        </div>
+      } @else {
+        <section class="obs__filters" aria-label="Filters" data-testid="observability-filters">
+          <label class="obs__field">
+            <span>Range</span>
+            <select [ngModel]="filter.rangeHours"
+                    (ngModelChange)="onRangeChanged($event)"
+                    data-testid="observability-filter-range">
+              @for (r of rangeOptions; track r.id) {
+                <option [value]="r.id">{{ r.label }}</option>
+              }
+            </select>
+          </label>
+          <label class="obs__field">
+            <span>Participant</span>
+            <select [(ngModel)]="filter.participantId" (ngModelChange)="onFilterChanged()" data-testid="observability-filter-participant">
+              <option value="">All participants</option>
+              @for (p of participantIds(); track p) {
+                <option [value]="p">{{ p }}</option>
+              }
+            </select>
+          </label>
+          <label class="obs__field">
+            <span>Kind</span>
+            <select [(ngModel)]="filter.kind" (ngModelChange)="onFilterChanged()" data-testid="observability-filter-kind">
+              <option value="">All kinds</option>
+              @for (k of kinds; track k) {
+                <option [value]="k">{{ k }}</option>
+              }
+            </select>
+          </label>
+          <label class="obs__field">
+            <span>Severity</span>
+            <select [(ngModel)]="filter.severity" (ngModelChange)="onFilterChanged()" data-testid="observability-filter-severity">
+              <option value="">All severities</option>
+              @for (s of severities; track s) {
+                <option [value]="s">{{ s }}</option>
+              }
+            </select>
+          </label>
+          <label class="obs__field">
+            <span>Job</span>
+            <select [(ngModel)]="filter.jobId" (ngModelChange)="onFilterChanged()" data-testid="observability-filter-job">
+              <option value="">All jobs</option>
+              @for (j of jobIds(); track j) {
+                <option [value]="j">{{ j }}</option>
+              }
+            </select>
+          </label>
+          <label class="obs__field">
+            <span>Run</span>
+            <input type="text" [(ngModel)]="filter.runId" (ngModelChange)="onFilterChanged()"
+                   placeholder="run-id" data-testid="observability-filter-run">
+          </label>
+          <label class="obs__field">
+            <span>CLI</span>
+            <select [(ngModel)]="filter.cli" (ngModelChange)="onFilterChanged()" data-testid="observability-filter-cli">
+              <option value="">All</option>
+              @for (c of cliOptions(); track c) {
+                <option [value]="c">{{ c }}</option>
+              }
+            </select>
+          </label>
+          <label class="obs__field">
+            <span>Skill</span>
+            <select [(ngModel)]="filter.skill" (ngModelChange)="onFilterChanged()" data-testid="observability-filter-skill">
+              <option value="">All</option>
+              @for (s of skillOptions(); track s) {
+                <option [value]="s">{{ s }}</option>
+              }
+            </select>
+          </label>
+          <button type="button"
+                  class="obs__field-reset"
+                  data-testid="observability-filter-reset"
+                  (click)="resetFilters()">Reset</button>
+        </section>
+
+        <section class="obs__counters" aria-label="Counters" data-testid="observability-counters">
+          @for (c of countChips(); track c.testid) {
+            <div class="obs__counter"
+                 [class.obs__counter--warn]="c.tone === 'warn'"
+                 [class.obs__counter--high]="c.tone === 'high'"
+                 [attr.data-testid]="c.testid">
+              <span class="obs__counter-num">{{ c.value }}</span>
+              <span class="obs__counter-label">{{ c.label }}</span>
+            </div>
+          }
+        </section>
+
+        <section class="obs__timeline" aria-label="Timeline by participant" data-testid="observability-timeline">
+          <header class="obs__section-head">
+            <h3>Timeline by participant</h3>
+            <span class="obs__section-meta">{{ rangeLabel() }} · {{ filtered().length }} message{{ filtered().length === 1 ? '' : 's' }}</span>
+          </header>
+          @if (timelineLanes().length === 0) {
+            <p class="obs__section-empty">No messages in the selected range.</p>
+          } @else {
+            <div class="obs__timeline-grid" role="grid">
+              @for (lane of timelineLanes(); track lane.participantId) {
+                <div class="obs__timeline-row"
+                     role="row"
+                     [attr.data-testid]="'observability-timeline-row'"
+                     [attr.data-participant]="lane.participantId">
+                  <div class="obs__timeline-label">{{ lane.participantId }}</div>
+                  <div class="obs__timeline-track" role="gridcell">
+                    @for (m of lane.marks; track m.id) {
+                      <button type="button"
+                              class="obs__timeline-mark"
+                              [class]="'obs__timeline-mark--' + m.kind"
+                              [class.obs__timeline-mark--high]="m.severity === 'High'"
+                              [class.obs__timeline-mark--warn]="m.severity === 'Warn'"
+                              [style.left.%]="m.offsetPct"
+                              [title]="m.title"
+                              [attr.data-testid]="'observability-timeline-mark'"
+                              [attr.data-msg-id]="m.id"
+                              (click)="selectMessage(m.id)"></button>
+                    }
+                  </div>
+                </div>
+              }
+            </div>
+            <div class="obs__timeline-axis">
+              <span>{{ formatTime(rangeStart()) }}</span>
+              <span>{{ formatTime(rangeEnd()) }}</span>
+            </div>
+          }
+        </section>
+
+        <section class="obs__matrix" aria-label="Participant matrix" data-testid="observability-matrix">
+          <header class="obs__section-head">
+            <h3>Participant × kind matrix</h3>
+            <span class="obs__section-meta">Refs = unique jobs each participant emitted to</span>
+          </header>
+          @if (matrixRows().length === 0) {
+            <p class="obs__section-empty">No participants in the selected range.</p>
+          } @else {
+            <div class="obs__matrix-scroll">
+              <table class="obs__matrix-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Participant</th>
+                    @for (k of matrixKinds(); track k) {
+                      <th scope="col" class="obs__matrix-th">{{ k }}</th>
+                    }
+                    <th scope="col" class="obs__matrix-th">Total</th>
+                    <th scope="col" class="obs__matrix-th">Refs</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (row of matrixRows(); track row.participantId) {
+                    <tr [attr.data-testid]="'observability-matrix-row'"
+                        [attr.data-participant]="row.participantId">
+                      <th scope="row" class="obs__matrix-row-th">{{ row.participantId }}</th>
+                      @for (k of matrixKinds(); track k) {
+                        <td class="obs__matrix-cell"
+                            [class.obs__matrix-cell--zero]="(row.kindCounts[k] ?? 0) === 0">
+                          {{ row.kindCounts[k] ?? 0 }}
+                        </td>
+                      }
+                      <td class="obs__matrix-cell obs__matrix-cell--total">{{ row.total }}</td>
+                      <td class="obs__matrix-cell">{{ row.jobs.size }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        </section>
+
+        <section class="obs__heatmap-section" aria-label="Token usage heatmap" data-testid="observability-heatmap">
+          <header class="obs__section-head">
+            <h3>Token usage heatmap</h3>
+            <span class="obs__section-meta">{{ heatmapTotalLabel() }}</span>
+          </header>
+          @if (heatmapHasData()) {
+            <div class="obs__heatmap-scroll">
+              <table class="obs__heatmap-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Participant</th>
+                    @for (b of heatmapBuckets(); track b) {
+                      <th scope="col" class="obs__heatmap-th">{{ b }}</th>
+                    }
+                    <th scope="col" class="obs__heatmap-th">Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (row of heatmapRows(); track row.participantId) {
+                    <tr [attr.data-testid]="'observability-heatmap-row'"
+                        [attr.data-participant]="row.participantId">
+                      <th scope="row" class="obs__heatmap-row-th">{{ row.participantId }}</th>
+                      @for (cell of row.cells; track cell.bucket) {
+                        <td class="obs__heatmap-cell"
+                            [class]="'obs__heatmap-cell--' + heatLevel(cell.tokens)"
+                            [attr.data-testid]="'observability-heatmap-cell'"
+                            [attr.data-participant]="cell.participantId"
+                            [attr.data-bucket]="cell.bucket"
+                            [attr.data-tokens]="cell.tokens"
+                            [title]="cell.tokens + ' tokens · ' + cell.msgIds.length + ' message(s)'"
+                            (click)="selectFirst(cell.msgIds)"></td>
+                      }
+                      <td class="obs__heatmap-cell obs__heatmap-cell--total">{{ formatTokens(row.total) }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          } @else {
+            <p class="obs__section-empty" data-testid="observability-heatmap-empty">
+              No token-usage data in the selected range.
+            </p>
+          }
+        </section>
+
+        <section class="obs__messages-section" aria-label="Filtered messages">
+          <header class="obs__section-head">
+            <h3>Messages</h3>
+            <span class="obs__section-meta">{{ filtered().length }} match{{ filtered().length === 1 ? '' : 'es' }}</span>
+          </header>
+          @if (filtered().length === 0) {
+            <p class="obs__section-empty" data-testid="observability-messages-empty">
+              No messages match the current filter.
+            </p>
+          } @else {
+            <div class="obs__messages-scroll">
+              <table class="obs__messages-table" data-testid="observability-messages">
+                <thead>
+                  <tr>
+                    <th scope="col">Time</th>
+                    <th scope="col">Participant</th>
+                    <th scope="col">Kind</th>
+                    <th scope="col">Severity</th>
+                    <th scope="col">Job · Run</th>
+                    <th scope="col">Summary</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (m of filtered(); track m.id) {
+                    <tr [class.obs__messages-row--active]="m.id === selectedMessageId()"
+                        [attr.data-testid]="'observability-message-row'"
+                        [attr.data-msg-id]="m.id"
+                        (click)="selectMessage(m.id)">
+                      <td class="obs__messages-cell obs__messages-cell--time">{{ formatTime(m.createdAt) }}</td>
+                      <td class="obs__messages-cell">{{ m.participantId }}</td>
+                      <td class="obs__messages-cell">
+                        <span class="obs__kind-badge" [class]="'obs__kind-badge--' + m.kind">{{ m.kind }}</span>
+                      </td>
+                      <td class="obs__messages-cell">
+                        @if (m.severity) {
+                          <span class="obs__sev"
+                                [class.obs__sev--warn]="m.severity === 'Warn'"
+                                [class.obs__sev--high]="m.severity === 'High'">{{ m.severity }}</span>
+                        }
+                      </td>
+                      <td class="obs__messages-cell obs__messages-cell--ids">
+                        @if (m.jobId) { <code>{{ m.jobId }}</code> }
+                        @if (m.runId) { <span class="obs__messages-sep">·</span><code>{{ m.runId }}</code> }
+                      </td>
+                      <td class="obs__messages-cell obs__messages-cell--summary">{{ m.summary || '(no summary)' }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        </section>
+
+        @if (selectedMessage(); as sel) {
+          <section class="obs__detail" aria-label="Selected message detail" data-testid="observability-detail">
+            <header class="obs__section-head">
+              <h3>Message · <code>{{ sel.id }}</code></h3>
+              <span class="obs__spacer"></span>
+              <button type="button"
+                      class="obs__refresh"
+                      data-testid="observability-detail-close"
+                      (click)="clearSelection()">Close</button>
+            </header>
+            <dl class="obs__detail-meta">
+              <div><dt>Created</dt><dd>{{ formatTime(sel.createdAt) }}</dd></div>
+              <div><dt>Participant</dt><dd>{{ sel.participantId }} ({{ sel.role }})</dd></div>
+              <div><dt>Kind</dt><dd>{{ sel.kind }}</dd></div>
+              @if (sel.severity) { <div><dt>Severity</dt><dd>{{ sel.severity }}</dd></div> }
+              @if (sel.jobId) { <div><dt>Job</dt><dd><code>{{ sel.jobId }}</code></dd></div> }
+              @if (sel.runId) { <div><dt>Run</dt><dd><code>{{ sel.runId }}</code></dd></div> }
+              @if (sel.cliSessionId) { <div><dt>CLI session</dt><dd><code>{{ sel.cliSessionId }}</code></dd></div> }
+              @if (sel.replyToId) { <div><dt>Reply to</dt><dd><code>{{ sel.replyToId }}</code></dd></div> }
+              @if (sel.correlationId) { <div><dt>Correlation</dt><dd><code>{{ sel.correlationId }}</code></dd></div> }
+              @if (sel.tokens) {
+                <div><dt>Tokens</dt><dd>↑{{ sel.tokens.input }} / ↓{{ sel.tokens.output }}@if (sel.tokens.cacheRead) { <span> (cache: {{ sel.tokens.cacheRead }})</span> }@if (sel.tokens.model) { <span> · {{ sel.tokens.model }}</span> }</dd></div>
+              }
+              @if (sel.tags && sel.tags.length) {
+                <div><dt>Tags</dt><dd>
+                  @for (t of sel.tags; track t) {
+                    <span class="obs__tag">{{ t }}</span>
+                  }
+                </dd></div>
+              }
+            </dl>
+            @if (sel.summary) {
+              <p class="obs__detail-summary">{{ sel.summary }}</p>
+            }
+            @if (sel.body) {
+              <pre class="obs__detail-body">{{ sel.body }}</pre>
+            }
+            <details class="obs__detail-json" open>
+              <summary>Raw JSON</summary>
+              <pre class="obs__detail-pre" data-testid="observability-detail-json">{{ formatJson(sel) }}</pre>
+            </details>
+          </section>
+        }
+      }
+    </section>
+  

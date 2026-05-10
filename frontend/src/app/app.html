@@ -1,0 +1,449 @@
+    <div class="app"
+         [class.app--vscode-layout]="featureFlags.vsCodeLayout()"
+         [class.app--vscode-meta-open]="featureFlags.vsCodeLayout() && featureFlags.vsCodeMetaOpen()"
+         [class.app--kanban-spec-v1]="featureFlags.kanbanDesignSpecV1()"
+         [class.app--task-open]="!!selectedJob()"
+         data-testid="app-root">
+      <header class="header">
+        <div class="header__brand">
+          <img class="header__icon" src="icons/icon.svg" alt="Agent Software Studio" width="20" height="20" />
+          <h1 class="header__title">
+            <span class="header__title-ai">Agent</span><span class="header__title-sep"></span><span class="header__title-name">Software Studio</span>
+          </h1>
+        </div>
+        <app-project-tabs
+          [names]="projectNames()"
+          [isActive]="isProjectActiveFn"
+          [runnerIndicator]="getRunnerIndicatorFn"
+          [autoInfo]="getAutoInfoFn"
+          [projectTokens]="getProjectTokenChipFn"
+          (toggle)="toggleProject($event)"
+          (toggleAuto)="onToggleAuto($event)"
+          (openDetail)="openProjectDetail($event)"
+          (openShell)="openProjectShell($event)" />
+        <div class="header__actions">
+          <app-update-version-badge />
+          <label class="client-filter" data-testid="client-filter">
+            <span class="client-filter__label">Owner:</span>
+            <select class="client-filter__select"
+                    data-testid="client-filter-select"
+                    [value]="activeClientFilter() ?? ''"
+                    (change)="setClientFilter(clientFilterChange($event))">
+              <option value="">All</option>
+              @for (c of clientService.clients(); track c.id) {
+                <option [value]="c.id">{{ c.emoji || '·' }} {{ c.displayName }}</option>
+              }
+            </select>
+          </label>
+          <app-filters-dropdown
+            [typeOptions]="typeFilterOptions"
+            [activeType]="activeType()"
+            [tags]="tagRegistry()"
+            [activeTagIds]="activeTagFilter()"
+            (setType)="onSetType($event)"
+            (toggleTag)="toggleTagFilter($event)" />
+          @if (boardSearchVisible() && !orchSideSheet.open()) {
+            <button type="button"
+                    class="header__filter-trigger"
+                    data-testid="kanban-filter-sidesheet-trigger"
+                    [class.header__filter-trigger--active]="kanbanFilterSidesheetOpen() || hasActiveFiltersOrSearch()"
+                    [attr.aria-pressed]="kanbanFilterSidesheetOpen()"
+                    [attr.aria-label]="'Open filter and view panel'"
+                    title="Filters &amp; view (press /)"
+                    (click)="toggleKanbanFilterSidesheet()">
+              <span aria-hidden="true">🔍</span>
+              @if (searchQuery().trim().length > 0) {
+                <span class="header__filter-trigger__chip"
+                      data-testid="kanban-filter-sidesheet-trigger-chip">"{{ searchQuery() }}"</span>
+              }
+              @if (activeFilterCount() > 0) {
+                <span class="header__filter-trigger__count"
+                      data-testid="kanban-filter-sidesheet-trigger-count">{{ activeFilterCount() }}</span>
+              }
+            </button>
+          }
+          <button class="btn btn--compact-toggle"
+                  data-testid="compact-cards-toggle"
+                  [class.btn--compact-toggle--active]="compactCards()"
+                  [attr.aria-pressed]="compactCards()"
+                  [title]="compactCards() ? 'Show full cards' : 'Show compact cards (titles only)'"
+                  (click)="toggleCompactCards()">
+            <span aria-hidden="true">{{ compactCards() ? '▤' : '▥' }}</span>
+            <span class="btn--compact-toggle__label">{{ compactCards() ? 'Compact' : 'Full' }}</span>
+          </button>
+          <button class="btn btn--create" (click)="openCreate()">
+            ＋ Add Task
+          </button>
+          <div class="devtools-menu">
+            <button class="devtools-menu__trigger"
+                    data-testid="devtools-menu-trigger"
+                    title="Dev tools"
+                    [class.devtools-menu__trigger--open]="devToolsMenuOpen()"
+                    (click)="devToolsMenuOpen.set(!devToolsMenuOpen()); $event.stopPropagation()">⋮</button>
+            @if (devToolsMenuOpen()) {
+              <div class="devtools-menu__backdrop" (click)="devToolsMenuOpen.set(false)"></div>
+              <div class="devtools-menu__panel" (click)="$event.stopPropagation()">
+                <div class="devtools-menu__header">System</div>
+                <button class="devtools-menu__item"
+                        data-testid="devtool-orch-config"
+                        (click)="onPickOrchestratorConfig()">
+                  <span class="devtools-menu__icon">⚙</span>
+                  <span class="devtools-menu__label">Orchestrator config</span>
+                  <span class="devtools-menu__hint">supervisor + meta-cycle flags</span>
+                </button>
+                @if (devToolsFlags().updateStableEnabled || devToolsFlags().deleteE2EJobsEnabled) {
+                  <div class="devtools-menu__header">Dev tools</div>
+                }
+                @if (devToolsFlags().updateStableEnabled) {
+                  <button class="devtools-menu__item"
+                          data-testid="devtool-update-stable"
+                          (click)="onPickUpdateStable()">
+                    <span class="devtools-menu__icon">⟳</span>
+                    <span class="devtools-menu__label">Update Stable</span>
+                    <span class="devtools-menu__hint">pull main, restart instance</span>
+                  </button>
+                }
+                @if (devToolsFlags().deleteE2EJobsEnabled) {
+                  <button class="devtools-menu__item devtools-menu__item--danger"
+                          data-testid="devtool-delete-e2e"
+                          (click)="onPickDeleteE2E()">
+                    <span class="devtools-menu__icon">🧹</span>
+                    <span class="devtools-menu__label">Delete E2E Jobs</span>
+                    <span class="devtools-menu__hint">across all projects</span>
+                  </button>
+                }
+              </div>
+            }
+          </div>
+        </div>
+      </header>
+
+      @if (activeFilterPills().length > 0) {
+        <div class="active-filter-strip"
+             data-testid="active-filter-strip"
+             role="region"
+             aria-label="Active filters">
+          @for (pill of activeFilterPills(); track pill.kind + ':' + pill.value) {
+            <span class="active-filter-strip__pill"
+                  [class]="'active-filter-strip__pill--' + pill.kind"
+                  [attr.data-testid]="'active-filter-pill-' + pill.kind + '-' + pill.value">
+              <span class="active-filter-strip__pill-kind">{{ pill.kindLabel }}:</span>
+              @if (pill.swatch) {
+                <span class="active-filter-strip__pill-swatch"
+                      aria-hidden="true"
+                      [style.background]="pill.swatch"></span>
+              }
+              <span class="active-filter-strip__pill-label">{{ pill.label }}</span>
+              <button type="button"
+                      class="active-filter-strip__pill-remove"
+                      [attr.data-testid]="'active-filter-remove-' + pill.kind + '-' + pill.value"
+                      [attr.aria-label]="'Remove ' + pill.kindLabel + ' filter ' + pill.label"
+                      (click)="removeFilterPill(pill)">×</button>
+            </span>
+          }
+          <button type="button"
+                  class="active-filter-strip__clear-all"
+                  data-testid="filter-clear-all"
+                  (click)="clearAllFilters()">Clear all</button>
+        </div>
+      }
+
+      <app-update-banner />
+      <app-update-center />
+      <app-orchestrator-config-panel #orchConfigPanel />
+      <app-update-block-modal />
+      <app-workspace-banner [projects]="bannerProjects()" />
+
+      <div class="app__body">
+        <div class="layout" [class.layout--focus]="selectedJob()">
+        @if (selectedJob(); as detail) {
+          <div class="workspace"
+               [class.workspace--nav-collapsed]="taskNavCollapsed()"
+               [style.--side-sheet-width]="sideSheetWidth() + 'px'">
+            @if (taskNavCollapsed()) {
+              <aside class="task-nav task-nav--collapsed" data-testid="task-nav-collapsed">
+                <button class="task-nav__expand"
+                        data-testid="task-nav-expand"
+                        title="Expand task list"
+                        (click)="setTaskNavCollapsed(false)">›</button>
+                <button class="task-nav__expand task-nav__expand--board"
+                        data-testid="back-to-board"
+                        title="Back to board"
+                        (click)="closeDetail()">←</button>
+              </aside>
+            } @else {
+            <aside class="task-nav">
+              <div class="task-nav__header">
+                <div class="task-nav__header-row">
+                  <button class="btn btn--ghost" data-testid="back-to-board" (click)="closeDetail()">← Board</button>
+                  <button class="task-nav__collapse"
+                          data-testid="task-nav-collapse"
+                          title="Collapse task list"
+                          (click)="setTaskNavCollapsed(true)">‹</button>
+                </div>
+                <div>
+                  <div class="task-nav__eyebrow">Task list</div>
+                  <h2 class="task-nav__title">Focused view</h2>
+                </div>
+              </div>
+
+              <div class="task-nav__groups">
+                @for (group of focusGroups(); track group.state) {
+                  <section class="task-nav__group" [class.task-nav__group--collapsed]="isGroupCollapsed(group.state)">
+                    <div class="task-nav__group-header" (click)="toggleGroupCollapse(group.state)">
+                      <span>
+                        <span class="task-nav__group-toggle">{{ isGroupCollapsed(group.state) ? '▶' : '▼' }}</span>
+                        {{ group.icon }} {{ group.title }}
+                      </span>
+                      <span class="task-nav__count">{{ group.jobs.length }}</span>
+                    </div>
+
+                    @if (group.jobs.length > 0 && !isGroupCollapsed(group.state)) {
+                      <div class="task-nav__items">
+                        @for (job of group.jobs; track job.jobKey) {
+                          <button class="task-nav__item"
+                                  [class.task-nav__item--active]="isSelectedJob(job)"
+                                  [style.--project-color]="identityFor(job.projectName).color"
+                                  [style.--project-on]="identityFor(job.projectName).onColor"
+                                  (click)="openDetail(job)">
+                            <span class="task-nav__item-title">{{ job.title || job.id }}</span>
+                            <span class="task-nav__item-meta">
+                              <span>#{{ job.order }}</span>
+                              <span class="task-nav__item-project">
+                                <span class="task-nav__item-disk" aria-hidden="true">{{ identityFor(job.projectName).initial }}</span>
+                                {{ job.projectName }}
+                              </span>
+                            </span>
+                          </button>
+                        }
+                      </div>
+                    }
+                    @if (canAddTaskToGroup(group.state) && !isGroupCollapsed(group.state)) {
+                      <button class="task-nav__add" (click)="openCreate(group.state)">
+                        <span>＋</span>
+                        <span>Add task</span>
+                      </button>
+                    }
+                  </section>
+                }
+              </div>
+              
+              <div class="task-nav__resize-handle"
+                   (mousedown)="startResize($event)"></div>
+            </aside>
+            }
+
+            <main class="workspace__main">
+              <app-job-detail #jobDetail
+                              [detail]="detail"
+                              [watchPaths]="watchPaths()"
+                              [lanePeers]="triageLanePeers()"
+                              [mutationsBlocked]="updateClient.mutationsBlocked()"
+                              (back)="closeDetail()"
+                              (fileSaved)="onFileSaved()"
+                              (projectChanged)="onProjectChanged($event)"
+                              (completeAndNextReview)="onCompleteAndNextReview()"
+                              (deleteRequested)="onDeleteFromDetail(detail.info)"
+                              (stateChangeRequested)="onStateChangeFromDetail(detail.info, $event.targetState)"
+                              (triageMoveRequested)="onTriageMove(detail.info, $event)"
+                              (triageMoveToTopRequested)="onTriageMoveToTop(detail.info, $event)"
+                              (triageDeleteRequested)="onTriageDelete(detail.info, $event)"
+                              (triageStartRequested)="onTriageStart(detail.info, $event)"
+                              (nextInLaneRequested)="onTriageNext(detail.info)"
+                              (prevInLaneRequested)="onTriagePrev(detail.info)" />
+              @if (triageToast(); as toast) {
+                <div class="triage-toast" data-testid="triage-toast" role="status">{{ toast }}</div>
+              }
+            </main>
+          </div>
+        } @else {
+          @if (failedPickupCount() > 0) {
+            <button type="button"
+                    class="failed-pickup-banner"
+                    data-testid="failed-pickup-banner"
+                    [attr.aria-label]="'Open failed-pickup lane'"
+                    (click)="scrollToFailedPickupLane()">
+              <span class="failed-pickup-banner__dot" aria-hidden="true"></span>
+              <span class="failed-pickup-banner__text">
+                <strong data-testid="failed-pickup-banner-count">{{ failedPickupCount() }}</strong>
+                {{ failedPickupCount() === 1 ? 'job' : 'jobs' }} failed to pick up.
+                Open the failed-pickup lane.
+              </span>
+              <span class="failed-pickup-banner__chev" aria-hidden="true">›</span>
+            </button>
+          }
+          <main class="dashboard" data-testid="kanban-dashboard"
+                [class.dashboard--has-focus]="focusedContainer() !== null">
+            @for (g of laneGroups(); track g.id) {
+              <section class="lane-group"
+                       [attr.data-testid]="'lane-group-' + g.id"
+                       [class.lane-group--collapsed]="isContainerCollapsed(g.id)"
+                       [class.lane-group--focused]="isContainerFocused(g.id)"
+                       [style.flex-grow]="expandedLaneCount(g)">
+                <header class="lane-group__head">
+                  <button type="button"
+                          class="lane-group__toggle"
+                          [attr.data-testid]="'lane-group-toggle-' + g.id"
+                          [attr.aria-expanded]="!isContainerCollapsed(g.id)"
+                          [attr.aria-label]="(isContainerCollapsed(g.id) ? 'Expand ' : 'Collapse ') + g.label"
+                          (click)="toggleContainerCollapse(g.id)">
+                    {{ isContainerCollapsed(g.id) ? '▶' : '▼' }}
+                  </button>
+                  <span class="lane-group__label">{{ g.label }}</span>
+                  @if (isContainerCollapsed(g.id)) {
+                    <span class="lane-group__strip"
+                          [attr.data-testid]="'lane-group-strip-' + g.id">
+                      @for (chip of containerSummary(g.id); track chip.state) {
+                        <span class="lane-group__chip"
+                              [attr.data-testid]="'lane-group-chip-' + chip.state"
+                              [title]="chip.title">
+                          <span class="lane-group__chip-icon" aria-hidden="true">{{ chip.icon }}</span>
+                          <span class="lane-group__chip-count">×{{ chip.count }}</span>
+                        </span>
+                      }
+                    </span>
+                  }
+                  <button type="button"
+                          class="lane-group__focus"
+                          [attr.data-testid]="'lane-group-focus-' + g.id"
+                          [attr.aria-pressed]="isContainerFocused(g.id)"
+                          [attr.aria-label]="(isContainerFocused(g.id) ? 'Exit focus on ' : 'Focus ') + g.label"
+                          (click)="toggleContainerFocus(g.id)">⤢</button>
+                </header>
+                @if (!isContainerCollapsed(g.id)) {
+                  <div class="lane-group__lanes">
+                    @for (lane of g.lanes; track lane.state) {
+                      <app-job-column
+                        [title]="lane.title"
+                        [icon]="lane.icon"
+                        [state]="lane.state"
+                        [jobs]="lane.jobs"
+                        [collapsed]="isLaneCollapsed(lane.state)"
+                        [compact]="compactCards()"
+                        (collapseToggle)="toggleLaneCollapse(lane.state)"
+                        (jobClick)="openDetail($event)"
+                        (jobDrop)="onJobDrop($event)"
+                        (jobReorder)="onJobReorder($event)"
+                        (jobDeleteRequest)="onDeleteFromBoard($event)"
+                        (addTask)="openCreate($event)"
+                        (archiveAll)="onArchiveAll()" />
+                    }
+                  </div>
+                }
+              </section>
+            }
+          </main>
+        }
+      </div>
+
+        <app-kanban-filter-sidesheet
+          #kanbanFilterSheet
+          class="app__sidesheet"
+          [open]="kanbanFilterSidesheetOpen()"
+          [query]="searchQuery()"
+          [typeOptions]="typeFilterOptions"
+          [activeType]="activeType()"
+          [tags]="tagRegistry()"
+          [activeTagIds]="activeTagFilter()"
+          [owners]="clientService.clients()"
+          [activeOwnerId]="activeClientFilter()"
+          [compactCards]="compactCards()"
+          [hitCount]="filteredJobCount()"
+          [totalCount]="totalJobCount()"
+          [hasAnyFilter]="hasActiveFiltersOrSearch()"
+          (queryChange)="setSearchQuery($event)"
+          (setType)="onSetType($event)"
+          (toggleTag)="toggleTagFilter($event)"
+          (setOwner)="setClientFilter($event)"
+          (toggleCompactCards)="toggleCompactCards()"
+          (clearAll)="onSidesheetClearAll()"
+          (closed)="closeKanbanFilterSidesheet()" />
+        <app-cli-usage-sheet #usageSheet class="app__sidesheet" />
+        <app-orchestrator-side-sheet
+          #orchSideSheet
+          class="app__sidesheet"
+          [projects]="projectNames()"
+          [preferredProject]="orchSideSheetPreferredProject()"
+          [watchPaths]="watchPaths()"
+          [activeJobId]="selectedJob()?.info?.id ?? null"
+          [activeJobTitle]="selectedJob()?.info?.title ?? null"
+          [activeWatchPath]="selectedJob()?.info?.watchPath ?? null"
+          (createTaskFromDraft)="onCreateTaskFromOrchestratorDraft($event)"
+          (openVerboseDebug)="onOpenVerboseDebugFromSheet($event)"
+          (openJobDetail)="onOpenJobDetailFromSheet($event)" />
+      </div>
+
+      <app-status-bar
+        [projectNames]="projectNames()"
+        (toggleUsage)="usageSheet.toggle()"
+        (toggleOrchestrator)="orchSideSheet.toggle()"
+        (toggleFeed)="toggleOrchFeed()"
+        (toggleVisualEvidence)="toggleWorkspaceScreenshots()"
+        (toggleCliAdmin)="toggleCliAdmin()"
+        (defaultCliChange)="onDefaultCliChange($event)"
+        (defaultModelChange)="onDefaultModelChange($event)" />
+
+      <app-project-overlays
+        (securityFollowUp)="onSecurityFollowUp($event)"
+        (securityOpenEvidence)="onSecurityOpenEvidence($event)"
+        (securityAuditQueued)="onSecurityAuditQueued($event)"
+        (uxuiFollowUp)="onUxuiFollowUp($event)"
+        (uxuiActionQueued)="onUxuiActionQueued($event)" />
+
+
+      <app-workspace-overlays (openTask)="onOpenTaskFromReel($event)" />
+
+
+      @if (showCreate()) {
+        <app-create-job-dialog
+          [title]="createDialogTitle()"
+          [watchPaths]="watchPaths()"
+          [availableModels]="availableModels()"
+          [cliTypeDraft]="createJobForm.newCliType"
+          [(newTitle)]="createJobForm.newTitle"
+          [(newWatchPath)]="createJobForm.newWatchPath"
+          [(newModel)]="createJobForm.newModel"
+          [(newPrompt)]="createJobForm.newPrompt"
+          [(attachments)]="createJobForm.newAttachments"
+          [(newTaskType)]="createJobForm.newTaskType"
+          [(newTags)]="createJobForm.newTags"
+          (cliTypeChange)="onCreateCliTypeChange($event)"
+          (cancel)="cancelCreate()"
+          (submit)="submitCreate()" />
+      }
+
+      @if (showUpdateStable()) {
+        <app-update-stable-console (closed)="showUpdateStable.set(false)" />
+      }
+
+      @if (showE2ECleanup()) {
+        <app-e2e-cleanup-dialog
+          (closed)="showE2ECleanup.set(false)"
+          (didDelete)="onE2EDidDelete()" />
+      }
+
+      @if (errorDialog.activeError(); as error) {
+        <app-error-dialog
+          [error]="error"
+          [canOpenCliConfig]="error.canOpenCliConfig && selectedJobUsesCopilot()"
+          [copyButtonLabel]="copyErrorButtonLabel()"
+          (close)="closeErrorDialog()"
+          (copy)="copyErrorDetails()"
+          (openCliConfig)="openCliConfigFromError()" />
+      }
+
+      @defer (when verboseDebugContext() !== null) {
+        @if (verboseDebugContext(); as ctx) {
+          <app-verbose-debug-overlay
+            data-testid="app-verbose-debug-overlay"
+            [lines]="ctx.lines"
+            [runTimeline]="ctx.runTimeline"
+            [screenshots]="ctx.screenshots"
+            [tokenSummary]="ctx.tokenSummary"
+            [job]="ctx.job"
+            [source]="ctx.job?.id ?? 'cli-output.log'"
+            (close)="closeVerboseDebug()" />
+        }
+      }
+    </div>
+  

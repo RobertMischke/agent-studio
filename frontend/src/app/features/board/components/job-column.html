@@ -1,0 +1,209 @@
+    @if (collapsed()) {
+      <button type="button"
+              class="column-rail"
+              [class.column-rail--dragover]="isDragOver"
+              [attr.data-testid]="'lane-rail-' + state()"
+              [attr.data-state]="state()"
+              [appTip]="railTooltip()"
+              (click)="collapseToggle.emit()"
+              (dragover)="onDragOver($event)"
+              (dragleave)="onDragLeave($event)"
+              (drop)="onDrop($event)">
+          <span class="column-rail__icon" aria-hidden="true">{{ icon() }}</span>
+          <span class="column-rail__count" data-testid="lane-rail-count">{{ jobs().length }}</span>
+          <span class="column-rail__title">{{ title() }}</span>
+          <span class="column-rail__indicators" aria-hidden="true">
+            @if (indicators().running > 0) {
+              <span class="column-rail__dot column-rail__dot--running"
+                    [attr.data-testid]="'lane-rail-running-' + state()"
+                    [attr.data-count]="indicators().running"></span>
+            }
+            @if (indicators().needsInput > 0) {
+              <span class="column-rail__dot column-rail__dot--needs-input"
+                    [attr.data-testid]="'lane-rail-needs-input-' + state()"
+                    [attr.data-count]="indicators().needsInput">!</span>
+            }
+            @if (indicators().error > 0) {
+              <span class="column-rail__dot column-rail__dot--error"
+                    [attr.data-testid]="'lane-rail-error-' + state()"
+                    [attr.data-count]="indicators().error">×</span>
+            }
+            @if (indicators().activeCli; as cli) {
+              <span class="column-rail__cli"
+                    [attr.data-testid]="'lane-rail-cli-' + state()"
+                    [attr.data-cli]="cli">{{ cliIconFor(cli) }}</span>
+            }
+          </span>
+          <span class="column-rail__expand" aria-hidden="true">›</span>
+      </button>
+    } @else {
+    <div class="column"
+         [class.column--dragover]="isDragOver"
+         [class.column--archive]="isArchive()"
+         [class.column--failed-pickup]="isFailedPickup()"
+         [attr.data-testid]="'lane-' + state()"
+         [attr.data-state]="state()"
+         (dragover)="onDragOver($event)"
+         (dragleave)="onDragLeave($event)"
+         (drop)="onDrop($event)">
+      <div class="column__header">
+        <span class="column__icon">{{ icon() }}</span>
+        @if (isFailedPickup()) {
+          <span class="column__amber-dot"
+                aria-hidden="true"
+                data-testid="failed-pickup-dot"></span>
+        }
+        <h2 class="column__title">{{ title() }}</h2>
+        <span class="column__count">{{ jobs().length }}</span>
+        @if (infoTopic(); as topic) {
+          <app-info-button [topic]="topic" />
+        }
+        @if (canArchiveAll()) {
+          <button type="button"
+                  class="column__archive-all"
+                  data-testid="archive-all-btn"
+                  [appTip]="'Move all completed tasks to Archive'"
+                  (click)="archiveAll.emit()">
+            ⬇ Archive all
+          </button>
+        }
+        @if (!isFailedPickup()) {
+          <button type="button"
+                  class="column__collapse"
+                  [attr.data-testid]="'lane-collapse-' + state()"
+                  [appTip]="'Collapse ' + title() + ' lane'"
+                  (click)="collapseToggle.emit()">‹</button>
+        }
+      </div>
+      @if (isAutoReview()) {
+        <div class="column__auto-review-status"
+             data-testid="auto-review-status">
+          {{ autoReviewStatusLine() }}
+        </div>
+      }
+      <div class="column__body">
+        @if (isArchive()) {
+          @for (job of archiveVisible(); track job.jobKey) {
+            <button type="button"
+                    class="archive-row"
+                    [attr.data-testid]="'archive-row'"
+                    [style.--project-color]="identityFor(job.projectName).color"
+                    [style.--project-on]="identityFor(job.projectName).onColor"
+                    [appTip]="archiveTooltip(job)"
+                    (click)="jobClick.emit(job)">
+              <span class="archive-row__date">{{ formatShortDate(job.lastActivity) }}</span>
+              <span class="archive-row__disk"
+                    [attr.aria-label]="job.projectName">{{ identityFor(job.projectName).initial }}</span>
+              <span class="archive-row__title">{{ job.title || job.id }}</span>
+            </button>
+          }
+          @if (jobs().length === 0) {
+            <div class="column__empty">No archived jobs</div>
+          } @else if (archiveOverflow() > 0) {
+            <div class="archive-overflow">
+              + {{ archiveOverflow() }} more in <code>6-archive/</code> folder
+            </div>
+          }
+        } @else if (isReview()) {
+          @for (group of reviewGroups(); track group.kind) {
+            <section class="column__subsection"
+                     [class]="'column__subsection--' + group.kind"
+                     [attr.data-testid]="'review-subsection-' + group.kind">
+              <h3 class="column__subsection-title">
+                <span class="column__subsection-icon" aria-hidden="true">{{ group.icon }}</span>
+                <span>{{ group.label }}</span>
+                <span class="column__subsection-count">{{ group.jobs.length }}</span>
+              </h3>
+              @for (job of group.jobs; track job.jobKey) {
+                <app-job-card
+                  [job]="job"
+                  [compact]="compact()"
+                  (click)="jobClick.emit(job)"
+                  (deleteRequested)="jobDeleteRequest.emit($event)"
+                  draggable="true"
+                  (dragstart)="onDragStart($event, job)" />
+              }
+              @if (group.jobs.length === 0) {
+                <div class="column__empty column__empty--subsection">No jobs</div>
+              }
+            </section>
+          }
+        } @else if (useVirtualScroll()) {
+          <!-- Cycle 7c2: virtualised path for big lanes (>VIRTUAL_SCROLL_THRESHOLD).
+               Per-card drop zones are dropped because the virtualizer
+               only renders the visible window; we keep top + bottom
+               drop zones so drag-to-this-lane still works at scale.
+               Below the threshold, the path below preserves the full
+               drop-zone-per-card UX so day-to-day reorder is unchanged. -->
+          @if (!reorderDisabled()) {
+            <div class="column__drop-zone column__drop-zone--first"
+                 [class.column__drop-zone--active]="dropIndex === 0"
+                 (dragover)="onCardDragOver($event, 0)"
+                 (dragleave)="onCardDragLeave()"
+                 (drop)="onCardDrop($event, 0)">
+            </div>
+          }
+          <cdk-virtual-scroll-viewport [itemSize]="VIRTUAL_ITEM_SIZE_PX"
+                                       [minBufferPx]="VIRTUAL_ITEM_SIZE_PX * 4"
+                                       [maxBufferPx]="VIRTUAL_ITEM_SIZE_PX * 8"
+                                       class="column__virtual-scroll">
+            <app-job-card *cdkVirtualFor="let job of jobs(); trackBy: trackByJobKey"
+              [job]="job"
+              [compact]="compact()"
+              (click)="jobClick.emit(job)"
+              draggable="true"
+              (dragstart)="onDragStart($event, job)" />
+          </cdk-virtual-scroll-viewport>
+          @if (!reorderDisabled()) {
+            <div class="column__drop-zone column__drop-zone--last"
+                 [class.column__drop-zone--active]="dropIndex === jobs().length"
+                 (dragover)="onCardDragOver($event, jobs().length)"
+                 (dragleave)="onCardDragLeave()"
+                 (drop)="onCardDrop($event, jobs().length)">
+            </div>
+          }
+          @if (canAddTask()) {
+            <button type="button" class="column__add" (click)="addTask.emit(state())">
+              <span class="column__add-icon">＋</span>
+              <span>Add task</span>
+            </button>
+          }
+        } @else {
+          @for (job of jobs(); track job.jobKey; let i = $index) {
+            @if (!reorderDisabled()) {
+              <div class="column__drop-zone"
+                   [class.column__drop-zone--active]="dropIndex === i"
+                   (dragover)="onCardDragOver($event, i)"
+                   (dragleave)="onCardDragLeave()"
+                   (drop)="onCardDrop($event, i)">
+              </div>
+            }
+            <app-job-card
+              [job]="job"
+              [compact]="compact()"
+              (click)="jobClick.emit(job)"
+              draggable="true"
+              (dragstart)="onDragStart($event, job)" />
+          }
+          @if (!reorderDisabled()) {
+            <div class="column__drop-zone column__drop-zone--last"
+                 [class.column__drop-zone--active]="dropIndex === jobs().length"
+                 (dragover)="onCardDragOver($event, jobs().length)"
+                 (dragleave)="onCardDragLeave()"
+                 (drop)="onCardDrop($event, jobs().length)">
+            </div>
+          }
+          @if (jobs().length === 0) {
+            <div class="column__empty">No jobs</div>
+          }
+          @if (canAddTask()) {
+            <button type="button" class="column__add" (click)="addTask.emit(state())">
+              <span class="column__add-icon">＋</span>
+              <span>Add task</span>
+            </button>
+          }
+        }
+      </div>
+    </div>
+    }
+  

@@ -1,0 +1,460 @@
+    .column {
+      background: var(--column-bg, #181825);
+      border-radius: 16px;
+      padding: 16px;
+      /*
+       * Columns share whatever horizontal space the dashboard has left
+       * after gaps and group padding. The 220px floor matches the
+       * kanban-board-design-spec-mockup-first contract; below that the
+       * dashboard's overflow-x: auto kicks in. flex: 1 1 220px lets
+       * lanes grow past their floor so the board fills 100% of the
+       * viewport instead of leaving empty space at the right.
+       */
+      min-width: 220px;
+      flex: 1 1 220px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      transition: outline 0.15s;
+      /*
+       * CSS containment: scrolling a single lane's body or polling a
+       * single lane's status (4-auto-review header line) must not
+       * trigger layout/paint work in sibling lanes. The "layout" scope
+       * keeps descendants' size/position changes from invalidating
+       * ancestors; the "paint" scope clips the column's painting to
+       * its own border box. The default style/size scopes are
+       * intentionally left untouched so descendant counters and
+       * viewport units still resolve.
+       *
+       * This is the perf intervention that brings the long-task
+       * budget during a dense-board 5 s scroll below the 50 ms
+       * acceptance criterion in the lane-overlap regression spec.
+       */
+      contain: layout paint;
+    }
+    /* Drag-over signal: outline ring only. We deliberately do NOT tint the
+       column background because a transient overlay that snaps off on drop
+       reads as a "flash" together with the drop-zone glow underneath the
+       landed card. Motion rule (docs/design-principles.md): drag-and-drop
+       never changes brightness; only opacity (drop-zone) and transform. */
+    .column--dragover {
+      outline: 2px solid rgba(99, 102, 241, 0.6);
+      outline-offset: -2px;
+    }
+    /* ADR-0028: 3a-failed-pickup is the only lane that uses an outline tint
+       on the column itself. 1 px amber per the kanban-board-design taxonomy.
+       Pickup failures must remain visible; collapse is suppressed in the
+       template so a non-empty failed-pickup lane cannot be hidden. */
+    .column--failed-pickup {
+      border: 1px solid rgba(245, 158, 11, 0.55);
+    }
+    .column--failed-pickup .column__title { color: #fbbf24; }
+    .column__amber-dot {
+      width: 12px;
+      height: 12px;
+      border-radius: 999px;
+      background: #f59e0b;
+      box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.20);
+      flex-shrink: 0;
+      display: inline-block;
+    }
+    .column__header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+      /*
+       * Clip header content to the column. With min-width: 200 on
+       * .column the header's natural fixed-size children (icon, count,
+       * Archive-all, collapse) sum close to 170px, leaving little room
+       * for the title. Without this clamp the trailing collapse button
+       * overflows into the neighbouring lane and intercepts pointer
+       * events meant for that lane (caught by kanban-lane-grouping
+       * spec). Pair with min-width: 0 + ellipsis on the title so it
+       * shrinks instead.
+       */
+      min-width: 0;
+      overflow: hidden;
+    }
+    .column__icon { font-size: 18px; flex-shrink: 0; }
+    .column__title {
+      margin: 0;
+      font-size: 14px;
+      font-weight: 600;
+      color: #e2e8f0;
+      flex: 1 1 0;
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .column__count {
+      background: rgba(255,255,255,0.08);
+      border-radius: 10px;
+      padding: 2px 8px;
+      font-size: 12px;
+      color: #94a3b8;
+    }
+    .column__body {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex: 1;
+      min-height: 0; /* let virtual viewport child claim available space */
+    }
+    /* Cycle 7c2: CDK virtual scroll viewport. Needs explicit height
+       so the virtualizer knows how many items fit; flex:1 + min-height:0
+       on the parent gives it the lane's remaining space. The internal
+       cdk-virtual-scroll-content-wrapper handles overflow itself, so we
+       hide overflow at the viewport. */
+    .column__virtual-scroll {
+      flex: 1;
+      min-height: 200px;
+      width: 100%;
+      contain: strict;
+    }
+    .column__virtual-scroll ::ng-deep .cdk-virtual-scroll-content-wrapper {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      width: 100%;
+    }
+    .column__empty {
+      text-align: center;
+      color: #4a5568;
+      font-size: 13px;
+      padding: 24px 0;
+    }
+    .column__empty--subsection {
+      padding: 8px 0;
+      font-size: 12px;
+    }
+    /* 4-review swim-lane subdivisions: orchestrator-decided cards visually
+       separate from human-review cards so the user sees at a glance which
+       cards the orchestrator already triaged. */
+    .column__subsection {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 8px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.02);
+      border: 1px solid rgba(255, 255, 255, 0.04);
+    }
+    .column__subsection--orchestrator {
+      background: rgba(139, 92, 246, 0.06);
+      border-color: rgba(139, 92, 246, 0.20);
+    }
+    .column__subsection--human {
+      background: rgba(56, 189, 248, 0.04);
+      border-color: rgba(56, 189, 248, 0.16);
+    }
+    .column__subsection-title {
+      margin: 0 0 2px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #cbd5e1;
+    }
+    .column__subsection--orchestrator .column__subsection-title { color: #c4b5fd; }
+    .column__subsection--human        .column__subsection-title { color: #7dd3fc; }
+    .column__subsection-icon { font-size: 13px; line-height: 1; }
+    .column__subsection-count {
+      margin-left: auto;
+      background: rgba(255,255,255,0.08);
+      color: #cbd5e1;
+      border-radius: 10px;
+      padding: 1px 6px;
+      font-size: 10px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      min-width: 20px;
+      text-align: center;
+    }
+    /* The drop-zone occupies just 2px of layout space but extends its hit
+       target via padding + negative margins, eating into the surrounding
+       8px flex gaps. This makes it ~14px tall to the cursor without
+       changing the visual rhythm of the column. */
+    .column__drop-zone {
+      position: relative;
+      height: 2px;
+      padding: 6px 0;
+      margin: -6px 0;
+      flex-shrink: 0;
+    }
+    .column__drop-zone::before {
+      content: '';
+      position: absolute;
+      left: 4px;
+      right: 4px;
+      top: 50%;
+      height: 3px;
+      transform: translateY(-50%);
+      border-radius: 2px;
+      background: rgba(99, 102, 241, 0.9);
+      opacity: 0;
+      transition: opacity 0.12s ease;
+      pointer-events: none;
+    }
+    /* Active drop-zone fades in via opacity only — no box-shadow glow.
+       The glow used to leak beyond the strip's bounds and lingered for
+       ~80ms after drop while it transitioned out, registering as a
+       "brightness flash" underneath the landed card. */
+    .column__drop-zone--active::before {
+      opacity: 1;
+    }
+    .column__add {
+      margin-top: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      width: 100%;
+      background: rgba(139, 92, 246, 0.08);
+      border: 1px dashed rgba(139, 92, 246, 0.35);
+      color: #a78bfa;
+      padding: 10px 12px;
+      border-radius: 12px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    .column__add:hover {
+      background: rgba(139, 92, 246, 0.18);
+      border-color: rgba(139, 92, 246, 0.6);
+      color: #c4b5fd;
+    }
+    .column__add-icon {
+      font-size: 16px;
+      line-height: 1;
+    }
+    .column__auto-review-status {
+      margin-top: -4px;
+      padding: 4px 8px;
+      border-radius: 8px;
+      background: rgba(139, 92, 246, 0.05);
+      border: 1px solid rgba(139, 92, 246, 0.15);
+      color: #c4b5fd;
+      font-size: 11px;
+      line-height: 1.4;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .column__archive-all {
+      background: rgba(100, 116, 139, 0.12);
+      border: 1px solid rgba(100, 116, 139, 0.3);
+      color: #94a3b8;
+      padding: 3px 8px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 11px;
+      font-weight: 500;
+      white-space: nowrap;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    .column__archive-all:hover {
+      background: rgba(100, 116, 139, 0.25);
+      border-color: rgba(100, 116, 139, 0.55);
+      color: #cbd5e1;
+    }
+    .column__collapse {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      color: #94a3b8;
+      width: 22px;
+      height: 22px;
+      padding: 0;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      display: grid;
+      place-items: center;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .column__collapse:hover {
+      background: rgba(255,255,255,0.10);
+      border-color: rgba(255,255,255,0.18);
+      color: #e2e8f0;
+    }
+    /*
+     * Collapsed-lane rail. Same vertical rhythm as a full column so the
+     * board stays aligned, but only ~36px wide. The rail itself is the
+     * drop target and the click target for re-expansion. Indicators live
+     * in a vertical strip in the middle so the user still sees task
+     * count, active runs, needs-input flags, and errors at a glance.
+     */
+    .column-rail {
+      background: var(--column-bg, #181825);
+      border: 1px solid rgba(255,255,255,0.04);
+      border-radius: 14px;
+      width: 36px;
+      min-width: 36px;
+      flex: 0 0 36px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 4px 10px;
+      cursor: pointer;
+      color: #cbd5e1;
+      transition: outline 0.15s, background 0.15s;
+      /* Same containment rationale as .column: a rail's running-pulse
+         animation must not invalidate sibling lanes. */
+      contain: layout paint;
+    }
+    .column-rail:hover {
+      background: #1a1a2b;
+    }
+    .column-rail--dragover {
+      outline: 2px solid rgba(99, 102, 241, 0.6);
+      outline-offset: -2px;
+    }
+    .column-rail__icon { font-size: 16px; line-height: 1; }
+    .column-rail__count {
+      background: rgba(255,255,255,0.08);
+      color: #cbd5e1;
+      border-radius: 10px;
+      padding: 2px 6px;
+      font-size: 11px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      min-width: 22px;
+      text-align: center;
+    }
+    .column-rail__title {
+      writing-mode: vertical-rl;
+      transform: rotate(180deg);
+      font-size: 11px;
+      font-weight: 600;
+      color: #94a3b8;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      margin: 4px 0 6px;
+      flex: 1 1 auto;
+      white-space: nowrap;
+    }
+    .column-rail__indicators {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 4px;
+    }
+    .column-rail__dot {
+      width: 14px;
+      height: 14px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      font-size: 9px;
+      font-weight: 800;
+      line-height: 1;
+    }
+    .column-rail__dot--running {
+      background: rgba(56,189,248,0.20);
+      border: 1px solid rgba(56,189,248,0.55);
+      color: #7dd3fc;
+      animation: column-rail-pulse 1.4s ease-in-out infinite;
+    }
+    .column-rail__dot--running::after {
+      content: '';
+      width: 6px;
+      height: 6px;
+      border-radius: 999px;
+      background: #7dd3fc;
+    }
+    .column-rail__dot--needs-input {
+      background: rgba(252, 211, 77, 0.18);
+      border: 1px solid rgba(252, 211, 77, 0.55);
+      color: #fcd34d;
+    }
+    .column-rail__dot--error {
+      background: rgba(244, 63, 94, 0.20);
+      border: 1px solid rgba(244, 63, 94, 0.55);
+      color: #fda4af;
+    }
+    @keyframes column-rail-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(56,189,248,0.55); }
+      50% { box-shadow: 0 0 0 4px rgba(56,189,248,0.0); }
+    }
+    .column-rail__cli {
+      font-size: 12px;
+      line-height: 1;
+      filter: saturate(1.1);
+    }
+    .column-rail__expand {
+      color: #64748b;
+      font-size: 14px;
+      line-height: 1;
+      margin-top: auto;
+    }
+    .column-rail:hover .column-rail__expand { color: #cbd5e1; }
+    .column--archive .column__body { gap: 2px; }
+    .archive-row {
+      display: grid;
+      grid-template-columns: auto auto 1fr;
+      gap: 8px;
+      align-items: baseline;
+      width: 100%;
+      text-align: left;
+      background: transparent;
+      border: 0;
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      color: #cbd5e1;
+      padding: 4px 6px;
+      font-size: 12px;
+      line-height: 1.3;
+      cursor: pointer;
+      transition: background 0.12s, color 0.12s;
+    }
+    .archive-row:hover { background: rgba(255,255,255,0.05); color: #f1f5f9; }
+    .archive-row__date {
+      font-family: 'Consolas', monospace;
+      color: #64748b;
+      font-size: 11px;
+      font-variant-numeric: tabular-nums;
+    }
+    .archive-row__disk {
+      display: inline-grid;
+      place-items: center;
+      width: 14px;
+      height: 14px;
+      border-radius: 999px;
+      background: var(--project-color, #8b5cf6);
+      color: var(--project-on, #0b1020);
+      font-size: 9px;
+      font-weight: 800;
+      flex: 0 0 auto;
+    }
+    .archive-row__title {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .archive-overflow {
+      margin-top: 8px;
+      padding: 6px 8px;
+      font-size: 11px;
+      color: #64748b;
+      border-top: 1px dashed rgba(255,255,255,0.08);
+    }
+    .archive-overflow code {
+      background: rgba(255,255,255,0.06);
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-size: 10px;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .column { transition: none; }
+      .column__drop-zone::before { transition: none; }
+      .column-rail { transition: none; }
+    }
+  

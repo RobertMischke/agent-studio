@@ -1,0 +1,162 @@
+    <aside class="sheet" [class.sheet--open]="open()" data-testid="orch-side-sheet">
+      <header class="sheet__header">
+        <div class="sheet__title-block">
+          <span class="sheet__eyebrow">Orchestrator</span>
+          <h2 class="sheet__title">Project chat</h2>
+        </div>
+        <div class="sheet__header-actions">
+          @if (activeJobId() && activeWatchPath()) {
+            <button class="sheet__btn"
+                    type="button"
+                    (click)="onOpenVerboseDebug()"
+                    [title]="'Open the read-only Verbose Debug view for ' + (activeJobTitle() ?? 'the active task')"
+                    data-testid="orch-side-sheet-verbose-debug">🐞</button>
+          }
+          <button class="sheet__btn"
+                  (click)="refresh()"
+                  [disabled]="loading()"
+                  title="Reload chat history"
+                  data-testid="orch-side-sheet-refresh">
+            {{ loading() ? '⏳' : '↻' }}
+          </button>
+          <button class="sheet__close"
+                  type="button"
+                  (click)="hide()"
+                  title="Close panel"
+                  data-testid="orch-side-sheet-close">✕</button>
+        </div>
+      </header>
+
+      <nav class="sheet__tabs" data-testid="orch-side-sheet-tabs">
+        <div class="sheet__combo-wrap"
+             [class.sheet__combo-wrap--active]="mode() === 'project'"
+             [class.sheet__combo-wrap--open]="comboOpen()"
+             data-testid="orch-side-sheet-project-combo-wrap">
+          <span class="sheet__select-icon">💬</span>
+          <input #comboInput
+                 type="text"
+                 class="sheet__combo-input"
+                 data-testid="orch-side-sheet-project-combo"
+                 [value]="comboQuery()"
+                 [placeholder]="activeProject() ?? 'Pick a project…'"
+                 (input)="onComboInput($event)"
+                 (focus)="onComboFocus()"
+                 (blur)="onComboBlur()"
+                 (keydown)="onComboKeydown($event)" />
+          <span class="sheet__select-caret">▾</span>
+          @if (comboOpen() && filteredProjects().length > 0) {
+            <ul class="sheet__combo-list"
+                role="listbox"
+                data-testid="orch-side-sheet-project-combo-list">
+              @for (proj of filteredProjects(); track proj; let i = $index) {
+                <li class="sheet__combo-option"
+                    role="option"
+                    [class.sheet__combo-option--active]="i === comboHighlight()"
+                    [class.sheet__combo-option--current]="proj === activeProject()"
+                    [attr.data-testid]="'orch-side-sheet-project-combo-option-' + proj"
+                    (mousedown)="onComboOptionMousedown($event)"
+                    (click)="selectComboOption(proj, $event)">
+                  {{ proj }}
+                </li>
+              }
+            </ul>
+          }
+        </div>
+        @if (activeJobId() && activeJobTitle()) {
+          <button class="sheet__tab sheet__tab--task"
+                  [class.sheet__tab--active]="mode() === 'task'"
+                  data-testid="orch-side-sheet-tab-task"
+                  (click)="selectTaskTab()"
+                  [title]="activeJobTitle() ?? ''">
+            🎯 {{ activeJobTitle() }}
+          </button>
+        }
+        <button class="sheet__tab sheet__tab--intake"
+                [class.sheet__tab--active]="mode() === 'intake'"
+                data-testid="orch-side-sheet-tab-intake"
+                (click)="selectIntakeTab()"
+                [disabled]="!activeProject()"
+                title="Send a long dump to the roadmap splitter">
+          🗺 Roadmap
+        </button>
+      </nav>
+      <select hidden
+              data-testid="orch-side-sheet-project-select"
+              [value]="activeProject() ?? ''"
+              (change)="onProjectSelectChange($event)">
+        @for (proj of projects(); track proj) {
+          <option [value]="proj">{{ proj }}</option>
+        }
+      </select>
+
+      @if (errorMsg(); as err) {
+        <div class="sheet__error">{{ err }}</div>
+      }
+
+      <div class="sheet__chat">
+        @if (mode() === 'intake' && activeProject()) {
+          <app-roadmap-intake-panel
+            [activeWatchPath]="activeWatchPathForIntake()"
+            [projectName]="activeProject()"
+            (created)="onIntakeCreated($event)" />
+        } @else if (mode() === 'task' && activeJobId()) {
+          <app-chat
+            variant="embedded"
+            [messages]="taskMessages()"
+            [pending]="taskSending()"
+            [disabled]="taskSending()"
+            [placeholder]="'Send a follow-up to this task (Continue mode: Steer)…'"
+            [emptyState]="'No follow-ups sent from here yet. The full activity log lives in the protocol pane.'"
+            (submitMessage)="onTaskSubmit($event)" />
+        } @else if (activeProject()) {
+          @if (virtualChatEnabled()) {
+            <app-project-chat-list
+              #projectChatList
+              [project]="activeProject()" />
+            <app-chat
+              variant="embedded"
+              [messages]="[]"
+              [events]="[]"
+              [pending]="sending()"
+              [disabled]="sending()"
+              [placeholder]="'Ask the orchestrator about this project…'"
+              [emptyState]="''"
+              [bodyMaxHeight]="'0px'"
+              (submitMessage)="onSubmit($event)" />
+          } @else {
+            <app-chat
+              variant="embedded"
+              [messages]="messages()"
+              [events]="events()"
+              [pending]="sending()"
+              [disabled]="sending()"
+              [placeholder]="'Ask the orchestrator… try /bug &lt;description&gt; to file a bug'"
+              [emptyState]="emptyStateText()"
+              (submitMessage)="onSubmit($event)"
+              (eventAction)="onChatEventAction($event)" />
+          }
+
+          <div class="sheet__draft-actions" data-testid="orch-side-sheet-draft-actions">
+            <button class="sheet__draft-btn sheet__draft-btn--primary"
+                    type="button"
+                    (click)="onCreateTaskFromYourMessage()"
+                    [disabled]="!canCreateTaskFromUserMessage()"
+                    title="Open Add Task pre-filled with the text you typed (works even if the orchestrator hasn't replied yet)"
+                    data-testid="orch-side-sheet-make-task-from-yours">
+              ✦ Make a task from your message
+            </button>
+            <button class="sheet__draft-btn"
+                    type="button"
+                    (click)="onCreateTaskFromLastReply()"
+                    [disabled]="!canCreateTaskFromReply()"
+                    title="Open Add Task pre-filled with the last orchestrator reply"
+                    data-testid="orch-side-sheet-make-task">
+              ✨ Make a task from this reply
+            </button>
+          </div>
+        } @else {
+          <div class="sheet__no-project">No watched projects yet.</div>
+        }
+      </div>
+    </aside>
+  

@@ -1,0 +1,312 @@
+    <section class="proj-detail__group" data-testid="project-drift-overview-section">
+      <h3>
+        <span class="pdov__icon">📊</span>
+        Drift overview
+        @if (latest(); as r) {
+          <span class="pdov__band pdov__band--{{ bandClass(r.scoreBand) }}"
+                data-testid="project-drift-overview-band">{{ tc(r.scoreBand) }}</span>
+        }
+        @if (latest(); as r) {
+          <span class="pdov__score-pill"
+                data-testid="project-drift-overview-score">{{ r.overallScore }} / 100</span>
+        }
+      </h3>
+
+      <p class="proj-detail__hint">
+        Drift is the gap between what the project says and what the project does.
+        Scores are triage signals with evidence links, not automatic decisions:
+        the surface never blocks lane transitions in V1, and follow-up work
+        always becomes a normal queued task.
+      </p>
+
+      @if (loading() && !latest() && reports().length === 0 && !error()) {
+        <p class="proj-detail__empty" data-testid="project-drift-overview-loading">Loading drift reports…</p>
+      }
+
+      @if (error(); as e) {
+        <div class="pdov__error" data-testid="project-drift-overview-error">
+          <strong>Drift report unreadable.</strong>
+          <span>{{ e }}</span>
+          <button class="pdov__btn pdov__btn--ghost"
+                  data-testid="project-drift-overview-retry"
+                  (click)="refresh()">Retry</button>
+        </div>
+      }
+
+      <h4 class="pdov__sub">Run a comparison</h4>
+      <div class="pdov__actions" data-testid="project-drift-overview-actions">
+        @for (a of actions; track a.slug) {
+          <button class="pdov__btn"
+                  [attr.data-testid]="'project-drift-overview-action-' + a.slug"
+                  [title]="a.description"
+                  [disabled]="busyAction() === a.slug"
+                  (click)="runAction(a)">
+            {{ a.label }}
+            @if (busyAction() === a.slug) { <span class="pdov__btn-spin">…</span> }
+          </button>
+        }
+      </div>
+      @if (actionMessage(); as msg) {
+        <p class="pdov__action-msg" data-testid="project-drift-overview-action-msg">{{ msg }}</p>
+      }
+      @if (actionError(); as err) {
+        <p class="pdov__action-error" data-testid="project-drift-overview-action-error">{{ err }}</p>
+      }
+
+      @if (!error() && !loading() && reports().length === 0) {
+        <p class="proj-detail__empty" data-testid="project-drift-overview-empty">
+          No drift reports yet for this project.
+          Run a comparison above to produce the first one;
+          evidence-only reports are also fine while you wait for an agent verdict.
+        </p>
+      }
+
+      @if (latest(); as r) {
+        <div class="pdov__latest" data-testid="project-drift-overview-latest">
+          <div class="pdov__latest-header">
+            <div class="pdov__latest-headline">
+              <p class="pdov__latest-summary">{{ r.summary }}</p>
+              <p class="pdov__latest-meta">
+                <code data-testid="project-drift-overview-latest-id">{{ r.reportId }}</code>
+                · {{ formatTime(r.createdAt) }}
+                · trigger: {{ tc(r.trigger) }}
+                · scope: {{ scopeLabel(r) }}
+              </p>
+            </div>
+            <button class="pdov__btn pdov__btn--ghost"
+                    data-testid="project-drift-overview-open-latest"
+                    (click)="openReport(r.reportId)">Open report</button>
+          </div>
+
+          @if (parseStatusEq(r.parseStatus, 'Unstructured')) {
+            <div class="pdov__warn" data-testid="project-drift-overview-warn-unstructured">
+              ⚠️ <strong>Unstructured report.</strong>
+              The producer wrote Markdown only. Structured filters (severity counts, dimension cards,
+              follow-up status) are best-effort.
+            </div>
+          } @else if (parseStatusEq(r.parseStatus, 'MalformedJson')) {
+            <div class="pdov__warn pdov__warn--strong" data-testid="project-drift-overview-warn-malformed">
+              ⚠️ <strong>Malformed JSON sidecar.</strong>
+              Markdown stays readable below.
+              @if (r.parseError) { <code>{{ r.parseError }}</code> }
+            </div>
+          }
+
+          <h4 class="pdov__sub">Dimensions</h4>
+          <div class="pdov__dimensions" data-testid="project-drift-overview-dimensions">
+            @for (row of dimensionRows(); track row.type) {
+              @if (row.dimension) {
+                <button class="pdov__dim pdov__dim--{{ severityClass(row.dimension.severity) }}"
+                        [attr.data-testid]="'project-drift-overview-dim-' + dimSlug(row.type)"
+                        (click)="toggleDimension(row.type)">
+                  <header>
+                    <span class="pdov__dim-label">{{ row.label }}</span>
+                    <span class="pdov__dim-score"
+                          [attr.data-testid]="'project-drift-overview-dim-score-' + dimSlug(row.type)">
+                      {{ row.dimension.score }}
+                    </span>
+                  </header>
+                  <p class="pdov__dim-summary">{{ row.dimension.summary }}</p>
+                  <footer>
+                    <span class="pdov__sev pdov__sev--{{ severityClass(row.dimension.severity) }}"
+                          [attr.data-testid]="'project-drift-overview-dim-sev-' + dimSlug(row.type)">{{ tc(row.dimension.severity) }}</span>
+                    <span class="pdov__cov" title="Source coverage">cov {{ formatCoverage(row.dimension.sourceCoverage) }}</span>
+                    <span class="pdov__status pdov__status--{{ statusClass(row.dimension.status) }}"
+                          [attr.data-testid]="'project-drift-overview-dim-status-' + dimSlug(row.type)">{{ tc(row.dimension.status) }}</span>
+                  </footer>
+                </button>
+              } @else {
+                <div class="pdov__dim pdov__dim--empty"
+                     [attr.data-testid]="'project-drift-overview-dim-' + dimSlug(row.type) + '-empty'">
+                  <header>
+                    <span class="pdov__dim-label">{{ row.label }}</span>
+                    <span class="pdov__dim-score">—</span>
+                  </header>
+                  <p class="pdov__dim-summary pdov__dim-summary--muted">
+                    Not scored in this report. Run a comparison that covers this dimension to populate it.
+                  </p>
+                </div>
+              }
+            }
+          </div>
+
+          @if (openedDimension(); as opened) {
+            <section class="pdov__panel" data-testid="project-drift-overview-dimension-drilldown">
+              <header>
+                <h4>{{ opened.label }} <span class="pdov__panel-score">{{ opened.dimension!.score }} / 100</span></h4>
+                <button class="pdov__close"
+                        data-testid="project-drift-overview-dimension-close"
+                        (click)="closeDimension()">×</button>
+              </header>
+              <p class="pdov__panel-summary">{{ opened.dimension!.summary }}</p>
+
+              <dl class="pdov__panel-meta">
+                <div><dt>Severity</dt><dd>{{ tc(opened.dimension!.severity) }}</dd></div>
+                <div><dt>Status</dt><dd>{{ tc(opened.dimension!.status) }}</dd></div>
+                <div><dt>Confidence</dt><dd>{{ formatConfidence(opened.dimension!.confidence) }}</dd></div>
+                <div><dt>Source coverage</dt><dd>{{ formatCoverage(opened.dimension!.sourceCoverage) }}</dd></div>
+              </dl>
+
+              @if (opened.dimension!.evidenceRefs.length > 0) {
+                <details class="pdov__panel-details" open>
+                  <summary>Evidence ({{ opened.dimension!.evidenceRefs.length }})</summary>
+                  <ul data-testid="project-drift-overview-dimension-evidence">
+                    @for (ref of opened.dimension!.evidenceRefs; track ref) {
+                      <li><code>{{ ref }}</code></li>
+                    }
+                  </ul>
+                </details>
+              }
+
+              @if (opened.dimension!.recommendedActions.length > 0) {
+                <details class="pdov__panel-details">
+                  <summary>Recommended actions</summary>
+                  <ul>
+                    @for (a of opened.dimension!.recommendedActions; track a) {
+                      <li>{{ a }}</li>
+                    }
+                  </ul>
+                </details>
+              }
+
+              @if ((opened.dimension!.findings?.length ?? 0) > 0) {
+                <h5 class="pdov__panel-sub">Findings</h5>
+                <ul class="pdov__findings" data-testid="project-drift-overview-findings">
+                  @for (f of opened.dimension!.findings; track f.findingId) {
+                    <li class="pdov__finding pdov__finding--{{ severityClass(f.severity) }}"
+                        [attr.data-testid]="'project-drift-overview-finding-' + f.findingId">
+                      <header>
+                        <span class="pdov__sev pdov__sev--{{ severityClass(f.severity) }}">{{ tc(f.severity) }}</span>
+                        <span class="pdov__finding-id"><code>{{ f.findingId }}</code></span>
+                        <span class="pdov__status pdov__status--{{ statusClass(f.status) }}">{{ tc(f.status) }}</span>
+                      </header>
+                      <p>{{ f.summary }}</p>
+                      @if ((f.evidenceRefs?.length ?? 0) > 0) {
+                        <details class="pdov__panel-details">
+                          <summary>Evidence ({{ f.evidenceRefs!.length }})</summary>
+                          <ul>
+                            @for (ref of f.evidenceRefs!; track ref) {
+                              <li><code>{{ ref }}</code></li>
+                            }
+                          </ul>
+                        </details>
+                      }
+                      <div class="pdov__finding-actions">
+                        <button class="pdov__btn pdov__btn--accent"
+                                [attr.data-testid]="'project-drift-overview-finding-followup-' + f.findingId"
+                                [disabled]="busyFollowUp() === f.findingId"
+                                (click)="createFollowUpFromFinding(opened.dimension!, f)">
+                          Create follow-up task
+                        </button>
+                      </div>
+                    </li>
+                  }
+                </ul>
+              }
+            </section>
+          }
+
+          @if (r.followUpTaskSuggestions.length > 0) {
+            <h4 class="pdov__sub">Follow-up suggestions</h4>
+            <ul class="pdov__followups" data-testid="project-drift-overview-followups">
+              @for (s of r.followUpTaskSuggestions; track s.title) {
+                <li class="pdov__followup pdov__followup--{{ priorityClass(s.priority) }}">
+                  <header>
+                    <strong>{{ s.title }}</strong>
+                    <span class="pdov__prio pdov__prio--{{ priorityClass(s.priority) }}">{{ tc(s.priority) }}</span>
+                    @if (s.relatedDimension) {
+                      <span class="pdov__rel">{{ DIMENSION_LABELS[s.relatedDimension] || s.relatedDimension }}</span>
+                    }
+                    @if (s.createdJobId) {
+                      <span class="pdov__followup-job">queued · <code>{{ s.createdJobId }}</code></span>
+                    }
+                  </header>
+                  @if (s.summary) { <p>{{ s.summary }}</p> }
+                  @if (!s.createdJobId) {
+                    <button class="pdov__btn pdov__btn--accent"
+                            [attr.data-testid]="'project-drift-overview-followup-suggest-' + slug(s.title)"
+                            [disabled]="busyFollowUp() === s.title"
+                            (click)="createFollowUpFromSuggestion(s)">
+                      Queue follow-up task
+                    </button>
+                  }
+                </li>
+              }
+            </ul>
+          }
+        </div>
+      }
+
+      <h4 class="pdov__sub">Report history</h4>
+      @if (reports().length === 0) {
+        <p class="proj-detail__empty">No drift reports yet.</p>
+      } @else {
+        <ul class="pdov__history" data-testid="project-drift-overview-history">
+          @for (r of reports(); track r.reportId) {
+            <li class="pdov__hist-row pdov__hist-row--{{ bandClass(r.scoreBand) }}"
+                [attr.data-testid]="'project-drift-overview-history-row'"
+                (click)="openReport(r.reportId)">
+              <span class="pdov__hist-band pdov__hist-band--{{ bandClass(r.scoreBand) }}">{{ tc(r.scoreBand) }}</span>
+              <span class="pdov__hist-score">{{ r.overallScore }}</span>
+              <span class="pdov__hist-summary">{{ r.summary }}</span>
+              <span class="pdov__hist-trigger">{{ tc(r.trigger) }}</span>
+              @if (!parseStatusEq(r.parseStatus, 'Structured')) {
+                <span class="pdov__hist-parse"
+                      [attr.data-testid]="'project-drift-overview-history-parse-' + (r.parseStatus ?? '').toString().toLowerCase()"
+                      [title]="parseStatusEq(r.parseStatus, 'MalformedJson') ? (r.parseError ?? 'sidecar invalid') : 'no JSON sidecar'">
+                  ⚠️ {{ parseStatusEq(r.parseStatus, 'MalformedJson') ? 'malformed' : 'unstructured' }}
+                </span>
+              }
+              <span class="pdov__hist-ts">{{ formatTime(r.createdAt) }}</span>
+            </li>
+          }
+        </ul>
+      }
+
+      @if (reportDetail(); as detail) {
+        <section class="pdov__report-modal"
+                 data-testid="project-drift-overview-report-modal"
+                 (click)="closeReport($event)">
+          <article class="pdov__report-card" (click)="stop($event)">
+            <header>
+              <h3>
+                Drift report
+                <code>{{ detail.report.reportId }}</code>
+                <span class="pdov__band pdov__band--{{ bandClass(detail.report.scoreBand) }}">{{ tc(detail.report.scoreBand) }}</span>
+              </h3>
+              <button class="pdov__close"
+                      data-testid="project-drift-overview-report-close"
+                      (click)="closeReport()">×</button>
+            </header>
+
+            @if (parseStatusEq(detail.report.parseStatus, 'Unstructured')) {
+              <div class="pdov__warn" data-testid="project-drift-overview-report-warn-unstructured">
+                ⚠️ <strong>Unstructured report.</strong>
+                Markdown is the only artifact below.
+              </div>
+            } @else if (parseStatusEq(detail.report.parseStatus, 'MalformedJson')) {
+              <div class="pdov__warn pdov__warn--strong" data-testid="project-drift-overview-report-warn-malformed">
+                ⚠️ <strong>Malformed JSON sidecar.</strong>
+                <code>{{ detail.report.parseError ?? 'sidecar invalid' }}</code>
+              </div>
+            }
+
+            <p class="pdov__latest-summary">{{ detail.report.summary }}</p>
+            <p class="pdov__latest-meta">
+              {{ formatTime(detail.report.createdAt) }}
+              · score {{ detail.report.overallScore }} / 100
+              · trigger {{ tc(detail.report.trigger) }}
+              · scope {{ scopeLabel(detail.report) }}
+            </p>
+
+            <h4 class="pdov__panel-sub">Markdown</h4>
+            @if (detail.markdown) {
+              <pre class="pdov__report-md" data-testid="project-drift-overview-report-md">{{ detail.markdown }}</pre>
+            } @else {
+              <p class="proj-detail__empty">No Markdown body recorded.</p>
+            }
+          </article>
+        </section>
+      }
+    </section>
+  

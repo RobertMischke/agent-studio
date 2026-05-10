@@ -1,0 +1,345 @@
+    <div class="vdbg" data-testid="verbose-debug-overlay" [attr.data-theme]="theme()" (click)="close.emit()">
+      <section class="vdbg__panel" role="dialog" aria-label="Verbose debug" (click)="$event.stopPropagation()">
+        <header class="vdbg__header">
+          <div class="vdbg__title-block">
+            <strong class="vdbg__title">🐞 Verbose Debug</strong>
+            <span class="vdbg__subtitle">{{ subtitle() }}</span>
+          </div>
+          <div class="vdbg__head-actions">
+            <button class="vdbg__theme"
+                    type="button"
+                    data-testid="verbose-debug-theme-toggle"
+                    [title]="theme() === 'light' ? 'Switch to dark' : 'Switch to light'"
+                    (click)="toggleTheme()">{{ theme() === 'light' ? '🌙' : '☀' }}</button>
+            <button class="vdbg__close"
+                    type="button"
+                    data-testid="verbose-debug-close"
+                    (click)="close.emit()">✕ Close</button>
+          </div>
+        </header>
+
+        <nav class="vdbg__tabs" role="tablist" aria-label="Verbose debug sections" data-testid="verbose-debug-tabs">
+          @for (tab of tabs; track tab.id) {
+            <button class="vdbg__tab"
+                    type="button"
+                    role="tab"
+                    [attr.aria-selected]="activeTab() === tab.id"
+                    [class.vdbg__tab--active]="activeTab() === tab.id"
+                    [attr.data-testid]="'verbose-debug-tab-' + tab.id"
+                    (click)="activeTab.set(tab.id)">
+              <span aria-hidden="true">{{ tab.icon }}</span>
+              <span>{{ tab.label }}</span>
+              @if (tabBadge(tab.id); as badge) {
+                <span class="vdbg__tab-badge" aria-hidden="true">{{ badge }}</span>
+              }
+            </button>
+          }
+        </nav>
+
+        <div class="vdbg__body" data-testid="verbose-debug-body">
+          @switch (activeTab()) {
+            @case ('overview') {
+              <article class="vdbg__card vdbg__card--explanation">
+                <h3>What this view shows</h3>
+                <p>
+                  The default chat hides noise so reading stays compact. This page is the deliberate escape hatch
+                  for when a run looks confusing: it explains how often each actor was active, how long the run
+                  took, where tokens went, and which evidence backs the current state. It is read-only — every row
+                  links back to the raw activity log so the chat lens never replaces the source of truth.
+                </p>
+              </article>
+
+              <article class="vdbg__card">
+                <h3>Run timing</h3>
+                <div class="vdbg__metrics">
+                  <div><b data-testid="verbose-debug-metric-runs">{{ runStats().runCount }}</b><span>runs</span></div>
+                  <div><b>{{ runStats().completedCount }}</b><span>completed</span></div>
+                  <div><b>{{ runStats().failedCount }}</b><span>failed</span></div>
+                  <div><b>{{ runStats().cancelledCount }}</b><span>cancelled</span></div>
+                  <div><b>{{ formatDuration(totalDurationSeconds()) }}</b><span>total wall time</span></div>
+                  <div><b>{{ activeRunBadge() }}</b><span>active</span></div>
+                </div>
+              </article>
+
+              <article class="vdbg__card">
+                <h3>At a glance</h3>
+                <div class="vdbg__metrics">
+                  <div><b data-testid="verbose-debug-metric-tools">{{ toolDensity().total }}</b><span>tool calls</span></div>
+                  <div><b>{{ toolDensity().failures }}</b><span>tool failures</span></div>
+                  <div><b>{{ totalWarnings() }}</b><span>warnings</span></div>
+                  <div><b>{{ formatTokens(totalTokens()) }}</b><span>tokens</span></div>
+                  <div><b>{{ artifactRows().length }}</b><span>artifacts</span></div>
+                  <div><b>{{ taskScopeLabel() }}</b><span>task lane</span></div>
+                </div>
+              </article>
+
+              <article class="vdbg__card">
+                <h3>Density timeline</h3>
+                @for (row of overviewBands(); track row.name) {
+                  <div class="vdbg__band">
+                    <span class="vdbg__band-label">{{ row.name }}</span>
+                    <i class="vdbg__band-bar"><em [style.width.%]="row.percent"></em></i>
+                    <b class="vdbg__band-value">{{ row.value }}</b>
+                  </div>
+                }
+                @if (overviewBands().length === 0) {
+                  <p class="vdbg__empty">No timing or density signal yet. Start a run to populate this view.</p>
+                }
+              </article>
+            }
+
+            @case ('actors') {
+              <article class="vdbg__card">
+                <h3>Actor activity counts</h3>
+                <p class="vdbg__hint">
+                  How often each conversational actor showed up between user inputs and the latest event. Filter the
+                  raw activity log by actor with the row buttons.
+                </p>
+                <div class="vdbg__rows" data-testid="verbose-debug-actor-rows">
+                  @for (row of actorRows(); track row.key) {
+                    <div class="vdbg__row" [attr.data-testid]="'verbose-debug-actor-row-' + row.key">
+                      <span class="vdbg__row-icon" aria-hidden="true">{{ row.glyph }}</span>
+                      <span class="vdbg__row-label">{{ row.label }}</span>
+                      <i class="vdbg__row-bar"><em [style.width.%]="rowPercent(row.count, maxActorCount())"></em></i>
+                      <b class="vdbg__row-value">{{ row.count }}</b>
+                    </div>
+                  }
+                  @if (actorRows().length === 0) {
+                    <p class="vdbg__empty">No actor activity yet.</p>
+                  }
+                </div>
+              </article>
+              <article class="vdbg__card">
+                <h3>Supervisor advisories</h3>
+                <p class="vdbg__hint">Watchdog quiet/resume/kill signals reach this run from Layer 2. They never replace the raw trace.</p>
+                <div class="vdbg__metrics" data-testid="verbose-debug-supervisor-counts">
+                  <div><b>{{ warningCounts().watchdogQuiet }}</b><span>quiet</span></div>
+                  <div><b>{{ warningCounts().watchdogKills }}</b><span>kills</span></div>
+                  <div><b>{{ supervisorWaits().filter(supervisorIsResumed).length }}</b><span>resumed</span></div>
+                </div>
+              </article>
+            }
+
+            @case ('orchestrator') {
+              <article class="vdbg__card">
+                <h3>Orchestrator actions</h3>
+                <p class="vdbg__hint">
+                  Decision and reissue rows from the orchestrator stream and decision events, ordered by occurrence.
+                </p>
+                <div class="vdbg__decision-list" data-testid="verbose-debug-orchestrator-list">
+                  @for (d of orchestratorDecisions(); track d.id) {
+                    <div class="vdbg__decision">
+                      <header>
+                        <span class="vdbg__decision-kind"
+                              [attr.data-tone]="d.severity ?? 'info'">{{ d.decisionType }}</span>
+                        <span class="vdbg__decision-action">→ {{ d.action || '—' }}</span>
+                        <span class="vdbg__decision-time">{{ formatTime(d.timestamp) }}</span>
+                      </header>
+                      <p>{{ d.reason }}</p>
+                      @if (d.evidence) {
+                        <p class="vdbg__decision-evidence">{{ d.evidence }}</p>
+                      }
+                      <footer>
+                        @if (d.retryBudget) {
+                          <span>retry {{ d.retryBudget.used }}/{{ d.retryBudget.max }}</span>
+                        }
+                        @if (d.tokenUsage) {
+                          <span>tokens ↑ {{ formatTokens(d.tokenUsage.inputTokens) }} / ↓ {{ formatTokens(d.tokenUsage.outputTokens) }}</span>
+                        }
+                        <button type="button"
+                                class="vdbg__link-btn"
+                                data-testid="verbose-debug-orchestrator-trace"
+                                (click)="emitTrace(d.rawRange)">Open raw trace lines {{ d.rawRange.start }}–{{ d.rawRange.end }}</button>
+                      </footer>
+                    </div>
+                  }
+                  @if (orchestratorDecisions().length === 0) {
+                    <p class="vdbg__empty">No orchestrator decisions in this run.</p>
+                  }
+                </div>
+              </article>
+            }
+
+            @case ('tools') {
+              <article class="vdbg__card">
+                <h3>Tool density</h3>
+                <p class="vdbg__hint">
+                  Per-family aggregate from collapsed tool bursts. The chat lens shows one chip; this is the breakdown.
+                </p>
+                <div class="vdbg__rows" data-testid="verbose-debug-tool-rows">
+                  @for (row of toolRows(); track row.family) {
+                    <div class="vdbg__row" [attr.data-testid]="'verbose-debug-tool-row-' + row.family">
+                      <span class="vdbg__row-label">{{ row.label }}</span>
+                      <i class="vdbg__row-bar"><em [style.width.%]="row.percent"></em></i>
+                      <b class="vdbg__row-value">{{ row.count }}</b>
+                      @if (row.failures > 0) {
+                        <span class="vdbg__row-failures" title="Failed tool invocations in this family">{{ row.failures }} ✗</span>
+                      }
+                    </div>
+                  }
+                  @if (toolRows().length === 0) {
+                    <p class="vdbg__empty">No tool activity recorded.</p>
+                  }
+                </div>
+                @if (toolBursts().length > 0) {
+                  <p class="vdbg__hint">
+                    {{ toolBursts().length }} burst{{ toolBursts().length === 1 ? '' : 's' }} ·
+                    {{ toolDensity().total }} call{{ toolDensity().total === 1 ? '' : 's' }} ·
+                    {{ toolDensity().failures }} failure{{ toolDensity().failures === 1 ? '' : 's' }}
+                  </p>
+                }
+              </article>
+            }
+
+            @case ('warnings') {
+              <article class="vdbg__card">
+                <h3>Warning density</h3>
+                <p class="vdbg__hint">
+                  Parser warnings, capture failures, schema drift, watchdog events, and needs-input loops. Hidden from the
+                  compact chat by default; visible here for triage.
+                </p>
+                <div class="vdbg__rows" data-testid="verbose-debug-warning-rows">
+                  @for (row of warningRows(); track row.key) {
+                    <div class="vdbg__row" [attr.data-testid]="'verbose-debug-warning-row-' + row.key" [attr.data-tone]="row.tone">
+                      <span class="vdbg__row-label">{{ row.label }}</span>
+                      <span class="vdbg__row-meta">{{ row.description }}</span>
+                      <b class="vdbg__row-value">{{ row.count }}</b>
+                    </div>
+                  }
+                </div>
+              </article>
+            }
+
+            @case ('tasks') {
+              <article class="vdbg__card">
+                <h3>Task and run markers</h3>
+                <p class="vdbg__hint">Per-run start/finish events with duration, exit code, and trace range.</p>
+                <div class="vdbg__rows" data-testid="verbose-debug-task-rows">
+                  @if (job(); as info) {
+                    <div class="vdbg__row" data-testid="verbose-debug-task-summary">
+                      <span class="vdbg__row-icon" aria-hidden="true">🎯</span>
+                      <span class="vdbg__row-label">{{ info.title }}</span>
+                      <span class="vdbg__row-meta">lane: {{ info.state }}</span>
+                    </div>
+                  }
+                  @for (run of runs(); track run.index) {
+                    <div class="vdbg__row" [attr.data-testid]="'verbose-debug-run-row-' + run.index">
+                      <span class="vdbg__row-icon" aria-hidden="true">▶</span>
+                      <span class="vdbg__row-label">Run #{{ run.index }} · {{ run.intent }}</span>
+                      <span class="vdbg__row-meta">
+                        {{ run.cli || '?' }} · {{ run.status }} · {{ formatDuration(run.durationSeconds ?? 0) }}
+                        @if (run.exitCode != null) {
+                          · exit {{ run.exitCode }}
+                        }
+                      </span>
+                      @if (run.lineStart && run.lineEnd) {
+                        <button type="button"
+                                class="vdbg__link-btn"
+                                [attr.data-testid]="'verbose-debug-run-trace-' + run.index"
+                                (click)="emitTrace({ source: traceSource(), start: run.lineStart!, end: run.lineEnd! })">Trace {{ run.lineStart }}–{{ run.lineEnd }}</button>
+                      }
+                    </div>
+                  }
+                  @if (runs().length === 0) {
+                    <p class="vdbg__empty">No runs recorded yet.</p>
+                  }
+                </div>
+              </article>
+            }
+
+            @case ('tokens') {
+              <article class="vdbg__card">
+                <h3>Token usage</h3>
+                <p class="vdbg__hint">
+                  Token totals collected from the conversation projection. The chat lens shows pressure and trend; this view
+                  splits attribution across task agent, orchestrator, and any supporting jobs the projection produced events for.
+                </p>
+                <div class="vdbg__rows" data-testid="verbose-debug-token-rows">
+                  @for (row of tokenRows(); track row.key) {
+                    <div class="vdbg__row" [attr.data-testid]="'verbose-debug-token-row-' + row.key">
+                      <span class="vdbg__row-label">{{ row.scope }}</span>
+                      <i class="vdbg__row-bar"><em [style.width.%]="row.percent"></em></i>
+                      <b class="vdbg__row-value">{{ formatTokens(row.total) }}</b>
+                      <span class="vdbg__row-meta">↑ {{ formatTokens(row.inputTokens) }} · ↓ {{ formatTokens(row.outputTokens) }}</span>
+                    </div>
+                  }
+                  @if (tokenRows().length === 0) {
+                    <p class="vdbg__empty">No token attribution available yet.</p>
+                  }
+                </div>
+                @if (jobTokenSummary(); as t) {
+                  <p class="vdbg__hint" data-testid="verbose-debug-token-orchestrator">
+                    Orchestrator post-run summarizer/grader rolled up {{ t.calls }} call{{ t.calls === 1 ? '' : 's' }} on
+                    {{ t.lastModel || '?' }} (cache read {{ formatTokens(t.cacheReadTokens) }}, cache write {{ formatTokens(t.cacheCreationTokens) }}).
+                  </p>
+                }
+              </article>
+            }
+
+            @case ('artifacts') {
+              <article class="vdbg__card">
+                <h3>Artifacts and screenshots</h3>
+                <p class="vdbg__hint">Durable evidence under <code>results/</code>. Scratch paths are kept so you can trace the original.</p>
+                <div class="vdbg__artifacts" data-testid="verbose-debug-artifact-rows">
+                  @for (row of artifactRows(); track row.durablePath || row.sourcePath) {
+                    <figure class="vdbg__artifact" [attr.data-testid]="'verbose-debug-artifact-row'">
+                      @if (row.url) {
+                        <img [attr.src]="row.url" [attr.alt]="row.caption" loading="lazy" />
+                      } @else {
+                        <div class="vdbg__artifact-placeholder" aria-hidden="true">📷</div>
+                      }
+                      <figcaption>
+                        <strong>{{ row.caption || 'screenshot' }}</strong>
+                        <code>{{ row.durablePath || row.sourcePath }}</code>
+                        @if (row.status) {
+                          <span class="vdbg__artifact-status" [attr.data-status]="row.status">{{ row.status }}</span>
+                        }
+                      </figcaption>
+                    </figure>
+                  }
+                  @if (artifactRows().length === 0) {
+                    <p class="vdbg__empty">No screenshots or artifacts attached to this run.</p>
+                  }
+                </div>
+              </article>
+            }
+
+            @case ('trace') {
+              <article class="vdbg__card">
+                <h3>Raw trace ranges</h3>
+                <p class="vdbg__hint">
+                  Every chat-lens event keeps a back-reference to the raw activity log. Click a row to copy the line range
+                  or hand it to the host's trace viewer.
+                </p>
+                <div class="vdbg__rows" data-testid="verbose-debug-trace-rows">
+                  @for (row of traceLinkRows(); track row.label) {
+                    <div class="vdbg__row" [attr.data-testid]="'verbose-debug-trace-row'">
+                      <span class="vdbg__row-icon" aria-hidden="true">📜</span>
+                      <span class="vdbg__row-label">{{ row.kind }}</span>
+                      <span class="vdbg__row-meta">{{ row.label }}</span>
+                      <button type="button"
+                              class="vdbg__link-btn"
+                              data-testid="verbose-debug-trace-open"
+                              (click)="emitTrace(row.range)">Open lines {{ row.start }}–{{ row.end }}</button>
+                    </div>
+                  }
+                  @if (traceLinkRows().length === 0) {
+                    <p class="vdbg__empty">No trace ranges yet.</p>
+                  }
+                </div>
+              </article>
+              <article class="vdbg__card">
+                <h3>Source pointer</h3>
+                <p class="vdbg__hint">
+                  The raw Activity Log remains one click away. Trace ranges are 1-based line numbers into <code>cli-output.log</code>.
+                </p>
+                @if (latestResult()) {
+                  <p data-testid="verbose-debug-latest-result"><strong>Latest result:</strong> {{ latestResult() }}</p>
+                }
+              </article>
+            }
+          }
+        </div>
+      </section>
+    </div>
+  
