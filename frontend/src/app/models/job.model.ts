@@ -210,51 +210,9 @@ export interface SessionUsage {
   requests: string | null;
 }
 
-export interface CliModelInfo {
-  id: string;
-  label: string;
-  multiplier: number | null;
-  vendor: string | null;
-  isDefault: boolean;
-}
-
-export interface CliModelCatalog {
-  models: CliModelInfo[];
-  source: string;
-  fetchedAt?: string;
-}
-
-// Backwards-compat aliases — the records were Copilot-named before the multi-CLI refactor.
-export type CopilotModelInfo = CliModelInfo;
-export type CopilotModelCatalog = CliModelCatalog;
-
-export interface CliSessionInfo {
-  id: string;
-  label: string | null;
-  updatedAt: string | null;
-  cwd: string | null;
-  lastUsage: SessionUsage | null;
-  isProjectDefault: boolean;
-}
-
-export interface CliUsageProjectGroup {
-  projectName: string;
-  rootPath: string | null;
-  sessions: CliSessionInfo[];
-}
-
-export interface CliUsageSection {
-  cliType: CliType;
-  available: boolean;
-  version: string | null;
-  error: string | null;
-  projects: CliUsageProjectGroup[];
-}
-
-export interface CliUsageReport {
-  at: string;
-  sections: CliUsageSection[];
-}
+// (CliModelInfo, CliModelCatalog, CopilotModelInfo, CopilotModelCatalog,
+// CliSessionInfo, CliUsageProjectGroup, CliUsageSection, CliUsageReport
+// now in features/cli/models/cli.model.ts; re-exported below.)
 
 export type JobSummaryStatus = 'none' | 'generating' | 'ready' | 'failed';
 
@@ -679,3 +637,15 @@ export interface CliSettings {
 // import from the feature folder directly so the boundary stays
 // visible. The canonical home is the feature folder.
 export type { QuotaWindow, QuotaSnapshot, QuotaReport } from '../features/quota/models/quota.model';
+
+// Cycle 9: CLI catalog/usage types live under features/cli/models/cli.model.ts.
+export type {
+  CliModelInfo,
+  CliModelCatalog,
+  CopilotModelInfo,
+  CopilotModelCatalog,
+  CliSessionInfo,
+  CliUsageProjectGroup,
+  CliUsageSection,
+  CliUsageReport,
+} from '../features/cli/models/cli.model';
