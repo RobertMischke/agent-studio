@@ -12,7 +12,8 @@
     "e2e": "playwright test",
     "e2e:ui": "playwright test --ui",
     "e2e:headed": "playwright test --headed",
-    "e2e:report": "playwright show-report"
+    "e2e:report": "playwright show-report",
+    "lint": "ng lint"
   },
   "private": true,
   "packageManager": "npm@11.3.0",
@@ -36,9 +37,13 @@
     "@angular/build": "^21.2.7",
     "@angular/cli": "^21.2.7",
     "@angular/compiler-cli": "^21.2.0",
+    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.59.1",
+    "angular-eslint": "21.3.1",
+    "eslint": "^10.0.3",
     "prettier": "^3.8.1",
     "typescript": "~5.9.2",
+    "typescript-eslint": "8.56.1",
     "vitest": "^4.0.0"
   }
 }

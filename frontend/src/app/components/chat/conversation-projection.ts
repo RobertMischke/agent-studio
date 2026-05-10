@@ -21,8 +21,8 @@ import type { RunRecord, RunTimeline } from '../../features/run-timeline';
 import {
   parseActivityLog,
   type ActivityLogGroup,
-  type ActivityLogKind
-} from '../../features/job-detail/components/activity-log.parser';
+  type ActivityLogKind,
+} from '../../features/job-detail';
 import type {
   ConversationEvent,
   RawLineRange,

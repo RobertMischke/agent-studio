@@ -65,3 +65,5 @@ Why: the barrel is the feature's **public API**. Anything not exported from it i
 When you add a new component or service that needs to be reachable from outside its feature, add it to that feature's `index.ts`. If you find yourself wanting a deep import from outside, that's a signal: either (a) the symbol belongs in the barrel, or (b) what you're trying to do should live inside the target feature, not at the call site.
 
 Existing deep imports across the codebase still work (they're just paths). Convert them to barrel imports as you touch the surrounding code; don't churn for its own sake.
+
+**Enforced by lint** (Cycle 10j): `eslint.config.js` carries a `no-restricted-imports` rule that blocks `**/features/*/{components,services,models,state}/**` from outside the feature. `npm run lint` runs the full ruleset. Files under the same feature and `**/*.spec.ts` / `**/e2e/**` are exempt.

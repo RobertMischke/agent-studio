@@ -1,14 +1,14 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import {
+import type {
   AcceptCouncilNoteResponse,
   DesignActionKind,
   DesignActionQueueResponse,
   DesignCouncilResponse,
   DesignOverviewResponse,
   DesignReferencesResponse,
-} from '../features/project-detail/components/uxui-panel/uxui-panel.types';
+} from '../features/project-detail';
 
 /**
  * Read + manual-trigger surface for the project UX/UI panel (slice 6 of

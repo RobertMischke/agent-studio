@@ -1,11 +1,11 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import {
+import type {
   SecurityAuditQueueResponse,
   SecurityBaselineResponse,
   SecurityReviewListResponse,
-} from '../features/project-detail/components/security-panel/security-panel.types';
+} from '../features/project-detail';
 
 /**
  * Read + manual-trigger surface for the project Security panel (slice 1
