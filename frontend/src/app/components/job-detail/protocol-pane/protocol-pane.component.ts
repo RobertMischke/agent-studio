@@ -17,7 +17,7 @@ import { CliOutputPollService } from '../cli-output-poll.service';
 import { SessionEventsPollService } from '../session-events-poll.service';
 import { RunTimelinePollService } from '../run-timeline-poll.service';
 import { ScreenshotsPollService } from '../screenshots-poll.service';
-import { ScreenshotStripComponent } from '../../screenshot-strip/screenshot-strip.component';
+import { ScreenshotStripComponent } from '../../../features/screenshots/components/screenshot-strip/screenshot-strip.component';
 import { NowTickService } from '../../../services/now-tick.service';
 import { RunTimelineComponent } from './run-timeline.component';
 import { RunGitViewerComponent } from './run-git-viewer.component';

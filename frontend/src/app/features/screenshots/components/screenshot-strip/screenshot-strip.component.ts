@@ -9,8 +9,8 @@ import {
   signal
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { JobScreenshot } from '../../models/job.model';
-import { copyTextToClipboard } from '../../services/clipboard.util';
+import { JobScreenshot } from '../../../../models/job.model';
+import { copyTextToClipboard } from '../../../../services/clipboard.util';
 
 /**
  * Visual-evidence strip + lightbox. Two surfaces share this component:

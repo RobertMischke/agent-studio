@@ -1,7 +1,7 @@
 import { Component, OnDestroy, OnInit, signal, computed } from '@angular/core';
-import { JobService } from '../services/job.service';
-import { CliType, QuotaReport, QuotaSnapshot, QuotaWindow } from '../models/job.model';
-import { cliTypeIcon } from '../services/format.util';
+import { JobService } from '../../../services/job.service';
+import { CliType, QuotaReport, QuotaSnapshot, QuotaWindow } from '../../../models/job.model';
+import { cliTypeIcon } from '../../../services/format.util';
 
 /**
  * Compact strip surfacing each installed CLI's subscription quota / rate-limit

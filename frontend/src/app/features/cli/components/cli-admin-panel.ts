@@ -1,8 +1,8 @@
 import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { JobService } from '../services/job.service';
-import { CliType, QuotaReport, QuotaSnapshot, QuotaWindow } from '../models/job.model';
-import { cliTypeIcon, cliTypeLabel } from '../services/format.util';
+import { JobService } from '../../../services/job.service';
+import { CliType, QuotaReport, QuotaSnapshot, QuotaWindow } from '../../../models/job.model';
+import { cliTypeIcon, cliTypeLabel } from '../../../services/format.util';
 
 interface CapsResponse {
   defaultCapPct: number;

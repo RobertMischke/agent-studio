@@ -1,8 +1,8 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
-import { JobService } from '../services/job.service';
-import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../utils/visible-interval';
-import { CliType, QuotaReport, QuotaSnapshot, QuotaWindow } from '../models/job.model';
-import { cliTypeIcon } from '../services/format.util';
+import { JobService } from '../../../services/job.service';
+import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../utils/visible-interval';
+import { CliType, QuotaReport, QuotaSnapshot, QuotaWindow } from '../../../models/job.model';
+import { cliTypeIcon } from '../../../services/format.util';
 
 interface DonutSlot {
   /** Short label shown under the ring ("5h", "rest", "weekly"). */

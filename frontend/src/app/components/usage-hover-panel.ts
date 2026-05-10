@@ -19,7 +19,7 @@ import {
   TokenSummaryAggregate,
 } from '../models/job.model';
 import { cliTypeIcon } from '../services/format.util';
-import { HeaderQuotaComponent } from './header-quota';
+import { HeaderQuotaComponent } from '../features/quota/components/header-quota';
 
 interface QuotaRow {
   cliType: CliType;

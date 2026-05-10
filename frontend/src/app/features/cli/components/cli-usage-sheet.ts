@@ -1,7 +1,7 @@
 import { Component, OnDestroy, OnInit, signal, computed } from '@angular/core';
-import { JobService } from '../services/job.service';
+import { JobService } from '../../../services/job.service';
 import { CliConsoleComponent } from './cli-console';
-import { QuotaStripComponent } from './quota-strip';
+import { QuotaStripComponent } from '../../quota/components/quota-strip';
 import {
   CliOutputLine,
   CliSessionInfo,
@@ -9,7 +9,7 @@ import {
   CliUsageProjectGroup,
   CliUsageReport,
   CliUsageSection
-} from '../models/job.model';
+} from '../../../models/job.model';
 
 interface SelectedSession {
   cliType: CliType;
