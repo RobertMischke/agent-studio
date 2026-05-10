@@ -1,49 +1,58 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, OnInit, signal, untracked, ViewChild, ViewEncapsulation } from '@angular/core';
-import { LaneCollapseService } from './features/board/state/lane-collapse.service';
-import { UiPreferencesService } from './features/shell/state/ui-preferences.service';
-import { BoardFiltersService, ActiveFilterPill } from './features/board/state/board-filters.service';
 import { forkJoin } from 'rxjs';
 import { FormsModule } from '@angular/forms';
-import { JobColumnComponent } from './features/board/components/job-column';
-import { JobDetailComponent } from './features/job-detail/job-detail';
-import { CliUsageSheetComponent } from './features/cli/components/cli-usage-sheet';
-import { OrchestratorSideSheetComponent } from './features/orchestrator/components/orchestrator-side-sheet/orchestrator-side-sheet.component';
-import { ProjectOverlaysComponent } from './features/project-detail/components/project-overlays.component';
-import { ProjectOverlaysService } from './features/project-detail/state/project-overlays.service';
+import {
+  ActiveFilterPill,
+  BoardFiltersService,
+  CreateJobDialogComponent,
+  FiltersDropdownComponent,
+  JobColumnComponent,
+  KanbanFilterSidesheetComponent,
+  LaneCollapseService,
+  ProjectAutoInfo,
+  ProjectTabsComponent,
+  ProjectTokenChipInfo,
+  PendingAttachment,
+  TypeFilterOption,
+  splitReadyByPhase,
+} from './features/board';
+import { JobDetailComponent } from './features/job-detail';
+import { CliUsageSheetComponent } from './features/cli';
+import { OrchestratorConfigPanelComponent, OrchestratorSideSheetComponent } from './features/orchestrator';
 import {
   DEFAULT_PROJECT_RAIL_KEY,
+  ProjectOverlaysComponent,
+  ProjectOverlaysService,
   ProjectRailKey,
-} from './features/project-detail/components/project-shell/project-shell.config';
-import { StatusBarComponent } from './features/shell/components/status-bar';
+} from './features/project-detail';
+import {
+  StatusBarComponent,
+  UiPreferencesService,
+  WorkspaceBannerComponent,
+  WorkspaceOverlaysComponent,
+  WorkspaceOverlaysService,
+} from './features/shell';
+import { E2ECleanupDialogComponent, UpdateStableConsoleComponent } from './features/dev-tools';
+import {
+  UpdateBannerComponent,
+  UpdateBlockModalComponent,
+  UpdateCenterComponent,
+  UpdateVersionBadgeComponent,
+} from './features/update';
+import { VerboseDebugOverlayComponent } from './features/verbose-debug';
 import { JobService } from './services/job.service';
 import { ClientService } from './services/client.service';
 import { JobDetail, JobInfo, WatchPathEntry, CliType, CLI_TYPES, CliModelInfo } from './models/job.model';
 import { ErrorDialogService } from './services/error-dialog.service';
 import { cliTypeLabel as fmtCliTypeLabel, formatMultiplier as fmtMultiplier } from './services/format.util';
-import { CreateJobDialogComponent, PendingAttachment } from './features/board/components/create-job-dialog/create-job-dialog.component';
 import { ErrorDialogComponent } from './components/error-dialog/error-dialog.component';
-import { ProjectAutoInfo, ProjectTabsComponent, ProjectTokenChipInfo } from './features/board/components/project-tabs/project-tabs.component';
-import { FiltersDropdownComponent, TypeFilterOption } from './features/board/components/filters-dropdown/filters-dropdown.component';
-import { KanbanFilterSidesheetComponent } from './features/board/components/kanban-filter-sidesheet/kanban-filter-sidesheet.component';
 import { UpdateClientService } from './services/update.service';
 import { projectIdentity } from './services/project-identity.util';
 import { DevToolsService } from './services/dev-tools.service';
 import { FeatureFlagsService } from './services/feature-flags.service';
 import { JobCompletionSoundService } from './services/job-completion-sound.service';
 import { TagRegistryStore } from './services/tag-registry.store';
-import { UpdateStableConsoleComponent } from './features/dev-tools/components/update-stable-console.component';
-import { E2ECleanupDialogComponent } from './features/dev-tools/components/e2e-cleanup-dialog.component';
-import { WorkspaceOverlaysComponent } from './features/shell/components/workspace-overlays.component';
-import { WorkspaceOverlaysService } from './features/shell/state/workspace-overlays.service';
-import { WorkspaceBannerComponent } from './features/shell/components/workspace-banner';
-import { UpdateBannerComponent } from './features/update/components/update-banner/update-banner.component';
-import { UpdateVersionBadgeComponent } from './features/update/components/update-version-badge/update-version-badge.component';
-import { UpdateCenterComponent } from './features/update/components/update-center/update-center.component';
-import { OrchestratorConfigPanelComponent } from './features/orchestrator/components/orchestrator-config-panel/orchestrator-config-panel.component';
-import { UpdateBlockModalComponent } from './features/update/components/update-block-modal/update-block-modal.component';
 import { JobScreenshot, RunTimeline, JobTokenSummary, CliOutputLine } from './models/job.model'; // verbose-debug overlay context types
-import { VerboseDebugOverlayComponent } from './features/verbose-debug/components/verbose-debug-overlay.component';
-import { splitReadyByPhase } from './features/board/components/ready-lane-split.util';
 
 interface VerboseDebugContext {
   lines: CliOutputLine[];

@@ -40,4 +40,28 @@ Never select by CSS class names; they belong to styling and change often.
 - State via Angular signals; service singletons go in `app/services/`.
 - Keep the dark Catppuccin-inspired direction.
 - The detail view is a simple protocol view — don't add tabs or metrics grids unless the product direction changes.
-- The CLI Usage sidesheet (`components/cli-usage-sheet.ts`) participates in flex layout: when closed its host width collapses to 0, so the main board reflows instead of being overlaid.
+- The CLI Usage sidesheet (`features/cli/components/cli-usage-sheet.ts`) participates in flex layout: when closed its host width collapses to 0, so the main board reflows instead of being overlaid.
+
+## Feature folders + barrel imports (ADR-0034, Cycle 9h)
+
+The frontend is organised by **feature** under `app/features/<name>/` with a uniform shape: `models/`, `state/`, `components/`, `services/`, plus a top-level `index.ts` barrel. Cross-cutting capabilities (e.g. `polling/`) follow the same shape.
+
+**Hard rule for cross-feature imports**: import from the **barrel**, not from internal paths.
+
+```ts
+// ✅ correct — uses the barrel
+import { BoardFiltersService, JobColumnComponent } from './features/board';
+import { ProjectOverlaysComponent } from './features/project-detail';
+
+// ❌ wrong — pierces the feature boundary
+import { BoardFiltersService } from './features/board/state/board-filters.service';
+import { JobColumnComponent } from './features/board/components/job-column';
+```
+
+Why: the barrel is the feature's **public API**. Anything not exported from it is private and can be moved/renamed/refactored without external breakage. Deep imports turn every internal file into a contract.
+
+**Inside the same feature**, use relative imports (`./components/...`, `../services/...`) as usual — barrels are about the cross-feature boundary.
+
+When you add a new component or service that needs to be reachable from outside its feature, add it to that feature's `index.ts`. If you find yourself wanting a deep import from outside, that's a signal: either (a) the symbol belongs in the barrel, or (b) what you're trying to do should live inside the target feature, not at the call site.
+
+Existing deep imports across the codebase still work (they're just paths). Convert them to barrel imports as you touch the surrounding code; don't churn for its own sake.
