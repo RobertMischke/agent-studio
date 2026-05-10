@@ -5,7 +5,7 @@ import { BoardFiltersService, ActiveFilterPill } from './features/board/state/bo
 import { forkJoin } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { JobColumnComponent } from './features/board/components/job-column';
-import { JobDetailComponent } from './components/job-detail';
+import { JobDetailComponent } from './features/job-detail/job-detail';
 import { CliUsageSheetComponent } from './features/cli/components/cli-usage-sheet';
 import { OrchestratorFeedComponent } from './features/orchestrator/components/orchestrator-feed';
 import { OrchestratorSideSheetComponent } from './features/orchestrator/components/orchestrator-side-sheet/orchestrator-side-sheet.component';
