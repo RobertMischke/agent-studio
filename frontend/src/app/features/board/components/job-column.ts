@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, output, signal } from '@angular/core';
 import { ScrollingModule } from '@angular/cdk/scrolling';
 import { JobInfo, JobOrderItem } from '../../../models/job.model';
-import { JobCardComponent } from './job-card';
+import { JobCardComponent } from './job-card/job-card.component';
 import { projectIdentity } from '../../../services/project-identity.util';
 import { cliTypeIcon } from '../../../services/format.util';
 import { InstantTooltipDirective } from '../../../directives/instant-tooltip.directive';

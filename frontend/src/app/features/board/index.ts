@@ -15,7 +15,7 @@ export { BoardSearchIconComponent } from './components/board-search-icon/board-s
 export { CreateJobDialogComponent, type PendingAttachment } from './components/create-job-dialog/create-job-dialog.component';
 export { FiltersDropdownComponent, type TypeFilterOption } from './components/filters-dropdown/filters-dropdown.component';
 export { KanbanFilterSidesheetComponent } from './components/kanban-filter-sidesheet/kanban-filter-sidesheet.component';
-export { JobCardComponent } from './components/job-card';
+export { JobCardComponent } from './components/job-card/job-card.component';
 export { JobColumnComponent } from './components/job-column';
 export {
   ProjectTabsComponent,
