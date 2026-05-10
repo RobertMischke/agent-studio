@@ -119,6 +119,25 @@ Out of scope (do not add, even if asked offhandedly):
 
 If a request implies any of the out-of-scope items, surface the conflict to the user before implementing.
 
+### Experiments kept for reference, not active focus
+
+- **Companion App** (`backend/Services/Companion/`, `frontend/src/app/...`, `docs/companion-app-design.md`, ADR-0018). V1 was built as a relay-based phone PWA so the user could read the board from outside the LAN. It is no longer the active direction. Do not extend it, do not list it as a current capability in the README, and do not propose V2 work. Code stays in the tree as a reference for the relay-based pull-only approach in case a similar problem comes up later.
+
+## Roadmap construction conventions
+
+The roadmap is **future-only** (see [README.md](README.md) for what already exists). Editorial guidance for adding or revising roadmap themes:
+
+- One section per coherent theme. Mix sentence-paragraphs and short lists; avoid wall-of-bullet sections.
+- Every theme that has queued work calls out the queue paths under `agent-taskboard/2-ready/...` so the trail from roadmap to actual queued task is visible.
+- Sibling themes cross-reference each other ("This is sibling to X" / "Builds on Y") so the dependency graph is readable.
+- Hard rules go in their own subsection inside the theme. They are the constraints a future implementer must respect.
+- "First implementation order" lists stay numbered and small (5-10 items max). Longer sequences belong in a research doc under `docs/research/` referenced from the theme.
+
+Existing tooling for roadmap work:
+- [`prompts/runtime/roadmap-intake.md`](prompts/runtime/roadmap-intake.md) is the splitter that turns a free-text dump into candidate tasks (the Roadmap Intake feature in the orchestrator side sheet uses this).
+- [`prompts/runtime/roadmap-alignment-review.md`](prompts/runtime/roadmap-alignment-review.md) is the meta-action that reads the queue + the roadmap and reports drift between them.
+- The Test Run Service entry in the roadmap was added today; use it as a shape reference for new themes (intent statement, what it enables, hard rules, first implementation order).
+
 ## Architecture
 
 | Layer | Path | Notes |

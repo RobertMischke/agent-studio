@@ -80,9 +80,9 @@ The product is small on purpose. Any feature that pulls toward "let's run two ag
 
 ---
 
-## What's in the box today
+## Today's capabilities
 
-The product ships ten major surfaces. Each one is a working capability, not a placeholder.
+What the application currently provides.
 
 ### Board: every watched project, every state
 
@@ -128,15 +128,11 @@ Per-job screenshot strip in the protocol pane plus a workspace-wide visual evide
 
 Project-scoped virtualised chat history with full-text search and a right-rail conversation map. Replaces the render-every-turn approach for projects with hundreds of turns; long-task budget under 50 ms during scroll burst is enforced by spec. Behind the `Frontend:NextGenChat` flag, a multi-actor `ConversationEvent` projection treats user, task agent, project orchestrator, supervisor, supporting agents, tool runner, and system warnings as distinct participants with persistent rails. The Verbose Debug overlay is the read-only deep-inspection variant of that projection.
 
-### Companion app (V1)
-
-Pull-only relay model: the local processor pushes snapshots and pulls commands on a single outbound HTTPS tick (default 10 s). The phone PWA reads the snapshot and posts commands. The local box never accepts inbound connections; the relay is the only public surface. Default-off (`Companion:Enabled` flag in `appsettings.Local.json`). V1 surface: pipeline overview, current task, token spend, quota windows, open `NEEDS_INPUT` decisions, decision-answer + new-task + start-job commands.
-
 ### Foundation
 
 .NET 10 backend (port 5030) + Angular 21 PWA (port 4010). Twenty-four JSON schemas under [`docs/schemas/`](docs/schemas/) cover Agent Message Bus events, supervisor advisories + interventions, drift reports, analysis reports, architecture model, product runtime events, token aggregates, task find / mutate, orchestrator decisions, and update-run snapshots. Twenty frontend feature folders under [`frontend/src/app/features/`](frontend/src/app/features/) carry the per-feature components / state / models with public APIs exported via barrel files (ADR-0034). Append-only Agent Message Bus persists every cross-cutting structured signal as JSONL.
 
-What stays out of the box on purpose: API-key billing, worktrees, sandboxes, branch-per-task, cross-task workflow engines, custom coding-agent runtimes. The product is small by design — every feature in the list above answers a question the existing CLI agents do not, while leaving them to do the actual coding.
+Out of scope on purpose: API-key billing, worktrees, sandboxes, branch-per-task, cross-task workflow engines, custom coding-agent runtimes. The product is small by design; every capability above answers a question the existing CLI agents do not, while leaving them to do the actual coding.
 
 ### Review handoff: what makes a task review-ready
 
@@ -273,81 +269,11 @@ The wire shape for find / mutate is fixed in [`docs/schemas/task-find-result.sch
 
 ---
 
-## Running
+## How to get started
 
-Backend on `http://localhost:5030`, frontend on `http://localhost:4010`. Agents must use the `sh` variant.
+Tell your favorite coding agent to clone the repository and to get it done. All necessary information needed to start the application is inside [AGENTS.md](AGENTS.md), so don't worry. Let the coding agent do the work.
 
-```sh
-./api.sh start                       # backend
-npm start --prefix frontend          # or VS Code task "Frontend: Start"
-```
-
-### Dev vs. stable checkout
-
-All code edits happen in the **dev** checkout. The stable checkout exists for reference and gets changes via `git pull` from `main`, never via direct edits. The dev checkout marks itself visually so the two never get confused:
-
-- An orange "DEV" stripe is pinned to the top of the window.
-- The PWA install icon and favicon use an orange variant with a "DEV" corner ribbon.
-- The window title becomes `Agent Software Studio (DEV)`.
-
-These markers activate when the backend serves `/api/environment` with `{ isDev: true }`, which it does iff a local-only `backend/appsettings.Local.json` file is present:
-
-```json
-// backend/appsettings.Local.json, gitignored, dev checkout only
-{
-  "Environment": {
-    "IsDev": true
-  }
-}
-```
-
-The file is gitignored so it stays per-checkout. Stable lacks the file, so the same code produces the un-marked appearance there.
-
-### Configuration
-
-```json
-// backend/appsettings.json
-{
-  "WatchPaths": [
-    {
-      "Name": "Runbook",
-      "RootPath": "C:\\Projects\\Runbook\\App",
-      "RepositoryPath": "C:\\Projects\\Runbook"
-    },
-    { "Name": "My Other Project", "RootPath": "C:\\Projects\\OtherApp" }
-  ]
-}
-```
-
-`RootPath` is the CLI working directory and the place where the board reads `<RootPath>/.orchestrator.yml` for `projectKey`. Jobs then resolve under `agent-taskboard-workspace/projects/<projectKey>/`.
-
-`RepositoryPath` is optional. Use it when the Git repository root differs from the CLI working directory, for example a monorepo or a source app under a parent repository. Git status, diff, commits, and the VS Code handoff use `RepositoryPath`; when it is omitted, they fall back to `RootPath` and still ask Git for the work-tree top-level.
-
-#### Orchestrator + supervisor toggles (UI-configurable)
-
-The hosted-service flags that gate the auto-review orchestrator, the orchestrator-prep lane, the Layer-2 supervisor passes, the Layer-2.5 meta-cycle, and the auto-intervention policy used to require hand-editing `backend/appsettings.Local.json`. These are now reachable from the header `⋮` menu under "Orchestrator config". The drawer reads `GET /api/admin/config/orchestrator`, writes via `PUT` (X-Client-Id required), and the changes land in `backend/appsettings.Local.json` for the running checkout. All flags require a backend restart to take effect; the drawer surfaces a "Restart required" banner after every successful save.
-
-### Job Organization Through The API
-
-Agents and scripts must organize jobs through the application API, not by directly creating, moving, deleting, or reordering folders under `agent-taskboard-workspace/projects/<projectKey>/`.
-
-Use the API for normal job operations:
-
-- `GET /api/watch-paths` to discover the correct `watchPath`.
-- `POST /api/jobs` with `CreateJobRequest` to create a job. Set `targetState` when a job should land directly in `1-preparation` or `2-ready`.
-- `POST /api/jobs/{jobId}/move?watchPath=...` to move a job.
-- `POST /api/jobs/reorder` to reorder jobs.
-- `DELETE /api/jobs/{jobId}?watchPath=...` to delete a job.
-
-Direct filesystem edits are reserved for backend implementation, migrations, recovery work, and tests that deliberately exercise the filesystem contract. They are not the normal operating path for agents. The API is the boundary that keeps ownership, client identity, validation, live updates, and future Task Access behavior in one place.
-
-### Supported CLIs
-
-Claude Code, Codex, GitHub Copilot, Gemini. The contract every CLI must satisfy, including process lifecycle, session model, model selection, quota probing, logging, and cancellation, is in [docs/supported-clis.md](docs/supported-clis.md).
-
-### Keeping target projects in sync
-
-When the agent task contract or folder schema changes, run the `/sync-target-instructions` prompt against each target.
+If you want to install and configure manually, the technical walkthrough lives in [docs/getting-started.md](docs/getting-started.md).
 
 ---
 

@@ -30,6 +30,14 @@ frontend/e2e/_baselines*
 frontend/screenshots/
 test-results/
 
+# Loose Playwright screenshots that land in frontend/ when a spec writes
+# `screenshot({ path: 'foo.png' })` (relative path → CWD = frontend/).
+# Curated visual evidence stays under frontend/playwright-screenshots/
+# (tracked); this rule covers depth-1 only so subfolders are not affected.
+# When you find a spec writing loose PNGs, fix it to write under
+# `frontend/playwright-screenshots/<topic>/...` instead.
+frontend/*.png
+
 # Local mockup screenshot evidence is useful during review, but it is generated
 # output. Keep it on disk for inspection, not in the source repository.
 docs/mockups/**/evidence/*.png
