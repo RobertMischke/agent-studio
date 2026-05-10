@@ -43,15 +43,14 @@ import { JobCompletionSoundService } from './services/job-completion-sound.servi
 import { TagRegistryStore } from './services/tag-registry.store';
 import { UpdateStableConsoleComponent } from './features/dev-tools/components/update-stable-console.component';
 import { E2ECleanupDialogComponent } from './features/dev-tools/components/e2e-cleanup-dialog.component';
-import { WorkspaceTokenTimelineComponent } from './features/tokens/components/workspace-token-timeline';
-import { WorkspaceScreenshotsComponent } from './features/screenshots/components/workspace-screenshots';
+import { WorkspaceOverlaysComponent } from './features/shell/components/workspace-overlays.component';
+import { WorkspaceOverlaysService } from './features/shell/state/workspace-overlays.service';
 import { WorkspaceBannerComponent } from './features/shell/components/workspace-banner';
 import { UpdateBannerComponent } from './features/update/components/update-banner/update-banner.component';
 import { UpdateVersionBadgeComponent } from './features/update/components/update-version-badge/update-version-badge.component';
 import { UpdateCenterComponent } from './features/update/components/update-center/update-center.component';
 import { OrchestratorConfigPanelComponent } from './features/orchestrator/components/orchestrator-config-panel/orchestrator-config-panel.component';
 import { UpdateBlockModalComponent } from './features/update/components/update-block-modal/update-block-modal.component';
-import { CliAdminPanelComponent } from './features/cli/components/cli-admin-panel';
 import { JobScreenshot, RunTimeline, JobTokenSummary, CliOutputLine } from './models/job.model'; // verbose-debug overlay context types
 import { VerboseDebugOverlayComponent } from './features/verbose-debug/components/verbose-debug-overlay.component';
 import { splitReadyByPhase } from './features/board/components/ready-lane-split.util';
@@ -66,7 +65,7 @@ interface VerboseDebugContext {
 
 @Component({
   selector: 'app-root',
-  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, ProjectShellComponent, SecurityPanelComponent, UxuiPanelComponent, ProjectTokenUsagePanelComponent, ProjectObservabilityPanelComponent, ProjectProductRuntimePanelComponent, ProjectSteeringDocsSectionComponent, AnalysisReportDrilldownComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceTokenTimelineComponent, WorkspaceScreenshotsComponent, WorkspaceBannerComponent, UpdateBannerComponent, UpdateVersionBadgeComponent, UpdateCenterComponent, OrchestratorConfigPanelComponent, UpdateBlockModalComponent, VerboseDebugOverlayComponent, CliAdminPanelComponent, FiltersDropdownComponent, KanbanFilterSidesheetComponent],
+  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, ProjectShellComponent, SecurityPanelComponent, UxuiPanelComponent, ProjectTokenUsagePanelComponent, ProjectObservabilityPanelComponent, ProjectProductRuntimePanelComponent, ProjectSteeringDocsSectionComponent, AnalysisReportDrilldownComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceOverlaysComponent, WorkspaceBannerComponent, UpdateBannerComponent, UpdateVersionBadgeComponent, UpdateCenterComponent, OrchestratorConfigPanelComponent, UpdateBlockModalComponent, VerboseDebugOverlayComponent, FiltersDropdownComponent, KanbanFilterSidesheetComponent],
   // Cycle 7b: OnPush. The shell mounts kanban + detail panel + many
   // sheets; default (Default) change detection re-checked the whole
   // tree on every async event (every poll tick, every signal write).
@@ -555,34 +554,8 @@ interface VerboseDebugContext {
         </div>
       }
 
-      @if (workspaceTokensOpen()) {
-        <div class="overlay" data-testid="workspace-tokens-overlay" (click)="closeWorkspaceTokens()">
-          <div class="overlay__panel overlay__panel--wtt" (click)="$event.stopPropagation()">
-            <button class="overlay__close" (click)="closeWorkspaceTokens()" title="Close">×</button>
-            <app-workspace-token-timeline />
-          </div>
-        </div>
-      }
+      <app-workspace-overlays (openTask)="onOpenTaskFromReel($event)" />
 
-      @if (workspaceScreenshotsOpen()) {
-        <div class="overlay" data-testid="workspace-screenshots-overlay" (click)="closeWorkspaceScreenshots()">
-          <div class="overlay__panel overlay__panel--wtt" (click)="$event.stopPropagation()">
-            <button class="overlay__close" (click)="closeWorkspaceScreenshots()" title="Close">×</button>
-            <app-workspace-screenshots (openTask)="onOpenTaskFromReel($event)" />
-          </div>
-        </div>
-      }
-
-      @if (cliAdminOpen()) {
-        <div class="overlay" data-testid="cli-admin-overlay" (click)="closeCliAdmin()">
-          <div class="overlay__panel" (click)="$event.stopPropagation()">
-            <button class="overlay__close" (click)="closeCliAdmin()" title="Close">×</button>
-            @defer {
-              <app-cli-admin-panel />
-            }
-          </div>
-        </div>
-      }
 
       @if (showCreate()) {
         <app-create-job-dialog
@@ -2426,15 +2399,16 @@ export class App implements OnInit {
    * context.
    */
   readonly analysisReportFocus = signal<{ project: string; reportId: string } | null>(null);
-  /** Workspace token timeline overlay. Triggered from the usage hover panel
-   *  and from the deep-link `#/workspace/tokens` so it can be opened from
-   *  another tab or a bookmark. */
-  readonly workspaceTokensOpen = signal<boolean>(false);
-  private readonly workspaceTokensHash = '#/workspace/tokens';
-  /** Workspace visual evidence reel overlay. Triggered from the status
-   *  bar entry and from the deep-link `#/workspace/screenshots`. */
-  readonly workspaceScreenshotsOpen = signal<boolean>(false);
-  private readonly workspaceScreenshotsHash = '#/workspace/screenshots';
+  /**
+   * Cycle 9g: workspace overlay state (tokens / screenshots / cli-admin)
+   * lives in WorkspaceOverlaysService. The shell re-exposes the read
+   * signals so the existing template guards keep working unchanged; the
+   * `<app-workspace-overlays />` container owns the actual rendering.
+   */
+  private readonly workspaceOverlays = inject(WorkspaceOverlaysService);
+  readonly workspaceTokensOpen = this.workspaceOverlays.tokensOpen;
+  readonly workspaceScreenshotsOpen = this.workspaceOverlays.screenshotsOpen;
+  readonly cliAdminOpen = this.workspaceOverlays.cliAdminOpen;
   private hashListener: (() => void) | null = null;
   private kanbanKeyListener: ((ev: KeyboardEvent) => void) | null = null;
   readonly watchPaths = signal<WatchPathEntry[]>([]);
@@ -2928,12 +2902,7 @@ export class App implements OnInit {
     // Deep-link: open the workspace token timeline when the URL already
     // points at it, and keep the overlay in sync as the hash changes.
     const applyHash = () => {
-      const open = window.location.hash === this.workspaceTokensHash;
-      if (open !== this.workspaceTokensOpen()) this.workspaceTokensOpen.set(open);
-      const screenshotsOpen = window.location.hash === this.workspaceScreenshotsHash;
-      if (screenshotsOpen !== this.workspaceScreenshotsOpen()) {
-        this.workspaceScreenshotsOpen.set(screenshotsOpen);
-      }
+      this.workspaceOverlays.syncFromHash();
       this.applyProjectShellHash();
     };
     applyHash();
@@ -3710,48 +3679,19 @@ export class App implements OnInit {
     this.analysisReportFocus.set(null);
   }
 
-  openWorkspaceTokens(): void {
-    this.workspaceTokensOpen.set(true);
-    if (window.location.hash !== this.workspaceTokensHash) {
-      try { history.replaceState(null, '', window.location.pathname + window.location.search + this.workspaceTokensHash); } catch { /* ignore */ }
-    }
-  }
-
-  closeWorkspaceTokens(): void {
-    this.workspaceTokensOpen.set(false);
-    if (window.location.hash === this.workspaceTokensHash) {
-      try { history.replaceState(null, '', window.location.pathname + window.location.search); } catch { /* ignore */ }
-    }
-  }
-
-  openWorkspaceScreenshots(): void {
-    this.workspaceScreenshotsOpen.set(true);
-    if (window.location.hash !== this.workspaceScreenshotsHash) {
-      try { history.replaceState(null, '', window.location.pathname + window.location.search + this.workspaceScreenshotsHash); } catch { /* ignore */ }
-    }
-  }
-
-  closeWorkspaceScreenshots(): void {
-    this.workspaceScreenshotsOpen.set(false);
-    if (window.location.hash === this.workspaceScreenshotsHash) {
-      try { history.replaceState(null, '', window.location.pathname + window.location.search); } catch { /* ignore */ }
-    }
-  }
-
-  toggleWorkspaceScreenshots(): void {
-    if (this.workspaceScreenshotsOpen()) this.closeWorkspaceScreenshots();
-    else this.openWorkspaceScreenshots();
-  }
-
-  /** CLI admin overlay: per-CLI usage caps + placeholder admin sections. */
-  readonly cliAdminOpen = signal<boolean>(false);
-
-  openCliAdmin(): void { this.cliAdminOpen.set(true); }
-  closeCliAdmin(): void { this.cliAdminOpen.set(false); }
-  toggleCliAdmin(): void {
-    if (this.cliAdminOpen()) this.closeCliAdmin();
-    else this.openCliAdmin();
-  }
+  // Cycle 9g: workspace overlay open/close + URL-hash sync delegated to
+  // WorkspaceOverlaysService. The shell keeps these thin pass-throughs
+  // because external call sites (status bar, usage hover panel, dev-tools
+  // menu, screenshot reel) and deep-link entry points still go through
+  // the shell.
+  openWorkspaceTokens(): void { this.workspaceOverlays.openTokens(); }
+  closeWorkspaceTokens(): void { this.workspaceOverlays.closeTokens(); }
+  openWorkspaceScreenshots(): void { this.workspaceOverlays.openScreenshots(); }
+  closeWorkspaceScreenshots(): void { this.workspaceOverlays.closeScreenshots(); }
+  toggleWorkspaceScreenshots(): void { this.workspaceOverlays.toggleScreenshots(); }
+  openCliAdmin(): void { this.workspaceOverlays.openCliAdmin(); }
+  closeCliAdmin(): void { this.workspaceOverlays.closeCliAdmin(); }
+  toggleCliAdmin(): void { this.workspaceOverlays.toggleCliAdmin(); }
 
   /**
    * "Open task" link inside the workspace reel lightbox: close the
