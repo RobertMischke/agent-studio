@@ -80,25 +80,63 @@ The product is small on purpose. Any feature that pulls toward "let's run two ag
 
 ---
 
-## What you see
+## What's in the box today
+
+The product ships ten major surfaces. Each one is a working capability, not a placeholder.
 
 ### Board: every watched project, every state
 
 ![Board overview](docs/images/board-overview.png)
 
-Six lanes, `1-preparation`, `2-ready`, `3-progress`, `4-review`, `5-completed`, and `6-archive`, are driven directly off the filesystem. Each card shows the CLI, the model, the task size, and last activity. The pill in the header says how many projects are running on auto-pickup.
+Eight lanes (`0-backlog`, `1-preparation`, `1a-orchestrator-prep`, `1b-needs-human-review`, `2-ready`, `3-progress`, `3a-failed-pickup`, `4-auto-review` / `5-human-review`, `6-completed`, `7-archive`) are driven directly off the filesystem state. Each card carries up to thirteen chip types: task type, state, phase, execution, pending intent, auto-loop, review verdict, agent, model, token spend (with hover popover), git pill, last commit, last activity. The header strip shows free-text search, faceted filters across owner / project / type / tag with URL deep-links, lane collapse, and per-container focus mode. Drag-and-drop is optimistic with a snapshot-revert path.
 
-### Detail view: task description + live protocol
+### Detail panel: prompt + protocol + live git + triage
 
 ![Detail view, task + protocol panes](docs/images/detail-protocol.png)
 
-Click a card and you get the prompt on the left and the agent's protocol on the right. The protocol is a parsed, human-readable summary of what the agent has done so far, pulled from `status.md` and `cli-output.log` and re-rendered after every run.
+Per-task side panel that hosts ten sub-panes you can show, hide, and maximize: prompt editor (rich markdown), protocol view (parsed `status.md` + activity log + telemetry chips), live git pane with `diff2html` rendering, hygiene strip (committed / clean / synced), triage panel with `j` / `k` peer navigation and lane-decision actions (move / move-to-top / delete / start), command deck for the chat-compose strip, run timeline (one card per CLI invocation between user inputs), screenshot strip from `results/`, log overlay for the raw CLI buffer, and a verbose-debug overlay for read-only deep inspection.
 
-### Three panes: task, protocol, live git
+### Project page: dedicated rails for project workstreams
 
-![Three-pane layout with git view](docs/images/detail-three-panes.png)
+Per-project shell with rails for the workstreams that matter beyond a single task: Security baseline + review history, Architecture drift with marble diagram and per-element scores, UX/UI design loops with screenshot evidence + council critique, project Token Usage with heatmap and expensive-jobs drill-down, Observability over the Agent Message Bus, Product Runtime telemetry, Steering Docs viewer. Cross-rail follow-ups (Security / UX/UI panels create tasks) flow into the create-job-dialog with pre-filled prompt + title.
 
-Toggle the Git panel to see what the agent actually changed in the project's working tree, file by file, while it works. No leaving the board to alt-tab into a terminal.
+### CLI integration: four agents through one boundary
+
+Claude Code, Codex, GitHub Copilot, Gemini. Per-CLI model catalogue from `/api/cli/{type}/models`. Per-CLI quota visualisation in two forms: a compact donut strip in the status bar (at-a-glance "do I have headroom") and a denser sidesheet view (full per-CLI per-project session listing). Per-CLI admin panel for usage caps. Cross-CLI fallback when a session is stuck on one provider.
+
+### Live data: visibility-aware polling
+
+Five poll services keep the open detail and the board fresh without burning requests on a hidden tab: Claude session telemetry (5 s, claude-only), run timeline (5 s), session events (10 s), screenshots (10 s), and the CLI output buffer (custom cadence with two-buffer dedup against optimistic user echoes). All five share a `JobBackgroundPoller<T>` base; subclasses declare what to fetch + what to do with the response.
+
+### Orchestration: deterministic, not prompt-trust
+
+Per-project orchestrator owns queue movement. A long-lived orchestrator session carries the manager voice across runs and surfaces in a project-side sheet with chat composition + roadmap-intake tab + project-list tab. The deterministic post-run policy parses `[[TASK_DONE]]` / `[[TASK_BLOCKED:<reason>]]` / `[[TASK_NEEDS_INPUT:<reason>]]` / `[[TASK_NOOP]]` sentinels from the CLI buffer; when the agent's report contradicts structural evidence (no edits, near-zero duration, after a session-loss recovery with a user follow-up), the orchestrator re-issues the work itself instead of accepting the inconsistency. The decision tree is matrix-tested. A supervisor layer above the runner observes health and budget every tick and emits typed advisories + interventions when something looks stuck.
+
+### Token economy
+
+First-class signal on every surface that touches inference. Per-job, per-project, per-model token aggregates persist in JSONL. The workspace token-timeline overlay (`#/workspace/tokens`) renders 1h / 6h / 24h / 168h windows. The status-bar usage hover panel combines quota windows + token totals in one modal. Per-project token-usage panel adds heatmap + expensive-jobs + per-job drill-down with run-by-run breakdown. Category split (`job` / `supporting` / `orchestrator`) follows the published taxonomy.
+
+### Self-update
+
+A nine-phase update pipeline (stop, pull, install, build, verify, restart, retry-on-failure) updates the dev or stable checkout from inside the running app. Update Center surface, version badge in the header, full-screen click-blocking block-modal that survives F5 because the FE keeps polling. Stable update through a separate `update-stable.sh` script that the FE triggers; the dev checkout pulls + builds locally. ADR-0031 records the load-bearing decision.
+
+### Visual evidence
+
+Per-job screenshot strip in the protocol pane plus a workspace-wide visual evidence reel (`#/workspace/screenshots`) grouped by hour bucket with lightbox prev / next navigation. Files live under each job's `results/`. Routable URLs serve the files directly so screenshots can be linked from chat or external review.
+
+### Project chat (Slice D) and next-gen multi-actor chat surface
+
+Project-scoped virtualised chat history with full-text search and a right-rail conversation map. Replaces the render-every-turn approach for projects with hundreds of turns; long-task budget under 50 ms during scroll burst is enforced by spec. Behind the `Frontend:NextGenChat` flag, a multi-actor `ConversationEvent` projection treats user, task agent, project orchestrator, supervisor, supporting agents, tool runner, and system warnings as distinct participants with persistent rails. The Verbose Debug overlay is the read-only deep-inspection variant of that projection.
+
+### Companion app (V1)
+
+Pull-only relay model: the local processor pushes snapshots and pulls commands on a single outbound HTTPS tick (default 10 s). The phone PWA reads the snapshot and posts commands. The local box never accepts inbound connections; the relay is the only public surface. Default-off (`Companion:Enabled` flag in `appsettings.Local.json`). V1 surface: pipeline overview, current task, token spend, quota windows, open `NEEDS_INPUT` decisions, decision-answer + new-task + start-job commands.
+
+### Foundation
+
+.NET 10 backend (port 5030) + Angular 21 PWA (port 4010). Twenty-four JSON schemas under [`docs/schemas/`](docs/schemas/) cover Agent Message Bus events, supervisor advisories + interventions, drift reports, analysis reports, architecture model, product runtime events, token aggregates, task find / mutate, orchestrator decisions, and update-run snapshots. Twenty frontend feature folders under [`frontend/src/app/features/`](frontend/src/app/features/) carry the per-feature components / state / models with public APIs exported via barrel files (ADR-0034). Append-only Agent Message Bus persists every cross-cutting structured signal as JSONL.
+
+What stays out of the box on purpose: API-key billing, worktrees, sandboxes, branch-per-task, cross-task workflow engines, custom coding-agent runtimes. The product is small by design — every feature in the list above answers a question the existing CLI agents do not, while leaving them to do the actual coding.
 
 ### Review handoff: what makes a task review-ready
 

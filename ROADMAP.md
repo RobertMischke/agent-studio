@@ -1,44 +1,8 @@
 # Roadmap
 
-Agent Software Studio is a local control layer for keeping coding agents busy without turning a project into an orchestration platform.
+This document describes **what is coming next** — direction, planned themes, and the boundaries we will not cross while pursuing them.
 
-The product goal is simple: keep one coding task moving per project, reduce human babysitting, make review easier, and make security review a repeatable, documented project-level habit.
-
-## Product Thesis
-
-Modern coding agents are useful for long-running implementation work, but they still need a steady queue, clear handoffs, and fast human review. Agent Software Studio turns that loop into a local board:
-
-- The human defines and reviews work.
-- The board keeps the queue visible.
-- The runner starts the next ready task automatically.
-- The agent writes evidence back into the task folder.
-
-The thesis is not to invent another coding agent. The app assumes that productized agents such as Codex and Claude Code are already excellent, economically attractive through subscriptions, and available as direct fallback tools in terminals and IDEs. Agent Software Studio adds the layer those agents do not try to own: ordered local queues, lifecycle boundaries, durable evidence, review handoff, and cross-CLI fallback.
-
-An API-native agent runtime may become attractive later if model pricing, provider features, or subscription limits change enough to make it clearly better. Until then, building a custom coding agent loop is intentionally out of scope.
-
-The product should feel like a workbench, not a command center. It should make one project easier to move through a sequence of tasks, then scale that same pattern across several projects.
-
-Security is part of that thesis. Frontier models are becoming strong enough at cyber tasks that the limiting factor shifts toward process: enough token budget, clear scope, repeatable specialist skills, captured evidence, and a review surface that shows what was checked. UK AISI's April 30, 2026 GPT-5.5 cyber evaluation is the reference point for this roadmap direction: models like GPT-5.5 and Mythos-class systems can outperform casual manual review on hard cyber tasks when given sufficient inference budget and tooling, but the result only becomes useful inside a documented workflow. Documentation is the killer feature: a security review should record which model ran, how much token budget was spent, which process or skill was followed, which evidence was produced, and what conclusion a reviewer accepted.
-
-## Current Shape
-
-Today the application provides:
-
-- A .NET backend and Angular PWA for local use.
-- Watched project folders with ordered task states.
-- One active coding task per project.
-- Parallel execution across different watched projects.
-- CLI execution for Claude Code, Codex, GitHub Copilot, and Gemini.
-- Live task output, protocol summaries, screenshots, and review evidence.
-- CLI quota and session visibility where the underlying tools expose enough data.
-- Recovery after session loss via job-folder evidence and deterministic continuation planning.
-- Early project-level planning tasks for Security, Architecture, and Drift dimensions.
-- Supervisor, system-review, and meta-cycle concepts for recurring "is this on track?" inspection, with Markdown reports and structured JSON contracts where the app needs to parse results.
-- An integrated design mockup for project-level Security, Architecture, Drift, UX/UI, Test Quality, Token Usage, Steering Docs, Audits and Checks, and Skills under `docs/mockups/quality-system/`. This is exploratory, not product behavior yet.
-- A next-generation chat-window mockup under `docs/mockups/chat-window-next-gen/` that treats user, task agent, orchestrator, supervisor, supporting agents, tools, and system warnings as distinct actors in one run-based conversation.
-- A Found Next Workbench design-system direction for the chat prototype: VS Code-inspired containers and density, Codicons-style product icons, Angular-native primitives, owned theme tokens, and Code-OSS as a reference rather than a copied component library.
-- Early product planning for a project-level steering-documentation surface: the app should show the README, AGENTS, task contracts, skills lookup, and other agent-facing instructions together with a shorter human summary and drift warnings.
+For **what the product is and what it can do today**, see [README.md](README.md) — the pitch, the principles, and the ten built-out surfaces with their current shape. Documentation drift between the two files is real risk; if you are tempted to add a "current shape" bullet here, update the README instead.
 
 ## Roadmap Themes
 
