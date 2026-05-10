@@ -13,6 +13,7 @@ import {
   ProjectTabsComponent,
   ProjectTokenChipInfo,
   TypeFilterOption,
+  BoardMutationsService,
   CreateJobFormService,
   splitReadyByPhase,
 } from './features/board';
@@ -2308,6 +2309,8 @@ export class App implements OnInit {
    * bindings keep working unchanged.
    */
   readonly createJobForm = inject(CreateJobFormService);
+  /** Cycle 10b: board-mutation handlers (drag/drop, reorder, delete, archive, etc.) live here. */
+  private readonly boardMutations = inject(BoardMutationsService);
   readonly showCreate = this.createJobForm.visible;
   readonly availableModels = this.createJobForm.availableModels;
   /**
@@ -2972,139 +2975,13 @@ export class App implements OnInit {
     }
   }
 
-  onJobDrop(event: { jobId: string; watchPath: string; targetState: string }) {
-    // Optimistic move: paint the new lane immediately, let the backend
-    // catch up. While the POST is in flight, silent polls are suppressed
-    // so a stale /api/jobs/grouped response can't repaint the old lane.
-    // On failure, revert the local snapshot and surface the error.
-    // Virtual lanes inside the same filesystem state (e.g. the intake
-    // sub-lane that splits 2-ready into "Human Ready" and "Orch Intake")
-    // map back to the real state for the backend move; the orchestrator
-    // intake loop is the only producer of the lane-defining `phase`
-    // field, so a manual drag never has to write phase from the UI.
-    if (event.targetState === '2-ready-intake') event = { ...event, targetState: '2-ready' };
-    // Same-state drops (drag onto a sibling card in the same lane) are a
-    // no-op: the column-level drop handler already filters the common path,
-    // this is defense in depth so a stray emit cannot trigger a wasted
-    // backend round-trip or a vanish-and-recover repaint.
-    const moving = this.jobService.jobs().find(j => j.id === event.jobId && j.watchPath === event.watchPath);
-    if (moving && moving.state === event.targetState) return;
-    const snapshot = this.jobService.applyOptimisticMove(event.jobId, event.watchPath, event.targetState);
-    this.jobService.beginOptimisticPersist();
-    this.jobService.moveJob(event.jobId, event.targetState, event.watchPath).subscribe({
-      next: () => this.jobService.endOptimisticPersist(),
-      error: (err) => {
-        this.jobService.endOptimisticPersist();
-        if (snapshot) this.jobService.revertOptimisticMove(snapshot);
-        this.jobService.error.set(err.message || 'Failed to move job');
-        this.errorDialog.show(err, {
-          title: 'Failed to move task',
-          fallbackMessage: 'Failed to move task',
-          source: `Task ${event.jobId}`
-        });
-      },
-    });
-  }
-
-  onJobReorder(event: { state: string; jobs: { jobId: string; watchPath: string }[] }) {
-    // Optimistic reorder. The lane updates synchronously; in-flight
-    // POST tracking + a short grace window after the response keep the
-    // user-visible order stable while the backend rewrites job.json.
-    const before = this.jobService.applyOptimisticReorder(event.state, event.jobs);
-    this.jobService.beginOptimisticPersist();
-    this.jobService.reorderJobs(event.jobs).subscribe({
-      next: () => this.jobService.endOptimisticPersist(),
-      error: (err) => {
-        this.jobService.endOptimisticPersist();
-        if (before) this.jobService.revertOptimisticReorder(event.state, before);
-        this.jobService.error.set(err.message || 'Failed to reorder');
-        this.errorDialog.show(err, {
-          title: 'Failed to reorder tasks',
-          fallbackMessage: 'Failed to reorder tasks',
-          source: `Column ${event.state}`
-        });
-      },
-    });
-  }
-
-  onDeleteFromBoard(job: JobInfo) {
-    this.confirmAndDeleteJob(job, false);
-  }
-
-  onDeleteFromDetail(info: JobInfo) {
-    this.confirmAndDeleteJob(info, true);
-  }
-
-  /**
-   * Lane-dropdown move from the detail view. Mirrors the drag-and-drop path
-   * (`onJobDrop`) so the board repaints optimistically while the POST is
-   * in flight, then re-fetches the open detail so the dropdown reflects the
-   * new lane. The detail-view's local "changing" flag is cleared by the
-   * detail component's effect when the new `state` arrives.
-   */
-  onStateChangeFromDetail(info: JobInfo, targetState: string) {
-    if (!targetState || targetState === info.state) return;
-    const snapshot = this.jobService.applyOptimisticMove(info.id, info.watchPath, targetState);
-    this.jobService.beginOptimisticPersist();
-    this.jobService.moveJob(info.id, targetState, info.watchPath).subscribe({
-      next: () => {
-        this.jobService.endOptimisticPersist();
-        this.jobService.getDetail(info.id, info.watchPath).subscribe({
-          next: (detail) => this.selectedJob.set(detail),
-          error: () => { /* polling will reconcile */ }
-        });
-      },
-      error: (err) => {
-        this.jobService.endOptimisticPersist();
-        if (snapshot) this.jobService.revertOptimisticMove(snapshot);
-        this.jobService.error.set(err.message || 'Failed to move job');
-        this.errorDialog.show(err, {
-          title: 'Failed to move task',
-          fallbackMessage: 'Failed to move task',
-          source: `Task ${info.id}`
-        });
-      }
-    });
-  }
-
-  private confirmAndDeleteJob(job: JobInfo, closeDetailOnSuccess: boolean) {
-    const label = job.title || job.id;
-    const message =
-      `Delete this task?\n\n"${label}"\n\nThis removes the job folder and all its files (prompt, logs, results). Do you really want this?`;
-    if (typeof window === 'undefined' || !window.confirm(message)) return;
-
-    this.jobService.deleteJob(job.id, job.watchPath).subscribe({
-      next: () => {
-        if (closeDetailOnSuccess) this.closeDetail();
-        this.refresh();
-      },
-      error: (err) => {
-        this.errorDialog.show(err, {
-          title: 'Failed to delete task',
-          fallbackMessage: 'Failed to delete task',
-          source: `Task ${job.id}`
-        });
-        this.refresh();
-      }
-    });
-  }
-
-  onArchiveAll() {
-    const completed = this.filteredGrouped().completed;
-    if (completed.length === 0) return;
-    const moves = completed.map(job => this.jobService.moveJob(job.id, '7-archive', job.watchPath));
-    forkJoin(moves).subscribe({
-      next: () => this.refresh(),
-      error: (err) => {
-        this.errorDialog.show(err, {
-          title: 'Failed to archive tasks',
-          fallbackMessage: 'One or more tasks could not be moved to Archive',
-          source: 'Archive all'
-        });
-        this.refresh();
-      }
-    });
-  }
+  // Cycle 10b: board-mutation handlers delegate to BoardMutationsService.
+  onJobDrop(event: { jobId: string; watchPath: string; targetState: string }) { this.boardMutations.moveJob(event); }
+  onJobReorder(event: { state: string; jobs: { jobId: string; watchPath: string }[] }) { this.boardMutations.reorderJobs(event); }
+  onDeleteFromBoard(job: JobInfo) { this.boardMutations.deleteFromBoard(job); }
+  onDeleteFromDetail(info: JobInfo) { this.boardMutations.deleteFromDetail(info); }
+  onStateChangeFromDetail(info: JobInfo, targetState: string) { this.boardMutations.changeStateFromDetail(info, targetState); }
+  onArchiveAll() { this.boardMutations.archiveAllCompleted(this.filteredGrouped().completed); }
 
   openCreate(targetState?: string) {
     this.createJobForm.open({
@@ -3539,38 +3416,8 @@ export class App implements OnInit {
     });
   }
 
-  onFileSaved() {
-    // Re-fetch detail to reflect changes, and refresh the board so updates
-    // (e.g. renamed titles) propagate to the card and task-nav views immediately.
-    const current = this.selectedJob();
-    if (current) {
-      this.jobService.getDetail(current.info.id, current.info.watchPath).subscribe({
-        next: (detail) => this.selectedJob.set(detail),
-      });
-    }
-    this.jobService.refresh(true);
-  }
-
-  onProjectChanged(targetWatchPath: string) {
-    const current = this.selectedJob();
-    this.closeDetail();
-    this.jobService.refresh();
-    if (current) {
-      // Re-open detail after refresh
-      setTimeout(() => {
-        this.jobService.getDetail(current.info.id, targetWatchPath).subscribe({
-          next: (detail) => this.selectedJob.set(detail),
-          error: (err) => {
-            this.errorDialog.show(err, {
-              title: 'Task moved, but detail view could not be reopened',
-              fallbackMessage: 'Task moved, but detail view could not be reopened automatically.',
-              source: `Task ${current.info.id}`
-            });
-          }
-        });
-      }, 500);
-    }
-  }
+  onFileSaved() { this.boardMutations.refreshAfterFileSave(); }
+  onProjectChanged(targetWatchPath: string) { this.boardMutations.reopenAfterProjectChange(targetWatchPath); }
 
   closeErrorDialog() {
     this.errorDialog.close();
