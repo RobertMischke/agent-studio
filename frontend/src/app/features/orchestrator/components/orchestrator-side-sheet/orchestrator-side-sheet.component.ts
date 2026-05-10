@@ -14,7 +14,8 @@ import {
 } from '@angular/core';
 import { JobService } from '../../../../services/job.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
-import { OrchestratorChatTurn, WatchPathEntry } from '../../../../models/job.model';
+import type { WatchPathEntry } from '../../../../models/job.model';
+import type { OrchestratorChatTurn } from '../../../../features/orchestrator';
 import { ChatComponent } from '../../../../components/chat/chat.component';
 import { ChatEvent, ChatMessage, ChatSubmitEvent } from '../../../../components/chat/chat-types';
 import { RoadmapIntakePanelComponent } from '../../../roadmap/components/roadmap-intake/roadmap-intake-panel.component';

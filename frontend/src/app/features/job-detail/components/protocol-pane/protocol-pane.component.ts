@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, computed, inject, input, output, signal, ViewChild } from '@angular/core';
-import { CliOutputLine, ContinueMode, JobDetail, JobSummaryStatus, ReviewEvidenceEntry, RunRecord } from '../../../../models/job.model';
+import type { CliOutputLine, ContinueMode, JobDetail, JobSummaryStatus, ReviewEvidenceEntry } from '../../../../models/job.model';
+import type { RunRecord } from '../../../../features/run-timeline';
 import { deriveWatchdogPill } from './watchdog-state';
 import { ActivityLogViewComponent } from '../activity-log-view';
 import { markdownToHtml, MarkdownImageOptions } from '../../../../components/markdown-utils';

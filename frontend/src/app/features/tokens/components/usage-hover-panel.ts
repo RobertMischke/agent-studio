@@ -10,14 +10,9 @@ import {
 } from '@angular/core';
 import { JobService } from '../../../services/job.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../utils/visible-interval';
-import {
-  AdHocUsageAggregate,
-  CliType,
-  QuotaReport,
-  QuotaSnapshot,
-  QuotaWindow,
-  TokenSummaryAggregate,
-} from '../../../models/job.model';
+import type { CliType } from '../../../models/job.model';
+import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../../features/quota';
+import type { AdHocUsageAggregate, TokenSummaryAggregate } from '../../../features/tokens';
 import { cliTypeIcon } from '../../../services/format.util';
 import { HeaderQuotaComponent } from '../../quota/components/header-quota';
 

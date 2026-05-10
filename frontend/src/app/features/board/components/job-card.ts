@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, output, signal } from '@angular/core';
-import { AutoLoopSnapshot, JobInfo, JobTokenSummary, PendingIntent } from '../../../models/job.model';
+import type { AutoLoopSnapshot, JobInfo, PendingIntent } from '../../../models/job.model';
+import type { JobTokenSummary } from '../../../features/tokens';
 import { GitSummaryService } from '../../../services/git-summary.service';
 import { ClientService } from '../../../services/client.service';
 import { cliTypeIcon } from '../../../services/format.util';

@@ -2,7 +2,8 @@ import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject
 import { FormsModule } from '@angular/forms';
 import { JobService } from '../../../services/job.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../utils/visible-interval';
-import { GroupedJobs, OrchestratorLogEntry, OrchestratorSession, RunnerStatus } from '../../../models/job.model';
+import type { GroupedJobs, RunnerStatus } from '../../../models/job.model';
+import type { OrchestratorLogEntry, OrchestratorSession } from '../../../features/orchestrator';
 import { OrchestratorRunner_KnownModels } from './project-detail.models';
 import { TokenSummaryBlockComponent } from '../../../features/tokens/components/token-summary-block';
 import { GlobalOrchestratorCardComponent } from '../../../features/orchestrator/components/global-orchestrator-card';

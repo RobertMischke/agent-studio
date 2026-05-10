@@ -1,5 +1,6 @@
 import { Injectable, OnDestroy, signal } from '@angular/core';
-import { ClaudeRateLimitSnapshot, ClaudeSessionInfo, JobInfo } from '../../../models/job.model';
+import type { JobInfo } from '../../../models/job.model';
+import type { ClaudeRateLimitSnapshot, ClaudeSessionInfo } from '../../../features/claude';
 import { JobService } from '../../../services/job.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../utils/visible-interval';
 

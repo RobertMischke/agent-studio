@@ -10,7 +10,7 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { JobService } from '../../../services/job.service';
-import { JobScreenshot } from '../../../models/job.model';
+import type { JobScreenshot } from '../../../features/screenshots';
 import { ScreenshotStripComponent } from './screenshot-strip/screenshot-strip.component';
 
 interface HourBucket {

@@ -42,7 +42,9 @@ import {
 import { VerboseDebugOverlayComponent } from './features/verbose-debug';
 import { JobService } from './services/job.service';
 import { ClientService } from './services/client.service';
-import { JobDetail, JobInfo, WatchPathEntry, CliType, CLI_TYPES, CliModelInfo } from './models/job.model';
+import type { JobDetail, JobInfo, WatchPathEntry, CliType } from './models/job.model';
+import { CLI_TYPES } from './models/job.model';
+import type { CliModelInfo } from './features/cli';
 import { ErrorDialogService } from './services/error-dialog.service';
 import { cliTypeLabel as fmtCliTypeLabel, formatMultiplier as fmtMultiplier } from './services/format.util';
 import { ErrorDialogComponent } from './components/error-dialog/error-dialog.component';
@@ -52,7 +54,10 @@ import { DevToolsService } from './services/dev-tools.service';
 import { FeatureFlagsService } from './services/feature-flags.service';
 import { JobCompletionSoundService } from './services/job-completion-sound.service';
 import { TagRegistryStore } from './services/tag-registry.store';
-import { JobScreenshot, RunTimeline, JobTokenSummary, CliOutputLine } from './models/job.model'; // verbose-debug overlay context types
+import type { CliOutputLine } from './models/job.model';
+import type { RunTimeline } from './features/run-timeline';
+import type { JobScreenshot } from './features/screenshots';
+import type { JobTokenSummary } from './features/tokens'; // verbose-debug overlay context types
 
 interface VerboseDebugContext {
   lines: CliOutputLine[];

@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { CliModelInfo, CliType, CLI_TYPES, WatchPathEntry } from '../../../../models/job.model';
+import type { CliType, WatchPathEntry } from '../../../../models/job.model';
+import { CLI_TYPES } from '../../../../models/job.model';
+import type { CliModelInfo } from '../../../../features/cli';
 import { cliTypeIcon as fmtCliTypeIcon, cliTypeLabel as fmtCliTypeLabel, formatMultiplier as fmtMultiplier } from '../../../../services/format.util';
 
 /**

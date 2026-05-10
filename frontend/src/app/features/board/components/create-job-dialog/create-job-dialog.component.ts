@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, ElementRef, HostListener, ViewChild, computed, inject, input, model, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { CliModelInfo, CliType, CLI_TYPES, TagRegistryEntry, WatchPathEntry } from '../../../../models/job.model';
+import type { CliType, TagRegistryEntry, WatchPathEntry } from '../../../../models/job.model';
+import { CLI_TYPES } from '../../../../models/job.model';
+import type { CliModelInfo } from '../../../../features/cli';
 import { cliTypeIcon as fmtCliTypeIcon, cliTypeLabel as fmtCliTypeLabel, formatMultiplier as fmtMultiplier } from '../../../../services/format.util';
 import { JobService } from '../../../../services/job.service';
 import { TagRegistryStore } from '../../../../services/tag-registry.store';

@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, signal } from '@angular/core';
-import { TokenSummary } from '../../../models/job.model';
+import type { TokenSummary } from '../../../features/tokens';
 import { JobService } from '../../../services/job.service';
 
 /**

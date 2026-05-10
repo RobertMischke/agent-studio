@@ -14,14 +14,10 @@
  * `ConversationEvent[]`.
  */
 
-import type {
-  CliOutputLine,
-  GitFileChange,
-  JobInfo,
-  JobTokenSummary,
-  RunRecord,
-  RunTimeline
-} from '../../models/job.model';
+import type { CliOutputLine, JobInfo } from '../../models/job.model';
+import type { GitFileChange } from '../../features/git';
+import type { JobTokenSummary } from '../../features/tokens';
+import type { RunRecord, RunTimeline } from '../../features/run-timeline';
 import {
   parseActivityLog,
   type ActivityLogGroup,

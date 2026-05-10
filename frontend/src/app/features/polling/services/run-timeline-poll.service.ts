@@ -1,5 +1,6 @@
 import { Injectable, OnDestroy, computed, signal } from '@angular/core';
-import { JobInfo, RunTimeline } from '../../../models/job.model';
+import type { JobInfo } from '../../../models/job.model';
+import type { RunTimeline } from '../../../features/run-timeline';
 import { JobService } from '../../../services/job.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../utils/visible-interval';
 

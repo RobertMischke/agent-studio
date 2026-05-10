@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, computed, effect, inject, input, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { GitHygieneStatus, JobInfo } from '../../../../models/job.model';
+import type { JobInfo } from '../../../../models/job.model';
+import type { GitHygieneStatus } from '../../../../features/git';
 import { GitHygieneService } from '../../../../services/git-hygiene.service';
 import { ErrorDialogService } from '../../../../services/error-dialog.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';

@@ -3,7 +3,7 @@ import { WorkspaceOverlaysService } from '../state/workspace-overlays.service';
 import { WorkspaceTokenTimelineComponent } from '../../tokens/components/workspace-token-timeline';
 import { WorkspaceScreenshotsComponent } from '../../screenshots/components/workspace-screenshots';
 import { CliAdminPanelComponent } from '../../cli/components/cli-admin-panel';
-import { JobScreenshot } from '../../../models/job.model';
+import type { JobScreenshot } from '../../../features/screenshots';
 
 /**
  * Cycle 9g shell-feature container: renders the three workspace-level

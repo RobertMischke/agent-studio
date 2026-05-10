@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
-import { OrchestratorSession } from '../../../models/job.model';
+import type { OrchestratorSession } from '../../../features/orchestrator';
 import { JobService } from '../../../services/job.service';
 import { ConceptHelpComponent } from '../../../components/concept-help/concept-help.component';
 

@@ -1,6 +1,6 @@
 import { Injectable, computed, signal, inject, DestroyRef } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { GitProjectSummary } from '../models/job.model';
+import type { GitProjectSummary } from '../features/git';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../utils/visible-interval';
 
 /**

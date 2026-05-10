@@ -1,6 +1,18 @@
 import { Injectable, signal } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CopilotModelCatalog, CliModelCatalog, CliType, CliUsageReport, QuotaReport, QuotaSnapshot, GitFileChange, GitStatus, ClaudeSessionResponse, JobCommitDetail, SessionEventsResponse, ContinueMode, ContinueJobResponse, OrchestratorLogResponse, TokenSummary, TokenSummaryAggregate, TokenTimeline, AdHocUsageAggregate, OrchestratorSessionResponse, OrchestratorChatResponse, OrchestratorChatTurn, ProjectChatScrollResponse, ProjectChatSearchResponse, ProjectChatTurnResponse, RunTimeline, RunCommitsResponse, RunFilesResponse, RunDiffResponse, RoadmapIntakeCandidate, RoadmapIntakeResponse, RoadmapIntakeConfirmResponse, JobScreenshotsResponse, WorkspaceScreenshotsResponse, ProjectTokenUsageSummary, ProjectTokenHeatmap, ProjectExpensiveJobsResponse, ProjectJobTokenDetail, ProjectSnapshot } from '../models/job.model';
+import type { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CliType, ContinueMode, ContinueJobResponse, ProjectSnapshot } from '../models/job.model';
+import type { ClaudeSessionResponse } from '../features/claude';
+import type { CopilotModelCatalog, CliModelCatalog, CliUsageReport } from '../features/cli';
+import type { GitFileChange, GitStatus, JobCommitDetail } from '../features/git';
+import type { OrchestratorLogResponse, OrchestratorSessionResponse, OrchestratorChatResponse, OrchestratorChatTurn } from '../features/orchestrator';
+import type { ProjectChatScrollResponse, ProjectChatSearchResponse, ProjectChatTurnResponse } from '../features/project-chat';
+import type { ProjectTokenUsageSummary, ProjectTokenHeatmap, ProjectExpensiveJobsResponse, ProjectJobTokenDetail } from '../features/project-token-usage';
+import type { QuotaReport, QuotaSnapshot } from '../features/quota';
+import type { RoadmapIntakeCandidate, RoadmapIntakeResponse, RoadmapIntakeConfirmResponse } from '../features/roadmap';
+import type { RunTimeline, RunCommitsResponse, RunFilesResponse, RunDiffResponse } from '../features/run-timeline';
+import type { JobScreenshotsResponse, WorkspaceScreenshotsResponse } from '../features/screenshots';
+import type { SessionEventsResponse } from '../features/session-events';
+import type { TokenSummary, TokenSummaryAggregate, TokenTimeline, AdHocUsageAggregate } from '../features/tokens';
 import { ErrorDialogService } from './error-dialog.service';
 
 type LaneKey = keyof GroupedJobs;

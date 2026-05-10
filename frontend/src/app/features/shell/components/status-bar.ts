@@ -12,7 +12,9 @@ import {
   signal,
 } from '@angular/core';
 import { JobService } from '../../../services/job.service';
-import { CliType, CLI_TYPES, CliModelInfo } from '../../../models/job.model';
+import type { CliType } from '../../../models/job.model';
+import { CLI_TYPES } from '../../../models/job.model';
+import type { CliModelInfo } from '../../../features/cli';
 import { cliTypeIcon, cliTypeLabel } from '../../../services/format.util';
 import { UsageHoverPanelComponent } from '../../tokens/components/usage-hover-panel';
 

@@ -1,61 +1,16 @@
 export type CliType = 'copilot' | 'claude' | 'codex' | 'gemini';
 export const CLI_TYPES: CliType[] = ['copilot', 'claude', 'codex', 'gemini'];
 
-// Cycle 9: git types live under features/git/models/git.model.ts.
-// Re-exported here so existing imports keep working; new code should
-// import from the feature folder directly.
-export type {
-  GitFileChange, GitStatus, GitProjectSummary, GitHygieneStatus,
-  JobHygieneContext, JobCommitInfo, JobCommitDetail
-} from '../features/git/models/git.model';
-// Internal aliases: re-export above is for external consumers; this
-// import lets the still-in-this-file types (e.g. JobInfo) reference
-// JobCommitInfo without the alias prefix.
-import type { JobCommitInfo, GitFileChange } from '../features/git/models/git.model';
-
-// Cycle 9: Claude session types live under
-// features/claude/models/claude-session.model.ts. Re-exported here
-// so existing imports keep working.
-export type {
-  ClaudeSessionInfo, ClaudeRateLimitSnapshot, ClaudeSessionResponse
-} from '../features/claude/models/claude-session.model';
-
-// Cycle 9: token rollups + ad-hoc usage + timeline live under
-// features/tokens/models/tokens.model.ts.
-export type {
-  JobTokenSummary, JobTokenCall, TokenSummary, TokenSummaryAggregate,
-  TokenSummaryByProject, TokenSummaryByModel, TokenTimeline,
-  TokenTimelineCell, TokenTimelineProject, AdHocUsageAggregate,
-  AdHocUsageBySource, AdHocUsageByDay, AdHocUsageByModel
-} from '../features/tokens/models/tokens.model';
-import type { JobTokenSummary } from '../features/tokens/models/tokens.model';
-
-// Cycle 9: per-job run timeline (between user inputs).
-export type {
-  RunRecord, RunTimeline, RunCommitInfo, RunCommitsResponse,
-  RunFileChange, RunFilesResponse, RunDiffResponse
-} from '../features/run-timeline/models/run-timeline.model';
-
-// Cycle 9: orchestrator log + session + chat (manager-style
-// conversation alongside the agent runs).
-export type {
-  OrchestratorLogEntry, OrchestratorTokenUsage, OrchestratorLogResponse,
-  OrchestratorSession, OrchestratorSessionResponse,
-  OrchestratorChatTurn, OrchestratorChatAttachment, OrchestratorChatResponse
-} from '../features/orchestrator/models/orchestrator.model';
-import type { OrchestratorLogEntry, OrchestratorSession } from '../features/orchestrator/models/orchestrator.model';
-
-// Cycle 9: per-job session-event log rows.
-export type { SessionEvent, SessionEventsResponse } from '../features/session-events/models/session-events.model';
-
-// Cycle 9: per-job + workspace screenshot listings.
-export type { JobScreenshot, JobScreenshotsResponse, WorkspaceScreenshotsResponse } from '../features/screenshots/models/screenshots.model';
-
-// Cycle 9: project-chat (Slice D) turns + responses + search hits.
-export type { ProjectChatTurn, ProjectChatScrollResponse, ProjectChatSearchHit, ProjectChatSearchResponse, ProjectChatTurnResponse } from '../features/project-chat/models/project-chat.model';
-
-// Cycle 9: roadmap-intake splitter candidates + responses.
-export type { RoadmapIntakeCandidate, RoadmapIntakeResponse, RoadmapIntakeConfirmResponse } from '../features/roadmap/models/roadmap.model';
+// Cycle 9i: this file is the canonical "shared kernel" — JobInfo,
+// JobDetail, GroupedJobs, CliExecution, etc. Feature-specific types
+// (git, tokens, orchestrator, screenshots, claude, run-timeline,
+// session-events, project-chat, roadmap, quota, cli, project-token-usage)
+// live under their own `features/X/models/` and are accessed via the
+// feature barrel. The two `import type` lines below let JobInfo's
+// own field types reference feature-owned shapes without copying them.
+import type { JobCommitInfo, GitFileChange } from '../features/git';
+import type { JobTokenSummary } from '../features/tokens';
+import type { OrchestratorLogEntry, OrchestratorSession } from '../features/orchestrator';
 
 /** One row in `logs/session-events.jsonl` for a job. */
 // (SessionEvent + SessionEventsResponse now in features/session-events/models; re-exported below)
@@ -532,39 +487,15 @@ export interface CliSettings {
   hasToken: boolean;
 }
 
-// ── Subscription quota / rate-limit reporting ──
-// Each CLI exposes one or more "windows" (e.g. monthly premium requests for Copilot,
-// 5h+weekly buckets for Codex, rate-limit reset for Claude when over-quota).
-// usedPct above 100 means the user has overshot the included allotment.
-
-// Cycle 9: quota types live under features/quota/models/quota.model.ts.
-// Re-exported here so existing imports keep working; new code should
-// import from the feature folder directly so the boundary stays
-// visible. The canonical home is the feature folder.
-export type { QuotaWindow, QuotaSnapshot, QuotaReport } from '../features/quota/models/quota.model';
-
-// Cycle 9: CLI catalog/usage types live under features/cli/models/cli.model.ts.
-export type {
-  CliModelInfo,
-  CliModelCatalog,
-  CopilotModelInfo,
-  CopilotModelCatalog,
-  CliSessionInfo,
-  CliUsageProjectGroup,
-  CliUsageSection,
-  CliUsageReport,
-} from '../features/cli/models/cli.model';
-
-// Cycle 9: project-token-usage types live under
-// features/project-token-usage/models/project-token-usage.model.ts.
-export type {
-  ProjectTokenCategory,
-  ProjectTokenUsageSummary,
-  ProjectTokenHeatmapCell,
-  ProjectTokenHeatmapJob,
-  ProjectTokenHeatmap,
-  ProjectExpensiveJob,
-  ProjectExpensiveJobsResponse,
-  ProjectJobTokenRun,
-  ProjectJobTokenDetail,
-} from '../features/project-token-usage/models/project-token-usage.model';
+// ── End of shared kernel ──
+//
+// Cycle 9i: Feature-specific types (quota, cli catalog/usage,
+// project-token-usage, etc.) are no longer re-exported from this file.
+// Import them from the relevant feature barrel instead, e.g.:
+//
+//   import type { QuotaReport } from '../features/quota';
+//   import type { CliUsageReport } from '../features/cli';
+//   import type { ProjectTokenHeatmap } from '../features/project-token-usage';
+//
+// See frontend/AGENTS.md "Feature folders + barrel imports" for the
+// rule and rationale.

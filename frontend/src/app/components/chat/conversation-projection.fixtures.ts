@@ -11,7 +11,8 @@
  * the same way a host would feed it.
  */
 
-import type { CliOutputLine, RunRecord, RunTimeline } from '../../models/job.model';
+import type { CliOutputLine } from '../../models/job.model';
+import type { RunRecord, RunTimeline } from '../../features/run-timeline';
 
 let TS_COUNTER = 0;
 function ts(offsetSec = 0): string {
@@ -151,7 +152,7 @@ export function tokenSpikeFragment(): CliOutputLine[] {
   ];
 }
 
-export function tokenSpikeSummary(): import('../../models/job.model').JobTokenSummary {
+export function tokenSpikeSummary(): import('../../features/tokens').JobTokenSummary {
   return {
     calls: 4,
     inputTokens: 280_000,

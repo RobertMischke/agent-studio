@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
-import { GitFileChange } from '../../../../models/job.model';
+import type { GitFileChange } from '../../../../features/git';
 
 interface TreeNode {
   /** Full path from repo root for files; folder path with trailing names joined for directories. */

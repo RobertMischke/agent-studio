@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
-import { JobInfo, RunCommitInfo, RunRecord } from '../../../../models/job.model';
+import type { JobInfo } from '../../../../models/job.model';
+import type { RunCommitInfo, RunRecord } from '../../../../features/run-timeline';
 import { JobService } from '../../../../services/job.service';
 
 /**

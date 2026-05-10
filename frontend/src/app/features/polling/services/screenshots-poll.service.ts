@@ -1,5 +1,6 @@
 import { Injectable, OnDestroy, signal } from '@angular/core';
-import { JobInfo, JobScreenshot } from '../../../models/job.model';
+import type { JobInfo } from '../../../models/job.model';
+import type { JobScreenshot } from '../../../features/screenshots';
 import { JobService } from '../../../services/job.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../utils/visible-interval';
 

@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, HostListener, inject, input, output, signal, effect, OnDestroy, ViewChild, ViewEncapsulation } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { JobDetail, JobInfo, WatchPathEntry, CliSettings, CliModelInfo, CliType, CLI_TYPES, ContinueMode } from '../../models/job.model';
+import type { JobDetail, JobInfo, WatchPathEntry, CliSettings, CliType, ContinueMode } from '../../models/job.model';
+import { CLI_TYPES } from '../../models/job.model';
+import type { CliModelInfo } from '../../features/cli';
 import { JobService } from '../../services/job.service';
 import { ErrorDialogService } from '../../services/error-dialog.service';
 import { NowTickService } from '../../services/now-tick.service';

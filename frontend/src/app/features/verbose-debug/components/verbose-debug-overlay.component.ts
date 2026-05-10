@@ -7,14 +7,10 @@ import {
   signal
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import {
-  CliOutputLine,
-  JobInfo,
-  JobScreenshot,
-  JobTokenSummary,
-  RunRecord,
-  RunTimeline
-} from '../../../models/job.model';
+import type { CliOutputLine, JobInfo } from '../../../models/job.model';
+import type { RunRecord, RunTimeline } from '../../../features/run-timeline';
+import type { JobScreenshot } from '../../../features/screenshots';
+import type { JobTokenSummary } from '../../../features/tokens';
 import { projectConversation } from '../../../components/chat/conversation-projection';
 import type {
   ConversationEvent,

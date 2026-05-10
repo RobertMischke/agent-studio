@@ -1,5 +1,6 @@
 import { Injectable, OnDestroy, computed, signal } from '@angular/core';
-import { GitFileChange, GitStatus, JobCommitDetail, JobCommitInfo, JobInfo } from '../../../models/job.model';
+import type { JobInfo } from '../../../models/job.model';
+import type { GitFileChange, GitStatus, JobCommitDetail, JobCommitInfo } from '../../../features/git';
 import { JobService } from '../../../services/job.service';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../utils/visible-interval';

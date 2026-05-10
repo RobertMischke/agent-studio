@@ -1,5 +1,6 @@
 import { Injectable, OnDestroy, computed, signal } from '@angular/core';
-import { JobInfo, SessionEventsResponse } from '../../../models/job.model';
+import type { JobInfo } from '../../../models/job.model';
+import type { SessionEventsResponse } from '../../../features/session-events';
 import { JobService } from '../../../services/job.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../utils/visible-interval';
 

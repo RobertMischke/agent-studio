@@ -9,15 +9,7 @@ import {
 } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { JobService } from '../../../services/job.service';
-import {
-  ProjectExpensiveJob,
-  ProjectExpensiveJobsResponse,
-  ProjectJobTokenDetail,
-  ProjectTokenCategory,
-  ProjectTokenHeatmap,
-  ProjectTokenHeatmapJob,
-  ProjectTokenUsageSummary,
-} from '../../../models/job.model';
+import type { ProjectExpensiveJob, ProjectExpensiveJobsResponse, ProjectJobTokenDetail, ProjectTokenCategory, ProjectTokenHeatmap, ProjectTokenHeatmapJob, ProjectTokenUsageSummary } from '../../../features/project-token-usage';
 
 interface CardSpec {
   testid: string;

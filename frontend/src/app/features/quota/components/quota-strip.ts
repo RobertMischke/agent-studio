@@ -1,6 +1,7 @@
 import { Component, OnDestroy, OnInit, signal, computed } from '@angular/core';
 import { JobService } from '../../../services/job.service';
-import { CliType, QuotaReport, QuotaSnapshot, QuotaWindow } from '../../../models/job.model';
+import type { CliType } from '../../../models/job.model';
+import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../../features/quota';
 import { cliTypeIcon } from '../../../services/format.util';
 
 /**

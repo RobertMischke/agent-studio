@@ -2,14 +2,8 @@ import { Component, OnDestroy, OnInit, signal, computed } from '@angular/core';
 import { JobService } from '../../../services/job.service';
 import { CliConsoleComponent } from './cli-console';
 import { QuotaStripComponent } from '../../quota/components/quota-strip';
-import {
-  CliOutputLine,
-  CliSessionInfo,
-  CliType,
-  CliUsageProjectGroup,
-  CliUsageReport,
-  CliUsageSection
-} from '../../../models/job.model';
+import type { CliOutputLine, CliType } from '../../../models/job.model';
+import type { CliSessionInfo, CliUsageProjectGroup, CliUsageReport, CliUsageSection } from '../../../features/cli';
 
 interface SelectedSession {
   cliType: CliType;
