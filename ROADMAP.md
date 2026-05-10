@@ -101,6 +101,41 @@ First implementation order:
 5. Skills catalog for installed local skills and built-in audit/check definitions.
 6. Performance Probe slots after the audit/check loop is stable.
 
+### Test Run Service
+
+Triggering a full test run and reading back its quality verdict belongs behind its own service with a stable contract. The app should not know whether the actual runner is the local Playwright suite, a self-hosted TeamCity agent, GitHub Actions, a remote CI pool somewhere in Hesse, or whatever lands later. It should know one API:
+
+- Request a run for a given commit (or working-tree snapshot) and a named test profile.
+- Get back a run id immediately, with the run executing asynchronously somewhere else.
+- Receive status + structured quality metrics through a callback API as the run progresses and finishes.
+- Read durable run history, with attached evidence (logs, screenshots, traces, junit-style result trees) tied back to the originating job and commit.
+
+What this enables:
+
+- The board can mark a task as "tests requested → pending → green / red" without owning the executor. A long remote run (15-90 min) does not block the main process.
+- Multiple executors can serve the same contract — local Playwright for fast feedback, remote TeamCity for full coverage, an ad-hoc cloud pool for large fan-out — and the app stays the same.
+- Quality metrics (suite count, duration, flake rate, coverage delta, perf budget verdicts) become first-class data the supervisor and analysis surfaces can consume the same way they consume security findings or audit reports.
+- A failed remote run produces evidence in a known shape; the follow-up-task action can pre-fill from it just like security/uxui follow-ups do today.
+
+Hard rules:
+
+- The contract is the only integration surface. No backend logic in the consumer; no consumer logic in the executor. New executors are HTTP plugins that implement the contract, nothing else.
+- Run results are append-only and tied to the commit (not the branch). Re-runs produce new ids; a commit can have N completed runs from N profiles or N executors.
+- The callback channel is asynchronous and lossy by design — clients reconcile from the run-id endpoint, not from "did the webhook arrive." Webhooks are an optimisation, not a source of truth.
+- Run evidence (logs, screenshots, traces) is fetched lazily via the run id; the contract carries pointers, not blobs.
+- No coupling to a specific CI vendor's data model. The contract uses neutral shapes; vendor-specific fields go into a typed `executor` envelope inside the run record.
+
+First implementation order:
+
+1. Define `docs/test-run-service-contract.md` and `docs/schemas/test-run.schema.json` (request + run-record + quality-metrics shape).
+2. In-process executor that wraps the existing local Playwright suite, so the app can talk to its own contract end-to-end before any remote integration lands.
+3. Run-history surface on the project page: list of runs per commit, status chips, drill-down to evidence.
+4. Webhook + GET-run-by-id callback API so a remote executor can push status updates.
+5. TeamCity plugin: shells out to a TeamCity REST API, maps the project's build configurations onto the contract's profile concept, posts back via the callback API.
+6. Quality-metrics consumption — supervisor + meta-cycle treat run history as a first-class signal alongside security findings and audit reports.
+
+This is sibling to Performance Probes (which measure the running app) and to Product Runtime Observability (which records what the built software did). Test Runs answer a different question: "did the built software pass its declared test suite at this commit?" — the gate, not the live behaviour.
+
 ### Drift Control
 
 Make Drift a first-class project dimension beside Architecture. The most important drift is not document-to-document drift; it is when the actual software no longer follows the documented intent, architecture, guidelines, tests, runtime expectations, or product promises.
