@@ -6,34 +6,7 @@ import { ActivityItem, ActivityTarget } from './next-gen-chat-workbench-prototyp
 @Component({
   selector: 'mockup-next-gen-chat-activity-bar',
   standalone: true,
-  template: `
-    <nav class="activity" aria-label="Prototype activity bar" data-testid="prototype-activity-bar">
-      @for (item of items(); track item.id) {
-        <button class="activity__item"
-                [class.activity__item--active]="activeActivity() === item.id"
-                [attr.title]="item.title"
-                [attr.aria-label]="item.title"
-                [attr.data-testid]="'prototype-activity-' + item.id"
-                (click)="activitySelected.emit(item.id)">
-          <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
-            @for (path of iconPath(item.icon); track path) {
-              <path [attr.d]="path"></path>
-            }
-          </svg>
-          <span class="activity__label">{{ item.label }}</span>
-        </button>
-      }
-      <span class="activity__spacer"></span>
-      <button class="activity__item" title="Close prototype" aria-label="Close prototype" (click)="closeRequested.emit()">
-        <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
-          @for (path of iconPath('close'); track path) {
-            <path [attr.d]="path"></path>
-          }
-        </svg>
-        <span class="activity__label">Close</span>
-      </button>
-    </nav>
-  `,
+  templateUrl: './next-gen-chat-activity-bar.component.html',
 })
 export class NextGenChatActivityBarComponent {
   readonly items = input.required<readonly ActivityItem[]>();

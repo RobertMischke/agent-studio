@@ -1,0 +1,878 @@
+@if (!closed()) {
+  <section class="ng-chat-prototype"
+           [attr.data-theme]="theme()"
+           [attr.data-density]="density()"
+           [attr.data-pane]="activeDocument()"
+           [attr.data-queue-open]="queueOpen()"
+           data-testid="next-gen-chat-angular-prototype">
+  <mockup-next-gen-chat-activity-bar
+    [items]="activityItems"
+    [activeActivity]="activeActivity()"
+    (activitySelected)="handleActivity($event)"
+    (closeRequested)="close()">
+  </mockup-next-gen-chat-activity-bar>
+
+  <app-found-next-topbar
+    [theme]="theme()"
+    [density]="density()"
+    [sideSheetOpen]="sideSheetOpen()"
+    [statusPanel]="statusPanel()"
+    (projectPanelRequested)="toggleStatusPanel('projects')"
+    (sideSheetToggled)="sideSheetOpen.set(!sideSheetOpen())"
+    (queuePanelRequested)="toggleStatusPanel('queue')"
+    (densityToggled)="toggleDensity()"
+    (themeToggled)="toggleTheme()"
+    (commandRequested)="commandOpen.set(true)"
+    (debugRequested)="debugOpen.set(true)"
+    (closeRequested)="close()">
+  </app-found-next-topbar>
+
+  <main class="workspace"
+        [class.workspace--queue-closed]="!queueOpen()"
+        [class.workspace--sheet-closed]="!sideSheetOpen()">
+    @if (queueOpen()) {
+      <mockup-next-gen-chat-queue
+        [tasks]="taskCards"
+        (closeRequested)="closeQueueModule()">
+      </mockup-next-gen-chat-queue>
+    }
+
+    <section class="detail" aria-label="Task detail">
+      <header class="detail-chrome" data-testid="prototype-detail-chrome">
+        <button class="detail-chrome__back" title="Back to board" aria-label="Back to board">
+          <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+            @for (path of iconPath('back'); track path) {
+              <path [attr.d]="path"></path>
+            }
+          </svg>
+        </button>
+        <div class="detail-chrome__title">
+          <span class="project-pill"><b>ASS</b> Agent Software Studio</span>
+          <strong>Next-gen chat conversation event projection</strong>
+        </div>
+        <button class="detail-chrome__edit" title="Rename task" aria-label="Rename task">
+          <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+            @for (path of iconPath('edit'); track path) {
+              <path [attr.d]="path"></path>
+            }
+          </svg>
+        </button>
+        <span class="detail-chrome__state">2-ready</span>
+        <button class="detail-chrome__complete" title="Complete and move to next task">Complete & Next</button>
+      </header>
+
+      <section class="workbench" aria-label="Task chat workbench">
+        <mockup-next-gen-chat-rail
+          [paneButtons]="paneButtons"
+          [scenarios]="scenarios"
+          [activeScenario]="activeScenario()"
+          [summaryChips]="summaryChips"
+          [activePanes]="activePaneIds()"
+          [openCount]="openDocuments().length"
+          (guideRequested)="guideOpen.set(true)"
+          (allDocumentsRequested)="openAllContextPanes()"
+          (paneSelected)="togglePane($event)"
+          (scenarioSelected)="activeScenario.set($event)"
+          (summaryPaneSelected)="setPane($event)">
+        </mockup-next-gen-chat-rail>
+
+        <div class="workbench__main">
+        <mockup-next-gen-chat-document-tabs
+          [documents]="openDocuments()"
+          [activeDocument]="activeDocument()"
+          (documentActivated)="activateDocument($event)"
+          (documentClosed)="closeDocument($event)">
+        </mockup-next-gen-chat-document-tabs>
+        <div class="workbench__body"
+             style="grid-template-columns:minmax(0, 1fr)"
+             [attr.data-chat-open]="chatOpen()"
+             [attr.data-context-open]="contextOpen()"
+             [attr.data-split-dragging]="splitDragging()">
+          @if (activeDocument() === 'chat' && chatOpen()) {
+          <section class="conversation" aria-label="Conversation" data-testid="prototype-conversation">
+            <div class="conversation__topline">
+              <span class="badge badge--ok">Task Chat</span>
+              <span>{{ scenarioText() }}</span>
+              <button (click)="setPane('git')">
+                <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  @for (path of iconPath('fileDiff'); track path) {
+                    <path [attr.d]="path"></path>
+                  }
+                </svg>
+                Changes
+              </button>
+              <button (click)="toggleChat()" data-testid="prototype-chat-close">
+                <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  @for (path of iconPath('panelClose'); track path) {
+                    <path [attr.d]="path"></path>
+                  }
+                </svg>
+                Close chat
+              </button>
+              <button (click)="debugOpen.set(true)">
+                <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                  @for (path of iconPath('bug'); track path) {
+                    <path [attr.d]="path"></path>
+                  }
+                </svg>
+                Verbose Debug
+              </button>
+            </div>
+
+            <div class="conversation__scroll">
+            <button class="run-marker"
+                    type="button"
+                    [class.run-marker--open]="markerOpen()"
+                    (click)="markerOpen.set(!markerOpen())"
+                    data-testid="prototype-run-marker">
+              <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                @for (path of iconPath('clock'); track path) {
+                  <path [attr.d]="path"></path>
+                }
+              </svg>
+              <span>Run 4 · 12m active · 28 tool calls · 42k tokens · 3 commits</span>
+              <b>{{ markerOpen() ? 'hide' : 'details' }}</b>
+            </button>
+            @if (markerOpen()) {
+              <aside class="run-popover" data-testid="prototype-run-popover">
+                <header>
+                  <strong>Run 4 context</strong>
+                  <span>One CLI invocation between user inputs</span>
+                </header>
+                <div class="run-popover__grid">
+                  @for (item of runMarkerDetails; track item.label) {
+                    <div>
+                      <span>{{ item.label }}</span>
+                      <b>{{ item.value }}</b>
+                    </div>
+                  }
+                </div>
+                <footer>
+                  <button (click)="setPane('debug')">Debug this run</button>
+                  <button (click)="setPane('git')">Review commits</button>
+                  <button (click)="toolOpen.set(true)">Open tools</button>
+                </footer>
+              </aside>
+            }
+
+            <div class="actor-key" data-testid="prototype-actor-key" aria-label="Actors active in this run">
+              <span class="actor-key__label">Actors</span>
+              @for (kind of actorRailItems; track kind) {
+                <span class="actor-key__chip"
+                      [attr.data-actor]="kind"
+                      [attr.data-shape]="actorMeta(kind).shape"
+                      [attr.title]="actorMeta(kind).help"
+                      [attr.data-testid]="'prototype-actor-chip-' + kind">
+                  <span class="actor-avatar"
+                        [attr.data-shape]="actorMeta(kind).shape"
+                        aria-hidden="true">
+                    <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      @for (path of iconPath(actorMeta(kind).icon); track path) {
+                        <path [attr.d]="path"></path>
+                      }
+                    </svg>
+                    <i>{{ actorMeta(kind).glyph }}</i>
+                  </span>
+                  <b>{{ actorMeta(kind).label }}</b>
+                  <em>{{ actorRailCounts()[kind] }}</em>
+                </span>
+              }
+            </div>
+
+            @for (entry of visibleTurns(); track entry.id) {
+              @switch (entry.kind) {
+                @case ('turn') {
+                  <article class="turn"
+                           [attr.data-actor]="entry.actor"
+                           [attr.data-shape]="actorMeta(entry.actor).shape"
+                           [attr.data-testid]="'prototype-turn-' + entry.actor">
+                    <span class="actor-avatar turn__avatar"
+                          [attr.data-shape]="actorMeta(entry.actor).shape"
+                          [attr.aria-label]="actorMeta(entry.actor).label">
+                      <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                        @for (path of iconPath(actorMeta(entry.actor).icon); track path) {
+                          <path [attr.d]="path"></path>
+                        }
+                      </svg>
+                      <i>{{ actorMeta(entry.actor).glyph }}</i>
+                    </span>
+                    <div class="turn__body">
+                      <header>
+                        <strong>{{ entry.title }}</strong>
+                        <span class="turn__role">{{ actorMeta(entry.actor).label }}</span>
+                        @if (entry.intervention) {
+                          <span class="turn__target"
+                                [attr.data-target]="entry.intervention"
+                                [attr.title]="interventionMeta(entry.intervention).help"
+                                [attr.data-testid]="'prototype-target-' + entry.intervention">
+                            <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                              @for (path of iconPath(interventionMeta(entry.intervention).icon); track path) {
+                                <path [attr.d]="path"></path>
+                              }
+                            </svg>
+                            <span>&rarr; {{ interventionMeta(entry.intervention).label }}</span>
+                          </span>
+                        }
+                        @if (entry.meta) {
+                          <em>{{ entry.meta }}</em>
+                        }
+                      </header>
+                      <p>{{ entry.body }}</p>
+                      @if (entry.actions?.length) {
+                        <div class="turn__actions">
+                          @for (action of entry.actions; track action) {
+                            <button (click)="handleAction(action)">{{ action }}</button>
+                          }
+                        </div>
+                      }
+                    </div>
+                  </article>
+                }
+                @case ('decision') {
+                  <article class="decision"
+                           [attr.data-actor]="entry.actor"
+                           [attr.data-decision]="entry.decision"
+                           [attr.data-tone]="entry.tone"
+                           [attr.data-expanded]="isDecisionExpanded(entry.id)"
+                           [attr.data-testid]="'prototype-decision-' + entry.decision">
+                    <button class="decision__row"
+                            type="button"
+                            (click)="toggleDecision(entry.id)"
+                            [attr.aria-expanded]="isDecisionExpanded(entry.id)"
+                            [attr.aria-controls]="'decision-detail-' + entry.id">
+                      <span class="actor-avatar"
+                            [attr.data-shape]="actorMeta(entry.actor).shape"
+                            aria-hidden="true">
+                        <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                          @for (path of iconPath(decisionMeta[entry.decision].icon); track path) {
+                            <path [attr.d]="path"></path>
+                          }
+                        </svg>
+                        <i>{{ actorMeta(entry.actor).glyph }}</i>
+                      </span>
+                      <span class="decision__lead">
+                        <strong>{{ decisionMeta[entry.decision].label }}</strong>
+                        <span>{{ entry.title }}</span>
+                      </span>
+                      <span class="decision__summary">{{ entry.summary }}</span>
+                      <span class="decision__retry">{{ entry.retry }}</span>
+                      <b>{{ isDecisionExpanded(entry.id) ? 'Hide' : 'Details' }}</b>
+                    </button>
+                    @if (isDecisionExpanded(entry.id)) {
+                      <div class="decision__detail"
+                           [attr.id]="'decision-detail-' + entry.id"
+                           [attr.data-testid]="'prototype-decision-detail-' + entry.decision">
+                        <dl>
+                          <div><dt>Reason</dt><dd>{{ entry.reason }}</dd></div>
+                          <div><dt>Evidence</dt><dd>{{ entry.evidence }}</dd></div>
+                          <div><dt>Action</dt><dd>{{ entry.action }}</dd></div>
+                          <div><dt>Retry budget</dt><dd>{{ entry.retry }}</dd></div>
+                          <div><dt>Token usage</dt><dd>{{ entry.tokens }}</dd></div>
+                          <div><dt>Next step</dt><dd>{{ entry.nextStep }}</dd></div>
+                        </dl>
+                        <footer>
+                          <button (click)="openTrace(entry.traceRange)">Open trace · {{ entry.traceRange }}</button>
+                          <button (click)="setPane('debug')">Pin debug pane</button>
+                          <button (click)="debugOpen.set(true)">Verbose Debug</button>
+                        </footer>
+                      </div>
+                    }
+                  </article>
+                }
+              }
+            }
+
+            <button class="tool-burst"
+                    [class.tool-burst--open]="toolOpen()"
+                    (click)="toolOpen.set(!toolOpen())"
+                    data-testid="prototype-tool-burst">
+              <strong>Tools 28</strong>
+              <span>read 12 - search 7 - edit 4 - shell 3 - browser 2 - 1 failed - 4 artifacts</span>
+              <b>{{ toolOpen() ? 'close' : 'open' }}</b>
+            </button>
+            @if (toolOpen()) {
+              <div class="tool-details">
+                @for (row of toolRows; track row.tool) {
+                  <div>
+                    <code>{{ row.tool }}</code>
+                    <span>{{ row.target }}</span>
+                    <strong [attr.data-tone]="row.tone">{{ row.result }}</strong>
+                  </div>
+                }
+              </div>
+            }
+            </div>
+
+            <div class="composer" data-testid="prototype-composer">
+              <div class="composer__input">
+                <span>Reply in task context. Use #latest-run, #git, #screenshot, or /create-follow-up...</span>
+                <div class="composer__mentions">
+                  <button (click)="setPane('git')">#git</button>
+                  <button (click)="setPane('preview')">#screenshot</button>
+                  <button (click)="setPane('debug')">#latest-run</button>
+                  <button (click)="setPane('git')">#change-source</button>
+                </div>
+              </div>
+              <div class="composer__quick" aria-label="Chat mode">
+                @for (mode of composeModes; track mode.id) {
+                  <button type="button"
+                          [class.composer__mode--active]="composerMode() === mode.id"
+                          [attr.title]="mode.description"
+                          (click)="composerMode.set(mode.id)">
+                    <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      @for (path of iconPath(mode.icon); track path) {
+                        <path [attr.d]="path"></path>
+                      }
+                    </svg>
+                    <span>{{ mode.label }}</span>
+                  </button>
+                }
+              </div>
+              <div class="composer__bar">
+                <div class="composer__context">
+                  <button title="Attach files, screenshots, or report context" aria-label="Attach context">
+                    <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      @for (path of iconPath('plus'); track path) {
+                        <path [attr.d]="path"></path>
+                      }
+                    </svg>
+                    Attach
+                  </button>
+                  <button title="Scope follow-up to the active task">Task</button>
+                  <button title="Permission mode for the next CLI run">Access</button>
+                  <button title="Selected file context">ui.html</button>
+                </div>
+                <div class="composer__runtime">
+                  <button title="CLI driver">Codex</button>
+                  <button title="Model and reasoning">5.5 Extra High</button>
+                  <button title="Start or continue the current task">
+                    <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      @for (path of iconPath('play'); track path) {
+                        <path [attr.d]="path"></path>
+                      }
+                    </svg>
+                    Start
+                  </button>
+                  <button title="Pause running agent">
+                    <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      @for (path of iconPath('pause'); track path) {
+                        <path [attr.d]="path"></path>
+                      }
+                    </svg>
+                    Pause
+                  </button>
+                  <button class="composer__send" title="Send follow-up">
+                    <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+                      @for (path of iconPath('play'); track path) {
+                        <path [attr.d]="path"></path>
+                      }
+                    </svg>
+                    {{ composerModeLabel() }}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </section>
+          }
+
+          @if (activeContextDocument(); as openPane) {
+            <mockup-next-gen-chat-context-document
+              [pane]="openPane"
+              [chatOpen]="chatOpen()"
+              [featureParity]="featureParity"
+              [gitFiles]="gitFiles"
+              [activeGitFile]="activeGitFile()"
+              [screenshots]="screenshots"
+              [tokenRows]="tokenRows"
+              (toggleChatRequested)="toggleChat()"
+              (closePaneRequested)="closeContextPane($event)"
+              (debugRequested)="debugOpen.set(true)"
+              (paneSelected)="setPane($event)"
+              (featureSelected)="openFeatureParity($event)"
+              (activeGitFileChanged)="activeGitFile.set($event)"
+              (lightboxRequested)="lightboxOpen.set(true)">
+            </mockup-next-gen-chat-context-document>
+          }
+        </div>
+        </div>
+      </section>
+    </section>
+
+    <aside class="sheet" aria-label="Project side sheet" data-testid="prototype-side-sheet">
+      <header class="sheet__head">
+        <div>
+          <strong>Project side sheet chat</strong>
+          <span>Project-level steering, queue context, task references</span>
+        </div>
+        <button class="icon-btn" (click)="sideSheetOpen.set(!sideSheetOpen())" title="Toggle side sheet" aria-label="Toggle side sheet">
+          <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+            @for (path of iconPath(sideSheetOpen() ? 'panelClose' : 'panelOpen'); track path) {
+              <path [attr.d]="path"></path>
+            }
+          </svg>
+        </button>
+      </header>
+      <div class="sheet__body">
+        <article>
+          <strong>You</strong>
+          <p>Keep the chat open while I inspect the result and Git changes next to it.</p>
+        </article>
+        <article>
+          <strong>Orchestrator</strong>
+          <p>The task chat owns evidence. The side sheet owns project steering, upcoming jobs, and cross-task decisions.</p>
+        </article>
+        <button class="sheet__summary" (click)="setPane('debug')">
+          <strong>Queue signal</strong>
+          <span>6 chat jobs aligned to v7 workbench · click to inspect debug context</span>
+        </button>
+      </div>
+      <footer class="sheet__composer">
+        <span>Ask in project side sheet...</span>
+        <button>Send</button>
+      </footer>
+    </aside>
+  </main>
+
+  @if (statusPanel()) {
+    <section class="status-popover modal__panel"
+             style="position:fixed;left:58px;right:10px;bottom:32px;z-index:19;width:auto;max-height:340px;display:grid;grid-template-columns:220px minmax(0,1fr) minmax(180px,.45fr);gap:10px;padding:10px;border-radius:8px 8px 0 0;"
+             [attr.data-panel]="statusPanel()"
+             data-testid="prototype-status-popover">
+      <header style="display:grid;gap:6px;align-content:start;border-right:1px solid var(--line)">
+        <strong>{{ statusPanelTitle() }}</strong>
+        <button class="chip" (click)="statusPanel.set(null)">Close</button>
+      </header>
+      @switch (statusPanel()) {
+        @case ('tokens') {
+          <article>
+            <h3>Token usage heat</h3>
+            <div class="token-bars">
+              @for (row of tokenRows; track row.name) {
+                <div>
+                  <span>{{ row.name }}</span>
+                  <i><em [style.width.%]="row.percent"></em></i>
+                  <b>{{ row.value }}</b>
+                </div>
+              }
+            </div>
+          </article>
+          <article>
+            <h3>Usage hover contract</h3>
+            <p>Status bar usage keeps quota, token totals, refresh, timeline, and per-project/model drill-down in one compact hover surface.</p>
+            <div class="function-grid">
+              <button>Refresh all CLIs</button>
+              <button>Open token timeline</button>
+              <button (click)="debugTab.set('tokens'); debugOpen.set(true)">Open token debug</button>
+              <button (click)="setPane('debug')">Pin token pane</button>
+            </div>
+          </article>
+          <article>
+            <h3>Quota strip</h3>
+            <div class="usage-pop-grid">
+              @for (item of usageStrip; track item.label) {
+                <div [attr.data-tone]="item.tone">
+                  <b>{{ item.value }}</b>
+                  <span>{{ item.label }}</span>
+                  @if (item.window) {
+                    <em>{{ item.window }} window · resets {{ item.reset }}</em>
+                  }
+                </div>
+              }
+            </div>
+          </article>
+        }
+        @case ('queue') {
+          <article>
+            <h3>Queue and automation</h3>
+            <div class="metric-grid">
+              <div><b>2</b><span>running</span></div>
+              <div><b>4/6</b><span>auto loops</span></div>
+              <div><b>1</b><span>blocked</span></div>
+              <div><b>6</b><span>chat jobs</span></div>
+            </div>
+          </article>
+          <article>
+            <h3>Dummy actions</h3>
+            <div class="function-grid">
+              <button (click)="setPane('result')">Open active task</button>
+              <button (click)="openQueueModule()">Open Queue module</button>
+              <button (click)="closeQueueModule()">Hide Queue module</button>
+              <button (click)="sideSheetOpen.set(true)">Open project sheet</button>
+              <button (click)="commandOpen.set(true)">Create follow-up</button>
+            </div>
+          </article>
+        }
+        @case ('health') {
+          <article>
+            <h3>System health</h3>
+            <div class="metric-grid">
+              <div><b>Ready</b><span>runner</span></div>
+              <div><b>5031</b><span>stable API</span></div>
+              <div><b>12m</b><span>last run</span></div>
+              <div><b>0</b><span>fatal errors</span></div>
+            </div>
+          </article>
+          <article>
+            <h3>Observability shortcuts</h3>
+            <p>Status items should become the fastest route into health, logs, quotas, visual evidence, and stuck-loop diagnostics.</p>
+            <div class="function-grid">
+              <button (click)="debugTab.set('trace'); debugOpen.set(true)">Open trace</button>
+              <button (click)="toggleStatusPanel('queue')">Queue health</button>
+              <button (click)="toggleStatusPanel('tokens')">Token health</button>
+            </div>
+          </article>
+        }
+        @case ('evidence') {
+          <article>
+            <h3>Visual evidence</h3>
+            <p>Four screenshots are attached to this job. The status bar keeps them one click away even while Git stays open beside chat.</p>
+            <div class="function-grid">
+              <button (click)="setPane('preview')">Open preview</button>
+              <button (click)="lightboxOpen.set(true)">Open lightbox</button>
+              <button>Open evidence folder</button>
+            </div>
+          </article>
+          <article style="display:grid;place-items:center;text-align:center;color:var(--muted);background:linear-gradient(135deg, rgba(122,167,255,.22), transparent 46%), var(--surface-soft)">
+            <b>Latest</b>
+            <span>Result split, light theme, 1440 x 900</span>
+          </article>
+        }
+        @case ('session') {
+          <article>
+            <h3>Session continuity</h3>
+            <div class="metric-grid">
+              <div><b>3</b><span>session chain</span></div>
+              <div><b>0</b><span>recoveries</span></div>
+              <div><b>run 4</b><span>active segment</span></div>
+              <div><b>ok</b><span>capture state</span></div>
+            </div>
+          </article>
+          <article>
+            <h3>Why it matters</h3>
+            <p>The next version must show whether a continuation reused the vendor session, rebuilt context from disk, or lost capture. That state belongs in the status bar and verbose debug.</p>
+            <div class="handoff-list">
+              <span><b>Resume key</b> codex:next-gen-chat:run-4</span>
+              <span><b>Context source</b> prompt.md + latest-run + status.md</span>
+              <span><b>Worklog</b> 12m visible, 9m billable CLI time</span>
+            </div>
+            <div class="function-grid">
+              <button (click)="markerOpen.set(true)">Open run marker</button>
+              <button (click)="debugTab.set('overview'); debugOpen.set(true)">Open session debug</button>
+            </div>
+          </article>
+        }
+        @case ('projects') {
+          <article>
+            <h3>Project filter and owner</h3>
+            <div class="project-pop-list">
+              @for (project of projectTabs; track project.name) {
+                <button [class.project-pop-list__active]="project.active"
+                        [style.--project-color]="project.color"
+                        [style.--project-soft]="project.soft"
+                        [style.--project-border]="project.border">
+                  <span>{{ project.initial }}</span>
+                  <b>{{ project.name }}</b>
+                  <em>{{ project.auto }}</em>
+                </button>
+              }
+            </div>
+          </article>
+          <article>
+            <h3>Owner switch</h3>
+            <p>The header keeps owner filtering first-class. Found-next should preserve the fast switch for Robert, Orchestrator, QA, and Unassigned without pushing task content down.</p>
+            <div class="handoff-list">
+              <span><b>Scope</b> active project set plus owner filter</span>
+              <span><b>Default route</b> last selected project, then user-owned queue</span>
+              <span><b>Empty state</b> keep side sheet and status bar available</span>
+            </div>
+            <div class="function-grid">
+              <button class="function-grid__active">Robert</button>
+              <button>Orchestrator</button>
+              <button>QA</button>
+              <button>Unassigned</button>
+            </div>
+          </article>
+        }
+        @case ('model') {
+          <article>
+            <h3>CLI and model</h3>
+            <div class="function-grid">
+              <button class="function-grid__active">Codex</button>
+              <button>Claude</button>
+              <button>Gemini</button>
+              <button>Copilot</button>
+            </div>
+          </article>
+          <article>
+            <h3>Run configuration</h3>
+            <div class="function-grid">
+              <button class="function-grid__active">5.5 Extra High</button>
+              <button>5.4 High</button>
+              <button>Auto approve</button>
+              <button>Stop current run</button>
+            </div>
+          </article>
+        }
+      }
+    </section>
+  }
+
+  <app-found-next-statusbar
+    (statusPanelRequested)="toggleStatusPanel($event)"
+    (sideSheetRequested)="sideSheetOpen.set(true)"
+    (debugTraceRequested)="debugTab.set('trace'); debugOpen.set(true)">
+  </app-found-next-statusbar>
+
+  @if (debugOpen()) {
+    <div class="modal" data-testid="prototype-debug-modal" (click)="debugOpen.set(false)">
+      <section class="modal__panel modal__panel--debug" (click)="$event.stopPropagation()">
+        <header>
+          <strong>Verbose Debug</strong>
+          <div>
+            @for (tab of debugTabs; track tab.id) {
+              <button [class.modal__tab--active]="debugTab() === tab.id"
+                      [attr.data-testid]="'prototype-debug-tab-' + tab.id"
+                      (click)="debugTab.set(tab.id)">
+                {{ tab.label }}
+              </button>
+            }
+            <button (click)="debugOpen.set(false)">Close</button>
+          </div>
+        </header>
+        <div class="debug-grid">
+          @switch (debugTab()) {
+            @case ('actors') {
+              <article>
+                <h3>Actor counts</h3>
+                <div class="metric-grid">
+                  <div><b>7</b><span>agent turns</span></div>
+                  <div><b>2</b><span>orchestrator</span></div>
+                  <div><b>1</b><span>supervisor</span></div>
+                  <div><b>1</b><span>QA report</span></div>
+                </div>
+              </article>
+              <article>
+                <h3>Decision trail</h3>
+                <p>Orchestrator reissued once after a fast heuristic done. Supervisor observed one quiet window and did not kill the run.</p>
+              </article>
+            }
+            @case ('tools') {
+              <article>
+                <h3>Tool calls</h3>
+                @for (row of toolRows; track row.tool) {
+                  <div class="debug-band">
+                    <span>{{ row.tool }} · {{ row.target }}</span>
+                    <i><em [style.width.%]="row.tone === 'danger' ? 42 : 72"></em></i>
+                    <b>{{ row.result }}</b>
+                  </div>
+                }
+              </article>
+              <article>
+                <h3>Raw trace range</h3>
+                <p>Lines 418-731 collapse into the visible tool burst. Expanding shows command, duration, exit code, and artifact links.</p>
+              </article>
+            }
+            @case ('tokens') {
+              <article>
+                <h3>Token pressure</h3>
+                <div class="token-bars">
+                  @for (row of tokenRows; track row.name) {
+                    <div>
+                      <span>{{ row.name }}</span>
+                      <i><em [style.width.%]="row.percent"></em></i>
+                      <b>{{ row.value }}</b>
+                    </div>
+                  }
+                </div>
+              </article>
+              <article>
+                <h3>Budget interpretation</h3>
+                <p>Token heat should be visible at task, run, project, and supporting-agent level. The default chat shows only pressure and trend.</p>
+              </article>
+            }
+            @case ('trace') {
+              <article>
+                <h3>Trace filters</h3>
+                <div class="function-grid">
+                  <button>actor:agent</button>
+                  <button>actor:orchestrator</button>
+                  <button>tool:failed</button>
+                  <button>artifact:image</button>
+                  <button>sentinel:matched</button>
+                  <button>schema:drift</button>
+                </div>
+              </article>
+              <article>
+                <h3>Raw source</h3>
+                <p>The raw Activity Log remains one click away. The chat projection is a readable lens, not a replacement for evidence.</p>
+              </article>
+            }
+            @default {
+              <article>
+                <h3>Overview</h3>
+                <div class="metric-grid">
+                  <div><b>12m</b><span>duration</span></div>
+                  <div><b>28</b><span>tool calls</span></div>
+                  <div><b>42k</b><span>tokens</span></div>
+                  <div><b>3</b><span>commits</span></div>
+                </div>
+              </article>
+              <article>
+                <h3>Timeline</h3>
+                @for (row of debugBands; track row.name) {
+                  <div class="debug-band">
+                    <span>{{ row.name }}</span>
+                    <i><em [style.width.%]="row.percent"></em></i>
+                    <b>{{ row.value }}</b>
+                  </div>
+                }
+              </article>
+              <article>
+                <h3>Explanation</h3>
+                <p>The workbench keeps normal chat readable while preserving the deep diagnostic surface for confusing runs. It is read-only and links back to raw trace, tokens, commits, screenshots, and task markers.</p>
+              </article>
+            }
+          }
+        </div>
+      </section>
+    </div>
+  }
+
+  @if (guideOpen()) {
+    <div class="modal" data-testid="prototype-rail-guide-modal" (click)="guideOpen.set(false)">
+      <section class="modal__panel modal__panel--guide" (click)="$event.stopPropagation()">
+        <header>
+          <strong>Workbench rail</strong>
+          <button (click)="guideOpen.set(false)">Close</button>
+        </header>
+        <div class="guide-grid">
+          <article>
+            <h3>Container rule</h3>
+            <p>Activity Bar modules navigate. Side Bar views select. Workbench documents do the work. Status Bar items summarize.</p>
+          </article>
+          <article>
+            <h3>Queue is optional</h3>
+            <p>The Queue is the Tasks module. It can open by default, close when review needs width, and return from the Activity Bar.</p>
+          </article>
+          <article>
+            <h3>Document area</h3>
+            <p>Summary, Task Chat, Git changes, Screenshots, and Debug trace behave like opened documents, not permanent dashboard cards.</p>
+          </article>
+          <article>
+            <h3>Actions stay scoped</h3>
+            <p>Pane headers keep contextual actions sparse. Rare choices move to status popovers, command palette, or Verbose Debug.</p>
+          </article>
+        </div>
+      </section>
+    </div>
+  }
+
+  @if (lightboxOpen()) {
+    <div class="modal" data-testid="prototype-lightbox" (click)="lightboxOpen.set(false)">
+      <section class="modal__panel modal__panel--image" (click)="$event.stopPropagation()">
+        <header>
+          <strong>Screenshot evidence</strong>
+          <button (click)="lightboxOpen.set(false)">Close</button>
+        </header>
+        <div class="image-box">
+          <strong>Workbench Git split, verified</strong>
+          <code>docs/mockups/chat-window-next-gen/evidence/angular-prototype-git.png</code>
+        </div>
+      </section>
+    </div>
+  }
+
+  @if (featureModal(); as feature) {
+    <div class="modal" data-testid="prototype-feature-modal" (click)="featureModal.set(null)">
+      <section class="modal__panel modal__panel--guide" (click)="$event.stopPropagation()">
+        <header>
+          <strong>{{ featureTitle(feature) }}</strong>
+          <button (click)="featureModal.set(null)">Close</button>
+        </header>
+        <div class="guide-grid">
+          @switch (feature) {
+            @case ('prompt') {
+              <article>
+                <h3>Prompt history</h3>
+                <p><code>prompt.md</code> is the original task. <code>prompt-2.md</code> and <code>prompt-3.md</code> are user extensions that should remain reviewable without leaving the chat workbench.</p>
+              </article>
+              <article>
+                <h3>Edit path</h3>
+                <p>Production should keep preview, source edit, save state, and prompt-history breadcrumbs. This mock keeps the interaction as a quick modal.</p>
+                <div class="function-grid">
+                  <button>Preview prompt.md</button>
+                  <button>Edit prompt.md</button>
+                  <button>Open history diff</button>
+                </div>
+              </article>
+            }
+            @case ('timeline') {
+              <article>
+                <h3>Run timeline</h3>
+                <div class="metric-grid">
+                  <div><b>Run 1</b><span>start</span></div>
+                  <div><b>Run 2</b><span>continue</span></div>
+                  <div><b>Run 3</b><span>reissue</span></div>
+                  <div><b>Run 4</b><span>review</span></div>
+                </div>
+              </article>
+              <article>
+                <h3>Expected behavior</h3>
+                <p>The default transcript gets a tiny run marker. Full history opens here or in Verbose Debug, including session id, trace range, commits, and token pressure.</p>
+                <div class="function-grid">
+                  <button (click)="markerOpen.set(true); featureModal.set(null)">Open run marker</button>
+                  <button (click)="debugTab.set('overview'); debugOpen.set(true); featureModal.set(null)">Verbose timeline</button>
+                </div>
+              </article>
+            }
+            @case ('startStop') {
+              <article>
+                <h3>Run controls</h3>
+                <div class="metric-grid">
+                  <div><b>Codex</b><span>driver</span></div>
+                  <div><b>5.5</b><span>model</span></div>
+                  <div><b>Full</b><span>access</span></div>
+                  <div><b>Paused</b><span>safe stop ready</span></div>
+                </div>
+              </article>
+              <article>
+                <h3>Composer deck</h3>
+                <p>Start, pause, stop, access mode, model, CLI, and selected file context stay in the bottom composer area. The task header only carries durable task state.</p>
+                <div class="function-grid">
+                  <button (click)="composerMode.set('continue'); featureModal.set(null)">Focus continue</button>
+                  <button (click)="toggleStatusPanel('model'); featureModal.set(null)">Model settings</button>
+                  <button>Stop run</button>
+                </div>
+              </article>
+            }
+          }
+        </div>
+      </section>
+    </div>
+  }
+
+  @if (commandOpen()) {
+    <div class="modal" data-testid="prototype-command-palette" (click)="commandOpen.set(false)">
+      <section class="command" (click)="$event.stopPropagation()">
+        <input value="workbench: switch to git changes" aria-label="Command palette input" />
+        <button (click)="setPane('git'); commandOpen.set(false)">Pin Git review</button>
+        <button (click)="setPane('preview'); commandOpen.set(false)">Open screenshots</button>
+        <button (click)="setPane('debug'); commandOpen.set(false)">Open debug pane</button>
+        <button (click)="markerOpen.set(true); commandOpen.set(false)">Inspect current run</button>
+        <button (click)="sideSheetOpen.set(!sideSheetOpen()); commandOpen.set(false)">Toggle project side sheet</button>
+        <button (click)="composerMode.set('steer'); commandOpen.set(false)">Switch composer to steering</button>
+      </section>
+    </div>
+  }
+  </section>
+} @else {
+  <section class="ng-chat-prototype ng-chat-prototype--closed"
+           [attr.data-theme]="theme()"
+           data-testid="next-gen-chat-angular-prototype">
+    <div class="prototype-closed" data-testid="prototype-closed-state">
+      <strong>Prototype closed</strong>
+      <span>Restart the mockup server or refresh the page to open it again.</span>
+    </div>
+  </section>
+}
+  

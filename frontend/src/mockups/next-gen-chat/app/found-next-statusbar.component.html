@@ -1,0 +1,72 @@
+<footer class="statusbar" data-testid="prototype-statusbar">
+  <div class="statusbar__group">
+    <button class="statusbar__item statusbar__item--readonly" (click)="statusPanelRequested.emit('health')" data-testid="prototype-status-health">
+      <span class="statusbar__dot statusbar__dot--live"></span>
+      <span>2 running</span>
+    </button>
+    <button class="statusbar__item statusbar__item--readonly" (click)="statusPanelRequested.emit('queue')" data-testid="prototype-status-queue">
+      <span class="statusbar__icon-text">auto</span>
+      <span>4/6</span>
+    </button>
+    <button class="statusbar__item" (click)="statusPanelRequested.emit('session')" data-testid="prototype-status-session">
+      <span class="statusbar__icon-text">session</span>
+      <span>preserved chain 3</span>
+    </button>
+  </div>
+  <div class="statusbar__group statusbar__group--center statusbar__usage">
+    @for (item of usageStrip; track item.label) {
+      <button class="usage-pill"
+              [attr.data-tone]="item.tone"
+              [attr.title]="item.detail"
+              (click)="statusPanelRequested.emit('tokens')"
+              [attr.data-testid]="item.testId">
+        <span>{{ item.label }}</span>
+        <b>{{ item.value }}</b>
+        @if (item.window) {
+          <small>{{ item.window }}</small>
+        }
+      </button>
+    }
+    <button class="usage-pill usage-pill--tokens" (click)="statusPanelRequested.emit('tokens')" data-testid="prototype-status-token">
+      <span>Tokens</span>
+      <b>42k</b>
+    </button>
+    <button class="usage-pill" (click)="statusPanelRequested.emit('queue')" data-testid="prototype-status-git">
+      <span>Git</span>
+      <b>3 commits</b>
+    </button>
+    <button class="usage-pill" (click)="statusPanelRequested.emit('evidence')" data-testid="prototype-status-evidence">
+      <span>Visual</span>
+      <b>4 shots</b>
+    </button>
+    <button class="usage-pill" (click)="statusPanelRequested.emit('queue')">
+      <span>Tools</span>
+      <b>28</b>
+    </button>
+  </div>
+  <div class="statusbar__group statusbar__group--right">
+    <button class="statusbar__item statusbar__item--usage" (click)="statusPanelRequested.emit('tokens')" title="Codex and Claude 5-hour quota windows">
+      <span>Usage</span>
+      <b>{{ compactUsageSummary }}</b>
+    </button>
+    <button class="statusbar__item" (click)="sideSheetRequested.emit()">
+      <span>Orch</span>
+    </button>
+    <button class="statusbar__item" (click)="debugTraceRequested.emit()">
+      <span>Feed</span>
+    </button>
+    <button class="statusbar__item" (click)="statusPanelRequested.emit('evidence')">
+      <span>Visual</span>
+    </button>
+    <span class="statusbar__sep"></span>
+    <button class="statusbar__item statusbar__picker" (click)="statusPanelRequested.emit('model')" data-testid="prototype-status-model">
+      <b>Codex</b>
+      <span class="statusbar__caret">v</span>
+    </button>
+    <button class="statusbar__item statusbar__picker" (click)="statusPanelRequested.emit('model')">
+      <b>5.5 Extra High</b>
+      <span class="statusbar__caret">v</span>
+    </button>
+  </div>
+</footer>
+  

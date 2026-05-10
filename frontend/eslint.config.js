@@ -22,6 +22,16 @@ module.exports = tseslint.config(
         'error',
         { type: 'element', prefix: ['app', 'mockup'], style: 'kebab-case' },
       ],
+      // Cycle 11d: hard-floor the 3-file shape established in 11a/b.
+      // Inline `template:` and `styles:` blocks bloat .ts files, defeat
+      // per-file-type grep, and shut Prettier/template-aware lint out
+      // of the markup. Allow zero lines of either; tiny one-line stubs
+      // can stay inline by rare exception (raise the limit locally if
+      // ever needed).
+      '@angular-eslint/component-max-inline-declarations': [
+        'error',
+        { template: 0, styles: 0, animations: 0 },
+      ],
       // ADR-0034 / Cycle 9h+10j: cross-feature imports must use the
       // feature barrel (./features/<name>), not deep paths. The barrel
       // is each feature's public API; deep imports turn every internal

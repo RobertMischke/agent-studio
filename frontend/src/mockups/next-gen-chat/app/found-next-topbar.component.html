@@ -1,0 +1,101 @@
+<header class="topbar">
+  <div class="topbar__title">
+    <strong>Agent Software Studio</strong>
+    <span>Task workbench</span>
+  </div>
+  <div class="topbar__projects" aria-label="Project filter" data-testid="prototype-project-switcher">
+    @for (project of projectTabs; track project.name) {
+      <button class="project-chip"
+              [class.project-chip--active]="project.active"
+              [style.--project-color]="project.color"
+              [style.--project-soft]="project.soft"
+              [style.--project-border]="project.border"
+              [style.--project-on]="project.on"
+              [attr.title]="project.tooltip"
+              (click)="projectPanelRequested.emit()">
+        <span class="project-chip__disk">{{ project.initial }}</span>
+        <span class="project-chip__name">{{ project.name }}</span>
+        <span class="project-chip__auto">{{ project.auto }}</span>
+      </button>
+    }
+  </div>
+  <div class="topbar__runline" aria-label="Current run summary" data-testid="prototype-topbar-runline">
+    @for (stat of runStats; track stat) {
+      <span>{{ stat }}</span>
+    }
+  </div>
+  <div class="topbar__actions">
+    <button class="owner-switch"
+            title="Owner filter: Robert"
+            aria-label="Owner filter Robert"
+            data-testid="prototype-owner-switch"
+            (click)="projectPanelRequested.emit()">
+      <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+        @for (path of iconPath('user'); track path) {
+          <path [attr.d]="path"></path>
+        }
+      </svg>
+      <span>Robert</span>
+    </button>
+    <button class="icon-btn"
+            [class.icon-btn--active]="sideSheetOpen()"
+            title="Toggle project sheet"
+            aria-label="Toggle project sheet"
+            (click)="sideSheetToggled.emit()"
+            data-testid="prototype-topbar-sheet">
+      <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+        @for (path of iconPath(sideSheetOpen() ? 'panelClose' : 'panelOpen'); track path) {
+          <path [attr.d]="path"></path>
+        }
+      </svg>
+    </button>
+    <button class="icon-btn"
+            [class.icon-btn--active]="statusPanel() === 'queue'"
+            title="Queue and automation"
+            aria-label="Queue and automation"
+            (click)="queuePanelRequested.emit()"
+            data-testid="prototype-topbar-queue">
+      <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+        @for (path of iconPath('columns'); track path) {
+          <path [attr.d]="path"></path>
+        }
+      </svg>
+    </button>
+    <button class="icon-btn" title="Toggle density" aria-label="Toggle density" (click)="densityToggled.emit()" data-testid="prototype-density-toggle">
+      <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+        @for (path of iconPath(density() === 'compact' ? 'expand' : 'compress'); track path) {
+          <path [attr.d]="path"></path>
+        }
+      </svg>
+    </button>
+    <button class="icon-btn" title="Toggle theme" aria-label="Toggle theme" (click)="themeToggled.emit()" data-testid="prototype-theme-toggle">
+      <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+        @for (path of iconPath(theme() === 'light' ? 'sun' : 'moon'); track path) {
+          <path [attr.d]="path"></path>
+        }
+      </svg>
+    </button>
+    <button class="icon-btn" title="Command palette" aria-label="Command palette" (click)="commandRequested.emit()" data-testid="prototype-command-open">
+      <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+        @for (path of iconPath('command'); track path) {
+          <path [attr.d]="path"></path>
+        }
+      </svg>
+    </button>
+    <button class="icon-btn" title="Verbose debug" aria-label="Verbose debug" (click)="debugRequested.emit()" data-testid="prototype-debug-open">
+      <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+        @for (path of iconPath('bug'); track path) {
+          <path [attr.d]="path"></path>
+        }
+      </svg>
+    </button>
+    <button class="icon-btn" title="Close prototype" aria-label="Close prototype" (click)="closeRequested.emit()">
+      <svg class="svg-icon" viewBox="0 0 24 24" aria-hidden="true">
+        @for (path of iconPath('close'); track path) {
+          <path [attr.d]="path"></path>
+        }
+      </svg>
+    </button>
+  </div>
+</header>
+  
