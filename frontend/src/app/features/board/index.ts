@@ -7,6 +7,7 @@
 // state
 export { BoardFiltersService, type ActiveFilterPill } from './state/board-filters.service';
 export { LaneCollapseService } from './state/lane-collapse.service';
+export { CreateJobFormService } from './state/create-job-form.service';
 
 // components
 export { BoardSearchIconComponent } from './components/board-search-icon/board-search-icon.component';

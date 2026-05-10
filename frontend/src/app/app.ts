@@ -12,8 +12,8 @@ import {
   ProjectAutoInfo,
   ProjectTabsComponent,
   ProjectTokenChipInfo,
-  PendingAttachment,
   TypeFilterOption,
+  CreateJobFormService,
   splitReadyByPhase,
 } from './features/board';
 import { JobDetailComponent, JobSelectionService } from './features/job-detail';
@@ -485,14 +485,14 @@ interface VerboseDebugContext {
           [title]="createDialogTitle()"
           [watchPaths]="watchPaths()"
           [availableModels]="availableModels()"
-          [cliTypeDraft]="newCliType"
-          [(newTitle)]="newTitle"
-          [(newWatchPath)]="newWatchPath"
-          [(newModel)]="newModel"
-          [(newPrompt)]="newPrompt"
-          [(attachments)]="newAttachments"
-          [(newTaskType)]="newTaskType"
-          [(newTags)]="newTags"
+          [cliTypeDraft]="createJobForm.newCliType"
+          [(newTitle)]="createJobForm.newTitle"
+          [(newWatchPath)]="createJobForm.newWatchPath"
+          [(newModel)]="createJobForm.newModel"
+          [(newPrompt)]="createJobForm.newPrompt"
+          [(attachments)]="createJobForm.newAttachments"
+          [(newTaskType)]="createJobForm.newTaskType"
+          [(newTags)]="createJobForm.newTags"
           (cliTypeChange)="onCreateCliTypeChange($event)"
           (cancel)="cancelCreate()"
           (submit)="submitCreate()" />
@@ -2301,7 +2301,15 @@ export class App implements OnInit {
    * task detail isn't currently displayed.
    */
   readonly verboseDebugContext = signal<VerboseDebugContext | null>(null);
-  readonly showCreate = signal(false);
+  /**
+   * Cycle 10a: create-job dialog state + open/cancel/submit logic
+   * lives in CreateJobFormService. The shell re-exposes the visibility
+   * signal + the bound fields via getters so the existing template
+   * bindings keep working unchanged.
+   */
+  readonly createJobForm = inject(CreateJobFormService);
+  readonly showCreate = this.createJobForm.visible;
+  readonly availableModels = this.createJobForm.availableModels;
   /**
    * Cycle 9g: per-project overlay state (orch-feed / project-detail /
    * project-shell / analysis-report) lives in ProjectOverlaysService.
@@ -2606,75 +2614,18 @@ export class App implements OnInit {
   // Cycle 9j: triageLanePeers lives in JobSelectionService.
   readonly triageLanePeers = this.jobSelection.triageLanePeers;
 
-  newTitle = '';
-  newWatchPath = '';
-  newAgent = 'copilot';
-  newPrompt = '';
-  newTargetState = '0-backlog';
-  /** Backlog-lane spec: structural classification of the new task. */
-  newTaskType = 'chore';
-  /** Backlog-lane spec: tag ids attached on create. */
-  newTags: string[] = [];
-  newCliType: CliType = readDefaultCliPref();
-  newModel = readDefaultModelPref(readDefaultCliPref());
-  newAttachments: PendingAttachment[] = [];
-
+  // Cycle 10a: form state (newTitle/newPrompt/newCliType/etc.) lives in
+  // CreateJobFormService. Pass-through getters keep the existing
+  // template `[(ngModel)]` and helper-method bindings working unchanged.
   readonly cliTypes = CLI_TYPES;
-  readonly availableModels = signal<CliModelInfo[]>([]);
 
-  createDialogTitle(): string {
-    switch (this.newTargetState) {
-      case '2-ready': return 'Add Task to Ready';
-      case '1-preparation': return 'Add Task to Preparation';
-      case '0-backlog': return 'Add Task to Backlog';
-      default: return 'Add Task';
-    }
-  }
-
+  createDialogTitle(): string { return this.createJobForm.title(); }
   cliTypeLabel(t: CliType): string { return fmtCliTypeLabel(t); }
-
   formatMultiplier(mult: number | null): string { return fmtMultiplier(mult); }
-
-  onCreateCliTypeChange(t: CliType) {
-    if (this.newCliType === t) return;
-    this.newCliType = t;
-    this.newModel = readDefaultModelPref(t);
-    this.loadCreateModels(t);
-  }
-
-  /**
-   * Status bar changed the default CLI for new tasks. Pre-fill the create
-   * dialog so the next ＋ Add Task lands on the user's pick without making
-   * them re-pick inside the dialog.
-   */
-  onDefaultCliChange(t: CliType): void {
-    this.newCliType = t;
-    this.newModel = readDefaultModelPref(t);
-  }
-
-  onDefaultModelChange(ev: { cliType: CliType; model: string }): void {
-    if (ev.cliType === this.newCliType) {
-      this.newModel = ev.model;
-    }
-  }
-
-  private loadCreateModels(cliType: CliType) {
-    this.jobService.getCliModelCatalog(cliType).subscribe({
-      next: (catalog) => {
-        const models = catalog.models ?? [];
-        this.availableModels.set(models);
-        if (!this.newModel) {
-          const def = models.find(m => m.isDefault);
-          if (def) this.newModel = def.id;
-        }
-      },
-      error: () => this.availableModels.set([])
-    });
-  }
-
-  canAddTaskToGroup(state: string): boolean {
-    return state === '0-backlog' || state === '1-preparation' || state === '2-ready';
-  }
+  onCreateCliTypeChange(t: CliType): void { this.createJobForm.onCreateCliTypeChange(t); }
+  onDefaultCliChange(t: CliType): void { this.createJobForm.applyStoredCliDefault(); }
+  onDefaultModelChange(ev: { cliType: CliType; model: string }): void { this.createJobForm.onDefaultModelChange(ev); }
+  canAddTaskToGroup(state: string): boolean { return this.createJobForm.canAddTaskToGroup(state); }
 
   readonly devToolsFlags = computed(() => this.devTools.flags());
 
@@ -2712,6 +2663,11 @@ export class App implements OnInit {
     private readonly _completionSound: JobCompletionSoundService,
     readonly updateClient: UpdateClientService,
   ) {
+    // Cycle 10a: refresh the kanban after a successful create — the
+    // CreateJobFormService doesn't call jobService.refresh itself
+    // because that orchestration concern lives here.
+    this.createJobForm.submitted$.subscribe(() => this.refresh());
+
     effect(() => {
       const selected = this.selectedJob();
       const jobs = this.jobService.jobs();
@@ -2771,7 +2727,7 @@ export class App implements OnInit {
     this.jobService.getWatchPaths().subscribe({
       next: (entries) => {
         this.watchPaths.set(entries);
-        if (entries.length > 0) this.newWatchPath = entries[0].path;
+        if (entries.length > 0) this.createJobForm.newWatchPath = entries[0].path;
         // The deep-link hash listener can fire before watch paths are
         // known (e.g. on a hard reload of `#/projects/<slug>`); resolving
         // the slug → project name needs the watch-path list, so re-apply
@@ -3151,10 +3107,11 @@ export class App implements OnInit {
   }
 
   openCreate(targetState?: string) {
-    this.newTargetState = targetState === '2-ready' ? '2-ready' : '1-preparation';
-    this.newWatchPath = this.pickCreateWatchPath();
-    this.loadCreateModels(this.newCliType);
-    this.showCreate.set(true);
+    this.createJobForm.open({
+      watchPaths: this.watchPaths(),
+      activeProjects: this.activeProjects(),
+      targetState,
+    });
   }
 
   onSearchInput(event: Event) {
@@ -3320,14 +3277,7 @@ export class App implements OnInit {
    * before submitting; the panel never queues a job behind the user's back.
    */
   onSecurityFollowUp(event: { projectName: string; prefill: string }): void {
-    const watchEntry = this.watchPaths().find((wp) => wp.name === event.projectName);
-    if (!watchEntry) return;
-    this.newTargetState = '1-preparation';
-    this.newWatchPath = watchEntry.path;
-    this.newPrompt = event.prefill;
-    this.newTitle = `Security follow-up (${event.projectName})`;
-    this.loadCreateModels(this.newCliType);
-    this.showCreate.set(true);
+    this.createJobForm.openSecurityFollowUp(event, this.watchPaths());
   }
 
   /**
@@ -3357,14 +3307,7 @@ export class App implements OnInit {
    * target-state / title before submitting.
    */
   onUxuiFollowUp(event: { projectName: string; prefill: string; title: string }): void {
-    const watchEntry = this.watchPaths().find((wp) => wp.name === event.projectName);
-    if (!watchEntry) return;
-    this.newTargetState = '1-preparation';
-    this.newWatchPath = watchEntry.path;
-    this.newPrompt = event.prefill;
-    this.newTitle = event.title;
-    this.loadCreateModels(this.newCliType);
-    this.showCreate.set(true);
+    this.createJobForm.openUxuiFollowUp(event, this.watchPaths());
   }
 
   /** Refresh the kanban after a UX/UI design action was queued so the new job appears. */
@@ -3373,14 +3316,7 @@ export class App implements OnInit {
   }
 
   onCreateTaskFromOrchestratorDraft(event: { projectName: string; promptText: string }): void {
-    const watchEntry = this.watchPaths().find((wp) => wp.name === event.projectName);
-    if (!watchEntry) return;
-    this.newTargetState = '1-preparation';
-    this.newWatchPath = watchEntry.path;
-    this.newPrompt = event.promptText;
-    this.newTitle = deriveDraftTitle(event.promptText);
-    this.loadCreateModels(this.newCliType);
-    this.showCreate.set(true);
+    this.createJobForm.openOrchestratorDraftFollowUp(event, this.watchPaths());
   }
 
   private pickOrchFeedProject(): string | null {
@@ -3440,127 +3376,8 @@ export class App implements OnInit {
     });
   }
 
-  private pickCreateWatchPath(): string {
-    const paths = this.watchPaths();
-    if (paths.length === 0) return '';
-    const last = localStorage.getItem('lastCreateWatchPath');
-    const isValid = (p: string | null) => !!p && paths.some(wp => wp.path === p);
-    const active = this.activeProjects();
-    const activePaths = paths.filter(wp => active.has(wp.name));
-
-    if (activePaths.length === 1) {
-      return activePaths[0].path;
-    }
-    if (activePaths.length > 1) {
-      const lastInActive = activePaths.find(wp => wp.path === last);
-      if (lastInActive) return lastInActive.path;
-      return activePaths[0].path;
-    }
-    if (isValid(last)) return last as string;
-    return paths[0].path;
-  }
-
-  cancelCreate() {
-    this.showCreate.set(false);
-    this.newTitle = '';
-    this.newPrompt = '';
-    this.newAgent = 'copilot';
-    this.newTaskType = 'chore';
-    this.newTags = [];
-    this.newTargetState = '0-backlog';
-    this.newCliType = readDefaultCliPref();
-    this.newModel = readDefaultModelPref(this.newCliType);
-    this.availableModels.set([]);
-    for (const att of this.newAttachments) URL.revokeObjectURL(att.previewUrl);
-    this.newAttachments = [];
-  }
-
-  submitCreate() {
-    const attachments = this.newAttachments;
-    const promptDraft = this.newPrompt.trim();
-    const watchPath = this.newWatchPath;
-
-    // When attachments are present we defer writing the prompt to the create
-    // call (its `pending-attachment-…` placeholders are not yet resolvable),
-    // upload each image against the new jobId, then PUT prompt.md with the
-    // real `attachments/<file>` references.
-    const initialPrompt = attachments.length > 0 ? undefined : (promptDraft || undefined);
-
-    this.jobService.createJob({
-      title: this.newTitle.trim(),
-      watchPath,
-      agent: this.newCliType,
-      promptMarkdown: initialPrompt,
-      targetState: this.newTargetState,
-      cliType: this.newCliType,
-      model: this.newModel.trim() || undefined,
-      taskType: this.newTaskType,
-      tags: this.newTags.length > 0 ? [...this.newTags] : undefined
-    }).subscribe({
-      next: (res) => {
-        localStorage.setItem('lastCreateWatchPath', watchPath);
-        if (attachments.length > 0) {
-          void this.uploadCreateAttachments(res.id, watchPath, promptDraft, attachments);
-        }
-        this.cancelCreate();
-        this.refresh();
-      },
-      error: (err) => {
-        this.jobService.error.set(err.error || 'Failed to create job');
-        this.errorDialog.show(err, {
-          title: 'Failed to create task',
-          fallbackMessage: 'Failed to create task',
-          source: 'Task creation'
-        });
-      },
-    });
-  }
-
-  private async uploadCreateAttachments(
-    jobId: string,
-    watchPath: string,
-    promptDraft: string,
-    attachments: PendingAttachment[]
-  ): Promise<void> {
-    let prompt = promptDraft;
-    for (const att of attachments) {
-      try {
-        const form = new FormData();
-        form.append('file', att.file, att.file.name || `${att.alt}.png`);
-        const url = `/api/jobs/${encodeURIComponent(jobId)}/attachments`
-          + (watchPath ? `?watchPath=${encodeURIComponent(watchPath)}` : '');
-        const res = await fetch(url, { method: 'POST', body: form });
-        if (!res.ok) {
-          this.errorDialog.show(new Error(`Upload failed (${res.status}) for ${att.file.name || att.alt}`), {
-            title: 'Attachment upload failed',
-            fallbackMessage: 'Could not upload one of the pasted images.',
-            source: `Task ${jobId}`
-          });
-          continue;
-        }
-        const payload = (await res.json()) as { fileName: string; relativePath: string };
-        prompt = prompt.replace(
-          new RegExp(`pending-attachment-${att.id}`, 'g'),
-          payload.relativePath
-        );
-      } catch (err) {
-        this.errorDialog.show(err as Error, {
-          title: 'Attachment upload failed',
-          fallbackMessage: 'Could not upload one of the pasted images.',
-          source: `Task ${jobId}`
-        });
-      }
-    }
-
-    this.jobService.updateJobFile(jobId, 'prompt.md', prompt, watchPath).subscribe({
-      next: () => this.refresh(),
-      error: (err) => this.errorDialog.show(err, {
-        title: 'Failed to save prompt',
-        fallbackMessage: 'Attachments uploaded, but writing prompt.md failed.',
-        source: `Task ${jobId}`
-      })
-    });
-  }
+  cancelCreate() { this.createJobForm.cancel(); }
+  submitCreate() { this.createJobForm.submit(); }
 
   toggleProject(name: string) { this.boardFilters.toggleProject(name); }
   isProjectActive(name: string): boolean { return this.boardFilters.isProjectActive(name); }
@@ -3820,30 +3637,4 @@ export class App implements OnInit {
   toggleCompactCards(): void { this.uiPrefs.toggleCompactCards(); }
   startResize(event: MouseEvent): void { this.uiPrefs.startResize(event); }
 
-}
-
-function readDefaultCliPref(): CliType {
-  const stored = localStorage.getItem('defaultCliType') as CliType | null;
-  if (stored && (CLI_TYPES as string[]).includes(stored)) return stored;
-  return 'copilot';
-}
-
-function readDefaultModelPref(cliType: CliType): string {
-  return localStorage.getItem('defaultModel:' + cliType) ?? '';
-}
-
-/**
- * Best-effort task title from a Markdown reply: take the first non-empty
- * line, strip Markdown decoration, cap at 80 chars. Used by
- * `onCreateTaskFromOrchestratorDraft` so the user lands in the create
- * dialog with a placeholder title instead of an empty field.
- */
-function deriveDraftTitle(text: string): string {
-  if (!text) return '';
-  for (const raw of text.split('\n')) {
-    const line = raw.replace(/^#+\s*/, '').replace(/[*_`]/g, '').trim();
-    if (line.length === 0) continue;
-    return line.length > 80 ? line.slice(0, 77).trim() + '...' : line;
-  }
-  return '';
 }
