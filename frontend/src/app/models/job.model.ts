@@ -45,23 +45,20 @@ export type {
 } from '../features/orchestrator/models/orchestrator.model';
 import type { OrchestratorLogEntry, OrchestratorSession } from '../features/orchestrator/models/orchestrator.model';
 
-/** One row in `logs/session-events.jsonl` for a job. */
-export interface SessionEvent {
-  ts: string;                       // ISO timestamp
-  kind: 'start' | 'continue' | 'recovery';
-  cli: string | null;
-  inputSessionId: string | null;
-  capturedSessionId: string | null;
-  resumed: boolean;
-  reason: string | null;
-}
+// Cycle 9: per-job session-event log rows.
+export type { SessionEvent, SessionEventsResponse } from '../features/session-events/models/session-events.model';
 
-export interface SessionEventsResponse {
-  events: SessionEvent[];
-  /** Ordered list of CLI session ids; the literal string `(recovery)` marks a chain break. */
-  sessionChain: string[];
-  currentSessionId: string | null;
-}
+// Cycle 9: per-job + workspace screenshot listings.
+export type { JobScreenshot, JobScreenshotsResponse, WorkspaceScreenshotsResponse } from '../features/screenshots/models/screenshots.model';
+
+// Cycle 9: project-chat (Slice D) turns + responses + search hits.
+export type { ProjectChatTurn, ProjectChatScrollResponse, ProjectChatSearchHit, ProjectChatSearchResponse, ProjectChatTurnResponse } from '../features/project-chat/models/project-chat.model';
+
+// Cycle 9: roadmap-intake splitter candidates + responses.
+export type { RoadmapIntakeCandidate, RoadmapIntakeResponse, RoadmapIntakeConfirmResponse } from '../features/roadmap/models/roadmap.model';
+
+/** One row in `logs/session-events.jsonl` for a job. */
+// (SessionEvent + SessionEventsResponse now in features/session-events/models; re-exported below)
 
 /**
  * One CLI invocation between two user inputs - the unit of conversation
@@ -433,33 +430,7 @@ export interface ProjectJobTokenDetail {
  * protocol pane and the workspace visual evidence reel both render
  * arrays of these.
  */
-export interface JobScreenshot {
-  jobId: string;
-  jobTitle: string;
-  projectName: string;
-  watchPath: string;
-  fileName: string;
-  /** Always begins with `results/`. */
-  relativePath: string;
-  /** Routable URL that serves this file (sub-path aware). */
-  url: string;
-  caption: string;
-  /** `passed` | `failed` | `skipped` | `unknown` | null. */
-  status: string | null;
-  localPath: string;
-  timestampUtc: string;
-}
-
-export interface JobScreenshotsResponse {
-  jobId: string;
-  screenshots: JobScreenshot[];
-}
-
-export interface WorkspaceScreenshotsResponse {
-  windowHours: number;
-  projectFilter: string | null;
-  screenshots: JobScreenshot[];
-}
+// (JobScreenshot + JobScreenshotsResponse + WorkspaceScreenshotsResponse now in features/screenshots/models; re-exported below)
 
 /**
  * Long-lived orchestrator session record. The orchestrator boots one of
@@ -477,79 +448,14 @@ export interface WorkspaceScreenshotsResponse {
  * embedded events (tool-call / watchdog / rate-limit / ...) as
  * first-class records alongside conventional turns.
  */
-export interface ProjectChatTurn {
-  turnId: string;
-  author:
-    | 'user'
-    | 'orchestrator'
-    | 'agent'
-    | 'supervisor'
-    | 'claude'
-    | 'codex'
-    | 'copilot'
-    | 'gemini';
-  kind:
-    | 'turn'
-    | 'event-tool-call'
-    | 'event-watchdog'
-    | 'event-rate-limit'
-    | 'event-update'
-    | 'event-task'
-    | 'event-decision';
-  ts: string;
-  refs?: string[] | null;
-  body: string;
-}
-
-export interface ProjectChatScrollResponse {
-  project: string;
-  direction: 'before' | 'after' | 'tail';
-  turns: ProjectChatTurn[];
-}
-
-export interface ProjectChatSearchHit {
-  turnId: string;
-  author: ProjectChatTurn['author'];
-  kind: ProjectChatTurn['kind'];
-  ts: string;
-  /** HTML-safe snippet with `<b>...</b>` highlight markers around matched terms. */
-  snippet: string;
-  score: number;
-}
-
-export interface ProjectChatSearchResponse {
-  project: string;
-  results: ProjectChatSearchHit[];
-}
-
-export interface ProjectChatTurnResponse {
-  project: string;
-  turn: ProjectChatTurn;
-}
+// (Project chat turn + responses now in features/project-chat/models; re-exported below)
 
 /**
  * One candidate task produced by the roadmap-intake splitter. The user
  * reviews and edits these in place before confirming; the confirm step
  * materialises them as job folders in <c>1-preparation</c>.
  */
-export interface RoadmapIntakeCandidate {
-  title: string;
-  promptBody: string;
-  kind: 'feature' | 'bug' | 'adr' | 'chore' | 'research' | string;
-  suggestedOrder: number;
-  suggestedCliType: string;
-  rationale: string;
-}
-
-export interface RoadmapIntakeResponse {
-  candidates: RoadmapIntakeCandidate[];
-  notes: string;
-}
-
-export interface RoadmapIntakeConfirmResponse {
-  created: { jobId: string; title: string; state: string }[];
-  skipped: string[];
-}
+// (RoadmapIntake* now in features/roadmap/models; re-exported below)
 
 // (TokenSummaryByModel now in features/tokens/models/tokens.model.ts; re-exported below)
 
