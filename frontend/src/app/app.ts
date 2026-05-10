@@ -7,23 +7,13 @@ import { FormsModule } from '@angular/forms';
 import { JobColumnComponent } from './features/board/components/job-column';
 import { JobDetailComponent } from './features/job-detail/job-detail';
 import { CliUsageSheetComponent } from './features/cli/components/cli-usage-sheet';
-import { OrchestratorFeedComponent } from './features/orchestrator/components/orchestrator-feed';
 import { OrchestratorSideSheetComponent } from './features/orchestrator/components/orchestrator-side-sheet/orchestrator-side-sheet.component';
-import { ProjectDetailComponent } from './features/project-detail/components/project-detail';
-import { ProjectShellComponent } from './features/project-detail/components/project-shell/project-shell.component';
-import { SecurityPanelComponent } from './features/project-detail/components/security-panel/security-panel.component';
-import { UxuiPanelComponent } from './features/project-detail/components/uxui-panel/uxui-panel.component';
-import { ProjectTokenUsagePanelComponent } from './features/project-token-usage/components/project-token-usage-panel.component';
-import { ProjectObservabilityPanelComponent } from './features/project-detail/components/project-observability/project-observability-panel.component';
-import { ProjectProductRuntimePanelComponent } from './features/project-detail/components/project-product-runtime/project-product-runtime-panel.component';
-import { ProjectSteeringDocsSectionComponent } from './features/project-detail/components/project-steering-docs-section';
+import { ProjectOverlaysComponent } from './features/project-detail/components/project-overlays.component';
+import { ProjectOverlaysService } from './features/project-detail/state/project-overlays.service';
 import {
   DEFAULT_PROJECT_RAIL_KEY,
-  isProjectRailKey,
   ProjectRailKey,
-  toProjectSlug,
 } from './features/project-detail/components/project-shell/project-shell.config';
-import { AnalysisReportDrilldownComponent } from './features/project-detail/components/analysis-report-drilldown';
 import { StatusBarComponent } from './features/shell/components/status-bar';
 import { JobService } from './services/job.service';
 import { ClientService } from './services/client.service';
@@ -65,7 +55,7 @@ interface VerboseDebugContext {
 
 @Component({
   selector: 'app-root',
-  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorFeedComponent, OrchestratorSideSheetComponent, ProjectDetailComponent, ProjectShellComponent, SecurityPanelComponent, UxuiPanelComponent, ProjectTokenUsagePanelComponent, ProjectObservabilityPanelComponent, ProjectProductRuntimePanelComponent, ProjectSteeringDocsSectionComponent, AnalysisReportDrilldownComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceOverlaysComponent, WorkspaceBannerComponent, UpdateBannerComponent, UpdateVersionBadgeComponent, UpdateCenterComponent, OrchestratorConfigPanelComponent, UpdateBlockModalComponent, VerboseDebugOverlayComponent, FiltersDropdownComponent, KanbanFilterSidesheetComponent],
+  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorSideSheetComponent, ProjectOverlaysComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceOverlaysComponent, WorkspaceBannerComponent, UpdateBannerComponent, UpdateVersionBadgeComponent, UpdateCenterComponent, OrchestratorConfigPanelComponent, UpdateBlockModalComponent, VerboseDebugOverlayComponent, FiltersDropdownComponent, KanbanFilterSidesheetComponent],
   // Cycle 7b: OnPush. The shell mounts kanban + detail panel + many
   // sheets; default (Default) change detection re-checked the whole
   // tree on every async event (every poll tick, every signal write).
@@ -465,94 +455,13 @@ interface VerboseDebugContext {
         (defaultCliChange)="onDefaultCliChange($event)"
         (defaultModelChange)="onDefaultModelChange($event)" />
 
-      @if (orchFeedProject(); as proj) {
-        <div class="overlay" (click)="closeOrchFeed()">
-          <div class="overlay__panel" (click)="$event.stopPropagation()">
-            <button class="overlay__close" (click)="closeOrchFeed()" title="Close">×</button>
-            <app-orchestrator-feed [projectName]="proj" />
-          </div>
-        </div>
-      }
+      <app-project-overlays
+        (securityFollowUp)="onSecurityFollowUp($event)"
+        (securityOpenEvidence)="onSecurityOpenEvidence($event)"
+        (securityAuditQueued)="onSecurityAuditQueued($event)"
+        (uxuiFollowUp)="onUxuiFollowUp($event)"
+        (uxuiActionQueued)="onUxuiActionQueued($event)" />
 
-      @if (projectDetailName(); as proj) {
-        <div class="overlay" (click)="closeProjectDetail()">
-          <div class="overlay__panel" (click)="$event.stopPropagation()">
-            <button class="overlay__close" (click)="closeProjectDetail()" title="Close">×</button>
-            <app-project-detail
-              [projectName]="proj"
-              (openFeed)="onOpenFeedFromDetail($event)"
-              (openReport)="openAnalysisReport(proj, $event.reportId)" />
-          </div>
-        </div>
-      }
-
-      @if (projectShellName(); as projShell) {
-        <div class="overlay overlay--shell" data-testid="project-shell-overlay">
-          <div class="overlay__shell-panel">
-            <app-project-shell
-              [projectName]="projShell"
-              [activeRail]="projectShellRail()"
-              [hasCustomPanel]="projectShellRail() === 'security' || projectShellRail() === 'uxui' || projectShellRail() === 'token-usage' || projectShellRail() === 'observability' || projectShellRail() === 'product-runtime' || projectShellRail() === 'steering'"
-              (railChange)="onProjectShellRailChange($event)"
-              (openFeed)="onOpenFeedFromShell()"
-              (closeShell)="closeProjectShell()">
-              @defer (when projectShellRail() === 'security') {
-                @if (projectShellRail() === 'security') {
-                  <app-security-panel
-                    [projectName]="projShell"
-                    (createFollowUp)="onSecurityFollowUp($event)"
-                    (openEvidence)="onSecurityOpenEvidence($event)"
-                    (auditQueuedEvent)="onSecurityAuditQueued($event)" />
-                }
-              }
-              @defer (when projectShellRail() === 'uxui') {
-                @if (projectShellRail() === 'uxui') {
-                  <app-uxui-panel
-                    [projectName]="projShell"
-                    (createFollowUp)="onUxuiFollowUp($event)"
-                    (actionQueuedEvent)="onUxuiActionQueued($event)" />
-                }
-              }
-              @defer (when projectShellRail() === 'token-usage') {
-                @if (projectShellRail() === 'token-usage') {
-                  <app-project-token-usage-panel
-                    [projectName]="projShell" />
-                }
-              }
-              @defer (when projectShellRail() === 'observability') {
-                @if (projectShellRail() === 'observability') {
-                  <app-project-observability-panel
-                    [projectName]="projShell" />
-                }
-              }
-              @defer (when projectShellRail() === 'product-runtime') {
-                @if (projectShellRail() === 'product-runtime') {
-                  <app-project-product-runtime-panel
-                    [projectName]="projShell" />
-                }
-              }
-              @defer (when projectShellRail() === 'steering') {
-                @if (projectShellRail() === 'steering') {
-                  <app-project-steering-docs-section
-                    [projectName]="projShell" />
-                }
-              }
-            </app-project-shell>
-          </div>
-        </div>
-      }
-
-      @if (analysisReportFocus(); as f) {
-        <div class="overlay" data-testid="analysis-report-overlay" (click)="closeAnalysisReport()">
-          <div class="overlay__panel" (click)="$event.stopPropagation()">
-            <button class="overlay__close" (click)="closeAnalysisReport()" title="Close">×</button>
-            <app-analysis-report-drilldown
-              [projectName]="f.project"
-              [reportId]="f.reportId"
-              (close)="closeAnalysisReport()" />
-          </div>
-        </div>
-      }
 
       <app-workspace-overlays (openTask)="onOpenTaskFromReel($event)" />
 
@@ -2375,30 +2284,18 @@ export class App implements OnInit {
   readonly verboseDebugContext = signal<VerboseDebugContext | null>(null);
   readonly showCreate = signal(false);
   /**
-   * When non-null, names the project whose orchestrator feed is currently
-   * open as an overlay. The toolbar button toggles this for the active
-   * project; the overlay closes on backdrop click.
+   * Cycle 9g: per-project overlay state (orch-feed / project-detail /
+   * project-shell / analysis-report) lives in ProjectOverlaysService.
+   * The shell re-exposes the read signals so existing template guards +
+   * keyboard guards work unchanged; the `<app-project-overlays />`
+   * container owns the rendering.
    */
-  readonly orchFeedProject = signal<string | null>(null);
-  /** When non-null, names the project whose detail panel is open. */
-  readonly projectDetailName = signal<string | null>(null);
-  /**
-   * Project page shell state. When `projectShellName` is non-null, the
-   * project-shell overlay renders for that project and the URL hash is
-   * `#/projects/<slug>` (or `#/projects/<slug>/<rail-key>`). The active
-   * rail item drives which placeholder panel is shown. Slice 2 of the
-   * quality-system mockup; real per-panel content lands later.
-   */
-  readonly projectShellName = signal<string | null>(null);
-  readonly projectShellRail = signal<ProjectRailKey>(DEFAULT_PROJECT_RAIL_KEY);
-  private readonly projectShellHashPrefix = '#/projects/';
-  /**
-   * When non-null, the (project, reportId) pair whose Analysis Reports
-   * drill-down overlay is open. Stacked above the project-detail overlay so
-   * the user can return to the list with a single click without losing
-   * context.
-   */
-  readonly analysisReportFocus = signal<{ project: string; reportId: string } | null>(null);
+  private readonly projectOverlays = inject(ProjectOverlaysService);
+  readonly orchFeedProject = this.projectOverlays.orchFeedProject;
+  readonly projectDetailName = this.projectOverlays.projectDetailName;
+  readonly projectShellName = this.projectOverlays.projectShellName;
+  readonly projectShellRail = this.projectOverlays.projectShellRail;
+  readonly analysisReportFocus = this.projectOverlays.analysisReportFocus;
   /**
    * Cycle 9g: workspace overlay state (tokens / screenshots / cli-admin)
    * lives in WorkspaceOverlaysService. The shell re-exposes the read
@@ -3568,115 +3465,22 @@ export class App implements OnInit {
     return watchPaths.length > 0 ? watchPaths[0].name : null;
   }
 
-  /** Open the project detail panel from a click on the project tab's ⚙ button. */
-  openProjectDetail(name: string): void {
-    this.projectDetailName.set(name);
-  }
-
-  closeProjectDetail(): void {
-    this.projectDetailName.set(null);
-  }
-
-  /**
-   * Open the project page shell (slice 2 of the quality-system mockup).
-   * Pushes a hash so deep-links survive reload; the hash listener picks
-   * the change up and updates `projectShellName` / `projectShellRail`.
-   */
+  // Cycle 9g: project-overlay open/close + URL-hash sync delegated to
+  // ProjectOverlaysService. The shell keeps thin pass-through methods
+  // because external entry points (project-tabs, kanban project chip)
+  // still go through it.
+  openProjectDetail(name: string): void { this.projectOverlays.openProjectDetail(name); }
+  closeProjectDetail(): void { this.projectOverlays.closeProjectDetail(); }
   openProjectShell(name: string, rail: ProjectRailKey = DEFAULT_PROJECT_RAIL_KEY): void {
-    const slug = toProjectSlug(name);
-    if (!slug) return;
-    const target = `${this.projectShellHashPrefix}${slug}`
-      + (rail !== DEFAULT_PROJECT_RAIL_KEY ? `/${rail}` : '');
-    if (window.location.hash !== target) {
-      try {
-        history.pushState(null, '', window.location.pathname + window.location.search + target);
-      } catch { /* ignore */ }
-    }
-    // pushState doesn't fire hashchange; apply the resolved state directly.
-    this.applyProjectShellHash();
+    this.projectOverlays.openProjectShell(name, rail, this.watchPaths());
   }
-
-  closeProjectShell(): void {
-    this.projectShellName.set(null);
-    this.projectShellRail.set(DEFAULT_PROJECT_RAIL_KEY);
-    if (window.location.hash.startsWith(this.projectShellHashPrefix)) {
-      try {
-        history.pushState(null, '', window.location.pathname + window.location.search);
-      } catch { /* ignore */ }
-    }
-  }
-
-  onProjectShellRailChange(key: ProjectRailKey): void {
-    const name = this.projectShellName();
-    if (!name) return;
-    this.projectShellRail.set(key);
-    const slug = toProjectSlug(name);
-    const target = `${this.projectShellHashPrefix}${slug}`
-      + (key !== DEFAULT_PROJECT_RAIL_KEY ? `/${key}` : '');
-    if (window.location.hash !== target) {
-      try {
-        history.replaceState(null, '', window.location.pathname + window.location.search + target);
-      } catch { /* ignore */ }
-    }
-  }
-
-  onOpenFeedFromShell(): void {
-    const name = this.projectShellName();
-    if (!name) return;
-    // Stack the feed overlay over the shell (consistent with the project
-    // detail overlay → feed overlay handoff). The shell stays mounted so
-    // closing the feed returns to the same rail.
-    this.orchFeedProject.set(name);
-  }
-
-  /**
-   * Parse the URL hash and reconcile the project-shell signals with it.
-   * Accepts `#/projects/<slug>` and `#/projects/<slug>/<rail-key>`. The
-   * slug is mapped back to a project name by computing the slug for each
-   * known watch path and matching. If watch paths haven't loaded yet, we
-   * keep the signals untouched and re-run when they arrive.
-   */
-  private applyProjectShellHash(): void {
-    const hash = window.location.hash;
-    if (!hash.startsWith(this.projectShellHashPrefix)) {
-      if (this.projectShellName() !== null) {
-        this.projectShellName.set(null);
-        this.projectShellRail.set(DEFAULT_PROJECT_RAIL_KEY);
-      }
-      return;
-    }
-    const tail = hash.slice(this.projectShellHashPrefix.length);
-    const [slugRaw, railRaw] = tail.split('/', 2);
-    const slug = decodeURIComponent(slugRaw || '').toLowerCase();
-    if (!slug) return;
-    const entries = this.watchPaths();
-    if (entries.length === 0) {
-      // Hash arrived before /api/watch-paths returned. Leave the signals
-      // alone; the watch-paths success handler re-runs this.
-      return;
-    }
-    const match = entries.find(wp => toProjectSlug(wp.name) === slug);
-    if (!match) {
-      // Unknown slug — clear shell state but leave the URL alone so the
-      // user can fix it manually rather than getting silently bounced.
-      if (this.projectShellName() !== null) {
-        this.projectShellName.set(null);
-        this.projectShellRail.set(DEFAULT_PROJECT_RAIL_KEY);
-      }
-      return;
-    }
-    const railKey: ProjectRailKey = isProjectRailKey(railRaw) ? railRaw : DEFAULT_PROJECT_RAIL_KEY;
-    if (this.projectShellName() !== match.name) this.projectShellName.set(match.name);
-    if (this.projectShellRail() !== railKey) this.projectShellRail.set(railKey);
-  }
-
-  /** Open the analysis-report drill-down overlay for one report. */
+  closeProjectShell(): void { this.projectOverlays.closeProjectShell(); }
   openAnalysisReport(project: string, reportId: string): void {
-    this.analysisReportFocus.set({ project, reportId });
+    this.projectOverlays.openAnalysisReport(project, reportId);
   }
-
-  closeAnalysisReport(): void {
-    this.analysisReportFocus.set(null);
+  closeAnalysisReport(): void { this.projectOverlays.closeAnalysisReport(); }
+  private applyProjectShellHash(): void {
+    this.projectOverlays.syncShellFromHash(this.watchPaths());
   }
 
   // Cycle 9g: workspace overlay open/close + URL-hash sync delegated to
@@ -3707,16 +3511,6 @@ export class App implements OnInit {
       next: (detail) => this.selectedJob.set(detail),
       error: () => { /* keep the user where they were */ }
     });
-  }
-
-  /**
-   * "Open feed" button inside the project detail panel: close the detail
-   * panel, open the orchestrator feed for the same project. Two stacked
-   * overlays would be confusing; swap instead.
-   */
-  onOpenFeedFromDetail(name: string): void {
-    this.projectDetailName.set(null);
-    this.orchFeedProject.set(name);
   }
 
   private pickCreateWatchPath(): string {
