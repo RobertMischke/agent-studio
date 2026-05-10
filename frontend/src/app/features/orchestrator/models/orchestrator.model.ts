@@ -1,0 +1,86 @@
+/**
+ * Cycle 9 orchestrator feature models. Lifted out of `models/job.model.ts`
+ * per ADR-0034. Re-exported from the legacy file so existing imports
+ * keep working; new code should import from this feature folder.
+ *
+ * Covers the per-project orchestrator log feed, the long-lived
+ * orchestrator session, and the orchestrator chat (manager-style
+ * conversation alongside the agent runs).
+ */
+
+/**
+ * One entry in the orchestrator log feed for a project. Mirrors backend
+ * `OrchestratorLogEntry`. Kinds: decision / action / observation /
+ * intervention. Topics group entries in the UI feed.
+ */
+export interface OrchestratorLogEntry {
+  ts: string;
+  kind: 'decision' | 'action' | 'observation' | 'intervention';
+  topic: string;
+  summary: string;
+  reasoning?: string | null;
+  jobId?: string | null;
+  tokenUsage?: OrchestratorTokenUsage | null;
+  userOverride?: { at: string; newDirection: string } | null;
+}
+
+export interface OrchestratorTokenUsage {
+  model?: string | null;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+}
+
+export interface OrchestratorLogResponse {
+  project: string;
+  entries: OrchestratorLogEntry[];
+}
+
+export interface OrchestratorSession {
+  sessionId: string;
+  model: string;
+  bootedAt: string;
+  bootPromptPreview: string;
+  bootReplyPreview: string;
+  cumulativeInputTokens: number;
+  cumulativeOutputTokens: number;
+  cumulativeCacheReadTokens: number;
+  cumulativeCacheCreationTokens: number;
+  calls: number;
+  lastUsedAt: string;
+  lastError?: string | null;
+}
+
+export interface OrchestratorSessionResponse {
+  project: string;
+  session: OrchestratorSession | null;
+}
+
+/**
+ * One turn in the per-project orchestrator chat. Mirrors backend
+ * `OrchestratorChatTurn`. Roles: 'user' for the human's messages,
+ * 'orchestrator' for the model's replies. `errorMessage` is set on a
+ * failed orchestrator turn so the UI can surface what went wrong without
+ * losing the user's text.
+ */
+export interface OrchestratorChatTurn {
+  id: string;
+  ts: string;
+  role: 'user' | 'orchestrator';
+  text: string;
+  model?: string | null;
+  tokenUsage?: OrchestratorTokenUsage | null;
+  errorMessage?: string | null;
+  attachments?: OrchestratorChatAttachment[] | null;
+}
+
+export interface OrchestratorChatAttachment {
+  alt: string;
+  relativePath: string;
+}
+
+export interface OrchestratorChatResponse {
+  project: string;
+  turns: OrchestratorChatTurn[];
+}
