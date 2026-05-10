@@ -13,32 +13,22 @@ export type {
 // JobCommitInfo without the alias prefix.
 import type { JobCommitInfo, GitFileChange } from '../features/git/models/git.model';
 
-export interface ClaudeSessionInfo {
-  sessionId: string;
-  model: string | null;
-  inputTokens: number;
-  outputTokens: number;
-  cacheReadTokens: number;
-  cacheCreationTokens: number;
-  totalTokens: number;
-  lastTurnAt: string | null;
-  turnCount: number;
-  error: string | null;
-}
+// Cycle 9: Claude session types live under
+// features/claude/models/claude-session.model.ts. Re-exported here
+// so existing imports keep working.
+export type {
+  ClaudeSessionInfo, ClaudeRateLimitSnapshot, ClaudeSessionResponse
+} from '../features/claude/models/claude-session.model';
 
-export interface ClaudeRateLimitSnapshot {
-  window: string | null;          // e.g. "five_hour", "weekly"
-  status: string | null;          // e.g. "allowed", "exceeded"
-  resetsAt: number;               // Unix epoch (seconds)
-  overageStatus: string | null;
-  isUsingOverage: boolean;
-  capturedAt: string;             // ISO timestamp
-}
-
-export interface ClaudeSessionResponse {
-  sessionInfo: ClaudeSessionInfo;
-  rateLimit: ClaudeRateLimitSnapshot | null;
-}
+// Cycle 9: token rollups + ad-hoc usage + timeline live under
+// features/tokens/models/tokens.model.ts.
+export type {
+  JobTokenSummary, JobTokenCall, TokenSummary, TokenSummaryAggregate,
+  TokenSummaryByProject, TokenSummaryByModel, TokenTimeline,
+  TokenTimelineCell, TokenTimelineProject, AdHocUsageAggregate,
+  AdHocUsageBySource, AdHocUsageByDay, AdHocUsageByModel
+} from '../features/tokens/models/tokens.model';
+import type { JobTokenSummary } from '../features/tokens/models/tokens.model';
 
 /** One row in `logs/session-events.jsonl` for a job. */
 export interface SessionEvent {
@@ -261,26 +251,7 @@ export interface ClientSummary {
  * Surfaced on the kanban card as a colour-tiered "token bubble" with a
  * hover popover that lists per-call rows.
  */
-export interface JobTokenSummary {
-  calls: number;
-  inputTokens: number;
-  outputTokens: number;
-  cacheReadTokens: number;
-  cacheCreationTokens: number;
-  totalTokens: number;
-  lastModel: string | null;
-  lastUpdate: string | null;
-  entries: JobTokenCall[];
-}
-
-export interface JobTokenCall {
-  ts: string;
-  model: string | null;
-  inputTokens: number;
-  outputTokens: number;
-  cacheReadTokens: number;
-  cacheCreationTokens: number;
-}
+// (JobTokenSummary, JobTokenCall now in features/tokens/models/tokens.model.ts; re-exported below)
 
 export interface AutoLoopSnapshot {
   iteration: number;
@@ -437,154 +408,7 @@ export interface OrchestratorLogResponse {
  * theoretical API cost (estimate, must carry the disclaimer), and
  * subscription quota (linked from `/api/cli/quota`, not folded here).
  */
-export interface TokenSummary {
-  project: string;
-  orchestratorEntries: number;
-  orchestratorLlmCalls: number;
-  totalInputTokens: number;
-  totalOutputTokens: number;
-  totalCacheReadTokens: number;
-  totalCacheCreationTokens: number;
-  estimatedApiCostUsd: number;
-  allModelsPriced: boolean;
-  byModel: TokenSummaryByModel[];
-  disclaimer: string;
-}
-
-/**
- * Workspace-wide rollup of orchestrator tokens + theoretical API cost.
- * Mirrors backend `TokenSummaryAggregate`. Used by the status-bar usage
- * modal to render a single "tokens consumed" number on hover, without
- * forcing the user to pick a project first.
- */
-export interface TokenSummaryAggregate {
-  projects: number;
-  orchestratorEntries: number;
-  orchestratorLlmCalls: number;
-  totalInputTokens: number;
-  totalOutputTokens: number;
-  totalCacheReadTokens: number;
-  totalCacheCreationTokens: number;
-  estimatedApiCostUsd: number;
-  allModelsPriced: boolean;
-  byModel: TokenSummaryByModel[];
-  byProject: TokenSummaryByProject[];
-  fetchedAt: string;
-  disclaimer: string;
-}
-
-export interface TokenSummaryByProject {
-  project: string;
-  orchestratorLlmCalls: number;
-  inputTokens: number;
-  outputTokens: number;
-  cacheReadTokens: number;
-  cacheCreationTokens: number;
-  estimatedApiCostUsd: number;
-}
-
-/**
- * Workspace-wide rollup of ad-hoc Claude Haiku CLI calls (title-generate,
- * status.md summary, prompt enhance, commit-message, supervisor soft
- * reasoning, etc.). These calls live outside the per-project orchestrator
- * log; the status-bar usage modal renders this aggregate in its own
- * section so the user can see the ambient Haiku spend the orchestrator
- * incurs on top of the main pipeline. Mirrors backend
- * `AdHocUsageAggregate`.
- */
-export interface AdHocUsageAggregate {
-  calls: number;
-  inputTokens: number;
-  outputTokens: number;
-  cacheReadTokens: number;
-  cacheCreationTokens: number;
-  estimatedApiCostUsd: number;
-  allModelsPriced: boolean;
-  bySource: AdHocUsageBySource[];
-  byDay: AdHocUsageByDay[];
-  byModel: AdHocUsageByModel[];
-  logPath: string;
-  logSizeBytes: number;
-  logModifiedAt: string | null;
-  disclaimer: string;
-}
-
-export interface AdHocUsageBySource {
-  source: string;
-  calls: number;
-  inputTokens: number;
-  outputTokens: number;
-  cacheReadTokens: number;
-  cacheCreationTokens: number;
-  estimatedApiCostUsd: number;
-}
-
-export interface AdHocUsageByDay {
-  date: string;
-  calls: number;
-  inputTokens: number;
-  outputTokens: number;
-  cacheReadTokens: number;
-  cacheCreationTokens: number;
-  estimatedApiCostUsd: number;
-}
-
-export interface AdHocUsageByModel {
-  model: string;
-  calls: number;
-  inputTokens: number;
-  outputTokens: number;
-  cacheReadTokens: number;
-  cacheCreationTokens: number;
-  estimatedApiCostUsd: number;
-  modelPriced: boolean;
-}
-
-/**
- * Workspace token-usage timeline. Mirrors backend `TokenTimeline`.
- * Powers the workspace token view at `#/workspace/tokens`. Each cell is
- * a (project, time-bucket) datum that the chart stacks on the y axis.
- */
-export interface TokenTimeline {
-  windowStart: string;
-  windowEnd: string;
-  windowHours: number;
-  bucketMinutes: number;
-  bucketCount: number;
-  cells: TokenTimelineCell[];
-  projects: TokenTimelineProject[];
-  fetchedAt: string;
-  disclaimer: string;
-}
-
-export interface TokenTimelineCell {
-  project: string;
-  bucketStart: string;
-  bucketEnd: string;
-  calls: number;
-  input: number;
-  output: number;
-  cacheRead: number;
-  cacheWrite: number;
-  total: number;
-  dollars: number | null;
-  allModelsPriced: boolean;
-}
-
-export interface TokenTimelineProject {
-  project: string;
-  calls: number;
-  input: number;
-  output: number;
-  cacheRead: number;
-  cacheWrite: number;
-  total: number;
-  dollars: number | null;
-  allModelsPriced: boolean;
-  peakBucketStart: string | null;
-  peakBucketTotal: number;
-  lastActivity: string | null;
-}
+// (Token rollups + ad-hoc usage + timeline now in features/tokens/models/tokens.model.ts; re-exported below)
 
 /**
  * Project Token Usage models (slice 8 of the quality-system mockup,
@@ -856,16 +680,7 @@ export interface RoadmapIntakeConfirmResponse {
   skipped: string[];
 }
 
-export interface TokenSummaryByModel {
-  model: string;
-  calls: number;
-  inputTokens: number;
-  outputTokens: number;
-  cacheReadTokens: number;
-  cacheCreationTokens: number;
-  estimatedApiCostUsd: number;
-  modelPriced: boolean;
-}
+// (TokenSummaryByModel now in features/tokens/models/tokens.model.ts; re-exported below)
 
 export interface JobSummaryState {
   status: JobSummaryStatus;
