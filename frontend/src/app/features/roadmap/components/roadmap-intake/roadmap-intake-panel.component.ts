@@ -8,8 +8,8 @@ import {
   signal
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { JobService } from '../../services/job.service';
-import { RoadmapIntakeCandidate } from '../../models/job.model';
+import { JobService } from '../../../../services/job.service';
+import { RoadmapIntakeCandidate } from '../../../../models/job.model';
 
 /**
  * Two-step "Send to roadmap" surface. The user pastes a long, often

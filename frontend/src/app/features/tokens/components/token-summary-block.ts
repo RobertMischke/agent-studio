@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, signal } from '@angular/core';
-import { TokenSummary } from '../models/job.model';
-import { JobService } from '../services/job.service';
+import { TokenSummary } from '../../../models/job.model';
+import { JobService } from '../../../services/job.service';
 
 /**
  * Per-project token rollup block. Three rows:

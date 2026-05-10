@@ -14,12 +14,12 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { JobService } from '../../services/job.service';
+import { JobService } from '../../../../services/job.service';
 import {
   ProjectChatSearchHit,
   ProjectChatTurn,
-} from '../../models/job.model';
-import { markdownToHtml } from '../markdown-utils';
+} from '../../../../models/job.model';
+import { markdownToHtml } from '../../../../components/markdown-utils';
 import { ProjectChatRailComponent } from '../project-chat-rail/project-chat-rail.component';
 
 /**

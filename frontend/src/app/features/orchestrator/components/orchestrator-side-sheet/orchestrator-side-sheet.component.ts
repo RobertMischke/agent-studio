@@ -12,13 +12,13 @@ import {
   untracked,
   viewChild,
 } from '@angular/core';
-import { JobService } from '../../services/job.service';
-import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../utils/visible-interval';
-import { OrchestratorChatTurn, WatchPathEntry } from '../../models/job.model';
-import { ChatComponent } from '../chat/chat.component';
-import { ChatEvent, ChatMessage, ChatSubmitEvent } from '../chat/chat-types';
-import { RoadmapIntakePanelComponent } from '../roadmap-intake/roadmap-intake-panel.component';
-import { ProjectChatListComponent } from '../project-chat-list/project-chat-list.component';
+import { JobService } from '../../../../services/job.service';
+import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
+import { OrchestratorChatTurn, WatchPathEntry } from '../../../../models/job.model';
+import { ChatComponent } from '../../../../components/chat/chat.component';
+import { ChatEvent, ChatMessage, ChatSubmitEvent } from '../../../../components/chat/chat-types';
+import { RoadmapIntakePanelComponent } from '../../../roadmap/components/roadmap-intake/roadmap-intake-panel.component';
+import { ProjectChatListComponent } from '../../../project-chat/components/project-chat-list/project-chat-list.component';
 
 /**
  * Right-hand side sheet that hosts the orchestrator chat. Shell follows

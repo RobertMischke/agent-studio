@@ -8,8 +8,8 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { JobService } from '../services/job.service';
-import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../utils/visible-interval';
+import { JobService } from '../../../services/job.service';
+import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../utils/visible-interval';
 import {
   AdHocUsageAggregate,
   CliType,
@@ -17,9 +17,9 @@ import {
   QuotaSnapshot,
   QuotaWindow,
   TokenSummaryAggregate,
-} from '../models/job.model';
-import { cliTypeIcon } from '../services/format.util';
-import { HeaderQuotaComponent } from '../features/quota/components/header-quota';
+} from '../../../models/job.model';
+import { cliTypeIcon } from '../../../services/format.util';
+import { HeaderQuotaComponent } from '../../quota/components/header-quota';
 
 interface QuotaRow {
   cliType: CliType;

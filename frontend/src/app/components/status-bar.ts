@@ -14,7 +14,7 @@ import {
 import { JobService } from '../services/job.service';
 import { CliType, CLI_TYPES, CliModelInfo } from '../models/job.model';
 import { cliTypeIcon, cliTypeLabel } from '../services/format.util';
-import { UsageHoverPanelComponent } from './usage-hover-panel';
+import { UsageHoverPanelComponent } from '../features/tokens/components/usage-hover-panel';
 
 const STORAGE_DEFAULT_CLI = 'defaultCliType';
 const STORAGE_DEFAULT_MODEL_PREFIX = 'defaultModel:';

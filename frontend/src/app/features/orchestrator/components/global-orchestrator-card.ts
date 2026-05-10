@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
-import { OrchestratorSession } from '../models/job.model';
-import { JobService } from '../services/job.service';
-import { ConceptHelpComponent } from './concept-help/concept-help.component';
+import { OrchestratorSession } from '../../../models/job.model';
+import { JobService } from '../../../services/job.service';
+import { ConceptHelpComponent } from '../../../components/concept-help/concept-help.component';
 
 /**
  * Global orchestrator card. Sits above the per-project orchestrator panel

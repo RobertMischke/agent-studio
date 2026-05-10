@@ -8,7 +8,7 @@ import {
   signal,
 } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
-import { JobService } from '../../services/job.service';
+import { JobService } from '../../../services/job.service';
 import {
   ProjectExpensiveJob,
   ProjectExpensiveJobsResponse,
@@ -17,7 +17,7 @@ import {
   ProjectTokenHeatmap,
   ProjectTokenHeatmapJob,
   ProjectTokenUsageSummary,
-} from '../../models/job.model';
+} from '../../../models/job.model';
 
 interface CardSpec {
   testid: string;

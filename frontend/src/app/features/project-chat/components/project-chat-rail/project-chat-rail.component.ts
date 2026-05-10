@@ -12,7 +12,7 @@ import {
   signal,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ProjectChatTurn } from '../../models/job.model';
+import { ProjectChatTurn } from '../../../../models/job.model';
 
 /**
  * Slice C right-rail. A narrow column (~22 px) painted next to the
