@@ -1,0 +1,119 @@
+:host { display: block; }
+
+.wss {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  color: #cdd6f4;
+}
+
+.wss__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.wss__title {
+  margin: 0 0 4px 0;
+  font-size: 1.25rem;
+}
+
+.wss__sub {
+  margin: 0;
+  color: #a6adc8;
+  font-size: 0.92rem;
+}
+
+.wss__sub-stats { color: #cdd6f4; }
+
+.wss__controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.wss__win {
+  display: inline-flex;
+  gap: 0;
+  border: 1px solid rgba(180, 190, 254, 0.3);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.wss__win-btn {
+  background: transparent;
+  border: 0;
+  color: #cdd6f4;
+  font: inherit;
+  font-size: 0.84rem;
+  padding: 6px 10px;
+  cursor: pointer;
+
+  &--active { background: rgba(137, 180, 250, 0.25); }
+  &:hover { background: rgba(137, 180, 250, 0.15); }
+}
+
+.wss__project {
+  background: rgba(30, 30, 46, 0.6);
+  border: 1px solid rgba(180, 190, 254, 0.3);
+  color: #cdd6f4;
+  padding: 5px 8px;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 0.84rem;
+}
+
+.wss__refresh {
+  background: rgba(30, 30, 46, 0.6);
+  border: 1px solid rgba(180, 190, 254, 0.3);
+  color: #cdd6f4;
+  padding: 5px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+}
+
+.wss__placeholder {
+  padding: 24px;
+  text-align: center;
+  color: #a6adc8;
+  border: 1px dashed rgba(180, 190, 254, 0.25);
+  border-radius: 8px;
+}
+
+.wss__buckets {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.wss__bucket {
+  border: 1px solid rgba(180, 190, 254, 0.18);
+  border-radius: 8px;
+  background: rgba(17, 17, 27, 0.5);
+  padding: 6px 8px 8px;
+}
+
+.wss__bucket-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 4px 6px;
+}
+
+.wss__bucket-title {
+  margin: 0;
+  font-size: 0.95rem;
+  color: #cdd6f4;
+  font-variant-numeric: tabular-nums;
+}
+
+.wss__bucket-count {
+  color: #a6adc8;
+  font-size: 0.82rem;
+}
+  

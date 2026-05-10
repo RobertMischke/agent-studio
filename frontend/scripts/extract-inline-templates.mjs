@@ -40,7 +40,9 @@ for (const file of files) {
       console.log(`SKIP  ${file}  (${result.reason})`);
     } else {
       okCount++;
-      console.log(`OK    ${file}  -> ${basename(result.htmlPath)} + ${basename(result.scssPath ?? '(no styles)')}`);
+      const htmlBit = result.htmlPath ? basename(result.htmlPath) : '(no template)';
+      const scssBit = result.scssPath ? basename(result.scssPath) : '(no styles)';
+      console.log(`OK    ${file}  -> ${htmlBit} + ${scssBit}`);
     }
   } catch (e) {
     errors.push({ file, message: e.message });
@@ -65,18 +67,21 @@ function extract(file, dryRun) {
 
   const decoText = raw.slice(decoBody.start + 1, decoBody.end);
 
-  // Locate template: `...`
+  // Locate template: `...`  (may be absent if the file already uses templateUrl)
   const tpl = findBacktickKey(decoText, 'template');
-  if (!tpl) return { skipped: true, reason: 'no inline template: \\`...\\` found' };
 
   // Locate styles: [`...`, `...`] or styles: [`...`]  (also tolerate a single backtick string)
   const stylesArr = findStylesArray(decoText);
 
+  if (!tpl && !stylesArr) {
+    return { skipped: true, reason: 'no inline template: or styles: backtick blocks found' };
+  }
+
   const htmlPath = file.replace(/\.ts$/, '.html');
   const scssPath = file.replace(/\.ts$/, '.scss');
 
-  const templateContent = unescapeBacktickString(tpl.content);
-  const trimmedHtml = trimLeadingBlankLines(dedentLikely(templateContent));
+  const templateContent = tpl ? unescapeBacktickString(tpl.content) : null;
+  const trimmedHtml = templateContent ? trimLeadingBlankLines(dedentLikely(templateContent)) : null;
 
   let stylesContent = null;
   if (stylesArr) {
@@ -92,12 +97,14 @@ function extract(file, dryRun) {
   let newDecoText = decoText;
 
   // Replace template block (template:` ... `, may have trailing comma)
-  const tplRange = tpl.fullRange;
-  const tplReplacement = `templateUrl: './${baseName}.html'` + (tpl.hadTrailingComma ? ',' : '');
-  newDecoText =
-    newDecoText.slice(0, tplRange[0]) +
-    tplReplacement +
-    newDecoText.slice(tplRange[1]);
+  if (tpl) {
+    const tplRange = tpl.fullRange;
+    const tplReplacement = `templateUrl: './${baseName}.html'` + (tpl.hadTrailingComma ? ',' : '');
+    newDecoText =
+      newDecoText.slice(0, tplRange[0]) +
+      tplReplacement +
+      newDecoText.slice(tplRange[1]);
+  }
 
   if (stylesArr) {
     // Recompute the styles array range against the mutated text. Because we
@@ -117,7 +124,7 @@ function extract(file, dryRun) {
     raw.slice(decoBody.end);
 
   // Sanity check: must still contain templateUrl + (styleUrl if styles existed).
-  if (!newRaw.includes(`templateUrl: './${baseName}.html'`)) {
+  if (tpl && !newRaw.includes(`templateUrl: './${baseName}.html'`)) {
     throw new Error('post-write sanity failed — templateUrl not present');
   }
   if (stylesArr && !newRaw.includes(`styleUrl: './${baseName}.scss'`)) {
@@ -125,16 +132,18 @@ function extract(file, dryRun) {
   }
 
   if (dryRun) {
-    return { skipped: false, htmlPath, scssPath: stylesArr ? scssPath : null, dryRun: true };
+    return { skipped: false, htmlPath: tpl ? htmlPath : null, scssPath: stylesArr ? scssPath : null, dryRun: true };
   }
 
   // Write outputs (CRLF for the source ts, LF or CRLF matching for html/scss).
-  const htmlOut = ensureEol(trimmedHtml, eol).replace(/(\r?\n)+$/, '') + eol;
-  if (existsSync(htmlPath)) {
-    const existing = readFileSync(htmlPath, 'utf8');
-    if (existing !== htmlOut) throw new Error(`refuses to overwrite existing ${htmlPath}`);
-  } else {
-    writeFileSync(htmlPath, htmlOut);
+  if (tpl) {
+    const htmlOut = ensureEol(trimmedHtml, eol).replace(/(\r?\n)+$/, '') + eol;
+    if (existsSync(htmlPath)) {
+      const existing = readFileSync(htmlPath, 'utf8');
+      if (existing !== htmlOut) throw new Error(`refuses to overwrite existing ${htmlPath}`);
+    } else {
+      writeFileSync(htmlPath, htmlOut);
+    }
   }
 
   if (stylesArr) {

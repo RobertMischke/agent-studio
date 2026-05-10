@@ -1,0 +1,96 @@
+<section class="ard" data-testid="analysis-report-drilldown">
+  <header class="ard__head">
+    <span class="ard__sev ard__sev--{{ (report()?.severity ?? 'Info').toLowerCase() }}">
+      {{ report()?.severity ?? 'Info' }}
+    </span>
+    <h2 class="ard__title">{{ report()?.topic ?? '…' }}</h2>
+    <span class="ard__trigger">{{ report()?.trigger ?? '' }}</span>
+  </header>
+
+  @if (report()?.parseStatus === 'Unstructured') {
+    <div class="ard__warn" data-testid="analysis-report-warn-unstructured">
+      ⚠️ <strong>Unstructured report.</strong>
+      The producer did not write a JSON sidecar; the Markdown body below is the only artifact.
+      Structured filters (severity, follow-ups, references) are not promised for this report.
+    </div>
+  } @else if (report()?.parseStatus === 'MalformedJson') {
+    <div class="ard__warn ard__warn--strong" data-testid="analysis-report-warn-malformed">
+      ⚠️ <strong>Malformed JSON sidecar.</strong>
+      The Markdown body is still readable below; the sidecar failed to parse:
+      <code>{{ report()?.parseError ?? 'unknown' }}</code>
+    </div>
+  }
+
+  <dl class="ard__meta">
+    <div><dt>Report id</dt><dd><code>{{ report()?.reportId }}</code></dd></div>
+    <div><dt>Created</dt><dd>{{ formatTime(report()?.createdAt) }}</dd></div>
+    <div><dt>Scope</dt><dd>{{ scopeLabel() }}</dd></div>
+    <div><dt>Producer</dt><dd>{{ producerLabel() }}</dd></div>
+    <div><dt>Parse status</dt><dd>{{ report()?.parseStatus }}</dd></div>
+  </dl>
+
+  @if ((report()?.findings?.length ?? 0) > 0) {
+    <h3 class="ard__sub">Findings</h3>
+    <ul class="ard__findings">
+      @for (f of report()!.findings; track f.topic) {
+        <li class="ard__finding ard__finding--{{ f.severity.toLowerCase() }}">
+          <span class="ard__finding-sev">{{ f.severity }}</span>
+          <span class="ard__finding-topic">{{ f.topic }}</span>
+          <span class="ard__finding-msg">{{ f.message }}</span>
+        </li>
+      }
+    </ul>
+  }
+
+  @if ((report()?.followUpTaskSuggestions?.length ?? 0) > 0) {
+    <h3 class="ard__sub">Follow-up suggestions</h3>
+    <ul class="ard__followups">
+      @for (s of report()!.followUpTaskSuggestions; track s.title) {
+        <li>
+          <strong>{{ s.title }}</strong>
+          <span class="ard__followup-prio">{{ s.priority }}</span>
+          <p>{{ s.summary }}</p>
+          @if (s.createdJobId) {
+            <span class="ard__followup-job">queued as <code>{{ s.createdJobId }}</code></span>
+          } @else {
+            <span class="ard__followup-job">candidate (not yet queued)</span>
+          }
+        </li>
+      }
+    </ul>
+  }
+
+  @if ((report()?.references?.length ?? 0) > 0) {
+    <h3 class="ard__sub">References</h3>
+    <ul class="ard__refs" data-testid="analysis-report-references">
+      @for (ref of report()!.references; track ref.ref) {
+        <li>
+          <span class="ard__ref-kind">{{ ref.kind }}</span>
+          <code class="ard__ref-id">{{ ref.ref }}</code>
+          @if (ref.label) { <span class="ard__ref-label">{{ ref.label }}</span> }
+        </li>
+      }
+    </ul>
+  }
+
+  <h3 class="ard__sub">Markdown</h3>
+  @if (markdown()) {
+    <pre class="ard__markdown" data-testid="analysis-report-markdown">{{ markdown() }}</pre>
+  } @else if (loading()) {
+    <p class="ard__empty">Loading report body…</p>
+  } @else {
+    <p class="ard__empty" data-testid="analysis-report-markdown-missing">
+      Markdown body is unavailable for this report. The structured record is shown above.
+    </p>
+  }
+
+  <h3 class="ard__sub">Structured JSON</h3>
+  <pre class="ard__json" data-testid="analysis-report-json">{{ jsonView() }}</pre>
+
+  <div class="ard__actions">
+    <button class="ard__btn"
+            data-testid="analysis-report-close"
+            (click)="close.emit()">Close</button>
+  </div>
+</section>
+  

@@ -12,44 +12,8 @@ import { GitHygieneService } from '../../../../services/git-hygiene.service';
   selector: 'app-project-hygiene-badge',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    @if (visible()) {
-      <span class="project-hygiene-badge"
-            [class.project-hygiene-badge--dirty]="isDirty()"
-            [class.project-hygiene-badge--unpushed]="!isDirty() && isAhead()"
-            [title]="tooltip()"
-            data-testid="project-hygiene-badge">
-        @if (isDirty()) {
-          ⚠ dirty
-        } @else if (isAhead()) {
-          ↑ {{ aheadCount() }} unpushed
-        }
-      </span>
-    }
-  `,
-  styles: [`
-    :host { display: inline-flex; }
-    .project-hygiene-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 1px 7px;
-      border-radius: 999px;
-      font-size: 10.5px;
-      font-weight: 600;
-      letter-spacing: 0.03em;
-      text-transform: uppercase;
-      border: 1px solid currentColor;
-    }
-    .project-hygiene-badge--dirty {
-      color: #f9e2af;
-      background: rgba(249, 226, 175, 0.10);
-    }
-    .project-hygiene-badge--unpushed {
-      color: #fab387;
-      background: rgba(250, 179, 135, 0.10);
-    }
-  `]
+  templateUrl: './project-hygiene-badge.component.html',
+  styleUrl: './project-hygiene-badge.component.scss'
 })
 export class ProjectHygieneBadgeComponent implements OnInit, OnDestroy {
   readonly projectName = input.required<string>();

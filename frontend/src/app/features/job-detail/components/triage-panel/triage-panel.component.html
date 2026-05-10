@@ -1,0 +1,47 @@
+<section class="triage" data-testid="triage-panel" aria-label="Triage actions">
+  <div class="triage__counter" data-testid="triage-counter">
+    @if (laneSize() > 0) {
+      Job {{ laneIndex() + 1 }} of {{ laneSize() }} in {{ laneLabel() }}
+    } @else {
+      {{ laneLabel() }}
+    }
+    <span class="triage__hint" aria-hidden="true">
+      j / k navigate · Enter primary · Esc close
+    </span>
+  </div>
+
+  @if (mutationsBlocked()) {
+    <div class="triage__blocked" role="status">
+      Update in progress — actions paused.
+    </div>
+  }
+
+  @if (buttons().length === 0) {
+    <div class="triage__empty">No triage actions for this lane.</div>
+  } @else {
+    <div class="triage__actions" role="group">
+      @for (b of buttons(); track b.id) {
+        <button type="button"
+                class="triage__btn"
+                [class.triage__btn--primary]="b.variant === 'primary'"
+                [class.triage__btn--secondary]="b.variant === 'secondary'"
+                [class.triage__btn--danger]="b.variant === 'danger'"
+                [class.triage__btn--confirming]="confirmingId() === b.id"
+                [attr.data-testid]="'triage-action-' + b.id"
+                [attr.data-action-id]="b.id"
+                [disabled]="mutationsBlocked() || actingId() !== null"
+                [title]="buttonTooltip(b)"
+                (click)="onClick(b)">
+          @if (confirmingId() === b.id) {
+            Confirm: {{ b.label }}?
+          } @else if (actingId() === b.id) {
+            ⏳ {{ b.label }}…
+          } @else {
+            {{ b.label }}
+          }
+        </button>
+      }
+    </div>
+  }
+</section>
+  

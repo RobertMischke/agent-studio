@@ -1,0 +1,25 @@
+<ul class="git-tree" data-testid="git-files">
+  @for (node of visibleRows(); track node.path) {
+    <li class="git-tree__row"
+        [class.git-tree__row--file]="node.isFile"
+        [class.git-tree__row--folder]="!node.isFile"
+        [class.git-tree__row--selected]="node.isFile && selected() === node.path"
+        [style.padding-left.px]="8 + node.depth * 14"
+        [attr.data-testid]="node.isFile ? 'git-tree-file' : 'git-tree-folder'"
+        [attr.data-path]="node.path"
+        (click)="onClick(node)">
+      @if (!node.isFile) {
+        <span class="git-tree__chevron">{{ expanded().has(node.path) ? '▾' : '▸' }}</span>
+        <span class="git-tree__label git-tree__label--folder">{{ node.label }}/</span>
+        <span class="git-tree__count">{{ node.count }}</span>
+      } @else {
+        <span class="git-tree__status" [title]="node.status">{{ (node.status || '').trim() || '·' }}</span>
+        <span class="git-tree__label">{{ node.label }}</span>
+      }
+      @if (node.added || node.removed) {
+        <span class="git-tree__stat">+{{ node.added }}/−{{ node.removed }}</span>
+      }
+    </li>
+  }
+</ul>
+  

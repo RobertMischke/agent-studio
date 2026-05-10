@@ -1,0 +1,113 @@
+:host { display: block; }
+.tok-sum {
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(15, 23, 42, 0.45);
+  margin-bottom: 12px;
+}
+.tok-sum__head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.tok-sum__title {
+  margin: 0;
+  font-size: 0.78rem;
+  color: rgba(255,255,255,0.55);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.tok-sum__sub { color: rgba(255,255,255,0.55); font-size: 0.75rem; }
+.tok-sum__amounts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 8px;
+}
+.tok-sum__metric {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  cursor: help;
+}
+.tok-sum__metric-num {
+  color: #cdd6f4;
+  font-size: 1.05rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.tok-sum__metric-label {
+  color: rgba(255,255,255,0.50);
+  font-size: 0.66rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.tok-sum__cost {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(249, 226, 175, 0.06);
+  border: 1px dashed rgba(249, 226, 175, 0.30);
+  margin-bottom: 8px;
+}
+.tok-sum__cost-label {
+  color: rgba(249, 226, 175, 0.85);
+  font-size: 0.78rem;
+}
+.tok-sum__cost-amount {
+  color: #fcd34d;
+  font-size: 1.0rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.tok-sum__cost-amount--partial { color: #fde68a; }
+.tok-sum__partial { font-weight: 400; font-size: 0.74rem; color: rgba(255,255,255,0.50); }
+
+.tok-sum__breakdown { margin-bottom: 8px; }
+.tok-sum__breakdown summary {
+  cursor: pointer;
+  color: rgba(255,255,255,0.60);
+  font-size: 0.78rem;
+  user-select: none;
+}
+.tok-sum__breakdown summary:hover { color: #cdd6f4; }
+.tok-sum__table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 6px;
+  font-size: 0.78rem;
+}
+.tok-sum__table th, .tok-sum__table td {
+  padding: 4px 6px;
+  text-align: left;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  font-variant-numeric: tabular-nums;
+}
+.tok-sum__table th {
+  color: rgba(255,255,255,0.50);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 0.66rem;
+}
+.tok-sum__table td code {
+  font-size: 0.74rem;
+  background: rgba(255,255,255,0.06);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+.tok-sum__na { color: rgba(255,255,255,0.40); font-style: italic; }
+
+.tok-sum__disclaimer {
+  margin: 4px 0 0;
+  font-size: 0.74rem;
+  color: rgba(255,255,255,0.55);
+  line-height: 1.4;
+  font-style: italic;
+}
+  

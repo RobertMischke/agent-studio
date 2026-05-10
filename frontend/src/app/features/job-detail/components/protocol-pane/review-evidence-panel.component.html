@@ -1,0 +1,106 @@
+<section class="evidence-panel" data-testid="review-evidence-panel">
+  <header class="evidence-panel__header">
+    <h3 class="evidence-panel__title">
+      <span class="evidence-panel__icon" aria-hidden="true">🔎</span>
+      Review evidence
+    </h3>
+    @if (entries().length > 0) {
+      <span class="evidence-panel__count" data-testid="review-evidence-count">
+        {{ entries().length }} {{ entries().length === 1 ? 'finding' : 'findings' }}
+      </span>
+    }
+  </header>
+
+  @if (entries().length === 0) {
+    <div class="evidence-panel__empty" data-testid="review-evidence-empty">
+      No review findings recorded.
+      <span class="evidence-panel__empty-hint">
+        Audits and reviewers append rows to
+        <code>results/review-evidence.jsonl</code>.
+      </span>
+    </div>
+  } @else {
+    <ul class="evidence-list">
+      @for (e of sorted(); track e.id) {
+        <li class="evidence-row"
+            [attr.data-severity]="e.severity"
+            [attr.data-acknowledged]="e.acknowledged ? 'true' : 'false'"
+            [attr.data-testid]="'review-evidence-row-' + e.id">
+          <div class="evidence-row__head">
+            <span class="evidence-row__chip"
+                  [attr.data-severity]="e.severity"
+                  [attr.data-testid]="'review-evidence-severity-' + e.id">
+              {{ severityLabel(e.severity) }}
+            </span>
+            <span class="evidence-row__source">{{ sourceLabel(e.source) }}</span>
+            <span class="evidence-row__ts" [title]="e.createdAt">{{ formatTime(e.createdAt) }}</span>
+            @if (e.runIndex != null) {
+              <span class="evidence-row__run">run #{{ e.runIndex }}</span>
+            }
+            @if (e.acknowledged) {
+              <span class="evidence-row__ack-pill" data-testid="review-evidence-ack-pill">acknowledged</span>
+            }
+            @if (e.followupJobId) {
+              <span class="evidence-row__followup"
+                    [attr.data-testid]="'review-evidence-followup-' + e.id"
+                    title="Follow-up task created from this finding.">
+                follow-up: {{ e.followupJobId }}
+              </span>
+            }
+          </div>
+
+          <div class="evidence-row__title" [attr.data-testid]="'review-evidence-title-' + e.id">
+            {{ e.title }}
+          </div>
+
+          @if (e.body) {
+            <div class="evidence-row__body" [attr.data-testid]="'review-evidence-body-' + e.id">
+              {{ e.body }}
+            </div>
+          }
+
+          @if (e.artifacts.length > 0 || e.fileRefs.length > 0) {
+            <ul class="evidence-row__refs">
+              @for (a of e.artifacts; track a) {
+                <li class="evidence-row__ref evidence-row__ref--artifact"
+                    [attr.data-testid]="'review-evidence-artifact-' + e.id">
+                  <span class="evidence-row__ref-icon" aria-hidden="true">📎</span>
+                  <code>{{ a }}</code>
+                </li>
+              }
+              @for (f of e.fileRefs; track f) {
+                <li class="evidence-row__ref evidence-row__ref--file"
+                    [attr.data-testid]="'review-evidence-fileref-' + e.id">
+                  <span class="evidence-row__ref-icon" aria-hidden="true">📄</span>
+                  <code>{{ f }}</code>
+                </li>
+              }
+            </ul>
+          }
+
+          <div class="evidence-row__actions">
+            <button type="button"
+                    class="evidence-btn"
+                    [attr.data-testid]="'review-evidence-toggle-ack-' + e.id"
+                    [disabled]="busyId() === e.id"
+                    (click)="onToggleAck(e)">
+              {{ e.acknowledged ? 'Mark unread' : 'Acknowledge' }}
+            </button>
+            <button type="button"
+                    class="evidence-btn evidence-btn--primary"
+                    [attr.data-testid]="'review-evidence-create-followup-' + e.id"
+                    [disabled]="busyId() === e.id || !!e.followupJobId"
+                    (click)="onCreateFollowup(e)">
+              @if (e.followupJobId) {
+                Follow-up created
+              } @else {
+                + Create follow-up task
+              }
+            </button>
+          </div>
+        </li>
+      }
+    </ul>
+  }
+</section>
+  

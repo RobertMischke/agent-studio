@@ -1,0 +1,101 @@
+:host { display: block; }
+/* Compact bar: counter + buttons share one row when there is room, so
+   the panel costs minimal vertical space (the chat-first compression
+   spec expects the protocol pane to keep > 68% of the viewport). */
+.triage {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  padding: 5px 10px;
+  margin-top: 6px;
+  background: rgba(15, 23, 42, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+}
+.triage__counter {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.74rem;
+  color: #cdd6f4;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.triage__hint {
+  color: rgba(255, 255, 255, 0.45);
+  font-weight: 500;
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+.triage__blocked {
+  font-size: 0.72rem;
+  color: #f9e2af;
+  background: rgba(249, 226, 175, 0.08);
+  border: 1px solid rgba(249, 226, 175, 0.25);
+  border-radius: 4px;
+  padding: 3px 8px;
+}
+.triage__empty {
+  font-size: 0.74rem;
+  color: rgba(205, 214, 244, 0.6);
+  font-style: italic;
+}
+.triage__actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.triage__btn {
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.76rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.06);
+  color: #cdd6f4;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease, transform 0.05s ease;
+  white-space: nowrap;
+}
+.triage__btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.16);
+}
+.triage__btn:active:not(:disabled) { transform: translateY(1px); }
+.triage__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.triage__btn--primary {
+  background: rgba(137, 180, 250, 0.18);
+  color: #89b4fa;
+  border-color: rgba(137, 180, 250, 0.45);
+}
+.triage__btn--primary:hover:not(:disabled) {
+  background: rgba(137, 180, 250, 0.28);
+  color: #b4c5ff;
+}
+.triage__btn--secondary {
+  background: rgba(255, 255, 255, 0.05);
+  color: #cdd6f4;
+  border-color: rgba(255, 255, 255, 0.12);
+}
+.triage__btn--danger {
+  background: rgba(243, 139, 168, 0.10);
+  color: #f38ba8;
+  border-color: rgba(243, 139, 168, 0.35);
+}
+.triage__btn--danger:hover:not(:disabled) {
+  background: rgba(243, 139, 168, 0.20);
+  color: #ffb1c4;
+}
+.triage__btn--confirming {
+  background: rgba(243, 139, 168, 0.30);
+  color: #ffd1dd;
+  border-color: rgba(243, 139, 168, 0.7);
+}
+  

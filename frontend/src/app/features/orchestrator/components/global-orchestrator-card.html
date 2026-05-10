@@ -1,0 +1,41 @@
+<article class="global-orch" data-testid="global-orchestrator-card">
+  <header class="global-orch__head">
+    <span class="global-orch__role">Global orchestrator</span>
+    <app-concept-help concept="orchestrator" />
+    <span class="global-orch__scope">Across all watched projects</span>
+  </header>
+
+  @if (session(); as s) {
+    <p class="global-orch__voice" [title]="s.bootPromptPreview">
+      “{{ s.bootReplyPreview || 'Booted, no reply captured.' }}”
+    </p>
+    <dl class="global-orch__meta">
+      <div>
+        <dt>Model</dt>
+        <dd>{{ s.model }}</dd>
+      </div>
+      <div>
+        <dt>Booted</dt>
+        <dd>{{ formatTime(s.bootedAt) }} · {{ s.calls }} call{{ s.calls === 1 ? '' : 's' }} so far</dd>
+      </div>
+      <div>
+        <dt>Talk to it</dt>
+        <dd><code>claude -r {{ s.sessionId }}</code></dd>
+      </div>
+      @if (s.lastError) {
+        <div>
+          <dt>Last error</dt>
+          <dd class="global-orch__error">{{ s.lastError }}</dd>
+        </div>
+      }
+    </dl>
+  } @else if (loading()) {
+    <p class="global-orch__loading">Reading the global orchestrator's state…</p>
+  } @else {
+    <p class="global-orch__empty">
+      No global session booted yet. The app boots one Claude session that knows about every watched
+      project at startup. If this stays empty for more than a few seconds, the boot probably failed.
+    </p>
+  }
+</article>
+  

@@ -27,40 +27,8 @@ const STOPS: AutonomyStop[] = [
   standalone: true,
   imports: [FormsModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <section class="autonomy" data-testid="autonomy-slider">
-      <header>
-        <h3>Orchestrator autonomy</h3>
-        <span class="autonomy__current" [attr.data-testid]="'autonomy-level-current'">
-          {{ currentStop().level }}: {{ currentStop().name }}
-        </span>
-      </header>
-      <input type="range"
-             class="autonomy__range"
-             min="0" max="4" step="1"
-             data-testid="autonomy-range"
-             [ngModel]="level()"
-             (ngModelChange)="onChange($event)" />
-      <div class="autonomy__stops">
-        @for (s of stops; track s.level) {
-          <span [class.autonomy__stop--active]="s.level === level()" [title]="s.desc">{{ s.name }}</span>
-        }
-      </div>
-      <p class="autonomy__desc">{{ currentStop().desc }}</p>
-    </section>
-  `,
-  styles: [`
-    :host { display: block; }
-    .autonomy { padding: 10px 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 7px; }
-    .autonomy header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
-    .autonomy h3 { margin: 0; font-size: 0.85rem; color: #cdd6f4; text-transform: uppercase; letter-spacing: 0.04em; }
-    .autonomy__current { color: #cba6f7; font-size: 0.85rem; font-weight: 600; }
-    .autonomy__range { width: 100%; }
-    .autonomy__stops { display: grid; grid-template-columns: repeat(5, 1fr); font-size: 0.7rem; color: #7f849c; text-transform: uppercase; letter-spacing: 0.04em; margin-top: 4px; }
-    .autonomy__stops span { text-align: center; cursor: help; }
-    .autonomy__stop--active { color: #cba6f7; font-weight: 600; }
-    .autonomy__desc { color: #a6adc8; font-size: 0.78rem; margin: 8px 0 0; line-height: 1.4; }
-  `]
+  templateUrl: './autonomy-slider.html',
+  styleUrl: './autonomy-slider.scss'
 })
 export class AutonomySliderComponent implements OnInit {
   readonly projectName = input.required<string>();

@@ -1,0 +1,70 @@
+<section class="qstrip">
+  <header class="qstrip__head">
+    @if (lastUpdate(); as lu) {
+      <span class="qstrip__updated">updated {{ lu }}</span>
+    }
+    <button class="qstrip__refresh"
+            type="button"
+            title="Re-probe all CLIs (slow, several seconds)"
+            [disabled]="refreshingAll()"
+            (click)="refreshAll()">
+      {{ refreshingAll() ? '⏳' : '↻' }}
+    </button>
+  </header>
+
+  @if (errorMsg(); as err) {
+    <div class="qstrip__error">{{ err }}</div>
+  }
+
+  <div class="qstrip__cards">
+    @for (snap of snapshots(); track snap.cliType) {
+      <article class="qcard">
+        <div class="qcard__head">
+          <span class="qcard__icon" aria-hidden="true">{{ cliIcon(snap.cliType) }}</span>
+          <span class="qcard__cli">{{ cliLabel(snap.cliType) }}</span>
+          @if (snap.plan) {
+            <span class="qcard__plan">{{ snap.plan }}</span>
+          }
+          <button class="qcard__refresh"
+                  type="button"
+                  title="Re-probe {{ cliLabel(snap.cliType) }}"
+                  [disabled]="refreshing()[snap.cliType]"
+                  (click)="refreshOne(snap.cliType)">
+            {{ refreshing()[snap.cliType] ? '⏳' : '↻' }}
+          </button>
+        </div>
+
+        @if (snap.error && snap.windows.length === 0) {
+          <div class="qcard__error" [title]="snap.error">No quota data available.</div>
+        } @else if (snap.windows.length === 0) {
+          <div class="qcard__hint">Loading…</div>
+        } @else {
+          @for (w of snap.windows; track w.label) {
+            <div class="qwin">
+              <div class="qwin__row">
+                <span class="qwin__label">{{ w.label }}</span>
+                <span class="qwin__pct" [class]="severity(w.usedPct)">
+                  {{ formatPct(w.usedPct) }}
+                </span>
+              </div>
+              <div class="qwin__bar">
+                <span class="qwin__fill"
+                      [class]="severity(w.usedPct)"
+                      [style.width.%]="barWidth(w.usedPct)"></span>
+              </div>
+              <div class="qwin__meta">
+                @if (w.used !== null && w.limit !== null) {
+                  <span>{{ w.used }} / {{ w.limit }}{{ w.unit ? ' ' + w.unit : '' }}</span>
+                }
+                @if (resetText(w); as rt) {
+                  <span class="qwin__reset">resets {{ rt }}</span>
+                }
+              </div>
+            </div>
+          }
+        }
+      </article>
+    }
+  </div>
+</section>
+  

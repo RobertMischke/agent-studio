@@ -1,0 +1,34 @@
+<div class="console">
+  <div class="console__header">
+    <span class="console__title">{{ title() }}</span>
+    <div class="console__controls">
+      <button class="console__btn" [class.console__btn--active]="filterStream() === 'all'" (click)="filterStream.set('all')">All</button>
+      <button class="console__btn" [class.console__btn--active]="filterStream() === 'stdout'" (click)="filterStream.set('stdout')">stdout</button>
+      <button class="console__btn" [class.console__btn--active]="filterStream() === 'stderr'" (click)="filterStream.set('stderr')">stderr</button>
+      <span class="console__separator">|</span>
+      <button class="console__btn" [class.console__btn--active]="autoScroll()" (click)="autoScroll.set(!autoScroll())">
+        {{ autoScroll() ? '📌' : '📋' }} Auto-scroll
+      </button>
+      <button class="console__btn" (click)="copyOutput()">{{ copied() ? '✅ Copied' : '📋 Copy' }}</button>
+      <button class="console__btn" (click)="clear()">🗑 Clear</button>
+    </div>
+  </div>
+  <div class="console__body" #scrollContainer [style.max-height]="bodyMaxHeight()">
+    @for (line of filteredLines(); track $index) {
+      <div class="console__line" [class]="'console__line--' + line.stream">
+        <span class="console__time">{{ formatTime(line.timestamp) }}</span>
+        <span class="console__stream">{{ line.stream === 'stderr' ? 'ERR' : 'OUT' }}</span>
+        <span class="console__text">{{ line.text }}</span>
+      </div>
+    }
+    @if (filteredLines().length === 0) {
+      <div class="console__empty">
+        {{ lines().length === 0 ? 'No output yet. Start the job to see CLI output here.' : 'No lines match the current filter.' }}
+      </div>
+    }
+  </div>
+  <div class="console__footer">
+    <span class="console__count">{{ filteredLines().length }} / {{ lines().length }} lines</span>
+  </div>
+</div>
+  

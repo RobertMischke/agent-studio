@@ -1,0 +1,52 @@
+<span class="concept-help" [attr.data-concept]="concept()">
+  <button
+    type="button"
+    class="concept-help__trigger"
+    [class.concept-help__trigger--open]="open()"
+    [attr.data-testid]="'concept-help-trigger-' + concept()"
+    [attr.aria-expanded]="open()"
+    [attr.aria-label]="'About ' + entry().title"
+    title="About this concept"
+    (click)="toggle($event)">
+    i
+  </button>
+  @if (open()) {
+    <div
+      #popover
+      class="concept-help__popover"
+      role="dialog"
+      [attr.aria-label]="entry().title"
+      [attr.data-testid]="'concept-help-popover-' + concept()">
+      <header class="concept-help__head">
+        <h4 class="concept-help__title" [attr.data-testid]="'concept-help-title-' + concept()">
+          {{ entry().title }}
+        </h4>
+        <button
+          type="button"
+          class="concept-help__close"
+          [attr.data-testid]="'concept-help-close-' + concept()"
+          aria-label="Close"
+          (click)="close()">×</button>
+      </header>
+      <div class="concept-help__body" [attr.data-testid]="'concept-help-body-' + concept()">
+        @for (p of paragraphs(); track $index) {
+          <p>{{ p }}</p>
+        }
+      </div>
+      <footer class="concept-help__foot">
+        <a
+          class="concept-help__learn"
+          [attr.data-testid]="'concept-help-learn-' + concept()"
+          [attr.href]="learnHref()"
+          target="_blank"
+          rel="noopener noreferrer">
+          Learn more: {{ entry().learnMoreLabel }} →
+        </a>
+        <span class="concept-help__path" [attr.data-testid]="'concept-help-path-' + concept()">
+          {{ entry().learnMore }}
+        </span>
+      </footer>
+    </div>
+  }
+</span>
+  

@@ -1,0 +1,21 @@
+<section class="autonomy" data-testid="autonomy-slider">
+  <header>
+    <h3>Orchestrator autonomy</h3>
+    <span class="autonomy__current" [attr.data-testid]="'autonomy-level-current'">
+      {{ currentStop().level }}: {{ currentStop().name }}
+    </span>
+  </header>
+  <input type="range"
+         class="autonomy__range"
+         min="0" max="4" step="1"
+         data-testid="autonomy-range"
+         [ngModel]="level()"
+         (ngModelChange)="onChange($event)" />
+  <div class="autonomy__stops">
+    @for (s of stops; track s.level) {
+      <span [class.autonomy__stop--active]="s.level === level()" [title]="s.desc">{{ s.name }}</span>
+    }
+  </div>
+  <p class="autonomy__desc">{{ currentStop().desc }}</p>
+</section>
+  

@@ -1,0 +1,75 @@
+<section class="proj-detail__group" data-testid="project-meta-cycle-section">
+  <h3>
+    <span class="pmc__icon">🔁</span>
+    Meta-cycle
+    <span class="pmc__pill"
+          [class.pmc__pill--good]="enabled() && lastVerdict() === 'healthy'"
+          [class.pmc__pill--warn]="enabled() && lastVerdict() === 'fixTriggering'"
+          [class.pmc__pill--bad]="enabled() && lastVerdict() === 'escalationOnly'"
+          [class.pmc__pill--off]="!enabled()"
+          data-testid="project-meta-cycle-status">
+      {{ statusLabel() }}
+    </span>
+  </h3>
+
+  @if (loading() && reports().length === 0) {
+    <p class="proj-detail__empty">Loading…</p>
+  } @else if (!enabled()) {
+    <p class="proj-detail__empty" data-testid="project-meta-cycle-disabled">
+      The meta-cycle is off. Enable it via <code>Supervisor:MetaCycleEnabled</code>
+      in <code>backend/appsettings.Local.json</code> and restart the backend, then
+      opt this project in via per-project settings. Off by default; see
+      <code>docs/mockups/orchestrator-meta-cycle/</code> for the full design.
+    </p>
+  } @else if (reports().length === 0) {
+    <p class="proj-detail__empty">
+      No cycles yet. The next pause + inspection runs after
+      <code>{{ config()?.cycleLengthN ?? 2 }}</code> jobs reach
+      <code>4-auto-review</code> or <code>5-human-review</code>.
+    </p>
+  } @else {
+    <dl class="pmc__meta">
+      <div><dt>Cycle length</dt><dd>N = {{ config()?.cycleLengthN ?? 2 }}</dd></div>
+      <div><dt>Last cycle</dt><dd>{{ formatRelative(lastCompletedAt()) }} &middot; {{ verdictLabel(lastVerdict()) }}</dd></div>
+      <div><dt>Last action</dt><dd><code>{{ actionLabel(lastActionKind()) }}</code> &middot; {{ lastReason() }}</dd></div>
+      <div><dt>Auto-fix budget</dt><dd>{{ config()?.maxFixesPerHour ?? 2 }}/hour</dd></div>
+    </dl>
+
+    <h4 class="pmc__sub">History (last {{ reports().length }})</h4>
+    <ul class="pmc__list" data-testid="project-meta-cycle-history">
+      @for (r of reports(); track r.cycleId) {
+        <li class="pmc__item"
+            [class.pmc__item--healthy]="r.verdict === 'healthy'"
+            [class.pmc__item--warn]="r.verdict === 'fixTriggering'"
+            [class.pmc__item--high]="r.verdict === 'escalationOnly'">
+          <span class="pmc__sev">{{ verdictLabel(r.verdict) }}</span>
+          <span class="pmc__action"><code>{{ actionLabel(r.action.kind) }}</code></span>
+          <span class="pmc__msg">{{ r.action.reason }}</span>
+          <span class="pmc__ts">{{ formatTimeShort(r.completedAt) }}</span>
+        </li>
+      }
+    </ul>
+
+    @if (lastFindings().length > 0) {
+      <h4 class="pmc__sub">Last cycle findings</h4>
+      <ul class="pmc__list" data-testid="project-meta-cycle-findings">
+        @for (f of lastFindings(); track f.topic) {
+          <li class="pmc__item"
+              [class.pmc__item--warn]="f.severity === 'Warn'"
+              [class.pmc__item--high]="f.severity === 'High'">
+            <span class="pmc__sev">{{ f.severity }}</span>
+            <span class="pmc__action">{{ f.topic }}</span>
+            <span class="pmc__msg">{{ f.message }}</span>
+          </li>
+        }
+      </ul>
+    }
+  }
+
+  <div class="pmc__actions">
+    <button class="pmc__btn"
+            data-testid="project-meta-cycle-refresh"
+            (click)="refresh()">Refresh</button>
+  </div>
+</section>
+  

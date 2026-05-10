@@ -1,0 +1,22 @@
+@if (isRunning()) {
+  <div class="upd-block" data-testid="update-block-modal" role="dialog" aria-live="assertive" aria-label="Update in progress">
+    <div class="upd-block__panel">
+      <div class="upd-block__spinner" aria-hidden="true">
+        <span class="upd-block__spinner-ring"></span>
+      </div>
+      <h2 class="upd-block__title" data-testid="update-block-title">{{ titleLine() }}</h2>
+      <p class="upd-block__phase" data-testid="update-block-phase">{{ phaseLine() }}</p>
+      @if (status()?.headLocal && status()?.headOrigin) {
+        <p class="upd-block__heads">
+          <code>{{ status()!.headLocal }}</code>
+          <span class="upd-block__arrow">→</span>
+          <code>{{ status()!.headOrigin }}</code>
+        </p>
+      }
+      @if (!backendReachable()) {
+        <p class="upd-block__hint">Backend is restarting; the app will resume automatically when it is back.</p>
+      }
+    </div>
+  </div>
+}
+  

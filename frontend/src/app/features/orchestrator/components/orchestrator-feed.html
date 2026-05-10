@@ -1,0 +1,79 @@
+<section class="orch-feed" data-testid="orchestrator-feed">
+  <header class="orch-feed__head">
+    <div class="orch-feed__title-block">
+      <h2 class="orch-feed__title">Orchestrator activity</h2>
+      <p class="orch-feed__sub">{{ projectName() }} · {{ entries().length }} {{ entries().length === 1 ? 'entry' : 'entries' }}</p>
+    </div>
+    <button class="orch-feed__refresh" (click)="refresh()" [disabled]="loading()" data-testid="orchestrator-refresh">
+      {{ loading() ? '…' : 'Refresh' }}
+    </button>
+  </header>
+  @if (error()) {
+    <div class="orch-feed__error">{{ error() }}</div>
+  }
+
+  <app-global-orchestrator-card />
+
+  <app-token-summary-block [projectName]="projectName()" />
+
+  @if (entries().length === 0 && !loading() && !error()) {
+    <div class="orch-feed__empty">No orchestrator activity yet for this project.</div>
+  }
+  <ul class="orch-feed__list">
+    @for (entry of reversed(); track entry.ts + entry.summary) {
+      <li class="orch-feed__entry"
+          [class.orch-feed__entry--decision]="entry.kind === 'decision'"
+          [class.orch-feed__entry--action]="entry.kind === 'action'"
+          [class.orch-feed__entry--observation]="entry.kind === 'observation'"
+          [class.orch-feed__entry--intervention]="entry.kind === 'intervention'">
+        <p class="orch-feed__summary">{{ entry.summary }}</p>
+        <footer class="orch-feed__entry-head">
+          <span class="orch-feed__kind">{{ kindLabel(entry.kind) }}</span>
+          <span class="orch-feed__topic">{{ entry.topic }}</span>
+          <span class="orch-feed__ts">{{ formatTime(entry.ts) }}</span>
+          @if (entry.tokenUsage; as tu) {
+            <span class="orch-feed__tokens" [title]="tokenTooltip(tu)">
+              {{ tu.model || '?' }} · ↑{{ tu.inputTokens }} ↓{{ tu.outputTokens }}
+            </span>
+          }
+        </footer>
+        @if (entry.reasoning) {
+          <details class="orch-feed__reasoning">
+            <summary>Why</summary>
+            <p>{{ entry.reasoning }}</p>
+          </details>
+        }
+        @if (entry.kind === 'decision' && entry.jobId) {
+          @if (overridingTs() === entry.ts) {
+            <div class="orch-feed__override-form">
+              <textarea class="orch-feed__override-input"
+                        placeholder="Your direction. Will be sent as a Steer follow-up."
+                        [(ngModel)]="overrideDraft"
+                        data-testid="orchestrator-override-input"
+                        rows="3"></textarea>
+              <div class="orch-feed__override-actions">
+                <button class="orch-feed__override-cancel"
+                        (click)="cancelOverride()"
+                        [disabled]="submittingOverride()">Cancel</button>
+                <button class="orch-feed__override-submit"
+                        (click)="submitOverride(entry)"
+                        [disabled]="submittingOverride() || !overrideDraft.trim()"
+                        data-testid="orchestrator-override-submit">
+                  {{ submittingOverride() ? 'Sending...' : 'Send override' }}
+                </button>
+              </div>
+            </div>
+          } @else {
+            <button class="orch-feed__override"
+                    (click)="startOverride(entry)"
+                    data-testid="orchestrator-override-start"
+                    title="Disagree with this decision? Send a Steer follow-up to the agent.">
+              Override this decision
+            </button>
+          }
+        }
+      </li>
+    }
+  </ul>
+</section>
+  

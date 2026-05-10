@@ -1,0 +1,58 @@
+<section class="proj-shell" data-testid="project-shell">
+  <header class="proj-shell__head">
+    <div class="proj-shell__title-row">
+      <button class="proj-shell__back"
+              type="button"
+              data-testid="project-shell-back"
+              (click)="closeShell.emit()">← Board</button>
+      <h1 class="proj-shell__title" data-testid="project-shell-title">{{ projectName() }}</h1>
+      <span class="proj-shell__chip" data-testid="project-shell-chip">this repo</span>
+      <span class="proj-shell__spacer"></span>
+      <button class="proj-shell__feed"
+              type="button"
+              data-testid="project-shell-open-feed"
+              (click)="openFeed.emit()">📜 Open feed</button>
+    </div>
+  </header>
+
+  <div class="proj-shell__body">
+    <aside class="proj-shell__rail" data-testid="project-shell-rail" aria-label="Project sections">
+      @for (group of railGroups(); track group.id) {
+        <div class="proj-shell__rail-group">{{ group.label }}</div>
+        @for (item of group.items; track item.key) {
+          <button class="proj-shell__rail-item"
+                  type="button"
+                  [class.proj-shell__rail-item--active]="item.key === activeRail()"
+                  [attr.data-testid]="'project-shell-rail-' + item.key"
+                  [attr.aria-current]="item.key === activeRail() ? 'page' : null"
+                  (click)="onRailClick(item.key)">
+            <span class="proj-shell__rail-icon" aria-hidden="true">{{ item.icon }}</span>
+            <span class="proj-shell__rail-label">{{ item.label }}</span>
+          </button>
+        }
+      }
+    </aside>
+
+    <main class="proj-shell__panel"
+          [attr.data-testid]="'project-shell-panel-' + activeRail()"
+          [attr.data-rail-key]="activeRail()">
+      @if (hasCustomPanel()) {
+        <ng-content></ng-content>
+      } @else {
+        <header class="proj-shell__panel-head">
+          <h2 class="proj-shell__panel-title" data-testid="project-shell-panel-title">
+            <span aria-hidden="true">{{ activeItem().icon }}</span>
+            {{ activeItem().panelTitle }}
+          </h2>
+          <p class="proj-shell__panel-desc" data-testid="project-shell-panel-desc">
+            {{ activeItem().description }}
+          </p>
+        </header>
+        <div class="proj-shell__empty" data-testid="project-shell-panel-empty">
+          <p>{{ activeItem().empty }}</p>
+        </div>
+      }
+    </main>
+  </div>
+</section>
+  

@@ -1,0 +1,37 @@
+<button type="button"
+        class="info-btn"
+        [attr.data-testid]="'info-button-' + topic()"
+        [attr.aria-expanded]="open()"
+        [attr.aria-label]="'How does this lane work?'"
+        [appTip]="'How does this lane work?'"
+        (click)="toggle($event)">i</button>
+@if (open()) {
+  <div class="info-btn__backdrop"
+       [attr.data-testid]="'info-button-backdrop-' + topic()"
+       (click)="close()"></div>
+  <aside class="info-btn__drawer"
+         role="dialog"
+         [attr.aria-label]="title()"
+         [attr.data-testid]="'info-button-drawer-' + topic()">
+    <header class="info-btn__head">
+      <h2 class="info-btn__title"
+          [attr.data-testid]="'info-button-title-' + topic()">{{ title() }}</h2>
+      <button type="button"
+              class="info-btn__close"
+              [attr.data-testid]="'info-button-close-' + topic()"
+              aria-label="Close"
+              (click)="close()">×</button>
+    </header>
+    <div class="info-btn__body"
+         [attr.data-testid]="'info-button-body-' + topic()">
+      @if (loading()) {
+        <p class="info-btn__loading">Loading…</p>
+      } @else if (errorMessage(); as msg) {
+        <p class="info-btn__error">{{ msg }}</p>
+      } @else if (bodyHtml(); as html) {
+        <div class="info-btn__rendered" [innerHTML]="html"></div>
+      }
+    </div>
+  </aside>
+}
+  

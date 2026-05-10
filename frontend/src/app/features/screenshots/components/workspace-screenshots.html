@@ -1,0 +1,75 @@
+<section class="wss" data-testid="workspace-screenshots">
+  <header class="wss__head">
+    <div>
+      <h2 class="wss__title">Visual evidence</h2>
+      <p class="wss__sub">
+        Recent screenshots harvested from every watched project.
+        @if (loaded() && entries().length > 0) {
+          <span class="wss__sub-stats">
+            · {{ entries().length }} image{{ entries().length === 1 ? '' : 's' }}
+            across {{ projectCount() }} project{{ projectCount() === 1 ? '' : 's' }}
+          </span>
+        }
+      </p>
+    </div>
+    <div class="wss__controls">
+      <div class="wss__win" role="radiogroup" aria-label="Window">
+        @for (opt of windowOptions; track opt.hours) {
+          <button type="button"
+                  class="wss__win-btn"
+                  [class.wss__win-btn--active]="windowHours() === opt.hours"
+                  [attr.data-testid]="'wss-win-' + opt.testId"
+                  role="radio"
+                  [attr.aria-checked]="windowHours() === opt.hours"
+                  (click)="setWindow(opt.hours)">
+            {{ opt.label }}
+          </button>
+        }
+      </div>
+      @if (projects().length > 1) {
+        <select class="wss__project"
+                data-testid="wss-project-filter"
+                [value]="projectFilter() ?? ''"
+                (change)="setProject($any($event.target).value)">
+          <option value="">All projects</option>
+          @for (p of projects(); track p) {
+            <option [value]="p">{{ p }}</option>
+          }
+        </select>
+      }
+      <button type="button"
+              class="wss__refresh"
+              data-testid="wss-refresh"
+              [disabled]="loading()"
+              (click)="refresh()">
+        {{ loading() ? '⏳' : '↻' }}
+      </button>
+    </div>
+  </header>
+
+  @if (loading() && entries().length === 0) {
+    <div class="wss__placeholder" data-testid="wss-loading">Loading screenshots...</div>
+  } @else if (loaded() && entries().length === 0) {
+    <div class="wss__placeholder" data-testid="wss-empty">
+      No screenshots produced inside the selected window.
+    </div>
+  } @else {
+    <div class="wss__buckets">
+      @for (b of buckets(); track b.bucketKey) {
+        <section class="wss__bucket"
+                 [attr.data-testid]="'wss-bucket'"
+                 [attr.data-bucket-key]="b.bucketKey">
+          <header class="wss__bucket-head">
+            <h3 class="wss__bucket-title">{{ b.bucketLabel }}</h3>
+            <span class="wss__bucket-count">{{ b.items.length }} image{{ b.items.length === 1 ? '' : 's' }}</span>
+          </header>
+          <app-screenshot-strip
+            [screenshots]="b.items"
+            variant="reel"
+            (openTask)="onOpenTask($event)" />
+        </section>
+      }
+    </div>
+  }
+</section>
+  

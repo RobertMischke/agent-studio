@@ -1,0 +1,44 @@
+    <div class="overlay" (click)="onBackdropClick()">
+      <div class="panel" (click)="$event.stopPropagation()">
+        <header class="panel__head">
+          <div>
+            <div class="panel__eyebrow">Dev tool</div>
+            <h2 class="panel__title">Update Stable</h2>
+            <p class="panel__sub">Runs update-stable.sh and streams output live.</p>
+          </div>
+          <button class="panel__close" (click)="closed.emit()" title="Close">×</button>
+        </header>
+        <div class="panel__body">
+          <div class="actions">
+            <button class="btn btn--primary"
+                    data-testid="update-stable-run"
+                    [disabled]="running()"
+                    (click)="start()">
+              {{ running() ? 'Running…' : 'Run update-stable.sh' }}
+            </button>
+            <button class="btn btn--ghost"
+                    [disabled]="running() || lines().length === 0"
+                    (click)="clear()">Clear</button>
+            @if (running()) {
+              <button class="btn btn--danger" (click)="abort()">Abort</button>
+            }
+            <span class="status"
+                  [class.status--ok]="exitCode() === 0"
+                  [class.status--err]="exitCode() !== null && exitCode() !== 0">
+              @if (exitCode() === null && running()) {
+                Streaming…
+              } @else if (exitCode() === 0) {
+                Done (exit 0)
+              } @else if (exitCode() !== null) {
+                Failed (exit {{ exitCode() }})
+              } @else {
+                Idle
+              }
+            </span>
+          </div>
+          <pre #log class="console" data-testid="update-stable-log">@for (line of lines(); track $index) {<span class="line line--{{ line.kind }}">{{ line.text }}</span>
+}</pre>
+        </div>
+      </div>
+    </div>
+  

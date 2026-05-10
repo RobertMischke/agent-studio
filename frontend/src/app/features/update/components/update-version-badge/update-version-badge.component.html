@@ -1,0 +1,14 @@
+<button
+  type="button"
+  class="version-badge"
+  [class.version-badge--behind]="behindBy() > 0"
+  data-testid="version-badge"
+  [attr.title]="tooltip()"
+  (click)="open()">
+  <span class="version-badge__v">v{{ productVersion() }}</span>
+  <span class="version-badge__sha">{{ headLocal() }}</span>
+  @if (behindBy() > 0) {
+    <span class="version-badge__dot" data-testid="version-badge-dot" aria-hidden="true"></span>
+  }
+</button>
+  
