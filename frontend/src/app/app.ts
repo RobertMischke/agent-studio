@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, OnInit, signal, untracked, ViewChild, ViewEncapsulation } from '@angular/core';
 import { LaneCollapseService } from './features/board/state/lane-collapse.service';
 import { UiPreferencesService } from './features/shell/state/ui-preferences.service';
+import { BoardFiltersService, ActiveFilterPill } from './features/board/state/board-filters.service';
 import { forkJoin } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import { JobColumnComponent } from './components/job-column';
@@ -26,7 +27,7 @@ import { AnalysisReportDrilldownComponent } from './components/analysis-report-d
 import { StatusBarComponent } from './components/status-bar';
 import { JobService } from './services/job.service';
 import { ClientService } from './services/client.service';
-import { JobDetail, JobInfo, GroupedJobs, WatchPathEntry, CliType, CLI_TYPES, CliModelInfo, TagRegistryEntry } from './models/job.model';
+import { JobDetail, JobInfo, WatchPathEntry, CliType, CLI_TYPES, CliModelInfo } from './models/job.model';
 import { ErrorDialogService } from './services/error-dialog.service';
 import { cliTypeLabel as fmtCliTypeLabel, formatMultiplier as fmtMultiplier } from './services/format.util';
 import { CreateJobDialogComponent, PendingAttachment } from './components/board/create-job-dialog/create-job-dialog.component';
@@ -61,22 +62,6 @@ interface VerboseDebugContext {
   screenshots: JobScreenshot[];
   tokenSummary: JobTokenSummary | null;
   job: JobInfo | null;
-}
-
-/**
- * One pill in the active-filter strip below the header. Each pill
- * carries enough context for `removeFilterPill` to undo just this one
- * filter without disturbing the others.
- */
-interface ActiveFilterPill {
-  kind: 'owner' | 'project' | 'type' | 'tag';
-  kindLabel: string;
-  /** Identifier used by the remove handler. */
-  value: string;
-  /** Visible label shown on the pill. */
-  label: string;
-  /** Optional CSS colour for the leading swatch (tag colour, project colour). */
-  swatch: string | null;
 }
 
 @Component({
@@ -2453,9 +2438,17 @@ export class App implements OnInit {
   private hashListener: (() => void) | null = null;
   private kanbanKeyListener: ((ev: KeyboardEvent) => void) | null = null;
   readonly watchPaths = signal<WatchPathEntry[]>([]);
-  readonly activeProjects = signal<Set<string>>(new Set(JSON.parse(localStorage.getItem('activeProjects') ?? '[]')));
+  /**
+   * Cycle 9 / ADR-0034: search query, four faceted filters, URL hash +
+   * query-param round-trip, and `filteredGrouped` derivation all live
+   * in BoardFiltersService (features/board/state/board-filters.service.ts).
+   * The shell re-exposes the same signal/computed/method names so
+   * existing template bindings keep working unchanged.
+   */
+  private readonly boardFilters = inject(BoardFiltersService);
+  readonly activeProjects = this.boardFilters.activeProjects;
   /** Active project names as a plain readonly array for the workspace banner input. */
-  readonly bannerProjects = computed<readonly string[]>(() => [...this.activeProjects()]);
+  readonly bannerProjects = this.boardFilters.bannerProjects;
   // Cycle 9: side-sheet width owned by UiPreferencesService.
   private readonly uiPrefs = inject(UiPreferencesService);
   readonly sideSheetWidth = this.uiPrefs.sideSheetWidth;
@@ -2499,7 +2492,13 @@ export class App implements OnInit {
    * grouped jobs don't carry their prompts, so a "matches body" pretence
    * would lie. Ephemeral; not persisted to localStorage.
    */
-  readonly searchQuery = signal<string>('');
+  // Cycle 9 / ADR-0034: filter state + URL sync delegated to BoardFiltersService.
+  readonly searchQuery = this.boardFilters.searchQuery;
+  readonly activeFilterCount = this.boardFilters.activeFilterCount;
+  readonly hasActiveFiltersOrSearch = this.boardFilters.hasActiveFiltersOrSearch;
+  readonly filteredGrouped = this.boardFilters.filteredGrouped;
+  readonly filteredJobCount = this.boardFilters.filteredJobCount;
+  readonly totalJobCount = this.boardFilters.totalJobCount;
 
   /**
    * VS Code-style filter sidesheet that hosts search + faceted filters +
@@ -2525,131 +2524,11 @@ export class App implements OnInit {
   }
 
   onSidesheetClearAll(): void {
-    this.searchQuery.set('');
-    // clearAllFilters already calls writeFilterHash which mirrors to query params.
-    this.clearAllFilters();
+    this.boardFilters.clearSearchAndFilters();
   }
-
-  /**
-   * Unified count of active filter/search affordances for the header
-   * trigger badge. Mirrors `hasActiveFilters` plus a `+1` for an active
-   * search query so the user sees one number on the trigger and never
-   * has to remember which surface introduced the narrowing.
-   */
-  readonly activeFilterCount = computed(() => {
-    let n = 0;
-    if (this.activeClientFilter()) n += 1;
-    n += this.activeProjects().size;
-    if (this.activeType()) n += 1;
-    n += this.activeTagFilter().size;
-    return n;
-  });
-
-  readonly hasActiveFiltersOrSearch = computed(() =>
-    this.searchQuery().trim().length > 0
-    || this.activeClientFilter() !== null
-    || this.activeProjects().size > 0
-    || this.activeType() !== null
-    || this.activeTagFilter().size > 0);
 
   readonly projectNames = computed(() => {
     return this.watchPaths().map(wp => wp.name);
-  });
-
-  readonly filteredGrouped = computed(() => {
-    const grouped = this.jobService.grouped();
-    const active = this.activeProjects();
-    const ownerId = this.activeClientFilter();
-    const types = this.activeTypeFilter();
-    const tagIds = this.activeTagFilter();
-    const query = this.searchQuery().trim().toLowerCase();
-    const noFilters = active.size === 0 && !ownerId && types.size === 0 && tagIds.size === 0 && !query;
-    if (noFilters) return grouped;
-    const matchesQuery = (j: JobInfo) => {
-      if (!query) return true;
-      const haystack = [
-        j.title, j.id, j.projectName, j.agent,
-        j.model ?? '', j.cliType ?? '', j.sessionName ?? '', j.state,
-        j.ownerClientId ?? '', j.phase ?? '', j.taskType ?? '',
-        ...(j.tags ?? []),
-      ].join(' ').toLowerCase();
-      return haystack.includes(query);
-    };
-    const filterJobs = (jobs: JobInfo[]) => jobs.filter(j => {
-      if (active.size > 0 && !active.has(j.projectName)) return false;
-      if (ownerId && j.ownerClientId !== ownerId) return false;
-      if (types.size > 0) {
-        // Default missing taskType to 'chore' (server-side default for legacy jobs).
-        const t = j.taskType || 'chore';
-        if (!types.has(t)) return false;
-      }
-      if (tagIds.size > 0) {
-        const jobTags = new Set(j.tags ?? []);
-        // AND-match: a job needs ALL selected tags
-        // (header-filter-dropdown spec: "Selecting two tags ANDs them").
-        for (const tid of tagIds) if (!jobTags.has(tid)) return false;
-      }
-      if (!matchesQuery(j)) return false;
-      return true;
-    });
-    const autoReviewFiltered = filterJobs(grouped.autoReview ?? grouped.review);
-    return {
-      backlog: filterJobs(grouped.backlog ?? []),
-      preparation: filterJobs(grouped.preparation),
-      orchestratorPrep: filterJobs(grouped.orchestratorPrep ?? []),
-      needsHumanReview: filterJobs(grouped.needsHumanReview ?? []),
-      ready: filterJobs(grouped.ready),
-      progress: filterJobs(grouped.progress),
-      // ADR-0028: hide-when-empty on the board, but the persistent banner
-      // still counts items here when any project has a failed pickup.
-      failedPickup: filterJobs(grouped.failedPickup ?? []),
-      autoReview: autoReviewFiltered,
-      humanReview: filterJobs(grouped.humanReview ?? []),
-      review: autoReviewFiltered,
-      completed: filterJobs(grouped.completed),
-      archive: filterJobs(grouped.archive ?? []),
-    } as GroupedJobs;
-  });
-
-  /**
-   * Total visible jobs after the current search + facet filter is
-   * applied. Drives the sidesheet's "X / Y jobs match" footer. We sum
-   * across the lanes that the board renders rather than the full
-   * grouped DTO so the counter matches what the user actually sees.
-   */
-  readonly filteredJobCount = computed(() => {
-    const g = this.filteredGrouped();
-    return (
-      (g.preparation?.length ?? 0)
-      + (g.orchestratorPrep?.length ?? 0)
-      + (g.needsHumanReview?.length ?? 0)
-      + (g.backlog?.length ?? 0)
-      + (g.ready?.length ?? 0)
-      + (g.progress?.length ?? 0)
-      + (g.failedPickup?.length ?? 0)
-      + (g.autoReview?.length ?? 0)
-      + (g.humanReview?.length ?? 0)
-      + (g.completed?.length ?? 0)
-      + (g.archive?.length ?? 0)
-    );
-  });
-
-  /** Total job count, pre-filter, summed across the same lanes. */
-  readonly totalJobCount = computed(() => {
-    const g = this.jobService.grouped();
-    return (
-      (g.preparation?.length ?? 0)
-      + (g.orchestratorPrep?.length ?? 0)
-      + (g.needsHumanReview?.length ?? 0)
-      + (g.backlog?.length ?? 0)
-      + (g.ready?.length ?? 0)
-      + (g.progress?.length ?? 0)
-      + (g.failedPickup?.length ?? 0)
-      + (g.autoReview?.length ?? (g.review?.length ?? 0))
-      + (g.humanReview?.length ?? 0)
-      + (g.completed?.length ?? 0)
-      + (g.archive?.length ?? 0)
-    );
   });
 
   /**
@@ -2686,46 +2565,18 @@ export class App implements OnInit {
     });
   }
 
-  /** null = no filter; otherwise show only jobs whose ownerClientId matches. */
-  readonly activeClientFilter = signal<string | null>(null);
-  setClientFilter(id: string | null): void {
-    this.activeClientFilter.set(id || null);
-    this.writeFilterHash();
-  }
-  /** Read the new value out of the (change) event so the template stays terse. */
-  clientFilterChange(event: Event): string | null {
-    const target = event.target as HTMLSelectElement | null;
-    const v = target?.value ?? '';
-    return v ? v : null;
-  }
-
-  /**
-   * Backlog-lane spec filter set, refactored for the dropdown header
-   * (`header-filter-dropdown-for-type-and-tags-plus-card-chip`).
-   *
-   * - Type filter is single-select: a job has exactly one task type, so two
-   *   types ANDed would always be empty. The Set wrapper is preserved for
-   *   compatibility with the `filteredGrouped` membership check, but the
-   *   set always contains zero or one entry.
-   * - Tag filter is multi-select with AND semantics: the user is narrowing
-   *   ("things tagged ui-ux AND performance"), not broadening.
-   * - All four filter sources (Owner / Project / Type / Tags) round-trip
-   *   through the URL hash so a bookmark reproduces the view.
-   */
-  readonly activeTypeFilter = signal<Set<string>>(new Set());
-  readonly activeTagFilter = signal<Set<string>>(new Set());
-  /** Single-select view of the type filter. Null = no type filter. */
-  readonly activeType = computed<string | null>(() => {
-    const s = this.activeTypeFilter();
-    if (s.size === 0) return null;
-    return s.values().next().value as string;
-  });
-  readonly tagRegistry = signal<TagRegistryEntry[]>([]);
-  readonly tagRegistryById = computed(() => {
-    const m = new Map<string, TagRegistryEntry>();
-    for (const t of this.tagRegistry()) m.set(t.id, t);
-    return m;
-  });
+  // Cycle 9 / ADR-0034: filter signals + URL sync delegated to BoardFiltersService.
+  // The shell re-exposes the same names so existing template bindings + call
+  // sites keep working unchanged.
+  readonly activeClientFilter = this.boardFilters.activeClientFilter;
+  readonly activeTypeFilter = this.boardFilters.activeTypeFilter;
+  readonly activeTagFilter = this.boardFilters.activeTagFilter;
+  readonly activeType = this.boardFilters.activeType;
+  readonly hasActiveFilters = this.boardFilters.hasActiveFilters;
+  readonly activeFilterPills = this.boardFilters.activeFilterPills;
+  /** Workspace tag registry, refreshed on init via `loadTagRegistry`. */
+  readonly tagRegistry = this.tagRegistryStore.tags;
+  readonly tagRegistryById = this.tagRegistryStore.byId;
 
   /** Static option list for the type filter dropdown. */
   readonly typeFilterOptions: readonly TypeFilterOption[] = [
@@ -2734,242 +2585,19 @@ export class App implements OnInit {
     { value: 'chore', label: 'Chores', icon: '·', kind: 'chore' },
   ];
 
-  clearTypeFilters(): void {
-    this.activeTypeFilter.set(new Set());
-    this.writeFilterHash();
-  }
-
-  /** Single-select set of the type filter (called from the dropdown). */
-  onSetType(type: string | null): void {
-    this.activeTypeFilter.set(type ? new Set([type]) : new Set());
-    this.writeFilterHash();
-  }
-
-  toggleTypeFilter(type: string): void {
-    // Single-select: same value clears, otherwise replace.
-    const current = this.activeType();
-    this.onSetType(current === type ? null : type);
-  }
-
-  toggleTagFilter(id: string): void {
-    const next = new Set(this.activeTagFilter());
-    if (next.has(id)) next.delete(id); else next.add(id);
-    this.activeTagFilter.set(next);
-    this.writeFilterHash();
-  }
-
-  clearAllFilters(): void {
-    this.activeTypeFilter.set(new Set());
-    this.activeTagFilter.set(new Set());
-    this.activeClientFilter.set(null);
-    this.activeProjects.set(new Set());
-    localStorage.setItem('activeProjects', '[]');
-    this.writeFilterHash();
-  }
-
-  /** True when at least one type, tag, owner, or project filter is active. */
-  readonly hasActiveFilters = computed(() =>
-    this.activeTypeFilter().size > 0
-    || this.activeTagFilter().size > 0
-    || !!this.activeClientFilter()
-    || this.activeProjects().size > 0);
-
-  /**
-   * Active-filter pill data for the strip below the header. One pill per
-   * active filter; clicking the × calls `removeFilterPill`. Owner and
-   * Project are surfaced here even though their primary controls remain
-   * inline so the user has one consistent place to undo any narrowing.
-   */
-  readonly activeFilterPills = computed<ActiveFilterPill[]>(() => {
-    const pills: ActiveFilterPill[] = [];
-    const owner = this.activeClientFilter();
-    if (owner) {
-      const c = this.clientService.resolve(owner);
-      pills.push({
-        kind: 'owner', kindLabel: 'Owner', value: owner,
-        label: c.displayName || owner,
-        swatch: c.colour || null,
-      });
-    }
-    for (const name of this.activeProjects()) {
-      const id = projectIdentity(name);
-      pills.push({
-        kind: 'project', kindLabel: 'Project', value: name,
-        label: name, swatch: id.color,
-      });
-    }
-    const t = this.activeType();
-    if (t) {
-      const opt = this.typeFilterOptions.find(o => o.value === t);
-      pills.push({
-        kind: 'type', kindLabel: 'Type', value: t,
-        label: opt ? `${opt.icon} ${opt.label}` : t,
-        swatch: null,
-      });
-    }
-    const byId = this.tagRegistryById();
-    for (const id of this.activeTagFilter()) {
-      const entry = byId.get(id);
-      pills.push({
-        kind: 'tag', kindLabel: 'Tag', value: id,
-        label: entry?.label ?? id,
-        swatch: entry?.color ?? null,
-      });
-    }
-    return pills;
-  });
-
-  removeFilterPill(pill: ActiveFilterPill): void {
-    switch (pill.kind) {
-      case 'owner':
-        this.setClientFilter(null);
-        this.writeFilterHash();
-        break;
-      case 'project':
-        this.toggleProject(pill.value);
-        this.writeFilterHash();
-        break;
-      case 'type':
-        this.onSetType(null);
-        break;
-      case 'tag':
-        this.toggleTagFilter(pill.value);
-        break;
-    }
-  }
-
-  private readFilterHash(): void {
-    const hash = window.location.hash || '';
-    // New format: #filters=owner:X;projects:A,B;type:bug;tags:t1,t2 with `;`
-    // separating top-level keys. The legacy format `#filter=type:bug,tag:perf`
-    // is still understood so old bookmarks keep working.
-    const newM = hash.match(/[#&]filters=([^&]*)/);
-    if (newM) {
-      const decoded = decodeURIComponent(newM[1]);
-      const parts = decoded.split(';').map(p => p.trim()).filter(Boolean);
-      let owner: string | null = null;
-      const projects = new Set<string>();
-      const types = new Set<string>();
-      const tags = new Set<string>();
-      for (const p of parts) {
-        const idx = p.indexOf(':');
-        if (idx <= 0) continue;
-        const k = p.slice(0, idx).trim();
-        const v = p.slice(idx + 1).trim();
-        if (!v) continue;
-        if (k === 'owner') owner = v;
-        else if (k === 'projects') v.split(',').filter(Boolean).forEach(x => projects.add(x));
-        else if (k === 'type') types.add(v);
-        else if (k === 'tags') v.split(',').filter(Boolean).forEach(x => tags.add(x));
-      }
-      this.activeClientFilter.set(owner);
-      this.activeProjects.set(projects);
-      localStorage.setItem('activeProjects', JSON.stringify([...projects]));
-      // Type filter is single-select: keep at most one entry.
-      const oneType = types.size > 0 ? new Set([types.values().next().value as string]) : new Set<string>();
-      this.activeTypeFilter.set(oneType);
-      this.activeTagFilter.set(tags);
-      return;
-    }
-    const legacyM = hash.match(/[#&]filter=([^&]*)/);
-    if (legacyM) {
-      const parts = decodeURIComponent(legacyM[1]).split(',').map(p => p.trim()).filter(Boolean);
-      const types = new Set<string>();
-      const tags = new Set<string>();
-      for (const p of parts) {
-        const [k, v] = p.split(':');
-        if (!k || !v) continue;
-        if (k === 'type') types.add(v);
-        else if (k === 'tag') tags.add(v);
-      }
-      const oneType = types.size > 0 ? new Set([types.values().next().value as string]) : new Set<string>();
-      this.activeTypeFilter.set(oneType);
-      this.activeTagFilter.set(tags);
-    }
-  }
-
-  private writeFilterHash(): void {
-    const segments: string[] = [];
-    const owner = this.activeClientFilter();
-    if (owner) segments.push(`owner:${owner}`);
-    const projects = [...this.activeProjects()];
-    if (projects.length > 0) segments.push(`projects:${projects.join(',')}`);
-    const t = this.activeType();
-    if (t) segments.push(`type:${t}`);
-    const tags = [...this.activeTagFilter()];
-    if (tags.length > 0) segments.push(`tags:${tags.join(',')}`);
-    const fragment = segments.length > 0 ? `filters=${encodeURIComponent(segments.join(';'))}` : '';
-    // Preserve any non-filter hash content (e.g. the project route) and
-    // strip both the new (`filters=`) and legacy (`filter=`) keys so we
-    // don't accumulate duplicates.
-    const existing = (window.location.hash || '').replace(/^#/, '');
-    const others = existing
-      .split('&')
-      .filter(s => s && !s.startsWith('filters=') && !s.startsWith('filter='));
-    const next = [fragment, ...others].filter(Boolean).join('&');
-    const target = next ? `#${next}` : '';
-    if (target !== window.location.hash) {
-      history.replaceState(null, '', target || window.location.pathname + window.location.search);
-    }
-    this.writeFiltersToQueryParams();
-  }
-
-  /**
-   * Bookmark / shareable-link support for the kanban-filter sidesheet:
-   * sync the live search query (and a redundant copy of the active
-   * facet selection) to URL query params so a copy-pasted address
-   * reproduces the filtered view. The faceted filters keep their
-   * existing `#filters=` hash sync; `?q=` lives in the query string
-   * because that's what people copy out of the address bar without
-   * thinking, and the hash is owned by routes elsewhere.
-   */
-  private readFiltersFromQueryParams(): void {
-    if (typeof window === 'undefined') return;
-    const params = new URLSearchParams(window.location.search);
-    const q = params.get('q');
-    if (q != null) this.searchQuery.set(q);
-    const owner = params.get('owner');
-    if (owner) this.activeClientFilter.set(owner);
-    const tagsCsv = params.get('tag');
-    if (tagsCsv) {
-      const tags = new Set(tagsCsv.split(',').filter(Boolean));
-      if (tags.size > 0) this.activeTagFilter.set(tags);
-    }
-    const type = params.get('type');
-    if (type) this.activeTypeFilter.set(new Set([type]));
-  }
-
-  private writeFiltersToQueryParams(): void {
-    if (typeof window === 'undefined') return;
-    const params = new URLSearchParams(window.location.search);
-    const q = this.searchQuery();
-    if (q) params.set('q', q); else params.delete('q');
-    const owner = this.activeClientFilter();
-    if (owner) params.set('owner', owner); else params.delete('owner');
-    const tags = [...this.activeTagFilter()];
-    if (tags.length > 0) params.set('tag', tags.join(',')); else params.delete('tag');
-    const type = this.activeType();
-    if (type) params.set('type', type); else params.delete('type');
-    const qs = params.toString();
-    const target =
-      window.location.pathname
-      + (qs ? `?${qs}` : '')
-      + (window.location.hash || '');
-    if (target !== window.location.pathname + window.location.search + (window.location.hash || '')) {
-      history.replaceState(null, '', target);
-    }
-  }
+  setClientFilter(id: string | null): void { this.boardFilters.setClientFilter(id); }
+  clientFilterChange(event: Event): string | null { return this.boardFilters.clientFilterChange(event); }
+  clearTypeFilters(): void { this.boardFilters.clearTypeFilters(); }
+  onSetType(type: string | null): void { this.boardFilters.onSetType(type); }
+  toggleTypeFilter(type: string): void { this.boardFilters.toggleTypeFilter(type); }
+  toggleTagFilter(id: string): void { this.boardFilters.toggleTagFilter(id); }
+  clearAllFilters(): void { this.boardFilters.clearAllFilters(); }
+  removeFilterPill(pill: ActiveFilterPill): void { this.boardFilters.removeFilterPill(pill); }
 
   loadTagRegistry(): void {
     this.jobService.listTags().subscribe({
-      next: tags => {
-        this.tagRegistry.set(tags);
-        this.tagRegistryStore.set(tags);
-      },
-      error: () => {
-        this.tagRegistry.set([]);
-        this.tagRegistryStore.set([]);
-      }
+      next: tags => this.tagRegistryStore.set(tags),
+      error: () => this.tagRegistryStore.set([]),
     });
   }
 
@@ -3270,8 +2898,7 @@ export class App implements OnInit {
   ngOnInit() {
     // Backlog-lane spec: hydrate the filter bar from the URL hash before
     // rendering so a bookmark or copy-paste lands on the same view.
-    this.readFilterHash();
-    this.readFiltersFromQueryParams();
+    this.boardFilters.hydrateFromUrl();
     this.loadTagRegistry();
     this.refresh();
     this.jobService.startLiveUpdates();
@@ -3735,17 +3362,15 @@ export class App implements OnInit {
 
   onSearchInput(event: Event) {
     const value = (event.target as HTMLInputElement).value;
-    this.searchQuery.set(value);
+    this.boardFilters.setSearchQuery(value);
   }
 
   setSearchQuery(value: string) {
-    this.searchQuery.set(value);
-    this.writeFiltersToQueryParams();
+    this.boardFilters.setSearchQuery(value);
   }
 
   clearSearch() {
-    this.searchQuery.set('');
-    this.writeFiltersToQueryParams();
+    this.boardFilters.clearSearch();
   }
 
   /**
@@ -4276,21 +3901,8 @@ export class App implements OnInit {
     });
   }
 
-  toggleProject(name: string) {
-    const current = new Set(this.activeProjects());
-    if (current.has(name)) {
-      current.delete(name);
-    } else {
-      current.add(name);
-    }
-    this.activeProjects.set(current);
-    localStorage.setItem('activeProjects', JSON.stringify([...current]));
-    this.writeFilterHash();
-  }
-
-  isProjectActive(name: string): boolean {
-    return this.activeProjects().has(name);
-  }
+  toggleProject(name: string) { this.boardFilters.toggleProject(name); }
+  isProjectActive(name: string): boolean { return this.boardFilters.isProjectActive(name); }
 
   // Pre-bound arrow-function aliases for child components that take a
   // predicate-style input (e.g. <app-project-tabs>). Using arrows keeps
