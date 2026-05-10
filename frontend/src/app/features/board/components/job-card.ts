@@ -1,10 +1,10 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, output, signal } from '@angular/core';
-import { AutoLoopSnapshot, JobInfo, JobTokenSummary, PendingIntent } from '../models/job.model';
-import { GitSummaryService } from '../services/git-summary.service';
-import { ClientService } from '../services/client.service';
-import { cliTypeIcon } from '../services/format.util';
-import { projectIdentity } from '../services/project-identity.util';
-import { TagRegistryStore } from '../services/tag-registry.store';
+import { AutoLoopSnapshot, JobInfo, JobTokenSummary, PendingIntent } from '../../../models/job.model';
+import { GitSummaryService } from '../../../services/git-summary.service';
+import { ClientService } from '../../../services/client.service';
+import { cliTypeIcon } from '../../../services/format.util';
+import { projectIdentity } from '../../../services/project-identity.util';
+import { TagRegistryStore } from '../../../services/tag-registry.store';
 
 // Shared 'now' signal that ticks every 30s so all relative timestamps update in lockstep
 // without re-reading Date.now() during change detection (which causes NG0100).

@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import { projectIdentity } from '../../../services/project-identity.util';
+import { projectIdentity } from '../../../../services/project-identity.util';
 
 export interface ProjectRunnerIndicator { icon: string; cls: string; }
 

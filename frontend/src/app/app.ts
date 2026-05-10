@@ -4,7 +4,7 @@ import { UiPreferencesService } from './features/shell/state/ui-preferences.serv
 import { BoardFiltersService, ActiveFilterPill } from './features/board/state/board-filters.service';
 import { forkJoin } from 'rxjs';
 import { FormsModule } from '@angular/forms';
-import { JobColumnComponent } from './components/job-column';
+import { JobColumnComponent } from './features/board/components/job-column';
 import { JobDetailComponent } from './components/job-detail';
 import { CliUsageSheetComponent } from './features/cli/components/cli-usage-sheet';
 import { OrchestratorFeedComponent } from './features/orchestrator/components/orchestrator-feed';
@@ -30,11 +30,11 @@ import { ClientService } from './services/client.service';
 import { JobDetail, JobInfo, WatchPathEntry, CliType, CLI_TYPES, CliModelInfo } from './models/job.model';
 import { ErrorDialogService } from './services/error-dialog.service';
 import { cliTypeLabel as fmtCliTypeLabel, formatMultiplier as fmtMultiplier } from './services/format.util';
-import { CreateJobDialogComponent, PendingAttachment } from './components/board/create-job-dialog/create-job-dialog.component';
-import { ErrorDialogComponent } from './components/board/error-dialog/error-dialog.component';
-import { ProjectAutoInfo, ProjectTabsComponent, ProjectTokenChipInfo } from './components/board/project-tabs/project-tabs.component';
-import { FiltersDropdownComponent, TypeFilterOption } from './components/board/filters-dropdown/filters-dropdown.component';
-import { KanbanFilterSidesheetComponent } from './components/board/kanban-filter-sidesheet/kanban-filter-sidesheet.component';
+import { CreateJobDialogComponent, PendingAttachment } from './features/board/components/create-job-dialog/create-job-dialog.component';
+import { ErrorDialogComponent } from './components/error-dialog/error-dialog.component';
+import { ProjectAutoInfo, ProjectTabsComponent, ProjectTokenChipInfo } from './features/board/components/project-tabs/project-tabs.component';
+import { FiltersDropdownComponent, TypeFilterOption } from './features/board/components/filters-dropdown/filters-dropdown.component';
+import { KanbanFilterSidesheetComponent } from './features/board/components/kanban-filter-sidesheet/kanban-filter-sidesheet.component';
 import { UpdateClientService } from './services/update.service';
 import { projectIdentity } from './services/project-identity.util';
 import { DevToolsService } from './services/dev-tools.service';
@@ -54,7 +54,7 @@ import { UpdateBlockModalComponent } from './features/update/components/update-b
 import { CliAdminPanelComponent } from './features/cli/components/cli-admin-panel';
 import { JobScreenshot, RunTimeline, JobTokenSummary, CliOutputLine } from './models/job.model'; // verbose-debug overlay context types
 import { VerboseDebugOverlayComponent } from './features/verbose-debug/components/verbose-debug-overlay.component';
-import { splitReadyByPhase } from './components/ready-lane-split.util';
+import { splitReadyByPhase } from './features/board/components/ready-lane-split.util';
 
 interface VerboseDebugContext {
   lines: CliOutputLine[];
@@ -2446,6 +2446,7 @@ export class App implements OnInit {
    * existing template bindings keep working unchanged.
    */
   private readonly boardFilters = inject(BoardFiltersService);
+  private readonly tagRegistryStore = inject(TagRegistryStore);
   readonly activeProjects = this.boardFilters.activeProjects;
   /** Active project names as a plain readonly array for the workspace banner input. */
   readonly bannerProjects = this.boardFilters.bannerProjects;
@@ -2843,7 +2844,6 @@ export class App implements OnInit {
     readonly clientService: ClientService,
     readonly featureFlags: FeatureFlagsService,
     private readonly _completionSound: JobCompletionSoundService,
-    private readonly tagRegistryStore: TagRegistryStore,
     readonly updateClient: UpdateClientService,
   ) {
     effect(() => {

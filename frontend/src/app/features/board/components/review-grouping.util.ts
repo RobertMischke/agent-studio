@@ -1,4 +1,4 @@
-import { JobInfo } from '../models/job.model';
+import { JobInfo } from '../../../models/job.model';
 
 /**
  * Splits 4-review jobs into the two swim-lane sub-sections rendered by

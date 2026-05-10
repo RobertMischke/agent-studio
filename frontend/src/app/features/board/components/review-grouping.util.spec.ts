@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { groupReviewJobs } from './review-grouping.util';
-import { JobInfo } from '../models/job.model';
+import { JobInfo } from '../../../models/job.model';
 
 function job(id: string, verdict: JobInfo['orchestratorVerdict'] = null): JobInfo {
   return {

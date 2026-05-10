@@ -1,13 +1,13 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, output, signal } from '@angular/core';
 import { ScrollingModule } from '@angular/cdk/scrolling';
-import { JobInfo, JobOrderItem } from '../models/job.model';
+import { JobInfo, JobOrderItem } from '../../../models/job.model';
 import { JobCardComponent } from './job-card';
-import { projectIdentity } from '../services/project-identity.util';
-import { cliTypeIcon } from '../services/format.util';
-import { InstantTooltipDirective } from '../directives/instant-tooltip.directive';
+import { projectIdentity } from '../../../services/project-identity.util';
+import { cliTypeIcon } from '../../../services/format.util';
+import { InstantTooltipDirective } from '../../../directives/instant-tooltip.directive';
 import { groupReviewJobs } from './review-grouping.util';
-import { AutoReviewStatusStore } from '../services/auto-review-status.store';
-import { InfoButtonComponent } from './info-button/info-button.component';
+import { AutoReviewStatusStore } from '../../../services/auto-review-status.store';
+import { InfoButtonComponent } from '../../../components/info-button/info-button.component';
 
 const ARCHIVE_VISIBLE_LIMIT = 20;
 

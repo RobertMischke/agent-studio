@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
-import { TagRegistryEntry } from '../../../models/job.model';
+import { TagRegistryEntry } from '../../../../models/job.model';
 
 export interface TypeFilterOption {
   /** Backend-side value, e.g. `bug`, `feature`, `chore`. */

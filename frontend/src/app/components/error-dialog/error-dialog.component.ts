@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
-import { ErrorDialogState } from '../../../models/error-dialog.model';
+import { ErrorDialogState } from '../../models/error-dialog.model';
 
 /**
  * Error overlay used by the global ErrorDialogService. The parent

@@ -10,7 +10,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import { ClientSummary, TagRegistryEntry } from '../../../models/job.model';
+import { ClientSummary, TagRegistryEntry } from '../../../../models/job.model';
 import { TypeFilterOption } from '../filters-dropdown/filters-dropdown.component';
 
 /**
