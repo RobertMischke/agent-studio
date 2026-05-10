@@ -24,7 +24,7 @@ import {
   toProjectSlug,
 } from './features/project-detail/components/project-shell/project-shell.config';
 import { AnalysisReportDrilldownComponent } from './features/project-detail/components/analysis-report-drilldown';
-import { StatusBarComponent } from './components/status-bar';
+import { StatusBarComponent } from './features/shell/components/status-bar';
 import { JobService } from './services/job.service';
 import { ClientService } from './services/client.service';
 import { JobDetail, JobInfo, WatchPathEntry, CliType, CLI_TYPES, CliModelInfo } from './models/job.model';

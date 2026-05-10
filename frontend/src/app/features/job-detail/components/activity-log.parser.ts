@@ -1,4 +1,4 @@
-import { CliOutputLine } from '../models/job.model';
+import { CliOutputLine } from '../../../models/job.model';
 
 export type ActivityLogKind = 'read' | 'search' | 'command' | 'edit' | 'task' | 'todo' | 'error' | 'message' | 'orchestrator' | 'supervisor' | 'other';
 export type ActivityLogFilters = Record<ActivityLogKind, boolean>;

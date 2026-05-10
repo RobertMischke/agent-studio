@@ -15,7 +15,7 @@ import { ProjectMetaCycleSectionComponent } from './project-meta-cycle-section';
 import { ProjectAnalysisReportsSectionComponent } from './project-analysis-reports-section';
 import { ProjectSteeringDocsSectionComponent } from './project-steering-docs-section';
 import { ProjectSkillReadinessSectionComponent } from './project-skill-readiness-section';
-import { AutonomySliderComponent } from '../../../components/autonomy-slider';
+import { AutonomySliderComponent } from './autonomy-slider';
 import { AnalysisReport } from '../../../models/analysis-report.model';
 
 interface ProjectSettingsRow {

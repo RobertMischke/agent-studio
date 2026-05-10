@@ -1,8 +1,8 @@
 import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, OnDestroy, computed, effect, input, output, signal, viewChild, inject } from '@angular/core';
 import { ScrollingModule } from '@angular/cdk/scrolling';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
-import { CliOutputLine } from '../models/job.model';
-import { copyTextToClipboard } from '../services/clipboard.util';
+import { CliOutputLine } from '../../../models/job.model';
+import { copyTextToClipboard } from '../../../services/clipboard.util';
 import {
   ActivityLogGroup,
   ActivityLogKind,
@@ -19,7 +19,7 @@ import {
   parseActivityLog,
   parseOrchestratorSteer
 } from './activity-log.parser';
-import { markdownToHtml } from './markdown-utils';
+import { markdownToHtml } from '../../../components/markdown-utils';
 
 type ViewMode = 'conversation' | 'trace';
 

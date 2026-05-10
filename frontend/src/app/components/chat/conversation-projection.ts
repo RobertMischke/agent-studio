@@ -26,7 +26,7 @@ import {
   parseActivityLog,
   type ActivityLogGroup,
   type ActivityLogKind
-} from '../activity-log.parser';
+} from '../../features/job-detail/components/activity-log.parser';
 import type {
   ConversationEvent,
   RawLineRange,

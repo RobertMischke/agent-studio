@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { JobService } from '../services/job.service';
+import { JobService } from '../../../services/job.service';
 
 interface AutonomyStop {
   level: number;

@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, input, output, signal } from '@angular/core';
 import { CliOutputLine, JobLogEntry } from '../../../../models/job.model';
-import { ActivityLogViewComponent } from '../../../../components/activity-log-view';
+import { ActivityLogViewComponent } from '../activity-log-view';
 import { formatTime as fmtTime } from '../../../../services/format.util';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
 

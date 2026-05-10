@@ -1,10 +1,10 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, computed, inject, input, output, signal, ViewChild } from '@angular/core';
 import { CliOutputLine, ContinueMode, JobDetail, JobSummaryStatus, ReviewEvidenceEntry, RunRecord } from '../../../../models/job.model';
 import { deriveWatchdogPill } from './watchdog-state';
-import { ActivityLogViewComponent } from '../../../../components/activity-log-view';
+import { ActivityLogViewComponent } from '../activity-log-view';
 import { markdownToHtml, MarkdownImageOptions } from '../../../../components/markdown-utils';
-import { buildConversationTurns, parseActivityLog } from '../../../../components/activity-log.parser';
-import { classifyOutcome, OutcomeAssessment, QuickReply } from '../../../../components/agent-outcome.util';
+import { buildConversationTurns, parseActivityLog } from '../activity-log.parser';
+import { classifyOutcome, OutcomeAssessment, QuickReply } from '../agent-outcome.util';
 import { resolveProtocolImageSrc } from './protocol-image-resolver';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
 import {
