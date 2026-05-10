@@ -1,6 +1,7 @@
-import { Component, OnDestroy, OnInit, signal, computed } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject, signal, computed } from '@angular/core';
 import { JobService } from '../../../services/job.service';
 import type { CliType } from '../../../models/job.model';
+import { QuotaApiService } from '../../../features/quota';
 import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../../features/quota';
 import { cliTypeIcon } from '../../../services/format.util';
 
@@ -210,6 +211,7 @@ import { cliTypeIcon } from '../../../services/format.util';
   `]
 })
 export class QuotaStripComponent implements OnInit, OnDestroy {
+  private readonly quotaApi = inject(QuotaApiService);
   readonly report = signal<QuotaReport | null>(null);
   readonly errorMsg = signal<string | null>(null);
   readonly refreshingAll = signal(false);
@@ -247,7 +249,7 @@ export class QuotaStripComponent implements OnInit, OnDestroy {
 
   private load(silent = false) {
     if (!silent) this.errorMsg.set(null);
-    this.jobService.getQuotaReport().subscribe({
+    this.quotaApi.getQuotaReport().subscribe({
       next: r => this.report.set(r),
       error: err => {
         if (!silent) this.errorMsg.set(err.error?.error || err.message || 'Failed to load quota');
@@ -258,7 +260,7 @@ export class QuotaStripComponent implements OnInit, OnDestroy {
   refreshAll() {
     this.refreshingAll.set(true);
     this.errorMsg.set(null);
-    this.jobService.refreshQuotaAll().subscribe({
+    this.quotaApi.refreshQuotaAll().subscribe({
       next: r => { this.report.set(r); this.refreshingAll.set(false); },
       error: err => {
         this.errorMsg.set(err.error?.error || err.message || 'Quota refresh failed');
@@ -269,7 +271,7 @@ export class QuotaStripComponent implements OnInit, OnDestroy {
 
   refreshOne(cliType: CliType) {
     this.refreshing.update(m => ({ ...m, [cliType]: true }));
-    this.jobService.refreshQuotaForCli(cliType).subscribe({
+    this.quotaApi.refreshQuotaForCli(cliType).subscribe({
       next: snap => {
         // Splice the updated snapshot back into the cached report.
         const cur = this.report();

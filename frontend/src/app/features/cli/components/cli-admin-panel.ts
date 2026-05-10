@@ -4,6 +4,7 @@ import { JobService } from '../../../services/job.service';
 import type { CliType } from '../../../models/job.model';
 import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../../features/quota';
 import { cliTypeIcon, cliTypeLabel } from '../../../services/format.util';
+import { QuotaApiService } from '../../../features/quota';
 
 interface CapsResponse {
   defaultCapPct: number;
@@ -283,6 +284,7 @@ interface CapRow {
   `]
 })
 export class CliAdminPanelComponent implements OnInit, OnDestroy {
+  private readonly quotaApi = inject(QuotaApiService);
   private readonly jobService = inject(JobService);
 
   readonly loading = signal(false);
@@ -365,7 +367,7 @@ export class CliAdminPanelComponent implements OnInit, OnDestroy {
         this.localRows.set(this.rows().map(r => ({ ...r })));
       }
     };
-    this.jobService.getQuotaCaps().subscribe({
+    this.quotaApi.getQuotaCaps().subscribe({
       next: (resp: CapsResponse) => {
         this.defaultCapPct.set(resp.defaultCapPct);
         this.caps.set(resp.caps ?? {});
@@ -376,7 +378,7 @@ export class CliAdminPanelComponent implements OnInit, OnDestroy {
         finish();
       }
     });
-    this.jobService.getQuotaReport().subscribe({
+    this.quotaApi.getQuotaReport().subscribe({
       next: r => { this.report.set(r); finish(); },
       error: err => {
         this.errorMsg.set(this.errorMessage(err, 'Failed to load quota'));
@@ -386,7 +388,7 @@ export class CliAdminPanelComponent implements OnInit, OnDestroy {
   }
 
   private refreshQuotaOnly() {
-    this.jobService.getQuotaReport().subscribe({
+    this.quotaApi.getQuotaReport().subscribe({
       next: r => {
         this.report.set(r);
         // Update used% on existing local rows without disturbing pendingCapPct.
@@ -445,7 +447,7 @@ export class CliAdminPanelComponent implements OnInit, OnDestroy {
           : r
       )
     );
-    this.jobService.setQuotaCap(cliType, windowLabel, capPct).subscribe({
+    this.quotaApi.setQuotaCap(cliType, windowLabel, capPct).subscribe({
       next: (resp: CapsResponse) => {
         this.defaultCapPct.set(resp.defaultCapPct);
         this.caps.set(resp.caps ?? {});

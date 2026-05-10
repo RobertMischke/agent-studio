@@ -4,6 +4,7 @@ import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from 
 import type { CliType } from '../../../models/job.model';
 import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../../features/quota';
 import { cliTypeIcon } from '../../../services/format.util';
+import { QuotaApiService } from '../../../features/quota';
 
 interface DonutSlot {
   /** Short label shown under the ring ("5h", "rest", "weekly"). */
@@ -275,6 +276,7 @@ interface QuotaCardModel {
   `]
 })
 export class HeaderQuotaComponent implements OnInit, OnDestroy {
+  private readonly quotaApi = inject(QuotaApiService);
   private readonly jobService = inject(JobService);
   readonly report = signal<QuotaReport | null>(null);
   readonly refreshing = signal<{ [k: string]: boolean }>({});
@@ -309,7 +311,7 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
   }
 
   fetch(): void {
-    this.jobService.getQuotaReport().subscribe({
+    this.quotaApi.getQuotaReport().subscribe({
       next: (r) => this.report.set(r),
       error: () => { /* keep last value, do not clear */ }
     });
@@ -319,7 +321,7 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
     ev.stopPropagation();
     if (this.refreshing()[cliType]) return;
     this.refreshing.update(m => ({ ...m, [cliType]: true }));
-    this.jobService.refreshQuotaForCli(cliType).subscribe({
+    this.quotaApi.refreshQuotaForCli(cliType).subscribe({
       next: () => { this.fetch(); this.refreshing.update(m => ({ ...m, [cliType]: false })); },
       error: () => { this.refreshing.update(m => ({ ...m, [cliType]: false })); }
     });

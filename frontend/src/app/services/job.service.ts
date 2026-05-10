@@ -7,12 +7,10 @@ import type { GitFileChange, GitStatus, JobCommitDetail } from '../features/git'
 import type { OrchestratorLogResponse, OrchestratorSessionResponse, OrchestratorChatResponse, OrchestratorChatTurn } from '../features/orchestrator';
 import type { ProjectChatScrollResponse, ProjectChatSearchResponse, ProjectChatTurnResponse } from '../features/project-chat';
 import type { ProjectTokenUsageSummary, ProjectTokenHeatmap, ProjectExpensiveJobsResponse, ProjectJobTokenDetail } from '../features/project-token-usage';
-import type { QuotaReport, QuotaSnapshot } from '../features/quota';
 import type { RoadmapIntakeCandidate, RoadmapIntakeResponse, RoadmapIntakeConfirmResponse } from '../features/roadmap';
 import type { RunTimeline, RunCommitsResponse, RunFilesResponse, RunDiffResponse } from '../features/run-timeline';
 import type { JobScreenshotsResponse, WorkspaceScreenshotsResponse } from '../features/screenshots';
 import type { SessionEventsResponse } from '../features/session-events';
-import type { TokenSummary, TokenSummaryAggregate, TokenTimeline, AdHocUsageAggregate } from '../features/tokens';
 import { ErrorDialogService } from './error-dialog.service';
 
 type LaneKey = keyof GroupedJobs;
@@ -489,37 +487,10 @@ export class JobService {
     return this.http.get<CliUsageReport>(`${this.baseUrl}/cli/usage`);
   }
 
-  // Quota / subscription rate-limit reporting.
-  // GET returns the cached snapshot immediately and triggers a background refresh
-  // for stale entries. The POST variants force a synchronous re-probe (slow — each
-  // call spawns a CLI in a PTY for several seconds).
-  getQuotaReport() {
-    return this.http.get<QuotaReport>(`${this.baseUrl}/cli/quota`);
-  }
-
-  refreshQuotaAll() {
-    return this.http.post<QuotaReport>(`${this.baseUrl}/cli/quota/refresh`, {});
-  }
-
-  refreshQuotaForCli(cliType: CliType) {
-    return this.http.post<QuotaSnapshot>(`${this.baseUrl}/cli/quota/refresh/${cliType}`, {});
-  }
-
-  // ── Quota caps: per-CLI per-window usage ceilings. The runner blocks
-  // pickup and stops in-flight runs when usage crosses these caps so the
-  // user keeps a buffer for ad-hoc work outside the orchestrator.
-  getQuotaCaps() {
-    return this.http.get<{ defaultCapPct: number; caps: Record<string, Record<string, number>> }>(
-      `${this.baseUrl}/cli/quota/caps`
-    );
-  }
-
-  setQuotaCap(cliType: CliType, windowLabel: string, capPct: number) {
-    return this.http.put<{ defaultCapPct: number; caps: Record<string, Record<string, number>> }>(
-      `${this.baseUrl}/cli/quota/caps`,
-      { cliType, windowLabel, capPct }
-    );
-  }
+  // Cycle 10d: quota / subscription rate-limit reporting moved to
+  // QuotaApiService (`features/quota/services/`). Caller migration:
+  // `inject(QuotaApiService)` instead of `inject(JobService)` + the
+  // method names stay identical.
 
   setJobTitle(jobId: string, title: string, watchPath?: string) {
     return this.http.put(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/title`, { title }, this.withWatchPath(watchPath));
@@ -649,69 +620,12 @@ export class JobService {
     );
   }
 
-  /**
-   * Per-project token rollup. Returns total amounts, per-model
-   * breakdown, and a theoretical API-cost estimate. The cost is a
-   * comparison against Anthropic's published API rates, not the user's
-   * actual bill - CLI subscriptions are billed separately. The
-   * frontend renders the disclaimer prominently.
-   */
-  getTokenSummary(projectName: string) {
-    return this.http.get<TokenSummary>(
-      `${this.baseUrl}/runner/${encodeURIComponent(projectName)}/token-summary`
-    );
-  }
-
-  /**
-   * Workspace-wide token aggregate. Forces a fresh scan across all
-   * watched projects and writes the result to the on-disk cache, so the
-   * next call to {@link getTokenSummaryAggregateCached} can return it
-   * instantly. Cheap (reads JSONL files only); safe to poll.
-   */
-  getTokenSummaryAggregate() {
-    return this.http.get<TokenSummaryAggregate>(
-      `${this.baseUrl}/runner/token-summary-aggregate`
-    );
-  }
-
-  /**
-   * Cache-only read of the workspace-wide aggregate. Returns immediately
-   * with the on-disk snapshot without re-scanning the orchestrator logs.
-   * The status-bar usage modal calls this on first paint so the user
-   * sees real numbers before the live aggregator finishes; 204 No Content
-   * means there is no cached snapshot yet.
-   */
-  getTokenSummaryAggregateCached() {
-    return this.http.get<TokenSummaryAggregate>(
-      `${this.baseUrl}/runner/token-summary-aggregate/cached`,
-      { observe: 'response' }
-    );
-  }
-
-  /**
-   * Workspace-wide ad-hoc Haiku usage rollup. Powers the "Ad-hoc CLI usage"
-   * section in the status-bar hover panel. Cheap (reads one JSONL file);
-   * safe to poll alongside the project-token aggregate.
-   */
-  getAdHocUsage() {
-    return this.http.get<AdHocUsageAggregate>(`${this.baseUrl}/adhoc-usage/`);
-  }
-
-  /**
-   * Workspace-wide token timeline: one cell per (project, time-bucket).
-   * `windowHours` accepts {1, 6, 24, 168}; `bucketMinutes` accepts
-   * {5, 15, 60}. Out-of-range values are silently snapped to the
-   * defaults by the backend.
-   */
-  getWorkspaceTokensTimeline(windowHours: number, bucketMinutes: number) {
-    let params = new HttpParams()
-      .set('windowHours', String(windowHours))
-      .set('bucketMinutes', String(bucketMinutes));
-    return this.http.get<TokenTimeline>(
-      `${this.baseUrl}/workspace/tokens/timeline`,
-      { params }
-    );
-  }
+  // Cycle 10d: token-aggregate endpoints moved to TokensApiService
+  // (`features/tokens/services/`). Caller migration:
+  // `inject(TokensApiService)` instead of `inject(JobService)` + the
+  // method names stay identical. Methods covered: getTokenSummary,
+  // getTokenSummaryAggregate, getTokenSummaryAggregateCached,
+  // getAdHocUsage, getWorkspaceTokensTimeline.
 
   /**
    * Project Token Usage panel (slice 8 of the quality-system mockup).

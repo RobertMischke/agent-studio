@@ -15,6 +15,8 @@ import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../../features/
 import type { AdHocUsageAggregate, TokenSummaryAggregate } from '../../../features/tokens';
 import { cliTypeIcon } from '../../../services/format.util';
 import { HeaderQuotaComponent } from '../../quota/components/header-quota';
+import { TokensApiService } from '../../../features/tokens';
+import { QuotaApiService } from '../../../features/quota';
 
 interface QuotaRow {
   cliType: CliType;
@@ -616,6 +618,8 @@ interface QuotaRow {
   `]
 })
 export class UsageHoverPanelComponent implements OnInit, OnDestroy {
+  private readonly tokensApi = inject(TokensApiService);
+  private readonly quotaApi = inject(QuotaApiService);
   private readonly jobService = inject(JobService);
 
   readonly open = signal(false);
@@ -703,14 +707,14 @@ export class UsageHoverPanelComponent implements OnInit, OnDestroy {
   // ---- Data fetches ----
 
   fetchQuota(): void {
-    this.jobService.getQuotaReport().subscribe({
+    this.quotaApi.getQuotaReport().subscribe({
       next: (r) => this.report.set(r),
       error: () => { /* keep last value */ },
     });
   }
 
   fetchTokensCached(): void {
-    this.jobService.getTokenSummaryAggregateCached().subscribe({
+    this.tokensApi.getTokenSummaryAggregateCached().subscribe({
       next: (resp) => {
         if (resp.status === 200 && resp.body) this.tokens.set(resp.body);
       },
@@ -719,14 +723,14 @@ export class UsageHoverPanelComponent implements OnInit, OnDestroy {
   }
 
   fetchTokensFresh(): void {
-    this.jobService.getTokenSummaryAggregate().subscribe({
+    this.tokensApi.getTokenSummaryAggregate().subscribe({
       next: (a) => this.tokens.set(a),
       error: () => { /* keep last value */ },
     });
   }
 
   fetchAdHoc(): void {
-    this.jobService.getAdHocUsage().subscribe({
+    this.tokensApi.getAdHocUsage().subscribe({
       next: (a) => this.adhoc.set(a),
       error: () => { /* keep last value */ },
     });
@@ -736,7 +740,7 @@ export class UsageHoverPanelComponent implements OnInit, OnDestroy {
     ev.stopPropagation();
     if (this.refreshingAll()) return;
     this.refreshingAll.set(true);
-    this.jobService.refreshQuotaAll().subscribe({
+    this.quotaApi.refreshQuotaAll().subscribe({
       next: () => { this.fetchQuota(); this.refreshingAll.set(false); },
       error: () => this.refreshingAll.set(false),
     });
@@ -747,7 +751,7 @@ export class UsageHoverPanelComponent implements OnInit, OnDestroy {
     ev.stopPropagation();
     if (this.refreshing()[cliType]) return;
     this.refreshing.update(m => ({ ...m, [cliType]: true }));
-    this.jobService.refreshQuotaForCli(cliType).subscribe({
+    this.quotaApi.refreshQuotaForCli(cliType).subscribe({
       next: () => {
         this.fetchQuota();
         this.refreshing.update(m => ({ ...m, [cliType]: false }));

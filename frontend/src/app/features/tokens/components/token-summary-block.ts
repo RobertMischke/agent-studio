@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, signal } from '@angular/core';
 import type { TokenSummary } from '../../../features/tokens';
 import { JobService } from '../../../services/job.service';
+import { TokensApiService } from '../../../features/tokens';
 
 /**
  * Per-project token rollup block. Three rows:
@@ -224,6 +225,7 @@ import { JobService } from '../../../services/job.service';
   `]
 })
 export class TokenSummaryBlockComponent implements OnInit, OnDestroy {
+  private readonly tokensApi = inject(TokensApiService);
   readonly projectName = input.required<string>();
 
   private readonly jobService = inject(JobService);
@@ -241,7 +243,7 @@ export class TokenSummaryBlockComponent implements OnInit, OnDestroy {
   }
 
   refresh(): void {
-    this.jobService.getTokenSummary(this.projectName()).subscribe({
+    this.tokensApi.getTokenSummary(this.projectName()).subscribe({
       next: (s) => this.summary.set(s),
       error: () => { /* keep last value */ }
     });

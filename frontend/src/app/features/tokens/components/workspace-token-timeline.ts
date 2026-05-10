@@ -10,6 +10,7 @@ import {
 import { JobService } from '../../../services/job.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../utils/visible-interval';
 import type { TokenTimeline, TokenTimelineCell, TokenTimelineProject } from '../../../features/tokens';
+import { TokensApiService } from '../../../features/tokens';
 
 const STORAGE_DISABLED_KEY = 'workspaceTokens.disabledProjects';
 const STORAGE_WINDOW_KEY = 'workspaceTokens.windowHours';
@@ -489,6 +490,7 @@ interface BucketSegment {
   `]
 })
 export class WorkspaceTokenTimelineComponent implements OnInit, OnDestroy {
+  private readonly tokensApi = inject(TokensApiService);
   private readonly jobService = inject(JobService);
 
   // Hard-coded SVG canvas. CSS scales the rendered box; the viewBox keeps
@@ -541,7 +543,7 @@ export class WorkspaceTokenTimelineComponent implements OnInit, OnDestroy {
 
   refresh(): void {
     this.loading.set(true);
-    this.jobService.getWorkspaceTokensTimeline(this.windowHours(), this.bucketMinutes())
+    this.tokensApi.getWorkspaceTokensTimeline(this.windowHours(), this.bucketMinutes())
       .subscribe({
         next: (t) => { this.timeline.set(t); this.loading.set(false); },
         error: () => { this.loading.set(false); /* keep last value */ },
