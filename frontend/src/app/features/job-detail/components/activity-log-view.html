@@ -1,0 +1,269 @@
+    <div class="activity-log" [class.activity-log--embedded]="variant() === 'embedded'">
+      <div class="activity-log__toolbar">
+        <div class="activity-log__tabs" role="tablist">
+          <button class="activity-log__tab"
+                  data-testid="activity-log-mode-conversation"
+                  [class.activity-log__tab--active]="mode() === 'conversation'"
+                  (click)="mode.set('conversation')">
+            Conversation
+          </button>
+          <button class="activity-log__tab"
+                  data-testid="activity-log-mode-trace"
+                  [class.activity-log__tab--active]="mode() === 'trace'"
+                  (click)="mode.set('trace')">
+            Trace
+          </button>
+        </div>
+        <div class="activity-log__actions">
+          @if (mode() === 'conversation') {
+            <label class="activity-log__toggle" data-testid="activity-log-show-tools">
+              <input type="checkbox"
+                     [checked]="showTools()"
+                     (change)="showTools.set(!showTools())" />
+              <span>Show tool activity</span>
+            </label>
+          } @else {
+            <label class="activity-log__toggle" data-testid="activity-log-show-debug">
+              <input type="checkbox"
+                     [checked]="showDebug()"
+                     (change)="showDebug.set(!showDebug())" />
+              <span>Show debug noise</span>
+            </label>
+          }
+          <button class="activity-log__btn"
+                  data-testid="activity-log-copy"
+                  [title]="copyTooltip()"
+                  [disabled]="copyDisabled()"
+                  (click)="copyVisible()">{{ copyLabel() }}</button>
+        </div>
+      </div>
+
+      <div #body
+           class="activity-log__body"
+           [style.max-height]="bodyMaxHeight()"
+           data-testid="activity-log-body"
+           (scroll)="onBodyScroll()">
+        @if (!stickToBottom()) {
+          <button type="button"
+                  class="activity-log__jump"
+                  data-testid="activity-log-jump-bottom"
+                  (click)="jumpToBottom()">↓ Jump to latest</button>
+        }
+
+        @if (mode() === 'conversation') {
+          <!-- Cycle 7i: CDK virtual scroll. itemSize=180 is an estimate
+               for the average non-compact turn; CDK FixedSize uses it
+               for scroll math. Real turns vary wildly (a one-line user
+               message vs a 50-line agent code block); the math is
+               imperfect but the perf win is huge - 2000-turn
+               conversations scroll at 60 FPS instead of 24, and the
+               render cost on detail open scales with VISIBLE turn
+               count instead of total. Keeps data-testid="activity-log-
+               conversation" for the existing measurement spec. -->
+          <cdk-virtual-scroll-viewport class="convo activity-log__virtual"
+                                       [itemSize]="180"
+                                       [minBufferPx]="540"
+                                       [maxBufferPx]="1080"
+                                       data-testid="activity-log-conversation">
+            <article *cdkVirtualFor="let item of visibleConversation(); trackBy: trackByTurnId"
+                     class="convo-turn"
+                     [class.convo-turn--user]="item.turn.kind === 'user'"
+                     [class.convo-turn--agent]="item.turn.kind === 'agent'"
+                     [class.convo-turn--tools]="item.turn.kind === 'tools'"
+                     [class.convo-turn--system]="item.turn.kind === 'system'"
+                     [class.convo-turn--orchestrator]="item.turn.kind === 'orchestrator'"
+                     [class.convo-turn--error]="item.turn.status === 'error'"
+                     [attr.data-testid]="testIdFor(item.turn)">
+                @switch (item.turn.kind) {
+                  @case ('user') {
+                    <header class="convo-turn__head">
+                      <span class="convo-turn__role">You</span>
+                      <span class="convo-turn__time">{{ formatTime(item.turn.timestamp) }}</span>
+                    </header>
+                    <div class="convo-turn__body convo-turn__body--user"
+                         [innerHTML]="item.bodyHtml"></div>
+                  }
+                  @case ('agent') {
+                    <header class="convo-turn__head">
+                      <span class="convo-turn__role">Agent</span>
+                      <span class="convo-turn__time">{{ formatTime(item.turn.timestamp) }}</span>
+                    </header>
+                    <div class="convo-turn__body convo-turn__body--agent markdown"
+                         [innerHTML]="item.bodyHtml"></div>
+                  }
+                  @case ('system') {
+                    <header class="convo-turn__head">
+                      <span class="convo-turn__role">System</span>
+                      <span class="convo-turn__time">{{ formatTime(item.turn.timestamp) }}</span>
+                    </header>
+                    <div class="convo-turn__body convo-turn__body--system"
+                         [innerHTML]="item.bodyHtml"></div>
+                  }
+                  @case ('orchestrator') {
+                    @if (item.steer; as s) {
+                      <article class="steer-card"
+                               data-testid="orchestrator-steer-card">
+                        <header class="steer-card__head">
+                          <span class="steer-card__icon" aria-hidden="true">?</span>
+                          <span class="steer-card__role">Orchestrator needs your input</span>
+                          <span class="convo-turn__time">{{ formatTime(item.turn.timestamp) }}</span>
+                        </header>
+                        <dl class="steer-card__fields">
+                          <dt>Need</dt>
+                          <dd data-testid="orchestrator-steer-need">{{ s.need }}</dd>
+                          @if (s.why) {
+                            <dt>Why</dt>
+                            <dd data-testid="orchestrator-steer-why">{{ s.why }}</dd>
+                          }
+                        </dl>
+                        @if (s.options.length > 0) {
+                          <div class="steer-card__options"
+                               role="group"
+                               aria-label="Suggested replies"
+                               data-testid="orchestrator-steer-options">
+                            @for (opt of s.options; track $index; let idx = $index) {
+                              <button type="button"
+                                      class="steer-card__option"
+                                      [attr.data-testid]="'orchestrator-steer-option-' + idx"
+                                      (click)="onSteerOptionClick(opt, idx)">
+                                <span class="steer-card__option-label">{{ steerOptionLabel(idx) }}</span>
+                                <span class="steer-card__option-text">{{ opt }}</span>
+                              </button>
+                            }
+                          </div>
+                        }
+                        @if (s.needsScreenshot) {
+                          <div class="steer-card__upload">
+                            <button type="button"
+                                    class="steer-card__upload-btn"
+                                    data-testid="orchestrator-steer-upload"
+                                    (click)="onSteerUploadClick()">
+                              📎 Send screenshot
+                            </button>
+                          </div>
+                        }
+                      </article>
+                    } @else {
+                      <header class="convo-turn__head">
+                        <span class="convo-turn__role">⚙ Orchestrator</span>
+                        <span class="convo-turn__time">{{ formatTime(item.turn.timestamp) }}</span>
+                      </header>
+                      <div class="convo-turn__body convo-turn__body--orchestrator"
+                           [innerHTML]="item.bodyHtml"></div>
+                    }
+                  }
+                  @case ('tools') {
+                    <button type="button"
+                            class="convo-tools"
+                            (click)="toggleTurn(item.turn.id)"
+                            [attr.aria-expanded]="isTurnExpanded(item.turn)"
+                            data-testid="convo-tools-pill">
+                      <span class="convo-tools__chevron">{{ isTurnExpanded(item.turn) ? 'v' : '>' }}</span>
+                      <span class="convo-tools__icon" aria-hidden="true">⚙</span>
+                      <span class="convo-tools__chips">
+                        @for (chip of item.toolChips; track chip.kind) {
+                          <span class="convo-tools__chip"
+                                [attr.data-kind]="chip.kind"
+                                [attr.data-testid]="'convo-tools-chip-' + chip.kind">
+                            <span class="convo-tools__chip-label">{{ chip.label }}</span>
+                            <span class="convo-tools__chip-count">×{{ chip.count }}</span>
+                          </span>
+                        }
+                      </span>
+                      @if (item.toolDuration) {
+                        <span class="convo-tools__duration"
+                              data-testid="convo-tools-duration"
+                              [title]="'Tool activity took ' + item.toolDuration">{{ item.toolDuration }}</span>
+                      }
+                      <span class="convo-tools__time">{{ formatTime(item.turn.timestamp) }}</span>
+                    </button>
+                    @if (isTurnExpanded(item.turn)) {
+                      <div class="convo-tools__detail">
+                        @for (bin of item.toolBins; track bin.kind) {
+                          <div class="convo-tools__bin">
+                            <div class="convo-tools__bin-head">
+                              <span class="convo-tools__kind">{{ kindLabel(bin.kind) }}</span>
+                              <span class="convo-tools__bin-count">×{{ bin.count }}</span>
+                            </div>
+                            @for (group of bin.groups; track group.id) {
+                              <div class="convo-tools__group">
+                                <span class="convo-tools__title">{{ group.title }}</span>
+                                @if (group.subtitle) {
+                                  <span class="convo-tools__sub">{{ group.subtitle }}</span>
+                                }
+                              </div>
+                            }
+                          </div>
+                        }
+                      </div>
+                    }
+                  }
+                }
+              </article>
+          </cdk-virtual-scroll-viewport>
+          @if (visibleConversation().length === 0) {
+            <div class="activity-log__empty">
+              {{ lines().length === 0 ? 'No activity output yet.' : 'Conversation is empty - try switching to Trace.' }}
+            </div>
+          }
+        } @else {
+          <div class="trace" data-testid="activity-log-trace">
+            @for (group of visibleTraceGroups(); track group.id) {
+              <article class="trace-group"
+                       [class.trace-group--error]="group.status === 'error'"
+                       [class.trace-group--user]="group.lines[0]?.stream === 'user'"
+                       [attr.data-testid]="group.lines[0]?.stream === 'user' ? 'trace-group-user' : null">
+                <button class="trace-group__header" (click)="toggleGroup(group)">
+                  <span class="trace-group__chevron">{{ isExpanded(group) ? 'v' : '>' }}</span>
+                  <span class="trace-group__kind">{{ kindLabel(group.kind) }}</span>
+                  <span class="trace-group__title">{{ group.title }}</span>
+                  <span class="trace-group__count">{{ group.lines.length }}</span>
+                </button>
+                @if (group.subtitle) {
+                  <div class="trace-group__subtitle">{{ group.subtitle }}</div>
+                }
+                @if (isExpanded(group)) {
+                  <div class="trace-group__lines">
+                    @for (line of group.lines; track $index) {
+                      <div class="trace-line"
+                           [class.trace-line--stderr]="line.stream === 'stderr'"
+                           [class.trace-line--user]="line.stream === 'user'">
+                        <span class="trace-line__time">{{ formatTime(line.timestamp) }}</span>
+                        <span class="trace-line__stream">{{ streamLabel(line.stream) }}</span>
+                        <span class="trace-line__text">{{ line.text }}</span>
+                      </div>
+                    }
+                  </div>
+                }
+              </article>
+            }
+            @if (visibleTraceGroups().length === 0) {
+              <div class="activity-log__empty">
+                {{ lines().length === 0 ? 'No activity output yet.' : 'Nothing matches - try toggling Show debug noise.' }}
+              </div>
+            }
+          </div>
+        }
+
+        @if (liveStatus(); as ls) {
+          <div class="live-status"
+               [attr.data-kind]="ls.kind"
+               data-testid="activity-log-live-status"
+               role="status"
+               aria-live="polite">
+            <span class="live-status__pulse" aria-hidden="true">
+              <span></span><span></span><span></span>
+            </span>
+            <span class="live-status__verb" data-testid="activity-log-live-verb">{{ ls.verb }}</span>
+            @if (ls.detail) {
+              <span class="live-status__detail" data-testid="activity-log-live-detail">{{ ls.detail }}</span>
+            }
+            @if (formatSince(ls.sinceMs); as since) {
+              <span class="live-status__since"
+                    data-testid="activity-log-live-since"
+                    [title]="'Time since the last activity-log line'">{{ since }}</span>
+            }
+          </div>
+        }
+      </div>
+    </div>
