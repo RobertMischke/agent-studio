@@ -1,0 +1,144 @@
+<div class="detail">
+  <app-detail-header
+    [info]="detail().info"
+    [editingTitle]="editingTitle()"
+    [titleDraft]="titleDraft()"
+    [savingTitle]="savingTitle()"
+    [isReview]="isReview()"
+    [completingAndNext]="completingAndNext()"
+    [changingState]="changingState()"
+    [movingToTop]="movingToTop()"
+    (back)="back.emit()"
+    (titleDraftChange)="titleDraft.set($event)"
+    (startTitleEdit)="startTitleEdit()"
+    (cancelTitleEdit)="cancelTitleEdit()"
+    (saveTitle)="saveTitle()"
+    (completeAndNext)="completeAndNext()"
+    (stateChange)="onStateChange($event)"
+    (moveToTop)="moveToTopOfReady()"
+    (deleteRequested)="deleteRequested.emit()" />
+
+  <app-command-deck
+    [currentWatchPath]="detail().info.watchPath"
+    [watchPaths]="watchPaths()"
+    [cliTypeDraft]="cliTypeDraft()"
+    [modelDraft]="modelDraft()"
+    [availableModels]="availableModels()"
+    [isRunning]="isRunning()"
+    [canStart]="canStartJob()"
+    [startDisabledReason]="startDisabledReason()"
+    [starting]="starting()"
+    [elapsedTime]="elapsedTime()"
+    [collapsed]="setupCollapsed()"
+    (projectChange)="onProjectChange($event)"
+    (cliTypeChange)="onCliTypeChange($event)"
+    (modelChange)="onModelDraftChange($event)"
+    (start)="startJob()"
+    (stop)="stopJob()"
+    (toggleCollapsed)="toggleSetupCollapsed()" />
+
+
+  @if (showCliConfig() && cliTypeDraft() === 'copilot') {
+    <app-cli-config-card
+      [status]="cliStatus()"
+      [testResult]="cliTestResult()"
+      [pathDraft]="cliPathDraft()"
+      [tokenDraft]="tokenDraft()"
+      [testing]="cliTesting()"
+      [tokenSaving]="tokenSaving()"
+      (close)="showCliConfig.set(false)"
+      (pathDraftChange)="cliPathDraft.set($event)"
+      (tokenDraftChange)="tokenDraft.set($event)"
+      (testPath)="testCliPath()"
+      (savePath)="saveCliPath()"
+      (saveToken)="saveToken()" />
+  }
+
+  <app-pane-toggle-bar
+    [panesVisible]="panesVisible()"
+    (toggle)="togglePane($event)"
+    (openInVsCode)="openInVsCode()" />
+
+  <div class="detail__panes" [class.detail__panes--maximized]="!!maximizedPane()" data-testid="detail-panes">
+    @if (isPaneRendered('prompt')) {
+      <app-prompt-pane
+        [markdown]="detail().promptMarkdown || ''"
+        [history]="detail().promptHistory || []"
+        [maximized]="maximizedPane() === 'prompt'"
+        [weight]="paneWeights().prompt"
+        [isRunning]="isRunning()"
+        [jobId]="detail().info.id"
+        [watchPath]="detail().info.watchPath"
+        (maximizeToggle)="toggleMaximize('prompt')"
+        (hide)="togglePane('prompt')"
+        (save)="saveFileContent('prompt.md', $event)" />
+    }
+
+    @if (!maximizedPane() && panesVisible().prompt && (panesVisible().protocol || panesVisible().git)) {
+      <div class="pane__splitter" role="separator" aria-orientation="vertical"
+           title="Resize" (pointerdown)="startPaneResize($event, 'prompt', firstVisibleAfter('prompt'))"><span></span></div>
+    }
+
+    @if (isPaneRendered('protocol')) {
+      <app-protocol-pane
+        [detail]="detail()"
+        [maximized]="maximizedPane() === 'protocol'"
+        [weight]="paneWeights().protocol"
+        [isRunning]="isRunning()"
+        [isActiveJob]="isActiveJob()"
+        [activeInspectorTab]="activeInspectorTab()"
+        [followupPrompt]="followupPrompt()"
+        [continueMode]="continueMode()"
+        [canSendChat]="canSendChat()"
+        [chatSendLabel]="chatSendLabel()"
+        [regenerating]="regeneratingSummary()"
+        (maximizeToggle)="toggleMaximize('protocol')"
+        (hide)="togglePane('protocol')"
+        (activeInspectorTabChange)="onInspectorTabChange($event)"
+        (followupPromptChange)="followupPrompt.set($event)"
+        (continueModeChange)="continueMode.set($event)"
+        (openLogOverlay)="showLogOverlay.set(true)"
+        (sendChat)="sendChatMessage()"
+        (stopJob)="stopJob()"
+        (regenerateSummary)="regenerateProtocol()"
+        (evidenceMutated)="fileSaved.emit()"
+        (followupCreatedFromEvidence)="fileSaved.emit()" />
+    }
+
+    @if (!maximizedPane() && panesVisible().protocol && panesVisible().git) {
+      <div class="pane__splitter" role="separator" aria-orientation="vertical"
+           title="Resize" (pointerdown)="startPaneResize($event, 'protocol', 'git')"><span></span></div>
+    }
+
+    @if (isPaneRendered('git')) {
+      <app-git-pane
+        [maximized]="maximizedPane() === 'git'"
+        [weight]="paneWeights().git"
+        [isRunning]="isRunning()"
+        [isActiveJob]="isActiveJob()"
+        (maximizeToggle)="toggleMaximize('git')"
+        (hide)="togglePane('git')" />
+    }
+
+    @if (!panesVisible().prompt && !panesVisible().protocol && !panesVisible().git) {
+      <div class="detail__panes-empty">All panels hidden — re-enable one above.</div>
+    }
+  </div>
+
+  <app-triage-panel
+    #triagePanel
+    [laneState]="detail().info.state"
+    [laneIndex]="laneIndex()"
+    [laneSize]="laneSize()"
+    [mutationsBlocked]="mutationsBlocked()"
+    [actingId]="triageActingId()"
+    (action)="onTriageAction($event)" />
+
+  @if (showLogOverlay()) {
+    <app-log-overlay
+      [cliOutput]="cliOutput()"
+      [log]="detail().log"
+      [isRunning]="isRunning()"
+      (close)="showLogOverlay.set(false)" />
+  }
+</div>
