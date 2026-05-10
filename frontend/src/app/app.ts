@@ -16,7 +16,7 @@ import {
   TypeFilterOption,
   splitReadyByPhase,
 } from './features/board';
-import { JobDetailComponent } from './features/job-detail';
+import { JobDetailComponent, JobSelectionService } from './features/job-detail';
 import { CliUsageSheetComponent } from './features/cli';
 import { OrchestratorConfigPanelComponent, OrchestratorSideSheetComponent } from './features/orchestrator';
 import {
@@ -2273,13 +2273,18 @@ interface VerboseDebugContext {
   `]
 })
 export class App implements OnInit {
-  readonly selectedJob = signal<JobDetail | null>(null);
-  /** Transient banner shown by the triage panel auto-advance flow ("Lane
-   *  cleared", "Job was moved externally; advancing"). Auto-cleared after
-   *  ~3 s. Lives on the App so it survives the panel close/reopen during
-   *  auto-advance. */
-  readonly triageToast = signal<string | null>(null);
-  private triageToastTimer: ReturnType<typeof setTimeout> | null = null;
+  /**
+   * Cycle 9j: selection state (selected detail, triage toast, lane
+   * peers, URL sync, request-token guard) lives in JobSelectionService.
+   * The shell re-exposes the read signals so existing template
+   * bindings + keyboard guards keep working unchanged. The triage
+   * HANDLERS (onTriageMove/Delete/Start, advanceToNextInLane) stay
+   * here because they orchestrate JobService mutations + the
+   * JobDetailComponent ViewChild (`clearTriageActing`).
+   */
+  private readonly jobSelection = inject(JobSelectionService);
+  readonly selectedJob = this.jobSelection.selected;
+  readonly triageToast = this.jobSelection.triageToast;
 
   @ViewChild('jobDetail') private jobDetailRef?: JobDetailComponent;
   @ViewChild('orchConfigPanel') private orchConfigPanelRef?: OrchestratorConfigPanelComponent;
@@ -2598,32 +2603,8 @@ export class App implements OnInit {
   });
   readonly selectedJobUsesCopilot = computed(() => (this.selectedJob()?.info.cliType ?? 'copilot') === 'copilot');
 
-  /**
-   * Peers in the same on-disk lane as the currently selected job, in the
-   * existing kanban sort order. Drives the triage panel's counter and
-   * `j` / `k` navigation. The mapping is keyed by the filesystem state on
-   * `info.state`; virtual sub-lanes (e.g. `2-ready-intake`) merge back into
-   * their parent because they share the same disk lane.
-   */
-  readonly triageLanePeers = computed<JobInfo[]>(() => {
-    const sel = this.selectedJob();
-    if (!sel) return [];
-    const g = this.jobService.grouped();
-    switch (sel.info.state) {
-      case '0-backlog':              return g.backlog ?? [];
-      case '1-preparation':          return g.preparation ?? [];
-      case '1a-orchestrator-prep':   return g.orchestratorPrep ?? [];
-      case '1b-needs-human-review':  return g.needsHumanReview ?? [];
-      case '2-ready':                return g.ready ?? [];
-      case '3-progress':             return g.progress ?? [];
-      case '3a-failed-pickup':       return g.failedPickup ?? [];
-      case '4-auto-review':          return g.autoReview ?? [];
-      case '5-human-review':         return g.humanReview ?? [];
-      case '6-completed':            return g.completed ?? [];
-      case '7-archive':              return g.archive ?? [];
-      default:                       return [];
-    }
-  });
+  // Cycle 9j: triageLanePeers lives in JobSelectionService.
+  readonly triageLanePeers = this.jobSelection.triageLanePeers;
 
   newTitle = '';
   newWatchPath = '';
@@ -2770,7 +2751,7 @@ export class App implements OnInit {
     // hand-off so the user knows what happened.
     effect(() => {
       const sel = this.selectedJob();
-      const lane = this.triageLaneState;
+      const lane = this.jobSelection.triageLaneState;
       if (!sel || !lane) return;
       if (sel.info.state === lane) return;
       if (this.jobDetailRef?.triageActingId() != null) return;
@@ -2808,7 +2789,7 @@ export class App implements OnInit {
     this.jobService.refreshRunnerStatus();
     this.devTools.loadFlags();
     this.clientService.refresh();
-    this.restoreDetailFromUrl();
+    this.jobSelection.restoreFromUrl();
 
     // Deep-link: open the workspace token timeline when the URL already
     // points at it, and keep the overlay in sync as the hash changes.
@@ -2860,72 +2841,19 @@ export class App implements OnInit {
     this.jobService.refresh(true);
   }
 
-  private restoreDetailFromUrl() {
-    const params = new URLSearchParams(window.location.search);
-    const jobId = params.get('job');
-    const watchPath = params.get('watchPath');
-    if (jobId && watchPath) {
-      this.jobService.getDetail(jobId, watchPath).subscribe({
-        next: (detail) => this.selectedJob.set(detail),
-        error: () => history.replaceState(null, '', window.location.pathname),
-      });
-    }
-  }
-
   refresh() {
     this.jobService.refresh();
   }
 
-  openDetail(job: JobInfo) {
-    history.replaceState(null, '', `?job=${encodeURIComponent(job.id)}&watchPath=${encodeURIComponent(job.watchPath)}`);
-    // Anchor the triage lane to the lane the panel is opening in. Walking
-    // peers and detecting external moves both key off this.
-    this.triageLaneState = job.state;
-    // Use a request token to discard responses that arrive after the user
-    // has already closed the panel or opened a different job. Without this
-    // the late `getDetail` reply re-sets `selectedJob` and the panel
-    // pops back open — visible as a "j to advance, Esc fails to close"
-    // race in the triage flow.
-    const token = ++this.openDetailToken;
-    this.jobService.getDetail(job.id, job.watchPath).subscribe({
-      next: (detail) => {
-        if (token !== this.openDetailToken) return;
-        this.selectedJob.set(detail);
-      },
-      error: (err) => {
-        if (token !== this.openDetailToken) return;
-        history.replaceState(null, '', window.location.pathname);
-        this.errorDialog.show(err, {
-          title: 'Failed to load task details',
-          fallbackMessage: 'Failed to load task details',
-          source: `Task ${job.id}`
-        });
-      }
-    });
-  }
-  /** Monotonic token guarding the latest `openDetail` request; bumped on
-   *  every open/close so a late HTTP reply for a stale job is dropped. */
-  private openDetailToken = 0;
-
-  isSelectedJob(job: JobInfo): boolean {
-    return this.selectedJob()?.info.jobKey === job.jobKey;
-  }
-
-  closeDetail() {
-    // Bump the token so any in-flight `openDetail` reply (e.g. the user
-    // pressed `j` then immediately Esc) drops its `selectedJob.set` and
-    // the panel does not pop back open after we close it.
-    this.openDetailToken++;
-    this.selectedJob.set(null);
-    this.triageLaneState = null;
-    history.replaceState(null, '', window.location.pathname);
-  }
+  openDetail(job: JobInfo) { this.jobSelection.openDetail(job); }
+  closeDetail() { this.jobSelection.closeDetail(); }
+  isSelectedJob(job: JobInfo): boolean { return this.jobSelection.isSelected(job); }
 
   /** Triage panel: lane-specific move action. Same path as a drag-and-drop
    *  move (optimistic paint + persist + revert-on-error), but on success we
    *  also auto-advance to the next peer in the lane the user was triaging. */
   onTriageMove(info: JobInfo, ev: { targetState: string; actionId: string }) {
-    const lane = this.triageLaneState ?? info.state;
+    const lane = this.jobSelection.triageLaneState ?? info.state;
     const peers = this.triageLanePeers();
     const snapshot = this.jobService.applyOptimisticMove(info.id, info.watchPath, ev.targetState);
     this.jobService.beginOptimisticPersist();
@@ -2971,7 +2899,7 @@ export class App implements OnInit {
    *  but we still surface the standard system confirm to match the menu's
    *  delete flow (so the user does not lose the safety net by accident). */
   onTriageDelete(info: JobInfo, _ev: { actionId: string }) {
-    const lane = this.triageLaneState ?? info.state;
+    const lane = this.jobSelection.triageLaneState ?? info.state;
     const peers = this.triageLanePeers();
     const label = info.title || info.id;
     const message =
@@ -3060,32 +2988,21 @@ export class App implements OnInit {
     const candidate = (next && live.find(p => p.jobKey === next!.jobKey)) ?? live[0] ?? null;
     if (candidate) {
       // Re-anchor lane to the new job's state (same lane unless poll drift)
-      this.triageLaneState = candidate.state;
-      const token = ++this.openDetailToken;
+      this.jobSelection.triageLaneState = candidate.state;
+      const token = this.jobSelection.bumpOpenDetailToken();
       this.jobService.getDetail(candidate.id, candidate.watchPath).subscribe({
         next: (detail) => {
-          if (token !== this.openDetailToken) return;
           history.replaceState(null, '', `?job=${encodeURIComponent(candidate.id)}&watchPath=${encodeURIComponent(candidate.watchPath)}`);
-          this.selectedJob.set(detail);
+          this.jobSelection.setSelectedFromAdvance(detail, token);
         },
         error: () => { /* leave panel on the previous job; the parent effect will reconcile */ }
       });
-      if (external) this.showTriageToast('Job was moved externally; advancing.');
+      if (external) this.jobSelection.showTriageToast('Job was moved externally; advancing.');
       return;
     }
     // Lane cleared — close the panel and toast.
     this.closeDetail();
-    this.showTriageToast('Lane cleared.');
-  }
-
-  /** Show a transient triage banner; auto-clears after 3 s. */
-  private showTriageToast(msg: string): void {
-    if (this.triageToastTimer) clearTimeout(this.triageToastTimer);
-    this.triageToast.set(msg);
-    this.triageToastTimer = setTimeout(() => {
-      this.triageToast.set(null);
-      this.triageToastTimer = null;
-    }, 3000);
+    this.jobSelection.showTriageToast('Lane cleared.');
   }
 
   onCompleteAndNextReview() {
@@ -3382,14 +3299,10 @@ export class App implements OnInit {
       '',
       `?job=${encodeURIComponent(event.jobId)}&watchPath=${encodeURIComponent(event.watchPath)}`
     );
-    const token = ++this.openDetailToken;
+    const token = this.jobSelection.bumpOpenDetailToken();
     this.jobService.getDetail(event.jobId, event.watchPath).subscribe({
-      next: (detail) => {
-        if (token !== this.openDetailToken) return;
-        this.selectedJob.set(detail);
-      },
+      next: (detail) => this.jobSelection.setSelectedFromAdvance(detail, token),
       error: (err) => {
-        if (token !== this.openDetailToken) return;
         history.replaceState(null, '', window.location.pathname);
         this.errorDialog.show(err, {
           title: 'Failed to open task',
