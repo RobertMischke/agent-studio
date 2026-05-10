@@ -13,7 +13,7 @@ import {
   parseOrchestratorSteer,
   summarizeToolBurst
 } from './activity-log.parser';
-import { CliOutputLine } from '../models/job.model';
+import { CliOutputLine } from '../../../models/job.model';
 
 describe('parseActivityLog', () => {
   it('compresses adjacent read entries into a single expandable group', () => {
