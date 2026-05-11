@@ -53,6 +53,14 @@ public class JobMutationService
         if (info == null) return false;
         var normalized = CliTypes.Normalize(cliType);
         JobJsonFile.UpdateField(info.FolderPath, "cliType", normalized, _logger);
+        // Keep the parallel `agent` field in lockstep with `cliType`. The two
+        // were originally meant to address different layers (which CLI vs.
+        // which logical agent) but every supported CLI maps 1:1 to one agent
+        // value, and the kanban card's text label reads `agent` while the
+        // icon reads `cliType`. A mass-flip of cliType without syncing agent
+        // produced cards showing "claude" with the Codex icon on 2026-05-12
+        // (see job bug-clitype-and-agent-fields-drift-on-mass-flip).
+        JobJsonFile.UpdateField(info.FolderPath, "agent", normalized, _logger);
         // Switching CLI invalidates the previous session - clear it so the next run mints a new one.
         if (!string.Equals(normalized, info.CliType, StringComparison.OrdinalIgnoreCase))
         {

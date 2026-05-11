@@ -187,6 +187,32 @@ severityIfBad: High
 
 ```yaml
 # ---------------------------------------------------------------------------
+# `cliType` and `agent` in job.json must stay in sync. On 2026-05-12 a mass
+# flip of 62 jobs from Claude to Codex via PUT /api/jobs/{id}/cli-type set
+# `cliType=codex` but left `agent=claude`. The kanban card reads the icon
+# from `cliType` and the text label from `agent`, so the cards rendered the
+# Codex icon next to a "claude" label until the file was hand-edited. Only
+# the canonical writer in JobMutationService.SetJobCliType may touch
+# `cliType` on its own; everywhere else that calls UpdateField with
+# `"cliType"` must also update `"agent"` in the same call site.
+# ---------------------------------------------------------------------------
+id: cli-type-and-agent-must-sync
+title: UpdateField("cliType", ...) must be accompanied by UpdateField("agent", ...)
+description: >
+  Whenever code writes the `cliType` field of a job.json, it must also write
+  the matching `agent` field in the same method. The two fields address the
+  same logical concept (the supported CLIs map 1:1 to agent labels); a write
+  to only one of them drifts the kanban card's icon away from its text label.
+  The canonical writer is JobMutationService.SetJobCliType.
+filePattern: backend/.*\.cs$
+excludeFilePattern: backend\.Tests|Services[/\\]Jobs[/\\]JobMutationService\.cs|Services[/\\]Jobs[/\\]JobJsonFile\.cs
+candidateMarker: UpdateField\s*\([^,]+,\s*"cliType"
+goodVariant: UpdateField\s*\([^,]+,\s*"agent"
+severityIfBad: High
+```
+
+```yaml
+# ---------------------------------------------------------------------------
 # Lane writes to 3-progress are reserved for the runner. On 2026-05-11 the
 # auto-review verdict path routed reissues straight to 3-progress while the
 # runner-pickup tick observed an empty lane mid-verdict and grabbed the next
