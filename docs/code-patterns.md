@@ -85,6 +85,27 @@ goodVariant: RedirectStandardError\s*=\s*true
 severityIfBad: Warn
 ```
 
+```yaml
+# ---------------------------------------------------------------------------
+# Frontmatter parsing should go through FrontmatterParser. Four services
+# rolled their own regex+parser pair before the helper existed; they share
+# enough edge-case logic (folded scalars, quote stripping, empty handling)
+# that drift between them is a real risk.
+# ---------------------------------------------------------------------------
+id: frontmatter-canonical-helper
+title: YAML frontmatter parsing uses FrontmatterParser
+description: >
+  Markdown files with `---` frontmatter at the top should be parsed via
+  OrchestratorApi.Services.Markdown.FrontmatterParser. Rolling a private
+  regex risks drift on edge cases (folded scalars, quote stripping,
+  CRLF handling).
+filePattern: \.cs$
+excludeFilePattern: backend\.Tests|Markdown[/\\]FrontmatterParser\.cs|CodePatternRuleLoader\.cs
+candidateMarker: \\A---\\s\*\\r\?\\n
+goodVariant: FrontmatterParser\b
+severityIfBad: Warn
+```
+
 ## Adding a rule — checklist
 
 1. **Catch a real incident.** Don't add a rule for a hypothetical drift; add

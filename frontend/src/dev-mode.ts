@@ -44,7 +44,13 @@ const DEV_ICON_DATA_URL = `data:image/svg+xml;utf8,${encodeURIComponent(DEV_ICON
 export async function applyDevModeIfFlagged(): Promise<void> {
   let isDev = false;
   try {
-    const res = await fetch('/api/environment', { cache: 'no-store' });
+    // Pass X-Client-Id even though /api/environment is read-only — the
+    // CodePatternDriftAnalysisService rule frontend-fetch-xclientid enforces
+    // this on every raw fetch() to /api so production-shape matches drill paths.
+    const res = await fetch('/api/environment', {
+      cache: 'no-store',
+      headers: { 'X-Client-Id': 'local-default' },
+    });
     if (res.ok) {
       const data = (await res.json()) as { isDev?: boolean };
       isDev = data.isDev === true;

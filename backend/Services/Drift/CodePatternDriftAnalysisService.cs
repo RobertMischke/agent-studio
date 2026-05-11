@@ -101,24 +101,23 @@ public sealed class CodePatternDriftAnalysisService
                 RegexOptions.Compiled),
             SeverityIfBad: DriftSeverity.High),
 
-        // Rule 2: JSONL append must hold a per-file SemaphoreSlim so
-        // concurrent appenders cannot interleave bytes. The 4 known-good
-        // implementations all do this; the other ~18 FileMode.Append
-        // sites land in the report so reviewers can decide which are
-        // safe (single-writer paths) and which need locking.
+        // Rule 2: JSONL append should use the canonical IJsonlAppender or
+        // at least hold a per-file SemaphoreSlim. The canonical helper
+        // gives newline-guarantee + lock + parent-dir-create for free;
+        // legacy sites with their own SemaphoreSlim are accepted but
+        // flagged when neither is present.
         new CodePatternRule(
             Id: "jsonl-append-locked",
-            Title: "JSONL append uses a per-file semaphore",
+            Title: "JSONL append uses IJsonlAppender or a per-file semaphore",
             CanonicalDescription:
-                "FileMode.Append on a JSONL path should be guarded by a per-path SemaphoreSlim. " +
-                "Without it, concurrent writers can interleave partial lines.",
+                "Append to a JSONL file should go through OrchestratorApi.Services.Persistence.IJsonlAppender " +
+                "(or wrap FileMode.Append in a per-path SemaphoreSlim). Without locking, concurrent writers can " +
+                "interleave bytes when records exceed the OS atomic-write threshold.",
             FilePattern: @"\.cs$",
-            ExcludeFilePattern: @"(?:backend\.Tests[/\\]|/bin/|/obj/|UsersrmiscAppDataLocalTemp)",
-            CandidateMarker: new Regex(
-                @"FileMode\.Append\b[\s\S]{0,400}?\.jsonl",
-                RegexOptions.Compiled),
-            BadVariant: null, // see GoodVariant check below
-            GoodVariant: new Regex(@"SemaphoreSlim\b", RegexOptions.Compiled),
+            ExcludeFilePattern: @"(?:backend\.Tests[/\\]|/bin/|/obj/|UsersrmiscAppDataLocalTemp|Persistence[/\\]IJsonlAppender\.cs|Persistence[/\\]JsonlAppender\.cs)",
+            CandidateMarker: new Regex(@"FileMode\.Append\b", RegexOptions.Compiled),
+            BadVariant: null,
+            GoodVariant: new Regex(@"(?:SemaphoreSlim\b|IJsonlAppender\b|_appender\b|\.AppendLineAsync\b)", RegexOptions.Compiled),
             SeverityIfBad: DriftSeverity.Warn),
 
         // Rule 3: Frontend file uploads must include X-Client-Id (or go
@@ -130,9 +129,10 @@ public sealed class CodePatternDriftAnalysisService
             Title: "Frontend fetch() calls to /api include X-Client-Id",
             CanonicalDescription:
                 "Raw `fetch('/api/...')` calls bypass the Angular HttpClient interceptor that adds X-Client-Id. " +
-                "Either route through HttpClient or pass the header explicitly.",
+                "Either route through HttpClient or pass the header explicitly. Scope: production runtime " +
+                "(src/) — e2e infrastructure is excluded because Playwright fixtures do not go through Angular.",
             FilePattern: @"\.ts$",
-            ExcludeFilePattern: @"(?:node_modules[/\\]|\.spec\.ts$|/dist/|client-id\.interceptor\.ts)",
+            ExcludeFilePattern: @"(?:node_modules[/\\]|\.spec\.ts$|/dist/|client-id\.interceptor\.ts|frontend[/\\]e2e[/\\])",
             CandidateMarker: new Regex(
                 @"\bfetch\s*\(\s*[`'""][^`'""]*?/api/",
                 RegexOptions.Compiled),

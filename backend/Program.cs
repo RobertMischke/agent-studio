@@ -134,6 +134,7 @@ builder.Services.AddSingleton<BusAggregationCache>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Cli.OneShot.ICliOneShot, OrchestratorApi.Services.Cli.OneShot.ClaudeOneShot>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Cli.OneShot.CliOneShotRegistry>();
 builder.Services.AddSingleton<CodePatternDriftAnalysisService>();
+builder.Services.AddSingleton<OrchestratorApi.Services.Persistence.IJsonlAppender, OrchestratorApi.Services.Persistence.JsonlAppender>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Runtime.ProductRuntimeEventStore>();
 builder.Services.AddSingleton<OrchestratorApi.Services.State.SupervisorAdvisoryStore>();
 builder.Services.AddSingleton<OrchestratorApi.Services.State.SupervisorInterventionStore>();
