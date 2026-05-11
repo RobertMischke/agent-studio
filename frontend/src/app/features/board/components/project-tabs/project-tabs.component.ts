@@ -51,7 +51,12 @@ export class ProjectTabsComponent {
   readonly autoInfo = input.required<(name: string) => ProjectAutoInfo>();
   readonly projectTokens = input<((name: string) => ProjectTokenChipInfo | null) | null>(null);
 
-  readonly toggle = output<string>();
+  /**
+   * Project chip clicked. `additive` is true when the user held Ctrl/Cmd
+   * — that signals "extend the multi-select" rather than the default
+   * single-select switch.
+   */
+  readonly toggle = output<{ name: string; additive: boolean }>();
   readonly toggleAuto = output<string>();
   readonly openShell = output<string>();
 

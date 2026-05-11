@@ -287,6 +287,28 @@ export class BoardFiltersService {
     this.writeFilterHash();
   }
 
+  /**
+   * Single-select project switch. Clicking an inactive project chip with
+   * no modifier replaces the active set with just that project, so the
+   * board, lane counters, and chip strips switch cleanly between projects
+   * instead of stacking filters. Clicking the only-active chip clears the
+   * filter (back to "all projects"). For additive multi-select callers
+   * pass `additive = true` (Ctrl/Cmd+click); that delegates to the legacy
+   * toggle behaviour so power users can still compare two boards.
+   */
+  selectProject(name: string, additive: boolean): void {
+    if (additive) {
+      this.toggleProject(name);
+      return;
+    }
+    const current = this.activeProjects();
+    const isSoleActive = current.size === 1 && current.has(name);
+    const next = isSoleActive ? new Set<string>() : new Set<string>([name]);
+    this.activeProjects.set(next);
+    localStorage.setItem('activeProjects', JSON.stringify([...next]));
+    this.writeFilterHash();
+  }
+
   isProjectActive(name: string): boolean {
     return this.activeProjects().has(name);
   }

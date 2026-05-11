@@ -917,7 +917,15 @@ export class App implements OnInit {
   cancelCreate() { this.createJobForm.cancel(); }
   submitCreate() { this.createJobForm.submit(); }
 
-  toggleProject(name: string) { this.boardFilters.toggleProject(name); }
+  toggleProject(event: { name: string; additive: boolean } | string) {
+    if (typeof event === 'string') {
+      // Legacy call sites (programmatic invocations) keep their toggle
+      // semantics so multi-select remains reachable without a modifier key.
+      this.boardFilters.toggleProject(event);
+      return;
+    }
+    this.boardFilters.selectProject(event.name, event.additive);
+  }
   isProjectActive(name: string): boolean { return this.boardFilters.isProjectActive(name); }
 
   // Pre-bound arrow-function aliases for child components that take a
