@@ -20,6 +20,7 @@ export interface AutoReviewStatusView {
   reissue: number;
   escalate: number;
   aspectsRun: number;
+  pending?: number;
   currentJob: string | null;
   currentProject: string | null;
 }

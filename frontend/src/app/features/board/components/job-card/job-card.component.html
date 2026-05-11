@@ -96,6 +96,15 @@
         {{ rb.label }}
       </span>
     }
+    @if (autoReviewProcessBadge(); as arb) {
+      <span class="job-card__auto-review-pill"
+            [class]="'job-card__auto-review-pill--' + arb.tone"
+            [title]="arb.tooltip"
+            data-testid="job-card-auto-review-status">
+        <span class="job-card__auto-review-dot"></span>
+        {{ arb.label }}
+      </span>
+    }
   </div>
   <div class="job-card__meta">
     <span class="job-card__agent">{{ agentIcon() }} {{ job().agent || 'unknown' }}</span>

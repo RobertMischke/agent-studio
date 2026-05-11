@@ -155,12 +155,23 @@ public static class ReviewDecisionParsing
     private static bool LineHasFollowUpStream(string line)
     {
         if (string.IsNullOrWhiteSpace(line)) return false;
+        if (LineIsTechnicalOrchestratorMarker(line)) return false;
         // Lines persisted by OrchestratorChatLog look like
         //   [HH:mm:ss.fff] [orchestrator] ...
         // and the runner's own user-input lines use the [user] stream tag.
         return line.Contains("[orchestrator]", StringComparison.OrdinalIgnoreCase)
             || line.Contains("[supervisor]", StringComparison.OrdinalIgnoreCase)
             || line.Contains("[user]", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool LineIsTechnicalOrchestratorMarker(string line)
+    {
+        // This is written after the job has already moved from
+        // 3-progress to 4-auto-review. It is bookkeeping, not an answer
+        // to the agent's terminal sentinel. Treating it as a resolution
+        // makes every freshly completed job invisible to auto-review.
+        return line.Contains("[orchestrator]", StringComparison.OrdinalIgnoreCase)
+            && line.Contains("Runner active state cleared:", StringComparison.OrdinalIgnoreCase);
     }
 
     private static Dictionary<string, string>? ParseFields(string body)

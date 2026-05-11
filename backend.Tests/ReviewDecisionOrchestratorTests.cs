@@ -463,6 +463,40 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     }
 
     [Fact]
+    public async Task TaskDone_WithRunnerActiveClearedMarker_StillRunsAspects()
+    {
+        SeedReviewJobWithDone("marker-job", includeRunnerActiveClearedMarker: true);
+        var calls = 0;
+        var orchestrator = BuildOrchestratorWithAspects(aspectStub: _ =>
+        {
+            calls++;
+            return "[[ASPECT_VERDICT: status=pass; summary=ok]]\n[[TASK_DONE]]";
+        });
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        Assert.Equal(4, calls);
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.AutoReview, "marker-job")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.HumanReview, "marker-job")));
+    }
+
+    [Fact]
+    public async Task TickOnce_RecordsPendingCountForHeaderStatus()
+    {
+        SeedReviewJobWithDone("status-job", includeRunnerActiveClearedMarker: true);
+        var statusSnapshot = new AutoReviewStatusSnapshot();
+        var orchestrator = BuildOrchestratorWithAspects(
+            aspectStub: _ => "[[ASPECT_VERDICT: status=pass; summary=ok]]\n[[TASK_DONE]]",
+            statusSnapshot: statusSnapshot);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        var status = statusSnapshot.Read();
+        Assert.Equal(1, status.Pending);
+        Assert.Equal(4, status.AspectsRun);
+    }
+
+    [Fact]
     public async Task TaskDone_AspectPipelineDisabled_LeavesJobInAutoReview()
     {
         // Kill switch: an empty AspectRunners list disables the multi-aspect
@@ -503,16 +537,20 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         Assert.Equal(firstCalls, calls);
     }
 
-    private void SeedReviewJobWithDone(string slug)
+    private void SeedReviewJobWithDone(string slug, bool includeRunnerActiveClearedMarker = false)
     {
         var dir = Path.Combine(_watchPath, JobStates.AutoReview, slug);
         Directory.CreateDirectory(Path.Combine(dir, "logs"));
         File.WriteAllText(Path.Combine(dir, "job.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{JobStates.AutoReview}\",\"order\":1,\"agent\":\"claude\"}}");
         File.WriteAllText(Path.Combine(dir, "prompt.md"), $"# {slug}\n\nDo the thing.\n");
+        var suffix = includeRunnerActiveClearedMarker
+            ? $"[12:00:02.000] [orchestrator] [decision] Runner active state cleared: job moved out of 3-progress externally (3-progress -> 4-auto-review){Environment.NewLine}"
+            : string.Empty;
         File.WriteAllText(Path.Combine(dir, "logs", "cli-output.log"),
             $"[12:00:00.000] [stdout] starting{Environment.NewLine}" +
-            $"[12:00:01.000] [stdout] [[TASK_DONE]]{Environment.NewLine}");
+            $"[12:00:01.000] [stdout] [[TASK_DONE]]{Environment.NewLine}" +
+            suffix);
     }
 
     private List<string> ReadJobTags(string state, string slug)
@@ -537,7 +575,8 @@ public class ReviewDecisionOrchestratorTests : IDisposable
 
     private ReviewDecisionOrchestrator BuildOrchestratorWithAspects(
         Func<string, string> aspectStub,
-        IReadOnlyList<string>? aspectRunners = null)
+        IReadOnlyList<string>? aspectRunners = null,
+        AutoReviewStatusSnapshot? statusSnapshot = null)
     {
         var dict = new Dictionary<string, string?>
         {
@@ -574,9 +613,8 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         var aspectRunner = new AspectRunnerService(prompts, NullLogger<AspectRunnerService>.Instance);
         aspectRunner.CliRunner = (aspectId, _, _, _, _, _) => Task.FromResult(aspectStub(aspectId));
-        var statusSnapshot = new AutoReviewStatusSnapshot();
         var orchestrator = new ReviewDecisionOrchestrator(
-            scanner, stateMachine, chatLog, prompts, aspectRunner, statusSnapshot, config,
+            scanner, stateMachine, chatLog, prompts, aspectRunner, statusSnapshot ?? new AutoReviewStatusSnapshot(), config,
             NullLogger<ReviewDecisionOrchestrator>.Instance);
         return orchestrator;
     }

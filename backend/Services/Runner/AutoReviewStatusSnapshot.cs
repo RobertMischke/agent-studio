@@ -17,6 +17,7 @@ public sealed class AutoReviewStatusSnapshot
     private int _reissue;
     private int _escalate;
     private int _aspectsRun;
+    private int _pending;
     private string? _currentJob;
     private string? _currentProject;
 
@@ -31,6 +32,7 @@ public sealed class AutoReviewStatusSnapshot
                 Reissue: _reissue,
                 Escalate: _escalate,
                 AspectsRun: _aspectsRun,
+                Pending: _pending,
                 CurrentJob: _currentJob,
                 CurrentProject: _currentProject);
         }
@@ -44,6 +46,7 @@ public sealed class AutoReviewStatusSnapshot
             _reissue = 0;
             _escalate = 0;
             _aspectsRun = 0;
+            _pending = 0;
             _currentJob = null;
             _currentProject = null;
         }
@@ -72,6 +75,7 @@ public sealed class AutoReviewStatusSnapshot
     public void RecordReissue() { lock (_lock) _reissue++; }
     public void RecordEscalate() { lock (_lock) _escalate++; }
     public void RecordAspectsRun(int count) { lock (_lock) _aspectsRun += count; }
+    public void RecordPending() { lock (_lock) _pending++; }
 }
 
 public sealed record AutoReviewStatusView(
@@ -80,5 +84,6 @@ public sealed record AutoReviewStatusView(
     int Reissue,
     int Escalate,
     int AspectsRun,
+    int Pending,
     string? CurrentJob,
     string? CurrentProject);

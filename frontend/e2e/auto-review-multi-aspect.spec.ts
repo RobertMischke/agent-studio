@@ -75,6 +75,7 @@ interface AutoReviewStatus {
   reissue: number;
   escalate: number;
   aspectsRun: number;
+  pending: number;
   currentJob: string | null;
   currentProject: string | null;
 }
@@ -167,22 +168,31 @@ test.describe('Auto-review multi-aspect surface', () => {
       reissue: 1,
       escalate: 0,
       aspectsRun: 16,
-      currentJob: null,
-      currentProject: null
+      pending: 6,
+      currentJob: 'fixture-pass',
+      currentProject: 'stub-project'
     });
 
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
     await dismissErrorDialogIfPresent(page);
 
+    const headerStatus = page.getByTestId('header-auto-review-status');
+    await expect(headerStatus).toBeVisible({ timeout: 10_000 });
+    await expect(headerStatus).toContainText('Auto-review running');
+
     // Status string is the load-bearing surface: it carries the per-tick
     // counters and the "last tick was N seconds ago" recency. Without
     // it the user has no way to tell that the orchestrator is alive.
     const statusLine = page.getByTestId('auto-review-status');
     await expect(statusLine).toBeVisible({ timeout: 10_000 });
+    await expect(statusLine).toContainText('6 queued');
     await expect(statusLine).toContainText('4 accept');
     await expect(statusLine).toContainText('1 reissue');
     await expect(statusLine).toContainText('0 escalate');
+
+    const card = page.locator('[data-testid="job-card"]', { hasText: 'All aspects pass' });
+    await expect(card.getByTestId('job-card-auto-review-status')).toContainText('reviewing now');
 
     // Info button next to the lane title opens the side-drawer with
     // the rendered concept doc fetched from /api/concept-docs/. The
@@ -218,6 +228,7 @@ test.describe('Auto-review multi-aspect surface', () => {
       reissue: 0,
       escalate: 0,
       aspectsRun: 4,
+      pending: 1,
       currentJob: null,
       currentProject: null
     });
@@ -228,6 +239,7 @@ test.describe('Auto-review multi-aspect surface', () => {
 
     const card = page.locator('[data-testid="job-card"]', { hasText: 'Auto-review flagged concerns' });
     await expect(card).toBeVisible({ timeout: 10_000 });
+    await expect(card.getByTestId('job-card-auto-review-status')).toContainText('queued for review');
 
     const concernChips = card.locator('[data-testid="job-card-concern-chip"]');
     await expect(concernChips).toHaveCount(2);

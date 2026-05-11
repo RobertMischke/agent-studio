@@ -214,6 +214,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
                 foreach (var pending in EnumeratePending(entry))
                 {
                     if (ct.IsCancellationRequested) return;
+                    _statusSnapshot.RecordPending();
                     _statusSnapshot.SetCurrent(entry.Name, pending.Job.Id);
 
                     try

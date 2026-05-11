@@ -143,6 +143,43 @@ public class ReviewDecisionParsingTests
     }
 
     [Fact]
+    public void FindUnresolvedDone_IgnoresRunnerActiveStateClearedMarker()
+    {
+        var log = string.Join('\n',
+            "[12:00:00.000] [stdout] [[TASK_DONE]]",
+            "[12:00:01.000] [system] [taskboard] claude CLI exited: status=completed, exitCode=0",
+            "[12:00:02.000] [orchestrator] [decision] Runner active state cleared: job moved out of 3-progress externally (3-progress -> 4-auto-review)");
+
+        var state = ReviewDecisionParsing.FindUnresolvedDone(log);
+
+        Assert.NotNull(state);
+        Assert.Equal(1, state!.LineNumber);
+    }
+
+    [Fact]
+    public void FindUnresolvedDone_ReturnsNull_WhenOrchestratorAlreadyReviewed()
+    {
+        var log = string.Join('\n',
+            "[12:00:00.000] [stdout] [[TASK_DONE]]",
+            "[12:00:30.000] [orchestrator] [decision] Decision: accept-as-done. Aspects: requirement-fit=pass");
+
+        Assert.Null(ReviewDecisionParsing.FindUnresolvedDone(log));
+    }
+
+    [Fact]
+    public void FindUnresolvedBlocked_IgnoresRunnerActiveStateClearedMarker()
+    {
+        var log = string.Join('\n',
+            "[12:00:00.000] [stdout] [[TASK_BLOCKED: needs scope]]",
+            "[12:00:01.000] [orchestrator] [decision] Runner active state cleared: job moved out of 3-progress externally (3-progress -> 4-auto-review)");
+
+        var state = ReviewDecisionParsing.FindUnresolvedBlocked(log);
+
+        Assert.NotNull(state);
+        Assert.Equal("needs scope", state!.Reason);
+    }
+
+    [Fact]
     public void ParseDecision_Reissue_RoundTripsActionAndReason()
     {
         var output = "After reading the roadmap...\n[[ORCHESTRATOR_DECISION: action=reissue; reason=Roadmap names option A as canonical.]]\n[[TASK_DONE]]";

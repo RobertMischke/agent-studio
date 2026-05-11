@@ -192,10 +192,11 @@ export class JobColumnComponent implements OnInit, OnDestroy {
     }
     const delta = Math.max(0, Math.round((Date.now() - new Date(s.lastTickAt).getTime()) / 1000));
     const ago = delta < 60 ? `${delta}s ago` : `${Math.round(delta / 60)}m ago`;
+    const pending = s.pending ?? 0;
     if (s.currentJob) {
-      return `Reviewing ${s.currentJob}. Last tick: ${s.accept} accept · ${s.reissue} reissue · ${s.escalate} escalate (${ago})`;
+      return `Reviewing ${s.currentJob}. Last tick: ${pending} queued · ${s.accept} accept · ${s.reissue} reissue · ${s.escalate} escalate (${ago})`;
     }
-    return `Last tick: ${s.accept} accept · ${s.reissue} reissue · ${s.escalate} escalate (${ago})`;
+    return `Last tick: ${pending} queued · ${s.accept} accept · ${s.reissue} reissue · ${s.escalate} escalate (${ago})`;
   });
 
   /**

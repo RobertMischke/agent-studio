@@ -1,8 +1,8 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, output, signal } from '@angular/core';
 import type { AutoLoopSnapshot, JobInfo, PendingIntent } from '../../../../models/job.model';
-import type { JobTokenSummary } from '../../../../features/tokens';
 import { GitSummaryService } from '../../../../services/git-summary.service';
 import { ClientService } from '../../../../services/client.service';
+import { AutoReviewStatusStore } from '../../../../services/auto-review-status.store';
 import { cliTypeIcon } from '../../../../services/format.util';
 import { projectIdentity } from '../../../../services/project-identity.util';
 import { TagRegistryStore } from '../../../../services/tag-registry.store';
@@ -34,6 +34,7 @@ export class JobCardComponent implements OnInit, OnDestroy {
   private readonly gitSummary = inject(GitSummaryService);
   private readonly clients = inject(ClientService);
   private readonly tagRegistry = inject(TagRegistryStore);
+  private readonly autoReviewStatus = inject(AutoReviewStatusStore);
   private stopPolling: (() => void) | null = null;
 
   /**
@@ -255,6 +256,55 @@ export class JobCardComponent implements OnInit, OnDestroy {
       default:
         return null;
     }
+  });
+
+  readonly autoReviewProcessBadge = computed<{ label: string; tone: 'active' | 'queued' | 'stale' | 'done'; tooltip: string } | null>(() => {
+    const job = this.job();
+    if (job.state !== '4-auto-review') return null;
+
+    const s = this.autoReviewStatus.status();
+    const matchesCurrent = !!s?.currentJob
+      && s.currentJob === job.id
+      && (!s.currentProject || s.currentProject === job.projectName);
+
+    if (matchesCurrent) {
+      return {
+        label: 'reviewing now',
+        tone: 'active',
+        tooltip: 'Auto-review is currently running its multi-aspect pass for this task.'
+      };
+    }
+
+    if (job.orchestratorVerdict) {
+      return {
+        label: `review ${job.orchestratorVerdict}`,
+        tone: 'done',
+        tooltip: `Auto-review has already recorded an orchestrator verdict: ${job.orchestratorVerdict}.`
+      };
+    }
+
+    if (!s?.lastTickAt) {
+      return {
+        label: 'review pending',
+        tone: 'queued',
+        tooltip: 'This task is in Auto Review. The global auto-review status has not loaded yet.'
+      };
+    }
+
+    const ageMs = Date.now() - Date.parse(s.lastTickAt);
+    if (ageMs > 90_000) {
+      return {
+        label: 'review stale',
+        tone: 'stale',
+        tooltip: `Auto-review has not completed a tick since ${new Date(s.lastTickAt).toLocaleString()}.`
+      };
+    }
+
+    return {
+      label: 'queued for review',
+      tone: 'queued',
+      tooltip: `Auto-review is alive. Last tick saw ${s.pending ?? 0} candidate(s); this task is waiting in 4-auto-review.`
+    };
   });
 
   /** Hot-state threshold: amber pill once the loop is at 80% of the iteration cap. */

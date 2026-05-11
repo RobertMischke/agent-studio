@@ -27,6 +27,7 @@ import {
   ProjectRailKey,
 } from './features/project-detail';
 import {
+  AutoReviewIndicatorComponent,
   StatusBarComponent,
   UiPreferencesService,
   WorkspaceBannerComponent,
@@ -70,7 +71,7 @@ interface VerboseDebugContext {
 
 @Component({
   selector: 'app-root',
-  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorSideSheetComponent, ProjectOverlaysComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceOverlaysComponent, WorkspaceBannerComponent, UpdateBannerComponent, UpdateVersionBadgeComponent, UpdateCenterComponent, OrchestratorConfigPanelComponent, UpdateBlockModalComponent, VerboseDebugOverlayComponent, FiltersDropdownComponent, KanbanFilterSidesheetComponent],
+  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorSideSheetComponent, ProjectOverlaysComponent, AutoReviewIndicatorComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceOverlaysComponent, WorkspaceBannerComponent, UpdateBannerComponent, UpdateVersionBadgeComponent, UpdateCenterComponent, OrchestratorConfigPanelComponent, UpdateBlockModalComponent, VerboseDebugOverlayComponent, FiltersDropdownComponent, KanbanFilterSidesheetComponent],
   // Cycle 7b: OnPush. The shell mounts kanban + detail panel + many
   // sheets; default (Default) change detection re-checked the whole
   // tree on every async event (every poll tick, every signal write).

@@ -278,6 +278,48 @@
       background: rgba(244, 63, 94, 0.14);
       border-color: rgba(244, 63, 94, 0.25);
     }
+    .job-card__auto-review-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 650;
+      letter-spacing: 0;
+      border: 1px solid transparent;
+      cursor: help;
+    }
+    .job-card__auto-review-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: currentColor;
+      flex: 0 0 auto;
+    }
+    .job-card__auto-review-pill--active {
+      color: #fcd34d;
+      background: rgba(252, 211, 77, 0.14);
+      border-color: rgba(252, 211, 77, 0.34);
+    }
+    .job-card__auto-review-pill--active .job-card__auto-review-dot {
+      animation: pulse-running 1.3s infinite;
+    }
+    .job-card__auto-review-pill--queued {
+      color: #fbbf24;
+      background: rgba(251, 191, 36, 0.10);
+      border-color: rgba(251, 191, 36, 0.26);
+    }
+    .job-card__auto-review-pill--done {
+      color: #86efac;
+      background: rgba(134, 239, 172, 0.10);
+      border-color: rgba(134, 239, 172, 0.24);
+    }
+    .job-card__auto-review-pill--stale {
+      color: #fecaca;
+      background: rgba(248, 113, 113, 0.12);
+      border-color: rgba(248, 113, 113, 0.28);
+    }
     .job-card__state-pill {
       background: rgba(255,255,255,0.06);
       color: #cbd5e1;

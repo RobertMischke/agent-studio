@@ -22,6 +22,7 @@
           (openDetail)="openProjectDetail($event)"
           (openShell)="openProjectShell($event)" />
         <div class="header__actions">
+          <app-auto-review-indicator />
           <app-update-version-badge />
           <label class="client-filter" data-testid="client-filter">
             <span class="client-filter__label">Owner:</span>
@@ -446,4 +447,3 @@
         }
       }
     </div>
-  

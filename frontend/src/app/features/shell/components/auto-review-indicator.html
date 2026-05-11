@@ -1,0 +1,9 @@
+<span class="auto-review-indicator"
+      data-testid="header-auto-review-status"
+      [class.auto-review-indicator--active]="tone() === 'active'"
+      [class.auto-review-indicator--idle]="tone() === 'idle'"
+      [class.auto-review-indicator--stale]="tone() === 'stale'"
+      [title]="tooltip()">
+  <span class="auto-review-indicator__dot" aria-hidden="true"></span>
+  <span class="auto-review-indicator__label">{{ label() }}</span>
+</span>
