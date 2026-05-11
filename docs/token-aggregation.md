@@ -1,14 +1,18 @@
 # Token Aggregation — Audit and Consolidation Plan
 
-> **Status (2026-05-11):** Audit + Phase 2 (bus emission for ad-hoc calls) +
-> Phase 3 (interface skeleton) + Phase 6 (drift rule) shipped first. The
-> follow-up pass landed the first Phase-4 read path
-> (`BusBackedAdHocUsageReader`) and its Phase-5 parity test
-> (`AdHocUsageBusParityTests`) proving that the bus-backed reader and the
-> legacy `adhoc-usage.jsonl` reader produce byte-identical aggregates for
-> records written through the recorder. The remaining three Phase-4 surfaces
-> (`TokenSummaryService`, `WorkspaceTokensTimelineService`,
-> `ProjectTokenUsageService`) are queued as follow-up tasks.
+> **Status (2026-05-11):** Phase 4+5 complete. Every surface that
+> `ITokenAggregator` exposes now reads through a bus-backed reader; the
+> legacy services (`TokenSummaryService`, `WorkspaceTokensTimelineService`,
+> `ProjectTokenUsageService`) stay registered for the parity-test fixture
+> and for callers that still go through their concrete types
+> (`JobEndpointHelpers.BuildTokenLookup` is the last such caller), but
+> `TokenAggregationService` never reaches into them. Each surface ships
+> with a Phase-5 parity test
+> (`TokenSummaryBusParityTests`, `WorkspaceTokensTimelineBusParityTests`,
+> `ProjectTokenUsageBusParityTests`, alongside the earlier
+> `AdHocUsageBusParityTests`) that drives both readers over the same data
+> set and asserts byte-identical numeric output. The drift rule
+> `token-aggregation-canonical` is ready to graduate from `Info` to `Warn`.
 
 ## Why this document exists
 
@@ -99,8 +103,7 @@ this document. The remaining phases are:
 
 ### Phase 4 — Convert legacy services to bus-backed shims
 
-Land one shim at a time, in this order, so each migration is independently
-verifiable:
+All four shims have landed in this order:
 
 1. **Landed.** `AdHocUsageService` read path. `BusBackedAdHocUsageReader`
    queries `support:adhoc` / `kind=token-usage` messages from the
@@ -115,18 +118,43 @@ verifiable:
    The `AdHocUsageService.Aggregate` source/model ordering picked up
    stable tie-breakers in the same change so insertion-order differences
    between JSONL and bus paths can no longer leak into the output.
-2. `TokenSummaryService.Summarize` (lifetime per-project totals + per-model
-   split). Simplest of the orchestrator-log readers; pure-function fold.
-3. `WorkspaceTokensTimelineService.Build`. Bucketing logic is straightforward
-   once the bus carries every orchestrator turn.
-4. `ProjectTokenUsageService.BuildSummary` / `BuildHeatmap` /
-   `BuildExpensiveJobs` / `BuildJobDetail`. Most surface area; requires the
-   bus to carry the Job/Supporting/Orchestrator category (today derivable
-   from `participantId`).
+2. **Landed.** `TokenSummaryService.Summarize` read path.
+   `BusBackedTokenSummaryReader` queries `kind=token-usage` messages
+   attributed to the project's orchestrator participant
+   (`orchestrator:<project>`), converts each into a transient
+   `OrchestratorLogEntry`, and folds through the same pure
+   `TokenSummaryService.Summarize` overload. `TokenSummaryService.Aggregate`
+   was refactored so the workspace fold (`AggregateSummaries`) is a
+   static helper both readers reuse - the bus path and the legacy path
+   cannot disagree on cross-project rollup math. Parity test:
+   [`TokenSummaryBusParityTests`](../backend.Tests/TokenSummaryBusParityTests.cs).
+3. **Landed.** `WorkspaceTokensTimelineService.Build` read path.
+   `BusBackedWorkspaceTimelineReader` walks every supplied project, pulls
+   the orchestrator-attributed token-usage messages, and feeds them
+   through `WorkspaceTokensTimelineService.BuildFromEntries`. Window
+   snapping, bucket span, dollar accounting, and the per-project peak /
+   last-activity trackers are unchanged because the bucketer is unchanged.
+   Parity test:
+   [`WorkspaceTokensTimelineBusParityTests`](../backend.Tests/WorkspaceTokensTimelineBusParityTests.cs).
+4. **Landed.** `ProjectTokenUsageService.BuildSummary` /
+   `BuildHeatmap` / `BuildExpensiveJobs` / `BuildJobDetail` read paths.
+   `BusBackedProjectTokenUsageReader` reuses every static `*FromEntries`
+   overload on the legacy service so the Job / Supporting / Orchestrator
+   category split (`SupportingJobTitlePrefixes` lookup against
+   `JobScannerService.ScanAllJobs`) is byte-identical across the source
+   change. The canonical bus-native split (participantId `agent:*` vs
+   `support:*` vs `orchestrator:*`) is a follow-up once the legacy
+   surface retires - parity needed byte-exact equality first. Parity
+   test:
+   [`ProjectTokenUsageBusParityTests`](../backend.Tests/ProjectTokenUsageBusParityTests.cs).
 
-Each shim ships with a parity test (Phase 5) that compares the legacy output
-against the bus-backed output over a fixed JSONL fixture; the shim only
-lands when parity is byte-exact.
+Each parity test compares every numeric field plus the ordered breakdown
+lists across the two readers driven against the same data set. The
+per-call drill-down's user-facing `Summary` is the one documented
+exception: the bus mints its own `tokens: in=... out=...` headline at
+emit time while `orchestrator.jsonl` carries the runner's own headline,
+so the parity assertion excludes that one presentation-only field
+(numeric fields and `Topic` are still checked verbatim).
 
 ### Phase 5 — Parity tests
 
@@ -139,10 +167,9 @@ guards.
 ### Phase 6 — Drift rule
 
 The drift rule `token-aggregation-canonical` is in
-[`docs/code-patterns.md`](code-patterns.md) but **starts at `Info` severity**
-until Phase 4 completes. Once the four legacy services have been converted
-to shims (or removed), the severity moves to `Warn` and the rule starts
-flagging any new aggregator outside `backend/Services/Tokens/` or
+[`docs/code-patterns.md`](code-patterns.md). Phase 4 is now complete, so
+the severity is ready to move from `Info` to `Warn`; the rule will then
+flag any new aggregator outside `backend/Services/Tokens/` or
 `backend/Services/Bus/`.
 
 The candidate marker scans for the two telltale patterns:
@@ -175,7 +202,11 @@ The good variant is membership in the `Tokens` or `Bus` namespace.
 | `backend/Services/Bus/AgentMessageBusBridge.cs` | Producer side: `EmitTokenUsageAsync` / `EmitTokenUsageRichAsync` |
 | `backend/Services/AdHoc/AdHocClaudeInvoker.cs` | Ad-hoc-call recorder; **also fires `EmitTokenUsageAsync` after Phase 2** |
 | `backend/Services/AdHoc/AdHocUsageRecorder.cs` | Legacy write path (kept for disk-format readers) |
-| `backend/Services/AdHoc/AdHocUsageService.cs` | Will become a shim in Phase 4 |
-| `backend/Services/Runner/ProjectTokenUsageService.cs` | Will become a shim in Phase 4 |
-| `backend/Services/Runner/WorkspaceTokensTimelineService.cs` | Will become a shim in Phase 4 |
-| `backend/Services/Runner/TokenSummary.cs` | Will become a shim in Phase 4 |
+| `backend/Services/AdHoc/AdHocUsageService.cs` | Legacy aggregator; only the parity fixture still calls it directly |
+| `backend/Services/Runner/ProjectTokenUsageService.cs` | Pure-function fold reused by `BusBackedProjectTokenUsageReader` |
+| `backend/Services/Runner/WorkspaceTokensTimelineService.cs` | Pure-function bucketer reused by `BusBackedWorkspaceTimelineReader` |
+| `backend/Services/Runner/TokenSummary.cs` | Pure-function summarizer reused by `BusBackedTokenSummaryReader`; workspace fold extracted to `AggregateSummaries` |
+| `backend/Services/Tokens/BusTokenEntryConverter.cs` | Shared adapter that turns bus `kind=token-usage` messages into transient `OrchestratorLogEntry` records so the bus-backed readers reuse the legacy folds |
+| `backend/Services/Tokens/BusBackedTokenSummaryReader.cs` | Phase-4 read path for the lifetime + per-model summary |
+| `backend/Services/Tokens/BusBackedWorkspaceTimelineReader.cs` | Phase-4 read path for the workspace timeline |
+| `backend/Services/Tokens/BusBackedProjectTokenUsageReader.cs` | Phase-4 read path for the four project-detail surfaces |
