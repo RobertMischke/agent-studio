@@ -121,32 +121,22 @@ public static class AspectVerdictParsing
     /// <summary>
     /// Read back the frontmatter status token from a previously written
     /// aspect report. Tolerant of missing frontmatter (returns null).
+    /// Uses the canonical
+    /// <see cref="OrchestratorApi.Services.Markdown.FrontmatterParser"/>
+    /// so the regex+block-detection lives in exactly one place.
     /// </summary>
     public static AspectStatus? ReadStatusFromReport(string content)
     {
-        if (string.IsNullOrWhiteSpace(content)) return null;
-        var lines = content.Split('\n');
-        if (lines.Length == 0 || lines[0].Trim() != "---") return null;
-        for (var i = 1; i < lines.Length; i++)
+        var result = OrchestratorApi.Services.Markdown.FrontmatterParser.Parse(content);
+        if (!result.Ok) return null;
+        if (!result.Fields.TryGetValue("status", out var value)) return null;
+        return value.ToLowerInvariant() switch
         {
-            var trimmed = lines[i].TrimEnd('\r');
-            if (trimmed.Trim() == "---") break;
-            var idx = trimmed.IndexOf(':');
-            if (idx <= 0) continue;
-            var key = trimmed[..idx].Trim();
-            var value = trimmed[(idx + 1)..].Trim();
-            if (string.Equals(key, "status", StringComparison.OrdinalIgnoreCase))
-            {
-                return value.ToLowerInvariant() switch
-                {
-                    "pass" => AspectStatus.Pass,
-                    "concerns" => AspectStatus.Concerns,
-                    "block" => AspectStatus.Block,
-                    _ => null
-                };
-            }
-        }
-        return null;
+            "pass" => AspectStatus.Pass,
+            "concerns" => AspectStatus.Concerns,
+            "block" => AspectStatus.Block,
+            _ => null,
+        };
     }
 
     private static Dictionary<string, string>? ParseFields(string body)

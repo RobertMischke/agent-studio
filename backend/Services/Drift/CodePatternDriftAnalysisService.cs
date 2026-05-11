@@ -114,10 +114,25 @@ public sealed class CodePatternDriftAnalysisService
                 "(or wrap FileMode.Append in a per-path SemaphoreSlim). Without locking, concurrent writers can " +
                 "interleave bytes when records exceed the OS atomic-write threshold.",
             FilePattern: @"\.cs$",
-            ExcludeFilePattern: @"(?:backend\.Tests[/\\]|/bin/|/obj/|UsersrmiscAppDataLocalTemp|Persistence[/\\]IJsonlAppender\.cs|Persistence[/\\]JsonlAppender\.cs)",
-            CandidateMarker: new Regex(@"FileMode\.Append\b", RegexOptions.Compiled),
+            ExcludeFilePattern: @"(?:backend\.Tests[/\\]|/bin/|/obj/|UsersrmiscAppDataLocalTemp|Persistence[/\\]IJsonlAppender\.cs|Persistence[/\\]JsonlAppender\.cs|update-service[/\\])",
+            // Three flavours of "appending to a JSONL file" we want to surface:
+            //  - new FileStream(..., FileMode.Append, ...)
+            //  - File.AppendAllText(...) on a .jsonl path
+            //  - File.AppendAllLines(...) / WriteAllLinesAsync with FileMode.Append
+            CandidateMarker: new Regex(
+                @"FileMode\.Append\b|File\.AppendAll(?:Text|Lines)(?:Async)?\b[\s\S]{0,200}?\.jsonl",
+                RegexOptions.Compiled),
             BadVariant: null,
-            GoodVariant: new Regex(@"(?:SemaphoreSlim\b|IJsonlAppender\b|_appender\b|\.AppendLineAsync\b)", RegexOptions.Compiled),
+            // Canonical signals (any one is enough):
+            //  - SemaphoreSlim (workspace pattern: per-path lock for short-lived appends)
+            //  - IJsonlAppender / _appender / AppendLineAsync (the new helper)
+            //  - lock (_lock)/lock(_sync) — per-instance object monitor, used by
+            //    CliOutputLogStore for its long-lived stream design
+            //  - File.AppendAllText/Lines is *not* in this list: those calls do
+            //    not lock and can interleave; flag them.
+            GoodVariant: new Regex(
+                @"(?:SemaphoreSlim\b|IJsonlAppender\b|_appender\b|\.AppendLineAsync\b|lock\s*\(\s*_(?:lock|sync)\b)",
+                RegexOptions.Compiled),
             SeverityIfBad: DriftSeverity.Warn),
 
         // Rule 3: Frontend file uploads must include X-Client-Id (or go

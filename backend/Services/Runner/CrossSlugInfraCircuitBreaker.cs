@@ -332,11 +332,16 @@ public sealed class InfraHaltLog
 {
     private readonly IConfiguration _configuration;
     private readonly ILogger<InfraHaltLog> _logger;
+    private readonly OrchestratorApi.Services.Persistence.IJsonlAppender _appender;
 
-    public InfraHaltLog(IConfiguration configuration, ILogger<InfraHaltLog> logger)
+    public InfraHaltLog(
+        IConfiguration configuration,
+        ILogger<InfraHaltLog> logger,
+        OrchestratorApi.Services.Persistence.IJsonlAppender? appender = null)
     {
         _configuration = configuration;
         _logger = logger;
+        _appender = appender ?? new OrchestratorApi.Services.Persistence.JsonlAppender();
     }
 
     public void Append(InfraHaltRecord record)
@@ -352,15 +357,14 @@ public sealed class InfraHaltLog
 
         try
         {
-            var dir = Path.Combine(workspaceRoot, "logs");
-            Directory.CreateDirectory(dir);
-            var line = JsonSerializer.Serialize(record, JsonOptions);
-            var path = Path.Combine(dir, "infra-halts.jsonl");
-            // Match the sibling JSONL writers (pickup-failures.jsonl,
-            // orphan-recoveries.jsonl): an append-with-newline on a small
-            // line is atomic at the OS level on Windows and POSIX, so a
-            // simple AppendAllText is the consistent and correct shape.
-            File.AppendAllText(path, line + Environment.NewLine, Encoding.UTF8);
+            var path = Path.Combine(workspaceRoot, "logs", "infra-halts.jsonl");
+            // IJsonlAppender holds a per-path SemaphoreSlim so concurrent
+            // halts from different projects do not interleave bytes. The
+            // previous comment claimed "AppendAllText is atomic at the OS
+            // level" — true only for writes under 4 KB; the rest is
+            // implementation-dependent. The helper makes the guarantee
+            // explicit.
+            _appender.AppendAsync(path, record, JsonOptions).GetAwaiter().GetResult();
         }
         catch (Exception ex)
         {

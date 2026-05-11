@@ -26,10 +26,6 @@ namespace OrchestratorApi.Services.Security;
 /// </summary>
 public static class SecurityReviewParser
 {
-    private static readonly Regex FrontmatterRegex = new(
-        @"\A---\s*\r?\n(?<body>[\s\S]*?)\r?\n---\s*\r?\n",
-        RegexOptions.Compiled);
-
     private static readonly Regex JsonFenceRegex = new(
         @"```\s*json\s*\r?\n(?<body>[\s\S]*?)```",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
@@ -79,12 +75,17 @@ public static class SecurityReviewParser
             }
         }
 
-        var fmMatch = FrontmatterRegex.Match(markdown);
-        if (fmMatch.Success)
+        // Frontmatter detection now goes through the shared
+        // OrchestratorApi.Services.Markdown.FrontmatterParser so the regex
+        // is defined exactly once across the codebase. Value coercion
+        // (typed scalars, nested maps) stays service-specific because the
+        // shared helper returns strings only.
+        var rawFrontmatter = Markdown.FrontmatterParser.TryExtractRawFrontmatter(markdown);
+        if (rawFrontmatter is not null)
         {
             try
             {
-                var fields = ParseFlatYaml(fmMatch.Groups["body"].Value);
+                var fields = ParseFlatYaml(rawFrontmatter);
                 if (fields.Count == 0)
                 {
                     return new SecurityReviewParseResult(

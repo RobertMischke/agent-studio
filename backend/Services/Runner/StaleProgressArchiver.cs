@@ -6,6 +6,7 @@ using System.Text.RegularExpressions;
 using Microsoft.Extensions.Configuration;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.Persistence;
 
 namespace OrchestratorApi.Services.Runner;
 
@@ -73,6 +74,7 @@ public sealed class StaleProgressArchiver
     private readonly IServiceProvider _services;
     private readonly IConfiguration _configuration;
     private readonly ILogger<StaleProgressArchiver> _logger;
+    private readonly IJsonlAppender _appender;
 
     public const int DefaultStuckResumeWindowMinutes = 60;
     private const int SentinelTailLineWindow = 50;
@@ -88,7 +90,8 @@ public sealed class StaleProgressArchiver
         OrchestratorChatLog chatLog,
         IServiceProvider services,
         IConfiguration configuration,
-        ILogger<StaleProgressArchiver> logger)
+        ILogger<StaleProgressArchiver> logger,
+        IJsonlAppender? appender = null)
     {
         _scanner = scanner;
         _states = states;
@@ -97,6 +100,7 @@ public sealed class StaleProgressArchiver
         _services = services;
         _configuration = configuration;
         _logger = logger;
+        _appender = appender ?? new JsonlAppender();
     }
 
     /// <summary>
@@ -510,10 +514,8 @@ public sealed class StaleProgressArchiver
 
         try
         {
-            var dir = Path.Combine(workspaceRoot, "logs");
-            Directory.CreateDirectory(dir);
-            var line = JsonSerializer.Serialize(decision, JsonOptions);
-            File.AppendAllText(Path.Combine(dir, "orphan-recoveries.jsonl"), line + Environment.NewLine, Encoding.UTF8);
+            var path = Path.Combine(workspaceRoot, "logs", "orphan-recoveries.jsonl");
+            _appender.AppendAsync(path, decision, JsonOptions).GetAwaiter().GetResult();
         }
         catch (Exception ex)
         {

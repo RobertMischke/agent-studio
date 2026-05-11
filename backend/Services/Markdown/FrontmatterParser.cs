@@ -41,7 +41,26 @@ public static class FrontmatterParser
         bool Ok,
         string? Error,
         IReadOnlyDictionary<string, string> Fields,
-        string Body);
+        string Body)
+    {
+        /// <summary>Raw frontmatter content (between the two <c>---</c>
+        /// lines), unparsed. Services with their own value-coercion logic
+        /// (nested objects, typed scalars, comments) can hand this to their
+        /// internal parser while still using this helper to locate the
+        /// block.</summary>
+        public string RawFrontmatter { get; init; } = string.Empty;
+    }
+
+    /// <summary>Locate and return the raw frontmatter content without
+    /// parsing values. Returns null when no block is present. Use this
+    /// when your service has its own typed YAML subset that the
+    /// string-only <see cref="Parse"/> result cannot represent.</summary>
+    public static string? TryExtractRawFrontmatter(string? markdown)
+    {
+        if (string.IsNullOrWhiteSpace(markdown)) return null;
+        var match = FrontmatterRegex.Match(markdown!);
+        return match.Success ? match.Groups["body"].Value : null;
+    }
 
     /// <summary>Look for a YAML frontmatter block at the top of
     /// <paramref name="markdown"/> and parse it. Returns the residual
@@ -68,7 +87,8 @@ public static class FrontmatterParser
                 Body: markdown!);
         }
 
-        var fields = ParseFlatYaml(match.Groups["body"].Value);
+        var rawFrontmatter = match.Groups["body"].Value;
+        var fields = ParseFlatYaml(rawFrontmatter);
         var body = markdown!.Substring(match.Index + match.Length);
         if (fields.Count == 0)
         {
@@ -76,9 +96,13 @@ public static class FrontmatterParser
                 Ok: false,
                 Error: "frontmatter present but yielded no recognised keys",
                 Fields: fields,
-                Body: body);
+                Body: body)
+            { RawFrontmatter = rawFrontmatter };
         }
-        return new FrontmatterResult(Ok: true, Error: null, Fields: fields, Body: body);
+        return new FrontmatterResult(Ok: true, Error: null, Fields: fields, Body: body)
+        {
+            RawFrontmatter = rawFrontmatter,
+        };
     }
 
     /// <summary>Parse the flat <c>key: value</c> form. Single-line strings

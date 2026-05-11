@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Configuration;
+using OrchestratorApi.Services.Persistence;
 
 namespace OrchestratorApi.Services.Runner;
 
@@ -22,11 +23,13 @@ public sealed class PickupFailureLog
 {
     private readonly IConfiguration _configuration;
     private readonly ILogger<PickupFailureLog> _logger;
+    private readonly IJsonlAppender _appender;
 
-    public PickupFailureLog(IConfiguration configuration, ILogger<PickupFailureLog> logger)
+    public PickupFailureLog(IConfiguration configuration, ILogger<PickupFailureLog> logger, IJsonlAppender? appender = null)
     {
         _configuration = configuration;
         _logger = logger;
+        _appender = appender ?? new JsonlAppender();
     }
 
     public void Append(PickupFailureRecord record)
@@ -42,10 +45,8 @@ public sealed class PickupFailureLog
 
         try
         {
-            var dir = Path.Combine(workspaceRoot, "logs");
-            Directory.CreateDirectory(dir);
-            var line = JsonSerializer.Serialize(record, JsonOptions);
-            File.AppendAllText(Path.Combine(dir, "pickup-failures.jsonl"), line + Environment.NewLine, Encoding.UTF8);
+            var path = Path.Combine(workspaceRoot, "logs", "pickup-failures.jsonl");
+            _appender.AppendAsync(path, record, JsonOptions).GetAwaiter().GetResult();
         }
         catch (Exception ex)
         {

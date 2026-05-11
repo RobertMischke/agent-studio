@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.Diagnostics;
 using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.Persistence;
 
 namespace OrchestratorApi.Services.Runner;
 
@@ -49,6 +50,7 @@ public sealed class CrashRecoveryService
     private readonly BackendFileLogSink _logSink;
     private readonly BackendFileLoggerOptions _logOptions;
     private readonly ILogger<CrashRecoveryService> _logger;
+    private readonly IJsonlAppender _appender;
 
     public CrashRecoveryService(
         JobScannerService scanner,
@@ -57,7 +59,8 @@ public sealed class CrashRecoveryService
         GitService git,
         BackendFileLogSink logSink,
         IOptions<BackendFileLoggerOptions> logOptions,
-        ILogger<CrashRecoveryService> logger)
+        ILogger<CrashRecoveryService> logger,
+        IJsonlAppender? appender = null)
     {
         _scanner = scanner;
         _transitions = transitions;
@@ -66,6 +69,7 @@ public sealed class CrashRecoveryService
         _logSink = logSink;
         _logOptions = logOptions.Value;
         _logger = logger;
+        _appender = appender ?? new JsonlAppender();
     }
 
     /// <summary>Path of the recovery audit log. Absolute, alongside daily backend logs.</summary>
@@ -325,9 +329,7 @@ public sealed class CrashRecoveryService
     {
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(RecoveryLogPath)!);
-            var line = JsonSerializer.Serialize(decision, RecoveryJsonOptions);
-            File.AppendAllText(RecoveryLogPath, line + Environment.NewLine, Encoding.UTF8);
+            _appender.AppendAsync(RecoveryLogPath, decision, RecoveryJsonOptions).GetAwaiter().GetResult();
         }
         catch (Exception ex)
         {
