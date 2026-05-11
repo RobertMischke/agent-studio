@@ -24,11 +24,11 @@ The README must stay in sync with these sources of truth. Read them first; never
 These are policy, not preference. Violating any is a defect.
 
 1. **No em dashes** anywhere in the file. Use a hyphen, a comma, a semicolon, or a new sentence. The repo policy is in [`AGENTS.md`](../../../AGENTS.md) "Documentation Language".
-2. **English only** in the body. The pinned German user note at the very top is the one allowed exception and must be preserved verbatim across regenerations.
+2. **English only** in the body. No pinned German note at the top: the previous propagation-test note was removed on 2026-05-12. Memory-propagation rules now live in AGENTS.md as structural guidance rather than a top-pin.
 3. **No invented features.** Every claim in the README must be traceable to code or to one of the source-of-truth docs above.
 4. **Keep the demo project images.** README references `docs/images/board-overview.png`, `docs/images/detail-protocol.png`, `docs/images/detail-three-panes.png`, `docs/images/detail-quality-gate.png`. Do not delete the demo project these came from. Regenerate README often, keep the demo intact.
 5. **Sections are stable.** The top-level sections in the current README are the canonical narrative skeleton:
-   - Title + pinned agent-instruction note
+   - Title
    - Security first
    - The bottleneck is you (with the ASCII queue diagram)
    - Principles (table of skipped things)
@@ -44,7 +44,7 @@ These are policy, not preference. Violating any is a defect.
 
 1. Read every source-of-truth doc listed under Inputs.
 2. Diff the current README against the inputs. List drift candidates: claims that no longer hold, missing supervision section, stale endpoint shapes, broken image links, anything not in English.
-3. Draft the rewrite section by section. Preserve the pinned German note. Keep the ASCII diagrams. Keep all image references; only replace an image if a new equivalent already exists at the same path.
+3. Draft the rewrite section by section. Keep the ASCII diagrams. Keep all image references; only replace an image if a new equivalent already exists at the same path.
 4. Run `grep -c "—" README.md` and confirm the result is `0`. If not, fix.
 5. Run `grep -nE "^## " README.md` and confirm the section list matches the canonical skeleton. Add or restore missing sections; never silently delete one.
 6. Verify every internal link resolves: `grep -oE "\[.*\]\(\S+\)" README.md | grep -v "^http"` and spot-check.
@@ -61,5 +61,5 @@ Do not silently rewrite ROADMAP.md or AGENTS.md from this skill. If the rewrite 
 - Rewriting tone-by-vibe without re-reading the source docs. The README will drift further from reality.
 - Adding em dashes "for flow". The lint sweeps them out; do not waste a round-trip.
 - Adding a new top-level section without first updating the canonical skeleton list above.
-- Deleting the pinned German agent note because it does not match the marketing tone. It is load-bearing for memory propagation.
+- Adding a German top-pinned propagation note back. That experiment was rolled back on 2026-05-12; the propagation rule lives in AGENTS.md now, not as a README header.
 - Inventing endpoints, file paths, or component names. README is read by people deciding whether to use the product; false claims erode trust faster than missing claims.
