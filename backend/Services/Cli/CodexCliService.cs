@@ -11,7 +11,8 @@ namespace OrchestratorApi.Services.Cli;
 /// <list type="bullet">
 ///   <item>First run: <c>codex exec "prompt"</c> auto-creates a session UUID.</item>
 ///   <item>Resume:    <c>codex exec resume &lt;uuid&gt; "prompt"</c>.</item>
-///   <item>The session UUID is captured from the first <c>session_meta</c> JSON line on stdout.</item>
+///   <item>The session UUID is captured from the first <c>thread.started</c> JSON line
+///         (codex-cli &gt;= 0.128) or the legacy <c>session_meta</c> frame.</item>
 /// </list>
 /// </summary>
 public sealed class CodexCliService : CliExecutionServiceBase
@@ -30,8 +31,9 @@ public sealed class CodexCliService : CliExecutionServiceBase
 
     public override string CliType => CliTypes.Codex;
 
-    // Codex resumes by UUID captured from session_meta. A slug from Copilot or
-    // any other CLI is invalid and would make `codex exec resume` error out.
+    // Codex resumes by UUID captured from thread.started (or legacy session_meta).
+    // A slug from Copilot or any other CLI is invalid and would make
+    // `codex exec resume` error out.
     private static readonly System.Text.RegularExpressions.Regex CodexUuidRegex =
         new(@"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
             System.Text.RegularExpressions.RegexOptions.Compiled);
@@ -83,7 +85,8 @@ public sealed class CodexCliService : CliExecutionServiceBase
             psi.ArgumentList.Add(sessionName);
         }
 
-        // --json keeps stdout machine-readable so we can extract the session_meta UUID.
+        // --json keeps stdout machine-readable so we can extract the session UUID
+        // from the first thread.started (or legacy session_meta) frame.
         psi.ArgumentList.Add("--json");
 
         if (!string.IsNullOrWhiteSpace(model))
@@ -124,30 +127,79 @@ public sealed class CodexCliService : CliExecutionServiceBase
     }
 
     /// <summary>
-    /// Codex emits the session UUID on the very first <c>{"type":"session_meta",...}</c>
-    /// line of <c>--json</c> output. Capture it so the UI can persist the id and resume later.
+    /// Codex emits the session UUID on the first <c>{"type":"thread.started",
+    /// "thread_id":"&lt;uuid&gt;"}</c> line of <c>--json</c> output (codex-cli
+    /// &gt;= 0.128). Older builds used <c>{"type":"session_meta","payload":{"id":"&lt;uuid&gt;"}}</c>
+    /// which we still accept. Without this capture the per-job session store
+    /// stays empty and every follow-up rebuilds context from disk via Recovery
+    /// instead of <c>codex exec resume &lt;uuid&gt;</c>, throwing away Codex's
+    /// own prompt-cache.
     /// </summary>
     protected override void OnOutputLine(ProcInfo info, CliOutputLine line)
     {
         if (info.CapturedSessionId != null) return;
         if (line.Stream != "stdout") return;
-        var text = line.Text?.TrimStart();
-        if (text == null || !text.StartsWith('{')) return;
-        if (!text.Contains("session_meta", StringComparison.Ordinal)) return;
 
+        var id = TryExtractSessionId(line.Text);
+        if (id == null) return;
+
+        info.CapturedSessionId = id;
+        info.SessionName ??= id;
+        _logger.LogInformation("Captured Codex session id {Id}", id);
+    }
+
+    /// <summary>
+    /// Parses a single <c>codex exec --json</c> stdout line and returns the
+    /// session UUID iff the line is a <c>thread.started</c> (preferred) or
+    /// legacy <c>session_meta</c> frame carrying a canonical UUID. Returns
+    /// <c>null</c> for every other line shape (other frame types, malformed
+    /// JSON, non-JSON text, non-UUID ids). Exposed <c>internal</c> so the
+    /// regression test for the codex-cli 0.128 capture path can drive it
+    /// without spinning up a real CLI process.
+    /// </summary>
+    internal static string? TryExtractSessionId(string? line)
+    {
+        var text = line?.TrimStart();
+        if (string.IsNullOrEmpty(text) || text[0] != '{') return null;
+
+        // Fast prefilter: only attempt JSON parsing for frame types we care about.
+        var hasThreadStarted = text.Contains("thread.started", StringComparison.Ordinal);
+        var hasSessionMeta = text.Contains("session_meta", StringComparison.Ordinal);
+        if (!hasThreadStarted && !hasSessionMeta) return null;
+
+        string? id = null;
         try
         {
             using var doc = JsonDocument.Parse(text);
-            if (doc.RootElement.TryGetProperty("payload", out var payload)
-                && payload.TryGetProperty("id", out var id)
-                && id.ValueKind == JsonValueKind.String)
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return null;
+            var type = root.TryGetProperty("type", out var t) ? t.GetString() : null;
+
+            if (string.Equals(type, "thread.started", StringComparison.Ordinal)
+                && root.TryGetProperty("thread_id", out var tid)
+                && tid.ValueKind == JsonValueKind.String)
             {
-                info.CapturedSessionId = id.GetString();
-                info.SessionName ??= info.CapturedSessionId;
-                _logger.LogInformation("Captured Codex session id {Id}", info.CapturedSessionId);
+                id = tid.GetString();
+            }
+            else if (string.Equals(type, "session_meta", StringComparison.Ordinal))
+            {
+                // Legacy: id may live at payload.id or at session_id on root.
+                if (root.TryGetProperty("payload", out var payload)
+                    && payload.TryGetProperty("id", out var pid)
+                    && pid.ValueKind == JsonValueKind.String)
+                {
+                    id = pid.GetString();
+                }
+                else if (root.TryGetProperty("session_id", out var sid)
+                    && sid.ValueKind == JsonValueKind.String)
+                {
+                    id = sid.GetString();
+                }
             }
         }
-        catch { /* not json — ignore */ }
+        catch { return null; }
+
+        return !string.IsNullOrWhiteSpace(id) && CodexUuidRegex.IsMatch(id) ? id : null;
     }
 
     /// <summary>
