@@ -130,7 +130,7 @@ public sealed class UpdateStatusStore
                 LastRunFinishedAt = lastRunFinishedAt ?? _status.LastRunFinishedAt,
                 LastRunHeadBefore = lastRunHeadBefore ?? _status.LastRunHeadBefore,
                 LastRunHeadAfter = lastRunHeadAfter ?? _status.LastRunHeadAfter,
-                VerificationFailures = verificationFailures ?? _status.VerificationFailures,
+                VerificationFailures = verificationFailures,
                 AutoRollbackEnabled = autoRollbackEnabled ?? _status.AutoRollbackEnabled,
             };
         }
