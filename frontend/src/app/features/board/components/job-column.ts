@@ -389,20 +389,8 @@ export class JobColumnComponent implements OnInit, OnDestroy {
     if (!payload) return;
 
     if (sourceState === this.state()) {
-      // Reorder within same column
-      const currentJobs = this.jobs().map(j => ({ jobId: j.id, watchPath: j.watchPath, jobKey: j.jobKey }));
-      const fromIndex = currentJobs.findIndex(job => job.jobKey === payload.jobKey);
-      if (fromIndex >= 0) {
-        const [movedJob] = currentJobs.splice(fromIndex, 1);
-        const insertAt = index > fromIndex ? index - 1 : index;
-        currentJobs.splice(insertAt, 0, movedJob);
-      }
-      this.jobReorder.emit({
-        state: this.state(),
-        jobs: currentJobs.map(job => ({ jobId: job.jobId, watchPath: job.watchPath }))
-      });
+      this.performSameLaneReorder(payload.jobKey, index);
     } else {
-      // Cross-column move
       this.jobDrop.emit({ jobId: payload.jobId, watchPath: payload.watchPath, targetState: this.state() });
     }
   }
@@ -413,18 +401,75 @@ export class JobColumnComponent implements OnInit, OnDestroy {
     this.dropIndex = -1;
     const payload = this.parsePayload(event.dataTransfer?.getData('text/plain'));
     if (!payload) return;
-    // The card drop-zone strips are intentionally narrow (~14 px hit target);
-    // when the user releases the cursor over an actual card the drop bubbles
-    // up to this column-level handler. If the card already lives in this
-    // lane, treat it as a within-lane drop and emit nothing — emitting
-    // `jobDrop` with `targetState === sourceState` would route through the
-    // optimistic-move path, which removes the card from its lane and never
-    // re-adds it (same fromLane/toLane case), making it disappear visually
-    // until the next polling tick repaints. Cross-lane drops still flow
-    // through the same path.
     const sourceState = event.dataTransfer?.getData('application/x-source-state');
-    if (sourceState === this.state()) return;
+    if (sourceState === this.state()) {
+      // Same-lane drop that missed the per-card drop-zone strips: the strips
+      // are intentionally narrow (~14 px) so the user can't accidentally
+      // reorder while drag-scrolling, but that makes "drag to the very top
+      // of the lane" hard to land — the strip above the first card is a thin
+      // ribbon and the cursor frequently ends up on the first card's body
+      // instead. The drop then bubbled here and was silently dropped, or it
+      // landed on strip i=1 and the dragged card ended at order 2 instead
+      // of order 1. The sustainable fix is to compute the drop slot from
+      // the cursor Y vs each card's midpoint: any drop above the first
+      // card's midpoint produces order 1, any drop below the last card's
+      // midpoint produces the largest order, and drops on a sibling card
+      // route by which half the cursor is in. The card-vanish regression
+      // (lane-reorder-drop-on-card.spec.ts) is preserved because we now
+      // emit jobReorder (not jobDrop) for same-lane drops.
+      //
+      // Reorder stays suppressed when reorder is disabled or when the lane
+      // renders the legacy 4-review subdivision (which intentionally
+      // disables reorder so the orchestrator/human swim-lanes stay coherent).
+      if (this.reorderDisabled() || this.isReview()) return;
+      const slot = this.computeDropSlotFromCursor(event);
+      this.performSameLaneReorder(payload.jobKey, slot);
+      return;
+    }
     this.jobDrop.emit({ jobId: payload.jobId, watchPath: payload.watchPath, targetState: this.state() });
+  }
+
+  /**
+   * Find the insertion slot (0..jobs.length) that corresponds to the
+   * cursor's vertical position. Slot `i` means "insert before card i"; slot
+   * `jobs.length` means "append after the last card". Cards are queried
+   * from the column root so the result reflects the actual rendered
+   * positions (gap, padding, scroll offset all baked into the rect).
+   */
+  private computeDropSlotFromCursor(event: DragEvent): number {
+    const columnEl = event.currentTarget as HTMLElement | null;
+    if (!columnEl) return this.jobs().length;
+    const cards = Array.from(columnEl.querySelectorAll('app-job-card')) as HTMLElement[];
+    if (cards.length === 0) return 0;
+    const cursorY = event.clientY;
+    for (let i = 0; i < cards.length; i++) {
+      const rect = cards[i].getBoundingClientRect();
+      const mid = rect.top + rect.height / 2;
+      if (cursorY < mid) return i;
+    }
+    return cards.length;
+  }
+
+  /**
+   * Apply a same-lane reorder to the column's job list and emit the
+   * resulting order. `slot` uses the drop-zone-strip convention (0 means
+   * "before the first card", jobs.length means "after the last"). When the
+   * slot would not actually move the card (drop on its own row or the
+   * adjacent boundary), the call is a no-op so the optimistic-paint layer
+   * doesn't churn for an empty reorder.
+   */
+  private performSameLaneReorder(jobKey: string, slot: number): void {
+    const currentJobs = this.jobs().map(j => ({ jobId: j.id, watchPath: j.watchPath, jobKey: j.jobKey }));
+    const fromIndex = currentJobs.findIndex(job => job.jobKey === jobKey);
+    if (fromIndex < 0) return;
+    if (slot === fromIndex || slot === fromIndex + 1) return;
+    const [movedJob] = currentJobs.splice(fromIndex, 1);
+    const insertAt = slot > fromIndex ? slot - 1 : slot;
+    currentJobs.splice(insertAt, 0, movedJob);
+    this.jobReorder.emit({
+      state: this.state(),
+      jobs: currentJobs.map(job => ({ jobId: job.jobId, watchPath: job.watchPath }))
+    });
   }
 
   private parsePayload(rawPayload?: string): { jobId: string; watchPath: string; jobKey: string } | null {

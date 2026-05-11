@@ -1,27 +1,37 @@
 /**
  * Regression: dropping a dragged card onto another card in the same lane
- * must not make the dragged card disappear.
+ * must not make the dragged card disappear, AND must produce a sensible
+ * reorder based on the cursor's position relative to the target card's
+ * midpoint.
  *
- * Symptom (pre-fix): the drop-zone strips between cards are intentionally
- * narrow (~14 px hit target). When the user releases over an actual card,
- * the drop event bubbles to the column-level `(drop)="onDrop"` handler,
- * which used to emit `jobDrop` with `targetState === sourceState`. That
- * routed through `applyOptimisticMove`, which filtered the card out of
- * its `fromLane` and then aliased `toLane` to the just-filtered array —
- * the card vanished from its lane until a poll repainted (or, with
- * pendingPersistCount churn from a follow-up drag, never recovered
- * without a reload).
+ * History:
  *
- * The fix is in two places:
- *   - `JobColumnComponent.onDrop` now ignores drops whose source state
- *     matches the column state (within-lane drops on a card surface).
- *   - `JobService.applyOptimisticMove` returns null on same-lane callers
- *     as defense in depth.
+ *   Symptom (initial bug): the drop-zone strips between cards are
+ *   intentionally narrow (~14 px hit target). When the user released over
+ *   an actual card, the drop event bubbled to the column-level
+ *   `(drop)="onDrop"` handler, which emitted `jobDrop` with
+ *   `targetState === sourceState`. That routed through
+ *   `applyOptimisticMove`, which filtered the card out of its `fromLane`
+ *   and then aliased `toLane` to the just-filtered array — the card
+ *   vanished from its lane until a poll repainted.
  *
- * The spec drives the bug with a synthetic drop on a *card* (not a
- * drop-zone) and asserts the card stays visible in the lane. It also
- * verifies the drop-zone reorder path (drop on a strip between cards)
- * still works in each of the lanes the acceptance calls out.
+ *   First fix (vanish): made same-lane bubbled drops a no-op. The card
+ *   stopped vanishing, but the user's "drag to top" gesture also stopped
+ *   doing anything when the cursor missed the 14 px strip — and when it
+ *   hit strip i=1 instead of strip i=0, the dragged card ended at order 2
+ *   instead of order 1 (recurring "Sortieren ist buggy" report).
+ *
+ *   Second fix (this contract): same-lane bubbled drops now compute a
+ *   slot from the cursor Y vs each card's midpoint and emit jobReorder
+ *   for that slot. Card never vanishes (jobReorder operates on the
+ *   already-rendered lane snapshot) AND drag-to-top lands at order 1
+ *   whenever the cursor is above the first card's midpoint.
+ *
+ * The spec drives the bug with a synthetic drop on the first card with
+ * the cursor positioned in that card's upper half, and asserts the
+ * dragged card lands at the top of the lane. It also verifies the
+ * drop-zone reorder path (drop on a strip between cards) still works in
+ * each of the lanes the acceptance calls out.
  *
  * Lanes exercised: 4-auto-review (primary trigger), 2-ready,
  * 5-human-review, 0-backlog. The reorder spec does not exercise
@@ -70,15 +80,19 @@ async function readColumnTitles(page: Page, heading: string): Promise<string[]> 
  * Dispatch a synthetic drag/drop where the drop event lands on the
  * *target card* itself (not a drop-zone strip). This reproduces the
  * "release cursor over a sibling card" gesture that bypasses the
- * narrow drop-zone hit target.
+ * narrow drop-zone hit target. The cursor Y is set to the requested
+ * fraction of the target card's height so the column-level
+ * `computeDropSlotFromCursor` resolves a deterministic slot.
  */
 async function dispatchDropOnCard(
   page: Page,
   columnHeading: string,
   sourceCardTitle: string,
-  targetCardTitle: string
+  targetCardTitle: string,
+  /** 0 = top edge of target card, 1 = bottom edge. 0.25 lands in the upper half. */
+  cursorFraction = 0.25
 ): Promise<void> {
-  await page.evaluate(({ columnHeading, sourceCardTitle, targetCardTitle }) => {
+  await page.evaluate(({ columnHeading, sourceCardTitle, targetCardTitle, cursorFraction }) => {
     const headings = Array.from(document.querySelectorAll('.column__title')) as HTMLElement[];
     const heading = headings.find(el => el.textContent?.trim() === columnHeading);
     if (!heading) throw new Error(`Column "${columnHeading}" not found`);
@@ -93,13 +107,16 @@ async function dispatchDropOnCard(
     if (targetIdx < 0) throw new Error(`Target card "${targetCardTitle}" not found in "${columnHeading}"`);
     const sourceCard = cards[sourceIdx];
     const targetCard = cards[targetIdx];
+    const rect = targetCard.getBoundingClientRect();
+    const clientY = Math.round(rect.top + rect.height * cursorFraction);
+    const clientX = Math.round(rect.left + rect.width / 2);
 
     const dataTransfer = new DataTransfer();
-    sourceCard.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer }));
-    targetCard.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer }));
-    targetCard.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer }));
-    sourceCard.dispatchEvent(new DragEvent('dragend', { bubbles: true, cancelable: true, dataTransfer }));
-  }, { columnHeading, sourceCardTitle, targetCardTitle });
+    sourceCard.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer, clientX, clientY }));
+    targetCard.dispatchEvent(new DragEvent('dragover', { bubbles: true, cancelable: true, dataTransfer, clientX, clientY }));
+    targetCard.dispatchEvent(new DragEvent('drop', { bubbles: true, cancelable: true, dataTransfer, clientX, clientY }));
+    sourceCard.dispatchEvent(new DragEvent('dragend', { bubbles: true, cancelable: true, dataTransfer, clientX, clientY }));
+  }, { columnHeading, sourceCardTitle, targetCardTitle, cursorFraction });
 }
 
 async function dispatchDropOnZone(
@@ -193,7 +210,7 @@ async function seedThreeCardsIn(state: string, watchPath: string, prefix: string
 
 test.describe('Within-lane drag-drop never drops the card from the lane', () => {
   for (const lane of LANES) {
-    test(`drop on a sibling card in ${lane.state} keeps the card in the lane`, async ({ page }) => {
+    test(`drop on a sibling card in ${lane.state} keeps the card in the lane and reorders by cursor half`, async ({ page }) => {
       const wp = await getFirstWatchPath();
       const watchPath = wp.path;
       const PREFIX = `e2e-dropcard-${lane.state.replace(/[^a-z0-9]/gi, '')}-`;
@@ -209,25 +226,27 @@ test.describe('Within-lane drag-drop never drops the card from the lane', () => 
           return titles.join('|');
         }, { timeout: 10_000 }).toBe([trio.a.title, trio.b.title, trio.c.title].join('|'));
 
-        // Reproduces the bug: drop the third card directly onto the first
-        // card. Pre-fix this triggered the column-level onDrop, which fed
-        // applyOptimisticMove with same fromLane === toLane and made the
-        // card vanish. Post-fix the gesture is a graceful no-op: card
-        // stays in lane in its original position.
-        await dispatchDropOnCard(page, lane.heading, trio.c.title, trio.a.title);
+        // Drop the third card directly onto the first card with the cursor
+        // in the first card's UPPER half. Pre-vanish-fix this made the card
+        // vanish. Pre-this-fix the gesture silently did nothing. Now the
+        // column-level handler reads the cursor Y, sees it above the first
+        // card's midpoint, and emits jobReorder for slot 0 — the dragged
+        // card lands at the top of the lane.
+        await dispatchDropOnCard(page, lane.heading, trio.c.title, trio.a.title, 0.25);
 
-        // Give Angular a paint cycle, then poll briefly for stability.
+        // Optimistic paint flips immediately to [C, A, B]. Trio still in
+        // lane (no vanish), and the dragged card is now first.
         await expect.poll(async () => {
           const titles = (await readColumnTitles(page, lane.heading)).filter(t => t.startsWith(PREFIX));
           return titles.length === 3 ? titles.join('|') : `count=${titles.length}|${titles.join(',')}`;
-        }, { timeout: 1500 }).toBe([trio.a.title, trio.b.title, trio.c.title].join('|'));
+        }, { timeout: 1500 }).toBe([trio.c.title, trio.a.title, trio.b.title].join('|'));
 
         // And after a polling tick (which would have repainted from the
         // server snapshot if the optimistic UI ever actually broke), the
-        // card is still there.
+        // backend has persisted the same order.
         await page.waitForTimeout(2500);
         const finalTitles = (await readColumnTitles(page, lane.heading)).filter(t => t.startsWith(PREFIX));
-        expect(finalTitles).toEqual([trio.a.title, trio.b.title, trio.c.title]);
+        expect(finalTitles).toEqual([trio.c.title, trio.a.title, trio.b.title]);
       } finally {
         await deleteJob(trio.a.id, watchPath).catch(() => {});
         await deleteJob(trio.b.id, watchPath).catch(() => {});
