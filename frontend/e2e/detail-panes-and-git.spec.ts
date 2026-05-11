@@ -29,8 +29,15 @@ test.describe('Detail view — 3-pane layout + Git view', () => {
       // Git pane is hidden by default — keeps the layout calm for new users.
       await expect(page.getByTestId('pane-git')).toHaveCount(0);
 
+      // The Git toggle must have a visible glyph. Past regression: the bare
+      // ⎇ (U+2387) character isn't in Segoe UI on Windows and rendered as
+      // an empty square, so users reported the button as "missing".
+      const gitToggle = page.getByTestId('pane-toggle-git');
+      await expect(gitToggle).toBeVisible();
+      await expect(gitToggle).toHaveText(/\S/);
+
       // Show Git via the toolbar.
-      await page.getByTestId('pane-toggle-git').click();
+      await gitToggle.click();
       await expect(page.getByTestId('pane-git')).toBeVisible();
 
       // Hide the prompt pane.
