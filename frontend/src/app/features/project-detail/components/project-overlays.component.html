@@ -7,18 +7,6 @@
   </div>
 }
 
-@if (overlays.projectDetailName(); as proj) {
-  <div class="overlay" (click)="overlays.closeProjectDetail()">
-    <div class="overlay__panel" (click)="$event.stopPropagation()">
-      <button class="overlay__close" (click)="overlays.closeProjectDetail()" title="Close">×</button>
-      <app-project-detail
-        [projectName]="proj"
-        (openFeed)="overlays.openFeedFromDetail($event)"
-        (openReport)="overlays.openAnalysisReport(proj, $event.reportId)" />
-    </div>
-  </div>
-}
-
 @if (overlays.projectShellName(); as projShell) {
   <div class="overlay overlay--shell" data-testid="project-shell-overlay">
     <div class="overlay__shell-panel">

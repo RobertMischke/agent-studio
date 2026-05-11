@@ -131,15 +131,14 @@ export class App implements OnInit {
   readonly showCreate = this.createJobForm.visible;
   readonly availableModels = this.createJobForm.availableModels;
   /**
-   * Cycle 9g: per-project overlay state (orch-feed / project-detail /
-   * project-shell / analysis-report) lives in ProjectOverlaysService.
+   * Cycle 9g: per-project overlay state (orch-feed / project-shell /
+   * analysis-report) lives in ProjectOverlaysService.
    * The shell re-exposes the read signals so existing template guards +
    * keyboard guards work unchanged; the `<app-project-overlays />`
    * container owns the rendering.
    */
   private readonly projectOverlays = inject(ProjectOverlaysService);
   readonly orchFeedProject = this.projectOverlays.orchFeedProject;
-  readonly projectDetailName = this.projectOverlays.projectDetailName;
   readonly projectShellName = this.projectOverlays.projectShellName;
   readonly projectShellRail = this.projectOverlays.projectShellRail;
   readonly analysisReportFocus = this.projectOverlays.analysisReportFocus;
@@ -685,7 +684,6 @@ export class App implements OnInit {
    */
   readonly boardSearchVisible = computed(() => {
     if (this.selectedJob()) return false;
-    if (this.projectDetailName()) return false;
     if (this.projectShellName()) return false;
     if (this.analysisReportFocus()) return false;
     if (this.orchFeedProject()) return false;
@@ -872,8 +870,9 @@ export class App implements OnInit {
   // ProjectOverlaysService. The shell keeps thin pass-through methods
   // because external entry points (project-tabs, kanban project chip)
   // still go through it.
-  openProjectDetail(name: string): void { this.projectOverlays.openProjectDetail(name); }
-  closeProjectDetail(): void { this.projectOverlays.closeProjectDetail(); }
+  openProjectDetail(name: string): void {
+    this.projectOverlays.openProjectShell(name, 'settings', this.watchPaths());
+  }
   openProjectShell(name: string, rail: ProjectRailKey = DEFAULT_PROJECT_RAIL_KEY): void {
     this.projectOverlays.openProjectShell(name, rail, this.watchPaths());
   }

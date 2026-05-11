@@ -11,15 +11,15 @@ import {
  * sync for the four per-project overlays that stack above the kanban
  * shell:
  *
- *   - orchestrator-feed (per-project log)         no hash
- *   - project-detail    (per-project settings)    no hash
- *   - project-shell     (full project page)       `#/projects/<slug>[/<rail>]`
+ *   - orchestrator-feed (per-project log)          no hash
+ *   - project-shell     (full project window)      `#/projects/<slug>[/<rail>]`
  *   - analysis-report   (drill-down on one report) no hash
  *
  * Lifted out of `app.ts` per ADR-0034. The `<app-project-overlays>`
  * container injects this service and renders all four overlays. The
  * shell keeps thin pass-through methods for the entry points that
- * remain shell-coordinated (project-tabs `openShell`, `openDetail`).
+ * remain shell-coordinated. The legacy project-detail overlay is folded
+ * into the project-shell `settings` rail.
  *
  * The project-shell hash sync requires the workspace's watch-paths
  * (slug → name resolution); the shell calls `syncShellFromHash` on the
@@ -29,14 +29,12 @@ import {
 @Injectable({ providedIn: 'root' })
 export class ProjectOverlaysService {
   readonly orchFeedProject = signal<string | null>(null);
-  readonly projectDetailName = signal<string | null>(null);
   readonly projectShellName = signal<string | null>(null);
   readonly projectShellRail = signal<ProjectRailKey>(DEFAULT_PROJECT_RAIL_KEY);
   readonly analysisReportFocus = signal<{ project: string; reportId: string } | null>(null);
 
   readonly anyOpen = computed(() =>
     this.orchFeedProject() !== null
-    || this.projectDetailName() !== null
     || this.projectShellName() !== null
     || this.analysisReportFocus() !== null);
 
@@ -50,16 +48,6 @@ export class ProjectOverlaysService {
 
   closeOrchFeed(): void {
     this.orchFeedProject.set(null);
-  }
-
-  // ---------- project-detail ----------
-
-  openProjectDetail(name: string): void {
-    this.projectDetailName.set(name);
-  }
-
-  closeProjectDetail(): void {
-    this.projectDetailName.set(null);
   }
 
   // ---------- project-shell (URL-deep-linked) ----------
@@ -115,12 +103,10 @@ export class ProjectOverlaysService {
   }
 
   /**
-   * Cross-overlay nav: clicking "open feed" inside the project-detail
-   * panel swaps the two overlays. Two stacked overlays would be
-   * confusing; close detail first.
+   * Cross-overlay nav retained for the settings rail, which mounts the
+   * former project-detail component inside the central project window.
    */
   openFeedFromDetail(name: string): void {
-    this.projectDetailName.set(null);
     this.orchFeedProject.set(name);
   }
 

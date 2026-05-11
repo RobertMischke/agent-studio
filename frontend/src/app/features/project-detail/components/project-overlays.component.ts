@@ -15,9 +15,11 @@ import { WorkspaceScreenshotsComponent } from '../../screenshots';
 import type { JobScreenshot } from '../../screenshots';
 
 /**
- * Cycle 9g project-detail-feature container: renders the four
- * per-project overlays (orch-feed / project-detail / project-shell /
- * analysis-report). Open/close + URL-hash sync owned by
+ * Cycle 9g project-detail-feature container: renders the project-level
+ * overlays (orch-feed / project-shell / analysis-report). The former
+ * project-detail overlay is mounted inside the project-shell settings
+ * rail so settings keep their functionality without a second window.
+ * Open/close + URL-hash sync owned by
  * ProjectOverlaysService; the shell only mounts this component once.
  *
  * Per-rail follow-up events bubble up because they trigger
