@@ -2126,6 +2126,12 @@ public class ProjectRunner
         foreach (var candidate in folders)
         {
             var slug = Path.GetFileName(candidate.FolderPath);
+            if (candidate.Info == null)
+            {
+                MoveProgressOrphanToFailedPickup(candidate, slug);
+                continue;
+            }
+
             var attempts = GetPickupAttempts(slug);
             if (attempts >= PickupFailureThreshold)
             {
@@ -2140,9 +2146,54 @@ public class ProjectRunner
                 if (trippedDuringThisDeadLetter) return null;
                 continue;
             }
-            return candidate.Info ?? _scanner.FindJob(slug, Entry.Path);
+            return candidate.Info;
         }
         return null;
+    }
+
+    private void MoveProgressOrphanToFailedPickup(ProgressPickupCandidate candidate, string slug)
+    {
+        var now = DateTime.UtcNow;
+        var destinationSlug = BuildProgressOrphanSlug(slug, now,
+            existsInDestination: name => Directory.Exists(Path.Combine(Entry.Path, JobStates.FailedPickup, name)));
+
+        var outcome = _states.MoveFolderToFailedPickup(candidate.FolderPath, destinationSlug);
+        if (outcome.Status != MoveJobStatus.Success)
+        {
+            _logger.LogWarning(
+                "Progress orphan move refused for {Slug} on {Project}: {Status} {Message}",
+                slug, ProjectName, outcome.Status, outcome.Message);
+            return;
+        }
+
+        try
+        {
+            var reason = Path.Combine(Entry.Path, JobStates.FailedPickup, destinationSlug, "failed-pickup-reason.md");
+            File.WriteAllText(reason,
+                "# Stale progress orphan\n\n" +
+                $"Original folder slug: `{slug}`\n\n" +
+                "The auto-pickup loop found this folder under `3-progress`, but it did not contain `job.json`. " +
+                "A progress folder without application-owned metadata is not a runnable job. The folder was moved here " +
+                "without counting as a CLI spawn failure, so the runner can continue with the next real job.\n");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Progress orphan reason write failed for {Slug}", slug);
+        }
+
+        _pickupAttempts.TryRemove(slug, out _);
+        _logger.LogWarning(
+            "[taskboard] moved stale 3-progress orphan {Slug} on {Project} to {Destination}; auto-pickup will continue",
+            slug, ProjectName, destinationSlug);
+    }
+
+    internal static string BuildProgressOrphanSlug(string slug, DateTime utcNow, Func<string, bool> existsInDestination)
+    {
+        var baseSlug = $"orphan-{slug}-{utcNow:yyyy-MM-dd}";
+        if (!existsInDestination(baseSlug)) return baseSlug;
+        var i = 2;
+        while (existsInDestination($"{baseSlug}-{i}")) i++;
+        return $"{baseSlug}-{i}";
     }
 
     /// <summary>

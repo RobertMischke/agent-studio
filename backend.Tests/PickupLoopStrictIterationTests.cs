@@ -264,6 +264,36 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
     }
 
     [Fact]
+    public void StrictIteration_ProgressFolderWithoutJobJson_IsMovedToFailedPickupWithoutFlippingMode()
+    {
+        WriteOrphanProgressFolder("duplicate-later-lane");
+        WriteJob(JobStates.HumanReview, "duplicate-later-lane");
+        WriteJob(JobStates.Ready, "ready-after-orphan");
+
+        var runner = BuildRunner();
+        runner.SetMode("auto-continuous");
+
+        InvokePickerLoop(runner);
+
+        Assert.Equal("auto-continuous", runner.GetStatus().Mode);
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "duplicate-later-lane")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.HumanReview, "duplicate-later-lane")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Ready, "ready-after-orphan")));
+
+        var failedPickupRoot = Path.Combine(_watchPath, JobStates.FailedPickup);
+        var moved = Directory.EnumerateDirectories(failedPickupRoot)
+            .Where(d => Path.GetFileName(d).StartsWith("orphan-duplicate-later-lane-", StringComparison.Ordinal))
+            .ToList();
+        var only = Assert.Single(moved);
+        Assert.True(File.Exists(Path.Combine(only, "logs", "cli-output.log")));
+        Assert.True(File.Exists(Path.Combine(only, "job.json")));
+        Assert.True(File.Exists(Path.Combine(only, "failed-pickup-reason.md")));
+
+        Assert.False(File.Exists(Path.Combine(_workspaceRoot, "logs", "infra-halts.jsonl")),
+            "stale metadata orphans are queue-hygiene issues, not CLI infra failures");
+    }
+
+    [Fact]
     public void DeadLetterRow_IncludesAttemptHistoryWhenAvailable()
     {
         WriteJob(JobStates.Progress, "history-task");
@@ -413,6 +443,14 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
         // mtime values the ordering tests rely on).
         File.WriteAllText(Path.Combine(dir, "job.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\",\"order\":1,\"agent\":\"copilot\",\"cliType\":\"copilot\",\"ownerClientId\":\"local-default\"}}");
+    }
+
+    private void WriteOrphanProgressFolder(string slug)
+    {
+        var dir = Path.Combine(_watchPath, JobStates.Progress, slug);
+        Directory.CreateDirectory(Path.Combine(dir, "logs"));
+        File.WriteAllText(Path.Combine(dir, "logs", "cli-output.log"), "orphan log");
+        File.WriteAllText(Path.Combine(dir, "status.md"), "orphan status");
     }
 
     private static void SetMtime(string path, TimeSpan offset)

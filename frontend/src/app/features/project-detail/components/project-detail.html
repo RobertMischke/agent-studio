@@ -1,210 +1,327 @@
-<section class="proj-detail" data-testid="project-detail">
-  <header class="proj-detail__head">
-    <h2 class="proj-detail__title">{{ projectName() }}</h2>
-    <button class="proj-detail__feed" (click)="openFeed.emit(projectName())" data-testid="project-detail-open-feed">
-      📜 Open feed
-    </button>
-  </header>
+<section class="proj-detail" [attr.data-testid]="'project-detail-' + view()">
+  @if (view() === 'overview') {
+    <header class="proj-detail__head">
+      <h2 class="proj-detail__title">{{ projectName() }}</h2>
+      <button class="proj-detail__feed" (click)="openFeed.emit(projectName())" data-testid="project-detail-open-feed">
+        Open feed
+      </button>
+    </header>
 
-  <app-global-orchestrator-card />
+    @if (paths(); as p) {
+      <dl class="proj-detail__paths">
+        <div><dt>Watch path</dt><dd>{{ p.path }}</dd></div>
+        <div><dt>Working directory</dt><dd>{{ p.rootPath || '(same as watch path)' }}</dd></div>
+        <div><dt>Repository</dt><dd>{{ p.repositoryPath || '(none configured)' }}</dd></div>
+      </dl>
+    }
 
-  @if (pendingDecisions().length > 0) {
-    <section class="proj-detail__banner" data-testid="project-detail-needs-input-banner">
-      <header>
-        <span class="proj-detail__banner-icon">⚠️</span>
-        <strong>Orchestrator decision pending</strong>
-        <span class="proj-detail__banner-count">{{ pendingDecisions().length }} task{{ pendingDecisions().length === 1 ? '' : 's' }}</span>
-      </header>
-      <ul>
-        @for (p of pendingDecisions(); track p.jobId) {
-          <li>
-            <code>{{ p.jobId }}</code>
-            <span class="proj-detail__banner-reason">{{ p.reason || '(no reason given)' }}</span>
-          </li>
+    <section class="proj-detail__group">
+      <h3>Pipeline snapshot</h3>
+      <div class="proj-detail__status-grid">
+        <div class="proj-detail__status-cell">
+          <span class="proj-detail__status-label">Mode</span>
+          <strong>{{ effectiveMode() }}</strong>
+        </div>
+        <div class="proj-detail__status-cell">
+          <span class="proj-detail__status-label">Active job</span>
+          <strong>{{ activeRunner()?.activeJobId || 'none' }}</strong>
+          @if (activeLaneLabel(); as lane) {
+            <span class="proj-detail__status-note">{{ lane }}</span>
+          }
+        </div>
+        <div class="proj-detail__status-cell">
+          <span class="proj-detail__status-label">Queued</span>
+          <strong>{{ activeRunner()?.queuedJobIds?.length ?? 0 }}</strong>
+        </div>
+      </div>
+      <p class="proj-detail__hint">{{ modeHint() }}</p>
+    </section>
+
+    <section class="proj-detail__group">
+      <h3>Lane counts</h3>
+      <div class="proj-detail__counts">
+        @for (lane of laneCounts(); track lane.state) {
+          <div class="proj-detail__count">
+            <span class="proj-detail__count-num">{{ lane.count }}</span>
+            <span class="proj-detail__count-state">{{ lane.label }}</span>
+          </div>
         }
-      </ul>
-      <p class="proj-detail__hint">
-        One or more 4-auto-review tasks ended in <code>[[TASK_NEEDS_INPUT]]</code>. The orchestrator will pick them up on the next tick (≈ 30 s) and either reissue, accept-as-done (promotes to 5-human-review), or escalate (also to 5-human-review).
-      </p>
+      </div>
+    </section>
+
+    <section class="proj-detail__group">
+      <h3>Queue health</h3>
+      @if (queueHealth(); as health) {
+        <div class="proj-detail__health" [class.proj-detail__health--critical]="health.severity === 'critical'">
+          <strong>{{ health.issueCount === 0 ? 'Healthy' : health.issueCount + ' issue' + (health.issueCount === 1 ? '' : 's') }}</strong>
+          <span>{{ health.severity }}</span>
+        </div>
+        @if (health.missingJobJson.length > 0) {
+          <h4>Folders without job.json</h4>
+          <ul class="proj-detail__compact-list">
+            @for (item of health.missingJobJson.slice(0, 8); track item.path) {
+              <li><code>{{ item.lane }}</code> {{ item.id }}</li>
+            }
+          </ul>
+        }
+        @if (health.duplicates.length > 0) {
+          <h4>Duplicate slugs</h4>
+          <ul class="proj-detail__compact-list">
+            @for (dup of health.duplicates.slice(0, 8); track dup.id) {
+              <li><code>{{ dup.id }}</code> in {{ dup.locations.length }} lanes</li>
+            }
+          </ul>
+        }
+      } @else {
+        <p class="proj-detail__empty">Queue health is loading.</p>
+      }
     </section>
   }
 
-  @if (livePendingDecisions().length > 0) {
-    @for (p of livePendingDecisions(); track p.jobId) {
-      <section class="proj-detail__live-banner"
-               [attr.data-testid]="'project-detail-live-decision-banner-' + p.jobId"
-               [class.proj-detail__live-banner--blocked]="p.kind === 'blocked'">
-        <header>
-          <span class="proj-detail__live-banner__icon" aria-hidden="true">{{ p.kind === 'blocked' ? '⛔' : '🛎️' }}</span>
-          <strong>{{ p.kind === 'blocked' ? 'Agent blocked' : 'Agent is asking for input' }}</strong>
-          <span class="proj-detail__live-banner__chip">live · {{ p.jobId }}</span>
-        </header>
-        <p class="proj-detail__live-banner__title">{{ p.title }}</p>
-        <p class="proj-detail__live-banner__reason">{{ p.reason || '(no reason given by the agent)' }}</p>
-        <div class="proj-detail__live-banner__reply">
-          <textarea
-            [attr.data-testid]="'project-detail-live-decision-reply-' + p.jobId"
-            [(ngModel)]="liveReplyDrafts[p.jobId]"
-            rows="3"
-            placeholder="Reply to the agent. This goes through the existing continue endpoint (mode: steer) and resolves the banner once received."></textarea>
-          <div class="proj-detail__live-banner__actions">
-            @if (liveReplyErrors[p.jobId]) {
-              <span class="proj-detail__live-banner__error">{{ liveReplyErrors[p.jobId] }}</span>
-            }
-            <button type="button"
-                    class="proj-detail__live-banner__send"
-                    [attr.data-testid]="'project-detail-live-decision-send-' + p.jobId"
-                    [disabled]="liveReplySending[p.jobId] || !(liveReplyDrafts[p.jobId] || '').trim()"
-                    (click)="sendLiveDecisionReply(p.jobId)">
-              {{ liveReplySending[p.jobId] ? 'Sending…' : 'Reply' }}
-            </button>
-          </div>
+  @if (view() === 'jobs') {
+    <section class="proj-detail__group">
+      <h3>Runner mode</h3>
+      <div class="proj-detail__modes">
+        @for (m of modes; track m.id) {
+          <button class="proj-detail__mode"
+                  [class.proj-detail__mode--active]="effectiveMode() === m.id"
+                  [attr.data-testid]="'project-detail-mode-' + m.id"
+                  [title]="m.tooltip"
+                  (click)="setMode(m.id)">{{ m.label }}</button>
+        }
+      </div>
+      <p class="proj-detail__hint">{{ modeHint() }}</p>
+    </section>
+
+    <section class="proj-detail__group">
+      <h3>Active execution</h3>
+      @if (activeRunner()?.activeExecution; as ex) {
+        <dl class="proj-detail__paths proj-detail__session">
+          <div><dt>Job</dt><dd><code>{{ ex.jobId }}</code></dd></div>
+          <div><dt>Status</dt><dd>{{ ex.status }}</dd></div>
+          <div><dt>Process</dt><dd>{{ ex.processId }}</dd></div>
+          <div><dt>Model</dt><dd>{{ ex.model || '(default)' }}</dd></div>
+          <div><dt>Started</dt><dd>{{ formatTime(ex.startedAt) }}</dd></div>
+        </dl>
+      } @else {
+        <p class="proj-detail__empty">No active execution.</p>
+      }
+    </section>
+
+    <section class="proj-detail__group">
+      <h3>Queue health</h3>
+      @if (queueHealth(); as health) {
+        <div class="proj-detail__health" [class.proj-detail__health--critical]="health.severity === 'critical'">
+          <strong>{{ health.issueCount === 0 ? 'No structural issues detected' : health.issueCount + ' structural issue' + (health.issueCount === 1 ? '' : 's') }}</strong>
+          <span>{{ health.severity }}</span>
         </div>
+        @if (health.missingJobJson.length > 0) {
+          <div class="proj-detail__repair-row">
+            <button type="button"
+                    class="proj-detail__repair"
+                    [disabled]="queueRepairBusy()"
+                    (click)="repairQueueHealth()">
+              {{ queueRepairBusy() ? 'Repairing...' : 'Move metadata orphans to Failed Pickup' }}
+            </button>
+            @if (queueRepairMessage(); as msg) {
+              <span>{{ msg }}</span>
+            }
+          </div>
+        }
+        @if (health.missingJobJson.length === 0 && health.duplicates.length === 0 && health.stateMismatches.length === 0) {
+          <p class="proj-detail__empty">The lane folders visible to the backend are structurally consistent.</p>
+        }
+        @if (health.missingJobJson.length > 0) {
+          <h4>Folders without job.json</h4>
+          <ul class="proj-detail__compact-list">
+            @for (item of health.missingJobJson; track item.path) {
+              <li><code>{{ item.lane }}</code> {{ item.id }}</li>
+            }
+          </ul>
+        }
+        @if (health.duplicates.length > 0) {
+          <h4>Duplicate slugs</h4>
+          <ul class="proj-detail__compact-list">
+            @for (dup of health.duplicates; track dup.id) {
+              <li><code>{{ dup.id }}</code> {{ dup.locations.length }} folders</li>
+            }
+          </ul>
+        }
+        @if (health.stateMismatches.length > 0) {
+          <h4>State mismatches</h4>
+          <ul class="proj-detail__compact-list">
+            @for (item of health.stateMismatches; track item.path) {
+              <li><code>{{ item.id }}</code> file says {{ item.state || '(missing)' }}, folder is {{ item.lane }}</li>
+            }
+          </ul>
+        }
+      }
+    </section>
+  }
+
+  @if (view() === 'settings') {
+    <section class="proj-detail__group">
+      <h3>Runner mode</h3>
+      <div class="proj-detail__modes">
+        @for (m of modes; track m.id) {
+          <button class="proj-detail__mode"
+                  [class.proj-detail__mode--active]="effectiveMode() === m.id"
+                  [title]="m.tooltip"
+                  (click)="setMode(m.id)">{{ m.label }}</button>
+        }
+      </div>
+      <p class="proj-detail__hint">{{ modeHint() }}</p>
+    </section>
+
+    <section class="proj-detail__group">
+      <h3>Orchestrator model</h3>
+      <div class="proj-detail__model-row">
+        <select class="proj-detail__model-select"
+                data-testid="project-detail-orch-model"
+                [(ngModel)]="orchModelDraft"
+                (ngModelChange)="onOrchModelChange()">
+          @for (opt of orchModelOptions; track opt.id) {
+            <option [value]="opt.id">{{ opt.label }}</option>
+          }
+        </select>
+        <span class="proj-detail__hint proj-detail__hint--inline">
+          Used when the orchestrator decides on your behalf in auto mode.
+        </span>
+      </div>
+    </section>
+
+    <section class="proj-detail__group">
+      <app-autonomy-slider [projectName]="projectName()" />
+    </section>
+
+    <section class="proj-detail__group">
+      <h3>Auto-commit</h3>
+      <label class="proj-detail__toggle">
+        <input type="checkbox"
+               data-testid="project-detail-auto-commit"
+               [(ngModel)]="autoCommitDraft"
+               (ngModelChange)="onAutoCommitChange()">
+        <span>Auto-commit on transition <code>3-progress -> 4-auto-review</code></span>
+      </label>
+    </section>
+  }
+
+  @if (view() === 'orchestrator') {
+    <app-global-orchestrator-card />
+
+    @if (pendingDecisions().length > 0) {
+      <section class="proj-detail__banner" data-testid="project-detail-needs-input-banner">
+        <header>
+          <span class="proj-detail__banner-icon">!</span>
+          <strong>Orchestrator decision pending</strong>
+          <span class="proj-detail__banner-count">{{ pendingDecisions().length }} task{{ pendingDecisions().length === 1 ? '' : 's' }}</span>
+        </header>
+        <ul>
+          @for (p of pendingDecisions(); track p.jobId) {
+            <li><code>{{ p.jobId }}</code><span class="proj-detail__banner-reason">{{ p.reason || '(no reason given)' }}</span></li>
+          }
+        </ul>
       </section>
     }
+
+    @if (livePendingDecisions().length > 0) {
+      @for (p of livePendingDecisions(); track p.jobId) {
+        <section class="proj-detail__live-banner"
+                 [attr.data-testid]="'project-detail-live-decision-banner-' + p.jobId"
+                 [class.proj-detail__live-banner--blocked]="p.kind === 'blocked'">
+          <header>
+            <span class="proj-detail__live-banner__icon" aria-hidden="true">{{ p.kind === 'blocked' ? '!' : '?' }}</span>
+            <strong>{{ p.kind === 'blocked' ? 'Agent blocked' : 'Agent is asking for input' }}</strong>
+            <span class="proj-detail__live-banner__chip">live · {{ p.jobId }}</span>
+          </header>
+          <p class="proj-detail__live-banner__title">{{ p.title }}</p>
+          <p class="proj-detail__live-banner__reason">{{ p.reason || '(no reason given by the agent)' }}</p>
+          <div class="proj-detail__live-banner__reply">
+            <textarea
+              [attr.data-testid]="'project-detail-live-decision-reply-' + p.jobId"
+              [(ngModel)]="liveReplyDrafts[p.jobId]"
+              rows="3"
+              placeholder="Reply to the agent"></textarea>
+            <div class="proj-detail__live-banner__actions">
+              @if (liveReplyErrors[p.jobId]) {
+                <span class="proj-detail__live-banner__error">{{ liveReplyErrors[p.jobId] }}</span>
+              }
+              <button type="button"
+                      class="proj-detail__live-banner__send"
+                      [attr.data-testid]="'project-detail-live-decision-send-' + p.jobId"
+                      [disabled]="liveReplySending[p.jobId] || !(liveReplyDrafts[p.jobId] || '').trim()"
+                      (click)="sendLiveDecisionReply(p.jobId)">
+                {{ liveReplySending[p.jobId] ? 'Sending...' : 'Reply' }}
+              </button>
+            </div>
+          </div>
+        </section>
+      }
+    }
+
+    <section class="proj-detail__group">
+      <h3>Orchestrator session</h3>
+      @if (orchSession(); as os) {
+        <dl class="proj-detail__paths proj-detail__session">
+          <div><dt>Status</dt><dd>Live · model {{ os.model }}</dd></div>
+          <div><dt>Session id</dt><dd><code>{{ os.sessionId }}</code></dd></div>
+          <div><dt>Booted</dt><dd>{{ formatTime(os.bootedAt) }} · {{ os.calls }} call{{ os.calls === 1 ? '' : 's' }} so far</dd></div>
+          @if (os.lastError) {
+            <div><dt>Last error</dt><dd class="proj-detail__session-error">{{ os.lastError }}</dd></div>
+          }
+        </dl>
+        <details class="proj-detail__session-snap">
+          <summary>What the orchestrator read on boot</summary>
+          <pre class="proj-detail__session-pre">{{ os.bootPromptPreview }}</pre>
+        </details>
+        <details class="proj-detail__session-snap">
+          <summary>Boot reply</summary>
+          <pre class="proj-detail__session-pre">{{ os.bootReplyPreview }}</pre>
+        </details>
+      } @else {
+        <p class="proj-detail__empty">No orchestrator session is booted for this project.</p>
+      }
+    </section>
   }
 
-  @if (paths(); as p) {
-    <dl class="proj-detail__paths">
-      <div><dt>Watch path</dt><dd>{{ p.path }}</dd></div>
-      <div><dt>Working directory</dt><dd>{{ p.rootPath || '(same as watch path)' }}</dd></div>
-      <div><dt>Repository</dt><dd>{{ p.repositoryPath || '(none configured)' }}</dd></div>
-    </dl>
+  @if (view() === 'activity') {
+    <section class="proj-detail__group">
+      <h3>Recent orchestrator activity</h3>
+      @if (recentEntries().length === 0) {
+        <p class="proj-detail__empty">No activity yet for this project.</p>
+      } @else {
+        <ul class="proj-detail__entries">
+          @for (entry of recentEntries(); track entry.ts) {
+            <li class="proj-detail__entry"
+                [class.proj-detail__entry--decision]="entry.kind === 'decision'"
+                [class.proj-detail__entry--action]="entry.kind === 'action'"
+                [class.proj-detail__entry--observation]="entry.kind === 'observation'"
+                [class.proj-detail__entry--intervention]="entry.kind === 'intervention'">
+              <p>{{ entry.summary }}</p>
+              <header>
+                <span class="proj-detail__entry-kind">{{ entry.kind }}</span>
+                <span class="proj-detail__entry-topic">{{ entry.topic }}</span>
+                <span class="proj-detail__entry-ts">{{ formatTime(entry.ts) }}</span>
+              </header>
+            </li>
+          }
+        </ul>
+      }
+    </section>
   }
 
-  <section class="proj-detail__group">
-    <h3>Runner mode</h3>
-    <div class="proj-detail__modes">
-      @for (m of modes; track m.id) {
-        <button class="proj-detail__mode"
-                [class.proj-detail__mode--active]="effectiveMode() === m.id"
-                [attr.data-testid]="'project-detail-mode-' + m.id"
-                [title]="m.tooltip"
-                (click)="setMode(m.id)">{{ m.label }}</button>
-      }
-    </div>
-    <p class="proj-detail__hint">{{ modeHint() }}</p>
-  </section>
+  @if (view() === 'architecture') {
+    <app-project-architecture-section [projectName]="projectName()" />
+    <app-project-drift-overview-section [projectName]="projectName()" />
+    <app-project-drift-section [projectName]="projectName()" />
+  }
 
-  <section class="proj-detail__group">
-    <h3>Orchestrator model</h3>
-    <div class="proj-detail__model-row">
-      <select class="proj-detail__model-select"
-              data-testid="project-detail-orch-model"
-              [(ngModel)]="orchModelDraft"
-              (ngModelChange)="onOrchModelChange()">
-        @for (opt of orchModelOptions; track opt.id) {
-          <option [value]="opt.id">{{ opt.label }}</option>
-        }
-      </select>
-      <span class="proj-detail__hint proj-detail__hint--inline">
-        Used when the orchestrator decides on your behalf in auto mode.
-      </span>
-    </div>
-  </section>
-
-  <section class="proj-detail__group">
-    <app-autonomy-slider [projectName]="projectName()" />
-  </section>
-
-  <section class="proj-detail__group">
-    <h3>Auto-commit</h3>
-    <label class="proj-detail__toggle">
-      <input type="checkbox"
-             data-testid="project-detail-auto-commit"
-             [(ngModel)]="autoCommitDraft"
-             (ngModelChange)="onAutoCommitChange()">
-      <span>Auto-commit on transition <code>3-progress → 4-auto-review</code></span>
-    </label>
-  </section>
-
-  <section class="proj-detail__group">
-    <h3>Lane counts</h3>
-    <div class="proj-detail__counts">
-      @for (lane of laneCounts(); track lane.state) {
-        <div class="proj-detail__count">
-          <span class="proj-detail__count-num">{{ lane.count }}</span>
-          <span class="proj-detail__count-state">{{ lane.label }}</span>
-        </div>
-      }
-    </div>
-  </section>
-
-  <section class="proj-detail__group">
-    <h3>Orchestrator session</h3>
-    @if (orchSession(); as os) {
-      <dl class="proj-detail__paths proj-detail__session">
-        <div><dt>Status</dt><dd>● Live · model {{ os.model }}</dd></div>
-        <div><dt>Session id</dt><dd><code>{{ os.sessionId }}</code></dd></div>
-        <div><dt>Booted</dt><dd>{{ formatTime(os.bootedAt) }} · {{ os.calls }} call{{ os.calls === 1 ? '' : 's' }} so far</dd></div>
-        @if (os.lastError) {
-          <div><dt>Last error</dt><dd class="proj-detail__session-error">{{ os.lastError }}</dd></div>
-        }
-      </dl>
-      <details class="proj-detail__session-snap">
-        <summary>What the orchestrator read on boot</summary>
-        <pre class="proj-detail__session-pre">{{ os.bootPromptPreview }}</pre>
-      </details>
-      <details class="proj-detail__session-snap">
-        <summary>Boot reply ("I am ready ...")</summary>
-        <pre class="proj-detail__session-pre">{{ os.bootReplyPreview }}</pre>
-      </details>
-      <p class="proj-detail__hint">
-        Resume this session yourself with <code>claude -r {{ os.sessionId }}</code> from <code>{{ paths().path }}</code>.
-      </p>
-    } @else {
-      <p class="proj-detail__empty">
-        No session booted yet. The orchestrator boots one Claude session per project at app start; if this stays empty after a few seconds, the boot probably failed (check the API log) and decisions will fall back to one-shot calls.
-      </p>
-    }
-  </section>
-
-  <app-token-summary-block [projectName]="projectName()" />
-
-  <app-project-supervisor-section [projectName]="projectName()" />
-
-  <app-project-meta-cycle-section [projectName]="projectName()" />
-
-  <app-project-analysis-reports-section
-    [projectName]="projectName()"
-    (openReport)="openReport.emit($event)" />
-
-  <app-project-steering-docs-section [projectName]="projectName()" />
-
-  <app-project-skill-readiness-section [projectName]="projectName()" />
-
-  <app-project-security-section [projectName]="projectName()" />
-
-  <app-project-architecture-section [projectName]="projectName()" />
-
-  <app-project-drift-overview-section [projectName]="projectName()" />
-
-  <app-project-drift-section [projectName]="projectName()" />
-
-  <app-code-pattern-drift-card />
-
-  <section class="proj-detail__group">
-    <h3>Recent orchestrator activity</h3>
-    @if (recentEntries().length === 0) {
-      <p class="proj-detail__empty">No activity yet for this project.</p>
-    } @else {
-      <ul class="proj-detail__entries">
-        @for (entry of recentEntries(); track entry.ts) {
-          <li class="proj-detail__entry"
-              [class.proj-detail__entry--decision]="entry.kind === 'decision'"
-              [class.proj-detail__entry--action]="entry.kind === 'action'"
-              [class.proj-detail__entry--observation]="entry.kind === 'observation'"
-              [class.proj-detail__entry--intervention]="entry.kind === 'intervention'">
-            <p>{{ entry.summary }}</p>
-            <header>
-              <span class="proj-detail__entry-kind">{{ entry.kind }}</span>
-              <span class="proj-detail__entry-topic">{{ entry.topic }}</span>
-              <span class="proj-detail__entry-ts">{{ formatTime(entry.ts) }}</span>
-            </header>
-          </li>
-        }
-      </ul>
-    }
-  </section>
+  @if (view() === 'observability') {
+    <app-token-summary-block [projectName]="projectName()" />
+    <app-project-supervisor-section [projectName]="projectName()" />
+    <app-project-meta-cycle-section [projectName]="projectName()" />
+    <app-project-analysis-reports-section
+      [projectName]="projectName()"
+      (openReport)="openReport.emit($event)" />
+  }
 </section>
-  

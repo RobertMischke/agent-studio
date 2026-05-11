@@ -17,6 +17,24 @@
         (railChange)="setProjectShellRail($event)"
         (openFeed)="overlays.openFeedFromShell()"
         (closeShell)="overlays.closeProjectShell()">
+        @defer (when overlays.projectShellRail() === 'overview') {
+          @if (overlays.projectShellRail() === 'overview') {
+            <app-project-detail
+              [projectName]="projShell"
+              view="overview"
+              (openFeed)="overlays.openFeedFromDetail($event)"
+              (openReport)="overlays.openAnalysisReport(projShell, $event.reportId)" />
+          }
+        }
+        @defer (when overlays.projectShellRail() === 'jobs') {
+          @if (overlays.projectShellRail() === 'jobs') {
+            <app-project-detail
+              [projectName]="projShell"
+              view="jobs"
+              (openFeed)="overlays.openFeedFromDetail($event)"
+              (openReport)="overlays.openAnalysisReport(projShell, $event.reportId)" />
+          }
+        }
         @defer (when overlays.projectShellRail() === 'security') {
           @if (overlays.projectShellRail() === 'security') {
             <app-security-panel
@@ -31,6 +49,15 @@
             <app-workspace-screenshots
               [projectName]="projShell"
               (openTask)="openTask.emit($event)" />
+          }
+        }
+        @defer (when overlays.projectShellRail() === 'architecture') {
+          @if (overlays.projectShellRail() === 'architecture') {
+            <app-project-detail
+              [projectName]="projShell"
+              view="architecture"
+              (openFeed)="overlays.openFeedFromDetail($event)"
+              (openReport)="overlays.openAnalysisReport(projShell, $event.reportId)" />
           }
         }
         @defer (when overlays.projectShellRail() === 'uxui') {
@@ -49,6 +76,10 @@
         @defer (when overlays.projectShellRail() === 'observability') {
           @if (overlays.projectShellRail() === 'observability') {
             <app-project-observability-panel [projectName]="projShell" />
+            <app-project-detail
+              [projectName]="projShell"
+              view="observability"
+              (openReport)="overlays.openAnalysisReport(projShell, $event.reportId)" />
           }
         }
         @defer (when overlays.projectShellRail() === 'product-runtime') {
@@ -59,12 +90,32 @@
         @defer (when overlays.projectShellRail() === 'steering') {
           @if (overlays.projectShellRail() === 'steering') {
             <app-project-steering-docs-section [projectName]="projShell" />
+            <app-project-skill-readiness-section [projectName]="projShell" />
           }
         }
         @defer (when overlays.projectShellRail() === 'settings') {
           @if (overlays.projectShellRail() === 'settings') {
             <app-project-detail
               [projectName]="projShell"
+              view="settings"
+              (openFeed)="overlays.openFeedFromDetail($event)"
+              (openReport)="overlays.openAnalysisReport(projShell, $event.reportId)" />
+          }
+        }
+        @defer (when overlays.projectShellRail() === 'orchestrator') {
+          @if (overlays.projectShellRail() === 'orchestrator') {
+            <app-project-detail
+              [projectName]="projShell"
+              view="orchestrator"
+              (openFeed)="overlays.openFeedFromDetail($event)"
+              (openReport)="overlays.openAnalysisReport(projShell, $event.reportId)" />
+          }
+        }
+        @defer (when overlays.projectShellRail() === 'activity') {
+          @if (overlays.projectShellRail() === 'activity') {
+            <app-project-detail
+              [projectName]="projShell"
+              view="activity"
               (openFeed)="overlays.openFeedFromDetail($event)"
               (openReport)="overlays.openAnalysisReport(projShell, $event.reportId)" />
           }

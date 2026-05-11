@@ -1,4 +1,5 @@
 :host { display: block; padding: 18px 20px; max-width: 760px; margin: 0 auto; }
+.proj-detail { display: flex; flex-direction: column; gap: 2px; }
 .proj-detail__head {
   display: flex;
   align-items: baseline;
@@ -192,6 +193,12 @@
   text-transform: none;
   border-bottom: 1px solid rgba(255,255,255,0.06);
 }
+.proj-detail__group h4 {
+  margin: 14px 0 8px;
+  color: #cbd5e1;
+  font-size: 0.82rem;
+  font-weight: 600;
+}
 .proj-detail__hint {
   margin: 6px 0 0;
   color: rgba(255,255,255,0.55);
@@ -254,6 +261,90 @@
 }
 .proj-detail__count-num { color: #cdd6f4; font-size: 1.15rem; font-weight: 700; font-variant-numeric: tabular-nums; }
 .proj-detail__count-state { color: rgba(255,255,255,0.55); font-size: 0.70rem; text-transform: uppercase; letter-spacing: 0.04em; }
+
+.proj-detail__status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+.proj-detail__status-cell {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 6px;
+  background: rgba(255,255,255,0.035);
+}
+.proj-detail__status-label,
+.proj-detail__status-note {
+  display: block;
+  color: rgba(255,255,255,0.52);
+  font-size: 0.72rem;
+}
+.proj-detail__status-cell strong {
+  display: block;
+  margin-top: 4px;
+  color: #e2e8f0;
+  font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+.proj-detail__status-note { margin-top: 3px; }
+
+.proj-detail__health {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 9px 11px;
+  border: 1px solid rgba(74,222,128,0.28);
+  border-radius: 6px;
+  background: rgba(74,222,128,0.08);
+  color: #bbf7d0;
+}
+.proj-detail__health--critical {
+  border-color: rgba(248,113,113,0.45);
+  background: rgba(248,113,113,0.10);
+  color: #fecaca;
+}
+.proj-detail__health span {
+  color: rgba(255,255,255,0.60);
+  font-size: 0.74rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.proj-detail__compact-list {
+  margin: 0;
+  padding-left: 18px;
+  color: #cdd6f4;
+  font-size: 0.82rem;
+}
+.proj-detail__compact-list li { margin: 4px 0; overflow-wrap: anywhere; }
+.proj-detail__compact-list code {
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: rgba(255,255,255,0.06);
+  color: #c4b5fd;
+}
+.proj-detail__repair-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+  color: rgba(255,255,255,0.58);
+  font-size: 0.78rem;
+}
+.proj-detail__repair {
+  border: 1px solid rgba(248,113,113,0.45);
+  border-radius: 6px;
+  background: rgba(248,113,113,0.14);
+  color: #fecaca;
+  padding: 6px 10px;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+.proj-detail__repair:hover:not(:disabled) { background: rgba(248,113,113,0.22); }
+.proj-detail__repair:disabled { opacity: 0.55; cursor: wait; }
 
 /*
  * Recent-activity entries: drop the boxed "card" treatment and the

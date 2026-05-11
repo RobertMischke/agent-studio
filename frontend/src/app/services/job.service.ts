@@ -569,6 +569,13 @@ export class JobService {
     );
   }
 
+  repairProjectQueueHealth(projectName: string) {
+    return this.http.post<{ project: string; moved: unknown[]; failed: unknown[]; queueHealth: ProjectSnapshot['queueHealth'] }>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/queue-health/repair`,
+      {}
+    );
+  }
+
   /** All per-project settings (auto-commit, runner mode, orchestrator model). */
   getAllProjectSettings() {
     return this.http.get<{ [project: string]: { autoCommit: boolean; runnerMode: string | null; orchestratorModel: string | null } }>(

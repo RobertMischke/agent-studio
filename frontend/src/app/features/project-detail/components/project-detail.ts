@@ -2,21 +2,17 @@ import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject
 import { FormsModule } from '@angular/forms';
 import { JobService } from '../../../services/job.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../utils/visible-interval';
-import type { GroupedJobs, RunnerStatus } from '../../../models/job.model';
+import type { GroupedJobs, ProjectQueueHealth, RunnerStatus } from '../../../models/job.model';
 import type { OrchestratorLogEntry, OrchestratorSession } from '../../../features/orchestrator';
 import { OrchestratorRunner_KnownModels } from './project-detail.models';
 import { TokenSummaryBlockComponent } from '../../../features/tokens/components/token-summary-block';
 import { GlobalOrchestratorCardComponent } from '../../../features/orchestrator/components/global-orchestrator-card';
-import { ProjectSecuritySectionComponent } from './project-security-section';
 import { ProjectArchitectureSectionComponent } from './project-architecture-section';
 import { ProjectDriftSectionComponent } from './project-drift-section';
 import { ProjectDriftOverviewSectionComponent } from './project-drift-overview-section';
-import { CodePatternDriftCardComponent } from './code-pattern-drift-card';
 import { ProjectSupervisorSectionComponent } from './project-supervisor-section';
 import { ProjectMetaCycleSectionComponent } from './project-meta-cycle-section';
 import { ProjectAnalysisReportsSectionComponent } from './project-analysis-reports-section';
-import { ProjectSteeringDocsSectionComponent } from './project-steering-docs-section';
-import { ProjectSkillReadinessSectionComponent } from './project-skill-readiness-section';
 import { AutonomySliderComponent } from './autonomy-slider';
 import { AnalysisReport } from '../../../models/analysis-report.model';
 
@@ -25,6 +21,15 @@ interface ProjectSettingsRow {
   runnerMode: string | null;
   orchestratorModel: string | null;
 }
+
+export type ProjectDetailView =
+  | 'overview'
+  | 'jobs'
+  | 'settings'
+  | 'orchestrator'
+  | 'activity'
+  | 'architecture'
+  | 'observability';
 
 /**
  * Project detail panel: name + paths, runner mode toggle, orchestrator
@@ -43,16 +48,12 @@ interface ProjectSettingsRow {
     FormsModule,
     TokenSummaryBlockComponent,
     GlobalOrchestratorCardComponent,
-    ProjectSecuritySectionComponent,
     ProjectArchitectureSectionComponent,
     ProjectDriftSectionComponent,
     ProjectDriftOverviewSectionComponent,
-    CodePatternDriftCardComponent,
     ProjectSupervisorSectionComponent,
     ProjectMetaCycleSectionComponent,
     ProjectAnalysisReportsSectionComponent,
-    ProjectSteeringDocsSectionComponent,
-    ProjectSkillReadinessSectionComponent,
     AutonomySliderComponent
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -61,6 +62,7 @@ interface ProjectSettingsRow {
 })
 export class ProjectDetailComponent implements OnInit, OnDestroy {
   readonly projectName = input.required<string>();
+  readonly view = input<ProjectDetailView>('overview');
   readonly openFeed = output<string>();
   readonly openReport = output<AnalysisReport>();
 
@@ -71,7 +73,11 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   readonly grouped = signal<GroupedJobs | null>(null);
   readonly recentEntries = signal<OrchestratorLogEntry[]>([]);
   readonly orchSession = signal<OrchestratorSession | null>(null);
+  readonly projectPaths = signal<{ path: string; rootPath: string | null; repositoryPath: string | null } | null>(null);
   readonly pendingDecisions = signal<ReadonlyArray<{ jobId: string; title: string; reason: string | null }>>([]);
+  readonly queueHealth = signal<ProjectQueueHealth | null>(null);
+  readonly queueRepairBusy = signal(false);
+  readonly queueRepairMessage = signal<string | null>(null);
 
   // ADR-0027: live, in-progress decision sentinels emitted by the running
   // job. Distinct from pendingDecisions (post-run, lane-scoped). Polled on
@@ -122,15 +128,9 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   });
 
   readonly paths = computed(() => {
-    // Watch-paths come back from /api/watch-paths via JobService and are
-    // already cached in JobService when the app boots; we look them up
-    // through the runnerStatus's project record where available.
-    // (Path strings are not exposed there; fall back to "(unknown)".)
-    const status = this.runnerStatus();
-    const proj = status?.projects?.[this.projectName()];
-    return {
+    return this.projectPaths() ?? {
       path: this.projectName(),
-      rootPath: proj?.activeJobId ? '' : '',
+      rootPath: '',
       repositoryPath: ''
     };
   });
@@ -150,6 +150,27 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
       { state: '6-completed',   label: 'Completed',   count: c(grouped.completed) },
       { state: '7-archive',     label: 'Archive',     count: c(grouped.archive) }
     ];
+  });
+
+  readonly activeRunner = computed(() => this.runnerStatus()?.projects?.[this.projectName()] ?? null);
+
+  readonly activeLaneLabel = computed(() => {
+    const activeId = this.activeRunner()?.activeJobId;
+    if (!activeId) return null;
+    const grouped = this.grouped();
+    if (!grouped) return null;
+    const lanes: ReadonlyArray<[string, ReadonlyArray<{ id: string }>]> = [
+      ['Backlog', grouped.backlog ?? []],
+      ['Preparation', grouped.preparation ?? []],
+      ['Ready', grouped.ready ?? []],
+      ['Progress', grouped.progress ?? []],
+      ['Failed Pickup', grouped.failedPickup ?? []],
+      ['Auto Review', grouped.autoReview ?? grouped.review],
+      ['Human Review', grouped.humanReview ?? []],
+      ['Completed', grouped.completed],
+      ['Archive', grouped.archive],
+    ];
+    return lanes.find(([, jobs]) => jobs.some(j => j.id === activeId))?.[0] ?? null;
   });
 
   readonly tokenTotalLabel = computed(() => {
@@ -210,8 +231,10 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
 
         this.recentEntries.set(snap.orchestratorLogTail ?? []);
         this.orchSession.set(snap.orchestratorSession ?? null);
+        this.projectPaths.set(snap.paths ?? null);
         this.pendingDecisions.set(snap.reviewDecisionsPending ?? []);
         this.livePendingDecisions.set(snap.runnerPendingDecisions ?? []);
+        this.queueHealth.set(snap.queueHealth ?? null);
       },
       error: () => { /* silent; keep last snapshot */ }
     });
@@ -269,6 +292,24 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     this.jobService.setProjectOrchestratorModel(this.projectName(), model || null).subscribe({
       next: () => this.refreshAll(true),
       error: () => {}
+    });
+  }
+
+  repairQueueHealth(): void {
+    if (this.queueRepairBusy()) return;
+    this.queueRepairBusy.set(true);
+    this.queueRepairMessage.set(null);
+    this.jobService.repairProjectQueueHealth(this.projectName()).subscribe({
+      next: (res) => {
+        this.queueRepairBusy.set(false);
+        this.queueHealth.set(res.queueHealth);
+        this.queueRepairMessage.set(`Moved ${res.moved.length} folder${res.moved.length === 1 ? '' : 's'} to Failed Pickup.`);
+        this.refreshAll(true);
+      },
+      error: (err) => {
+        this.queueRepairBusy.set(false);
+        this.queueRepairMessage.set(err?.error?.error || err?.message || 'Repair failed.');
+      }
     });
   }
 

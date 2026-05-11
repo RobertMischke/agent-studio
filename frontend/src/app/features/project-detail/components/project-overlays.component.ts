@@ -9,6 +9,7 @@ import { ProjectTokenUsagePanelComponent } from '../../project-token-usage/compo
 import { ProjectObservabilityPanelComponent } from './project-observability/project-observability-panel.component';
 import { ProjectProductRuntimePanelComponent } from './project-product-runtime/project-product-runtime-panel.component';
 import { ProjectSteeringDocsSectionComponent } from './project-steering-docs-section';
+import { ProjectSkillReadinessSectionComponent } from './project-skill-readiness-section';
 import { AnalysisReportDrilldownComponent } from './analysis-report-drilldown';
 import { ProjectRailKey } from './project-shell/project-shell.config';
 import { WorkspaceScreenshotsComponent } from '../../screenshots';
@@ -38,6 +39,7 @@ import type { JobScreenshot } from '../../screenshots';
     ProjectObservabilityPanelComponent,
     ProjectProductRuntimePanelComponent,
     ProjectSteeringDocsSectionComponent,
+    ProjectSkillReadinessSectionComponent,
     AnalysisReportDrilldownComponent,
     WorkspaceScreenshotsComponent,
   ],
@@ -60,14 +62,19 @@ export class ProjectOverlaysComponent {
   readonly railChangeNeedsWatchPaths = output<ProjectRailKey>();
 
   hasCustomPanel(rail: ProjectRailKey): boolean {
-    return rail === 'security'
+    return rail === 'overview'
+      || rail === 'jobs'
+      || rail === 'security'
       || rail === 'visual-evidence'
+      || rail === 'architecture'
       || rail === 'uxui'
       || rail === 'token-usage'
       || rail === 'observability'
       || rail === 'product-runtime'
       || rail === 'steering'
-      || rail === 'settings';
+      || rail === 'settings'
+      || rail === 'orchestrator'
+      || rail === 'activity';
   }
 
   setProjectShellRail(key: ProjectRailKey): void {

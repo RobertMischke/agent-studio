@@ -483,6 +483,11 @@ export interface RunnerStatus {
 export interface ProjectSnapshot {
   project: string;
   capturedAt: string;
+  paths: {
+    path: string;
+    rootPath: string | null;
+    repositoryPath: string | null;
+  };
   settings: {
     autoCommit: boolean;
     runnerMode: string | null;
@@ -493,6 +498,34 @@ export interface ProjectSnapshot {
   orchestratorSession: OrchestratorSession | null;
   reviewDecisionsPending: { jobId: string; title: string; reason: string | null }[];
   runnerPendingDecisions: { jobId: string; title: string; kind: string; reason: string | null; detectedAt: string }[];
+  queueHealth: ProjectQueueHealth;
+}
+
+export interface ProjectQueueHealthLocation {
+  id: string;
+  lane: string;
+  hasJobJson: boolean;
+  path: string;
+}
+
+export interface ProjectQueueHealthDuplicate {
+  id: string;
+  locations: ProjectQueueHealthLocation[];
+}
+
+export interface ProjectQueueHealthStateMismatch {
+  id: string;
+  lane: string;
+  state: string | null;
+  path: string;
+}
+
+export interface ProjectQueueHealth {
+  severity: 'ok' | 'warning' | 'critical' | string;
+  issueCount: number;
+  missingJobJson: ProjectQueueHealthLocation[];
+  duplicates: ProjectQueueHealthDuplicate[];
+  stateMismatches: ProjectQueueHealthStateMismatch[];
 }
 
 export interface CliSettings {

@@ -107,6 +107,12 @@ public static class ProjectSnapshotEndpoints
             {
                 project = projectName,
                 capturedAt = DateTime.UtcNow,
+                paths = new
+                {
+                    path = entry.Path,
+                    rootPath = entry.RootPath,
+                    repositoryPath = entry.RepositoryPath
+                },
                 settings = new
                 {
                     autoCommit = settings.AutoCommit,
@@ -125,9 +131,167 @@ public static class ProjectSnapshotEndpoints
                 orchestratorSession = session,
                 reviewDecisionsPending = reviewDecisions,
                 runnerPendingDecisions = liveItems,
+                queueHealth = ReadQueueHealth(entry.Path),
                 _diag = new { reviewHits = ReviewCacheHits, reviewMisses = ReviewCacheMisses }
             });
         });
+
+        app.MapPost("/api/projects/{projectName}/queue-health/repair", (
+            string projectName,
+            JobScannerService scanner,
+            JobStateMachine states) =>
+        {
+            var entry = scanner.GetWatchPaths().FirstOrDefault(e =>
+                string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (entry == null) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+
+            var moved = new List<object>();
+            var failed = new List<object>();
+            foreach (var folder in FindFoldersWithoutJobJson(entry.Path))
+            {
+                var lane = Path.GetFileName(Path.GetDirectoryName(folder)) ?? "unknown";
+                var slug = Path.GetFileName(folder);
+                var destinationSlug = BuildRepairSlug(lane, slug, entry.Path);
+                var outcome = states.MoveFolderToFailedPickup(folder, destinationSlug);
+                if (outcome.Status == MoveJobStatus.Success)
+                {
+                    TryWriteRepairReason(entry.Path, destinationSlug, lane, slug);
+                    moved.Add(new { id = slug, fromLane = lane, destinationSlug });
+                }
+                else
+                {
+                    failed.Add(new { id = slug, fromLane = lane, status = outcome.Status.ToString(), outcome.Message });
+                }
+            }
+
+            return Results.Ok(new
+            {
+                project = projectName,
+                moved,
+                failed,
+                queueHealth = ReadQueueHealth(entry.Path)
+            });
+        });
+    }
+
+    private static IEnumerable<string> FindFoldersWithoutJobJson(string watchPath)
+    {
+        foreach (var lane in JobStates.All)
+        {
+            var laneDir = Path.Combine(watchPath, lane);
+            if (!Directory.Exists(laneDir)) continue;
+            foreach (var folder in Directory.EnumerateDirectories(laneDir))
+            {
+                if (!File.Exists(Path.Combine(folder, "job.json"))) yield return folder;
+            }
+        }
+    }
+
+    private static string BuildRepairSlug(string lane, string slug, string watchPath)
+    {
+        var safeLane = lane.Replace(Path.DirectorySeparatorChar, '-').Replace(Path.AltDirectorySeparatorChar, '-');
+        var baseSlug = $"orphan-{safeLane}-{slug}-{DateTime.UtcNow:yyyy-MM-dd}";
+        var candidate = baseSlug;
+        var i = 2;
+        while (Directory.Exists(Path.Combine(watchPath, JobStates.FailedPickup, candidate)))
+        {
+            candidate = $"{baseSlug}-{i++}";
+        }
+        return candidate;
+    }
+
+    private static void TryWriteRepairReason(string watchPath, string destinationSlug, string fromLane, string sourceSlug)
+    {
+        try
+        {
+            var reason = Path.Combine(watchPath, JobStates.FailedPickup, destinationSlug, "failed-pickup-reason.md");
+            File.WriteAllText(reason,
+                "# Queue health repair\n\n" +
+                $"Original folder: `{fromLane}/{sourceSlug}`\n\n" +
+                "This folder did not contain `job.json`, so it could not be governed by the normal job API. " +
+                "The queue-health repair action moved it here through the application state machine and preserved its files.\n");
+        }
+        catch { /* best-effort evidence note */ }
+    }
+
+    private static object ReadQueueHealth(string watchPath)
+    {
+        var lanes = JobStates.All;
+        var missingJobJson = new List<object>();
+        var stateMismatches = new List<object>();
+        var bySlug = new Dictionary<string, List<object>>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var lane in lanes)
+        {
+            var laneDir = Path.Combine(watchPath, lane);
+            if (!Directory.Exists(laneDir)) continue;
+
+            foreach (var folder in Directory.EnumerateDirectories(laneDir))
+            {
+                var slug = Path.GetFileName(folder);
+                var jobJson = Path.Combine(folder, "job.json");
+                var hasJobJson = File.Exists(jobJson);
+                var entry = new
+                {
+                    id = slug,
+                    lane,
+                    hasJobJson,
+                    path = folder
+                };
+
+                if (!bySlug.TryGetValue(slug, out var locations))
+                {
+                    locations = new List<object>();
+                    bySlug[slug] = locations;
+                }
+                locations.Add(entry);
+
+                if (!hasJobJson)
+                {
+                    missingJobJson.Add(entry);
+                    continue;
+                }
+
+                try
+                {
+                    using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(jobJson));
+                    if (doc.RootElement.TryGetProperty("state", out var stateEl))
+                    {
+                        var state = stateEl.GetString();
+                        if (!string.Equals(state, lane, StringComparison.OrdinalIgnoreCase))
+                        {
+                            stateMismatches.Add(new { id = slug, lane, state, path = folder });
+                        }
+                    }
+                }
+                catch
+                {
+                    stateMismatches.Add(new { id = slug, lane, state = "(unreadable)", path = folder });
+                }
+            }
+        }
+
+        var duplicates = bySlug
+            .Where(kv => kv.Value.Count > 1)
+            .Select(kv => new { id = kv.Key, locations = kv.Value })
+            .OrderBy(x => x.id, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var issueCount = missingJobJson.Count + stateMismatches.Count + duplicates.Count;
+        var severity = issueCount == 0
+            ? "ok"
+            : missingJobJson.Count > 0 || duplicates.Count > 0
+                ? "critical"
+                : "warning";
+
+        return new
+        {
+            severity,
+            issueCount,
+            missingJobJson,
+            duplicates,
+            stateMismatches
+        };
     }
 
     private static List<object> ReadReviewDecisionsCached(string watchPath)
