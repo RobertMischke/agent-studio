@@ -47,7 +47,7 @@ test.beforeEach(async () => {
 
 test('no architecture model: empty state with explanatory copy', async ({ page }) => {
   await page.goto('/');
-  await page.getByTestId(`project-detail-${projectName}`).click();
+  await page.getByTestId(`project-shell-open-${projectName}`).click();
   const detail = page.getByTestId('project-detail');
   await expect(detail).toBeVisible({ timeout: 10_000 });
 
@@ -75,7 +75,7 @@ test('healthy map: every element Info, every marble in the info band', async ({ 
   await api(`/api/drift/${encodeURIComponent(projectName)}/reports?refresh=true`);
 
   await page.goto('/');
-  await page.getByTestId(`project-detail-${projectName}`).click();
+  await page.getByTestId(`project-shell-open-${projectName}`).click();
   await expect(page.getByTestId('project-detail')).toBeVisible({ timeout: 10_000 });
 
   const section = page.getByTestId('project-drift-section');
@@ -109,7 +109,7 @@ test('warning and critical element: hot marbles render and surface their severit
   await api(`/api/drift/${encodeURIComponent(projectName)}/reports?refresh=true`);
 
   await page.goto('/');
-  await page.getByTestId(`project-detail-${projectName}`).click();
+  await page.getByTestId(`project-shell-open-${projectName}`).click();
   await expect(page.getByTestId('project-detail')).toBeVisible({ timeout: 10_000 });
 
   const section = page.getByTestId('project-drift-section');
@@ -142,7 +142,7 @@ test('element drill-down: panel renders evidence, guidelines, and action buttons
   await api(`/api/drift/${encodeURIComponent(projectName)}/reports?refresh=true`);
 
   await page.goto('/');
-  await page.getByTestId(`project-detail-${projectName}`).click();
+  await page.getByTestId(`project-shell-open-${projectName}`).click();
   await expect(page.getByTestId('project-detail')).toBeVisible({ timeout: 10_000 });
 
   const section = page.getByTestId('project-drift-section');
@@ -189,7 +189,7 @@ test('invalid drift JSON fallback: malformed response surfaces the error pill', 
   });
 
   await page.goto('/');
-  await page.getByTestId(`project-detail-${projectName}`).click();
+  await page.getByTestId(`project-shell-open-${projectName}`).click();
   await expect(page.getByTestId('project-detail')).toBeVisible({ timeout: 10_000 });
 
   const section = page.getByTestId('project-drift-section');

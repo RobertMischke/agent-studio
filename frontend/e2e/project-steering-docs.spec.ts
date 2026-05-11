@@ -30,7 +30,7 @@ test.describe('Project detail - Steering Docs section', () => {
 
   test('Inventory + summary + warnings render with raw file drilldown', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId(`project-detail-${projectName}`).click();
+    await page.getByTestId(`project-shell-open-${projectName}`).click();
     await expect(page.getByTestId('project-detail')).toBeVisible({ timeout: 10_000 });
 
     const section = page.getByTestId('project-steering-docs-section');
@@ -92,7 +92,7 @@ test.describe('Project detail - Steering Docs section', () => {
 
   test('Action button queues a 1-preparation task without rewriting docs', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId(`project-detail-${projectName}`).click();
+    await page.getByTestId(`project-shell-open-${projectName}`).click();
     await expect(page.getByTestId('project-detail')).toBeVisible({ timeout: 10_000 });
 
     const section = page.getByTestId('project-steering-docs-section');

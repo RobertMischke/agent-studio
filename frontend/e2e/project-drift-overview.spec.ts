@@ -304,7 +304,7 @@ async function openProjectDetail(page: Page): Promise<void> {
     await session.detach();
   } catch { /* best-effort */ }
   await page.goto('/');
-  await page.getByTestId(`project-detail-${projectName}`).click();
+  await page.getByTestId(`project-shell-open-${projectName}`).click();
   await expect(page.getByTestId('project-detail')).toBeVisible({ timeout: 10_000 });
 }
 

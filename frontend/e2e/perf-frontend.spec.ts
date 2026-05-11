@@ -86,7 +86,7 @@ test.describe('Frontend perceived latency', () => {
     // for the queue to fully drain.
     await page.waitForTimeout(500);
 
-    const trigger = page.getByTestId(`project-detail-${PROJECT_NAME}`);
+    const trigger = page.getByTestId(`project-shell-open-${PROJECT_NAME}`);
     await expect(trigger, `project-detail trigger for "${PROJECT_NAME}" missing`).toBeVisible();
 
     const target = page.getByTestId('project-detail');
@@ -113,7 +113,7 @@ test.describe('Frontend perceived latency', () => {
     // for the queue to fully drain.
     await page.waitForTimeout(500);
 
-    const trigger = page.getByTestId(`project-detail-${PROJECT_NAME}`);
+    const trigger = page.getByTestId(`project-shell-open-${PROJECT_NAME}`);
     await trigger.click();
     await page.getByTestId('project-detail').waitFor({ state: 'visible', timeout: 10_000 });
 

@@ -870,9 +870,6 @@ export class App implements OnInit {
   // ProjectOverlaysService. The shell keeps thin pass-through methods
   // because external entry points (project-tabs, kanban project chip)
   // still go through it.
-  openProjectDetail(name: string): void {
-    this.projectOverlays.openProjectShell(name, 'settings', this.watchPaths());
-  }
   openProjectShell(name: string, rail: ProjectRailKey = DEFAULT_PROJECT_RAIL_KEY): void {
     this.projectOverlays.openProjectShell(name, rail, this.watchPaths());
   }

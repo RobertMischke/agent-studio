@@ -150,7 +150,7 @@ test.describe('Frontend perf baseline', () => {
 
     const samples: number[] = [];
     for (let i = 0; i < ITERATIONS; i++) {
-      const trigger = page.getByTestId(`project-detail-${PROJECT_NAME}`);
+      const trigger = page.getByTestId(`project-shell-open-${PROJECT_NAME}`);
       await expect(trigger).toBeVisible({ timeout: 10_000 });
       const target = page.getByTestId('project-detail');
       const ms = await clickToVisible(trigger, target, 10_000);
@@ -169,7 +169,7 @@ test.describe('Frontend perf baseline', () => {
     await page.goto('/');
     await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(500);
-    const trigger = page.getByTestId(`project-detail-${PROJECT_NAME}`);
+    const trigger = page.getByTestId(`project-shell-open-${PROJECT_NAME}`);
     await trigger.click();
     await page.getByTestId('project-detail').waitFor({ state: 'visible', timeout: 10_000 });
     await page.waitForTimeout(500);

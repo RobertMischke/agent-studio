@@ -20,7 +20,7 @@ test.describe('Project docs sections', () => {
     test.skip(!target, `Watch path "${PROJECT_NAME}" not configured on this machine`);
 
     await page.goto('/');
-    const trigger = page.getByTestId(`project-detail-${PROJECT_NAME}`);
+    const trigger = page.getByTestId(`project-shell-open-${PROJECT_NAME}`);
     await expect(trigger).toBeVisible({ timeout: 10_000 });
     await trigger.click();
 
@@ -44,7 +44,7 @@ test.describe('Project docs sections', () => {
 
     // Force a refresh by re-opening the panel.
     await page.reload();
-    await page.getByTestId(`project-detail-${PROJECT_NAME}`).click();
+    await page.getByTestId(`project-shell-open-${PROJECT_NAME}`).click();
     await expect(page.getByTestId('project-security-section')).toBeVisible();
 
     const meta = page.getByTestId('project-security-meta');

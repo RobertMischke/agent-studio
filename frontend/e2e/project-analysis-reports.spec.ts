@@ -60,7 +60,7 @@ test.beforeEach(async () => {
 
 test('empty state renders manual triggers and schedule rows', async ({ page }) => {
   await page.goto('/');
-  await page.getByTestId(`project-detail-${projectName}`).click();
+  await page.getByTestId(`project-shell-open-${projectName}`).click();
   const detail = page.getByTestId('project-detail');
   await expect(detail).toBeVisible({ timeout: 10_000 });
 
@@ -89,7 +89,7 @@ test('empty state renders manual triggers and schedule rows', async ({ page }) =
 
 test('manual trigger writes a report and the list refreshes', async ({ page }) => {
   await page.goto('/');
-  await page.getByTestId(`project-detail-${projectName}`).click();
+  await page.getByTestId(`project-shell-open-${projectName}`).click();
   await expect(page.getByTestId('project-detail')).toBeVisible({ timeout: 10_000 });
 
   const section = page.getByTestId('project-analysis-reports-section');
@@ -166,7 +166,7 @@ test('unstructured report shows the warning banner without hiding Markdown', asy
   await api(`/api/analysis/${encodeURIComponent(projectName)}/reports?refresh=true`);
 
   await page.goto('/');
-  await page.getByTestId(`project-detail-${projectName}`).click();
+  await page.getByTestId(`project-shell-open-${projectName}`).click();
   await expect(page.getByTestId('project-detail')).toBeVisible({ timeout: 10_000 });
 
   const section = page.getByTestId('project-analysis-reports-section');

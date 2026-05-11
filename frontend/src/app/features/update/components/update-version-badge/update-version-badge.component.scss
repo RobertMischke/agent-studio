@@ -1,9 +1,10 @@
 .version-badge {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.2rem 0.55rem;
-  border-radius: 4px;
+  gap: var(--header-btn-gap, 6px);
+  height: var(--header-btn-height, 28px);
+  padding: 0 var(--header-btn-padding-x, 10px);
+  border-radius: var(--header-btn-radius, 6px);
   border: 1px solid rgba(255, 255, 255, 0.12);
   background: rgba(255, 255, 255, 0.04);
   color: rgba(205, 214, 244, 0.85);
@@ -12,6 +13,7 @@
   line-height: 1;
   cursor: pointer;
   position: relative;
+  box-sizing: border-box;
 }
 .version-badge:hover {
   background: rgba(255, 255, 255, 0.08);

@@ -31,7 +31,7 @@ test.describe('Project detail — Security & Architecture sections', () => {
   test('Security section shows meta + files; Architecture lists ADRs and opens one', async ({ page }) => {
     await page.goto('/');
 
-    await page.getByTestId(`project-detail-${projectName}`).click();
+    await page.getByTestId(`project-shell-open-${projectName}`).click();
     const detail = page.getByTestId('project-detail');
     await expect(detail).toBeVisible({ timeout: 10_000 });
 
@@ -68,7 +68,7 @@ test.describe('Project detail — Security & Architecture sections', () => {
 
   test('Security meta save persists rating + summary across reload', async ({ page }) => {
     await page.goto('/');
-    await page.getByTestId(`project-detail-${projectName}`).click();
+    await page.getByTestId(`project-shell-open-${projectName}`).click();
     await expect(page.getByTestId('project-security-section')).toBeVisible({ timeout: 10_000 });
 
     // Open the meta-edit drawer (a <details> element).
@@ -90,7 +90,7 @@ test.describe('Project detail — Security & Architecture sections', () => {
 
     // Reload to confirm server-side persistence.
     await page.reload();
-    await page.getByTestId(`project-detail-${projectName}`).click();
+    await page.getByTestId(`project-shell-open-${projectName}`).click();
     await expect(page.getByTestId('project-security-meta')).toContainText(stamp, { timeout: 10_000 });
 
     // Scroll the security section into view so the screenshot actually

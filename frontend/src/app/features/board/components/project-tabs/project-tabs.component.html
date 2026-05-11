@@ -39,14 +39,10 @@
           }
         </button>
       }
-      <button class="project-tab__shell"
+      <button class="header-btn header-btn--icon project-tab__shell"
               [attr.data-testid]="'project-shell-open-' + name"
               title="Open project page"
               (click)="openShell.emit(name)">📊</button>
-      <button class="project-tab__detail"
-              [attr.data-testid]="'project-detail-' + name"
-              title="Open project window settings"
-              (click)="openDetail.emit(name)">⚙</button>
     </div>
   }
 </div>

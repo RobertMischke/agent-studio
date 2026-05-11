@@ -34,7 +34,53 @@
       padding: 4px 12px;
       background: #181825;
       border-bottom: 1px solid rgba(255,255,255,0.06);
-      min-height: 36px;
+      min-height: 40px;
+      /* Single source of truth for header-button sizing. Every interactive
+         control rendered inside .header (project chips, action buttons,
+         dropdown triggers, icon-only squares) reads from this var so they
+         line up to the same baseline. The matching `.header-btn` helper
+         below ships the rest of the shared shape; per-button rules below
+         layer colour / active-state on top without touching geometry. */
+      --header-btn-height: 28px;
+      --header-btn-radius: 6px;
+      --header-btn-padding-x: 10px;
+      --header-btn-gap: 6px;
+    }
+    /* Shared geometry for every interactive control in the header.
+       Component-scoped buttons (auto-review indicator, version badge,
+       filters dropdown, kanban filter trigger, devtools menu, compact
+       toggle, create button, project chips) all hit the same height,
+       padding, radius, and font-size by reading the .header-vars above
+       — either by adding this class, or via the per-component rules
+       that copy these values. Keeps the bar visually aligned without
+       forcing a single colour palette on every control. */
+    .header-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--header-btn-gap);
+      height: var(--header-btn-height);
+      padding: 0 var(--header-btn-padding-x);
+      border-radius: var(--header-btn-radius);
+      border: 1px solid rgba(255,255,255,0.12);
+      background: rgba(255,255,255,0.04);
+      color: #cbd5e1;
+      font-size: 12px;
+      font-weight: 600;
+      line-height: 1;
+      cursor: pointer;
+      box-sizing: border-box;
+      font-family: inherit;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    .header-btn:hover {
+      background: rgba(255,255,255,0.10);
+      border-color: rgba(255,255,255,0.22);
+      color: #f8fafc;
+    }
+    .header-btn--icon {
+      width: var(--header-btn-height);
+      padding: 0;
+      justify-content: center;
     }
     .header__brand {
       display: flex;
@@ -107,10 +153,13 @@
       background: rgba(255,255,255,0.06);
       border: 1px solid rgba(255,255,255,0.10);
       color: #e2e8f0;
-      border-radius: 6px;
-      padding: 4px 8px;
+      border-radius: var(--header-btn-radius, 6px);
+      height: var(--header-btn-height, 28px);
+      padding: 0 8px;
       font-size: 12px;
+      line-height: 1;
       max-width: 220px;
+      box-sizing: border-box;
     }
     .client-filter__select:focus {
       outline: 1px solid rgba(139,92,246,0.6);
@@ -222,15 +271,18 @@
     .filter-chip {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
+      gap: var(--header-btn-gap, 6px);
       background: rgba(255,255,255,0.06);
       border: 1px solid var(--project-border, rgba(255,255,255,0.20));
       color: #e2e8f0;
-      padding: 4px 12px 4px 4px;
-      border-radius: 20px;
+      height: var(--header-btn-height, 28px);
+      padding: 0 12px 0 4px;
+      border-radius: calc(var(--header-btn-height, 28px) / 2);
       cursor: pointer;
       font-size: 12px;
       font-weight: 600;
+      line-height: 1;
+      box-sizing: border-box;
       transition: all 0.15s;
     }
     .filter-chip__disk {
@@ -300,22 +352,15 @@
       align-items: center;
       gap: 4px;
     }
-    .project-tab__detail,
+    /* Project-shell icon button. Geometry comes from the .header-btn
+       + .header-btn--icon helpers on the element; this rule only ports
+       the subtler colour treatment (more muted than the default
+       header-btn idle colour) the icon-only chip uses. */
     .project-tab__shell {
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(255,255,255,0.10);
       color: rgba(255,255,255,0.55);
-      border-radius: 6px;
-      width: 26px;
-      height: 26px;
-      cursor: pointer;
       font-size: 14px;
-      line-height: 1;
-      padding: 0;
     }
-    .project-tab__detail:hover,
     .project-tab__shell:hover {
-      background: rgba(255,255,255,0.10);
       color: #cdd6f4;
     }
     .auto-toggle {
@@ -325,12 +370,15 @@
       background: rgba(255,255,255,0.04);
       border: 1px solid rgba(255,255,255,0.12);
       color: #94a3b8;
-      padding: 4px 10px;
-      border-radius: 16px;
+      height: var(--header-btn-height, 28px);
+      padding: 0 var(--header-btn-padding-x, 10px);
+      border-radius: calc(var(--header-btn-height, 28px) / 2);
       cursor: pointer;
       font-size: 11px;
       font-weight: 600;
       letter-spacing: 0.02em;
+      line-height: 1;
+      box-sizing: border-box;
       transition: background 0.15s, border-color 0.15s, color 0.15s;
     }
     .auto-toggle:hover {
@@ -384,14 +432,21 @@
       50% { opacity: 0.65; }
     }
     .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--header-btn-gap, 6px);
       background: rgba(255,255,255,0.10);
       border: 1px solid rgba(255,255,255,0.20);
       color: #f8fafc;
-      padding: 6px 14px;
-      border-radius: 6px;
+      height: var(--header-btn-height, 28px);
+      padding: 0 14px;
+      border-radius: var(--header-btn-radius, 6px);
       cursor: pointer;
       font-size: 12px;
       font-weight: 600;
+      line-height: 1;
+      box-sizing: border-box;
       transition: background 0.15s, border-color 0.15s;
     }
     .btn:hover { background: rgba(255,255,255,0.18); border-color: rgba(255,255,255,0.30); }
@@ -404,9 +459,6 @@
     }
     .btn--create:hover { background: rgba(139,92,246,0.6); border-color: rgba(196,181,253,0.95); }
     .btn--compact-toggle {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
       font-size: 12px;
     }
     .btn--compact-toggle--active {
@@ -422,14 +474,17 @@
     .header__filter-trigger {
       display: inline-flex;
       align-items: center;
-      gap: 6px;
-      padding: 4px 10px;
+      gap: var(--header-btn-gap, 6px);
+      height: var(--header-btn-height, 28px);
+      padding: 0 var(--header-btn-padding-x, 10px);
       background: rgba(255,255,255,0.04);
       border: 1px solid rgba(255,255,255,0.10);
-      border-radius: 6px;
+      border-radius: var(--header-btn-radius, 6px);
       color: #cbd5e1;
       cursor: pointer;
       font-size: 12px;
+      line-height: 1;
+      box-sizing: border-box;
       transition: background 0.12s, color 0.12s, border-color 0.12s;
     }
     .header__filter-trigger:hover {
@@ -471,15 +526,16 @@
       background: transparent;
       border: 1px solid rgba(255,255,255,0.10);
       color: #94a3b8;
-      width: 28px;
-      height: 28px;
-      border-radius: 6px;
+      width: var(--header-btn-height, 28px);
+      height: var(--header-btn-height, 28px);
+      border-radius: var(--header-btn-radius, 6px);
       cursor: pointer;
       font-size: 18px;
       line-height: 1;
       padding: 0;
       display: grid;
       place-items: center;
+      box-sizing: border-box;
       transition: background 0.15s, color 0.15s, border-color 0.15s;
     }
     .devtools-menu__trigger:hover {

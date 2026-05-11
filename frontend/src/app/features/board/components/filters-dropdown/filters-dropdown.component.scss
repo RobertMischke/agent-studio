@@ -6,15 +6,18 @@
 .filters-dropdown__trigger {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--header-btn-gap, 6px);
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid rgba(255, 255, 255, 0.12);
   color: #cbd5e1;
-  padding: 4px 10px;
-  border-radius: 6px;
+  height: var(--header-btn-height, 28px);
+  padding: 0 var(--header-btn-padding-x, 10px);
+  border-radius: var(--header-btn-radius, 6px);
   cursor: pointer;
   font-size: 12px;
   font-weight: 600;
+  line-height: 1;
+  box-sizing: border-box;
   transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 .filters-dropdown__trigger:hover {
