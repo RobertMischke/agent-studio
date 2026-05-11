@@ -3,6 +3,7 @@ using System.Text.Json;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.AdHoc;
 using OrchestratorApi.Services.Cli;
+using OrchestratorApi.Services.Cli.OneShot;
 using OrchestratorApi.Services.Jobs;
 
 namespace OrchestratorApi.Services;
@@ -36,18 +37,22 @@ public class RoadmapIntakeService
     private readonly JobMutationService _mutations;
     private readonly AdHocUsageRecorder? _usage;
 
+    private readonly CliOneShotRegistry? _oneShotRegistry;
+
     public RoadmapIntakeService(
         ILogger<RoadmapIntakeService> logger,
         IConfiguration configuration,
         RuntimePromptService prompts,
         JobMutationService mutations,
-        AdHocUsageRecorder? usage = null)
+        AdHocUsageRecorder? usage = null,
+        CliOneShotRegistry? oneShotRegistry = null)
     {
         _logger = logger;
         _configuration = configuration;
         _prompts = prompts;
         _mutations = mutations;
         _usage = usage;
+        _oneShotRegistry = oneShotRegistry;
     }
 
     public const string TemplateName = "roadmap-intake.md";
@@ -234,10 +239,24 @@ public class RoadmapIntakeService
     protected virtual async Task<(bool Ok, string? Raw, string? Error)> InvokeSplitterAsync(
         string prompt, CancellationToken ct)
     {
-        var claudePath = _configuration["ClaudeCli:Path"] ?? "claude";
         var model = _configuration["RoadmapIntake:Model"]
                     ?? _configuration["ClaudeCli:SummaryModel"]
                     ?? "claude-haiku-4-5";
+
+        var oneShot = _oneShotRegistry?.Get("claude");
+        if (oneShot != null)
+        {
+            var r = await oneShot.RunAsync(new CliOneShotRequest(
+                CliType: "claude", Model: model, Prompt: prompt)
+            {
+                Timeout = TimeSpan.FromSeconds(HaikuTimeoutSeconds),
+                Source = AdHocUsageSources.RoadmapIntake,
+            }, ct).ConfigureAwait(false);
+            if (!r.Ok) return (false, null, r.Error);
+            return (true, r.Stdout, null);
+        }
+
+        var claudePath = _configuration["ClaudeCli:Path"] ?? "claude";
 
         var psi = new ProcessStartInfo
         {

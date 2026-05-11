@@ -113,4 +113,61 @@ export class DriftService {
       { status, note: note ?? null },
     );
   }
+
+  /**
+   * Run the deterministic Code Pattern Drift check. Walks the dev repo,
+   * applies the rule catalog, and returns the full report inline (the
+   * detector is fast — no LLM call, sub-second on typical repos).
+   */
+  runCodePatternDrift(): Observable<CodePatternDriftResponse> {
+    return this.http.post<CodePatternDriftResponse>(
+      `${this.baseUrl}/actions/code-pattern-drift`,
+      {},
+    );
+  }
+
+  /** Read the active rule list so the card can preview "we check for: …". */
+  getCodePatternRules(): Observable<CodePatternRuleSummary[]> {
+    return this.http.get<CodePatternRuleSummary[]>(
+      `${this.baseUrl}/actions/code-pattern-drift/rules`,
+    );
+  }
+}
+
+export interface CodePatternHit {
+  filePath: string;
+  lineNumber: number;
+  snippet: string;
+  isDrift: boolean;
+  evidence: string;
+}
+
+export interface CodePatternFinding {
+  ruleId: string;
+  title: string;
+  canonicalDescription: string;
+  totalSites: number;
+  canonicalSites: number;
+  driftSites: number;
+  hits: CodePatternHit[];
+  overallSeverity: string;
+}
+
+export interface CodePatternDriftReport {
+  capturedAt: string;
+  repoRoot: string;
+  findings: CodePatternFinding[];
+  totalDriftSites: number;
+}
+
+export interface CodePatternDriftResponse {
+  report: CodePatternDriftReport;
+  markdown: string;
+}
+
+export interface CodePatternRuleSummary {
+  id: string;
+  title: string;
+  canonicalDescription: string;
+  severity: string;
 }

@@ -500,11 +500,35 @@ public static class DriftReportEndpoints
         // CodePatternDriftAnalysisService for the rule set.
         // -----------------------------------------------------------------
 
-        group.MapPost("/actions/code-pattern-drift", (
-            CodePatternDriftAnalysisService action) =>
+        group.MapPost("/actions/code-pattern-drift", async (
+            CodePatternDriftAnalysisService action,
+            OrchestratorApi.Services.Cli.OneShot.CliOneShotRegistry? oneShotRegistry,
+            bool? withLlmVerdict,
+            CancellationToken ct) =>
         {
             var repoRoot = ResolveRepoRoot();
             var report = action.Analyze(repoRoot);
+
+            // Phase-2 LLM verdict: optional, bounded cost (one call per
+            // finding-with-drift). When the OneShot isn't available the
+            // deterministic report is returned unchanged.
+            if (withLlmVerdict == true)
+            {
+                var oneShot = oneShotRegistry?.Get("claude");
+                if (oneShot != null)
+                {
+                    try
+                    {
+                        report = await action.EnrichWithLlmVerdictsAsync(report, oneShot, ct: ct);
+                    }
+                    catch
+                    {
+                        // LLM enrichment is best-effort; preserve the
+                        // deterministic report regardless of LLM failures.
+                    }
+                }
+            }
+
             var markdown = action.RenderMarkdown(report);
             return Results.Ok(new CodePatternDriftResponse(report, markdown));
         });

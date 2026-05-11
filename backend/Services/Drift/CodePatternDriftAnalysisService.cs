@@ -1,5 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
+using OrchestratorApi.Models;
+using OrchestratorApi.Services.Cli.OneShot;
 
 namespace OrchestratorApi.Services.Drift;
 
@@ -47,6 +49,27 @@ public sealed class CodePatternDriftAnalysisService
     {
         _logger = logger;
         _rules = rules ?? DefaultRules;
+    }
+
+    /// <summary>
+    /// Build the effective rule set: the hardcoded <see cref="DefaultRules"/>
+    /// plus any extra rules parsed from <c>docs/code-patterns.md</c> under
+    /// <paramref name="repoRoot"/>. Hardcoded rules win on id collisions so
+    /// a docs-only override cannot relax a load-bearing rule by accident.
+    /// </summary>
+    public static IReadOnlyList<CodePatternRule> LoadEffectiveRules(string repoRoot, ILogger? logger = null)
+    {
+        var path = Path.Combine(repoRoot, "docs", "code-patterns.md");
+        var fromDocs = CodePatternRuleLoader.LoadFromFile(path, logger);
+        if (fromDocs.Count == 0) return DefaultRules;
+        var ids = new HashSet<string>(DefaultRules.Select(r => r.Id), StringComparer.OrdinalIgnoreCase);
+        var merged = new List<CodePatternRule>(DefaultRules);
+        foreach (var r in fromDocs)
+        {
+            if (ids.Add(r.Id)) merged.Add(r);
+            else logger?.LogInformation("Docs rule '{Id}' shadowed by hardcoded default", r.Id);
+        }
+        return merged;
     }
 
     /// <summary>
@@ -135,7 +158,16 @@ public sealed class CodePatternDriftAnalysisService
         var findings = new List<CodePatternFinding>();
         var totalDrift = 0;
 
-        foreach (var rule in _rules)
+        // Merge: ctor-injected rules (used by tests) take priority; for the
+        // production path the ctor passes DefaultRules and we layer the
+        // docs/code-patterns.md additions on top.
+        IReadOnlyList<CodePatternRule> activeRules = _rules;
+        if (ReferenceEquals(_rules, DefaultRules))
+        {
+            activeRules = LoadEffectiveRules(repoRoot, _logger);
+        }
+
+        foreach (var rule in activeRules)
         {
             try
             {
@@ -281,6 +313,112 @@ public sealed class CodePatternDriftAnalysisService
         return raw.Replace('\r', ' ').Replace('\n', ' ');
     }
 
+    /// <summary>
+    /// Optional Phase-2 enrichment: for every finding with at least one drift
+    /// site, ask a fast Claude model whether the deterministic detector got
+    /// it right. The LLM verdict is purely advisory — it adds a per-finding
+    /// `LlmVerdict` (real-drift / false-positive / unclear) and a one-sentence
+    /// reasoning to the report. The deterministic verdict is never overwritten;
+    /// the LLM is an explainer, not the source of truth.
+    /// </summary>
+    /// <remarks>
+    /// Bounded cost: one call per finding with drift (typically &lt;5). The
+    /// per-call timeout is 30 s; a failure leaves the finding without an
+    /// LLM verdict. Token spend lands on the AdHocUsageRecorder via the
+    /// OneShot pipeline.
+    /// </remarks>
+    public async Task<CodePatternDriftReport> EnrichWithLlmVerdictsAsync(
+        CodePatternDriftReport report,
+        ICliOneShot oneShot,
+        string model = "claude-haiku-4-5",
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(report);
+        ArgumentNullException.ThrowIfNull(oneShot);
+
+        var enrichedFindings = new List<CodePatternFinding>(report.Findings.Count);
+        foreach (var finding in report.Findings)
+        {
+            if (finding.DriftSites == 0)
+            {
+                enrichedFindings.Add(finding);
+                continue;
+            }
+
+            var prompt = BuildLlmPrompt(finding, report.RepoRoot);
+            var result = await oneShot.RunAsync(new CliOneShotRequest(
+                CliType: "claude", Model: model, Prompt: prompt)
+            {
+                Timeout = TimeSpan.FromSeconds(30),
+                Source = AdHocUsageSources.ReviewDecision,
+            }, ct).ConfigureAwait(false);
+
+            var verdict = result.Ok ? ParseLlmVerdict(result.ParsedText) : null;
+            enrichedFindings.Add(finding with { LlmVerdict = verdict });
+        }
+
+        return report with { Findings = enrichedFindings };
+    }
+
+    private string BuildLlmPrompt(CodePatternFinding finding, string repoRoot)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("You are reviewing a code-pattern drift finding.");
+        sb.AppendLine();
+        sb.AppendLine($"Pattern: {finding.Title}");
+        sb.AppendLine($"Canonical description: {finding.CanonicalDescription}");
+        sb.AppendLine();
+
+        var drifters = finding.Hits.Where(h => h.IsDrift).Take(5).ToList();
+        var canonicals = finding.Hits.Where(h => !h.IsDrift).Take(2).ToList();
+
+        if (canonicals.Count > 0)
+        {
+            sb.AppendLine("Canonical sites (use as reference):");
+            foreach (var c in canonicals) sb.AppendLine($"- {c.FilePath}:{c.LineNumber}  →  {c.Snippet}");
+            sb.AppendLine();
+        }
+        sb.AppendLine("Sites flagged as drift:");
+        foreach (var d in drifters) sb.AppendLine($"- {d.FilePath}:{d.LineNumber}  →  {d.Snippet}");
+        sb.AppendLine();
+        sb.AppendLine("Decide whether the drift detector got it right. Answer in one short paragraph (under 80 words).");
+        sb.AppendLine("End with exactly one sentinel on its own line:");
+        sb.AppendLine("[[VERDICT: status=<real-drift|false-positive|unclear>; reasoning=<one-line>]]");
+        return sb.ToString();
+    }
+
+    private static readonly Regex LlmVerdictRegex = new(
+        @"\[\[VERDICT:\s*(?<body>[^\]]+)\]\]",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    private static CodePatternLlmVerdict? ParseLlmVerdict(string? response)
+    {
+        if (string.IsNullOrWhiteSpace(response)) return null;
+        var matches = LlmVerdictRegex.Matches(response);
+        if (matches.Count == 0) return null;
+        var body = matches[^1].Groups["body"].Value;
+        string? status = null;
+        string? reasoning = null;
+        foreach (var part in body.Split(';'))
+        {
+            var eq = part.IndexOf('=');
+            if (eq <= 0) continue;
+            var key = part[..eq].Trim().ToLowerInvariant();
+            var value = part[(eq + 1)..].Trim();
+            if (key == "status") status = value.ToLowerInvariant();
+            else if (key == "reasoning") reasoning = value;
+        }
+        if (status is null) return null;
+        return new CodePatternLlmVerdict(
+            Status: status switch
+            {
+                "real-drift" or "real" or "drift" => CodePatternLlmStatus.RealDrift,
+                "false-positive" or "false" or "fp" => CodePatternLlmStatus.FalsePositive,
+                _ => CodePatternLlmStatus.Unclear,
+            },
+            Reasoning: reasoning ?? "(no reasoning supplied)");
+    }
+
     /// <summary>Render the report as Markdown for the human-facing
     /// sibling stored under <c>logs/drift/code-pattern-drift/</c>.</summary>
     public string RenderMarkdown(CodePatternDriftReport report, string? project = null)
@@ -387,7 +525,24 @@ public sealed record CodePatternFinding(
     int CanonicalSites,
     int DriftSites,
     IReadOnlyList<CodePatternHit> Hits,
-    DriftSeverity OverallSeverity);
+    DriftSeverity OverallSeverity)
+{
+    /// <summary>Optional phase-2 enrichment from a Claude verdict pass.
+    /// Null on findings that were not LLM-reviewed or where the LLM call
+    /// failed.</summary>
+    public CodePatternLlmVerdict? LlmVerdict { get; init; }
+}
+
+public sealed record CodePatternLlmVerdict(
+    CodePatternLlmStatus Status,
+    string Reasoning);
+
+public enum CodePatternLlmStatus
+{
+    RealDrift,
+    FalsePositive,
+    Unclear,
+}
 
 public sealed record CodePatternDriftReport(
     DateTime CapturedAt,

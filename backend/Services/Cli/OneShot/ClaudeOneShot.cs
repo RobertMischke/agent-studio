@@ -88,6 +88,10 @@ public sealed class ClaudeOneShot : ICliOneShot
         psi.ArgumentList.Add("--model");
         psi.ArgumentList.Add(request.Model);
         psi.ArgumentList.Add("--dangerously-skip-permissions");
+        if (request.ExtraArgs is { Count: > 0 } extras)
+        {
+            foreach (var arg in extras) psi.ArgumentList.Add(arg);
+        }
 
         var requestedAt = DateTime.UtcNow;
         using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);

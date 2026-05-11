@@ -3,6 +3,7 @@ using System.Text.Json;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.AdHoc;
 using OrchestratorApi.Services.Cli;
+using OrchestratorApi.Services.Cli.OneShot;
 
 namespace OrchestratorApi.Services;
 
@@ -34,16 +35,20 @@ public class PromptEnhancementService
     private readonly RuntimePromptService _prompts;
     private readonly AdHocUsageRecorder? _usage;
 
+    private readonly CliOneShotRegistry? _oneShotRegistry;
+
     public PromptEnhancementService(
         ILogger<PromptEnhancementService> logger,
         IConfiguration configuration,
         RuntimePromptService prompts,
-        AdHocUsageRecorder? usage = null)
+        AdHocUsageRecorder? usage = null,
+        CliOneShotRegistry? oneShotRegistry = null)
     {
         _logger = logger;
         _configuration = configuration;
         _prompts = prompts;
         _usage = usage;
+        _oneShotRegistry = oneShotRegistry;
     }
 
     public record EnhanceResult(string RefinedPrompt, string Intent, IReadOnlyList<string> Tags);
@@ -202,11 +207,25 @@ public class PromptEnhancementService
     protected virtual async Task<(bool Ok, string? Raw, string? Error)> InvokeAsync(
         string prompt, CancellationToken ct)
     {
-        var claudePath = _configuration["ClaudeCli:Path"] ?? "claude";
         var model = _configuration["PromptEnhancement:Model"]
                     ?? _configuration["TitleGeneration:Model"]
                     ?? _configuration["ClaudeCli:SummaryModel"]
                     ?? "claude-haiku-4-5";
+
+        var oneShot = _oneShotRegistry?.Get("claude");
+        if (oneShot != null)
+        {
+            var r = await oneShot.RunAsync(new CliOneShotRequest(
+                CliType: "claude", Model: model, Prompt: prompt)
+            {
+                Timeout = TimeSpan.FromSeconds(HaikuTimeoutSeconds),
+                Source = AdHocUsageSources.PromptEnhancement,
+            }, ct).ConfigureAwait(false);
+            if (!r.Ok) return (false, null, r.Error);
+            return (true, r.Stdout, null);
+        }
+
+        var claudePath = _configuration["ClaudeCli:Path"] ?? "claude";
 
         var psi = new ProcessStartInfo
         {

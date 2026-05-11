@@ -2,6 +2,7 @@ using System.Diagnostics;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.AdHoc;
 using OrchestratorApi.Services.Cli;
+using OrchestratorApi.Services.Cli.OneShot;
 
 namespace OrchestratorApi.Services;
 
@@ -33,17 +34,20 @@ public class TitleGenerationService
     private readonly IConfiguration _configuration;
     private readonly RuntimePromptService _prompts;
     private readonly AdHocUsageRecorder? _usage;
+    private readonly CliOneShotRegistry? _oneShotRegistry;
 
     public TitleGenerationService(
         ILogger<TitleGenerationService> logger,
         IConfiguration configuration,
         RuntimePromptService prompts,
-        AdHocUsageRecorder? usage = null)
+        AdHocUsageRecorder? usage = null,
+        CliOneShotRegistry? oneShotRegistry = null)
     {
         _logger = logger;
         _configuration = configuration;
         _prompts = prompts;
         _usage = usage;
+        _oneShotRegistry = oneShotRegistry;
     }
 
     /// <summary>
@@ -134,11 +138,28 @@ public class TitleGenerationService
     protected virtual async Task<(bool Ok, string? Raw, string? Error)> InvokeAsync(
         string prompt, CancellationToken ct)
     {
-        var claudePath = _configuration["ClaudeCli:Path"] ?? "claude";
         var model = _configuration["TitleGeneration:Model"]
                     ?? _configuration["ClaudeCli:SummaryModel"]
                     ?? "claude-haiku-4-5";
 
+        var oneShot = _oneShotRegistry?.Get("claude");
+        if (oneShot != null)
+        {
+            var r = await oneShot.RunAsync(new CliOneShotRequest(
+                CliType: "claude", Model: model, Prompt: prompt)
+            {
+                Timeout = TimeSpan.FromSeconds(HaikuTimeoutSeconds),
+                Source = AdHocUsageSources.TitleGeneration,
+            }, ct).ConfigureAwait(false);
+            if (!r.Ok) return (false, null, r.Error);
+            _logger.LogInformation("Title generated in {Elapsed}ms ({Bytes} bytes)",
+                (long)r.Duration.TotalMilliseconds, r.Stdout.Length);
+            return (true, r.Stdout, null);
+        }
+
+        // Fallback for tests that build the service without DI. Still
+        // stdin-piped; the OneShot path is just the production wiring.
+        var claudePath = _configuration["ClaudeCli:Path"] ?? "claude";
         var psi = new ProcessStartInfo
         {
             FileName = CliExecutionServiceBase.ResolveExecutable(claudePath),
@@ -159,28 +180,18 @@ public class TitleGenerationService
         {
             using var p = Process.Start(psi);
             if (p == null) return (false, null, "Process.Start returned null");
-
             await p.StandardInput.WriteAsync(prompt.AsMemory(), ct);
             p.StandardInput.Close();
-
             var stdoutTask = p.StandardOutput.ReadToEndAsync(ct);
             var stderrTask = p.StandardError.ReadToEndAsync(ct);
             using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
             cts.CancelAfter(TimeSpan.FromSeconds(HaikuTimeoutSeconds));
             await p.WaitForExitAsync(cts.Token);
-
             var stdout = await stdoutTask;
             var stderr = await stderrTask;
             sw.Stop();
             if (p.ExitCode != 0)
-            {
-                _logger.LogWarning("Title generator exited {ExitCode} after {Elapsed}ms: {Stderr}",
-                    p.ExitCode, sw.ElapsedMilliseconds, stderr.Trim());
                 return (false, null, $"claude exited {p.ExitCode}: {stderr.Trim()}");
-            }
-
-            _logger.LogInformation("Title generated in {Elapsed}ms ({Bytes} bytes)",
-                sw.ElapsedMilliseconds, stdout.Length);
             return (true, stdout, null);
         }
         catch (OperationCanceledException)
@@ -189,7 +200,6 @@ public class TitleGenerationService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "Title generator invocation failed");
             return (false, null, ex.Message);
         }
     }

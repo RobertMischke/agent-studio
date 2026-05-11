@@ -72,6 +72,13 @@ public sealed record CliOneShotRequest(
     /// <see cref="AdHoc.AdHocUsageRecorder"/>. Used by call sites that
     /// own their own bookkeeping (e.g. ProjectRunner).</summary>
     public bool RecordUsage { get; init; } = true;
+
+    /// <summary>Extra argv tokens appended after the standard
+    /// <c>-p / --output-format / --model / --dangerously-skip-permissions</c>
+    /// args. Use for resume flags like <c>-r &lt;sessionId&gt;</c>. Tokens are
+    /// passed through ProcessStartInfo.ArgumentList so no manual quoting
+    /// is required.</summary>
+    public IReadOnlyList<string>? ExtraArgs { get; init; }
 }
 
 /// <summary>Full result envelope. All fields are populated even on

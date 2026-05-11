@@ -3,6 +3,7 @@ using System.Text.Json;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.Bus;
 using OrchestratorApi.Services.Cli;
+using OrchestratorApi.Services.Cli.OneShot;
 
 namespace OrchestratorApi.Services.Runner;
 
@@ -56,17 +57,20 @@ public class OrchestratorRunner
     private readonly ILogger<OrchestratorRunner> _logger;
     private readonly ICliUsageParser? _claudeUsageParser;
     private readonly ICliModelRegistry? _modelRegistry;
+    private readonly CliOneShotRegistry? _oneShotRegistry;
 
     public OrchestratorRunner(
         ClaudeCliService claude,
         ILogger<OrchestratorRunner> logger,
         CliUsageParserRegistry? parsers = null,
-        ICliModelRegistry? modelRegistry = null)
+        ICliModelRegistry? modelRegistry = null,
+        CliOneShotRegistry? oneShotRegistry = null)
     {
         _claude = claude;
         _logger = logger;
         _claudeUsageParser = parsers?.Get("claude");
         _modelRegistry = modelRegistry;
+        _oneShotRegistry = oneShotRegistry;
     }
 
     /// <summary>
@@ -114,6 +118,54 @@ public class OrchestratorRunner
         CancellationToken ct)
     {
         var modelId = string.IsNullOrWhiteSpace(model) ? DefaultModel : model!.Trim();
+
+        // Production path: route through ICliOneShot (single point of code).
+        // The OneShot service captures latency, parses tokens via
+        // ClaudeUsageParser, and feeds the prompt via stdin (the failure
+        // mode this file's long comment block exists to prevent).
+        var oneShot = _oneShotRegistry?.Get("claude");
+        if (oneShot != null)
+        {
+            var extras = string.IsNullOrWhiteSpace(resumeSessionId)
+                ? null
+                : new[] { "-r", resumeSessionId! };
+
+            var r = await oneShot.RunAsync(new CliOneShotRequest(
+                CliType: "claude", Model: modelId, Prompt: prompt)
+            {
+                WorkingDirectory = workingDirectory,
+                Timeout = DefaultTimeout,
+                ExtraArgs = extras,
+                RecordUsage = false, // The orchestrator path has its own bookkeeping
+            }, ct).ConfigureAwait(false);
+
+            if (!r.Ok)
+            {
+                // Resume errors land on stdout (claude quirk); surface as the error string
+                // so the policy layer can detect and fall back to a fresh one-shot.
+                var combined = string.IsNullOrWhiteSpace(r.Stderr)
+                    ? (string.IsNullOrWhiteSpace(r.Stdout) ? r.Error ?? "CLI failure" : r.Stdout.Trim())
+                    : r.Stderr.Trim();
+                _logger.LogWarning(
+                    "Orchestrator decision failed via OneShot: exit={Exit}, stdout={Stdout}, stderr={Stderr}",
+                    r.ExitCode, r.Stdout?.Trim(), r.Stderr?.Trim());
+                return new OrchestratorDecisionResult(false, "", modelId, null, null, combined)
+                {
+                    Latency = r.Latency,
+                };
+            }
+
+            var parsed = ParseResult(r.Stdout, modelId);
+            // OneShot already produced ParsedTurnUsage with the context-window
+            // snapshot from the same parser. Prefer that over a re-derivation.
+            return parsed with
+            {
+                Latency = r.Latency,
+                ParsedUsage = r.RichUsage ?? parsed.ParsedUsage,
+            };
+        }
+
+        // Fallback (legacy tests): inline implementation, still stdin-piped.
         var (args, _) = BuildArgs(modelId, resumeSessionId);
 
         var psi = new ProcessStartInfo

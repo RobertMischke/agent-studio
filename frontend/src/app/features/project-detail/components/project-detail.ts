@@ -11,6 +11,7 @@ import { ProjectSecuritySectionComponent } from './project-security-section';
 import { ProjectArchitectureSectionComponent } from './project-architecture-section';
 import { ProjectDriftSectionComponent } from './project-drift-section';
 import { ProjectDriftOverviewSectionComponent } from './project-drift-overview-section';
+import { CodePatternDriftCardComponent } from './code-pattern-drift-card';
 import { ProjectSupervisorSectionComponent } from './project-supervisor-section';
 import { ProjectMetaCycleSectionComponent } from './project-meta-cycle-section';
 import { ProjectAnalysisReportsSectionComponent } from './project-analysis-reports-section';
@@ -46,6 +47,7 @@ interface ProjectSettingsRow {
     ProjectArchitectureSectionComponent,
     ProjectDriftSectionComponent,
     ProjectDriftOverviewSectionComponent,
+    CodePatternDriftCardComponent,
     ProjectSupervisorSectionComponent,
     ProjectMetaCycleSectionComponent,
     ProjectAnalysisReportsSectionComponent,

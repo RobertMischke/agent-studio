@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.AdHoc;
 using OrchestratorApi.Services.Cli;
+using OrchestratorApi.Services.Cli.OneShot;
 
 namespace OrchestratorApi.Services;
 
@@ -34,13 +35,17 @@ public sealed class SummaryGenerationService
         ILogger<SummaryGenerationService> logger,
         IConfiguration configuration,
         RuntimePromptService prompts,
-        AdHocUsageRecorder? usage = null)
+        AdHocUsageRecorder? usage = null,
+        CliOneShotRegistry? oneShotRegistry = null)
     {
         _logger = logger;
         _configuration = configuration;
         _prompts = prompts;
         _usage = usage;
+        _oneShotRegistry = oneShotRegistry;
     }
+
+    private readonly CliOneShotRegistry? _oneShotRegistry;
 
     public JobSummaryState? GetState(string jobKey)
         => _states.TryGetValue(jobKey, out var s) ? s : null;
@@ -146,16 +151,31 @@ public sealed class SummaryGenerationService
     private async Task<(bool Ok, string? Summary, string? Error)> RunHaikuAsync(
         string prompt, string workingDirectory, CancellationToken ct)
     {
-        var claudePath = _configuration["ClaudeCli:Path"] ?? "claude";
         var model = _configuration["ClaudeCli:SummaryModel"] ?? "claude-haiku-4-5";
 
+        var oneShot = _oneShotRegistry?.Get("claude");
+        if (oneShot != null)
+        {
+            var r = await oneShot.RunAsync(new CliOneShotRequest(
+                CliType: "claude", Model: model, Prompt: prompt)
+            {
+                WorkingDirectory = Directory.Exists(workingDirectory) ? workingDirectory : null,
+                Timeout = TimeSpan.FromSeconds(HaikuTimeoutSeconds),
+                Source = AdHocUsageSources.SummaryGeneration,
+                RecordUsage = false, // We record below with parsed text + usage
+            }, ct).ConfigureAwait(false);
+
+            AdHocClaudeInvoker.Record(_usage, AdHocUsageSources.SummaryGeneration, model, r.Usage,
+                (long)r.Duration.TotalMilliseconds, ok: r.Ok);
+            if (!r.Ok) return (false, null, r.Error);
+            return (true, SanitizeMarkdown(r.ParsedText), null);
+        }
+
+        var claudePath = _configuration["ClaudeCli:Path"] ?? "claude";
+
         // Feed the prompt via stdin instead of a positional `-p <prompt>`
-        // argument. The summary prompt embeds up to MaxLogChars (60 000) of
-        // CLI log; that combined with `--model …` and the executable path
-        // overruns Windows' 32 767-char CreateProcess command-line cap and
-        // returns "The command line is too long." Stdin has no such limit
-        // and Claude Code's `-p` mode reads the user message from stdin
-        // when no positional prompt is provided.
+        // argument. See OneShot service for the production path; this
+        // fallback is for tests that build the service without DI.
         var psi = new ProcessStartInfo
         {
             FileName = CliExecutionServiceBase.ResolveExecutable(claudePath),
