@@ -408,6 +408,100 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     }
 
     [Fact]
+    public void BuildDiffSummary_EmptyHeadCommitWithPriorNonEmptyCommits_ReportsRealChangeset()
+    {
+        // Regression for the 2026-05-11 false positive: an empty
+        // crash-recovery commit landed on HEAD on top of three real
+        // commits with ~7 files / ~400 lines of work. The aspect runner
+        // was reading only HEAD (via JobInfo.Commit) and reporting
+        // "Files changed: 0", which led every aspect reviewer to BLOCK
+        // with "no work landed". The aggregator-backed summary must
+        // surface the union across all run-window commits so the LLM
+        // sees the real changeset.
+        var t = DateTime.UtcNow;
+        var emptyAutoCommit = new JobCommitInfo
+        {
+            Sha = "empty-head",
+            ShortSha = "emptyh",
+            Message = "chore(crash-recovery): collect leftover state",
+            FilesChanged = 0,
+            At = t.AddMinutes(1)
+        };
+        var aggregate = new JobCommitsAggregate
+        {
+            Count = 3,
+            TotalFilesChanged = 7,
+            TotalAdded = 380,
+            TotalRemoved = 60,
+            Commits = new List<JobCommitRecord>
+            {
+                new() { Sha = "empty-head", ShortSha = "emptyh", AuthorDateUtc = t.AddMinutes(1), Subject = "chore(crash-recovery): collect leftover state", FilesChanged = 0, Added = 0, Removed = 0 },
+                new() { Sha = "real-two",   ShortSha = "rl2",    AuthorDateUtc = t,                Subject = "feat: token aggregation phase 2",            FilesChanged = 3, Added = 180, Removed = 25 },
+                new() { Sha = "real-one",   ShortSha = "rl1",    AuthorDateUtc = t.AddMinutes(-5), Subject = "refactor: single source of truth",            FilesChanged = 4, Added = 200, Removed = 35 }
+            }
+        };
+
+        var summary = ReviewDecisionOrchestrator.BuildDiffSummary(aggregate, emptyAutoCommit);
+
+        // The aggregate-level header must surface the real numbers; an LLM
+        // reading the prompt must NOT see "Files changed: 0".
+        Assert.Contains("Commits attributed to this task: 3", summary);
+        Assert.Contains("Total files changed", summary);
+        Assert.Contains("7", summary);
+        Assert.Contains("380", summary);
+        Assert.Contains("60", summary);
+
+        // Every commit (including the empty recovery one) is enumerated so
+        // the reviewer can see context, but the empty one no longer
+        // dominates the prompt.
+        Assert.Contains("rl2", summary);
+        Assert.Contains("rl1", summary);
+        Assert.Contains("feat: token aggregation phase 2", summary);
+        Assert.Contains("refactor: single source of truth", summary);
+
+        // Critical assertion: the false-positive substring from the
+        // pre-fix view must not appear.
+        Assert.DoesNotContain("Files changed: 0\r", summary);
+        Assert.DoesNotContain("Files changed: 0\n", summary);
+    }
+
+    [Fact]
+    public void BuildDiffSummary_TrulyNoCommits_StatesItExplicitly()
+    {
+        // No runs and no auto-commit: the aspect runner must be told
+        // unambiguously that nothing landed rather than receiving a
+        // misleading "Commit: " line or an empty string.
+        var summary = ReviewDecisionOrchestrator.BuildDiffSummary(
+            new JobCommitsAggregate { Count = 0, Commits = [] },
+            legacyAutoCommit: null);
+
+        Assert.Contains("No commits attributed to this task", summary);
+    }
+
+    [Fact]
+    public void BuildDiffSummary_AggregateEmptyButLegacyCommitPresent_FallsBackToLegacyView()
+    {
+        // Defensive fallback path: the aggregator could not be wired
+        // (test / missing deps). With a legacy auto-commit on hand we
+        // still emit the old single-commit view so the prompt is not
+        // empty.
+        var legacy = new JobCommitInfo
+        {
+            Sha = "abc123",
+            ShortSha = "abc123",
+            Message = "feat: legacy single-commit\n\nbody",
+            FilesChanged = 4,
+            At = DateTime.UtcNow
+        };
+        var summary = ReviewDecisionOrchestrator.BuildDiffSummary(
+            new JobCommitsAggregate { Count = 0, Commits = [] }, legacy);
+
+        Assert.Contains("abc123", summary);
+        Assert.Contains("feat: legacy single-commit", summary);
+        Assert.Contains("Files changed: 4", summary);
+    }
+
+    [Fact]
     public void IsPromptUsable_SeparatesRealPromptsFromPlaceholders()
     {
         // Heuristic guard: any future change to the placeholder rules

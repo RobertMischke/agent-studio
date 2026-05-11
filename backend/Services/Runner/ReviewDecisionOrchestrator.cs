@@ -93,6 +93,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     private readonly AutoReviewStatusSnapshot _statusSnapshot;
     private readonly IConfiguration _configuration;
     private readonly ILogger<ReviewDecisionOrchestrator> _logger;
+    private readonly JobSessionLog? _sessions;
+    private readonly GitService? _git;
 
     /// <summary>
     /// Default aspect runner ids when <c>ReviewDecisionOrchestrator:AspectRunners</c>
@@ -129,7 +131,9 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         IConfiguration configuration,
         ILogger<ReviewDecisionOrchestrator> logger,
         OrchestratorApi.Services.AdHoc.AdHocUsageRecorder? usage = null,
-        OrchestratorApi.Services.Cli.OneShot.CliOneShotRegistry? oneShotRegistry = null)
+        OrchestratorApi.Services.Cli.OneShot.CliOneShotRegistry? oneShotRegistry = null,
+        JobSessionLog? sessions = null,
+        GitService? git = null)
     {
         _scanner = scanner;
         _stateMachine = stateMachine;
@@ -141,6 +145,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _logger = logger;
         _usage = usage;
         _oneShotRegistry = oneShotRegistry;
+        _sessions = sessions;
+        _git = git;
 
         // Route production CLI calls through ICliOneShot (stdin-piped,
         // stderr-captured, exit-code-surfaced). The CliRunner property
@@ -568,7 +574,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
         var (taskBody, recentLog) = LoadTaskContext(pending);
         var statusSummary = LoadStatusSummary(current.FolderPath);
-        var diffSummary = LoadDiffSummary(current);
+        var diffSummary = LoadDiffSummary(entry.Name, entry.Path, current);
 
         var inputs = new AspectRunInputs(
             Project: entry.Name,
@@ -704,21 +710,98 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         catch { return string.Empty; }
     }
 
-    private static string LoadDiffSummary(JobInfo job)
+    /// <summary>
+    /// Build the diff summary fed to the per-aspect prompts. Aggregates
+    /// every commit attributed to the job across all of its runs (via
+    /// session-events SHA ranges) plus the auto-commit on
+    /// <see cref="JobInfo.Commit"/>. Same aggregation pipeline that
+    /// powers <c>/api/jobs/{id}/commits</c>, so the aspect reviewer sees
+    /// the same picture the human reviewer sees.
+    ///
+    /// <para>
+    /// Why not just <c>job.Commit</c>: a crash-recovery commit lands as a
+    /// near-empty fixup on top of the real work, then becomes
+    /// <see cref="JobInfo.Commit"/>. Reading that alone gives "0 files
+    /// changed" and false-positive blocks the verdict (2026-05-11
+    /// incident). Walking the full run range is the only source of truth
+    /// for the actual change set.
+    /// </para>
+    ///
+    /// <para>
+    /// Falls back to the legacy single-commit summary only when neither
+    /// dependency is wired - that path exists for tests that construct
+    /// the orchestrator without the full graph; production always has
+    /// both services from DI.
+    /// </para>
+    /// </summary>
+    private string LoadDiffSummary(string project, string? watchPath, JobInfo job)
     {
-        // A first-slice approximation: name the files the job touched
-        // via its commit metadata if present. Future iterations can
-        // replace this with `git diff --stat` against the run window.
-        if (job.Commit is null) return "(no commit metadata available)";
-        var c = job.Commit;
-        var sb = new StringBuilder();
-        sb.AppendLine($"Commit: {c.ShortSha}");
-        if (!string.IsNullOrWhiteSpace(c.Message))
+        if (_sessions == null || _git == null)
         {
-            var firstLine = c.Message.Split('\n', 2)[0].Trim();
-            if (firstLine.Length > 0) sb.AppendLine($"Subject: {firstLine}");
+            return BuildDiffSummary(EmptyAggregate, job.Commit);
         }
-        sb.AppendLine($"Files changed: {c.FilesChanged}");
+        try
+        {
+            var events = _sessions.ReadSessionEvents(job.Id, watchPath);
+            var lines = CliOutputLogParser.ParseFile(JobPaths.CliOutputLog(job.FolderPath));
+            var timeline = RunTimelineBuilder.Build(events, lines, DateTime.UtcNow);
+            var aggregate = JobCommitsAggregator.Aggregate(job, timeline.Runs,
+                (before, after) => _git!.GetCommitsInShaRange(job.Id, watchPath, before, after));
+            return BuildDiffSummary(aggregate, job.Commit);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "ReviewDecisionOrchestrator: full-range diff summary failed for {Project}/{JobId}; falling back to single-commit view",
+                project, job.Id);
+            return BuildDiffSummary(EmptyAggregate, job.Commit);
+        }
+    }
+
+    private static readonly JobCommitsAggregate EmptyAggregate = new() { Count = 0, Commits = [] };
+
+    /// <summary>
+    /// Pure renderer: turn an aggregate plus the legacy auto-commit into the
+    /// diff-summary string handed to the aspect prompts. Pure so it can
+    /// be pinned by unit tests against a synthetic commit stack
+    /// (including the empty-HEAD-recovery-commit + non-empty prior
+    /// commits scenario that triggered the 2026-05-11 false positive).
+    /// </summary>
+    internal static string BuildDiffSummary(JobCommitsAggregate aggregate, JobCommitInfo? legacyAutoCommit)
+    {
+        if (aggregate.Count == 0)
+        {
+            if (legacyAutoCommit == null)
+            {
+                return "No commits attributed to this task (no run-window SHA range produced commits and no auto-commit was recorded).";
+            }
+            // Aggregator could not be run (test path / missing deps). Fall
+            // back to the legacy single-commit view so the prompt still has
+            // something to chew on.
+            var c = legacyAutoCommit;
+            var sb0 = new StringBuilder();
+            sb0.AppendLine($"Commit: {c.ShortSha}");
+            if (!string.IsNullOrWhiteSpace(c.Message))
+            {
+                var firstLine = c.Message.Split('\n', 2)[0].Trim();
+                if (firstLine.Length > 0) sb0.AppendLine($"Subject: {firstLine}");
+            }
+            sb0.AppendLine($"Files changed: {c.FilesChanged}");
+            return sb0.ToString();
+        }
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"Commits attributed to this task: {aggregate.Count}");
+        sb.AppendLine($"Total files changed (sum across commits; a file touched twice counts twice): {aggregate.TotalFilesChanged}");
+        sb.AppendLine($"Total lines added: {aggregate.TotalAdded}");
+        sb.AppendLine($"Total lines removed: {aggregate.TotalRemoved}");
+        sb.AppendLine();
+        sb.AppendLine("Per commit (newest first):");
+        foreach (var c in aggregate.Commits)
+        {
+            var subject = string.IsNullOrWhiteSpace(c.Subject) ? "(no subject)" : c.Subject;
+            sb.AppendLine($"- {c.ShortSha} {subject} ({c.FilesChanged} files, +{c.Added}, -{c.Removed})");
+        }
         return sb.ToString();
     }
 
