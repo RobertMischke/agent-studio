@@ -24,6 +24,13 @@ import {
   ChatRole,
   ChatSubmitEvent
 } from './chat-types';
+import {
+  RoleBadgeComponent,
+  PhaseSummaryListComponent,
+  groupIntoPhases,
+  type ChatPhase,
+  type PhaseInputMessage,
+} from '../../features/workforce';
 
 interface RenderedMessage {
   kind: 'message';
@@ -75,7 +82,7 @@ const COLLAPSE_LINE_THRESHOLD = 24;
 @Component({
   selector: 'app-chat',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, RoleBadgeComponent, PhaseSummaryListComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './chat.component.html',
   styleUrl: './chat.component.scss'
@@ -110,6 +117,8 @@ export class ChatComponent implements AfterViewInit, OnDestroy {
   readonly expandedIds = signal<ReadonlySet<string>>(new Set());
   /** Per-event-id override: ids of events the user has expanded. */
   readonly expandedEventIds = signal<ReadonlySet<string>>(new Set());
+  /** Per-phase-id override: explicit expand/collapse from the operator. */
+  readonly phaseOverrides = signal<ReadonlyMap<string, boolean>>(new Map());
 
   draftText = '';
 
@@ -122,10 +131,54 @@ export class ChatComponent implements AfterViewInit, OnDestroy {
 
   private readonly sanitizer = inject(DomSanitizer);
 
+  /**
+   * Chat phases derived from the merged message stream. The chat
+   * component already orders by timestamp; we feed the same source
+   * directly into the grouping helper so the summary lines line up
+   * exactly with what the verbatim feed shows.
+   */
+  readonly phases = computed<ChatPhase[]>(() => {
+    const input: PhaseInputMessage[] = this.messages().map((m) => ({
+      id: m.id,
+      ts: m.timestamp,
+      author: m.role,
+    }));
+    return groupIntoPhases(input);
+  });
+
+  readonly expandedPhaseIds = computed<ReadonlySet<string>>(() => {
+    const phases = this.phases();
+    const overrides = this.phaseOverrides();
+    if (overrides.size === 0) {
+      if (phases.length === 0) return new Set();
+      return new Set([phases[phases.length - 1].id]);
+    }
+    const baseline = new Set<string>();
+    if (phases.length > 0) baseline.add(phases[phases.length - 1].id);
+    for (const [id, expanded] of overrides) {
+      if (expanded) baseline.add(id);
+      else baseline.delete(id);
+    }
+    return baseline;
+  });
+
+  readonly hiddenMessageIds = computed<ReadonlySet<string>>(() => {
+    const expanded = this.expandedPhaseIds();
+    const hidden = new Set<string>();
+    for (const phase of this.phases()) {
+      if (expanded.has(phase.id)) continue;
+      for (const id of phase.messageIds) hidden.add(id);
+    }
+    return hidden;
+  });
+
   readonly rendered = computed<RenderedItem[]>(() => {
     const expanded = this.expandedIds();
     const expandedEvents = this.expandedEventIds();
-    const messageItems: RenderedItem[] = this.messages().map((message) => {
+    const hiddenIds = this.hiddenMessageIds();
+    const messageItems: RenderedItem[] = this.messages()
+      .filter((message) => !hiddenIds.has(message.id))
+      .map((message) => {
       // User input stays plain text (newlines + escaping); every other role
       // ships Markdown, which is how agents and orchestrator log entries
       // express themselves on the wire.
@@ -308,6 +361,12 @@ export class ChatComponent implements AfterViewInit, OnDestroy {
   jumpToBottom(): void {
     this.stickToBottom.set(true);
     this.scheduleScrollToBottom();
+  }
+
+  onPhaseToggled(event: { phaseId: string; expanded: boolean }): void {
+    const next = new Map(this.phaseOverrides());
+    next.set(event.phaseId, event.expanded);
+    this.phaseOverrides.set(next);
   }
 
   toggleCollapsed(messageId: string): void {

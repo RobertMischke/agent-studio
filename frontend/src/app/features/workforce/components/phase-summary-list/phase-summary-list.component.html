@@ -1,0 +1,37 @@
+<section
+  class="phase-summary"
+  data-testid="phase-summary-list"
+  [attr.data-phase-count]="phases().length"
+  aria-label="Workforce chat phase summary">
+  @if (phases().length === 0) {
+    <div class="phase-summary__empty">No phases yet.</div>
+  }
+  @for (phase of phases(); track phase.id) {
+    <div
+      class="phase-summary__row"
+      [class.phase-summary__row--expanded]="isExpanded(phase.id)"
+      [attr.data-testid]="'phase-summary-row'"
+      [attr.data-phase-id]="phase.id"
+      [attr.data-expanded]="isExpanded(phase.id) ? 'true' : 'false'">
+      <button
+        type="button"
+        class="phase-summary__toggle"
+        [attr.data-testid]="'phase-summary-toggle-' + phase.id"
+        [attr.aria-expanded]="isExpanded(phase.id)"
+        [title]="phase.summary"
+        (click)="togglePhase(phase.id)">
+        <span class="phase-summary__caret" aria-hidden="true">{{ isExpanded(phase.id) ? '▾' : '▸' }}</span>
+        <span class="phase-summary__participants">
+          @for (role of phase.participants; track role.id) {
+            <app-role-badge
+              [roleId]="role.id"
+              [compact]="true" />
+          }
+        </span>
+        <span class="phase-summary__line">{{ phase.summary }}</span>
+        <span class="phase-summary__count">{{ phase.messageCount }}</span>
+        <span class="phase-summary__time">{{ formatTimeRange(phase) }}</span>
+      </button>
+    </div>
+  }
+</section>

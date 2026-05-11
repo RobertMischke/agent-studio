@@ -1,4 +1,10 @@
     <div class="chat" [class.chat--embedded]="variant() === 'embedded'">
+      @if (phases().length > 0) {
+        <app-phase-summary-list
+          [phases]="phases()"
+          [expandedPhaseIds]="expandedPhaseIds()"
+          (phaseToggled)="onPhaseToggled($event)" />
+      }
       <div #body
            class="chat__body"
            [style.max-height]="bodyMaxHeight()"
@@ -29,7 +35,11 @@
                      [attr.data-turn-id]="item.message.id"
                      [attr.data-collapsed]="item.collapsed ? 'true' : 'false'">
               <header class="chat__msg-head">
-                <span class="chat__msg-role">{{ roleLabel(item.message.role) }}</span>
+                @if (item.message.role === 'user') {
+                  <span class="chat__msg-role">You</span>
+                } @else {
+                  <app-role-badge [author]="item.message.role" />
+                }
                 <span class="chat__msg-time">{{ formatTime(item.message.timestamp) }}</span>
               </header>
               <div class="chat__msg-body"

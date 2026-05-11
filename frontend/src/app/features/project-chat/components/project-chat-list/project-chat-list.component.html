@@ -28,6 +28,13 @@
     <div class="pchat__error" data-testid="pchat-error">{{ e }}</div>
   }
 
+  @if (mode() === 'live' && phases().length > 0) {
+    <app-phase-summary-list
+      [phases]="phases()"
+      [expandedPhaseIds]="expandedPhaseIds()"
+      (phaseToggled)="onPhaseToggled($event)" />
+  }
+
   <div class="pchat__body-row">
     <div
       #scrollHost
@@ -131,7 +138,14 @@
             [class.pchat__turn--event]="turn.kind !== 'turn'"
             [class.pchat__turn--flash]="turn.turnId === flashTurnId()">
             <header class="pchat__turn-head">
-              <span class="pchat__author">{{ turn.author }}</span>
+              @if (turn.author === 'user') {
+                <span class="pchat__author">You</span>
+              } @else {
+                <app-role-badge
+                  [author]="turn.author"
+                  [kind]="turn.kind"
+                  [refs]="turn.refs ?? null" />
+              }
               <span class="pchat__kind">{{ turn.kind }}</span>
               <time class="pchat__ts" [attr.datetime]="turn.ts">{{ formatTs(turn.ts) }}</time>
             </header>
@@ -162,7 +176,11 @@
               [attr.data-turnid]="hit.turnId"
               (click)="openHit(hit)">
               <span class="pchat__hit-meta">
-                <span class="pchat__author">{{ hit.author }}</span>
+                @if (hit.author === 'user') {
+                  <span class="pchat__author">You</span>
+                } @else {
+                  <app-role-badge [author]="hit.author" [kind]="hit.kind" />
+                }
                 <span class="pchat__kind">{{ hit.kind }}</span>
                 <time class="pchat__ts">{{ formatTs(hit.ts) }}</time>
               </span>

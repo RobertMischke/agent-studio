@@ -19,6 +19,13 @@ import type { ProjectChatSearchHit, ProjectChatTurn } from '../../../../features
 import { markdownToHtml } from '../../../../components/markdown-utils';
 import { ProjectChatRailComponent } from '../project-chat-rail/project-chat-rail.component';
 import { decideLoadAction, formatLoadedSummary } from './load-strategy';
+import {
+  RoleBadgeComponent,
+  PhaseSummaryListComponent,
+  groupIntoPhases,
+  type ChatPhase,
+  type PhaseInputMessage,
+} from '../../../workforce';
 
 /**
  * Slice D virtualised chat list. Replaces the previous "render every
@@ -42,7 +49,7 @@ import { decideLoadAction, formatLoadedSummary } from './load-strategy';
 @Component({
   selector: 'app-project-chat-list',
   standalone: true,
-  imports: [CommonModule, FormsModule, ProjectChatRailComponent],
+  imports: [CommonModule, FormsModule, ProjectChatRailComponent, RoleBadgeComponent, PhaseSummaryListComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-chat-list.component.html',
   styleUrl: './project-chat-list.component.scss',
@@ -91,11 +98,70 @@ export class ProjectChatListComponent implements OnInit, OnDestroy {
   readonly oldestServerTs = signal<string | null>(null);
   readonly jumpDate = signal('');
 
+  // ── Phase summary layer ──────────────────────────────────────────
+  /**
+   * User-driven expansion overrides. The default expansion is "only the
+   * newest phase is open", computed inside `expandedPhaseIds` when this
+   * set is empty.
+   */
+  readonly phaseOverrides = signal<ReadonlyMap<string, boolean>>(new Map());
+
+  readonly phases = computed<ChatPhase[]>(() => {
+    const input: PhaseInputMessage[] = this.allTurns().map((t) => ({
+      id: t.turnId,
+      ts: t.ts,
+      author: t.author,
+      kind: t.kind,
+      refs: t.refs ?? null,
+    }));
+    return groupIntoPhases(input);
+  });
+
+  readonly expandedPhaseIds = computed<ReadonlySet<string>>(() => {
+    const phases = this.phases();
+    const overrides = this.phaseOverrides();
+    if (overrides.size === 0) {
+      if (phases.length === 0) return new Set();
+      return new Set([phases[phases.length - 1].id]);
+    }
+    // Default newest-expanded baseline, then apply overrides on top so a
+    // user's explicit collapse of the newest phase is honoured.
+    const baseline = new Set<string>();
+    if (phases.length > 0) baseline.add(phases[phases.length - 1].id);
+    for (const [id, expanded] of overrides) {
+      if (expanded) baseline.add(id);
+      else baseline.delete(id);
+    }
+    return baseline;
+  });
+
+  /** Turn ids that belong to a collapsed phase. Hidden from the timeline. */
+  readonly hiddenTurnIds = computed<ReadonlySet<string>>(() => {
+    const expanded = this.expandedPhaseIds();
+    const hidden = new Set<string>();
+    for (const phase of this.phases()) {
+      if (expanded.has(phase.id)) continue;
+      for (const id of phase.messageIds) hidden.add(id);
+    }
+    return hidden;
+  });
+
   readonly flashTurnId = signal<string | null>(null);
   private flashTimer: ReturnType<typeof setTimeout> | null = null;
 
+  /**
+   * Turns that survive the phase-collapse filter. Drives the virtualised
+   * window so collapsing an older phase removes its rows from the timeline
+   * without disturbing the loaded chat-history substrate.
+   */
+  readonly visibleTurns = computed<ProjectChatTurn[]>(() => {
+    const hidden = this.hiddenTurnIds();
+    if (hidden.size === 0) return this.allTurns();
+    return this.allTurns().filter((t) => !hidden.has(t.turnId));
+  });
+
   readonly windowedTurns = computed<ProjectChatTurn[]>(() => {
-    const all = this.allTurns();
+    const all = this.visibleTurns();
     const start = Math.max(0, this.visibleStart());
     const end = Math.min(all.length, this.visibleEnd());
     return all.slice(start, end);
@@ -103,7 +169,7 @@ export class ProjectChatListComponent implements OnInit, OnDestroy {
 
   readonly topSpacerPx = computed(() => this.visibleStart() * this.rowHeightPx);
   readonly bottomSpacerPx = computed(() => {
-    const remaining = this.allTurns().length - this.visibleEnd();
+    const remaining = this.visibleTurns().length - this.visibleEnd();
     return Math.max(0, remaining) * this.rowHeightPx;
   });
 
@@ -335,6 +401,16 @@ export class ProjectChatListComponent implements OnInit, OnDestroy {
    *  load path that the search-result click uses also drives the rail. */
   onRailChipSelect(event: { turnId: string }): void {
     this.scrollToTurn(event.turnId);
+  }
+
+  /** Phase-summary toggle. Records the user's explicit preference for
+   *  this phase so the default "newest expanded, rest collapsed" can be
+   *  overridden in either direction. */
+  onPhaseToggled(event: { phaseId: string; expanded: boolean }): void {
+    const next = new Map(this.phaseOverrides());
+    next.set(event.phaseId, event.expanded);
+    this.phaseOverrides.set(next);
+    queueMicrotask(() => this.recomputeWindow());
   }
 
   scrollToTurn(turnId: string): void {
