@@ -666,6 +666,19 @@ public class ProjectRunner
             catch (Exception ex) { _logger.LogWarning(ex, "Sentinel-stop check failed for {JobKey}", jobKey); }
         }
 
+        // Mirror per-turn token usage emitted by the coding-agent CLI onto
+        // the agent message bus. Without this, the Codex streaming path is
+        // invisible to BusAggregationCache, the project token summary, and
+        // the workspace quota strip - they read kind:token-usage messages,
+        // and a Codex run that never produces an orchestrator decision turn
+        // would otherwise leave the workspace timeline blank for the run's
+        // own spend. One emit per turn.completed frame.
+        if (evt is CliRunEvent.TurnCompleted)
+        {
+            try { MirrorAgentTurnUsageToBus(jobKey); }
+            catch (Exception ex) { _logger.LogDebug(ex, "Per-turn bus mirror failed for {JobKey}", jobKey); }
+        }
+
         // Clean up on terminal events so a later run with the same key
         // does not inherit stale phase state.
         if (evt is CliRunEvent.ProcessExited or CliRunEvent.Killed)
@@ -713,6 +726,60 @@ public class ProjectRunner
             "TurnCompleted with sentinel for {JobKey}; killing lingering {Cli} process so OnCliFinished can run.",
             jobKey, cliType);
         cli.Stop(jobKey, RunStopReason.SentinelDetected);
+    }
+
+    /// <summary>
+    /// Mirror the coding-agent CLI's most recent <c>turn.completed</c> usage
+    /// snapshot onto the agent message bus as a <c>kind:token-usage</c>
+    /// message attributed to <c>agent:&lt;cli&gt;</c>. The CLI driver parses
+    /// the frame (Codex uses <see cref="CodexUsageParser"/>) and stashes a
+    /// <see cref="OrchestratorApi.Services.Bus.ParsedTurnUsage"/>; the runner
+    /// reads it here when the matching typed event arrives.
+    /// <para>
+    /// Without this, <c>BusAggregationCache.OnAppended</c> never sees the
+    /// coding agent's input/output/cached tokens. The project token summary
+    /// and workspace quota strip read off the bus, so a Codex run that
+    /// completes without an orchestrator decision turn shows zero spend even
+    /// though the CLI reported usage in its <c>turn.completed</c> frame.
+    /// </para>
+    /// </summary>
+    private void MirrorAgentTurnUsageToBus(string jobKey)
+    {
+        if (_bus == null) return;
+        if (GetActiveJobKey() != jobKey) return;
+        var jobId = _activeJobId;
+        if (string.IsNullOrEmpty(jobId)) return;
+        var cliType = _activeCliType;
+        if (string.IsNullOrEmpty(cliType)) return;
+
+        var cli = _router.Get(cliType);
+        // Today only the Codex driver captures the rich parsed-usage stash.
+        // Claude / Gemini will be added behind the same interface as their
+        // adapters move onto the shared parser; until then the dispatch is
+        // explicit so the call is a clear no-op for those CLIs.
+        if (cli is not CodexCliService codex) return;
+
+        var snapshot = codex.GetLastParsedTurnUsage(jobKey);
+        if (snapshot is null) return;
+        var (usage, observedAt, startedAt) = snapshot.Value;
+
+        var latency = new AgentMessageLatency(
+            RequestedAt: startedAt,
+            CompletedAt: observedAt,
+            TotalMs: (long)Math.Max(0, (observedAt - startedAt).TotalMilliseconds));
+
+        var runId = AgentMessageBusBridge.DeriveRunId(jobId!, startedAt);
+        var participantId = AgentMessageBusBridge.ParticipantForCli(cliType);
+        var topic = $"{cliType!.ToLowerInvariant()}-turn";
+
+        _ = _bus.EmitTokenUsageRichAsync(
+            ProjectName,
+            jobId,
+            runId,
+            participantId,
+            topic,
+            usage,
+            latency);
     }
 
     /// <summary>

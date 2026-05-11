@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services;
+using OrchestratorApi.Services.Bus;
 using OrchestratorApi.Services.Cli;
 using OrchestratorApi.Services.Jobs;
 using OrchestratorApi.Services.Pty;
@@ -91,7 +92,9 @@ internal sealed class PerfBaselineFixture : IDisposable
             cliEnv);
         var codexDiscovery = new CodexModelDiscovery(NullLogger<CodexModelDiscovery>.Instance, Config);
         var claude = new ClaudeCliService(NullLogger<ClaudeCliService>.Instance, Config);
-        var codex = new CodexCliService(NullLogger<CodexCliService>.Instance, Config, codexDiscovery);
+        var codex = new CodexCliService(NullLogger<CodexCliService>.Instance, Config, codexDiscovery,
+            new CliUsageParserRegistry(new ICliUsageParser[] { new CodexUsageParser() }),
+            new CliModelRegistry());
         var gemini = new GeminiCliService(NullLogger<GeminiCliService>.Instance, Config);
         Router = new CliRouter(copilot, claude, codex, gemini);
 

@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 using OrchestratorApi.Models;
+using OrchestratorApi.Services.Bus;
 using OrchestratorApi.Services.Cli.Adapters;
 using OrchestratorApi.Services.Pty;
 
@@ -18,15 +19,21 @@ namespace OrchestratorApi.Services.Cli;
 public sealed class CodexCliService : CliExecutionServiceBase
 {
     private readonly CodexModelDiscovery _modelDiscovery;
+    private readonly CliUsageParserRegistry _usageParsers;
+    private readonly ICliModelRegistry _modelRegistry;
     private string? _cliPathOverride;
 
     public CodexCliService(
         ILogger<CodexCliService> logger,
         IConfiguration configuration,
-        CodexModelDiscovery modelDiscovery)
+        CodexModelDiscovery modelDiscovery,
+        CliUsageParserRegistry usageParsers,
+        ICliModelRegistry modelRegistry)
         : base(logger, configuration)
     {
         _modelDiscovery = modelDiscovery;
+        _usageParsers = usageParsers;
+        _modelRegistry = modelRegistry;
     }
 
     public override string CliType => CliTypes.Codex;
@@ -119,10 +126,27 @@ public sealed class CodexCliService : CliExecutionServiceBase
     /// <summary>
     /// Bridge to <see cref="CodexEventAdapter"/>. Each raw stdout line is
     /// passed through and emitted on <see cref="CliExecutionServiceBase.OnRunEvent"/>.
+    /// <para>
+    /// We also opportunistically parse <c>turn.completed</c> frames here so
+    /// the captured <see cref="ParsedTurnUsage"/> lands on <c>ProcInfo</c>
+    /// <b>before</b> the typed <c>TurnCompleted</c> event is raised. Order
+    /// matters: <see cref="CliExecutionServiceBase"/> runs
+    /// <see cref="MapLineToRunEvents"/> first, raises the typed events, and
+    /// only then fires <see cref="OnOutputLine"/>. Doing the usage capture
+    /// inside <c>OnOutputLine</c> (or anywhere downstream of the event raise)
+    /// races the runner's subscriber, which immediately calls back into
+    /// <see cref="GetLastParsedTurnUsage"/> to mirror the spend onto the bus.
+    /// </para>
     /// </summary>
     protected override IEnumerable<CliRunEvent> MapLineToRunEvents(string jobKey, CliOutputLine line)
     {
         if (line.Stream != "stdout") return Array.Empty<CliRunEvent>();
+
+        if (_processes.TryGetValue(jobKey, out var info))
+        {
+            TryCaptureTurnUsage(info, line);
+        }
+
         return CodexEventAdapter.Map(line.Text, jobKey);
     }
 
@@ -146,6 +170,40 @@ public sealed class CodexCliService : CliExecutionServiceBase
         info.CapturedSessionId = id;
         info.SessionName ??= id;
         _logger.LogInformation("Captured Codex session id {Id}", id);
+    }
+
+    /// <summary>
+    /// Parse a <c>turn.completed</c> frame's <c>usage</c> block via the
+    /// shared <see cref="CodexUsageParser"/> and stash the parsed snapshot on
+    /// <see cref="CliExecutionServiceBase.ProcInfo.LastParsedUsage"/>. The
+    /// runner consumes the stash when the matching <c>TurnCompleted</c> typed
+    /// event arrives and mirrors it onto the agent message bus as
+    /// <c>kind:token-usage</c>. Without this, the Codex coding-agent's own
+    /// per-turn spend is invisible to <c>BusAggregationCache</c>, the project
+    /// token summary, and the workspace quota strip. Best-effort: a malformed
+    /// frame or parser miss leaves the previous snapshot untouched.
+    /// </summary>
+    private void TryCaptureTurnUsage(ProcInfo info, CliOutputLine line)
+    {
+        var text = line.Text?.TrimStart();
+        if (string.IsNullOrEmpty(text) || text![0] != '{') return;
+        // Fast prefilter: only attempt JSON parsing for frames we care about.
+        if (!text.Contains("turn.completed", StringComparison.Ordinal)) return;
+
+        var parser = _usageParsers.Get(CliTypes.Codex);
+        if (parser == null) return;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(text);
+            var modelHint = info.Execution.Model;
+            if (!parser.TryParse(doc.RootElement, modelHint, _modelRegistry, out var usage)) return;
+
+            info.LastParsedUsage = usage;
+            info.LastParsedUsageAt = line.Timestamp == default ? DateTime.UtcNow : line.Timestamp;
+        }
+        catch (JsonException) { /* malformed frame; nothing to capture */ }
+        catch (Exception ex) { _logger.LogDebug(ex, "Codex turn-usage capture skipped"); }
     }
 
     /// <summary>
@@ -209,6 +267,19 @@ public sealed class CodexCliService : CliExecutionServiceBase
     public string? GetCapturedSessionId(string jobKey)
     {
         return _processes.TryGetValue(jobKey, out var info) ? info.CapturedSessionId : null;
+    }
+
+    /// <summary>
+    /// Surface the most recently parsed <c>turn.completed</c> usage snapshot
+    /// for a job (captured by <see cref="TryCaptureTurnUsage"/>) along with
+    /// the UTC time it was observed and the run's start time. The runner uses
+    /// this to mirror per-turn usage onto the agent message bus.
+    /// </summary>
+    public (ParsedTurnUsage Usage, DateTime ObservedAt, DateTime StartedAt)? GetLastParsedTurnUsage(string jobKey)
+    {
+        if (!_processes.TryGetValue(jobKey, out var info)) return null;
+        if (info.LastParsedUsage == null || info.LastParsedUsageAt == null) return null;
+        return (info.LastParsedUsage, info.LastParsedUsageAt.Value, info.Execution.StartedAt);
     }
 
     public override Task<CliModelCatalog> GetModelCatalogAsync(bool forceRefresh = false, CancellationToken ct = default)

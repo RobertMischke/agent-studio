@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.Json;
 using OrchestratorApi.Models;
+using OrchestratorApi.Services.Bus;
 using OrchestratorApi.Services.Runner;
 
 namespace OrchestratorApi.Services.Cli;
@@ -923,6 +924,20 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         public string? SessionName { get; set; }
         /// <summary>For Codex: the UUID extracted from the first <c>session_meta</c> JSON line.</summary>
         public string? CapturedSessionId { get; set; }
+
+        /// <summary>
+        /// Latest <see cref="ParsedTurnUsage"/> captured from a CLI "turn
+        /// finished" frame (Codex: <c>turn.completed</c>; Claude: <c>result</c>).
+        /// Set by the per-CLI <see cref="OnOutputLine"/> hook when the adapter
+        /// recognises the frame; consumed by the runner to mirror the usage
+        /// onto the agent message bus as a <c>kind:token-usage</c> message so
+        /// the workspace timeline and the token aggregation cache see the
+        /// coding agent's own per-turn spend.
+        /// </summary>
+        public ParsedTurnUsage? LastParsedUsage { get; set; }
+
+        /// <summary>UTC timestamp the most recent <see cref="LastParsedUsage"/> frame was observed.</summary>
+        public DateTime? LastParsedUsageAt { get; set; }
 
         /// <summary>For Claude: the latest <c>rate_limit_event</c> frame parsed
         /// from the stream-json output. Null until the first event arrives.</summary>

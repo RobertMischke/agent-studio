@@ -1,3 +1,4 @@
+using OrchestratorApi.Services.Bus;
 using OrchestratorApi.Services.Cli;
 using Xunit;
 
@@ -84,7 +85,9 @@ public class CodexCliServiceTests
             cfg,
             new OrchestratorApi.Services.Pty.CodexModelDiscovery(
                 Microsoft.Extensions.Logging.Abstractions.NullLogger<OrchestratorApi.Services.Pty.CodexModelDiscovery>.Instance,
-                cfg));
+                cfg),
+            new CliUsageParserRegistry(new ICliUsageParser[] { new CodexUsageParser() }),
+            new CliModelRegistry());
 
         Assert.True(svc.IsCompatibleSessionName("019dee65-7a9b-7843-bfd9-06e555fff02b"));
         Assert.False(svc.IsCompatibleSessionName(null));

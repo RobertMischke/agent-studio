@@ -511,7 +511,10 @@ public class CliSpawnIntegrationTests
             cfg,
             new OrchestratorApi.Services.Pty.CodexModelDiscovery(
                 Microsoft.Extensions.Logging.Abstractions.NullLogger<OrchestratorApi.Services.Pty.CodexModelDiscovery>.Instance,
-                cfg));
+                cfg),
+            new OrchestratorApi.Services.Bus.CliUsageParserRegistry(new OrchestratorApi.Services.Bus.ICliUsageParser[]
+                { new OrchestratorApi.Services.Bus.CodexUsageParser() }),
+            new OrchestratorApi.Services.Bus.CliModelRegistry());
 
         var jobId = $"it-{Guid.NewGuid():N}";
         var jobKey = $"::{jobId}";
