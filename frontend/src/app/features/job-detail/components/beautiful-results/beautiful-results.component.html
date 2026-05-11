@@ -1,0 +1,75 @@
+<div class="results-view"
+     [attr.data-view-mode]="viewMode()"
+     data-testid="beautiful-results">
+
+  <div class="results-view__toolbar">
+    <div class="results-view__modes" role="tablist" aria-label="Result view mode">
+      <button type="button"
+              class="results-view__mode"
+              role="tab"
+              data-testid="results-view-mode-rendered"
+              [class.results-view__mode--active]="viewMode() === 'rendered'"
+              [attr.aria-selected]="viewMode() === 'rendered'"
+              (click)="setMode('rendered')">Rendered</button>
+      <button type="button"
+              class="results-view__mode"
+              role="tab"
+              data-testid="results-view-mode-raw"
+              [class.results-view__mode--active]="viewMode() === 'raw'"
+              [attr.aria-selected]="viewMode() === 'raw'"
+              (click)="setMode('raw')">Raw</button>
+    </div>
+  </div>
+
+  @if (banner(); as b) {
+    <div class="results-banner"
+         [attr.data-kind]="b.kind"
+         data-testid="results-sentinel-banner"
+         role="status">
+      <span class="results-banner__icon" aria-hidden="true">{{ b.icon }}</span>
+      <div class="results-banner__text">
+        <span class="results-banner__label">{{ b.label }}</span>
+        @if (b.reason) {
+          <span class="results-banner__reason">{{ b.reason }}</span>
+        }
+      </div>
+    </div>
+  }
+
+  @if (viewMode() === 'rendered') {
+    @if (hasBody()) {
+      <article #body
+               class="results-view__body"
+               data-testid="results-rendered"
+               (click)="onBodyClick($event)"
+               [innerHTML]="bodyHtml()"></article>
+    } @else {
+      <p class="results-view__empty" data-testid="results-empty">No result content.</p>
+    }
+  } @else {
+    <pre class="results-view__raw"
+         data-testid="results-raw">{{ markdown() }}</pre>
+  }
+</div>
+
+@if (lightbox(); as lb) {
+  <div class="results-lightbox"
+       role="dialog"
+       aria-modal="true"
+       aria-label="Image preview"
+       data-testid="results-lightbox"
+       tabindex="0"
+       (click)="closeLightbox()"
+       (keydown)="onLightboxKey($event)"
+       (keydown.enter)="closeLightbox()"
+       (keydown.space)="closeLightbox()">
+    <button type="button"
+            class="results-lightbox__close"
+            data-testid="results-lightbox-close"
+            aria-label="Close"
+            (click)="closeLightbox()">×</button>
+    <img class="results-lightbox__img"
+         [src]="lb.src"
+         [alt]="lb.alt">
+  </div>
+}

@@ -203,8 +203,11 @@
                         title="Copy the protocol markdown to the clipboard"
                         (click)="copyProtocolMarkdown()">{{ copyLabel() }}</button>
               </div>
-              <div class="markdown-preview notes-panel__body"
-                   [innerHTML]="renderMarkdown(detail().statusMarkdown || '')"></div>
+              <app-beautiful-results class="notes-panel__body"
+                                     data-testid="protocol-beautiful-results"
+                                     [markdown]="detail().statusMarkdown || ''"
+                                     [jobId]="detail().info.id"
+                                     [watchPath]="detail().info.watchPath" />
             }
           </section>
         } @else {

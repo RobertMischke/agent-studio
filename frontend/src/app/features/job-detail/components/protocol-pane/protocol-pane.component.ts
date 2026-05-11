@@ -3,10 +3,8 @@ import type { CliOutputLine, ContinueMode, JobDetail, JobSummaryStatus, ReviewEv
 import type { RunRecord } from '../../../../features/run-timeline';
 import { deriveWatchdogPill } from './watchdog-state';
 import { ActivityLogViewComponent } from '../activity-log-view';
-import { markdownToHtml, MarkdownImageOptions } from '../../../../components/markdown-utils';
 import { buildConversationTurns, parseActivityLog } from '../activity-log.parser';
 import { classifyOutcome, OutcomeAssessment, QuickReply } from '../agent-outcome.util';
-import { resolveProtocolImageSrc } from './protocol-image-resolver';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
 import {
   formatTokens as fmtTokens,
@@ -29,6 +27,7 @@ import { HygieneStripComponent } from '../hygiene-strip/hygiene-strip.component'
 import { ReviewEvidencePanelComponent } from './review-evidence-panel.component';
 import { JobService } from '../../../../services/job.service';
 import type { RawLineRange } from '../../../../components/chat/conversation-event';
+import { BeautifulResultsComponent } from '../beautiful-results/beautiful-results.component';
 
 export type InspectorTab = 'protocol' | 'activity';
 
@@ -42,7 +41,7 @@ export type InspectorTab = 'protocol' | 'activity';
   selector: 'app-protocol-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, ActivityLogViewComponent, RunTimelineComponent, RunGitViewerComponent, ScreenshotStripComponent, VerboseDebugOverlayComponent, HygieneStripComponent, ReviewEvidencePanelComponent],
+  imports: [CommonModule, ActivityLogViewComponent, RunTimelineComponent, RunGitViewerComponent, ScreenshotStripComponent, VerboseDebugOverlayComponent, HygieneStripComponent, ReviewEvidencePanelComponent, BeautifulResultsComponent],
   templateUrl: './protocol-pane.component.html',
   styleUrls: ['./protocol-pane.component.scss']
 })
@@ -416,17 +415,6 @@ export class ProtocolPaneComponent implements OnDestroy {
   formatTokens(n: number): string { return fmtTokens(n); }
   formatRateWindow(window: string | null): string { return fmtRateWindow(window); }
   formatResetIn(epoch: number): string { return fmtResetIn(epoch, this.nowTick()); }
-
-  renderMarkdown(md: string): string {
-    return markdownToHtml(md, this.markdownOptions());
-  }
-
-  private markdownOptions(): MarkdownImageOptions {
-    const info = this.detail().info;
-    return {
-      resolveImageSrc: (src) => resolveProtocolImageSrc(src, info.id, info.watchPath)
-    };
-  }
 
   claudeSessionTooltip(): string {
     const cs = this.claudeSession();

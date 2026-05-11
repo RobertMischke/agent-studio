@@ -1,0 +1,515 @@
+/*
+ * Beautiful results — Catppuccin Mocha-leaning palette, dev-tools-grade
+ * code blocks, GitHub-style diff rendering, image lightbox.
+ *
+ * Naming uses the `results-*` family. Styles are deliberately not nested
+ * under :host so the same rules apply to inner HTML rendered via
+ * [innerHTML] (Angular strips host scoping there otherwise).
+ */
+:host { display: block; }
+
+/* ---------- Catppuccin Mocha tokens (local) -------------------------- */
+$ctp-rosewater: #f5e0dc;
+$ctp-flamingo:  #f2cdcd;
+$ctp-pink:      #f5c2e7;
+$ctp-mauve:     #cba6f7;
+$ctp-red:       #f38ba8;
+$ctp-maroon:    #eba0ac;
+$ctp-peach:     #fab387;
+$ctp-yellow:    #f9e2af;
+$ctp-green:     #a6e3a1;
+$ctp-teal:      #94e2d5;
+$ctp-sky:       #89dceb;
+$ctp-sapphire:  #74c7ec;
+$ctp-blue:      #89b4fa;
+$ctp-lavender:  #b4befe;
+$ctp-text:      #cdd6f4;
+$ctp-subtext1:  #bac2de;
+$ctp-subtext0:  #a6adc8;
+$ctp-overlay2:  #9399b2;
+$ctp-overlay1:  #7f849c;
+$ctp-overlay0:  #6c7086;
+$ctp-surface2:  #585b70;
+$ctp-surface1:  #45475a;
+$ctp-surface0:  #313244;
+$ctp-base:      #1e1e2e;
+$ctp-mantle:    #181825;
+$ctp-crust:     #11111b;
+
+/* ---------- Container ------------------------------------------------- */
+.results-view {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: $ctp-text;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Inter',
+               system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.results-view__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.results-view__modes {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  background: rgba($ctp-surface1, 0.5);
+  border: 1px solid rgba($ctp-overlay0, 0.35);
+  border-radius: 3px;
+}
+
+.results-view__mode {
+  padding: 4px 12px;
+  border: none;
+  background: transparent;
+  color: $ctp-subtext1;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: background-color 0.12s ease, color 0.12s ease;
+
+  &:hover { color: $ctp-text; background: rgba($ctp-overlay0, 0.18); }
+  &--active {
+    background: $ctp-mauve;
+    color: $ctp-crust;
+    &:hover { background: $ctp-lavender; color: $ctp-crust; }
+  }
+}
+
+/* ---------- Sentinel banner ------------------------------------------ */
+.results-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 4px;
+  border: 1px solid;
+  background: rgba($ctp-surface0, 0.5);
+
+  &[data-kind="done"] {
+    border-color: rgba($ctp-green, 0.55);
+    background: linear-gradient(135deg, rgba($ctp-green, 0.18), rgba($ctp-green, 0.05));
+  }
+  &[data-kind="blocked"] {
+    border-color: rgba($ctp-red, 0.6);
+    background: linear-gradient(135deg, rgba($ctp-red, 0.18), rgba($ctp-red, 0.05));
+  }
+  &[data-kind="needsInput"] {
+    border-color: rgba($ctp-yellow, 0.55);
+    background: linear-gradient(135deg, rgba($ctp-yellow, 0.16), rgba($ctp-yellow, 0.04));
+  }
+  &[data-kind="noop"] {
+    border-color: rgba($ctp-overlay1, 0.5);
+    background: rgba($ctp-surface0, 0.6);
+  }
+
+  &__icon {
+    flex: 0 0 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    font-size: 16px;
+    font-weight: 700;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.25);
+  }
+
+  &__text {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  &__label {
+    font-weight: 600;
+    font-size: 14px;
+    letter-spacing: 0.01em;
+  }
+
+  &__reason {
+    font-size: 12.5px;
+    color: $ctp-subtext0;
+    word-break: break-word;
+  }
+}
+
+.results-view[data-kind="done"]   .results-banner__icon { color: $ctp-green; }
+.results-banner[data-kind="done"]   .results-banner__icon { color: $ctp-green; }
+.results-banner[data-kind="blocked"] .results-banner__icon { color: $ctp-red; }
+.results-banner[data-kind="needsInput"] .results-banner__icon { color: $ctp-yellow; }
+.results-banner[data-kind="noop"] .results-banner__icon { color: $ctp-overlay2; }
+
+/* ---------- Body prose ------------------------------------------------ */
+.results-view__body {
+  font-size: 15px;
+  line-height: 1.65;
+  color: $ctp-text;
+  max-width: 78ch;
+  hyphens: auto;
+  word-wrap: break-word;
+}
+
+.results-view__body p {
+  margin: 0 0 14px;
+}
+
+.results-view__body h1,
+.results-view__body h2,
+.results-view__body h3,
+.results-view__body h4 {
+  font-weight: 600;
+  color: $ctp-rosewater;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  margin: 28px 0 10px;
+}
+
+.results-view__body h1 {
+  font-size: 28px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba($ctp-overlay0, 0.4);
+}
+.results-view__body h2 {
+  font-size: 22px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba($ctp-overlay0, 0.25);
+}
+.results-view__body h3 { font-size: 17px; color: $ctp-lavender; }
+.results-view__body h4 { font-size: 15px; color: $ctp-blue; text-transform: uppercase; letter-spacing: 0.05em; }
+
+.results-view__body ul,
+.results-view__body ol {
+  margin: 0 0 14px;
+  padding-left: 26px;
+}
+.results-view__body li {
+  margin: 4px 0;
+  &::marker { color: $ctp-mauve; }
+}
+.results-view__body li > ul,
+.results-view__body li > ol {
+  margin: 4px 0;
+}
+
+.results-view__body blockquote {
+  margin: 14px 0;
+  padding: 8px 16px;
+  border-left: 4px solid $ctp-mauve;
+  background: rgba($ctp-surface0, 0.45);
+  color: $ctp-subtext1;
+  border-radius: 0 4px 4px 0;
+  font-style: italic;
+}
+
+.results-view__body a {
+  color: $ctp-sky;
+  text-decoration: underline;
+  text-decoration-color: rgba($ctp-sky, 0.45);
+  text-underline-offset: 2px;
+  transition: color 0.12s ease, text-decoration-color 0.12s ease;
+  &:hover { color: $ctp-sapphire; text-decoration-color: $ctp-sapphire; }
+}
+
+.results-view__body hr {
+  border: none;
+  height: 1px;
+  background: rgba($ctp-overlay0, 0.45);
+  margin: 22px 0;
+}
+
+.results-view__body strong { color: $ctp-rosewater; font-weight: 600; }
+.results-view__body em { color: $ctp-flamingo; }
+
+/* Inline code */
+.results-view__body :not(pre) > code,
+.results-view__body :not(pre) > code[data-results-code] {
+  padding: 1px 6px;
+  background: rgba($ctp-surface1, 0.7);
+  border: 1px solid rgba($ctp-overlay0, 0.3);
+  border-radius: 3px;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.88em;
+  color: $ctp-peach;
+}
+
+/* Tables */
+.results-view__body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 14px 0;
+  font-size: 14px;
+  border: 1px solid rgba($ctp-overlay0, 0.4);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.results-view__body th,
+.results-view__body td {
+  padding: 8px 12px;
+  text-align: left;
+  border-bottom: 1px solid rgba($ctp-overlay0, 0.25);
+}
+.results-view__body th {
+  background: rgba($ctp-surface1, 0.6);
+  color: $ctp-lavender;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.results-view__body tr:nth-child(even) td {
+  background: rgba($ctp-surface0, 0.35);
+}
+.results-view__body tr:last-child td { border-bottom: none; }
+
+/* Inline images that fell through outside our <figure> wrapper */
+.results-view__body img {
+  max-width: 100%;
+  border-radius: 4px;
+  border: 1px solid rgba($ctp-overlay0, 0.3);
+}
+
+/* ---------- Figures & lightbox --------------------------------------- */
+.results-figure {
+  margin: 18px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.results-figure__btn {
+  padding: 0;
+  border: 1px solid rgba($ctp-overlay0, 0.4);
+  background: $ctp-mantle;
+  border-radius: 4px;
+  overflow: hidden;
+  cursor: zoom-in;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+  max-width: 100%;
+  &:hover {
+    border-color: rgba($ctp-mauve, 0.6);
+    transform: translateY(-1px);
+  }
+}
+
+.results-figure__img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  max-height: 520px;
+  object-fit: contain;
+}
+
+.results-figure__caption {
+  font-size: 12.5px;
+  color: $ctp-subtext0;
+  font-style: italic;
+}
+
+.results-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  background: rgba(0, 0, 0, 0.86);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  cursor: zoom-out;
+
+  &__img {
+    max-width: 96vw;
+    max-height: 92vh;
+    object-fit: contain;
+    border: 1px solid rgba($ctp-overlay0, 0.4);
+    border-radius: 4px;
+    background: $ctp-mantle;
+  }
+
+  &__close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 36px;
+    height: 36px;
+    border: 1px solid rgba($ctp-overlay0, 0.5);
+    background: rgba($ctp-mantle, 0.85);
+    color: $ctp-text;
+    font-size: 18px;
+    border-radius: 3px;
+    cursor: pointer;
+    &:hover { background: $ctp-surface1; }
+  }
+}
+
+/* ---------- Code blocks ---------------------------------------------- */
+.results-code {
+  margin: 14px 0;
+  border: 1px solid rgba($ctp-overlay0, 0.4);
+  border-radius: 4px;
+  background: $ctp-mantle;
+  overflow: hidden;
+}
+
+.results-code__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 10px;
+  background: rgba($ctp-surface0, 0.7);
+  border-bottom: 1px solid rgba($ctp-overlay0, 0.3);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 11px;
+}
+
+.results-code__lang {
+  color: $ctp-blue;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+}
+
+.results-code__copy {
+  border: 1px solid rgba($ctp-overlay0, 0.4);
+  background: rgba($ctp-surface1, 0.4);
+  color: $ctp-subtext1;
+  padding: 1px 8px;
+  border-radius: 3px;
+  font-size: 11px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+  &:hover {
+    background: $ctp-surface1;
+    color: $ctp-text;
+    border-color: rgba($ctp-mauve, 0.5);
+  }
+}
+
+.results-code__pre {
+  margin: 0;
+  padding: 12px 14px;
+  background: $ctp-mantle;
+  overflow-x: auto;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.results-code__body {
+  display: block;
+  color: $ctp-text;
+  white-space: pre;
+}
+
+/* ---------- highlight.js theme (Catppuccin Mocha) ------------------- */
+.results-code__body .hljs-comment,
+.results-code__body .hljs-quote { color: $ctp-overlay2; font-style: italic; }
+.results-code__body .hljs-keyword,
+.results-code__body .hljs-selector-tag,
+.results-code__body .hljs-section { color: $ctp-mauve; }
+.results-code__body .hljs-built_in,
+.results-code__body .hljs-type { color: $ctp-yellow; }
+.results-code__body .hljs-string,
+.results-code__body .hljs-attr,
+.results-code__body .hljs-template-tag,
+.results-code__body .hljs-template-variable { color: $ctp-green; }
+.results-code__body .hljs-number,
+.results-code__body .hljs-literal { color: $ctp-peach; }
+.results-code__body .hljs-title,
+.results-code__body .hljs-title.class_,
+.results-code__body .hljs-title.function_ { color: $ctp-blue; }
+.results-code__body .hljs-variable,
+.results-code__body .hljs-name,
+.results-code__body .hljs-attribute { color: $ctp-flamingo; }
+.results-code__body .hljs-symbol,
+.results-code__body .hljs-bullet,
+.results-code__body .hljs-meta { color: $ctp-teal; }
+.results-code__body .hljs-tag { color: $ctp-sky; }
+.results-code__body .hljs-deletion { color: $ctp-red; background: rgba($ctp-red, 0.08); }
+.results-code__body .hljs-addition { color: $ctp-green; background: rgba($ctp-green, 0.08); }
+.results-code__body .hljs-emphasis { font-style: italic; }
+.results-code__body .hljs-strong { font-weight: 700; }
+
+/* ---------- Diff blocks (diff2html output) -------------------------- */
+.results-diff {
+  margin: 14px 0;
+  border: 1px solid rgba($ctp-overlay0, 0.4);
+  border-radius: 4px;
+  background: $ctp-mantle;
+  overflow: hidden;
+
+  /* diff2html outputs its own classes (d2h-*). Re-skin them to match
+   * the Catppuccin palette so the diff doesn't look bolted on. */
+  .d2h-wrapper,
+  .d2h-file-wrapper,
+  .d2h-file-list-wrapper,
+  .d2h-files-diff,
+  .d2h-file-diff { background: $ctp-mantle; color: $ctp-text; border: none; }
+  .d2h-file-header {
+    background: rgba($ctp-surface0, 0.7);
+    border-bottom: 1px solid rgba($ctp-overlay0, 0.3);
+    color: $ctp-subtext1;
+    padding: 4px 10px;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 12px;
+  }
+  .d2h-file-name { color: $ctp-blue; font-weight: 600; }
+  .d2h-tag { background: rgba($ctp-surface1, 0.7); color: $ctp-subtext1; border-color: rgba($ctp-overlay0, 0.4); }
+  .d2h-code-line,
+  .d2h-code-line-ctn,
+  .d2h-code-side-line { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12.5px; line-height: 1.55; }
+  .d2h-code-linenumber,
+  .d2h-code-side-linenumber {
+    background: $ctp-base;
+    color: $ctp-overlay1;
+    border-color: rgba($ctp-overlay0, 0.3);
+  }
+  .d2h-ins,
+  .d2h-ins.d2h-change { background: rgba($ctp-green, 0.13); color: $ctp-text; }
+  .d2h-ins .d2h-code-linenumber { background: rgba($ctp-green, 0.18); color: $ctp-green; }
+  .d2h-del,
+  .d2h-del.d2h-change { background: rgba($ctp-red, 0.14); color: $ctp-text; }
+  .d2h-del .d2h-code-linenumber { background: rgba($ctp-red, 0.18); color: $ctp-red; }
+  .d2h-info { background: rgba($ctp-surface0, 0.6); color: $ctp-overlay2; }
+  .d2h-cntx { color: $ctp-text; }
+  .d2h-emptyplaceholder,
+  .d2h-empty-placeholder { background: $ctp-base; border-color: rgba($ctp-overlay0, 0.2); }
+}
+
+/* ---------- Raw view ------------------------------------------------- */
+.results-view__raw {
+  margin: 0;
+  padding: 14px;
+  border: 1px solid rgba($ctp-overlay0, 0.4);
+  border-radius: 4px;
+  background: $ctp-mantle;
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: $ctp-text;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 70vh;
+  overflow: auto;
+}
+
+.results-view__empty {
+  color: $ctp-overlay2;
+  font-style: italic;
+}
+
+/* ---------- Light mode (follows existing app theming) --------------- */
+@media (prefers-color-scheme: light) {
+  /* The host app is dark-by-default with Catppuccin Mocha. If a future
+   * light-mode lands, swap the palette tokens here. For now keep the
+   * dark style consistent so contrast survives in the popped-out
+   * lightbox and the raw-view text remains legible. */
+}
