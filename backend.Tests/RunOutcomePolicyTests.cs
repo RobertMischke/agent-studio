@@ -249,10 +249,11 @@ public class RunOutcomePolicyTests
     }
 
     /// <summary>
-    /// Run produced *some* agent text but the heuristic could not classify
-    /// it. The "[heuristic] Could not classify" warning is the right signal
-    /// here - the user has text to read and the orchestrator is admitting
-    /// it cannot tell whether the agent finished, blocked, or kept working.
+    /// Run produced *some* agent text but the deterministic classifier could
+    /// not map it to a known outcome. This used to be the generic
+    /// heuristicfallback bucket; it now surfaces as the concrete
+    /// classifier-unknown category so the project-level observability
+    /// counters can distinguish it from permission and watchdog issues.
     /// </summary>
     [Fact]
     public void RealRun_UnknownWithText_AcceptedWithWarning()
@@ -265,8 +266,10 @@ public class RunOutcomePolicyTests
             reissueAttempt: 0);
 
         Assert.Equal(OutcomeActionKind.NotifyUserAndAccept, action.Kind);
-        Assert.True(action.IsHeuristicFallback);
-        Assert.Contains("Could not classify", action.MetaMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.False(action.IsHeuristicFallback);
+        Assert.Equal(RunIssueKind.ClassifierUnknown, action.IssueKind);
+        Assert.Equal(OrchestratorMessageKind.ClassifierUnknown, action.MessageKind);
+        Assert.Contains("classify", action.MetaMessage, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -292,5 +295,87 @@ public class RunOutcomePolicyTests
         Assert.Equal(OutcomeActionKind.Accept, action.Kind);
         Assert.False(action.IsHeuristicFallback);
         Assert.Equal(string.Empty, action.MetaMessage);
+    }
+
+    [Fact]
+    public void PermissionBlocked_FirstOccurrence_ReissuesOneSoftIntervention()
+    {
+        var action = RunOutcomePolicy.Decide(
+            RunIntent.AutoPickup,
+            ContinuePlan(),
+            Outcome(AgentOutcomeKind.Unknown, sentinel: false, duration: 65.0, agentChars: 500) with
+            {
+                IssueKind = RunIssueKind.PermissionBlocked,
+                Summary = "Tool permission failure prevented the agent from inspecting the workspace."
+            },
+            followupPrompt: null,
+            reissueAttempt: 0);
+
+        Assert.Equal(OutcomeActionKind.ReissueWithStrongerFraming, action.Kind);
+        Assert.Equal(1, action.RetryAttempt);
+        Assert.True(action.IsPreframedRetryPrompt);
+        Assert.Equal(RunIssueKind.PermissionBlocked, action.IssueKind);
+        Assert.Equal(OrchestratorMessageKind.SoftIntervention, action.MessageKind);
+        Assert.Contains("available permissions", action.FollowupRetryPrompt, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void PermissionBlocked_AfterOneIntervention_StopsWithConcreteCategory()
+    {
+        var action = RunOutcomePolicy.Decide(
+            RunIntent.AutoPickup,
+            ContinuePlan(),
+            Outcome(AgentOutcomeKind.Unknown, sentinel: false, duration: 65.0, agentChars: 500) with
+            {
+                IssueKind = RunIssueKind.PermissionBlocked,
+                Summary = "Tool permission failure prevented the agent from inspecting the workspace."
+            },
+            followupPrompt: null,
+            reissueAttempt: RunOutcomePolicy.MaxSoftInterventionAttempts);
+
+        Assert.Equal(OutcomeActionKind.NotifyUserAndStop, action.Kind);
+        Assert.False(action.IsHeuristicFallback);
+        Assert.Equal(RunIssueKind.PermissionBlocked, action.IssueKind);
+        Assert.Equal(OrchestratorMessageKind.PermissionBlocked, action.MessageKind);
+        Assert.Contains("permission", action.MetaMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void MissingTerminalSentinel_FirstOccurrence_AsksForSentinelOnce()
+    {
+        var action = RunOutcomePolicy.Decide(
+            RunIntent.AutoPickup,
+            ContinuePlan(),
+            Outcome(AgentOutcomeKind.Done, sentinel: false, duration: 35.0, agentChars: 900) with
+            {
+                IssueKind = RunIssueKind.MissingTerminalSentinel,
+                Summary = "Agent text suggests the task is done (heuristic)."
+            },
+            followupPrompt: null,
+            reissueAttempt: 0);
+
+        Assert.Equal(OutcomeActionKind.ReissueWithStrongerFraming, action.Kind);
+        Assert.True(action.IsPreframedRetryPrompt);
+        Assert.Equal(RunIssueKind.MissingTerminalSentinel, action.IssueKind);
+        Assert.Contains("[[TASK_DONE]]", action.FollowupRetryPrompt);
+    }
+
+    [Fact]
+    public void WatchdogTimeout_IsConcreteGiveupNotHeuristicFallback()
+    {
+        var action = RunOutcomePolicy.Decide(
+            RunIntent.AutoPickup,
+            ContinuePlan(),
+            Outcome(AgentOutcomeKind.Unknown, sentinel: false, duration: 60.0, agentChars: 0) with
+            {
+                IssueKind = RunIssueKind.WatchdogTimeout,
+                Summary = "Run was killed by the watchdog after silence."
+            },
+            followupPrompt: null,
+            reissueAttempt: 0);
+
+        Assert.Equal(OutcomeActionKind.NotifyUserAndStop, action.Kind);
+        Assert.False(action.IsHeuristicFallback);
+        Assert.Equal(OrchestratorMessageKind.WatchdogTimeout, action.MessageKind);
     }
 }

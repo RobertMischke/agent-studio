@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services;
@@ -239,6 +240,7 @@ public class JobScannerService
                 CommitCount = ComputeCommitCountHint(raw, jobDir),
                 SessionChain = ReadSessionChain(raw),
                 PendingIntent = ReadPendingIntent(jobDir),
+                OutcomeIssue = ResolveOutcomeIssue(jobDir),
                 Fixture = raw.TryGetProperty("fixture", out var fix)
                     && fix.ValueKind is JsonValueKind.True,
                 Phase = ReadPhase(raw, state, jobDir),
@@ -451,6 +453,104 @@ public class JobScannerService
         {
             return null;
         }
+    }
+
+    private const int OutcomeIssueTailBytes = 16 * 1024;
+
+    private static JobOutcomeIssue? ResolveOutcomeIssue(string jobFolder)
+    {
+        var logPath = JobPaths.CliOutputLog(jobFolder);
+        if (!File.Exists(logPath)) return null;
+
+        var tail = ReadTailUtf8(logPath, OutcomeIssueTailBytes);
+        if (string.IsNullOrWhiteSpace(tail)) return null;
+
+        var lines = tail.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        for (var i = lines.Length - 1; i >= 0; i--)
+        {
+            var line = lines[i].Trim();
+            if (TryResolveOutcomeIssue(line, File.GetLastWriteTimeUtc(logPath), out var issue))
+            {
+                return issue;
+            }
+        }
+
+        return null;
+    }
+
+    private static string ReadTailUtf8(string path, int maxBytes)
+    {
+        try
+        {
+            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            if (fs.Length <= 0) return "";
+            var length = (int)Math.Min(maxBytes, fs.Length);
+            fs.Seek(-length, SeekOrigin.End);
+            var buffer = new byte[length];
+            var read = fs.Read(buffer, 0, length);
+            return Encoding.UTF8.GetString(buffer, 0, read);
+        }
+        catch
+        {
+            return "";
+        }
+    }
+
+    private static bool TryResolveOutcomeIssue(string line, DateTime lastSeenAt, out JobOutcomeIssue? issue)
+    {
+        issue = null;
+        if (string.IsNullOrWhiteSpace(line)) return false;
+
+        var lower = line.ToLowerInvariant();
+        if (lower.Contains("permission-blocked") || lower.Contains("permission denied and could not request permission"))
+        {
+            issue = BuildOutcomeIssue("permission-blocked", "Permission blocked", "High", line, lastSeenAt);
+            return true;
+        }
+        if (lower.Contains("watchdog-timeout") || (lower.Contains("[watchdog]") && lower.Contains("killed after")))
+        {
+            issue = BuildOutcomeIssue("watchdog-timeout", "Watchdog timeout", "High", line, lastSeenAt);
+            return true;
+        }
+        if (lower.Contains("missing-terminal-sentinel"))
+        {
+            issue = BuildOutcomeIssue("missing-terminal-sentinel", "Missing sentinel", "Warn", line, lastSeenAt);
+            return true;
+        }
+        if (lower.Contains("classifier-unknown") || lower.Contains("could not classify the agent's reply"))
+        {
+            issue = BuildOutcomeIssue("classifier-unknown", "Classifier unknown", "Warn", line, lastSeenAt);
+            return true;
+        }
+        if (lower.Contains("heuristic-done"))
+        {
+            issue = BuildOutcomeIssue("heuristic-done", "Heuristic done", "Warn", line, lastSeenAt);
+            return true;
+        }
+
+        return false;
+    }
+
+    private static JobOutcomeIssue BuildOutcomeIssue(string kind, string label, string severity, string rawLine, DateTime lastSeenAt)
+        => new()
+        {
+            Kind = kind,
+            Label = label,
+            Severity = severity,
+            Summary = SummarizeOutcomeLine(rawLine),
+            LastSeenAt = lastSeenAt
+        };
+
+    private static string SummarizeOutcomeLine(string line)
+    {
+        var trimmed = line.Trim();
+        var end = trimmed.IndexOf(']');
+        if (trimmed.StartsWith("[", StringComparison.Ordinal) && end > 0)
+        {
+            trimmed = trimmed[(end + 1)..].Trim();
+        }
+        if (trimmed.Length <= 260) return trimmed;
+        return trimmed[..257].TrimEnd() + "...";
     }
 
     /// <summary>

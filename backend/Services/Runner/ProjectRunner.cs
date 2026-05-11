@@ -1495,27 +1495,28 @@ public class ProjectRunner
                 // identical heuristic message in a Recovery cascade. Two
                 // back-to-back "needsinput" warnings on a stuck loop do not
                 // help the user; one is enough.
-                var signature = $"{action.Kind}|{action.IsHeuristicFallback}|{outcome.Kind}|{string.Equals(capturedPlan!.EventKind, "recovery", StringComparison.OrdinalIgnoreCase)}";
+                var signature = $"{action.Kind}|{action.IssueKind}|{action.IsHeuristicFallback}|{outcome.Kind}|{string.Equals(capturedPlan!.EventKind, "recovery", StringComparison.OrdinalIgnoreCase)}";
                 var suppress = action.Kind == OutcomeActionKind.NotifyUserAndAccept
-                            && action.IsHeuristicFallback
+                            && (action.IsHeuristicFallback || action.IssueKind != RunIssueKind.None)
                             && string.Equals(_lastMetaSignature, signature, StringComparison.Ordinal);
 
                 if (!suppress)
                 {
-                    if (action.IsHeuristicFallback && !string.IsNullOrWhiteSpace(action.MetaMessage))
+                    if (!string.IsNullOrWhiteSpace(action.MetaMessage))
                     {
-                        _chatLog.Append(activeInfo, OrchestratorMessageKind.HeuristicFallback,
-                            $"{action.MetaMessage} (run summary: {outcome.Summary ?? "n/a"})");
-                    }
-                    else if (!string.IsNullOrWhiteSpace(action.MetaMessage))
-                    {
-                        var kind = action.Kind switch
+                        var kind = action.MessageKind != OrchestratorMessageKind.Decision
+                            ? action.MessageKind
+                            : action.Kind switch
                         {
                             OutcomeActionKind.ReissueWithStrongerFraming => OrchestratorMessageKind.Reissue,
                             OutcomeActionKind.NotifyUserAndStop          => OrchestratorMessageKind.GiveUp,
                             _                                            => OrchestratorMessageKind.Decision
                         };
-                        _chatLog.Append(activeInfo, kind, action.MetaMessage);
+                        var category = action.IssueKind == RunIssueKind.None ? null : ToIssueTopic(action.IssueKind);
+                        var message = category == null
+                            ? action.MetaMessage
+                            : $"{action.MetaMessage} (category: {category}; run summary: {outcome.Summary ?? "n/a"})";
+                        _chatLog.Append(activeInfo, kind, message);
                     }
                 }
                 _lastMetaSignature = signature;
@@ -1530,7 +1531,9 @@ public class ProjectRunner
                     _activeCliType = null;
                     NotifyStatus();
                     var wasRecovery = string.Equals(capturedPlan!.EventKind, "recovery", StringComparison.OrdinalIgnoreCase);
-                    var retryPrompt = RunOutcomePolicy.BuildReissueFollowupPrompt(action.FollowupRetryPrompt!, recoveryContext: wasRecovery);
+                    var retryPrompt = action.IsPreframedRetryPrompt
+                        ? action.FollowupRetryPrompt!
+                        : RunOutcomePolicy.BuildReissueFollowupPrompt(action.FollowupRetryPrompt!, recoveryContext: wasRecovery);
                     var retryAttempt = action.RetryAttempt;
                     _ = Task.Run(async () =>
                     {
@@ -1543,6 +1546,28 @@ public class ProjectRunner
                             _logger.LogError(ex, "Re-issue run failed for {JobId}", jobId);
                         }
                     });
+                    return;
+                }
+
+                if (action.Kind == OutcomeActionKind.NotifyUserAndStop
+                    && activeInfo != null
+                    && ShouldRouteIssueToHumanReview(action.IssueKind))
+                {
+                    _orchestratorLog.Append(activeInfo.WatchPath, new OrchestratorLogEntry
+                    {
+                        Kind = OrchestratorLogKinds.Intervention,
+                        Topic = ToIssueTopic(action.IssueKind),
+                        JobId = jobId,
+                        Summary = $"Routed \"{activeInfo.Title}\" to human review after {ToIssueTopic(action.IssueKind)}.",
+                        Reasoning = action.MetaMessage
+                    });
+                    var move = await _transitions.MoveAsync(jobId, JobStates.HumanReview, activeInfo.WatchPath, CancellationToken.None);
+                    if (move.Status != MoveJobStatus.Success)
+                    {
+                        _logger.LogWarning(
+                            "Issue routing to human review failed for {JobId}: {Status} {Message}",
+                            jobId, move.Status, move.Message);
+                    }
                     return;
                 }
             }
@@ -1704,6 +1729,20 @@ public class ProjectRunner
             }
         }
     }
+
+    private static bool ShouldRouteIssueToHumanReview(RunIssueKind issueKind)
+        => issueKind is RunIssueKind.PermissionBlocked or RunIssueKind.WatchdogTimeout;
+
+    private static string ToIssueTopic(RunIssueKind issueKind) => issueKind switch
+    {
+        RunIssueKind.PermissionBlocked        => "permission-blocked",
+        RunIssueKind.WatchdogTimeout          => "watchdog-timeout",
+        RunIssueKind.MissingTerminalSentinel  => "missing-terminal-sentinel",
+        RunIssueKind.HeuristicDone            => "heuristic-done",
+        RunIssueKind.ClassifierUnknown        => "classifier-unknown",
+        RunIssueKind.NoAgentOutput            => "no-agent-output",
+        _                                     => "none"
+    };
 
     /// <summary>
     /// Appends a clearly-visible separator line into <c>logs/cli-output.log</c>

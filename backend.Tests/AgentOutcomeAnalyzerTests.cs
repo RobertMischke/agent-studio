@@ -127,4 +127,46 @@ public class AgentOutcomeAnalyzerTests
         var outcome = AgentOutcomeAnalyzer.Analyze(new List<CliOutputLine>(), "failed", 4.6);
         Assert.NotEqual(AgentOutcomeKind.NoOp, outcome.Kind);
     }
+
+    [Fact]
+    public void PermissionDenied_Output_IsClassifiedAsPermissionBlocked()
+    {
+        var lines = Lines(
+            "x List workspace projects (shell)",
+            "  | Get-ChildItem C:\\Projects\\agent-taskboard-workspace\\projects -Directory",
+            "  └ Permission denied and could not request permission from user");
+
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, "completed", 64.0);
+
+        Assert.Equal(RunIssueKind.PermissionBlocked, outcome.IssueKind);
+        Assert.False(outcome.MatchedSentinel);
+        Assert.Contains("permission", outcome.Summary ?? string.Empty, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void WatchdogKilled_Output_IsClassifiedAsWatchdogTimeout()
+    {
+        var lines = new List<CliOutputLine>
+        {
+            new() { Timestamp = DateTime.UtcNow, Stream = "orchestrator", Text = "[giveup] [watchdog] Killed after 60s of silence. Process tree terminated; the run will finalize as failed." }
+        };
+
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, "failed", 60.0);
+
+        Assert.Equal(RunIssueKind.WatchdogTimeout, outcome.IssueKind);
+        Assert.Equal(AgentOutcomeKind.Unknown, outcome.Kind);
+        Assert.False(outcome.MatchedSentinel);
+    }
+
+    [Fact]
+    public void CompletedTextWithoutSentinel_IsClassifiedAsMissingTerminalSentinel()
+    {
+        var lines = Lines("I checked the implementation and it looks ready for review.");
+
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, "completed", 22.0);
+
+        Assert.Equal(RunIssueKind.MissingTerminalSentinel, outcome.IssueKind);
+        Assert.Equal(AgentOutcomeKind.Done, outcome.Kind);
+        Assert.False(outcome.MatchedSentinel);
+    }
 }

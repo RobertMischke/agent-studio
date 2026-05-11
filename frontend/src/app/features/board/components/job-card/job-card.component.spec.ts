@@ -5,6 +5,7 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { JobCardComponent } from './job-card.component';
+import type { JobInfo } from '../../../../models/job.model';
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.
@@ -41,4 +42,59 @@ describe('JobCardComponent (smoke)', () => {
     }
     expect(fixture.componentInstance).toBeTruthy();
   });
+
+  it('renders a runner outcome issue pill', async () => {
+    await TestBed.configureTestingModule({
+      imports: [JobCardComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(JobCardComponent);
+    fixture.componentRef.setInput('job', makeJob({
+      outcomeIssue: {
+        kind: 'permission-blocked',
+        label: 'Permission blocked',
+        severity: 'High',
+        summary: 'Permission denied and could not request permission from user.',
+        lastSeenAt: '2026-05-11T10:00:00Z',
+      },
+    }));
+    fixture.detectChanges();
+
+    const pill = fixture.nativeElement.querySelector('[data-testid="job-card-outcome-issue"]') as HTMLElement | null;
+    expect(pill?.textContent).toContain('Permission blocked');
+    expect(pill?.className).toContain('job-card__issue-pill--high');
+  });
 });
+
+function makeJob(overrides: Partial<JobInfo> = {}): JobInfo {
+  return {
+    id: 'task-1',
+    jobKey: 'test::task-1',
+    title: 'Task 1',
+    state: '3-progress',
+    order: 1,
+    agent: 'codex',
+    createdAt: '2026-05-11T09:00:00Z',
+    watchPath: '/tmp/watch',
+    projectName: 'Test',
+    folderPath: '/tmp/watch/3-progress/task-1',
+    lastActivity: '2026-05-11T09:30:00Z',
+    sessionName: null,
+    model: null,
+    cliType: 'codex',
+    useOwnSession: null,
+    lastUsage: null,
+    execution: null,
+    commit: null,
+    commits: [],
+    ownerClientId: 'local-default',
+    tags: [],
+    ...overrides,
+  };
+}

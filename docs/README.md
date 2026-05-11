@@ -86,6 +86,7 @@ Read these before re-litigating a decision they already explored.
 | [research/kanban-layout-reconciliation-2026-05.md](research/kanban-layout-reconciliation-2026-05.md) | Kanban layout drift between docs/mockups and the live frontend. |
 | [research/path-forward-plan-2026-05.md](research/path-forward-plan-2026-05.md) | Phase plan that the autonomy-scale work executes against. |
 | [research/planning-research-task-kinds-2026-05.md](research/planning-research-task-kinds-2026-05.md) | Task-kind taxonomy (Bug / User Story / Chore) that informed the backlog-lane work. |
+| [research/runner-outcome-visibility-2026-05-11.md](research/runner-outcome-visibility-2026-05-11.md) | Concrete runner outcome categories replacing broad heuristicfallback for permission blocks, watchdog kills, missing sentinels, and classifier misses. |
 
 ## Schemas (the wire / disk shapes)
 

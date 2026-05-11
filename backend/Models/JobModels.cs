@@ -108,6 +108,15 @@ public record JobInfo
     public JobSummaryState? SummaryState { get; init; }
 
     /// <summary>
+    /// Latest runner-outcome issue found in <c>logs/cli-output.log</c>.
+    /// Derived at read time from orchestrator log lines, not stored in
+    /// <c>job.json</c>. The UI uses this to surface permission blocks,
+    /// watchdog timeouts, missing terminal sentinels, and classifier
+    /// ambiguity directly on the card and protocol header.
+    /// </summary>
+    public JobOutcomeIssue? OutcomeIssue { get; init; }
+
+    /// <summary>
     /// Latest orchestrator-review verdict for this job, populated at
     /// endpoint-read time from the per-project decision journal at
     /// <c>{workspace}/logs/decisions/{project}.jsonl</c>. Drives the
@@ -163,6 +172,15 @@ public record JobInfo
     /// <c>"tags"</c>; absent or null on disk means an empty list.
     /// </summary>
     public List<string> Tags { get; init; } = [];
+}
+
+public record JobOutcomeIssue
+{
+    public string Kind { get; init; } = "";
+    public string Label { get; init; } = "";
+    public string Severity { get; init; } = "Info";
+    public string Summary { get; init; } = "";
+    public DateTime? LastSeenAt { get; init; }
 }
 
 /// <summary>

@@ -74,6 +74,11 @@ public sealed class AgentMessageBusBridgeTests : IDisposable
     [InlineData(OrchestratorMessageKind.Decision, "Info", "decision")]
     [InlineData(OrchestratorMessageKind.Reissue, "Warn", "reissue")]
     [InlineData(OrchestratorMessageKind.HeuristicFallback, "Warn", "heuristicfallback")]
+    [InlineData(OrchestratorMessageKind.SoftIntervention, "Warn", "soft-intervention")]
+    [InlineData(OrchestratorMessageKind.PermissionBlocked, "High", "permission-blocked")]
+    [InlineData(OrchestratorMessageKind.WatchdogTimeout, "High", "watchdog-timeout")]
+    [InlineData(OrchestratorMessageKind.MissingTerminalSentinel, "Warn", "missing-terminal-sentinel")]
+    [InlineData(OrchestratorMessageKind.ClassifierUnknown, "Warn", "classifier-unknown")]
     [InlineData(OrchestratorMessageKind.GiveUp, "High", "giveup")]
     public async Task EmitOrchestratorChatAsync_MapsKindToSeverityAndTopic(OrchestratorMessageKind kind, string expectedSeverity, string expectedTopic)
     {

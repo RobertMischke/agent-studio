@@ -125,6 +125,18 @@ public enum OrchestratorMessageKind
     Reissue,
     /// <summary>The deterministic contract did not match; classification is a heuristic best-effort.</summary>
     HeuristicFallback,
+    /// <summary>The orchestrator is intervening once to repair a recoverable protocol or tool-boundary issue.</summary>
+    SoftIntervention,
+    /// <summary>The agent hit tool permission boundaries and exhausted the one soft intervention.</summary>
+    PermissionBlocked,
+    /// <summary>The watchdog killed the run after a silence timeout.</summary>
+    WatchdogTimeout,
+    /// <summary>The agent did not emit the required terminal sentinel after one prompt repair.</summary>
+    MissingTerminalSentinel,
+    /// <summary>The agent reported done without a structured sentinel; kept as visible legacy heuristic.</summary>
+    HeuristicDone,
+    /// <summary>The classifier could not map the agent text to a known outcome.</summary>
+    ClassifierUnknown,
     /// <summary>The orchestrator gave up after a retry budget; user attention required.</summary>
     GiveUp,
     /// <summary>The orchestrator could not pick a path on its own but identified a concrete unblocking ask the user can resolve. Renders distinctly so the user sees a productive escalation, not a silent deferral.</summary>
@@ -138,8 +150,26 @@ internal static class OrchestratorMessageKindExtensions
         OrchestratorMessageKind.Decision          => "decision",
         OrchestratorMessageKind.Reissue           => "reissue",
         OrchestratorMessageKind.HeuristicFallback => "heuristic",
+        OrchestratorMessageKind.SoftIntervention  => "intervention",
+        OrchestratorMessageKind.PermissionBlocked => "permission-blocked",
+        OrchestratorMessageKind.WatchdogTimeout   => "watchdog-timeout",
+        OrchestratorMessageKind.MissingTerminalSentinel => "missing-terminal-sentinel",
+        OrchestratorMessageKind.HeuristicDone     => "heuristic-done",
+        OrchestratorMessageKind.ClassifierUnknown => "classifier-unknown",
         OrchestratorMessageKind.GiveUp            => "giveup",
         OrchestratorMessageKind.Steer             => "steer",
         _ => "info"
+    };
+
+    public static string ToBusTopic(this OrchestratorMessageKind kind) => kind switch
+    {
+        OrchestratorMessageKind.HeuristicFallback => "heuristicfallback",
+        OrchestratorMessageKind.SoftIntervention  => "soft-intervention",
+        OrchestratorMessageKind.PermissionBlocked => "permission-blocked",
+        OrchestratorMessageKind.WatchdogTimeout   => "watchdog-timeout",
+        OrchestratorMessageKind.MissingTerminalSentinel => "missing-terminal-sentinel",
+        OrchestratorMessageKind.HeuristicDone     => "heuristic-done",
+        OrchestratorMessageKind.ClassifierUnknown => "classifier-unknown",
+        _ => kind.ToString().ToLowerInvariant()
     };
 }

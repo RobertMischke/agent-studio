@@ -131,6 +131,29 @@
           }
         </section>
 
+        @if (outcomeIssueChips().length > 0) {
+          <section class="obs__issue-strip"
+                   aria-label="Runner outcome attention"
+                   data-testid="observability-outcome-issues">
+            <header class="obs__issue-strip-head">
+              <h3>Outcome attention</h3>
+              <span>Latest categorized runner issues from the bus</span>
+            </header>
+            <div class="obs__issue-chips">
+              @for (issue of outcomeIssueChips(); track issue.topic) {
+                <button type="button"
+                        class="obs__issue-chip"
+                        [class.obs__issue-chip--high]="issue.tone === 'high'"
+                        [attr.data-testid]="issue.testid"
+                        (click)="selectMessage(issue.latestMessageId)">
+                  <span class="obs__issue-chip-num">{{ issue.value }}</span>
+                  <span>{{ issue.label }}</span>
+                </button>
+              }
+            </div>
+          </section>
+        }
+
         <section class="obs__timeline" aria-label="Timeline by participant" data-testid="observability-timeline">
           <header class="obs__section-head">
             <h3>Timeline by participant</h3>
@@ -354,4 +377,3 @@
         }
       }
     </section>
-  

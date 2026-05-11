@@ -320,6 +320,33 @@
       background: rgba(248, 113, 113, 0.12);
       border-color: rgba(248, 113, 113, 0.28);
     }
+    .job-card__issue-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 650;
+      letter-spacing: 0;
+      border: 1px solid transparent;
+      cursor: help;
+    }
+    .job-card__issue-pill--info {
+      color: #bfdbfe;
+      background: rgba(96, 165, 250, 0.12);
+      border-color: rgba(96, 165, 250, 0.28);
+    }
+    .job-card__issue-pill--warn {
+      color: #fde68a;
+      background: rgba(245, 158, 11, 0.13);
+      border-color: rgba(245, 158, 11, 0.30);
+    }
+    .job-card__issue-pill--high {
+      color: #fecaca;
+      background: rgba(239, 68, 68, 0.14);
+      border-color: rgba(239, 68, 68, 0.34);
+    }
     .job-card__state-pill {
       background: rgba(255,255,255,0.06);
       color: #cbd5e1;

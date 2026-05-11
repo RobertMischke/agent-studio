@@ -307,6 +307,20 @@ export class JobCardComponent implements OnInit, OnDestroy {
     };
   });
 
+  readonly outcomeIssueBadge = computed<{ label: string; tone: 'info' | 'warn' | 'high'; tooltip: string } | null>(() => {
+    const issue = this.job().outcomeIssue;
+    if (!issue) return null;
+    const severity = (issue.severity ?? '').toLowerCase();
+    const tone = severity === 'high' ? 'high' : severity === 'warn' ? 'warn' : 'info';
+    const seen = issue.lastSeenAt ? `\nLast seen: ${this.formatShortTime(issue.lastSeenAt)}` : '';
+    const summary = issue.summary ? `\n\n${issue.summary}` : '';
+    return {
+      label: issue.label || issue.kind,
+      tone,
+      tooltip: `Runner outcome issue: ${issue.kind}${seen}${summary}`
+    };
+  });
+
   /** Hot-state threshold: amber pill once the loop is at 80% of the iteration cap. */
   readonly loopHot = computed(() => {
     const al = this.job().autoLoop;

@@ -28,7 +28,12 @@ public sealed record OutcomeAction(
     string MetaMessage,
     bool IsHeuristicFallback,
     string? FollowupRetryPrompt = null,
-    int RetryAttempt = 0);
+    int RetryAttempt = 0)
+{
+    public RunIssueKind IssueKind { get; init; } = RunIssueKind.None;
+    public OrchestratorMessageKind MessageKind { get; init; } = OrchestratorMessageKind.Decision;
+    public bool IsPreframedRetryPrompt { get; init; }
+}
 
 /// <summary>
 /// Pure decision library that maps (intent, run plan, outcome, follow-up,
@@ -51,6 +56,8 @@ public static class RunOutcomePolicy
 {
     /// <summary>Maximum number of automatic re-issue attempts before the orchestrator gives up and asks the user.</summary>
     public const int MaxAutoReissueAttempts = 1;
+    /// <summary>Maximum number of soft orchestration interventions for one detected issue class.</summary>
+    public const int MaxSoftInterventionAttempts = 1;
 
     /// <summary>
     /// Decide what to do with a finished run.
@@ -73,6 +80,72 @@ public static class RunOutcomePolicy
         var isResumeContinue = intent == RunIntent.UserContinue
             && string.Equals(plan.EventKind, "continue", StringComparison.OrdinalIgnoreCase)
             && plan.ResumeFlag;
+
+        if (outcome.IssueKind == RunIssueKind.PermissionBlocked)
+        {
+            if (reissueAttempt < MaxSoftInterventionAttempts)
+            {
+                return new OutcomeAction(
+                    Kind: OutcomeActionKind.ReissueWithStrongerFraming,
+                    MetaMessage: "The agent hit a tool permission boundary. The orchestrator is giving it one soft intervention to find a solution within the available permissions.",
+                    IsHeuristicFallback: false,
+                    FollowupRetryPrompt: BuildPermissionInterventionPrompt(),
+                    RetryAttempt: reissueAttempt + 1)
+                {
+                    IssueKind = RunIssueKind.PermissionBlocked,
+                    MessageKind = OrchestratorMessageKind.SoftIntervention,
+                    IsPreframedRetryPrompt = true
+                };
+            }
+
+            return new OutcomeAction(
+                Kind: OutcomeActionKind.NotifyUserAndStop,
+                MetaMessage: "Permission issue persisted after one orchestrator intervention. The task needs human attention before it can continue.",
+                IsHeuristicFallback: false)
+            {
+                IssueKind = RunIssueKind.PermissionBlocked,
+                MessageKind = OrchestratorMessageKind.PermissionBlocked
+            };
+        }
+
+        if (outcome.IssueKind == RunIssueKind.WatchdogTimeout)
+        {
+            return new OutcomeAction(
+                Kind: OutcomeActionKind.NotifyUserAndStop,
+                MetaMessage: "The watchdog killed this run after a silence timeout. This is a runner/process outcome, not an agent decision.",
+                IsHeuristicFallback: false)
+            {
+                IssueKind = RunIssueKind.WatchdogTimeout,
+                MessageKind = OrchestratorMessageKind.WatchdogTimeout
+            };
+        }
+
+        if (outcome.IssueKind == RunIssueKind.MissingTerminalSentinel)
+        {
+            if (reissueAttempt < MaxSoftInterventionAttempts)
+            {
+                return new OutcomeAction(
+                    Kind: OutcomeActionKind.ReissueWithStrongerFraming,
+                    MetaMessage: "The agent replied without a terminal sentinel. The orchestrator is asking once for a structured close-out so the task can move through the pipeline cleanly.",
+                    IsHeuristicFallback: false,
+                    FollowupRetryPrompt: BuildMissingSentinelInterventionPrompt(outcome),
+                    RetryAttempt: reissueAttempt + 1)
+                {
+                    IssueKind = RunIssueKind.MissingTerminalSentinel,
+                    MessageKind = OrchestratorMessageKind.SoftIntervention,
+                    IsPreframedRetryPrompt = true
+                };
+            }
+
+            return new OutcomeAction(
+                Kind: OutcomeActionKind.NotifyUserAndAccept,
+                MetaMessage: "The agent still did not emit a terminal sentinel after one orchestrator intervention. Continuing with a visible missing-terminal-sentinel marker.",
+                IsHeuristicFallback: false)
+            {
+                IssueKind = RunIssueKind.MissingTerminalSentinel,
+                MessageKind = OrchestratorMessageKind.MissingTerminalSentinel
+            };
+        }
 
         // No-effort completion: agent exited fast with little or no text.
         // Graceful Recovery (ADR-0006 supersedes ADR-0003): even when the
@@ -128,7 +201,11 @@ public static class RunOutcomePolicy
             return new OutcomeAction(
                 Kind: OutcomeActionKind.NotifyUserAndAccept,
                 MetaMessage: "[heuristic] Agent reports done (no structured signal).",
-                IsHeuristicFallback: true);
+                IsHeuristicFallback: true)
+            {
+                IssueKind = RunIssueKind.HeuristicDone,
+                MessageKind = OrchestratorMessageKind.HeuristicDone
+            };
         }
 
         if (outcome.Kind == AgentOutcomeKind.Unknown)
@@ -149,8 +226,12 @@ public static class RunOutcomePolicy
             }
             return new OutcomeAction(
                 Kind: OutcomeActionKind.NotifyUserAndAccept,
-                MetaMessage: "[heuristic] Could not classify the agent's reply.",
-                IsHeuristicFallback: true);
+                MetaMessage: "Could not classify the agent's reply after deterministic checks.",
+                IsHeuristicFallback: false)
+            {
+                IssueKind = RunIssueKind.ClassifierUnknown,
+                MessageKind = OrchestratorMessageKind.ClassifierUnknown
+            };
         }
 
         return new OutcomeAction(
@@ -186,4 +267,16 @@ public static class RunOutcomePolicy
              + "User request:\n"
              + (originalFollowup ?? string.Empty).Trim();
     }
+
+    public static string BuildPermissionInterventionPrompt()
+        => "The previous attempt hit one or more tool permission errors. "
+         + "Do not ask for additional permissions again. Find a solution using only the available permissions and the context already accessible in this run. "
+         + "If a command or path is unavailable, try a narrower read, use existing repository files, inspect the task folder evidence, or reason from the visible output. "
+         + "When you finish, end with exactly one terminal sentinel on its own line: [[TASK_DONE]], [[TASK_BLOCKED:<short reason>]], [[TASK_NEEDS_INPUT:<short reason>]], or [[TASK_NOOP]].";
+
+    public static string BuildMissingSentinelInterventionPrompt(AgentOutcome outcome)
+        => "Your previous reply did not include the terminal sentinel required by this taskboard. "
+         + "Continue the task if work remains; otherwise close it out now. "
+         + "End with exactly one terminal sentinel on its own line: [[TASK_DONE]], [[TASK_BLOCKED:<short reason>]], [[TASK_NEEDS_INPUT:<short reason>]], or [[TASK_NOOP]]. "
+         + $"The orchestrator's current summary of your previous reply was: {outcome.Summary ?? "unclassified"}.";
 }

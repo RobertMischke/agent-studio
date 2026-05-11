@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, computed, inject, input, output, signal, ViewChild } from '@angular/core';
-import type { CliOutputLine, ContinueMode, JobDetail, JobSummaryStatus, ReviewEvidenceEntry } from '../../../../models/job.model';
+import type { CliOutputLine, ContinueMode, JobDetail, JobOutcomeIssue, JobSummaryStatus, ReviewEvidenceEntry } from '../../../../models/job.model';
 import type { RunRecord } from '../../../../features/run-timeline';
 import { deriveWatchdogPill } from './watchdog-state';
 import { ActivityLogViewComponent } from '../activity-log-view';
@@ -239,6 +239,12 @@ export class ProtocolPaneComponent implements OnDestroy {
     isRunning: this.isRunning(),
     now: new Date(this.nowTick())
   }));
+  readonly outcomeIssue = computed(() => this.detail().info.outcomeIssue ?? null);
+  readonly outcomeIssueModalOpen = signal(false);
+  readonly outcomeIssueTone = computed<'info' | 'warn' | 'high'>(() => {
+    const severity = (this.outcomeIssue()?.severity ?? '').toLowerCase();
+    return severity === 'high' ? 'high' : severity === 'warn' ? 'warn' : 'info';
+  });
 
   /**
    * Order + labels for the mode pills above the chat input. Each option has a
@@ -415,6 +421,32 @@ export class ProtocolPaneComponent implements OnDestroy {
   formatTokens(n: number): string { return fmtTokens(n); }
   formatRateWindow(window: string | null): string { return fmtRateWindow(window); }
   formatResetIn(epoch: number): string { return fmtResetIn(epoch, this.nowTick()); }
+
+  outcomeIssueExplanation(issue: JobOutcomeIssue): string {
+    switch (issue.kind) {
+      case 'permission-blocked':
+        return 'The orchestrator detected a permission failure. It gets one soft intervention that asks the agent to continue with the permissions already available. If the same category appears again, the task is routed to Human Review.';
+      case 'watchdog-timeout':
+        return 'The watchdog stopped a run after it stopped producing progress. The task is surfaced for human review with the concrete timeout category instead of a generic heuristic fallback.';
+      case 'missing-terminal-sentinel':
+        return 'The agent replied with useful completion text but did not emit a terminal sentinel. The orchestrator asks once for a proper sentinel and then accepts or stops with this visible category.';
+      case 'classifier-unknown':
+        return 'The runner could not map the reply to a known completion shape. This is tracked separately so repeated classifier misses are visible at task and project level.';
+      case 'heuristic-done':
+        return 'The runner accepted a completed-looking reply through the compatibility heuristic. The category remains visible so these cases can be reduced over time.';
+      default:
+        return 'The runner attached a categorized outcome issue to this task. The raw source is still logs/cli-output.log.';
+    }
+  }
+
+  formatIssueTime(iso: string | null | undefined): string {
+    if (!iso) return 'unknown';
+    try {
+      return new Date(iso).toLocaleString();
+    } catch {
+      return iso;
+    }
+  }
 
   claudeSessionTooltip(): string {
     const cs = this.claudeSession();

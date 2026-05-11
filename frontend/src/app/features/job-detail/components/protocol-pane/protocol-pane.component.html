@@ -57,6 +57,16 @@
               data-testid="watchdog-chip">{{ wp.label }}</span>
       }
     }
+    @if (outcomeIssue(); as issue) {
+      <button type="button"
+              class="pane__outcome-issue"
+              [class]="'pane__outcome-issue--' + outcomeIssueTone()"
+              [title]="issue.summary || issue.kind"
+              data-testid="protocol-outcome-issue-chip"
+              (click)="outcomeIssueModalOpen.set(true)">
+        {{ issue.label || issue.kind }}
+      </button>
+    }
     @if (claudeRateLimit(); as rl) {
       <span class="pane__telemetry pane__telemetry-rate"
             [class.pane__telemetry-rate--ok]="rl.status === 'allowed'"
@@ -92,6 +102,40 @@
   </header>
   <div class="pane__body">
     <app-hygiene-strip [job]="detail().info" [isActiveJob]="isActiveJob()" />
+    @if (outcomeIssueModalOpen()) {
+      @if (outcomeIssue(); as issue) {
+        <div class="outcome-dialog-backdrop"
+             data-testid="protocol-outcome-issue-modal"
+             (click)="outcomeIssueModalOpen.set(false)">
+          <section class="outcome-dialog"
+                   role="dialog"
+                   aria-modal="true"
+                   aria-labelledby="outcome-dialog-title"
+                   (click)="$event.stopPropagation()">
+            <header class="outcome-dialog__head">
+              <div>
+                <p class="outcome-dialog__eyebrow">Runner outcome</p>
+                <h3 id="outcome-dialog-title">{{ issue.label || issue.kind }}</h3>
+              </div>
+              <button type="button"
+                      class="outcome-dialog__close"
+                      data-testid="protocol-outcome-issue-close"
+                      aria-label="Close outcome issue detail"
+                      (click)="outcomeIssueModalOpen.set(false)">×</button>
+            </header>
+            <dl class="outcome-dialog__meta">
+              <div><dt>Category</dt><dd><code>{{ issue.kind }}</code></dd></div>
+              <div><dt>Severity</dt><dd>{{ issue.severity || 'Info' }}</dd></div>
+              <div><dt>Last seen</dt><dd>{{ formatIssueTime(issue.lastSeenAt) }}</dd></div>
+            </dl>
+            <p class="outcome-dialog__explanation">{{ outcomeIssueExplanation(issue) }}</p>
+            @if (issue.summary) {
+              <pre class="outcome-dialog__summary">{{ issue.summary }}</pre>
+            }
+          </section>
+        </div>
+      }
+    }
     @if (screenshots().length > 0) {
       <app-screenshot-strip
         data-testid="protocol-screenshot-strip"

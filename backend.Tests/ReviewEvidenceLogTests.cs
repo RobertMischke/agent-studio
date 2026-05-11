@@ -255,3 +255,81 @@ public class JobDetailReviewEvidenceTests : IDisposable
         Assert.Equal(ReviewEvidenceSeverities.Warn, detail.ReviewEvidence[1].Severity);
     }
 }
+
+/// <summary>
+/// Locks the lightweight task-level outcome issue projection. The durable
+/// source remains logs/cli-output.log; JobInfo only exposes the latest
+/// categorized line so board and protocol header can show it without
+/// building a second storage path.
+/// </summary>
+public class JobOutcomeIssueScannerTests : IDisposable
+{
+    private readonly string _watchPath;
+
+    public JobOutcomeIssueScannerTests()
+    {
+        _watchPath = Path.Combine(Path.GetTempPath(), "job-outcome-issue-" + Guid.NewGuid().ToString("N"));
+        foreach (var state in JobStates.All)
+        {
+            Directory.CreateDirectory(Path.Combine(_watchPath, state));
+        }
+    }
+
+    public void Dispose()
+    {
+        try { Directory.Delete(_watchPath, recursive: true); } catch { /* best-effort */ }
+    }
+
+    private JobScannerService BuildScanner()
+    {
+        var config = new ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["WatchPaths:0:Name"] = "test",
+                ["WatchPaths:0:Path"] = _watchPath
+            })
+            .Build();
+        var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
+        return new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
+    }
+
+    [Fact]
+    public void ScanAllJobs_PermissionBlockedLog_SurfacesOutcomeIssue()
+    {
+        var dir = Path.Combine(_watchPath, JobStates.Progress, "permission-task");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "job.json"),
+            """{"id":"permission-task","title":"permission","state":"3-progress","order":1,"agent":"codex"}""");
+        Directory.CreateDirectory(JobPaths.LogsDir(dir));
+        File.WriteAllText(JobPaths.CliOutputLog(dir),
+            "[orchestrator] Permission denied and could not request permission from user.\n" +
+            "[intervention] Try to continue with available permissions. (category: permission-blocked; run summary: sandbox denied)\n",
+            Encoding.UTF8);
+
+        var job = Assert.Single(BuildScanner().ScanAllJobs());
+
+        Assert.NotNull(job.OutcomeIssue);
+        Assert.Equal("permission-blocked", job.OutcomeIssue!.Kind);
+        Assert.Equal("High", job.OutcomeIssue.Severity);
+        Assert.Contains("category: permission-blocked", job.OutcomeIssue.Summary);
+    }
+
+    [Fact]
+    public void ScanAllJobs_LegacyHeuristicFallbackLog_SurfacesClassifierUnknown()
+    {
+        var dir = Path.Combine(_watchPath, JobStates.HumanReview, "legacy-heuristic-task");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "job.json"),
+            """{"id":"legacy-heuristic-task","title":"legacy","state":"5-human-review","order":1,"agent":"claude"}""");
+        Directory.CreateDirectory(JobPaths.LogsDir(dir));
+        File.WriteAllText(JobPaths.CliOutputLog(dir),
+            "[heuristic] Could not classify the agent's reply. (run summary: Agent text did not match any known shape.)\n",
+            Encoding.UTF8);
+
+        var job = Assert.Single(BuildScanner().ScanAllJobs());
+
+        Assert.NotNull(job.OutcomeIssue);
+        Assert.Equal("classifier-unknown", job.OutcomeIssue!.Kind);
+        Assert.Equal("Warn", job.OutcomeIssue.Severity);
+    }
+}

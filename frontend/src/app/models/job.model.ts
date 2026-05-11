@@ -78,6 +78,13 @@ export interface JobInfo {
    */
   summaryState?: JobSummaryState | null;
   /**
+   * Latest categorized runner-outcome issue, derived from logs/cli-output.log.
+   * This is read-only observability: it surfaces permission blocks, watchdog
+   * timeouts, missing sentinels, and classifier ambiguity without creating a
+   * second persistence path beside the existing task log.
+   */
+  outcomeIssue?: JobOutcomeIssue | null;
+  /**
    * Latest orchestrator-review verdict for this job, sourced from the
    * per-project decision journal. Drives the 4-review kanban swim-lane
    * subdivision (orchestrator-review vs human-review) and the workspace
@@ -119,6 +126,14 @@ export interface JobInfo {
    * that were soft-deleted from the registry) render as a faint ghost chip.
    */
   tags?: string[];
+}
+
+export interface JobOutcomeIssue {
+  kind: 'permission-blocked' | 'watchdog-timeout' | 'missing-terminal-sentinel' | 'classifier-unknown' | 'heuristic-done' | string;
+  label: string;
+  severity: 'Info' | 'Warn' | 'High' | string;
+  summary: string;
+  lastSeenAt: string | null;
 }
 
 /**

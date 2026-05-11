@@ -124,12 +124,18 @@ public sealed class AgentMessageBusBridge
         var severity = kind switch
         {
             OrchestratorMessageKind.GiveUp            => "High",
+            OrchestratorMessageKind.PermissionBlocked => "High",
+            OrchestratorMessageKind.WatchdogTimeout   => "High",
             OrchestratorMessageKind.Reissue           => "Warn",
             OrchestratorMessageKind.HeuristicFallback => "Warn",
+            OrchestratorMessageKind.SoftIntervention  => "Warn",
+            OrchestratorMessageKind.MissingTerminalSentinel => "Warn",
+            OrchestratorMessageKind.HeuristicDone     => "Warn",
+            OrchestratorMessageKind.ClassifierUnknown => "Warn",
             OrchestratorMessageKind.Steer             => "Warn",
             _                                         => "Info"
         };
-        var topic = kind.ToString().ToLowerInvariant();
+        var topic = kind.ToBusTopic();
 
         var msg = NewMessage(
             participantId: ParticipantOrchestratorFor(info.ProjectName),

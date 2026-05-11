@@ -37,6 +37,15 @@ interface CountChip {
   tone: 'neutral' | 'warn' | 'high';
 }
 
+interface OutcomeIssueChip {
+  testid: string;
+  topic: string;
+  label: string;
+  value: number;
+  tone: 'warn' | 'high';
+  latestMessageId: string;
+}
+
 interface MatrixRow {
   participantId: string;
   total: number;
@@ -76,6 +85,15 @@ const RANGE_OPTIONS: ReadonlyArray<{ id: number; label: string }> = [
   { id: 24, label: 'Last 24h' },
   { id: 24 * 7, label: 'Last 7d' },
   { id: 0, label: 'All time' },
+];
+
+const OUTCOME_ISSUE_TOPICS: ReadonlyArray<{ topic: string; label: string; tone: 'warn' | 'high' }> = [
+  { topic: 'permission-blocked', label: 'Permission blocked', tone: 'high' },
+  { topic: 'watchdog-timeout', label: 'Watchdog timeout', tone: 'high' },
+  { topic: 'missing-terminal-sentinel', label: 'Missing sentinel', tone: 'warn' },
+  { topic: 'classifier-unknown', label: 'Classifier unknown', tone: 'warn' },
+  { topic: 'heuristic-done', label: 'Heuristic done', tone: 'warn' },
+  { topic: 'soft-intervention', label: 'Soft intervention', tone: 'warn' },
 ];
 
 /**
@@ -302,6 +320,36 @@ export class ProjectObservabilityPanelComponent implements OnInit, OnDestroy {
     ];
   });
 
+  readonly outcomeIssueChips = computed<OutcomeIssueChip[]>(() => {
+    const rows = new Map<string, { count: number; latestMessageId: string }>();
+    for (const m of this.filtered()) {
+      const topic = this.outcomeTopicForMessage(m);
+      if (!topic) continue;
+      const current = rows.get(topic);
+      if (current) {
+        current.count++;
+      } else {
+        rows.set(topic, { count: 1, latestMessageId: m.id });
+      }
+    }
+
+    return OUTCOME_ISSUE_TOPICS
+      .map(def => {
+        const row = rows.get(def.topic);
+        return row
+          ? {
+              testid: `observability-outcome-${def.topic}`,
+              topic: def.topic,
+              label: def.label,
+              value: row.count,
+              tone: def.tone,
+              latestMessageId: row.latestMessageId,
+            }
+          : null;
+      })
+      .filter((chip): chip is OutcomeIssueChip => chip !== null);
+  });
+
   readonly timelineLanes = computed<TimelineLane[]>(() => {
     const start = new Date(this.rangeStart()).getTime();
     const end = new Date(this.rangeEnd()).getTime();
@@ -440,5 +488,20 @@ export class ProjectObservabilityPanelComponent implements OnInit, OnDestroy {
 
   private shortBucket(d: Date): string {
     return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+  }
+
+  private outcomeTopicForMessage(m: AgentMessage): string | null {
+    const haystack = [
+      m.topic ?? '',
+      m.summary ?? '',
+      m.body ?? '',
+      ...(m.tags ?? []),
+    ].join(' ').toLowerCase();
+
+    for (const def of OUTCOME_ISSUE_TOPICS) {
+      if (haystack.includes(def.topic)) return def.topic;
+    }
+
+    return null;
   }
 }

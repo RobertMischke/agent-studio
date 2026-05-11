@@ -151,6 +151,65 @@
       letter-spacing: 0.04em;
     }
 
+    .obs__issue-strip {
+      margin: 0 0 16px;
+      padding: 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(148, 163, 184, 0.20);
+      background: rgba(15, 23, 42, 0.45);
+    }
+    .obs__issue-strip-head {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .obs__issue-strip-head h3 {
+      margin: 0;
+      font-size: 0.9rem;
+      color: #e2e8f0;
+      letter-spacing: 0;
+    }
+    .obs__issue-strip-head span {
+      color: #94a3b8;
+      font-size: 0.78rem;
+    }
+    .obs__issue-chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .obs__issue-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 30px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(245, 158, 11, 0.34);
+      background: rgba(245, 158, 11, 0.11);
+      color: #fde68a;
+      font-size: 0.78rem;
+      cursor: pointer;
+    }
+    .obs__issue-chip--high {
+      border-color: rgba(239, 68, 68, 0.42);
+      background: rgba(239, 68, 68, 0.14);
+      color: #fecaca;
+    }
+    .obs__issue-chip:hover { filter: brightness(1.08); }
+    .obs__issue-chip-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 20px;
+      height: 20px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.12);
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+    }
+
     .obs__section-head {
       display: flex;
       align-items: baseline;
@@ -379,4 +438,3 @@
       color: #a6adc8;
       font-size: 0.72rem;
     }
-  

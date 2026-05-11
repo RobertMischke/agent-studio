@@ -105,6 +105,14 @@
         {{ arb.label }}
       </span>
     }
+    @if (outcomeIssueBadge(); as oib) {
+      <span class="job-card__issue-pill"
+            [class]="'job-card__issue-pill--' + oib.tone"
+            [title]="oib.tooltip"
+            data-testid="job-card-outcome-issue">
+        {{ oib.label }}
+      </span>
+    }
   </div>
   <div class="job-card__meta">
     <span class="job-card__agent">{{ agentIcon() }} {{ job().agent || 'unknown' }}</span>

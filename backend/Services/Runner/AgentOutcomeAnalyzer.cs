@@ -27,6 +27,23 @@ public enum AgentOutcomeKind
 }
 
 /// <summary>
+/// Concrete issue class attached to a run outcome. This is separate from
+/// <see cref="AgentOutcomeKind"/>: the kind says what the agent appeared
+/// to say; the issue says why the orchestrator did not trust or complete
+/// the normal terminal-sentinel contract.
+/// </summary>
+public enum RunIssueKind
+{
+    None,
+    PermissionBlocked,
+    WatchdogTimeout,
+    MissingTerminalSentinel,
+    HeuristicDone,
+    ClassifierUnknown,
+    NoAgentOutput
+}
+
+/// <summary>
 /// Deterministic, side-effect-free description of how a CLI run ended.
 /// <see cref="MatchedSentinel"/> is the load-bearing flag: when it is true
 /// the orchestrator treats the result as authoritative; when it is false
@@ -41,7 +58,10 @@ public sealed record AgentOutcome(
     string? Reason,
     int AgentTextChars,
     int OutputLineCount,
-    double DurationSeconds);
+    double DurationSeconds)
+{
+    public RunIssueKind IssueKind { get; init; } = RunIssueKind.None;
+}
 
 /// <summary>
 /// Pure analyzer that turns a finished CLI run into an <see cref="AgentOutcome"/>.
@@ -92,6 +112,7 @@ public static class AgentOutcomeAnalyzer
     {
         lines ??= Array.Empty<CliOutputLine>();
         var agentText = JoinAgentText(lines);
+        var rawText = JoinRawText(lines);
         var lineCount = lines.Count;
 
         // 1) Hard sentinels - authoritative. Walk from the end so a final
@@ -110,11 +131,40 @@ public static class AgentOutcomeAnalyzer
                 DurationSeconds: durationSeconds);
         }
 
+        var failed = string.Equals(status, "failed", StringComparison.OrdinalIgnoreCase)
+                  || string.Equals(status, "cancelled", StringComparison.OrdinalIgnoreCase);
+
+        if (IsPermissionBlocked(rawText))
+        {
+            return new AgentOutcome(
+                Kind: AgentOutcomeKind.Unknown,
+                Summary: "Tool permission failure prevented the agent from using the requested command or path.",
+                MatchedSentinel: false,
+                SentinelKeyword: null,
+                Reason: "permission denied during tool execution",
+                AgentTextChars: agentText.Length,
+                OutputLineCount: lineCount,
+                DurationSeconds: durationSeconds)
+            { IssueKind = RunIssueKind.PermissionBlocked };
+        }
+
+        if (IsWatchdogTimeout(rawText))
+        {
+            return new AgentOutcome(
+                Kind: AgentOutcomeKind.Unknown,
+                Summary: "Run was killed by the watchdog after a silence timeout.",
+                MatchedSentinel: false,
+                SentinelKeyword: null,
+                Reason: "watchdog timeout",
+                AgentTextChars: agentText.Length,
+                OutputLineCount: lineCount,
+                DurationSeconds: durationSeconds)
+            { IssueKind = RunIssueKind.WatchdogTimeout };
+        }
+
         // 2) Structural no-op - the CLI exited cleanly without producing
         //    anything the user can review. Subscriber-side proof the agent
         //    didn't actually attempt the task.
-        var failed = string.Equals(status, "failed", StringComparison.OrdinalIgnoreCase)
-                  || string.Equals(status, "cancelled", StringComparison.OrdinalIgnoreCase);
         if (!failed && agentText.Length == 0 && durationSeconds < NoOpDurationThresholdSeconds)
         {
             return new AgentOutcome(
@@ -125,13 +175,15 @@ public static class AgentOutcomeAnalyzer
                 Reason: $"duration {durationSeconds:F1}s, no agent text",
                 AgentTextChars: 0,
                 OutputLineCount: lineCount,
-                DurationSeconds: durationSeconds);
+                DurationSeconds: durationSeconds)
+            { IssueKind = RunIssueKind.NoAgentOutput };
         }
 
         // 3) Heuristic regex fallback over the tail of the agent text. Mirrors
         //    the frontend's classifier so the orchestrator and the UI agree
         //    on what "done" / "blocked" / "needs-input" mean today.
         var (heuristicKind, heuristicSummary) = HeuristicClassify(agentText);
+        var issue = ResolveIssueKind(heuristicKind, agentText.Length, failed);
         return new AgentOutcome(
             Kind: heuristicKind,
             Summary: heuristicSummary,
@@ -142,7 +194,8 @@ public static class AgentOutcomeAnalyzer
                 : "no sentinel matched, heuristic fallback",
             AgentTextChars: agentText.Length,
             OutputLineCount: lineCount,
-            DurationSeconds: durationSeconds);
+            DurationSeconds: durationSeconds)
+        { IssueKind = issue };
     }
 
     // Sentinel format: [[TASK_<KEYWORD>]] or [[TASK_<KEYWORD>:reason text]].
@@ -212,6 +265,28 @@ public static class AgentOutcomeAnalyzer
         return (AgentOutcomeKind.Unknown, "Agent text did not match any known shape.");
     }
 
+    private static RunIssueKind ResolveIssueKind(AgentOutcomeKind kind, int agentTextChars, bool failed)
+    {
+        if (agentTextChars == 0) return failed ? RunIssueKind.NoAgentOutput : RunIssueKind.None;
+        if (failed) return RunIssueKind.ClassifierUnknown;
+        return kind switch
+        {
+            AgentOutcomeKind.Done    => RunIssueKind.MissingTerminalSentinel,
+            AgentOutcomeKind.Unknown => RunIssueKind.MissingTerminalSentinel,
+            _                        => RunIssueKind.None
+        };
+    }
+
+    private static bool IsPermissionBlocked(string text)
+        => !string.IsNullOrWhiteSpace(text)
+           && (text.Contains("Permission denied and could not request permission from user", StringComparison.OrdinalIgnoreCase)
+               || text.Contains("could not request permission from user", StringComparison.OrdinalIgnoreCase));
+
+    private static bool IsWatchdogTimeout(string text)
+        => !string.IsNullOrWhiteSpace(text)
+           && text.Contains("[watchdog]", StringComparison.OrdinalIgnoreCase)
+           && text.Contains("Killed after", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>
     /// Joins the parts of the buffer that look like agent (assistant) text.
     /// We exclude lines from the <c>system</c> stream (taskboard markers and
@@ -233,6 +308,9 @@ public static class AgentOutcomeAnalyzer
         }
         return string.Join("\n", parts).Trim();
     }
+
+    private static string JoinRawText(IReadOnlyList<CliOutputLine> lines)
+        => string.Join("\n", lines.Where(l => l != null).Select(l => l.Text ?? string.Empty)).Trim();
 
     private static string TailLines(string text, int count)
     {
