@@ -382,6 +382,38 @@ This needs a project-level **Steering Docs / Project Knowledge** surface beside 
 
 Queued at `agent-taskboard/2-ready/analysis-report-contract-and-storage/`, `agent-taskboard/2-ready/project-analysis-reports-surface/`, `agent-taskboard/2-ready/roadmap-alignment-analysis-action/`, `agent-taskboard/2-ready/orchestrator-output-pattern-learning/`, `agent-taskboard/2-ready/project-steering-docs-surface/`, and `agent-taskboard/2-ready/steering-docs-summary-and-drift-action/`.
 
+### Context Engineering
+
+Make context a first-class product concept, not a side effect of how agents happen to run.
+
+Agents are only as good as what they see before they act. Context Engineering is the discipline of deciding what goes into that view, how much, in what form, when, and how it is kept current. Today the app supports individual pieces of this — Steering Docs, Skills, task context, Analysis Reports — but the product has no surface that makes context visible as a whole, or that treats context health as a project metric.
+
+The product should support:
+
+- **Constitutional Layer surface.** AGENTS.md, README, ADRs, Skills, and project-specific steering notes visible together as the agent-facing knowledge base for each project. Editable and durable from within the app, not just from a text editor. A human summary layer on top: what agents are currently told, what matters for this project, what looks stale or contradictory, and what recent failures suggest should change.
+- **Per-task context panel.** Before a task runs, show what context it carries: which steering docs it inherits, which task-specific Spec and context is attached, which files are in scope, and what history is visible. Make missing or conflicting context detectable before the run, not after.
+- **Context enrichment in the Intake phase.** As part of Orchestrator Intake (see Expanded Lifecycle Lanes), a planning step enriches a task with relevant project knowledge before the agent touches code: README, Roadmap, ADRs, Specs, relevant prior tasks, related code areas. The output is a richer task context, not just the original prompt.
+- **JIT-retrieval awareness.** Surface which files and documents an agent is likely to read during a run (based on task scope, prior runs, and steering docs). This is not pre-loading; it is making the agent's expected read surface transparent to the human reviewer.
+- **Memory tier surfaces.** Make the four memory tiers visible as product concepts — Working Memory (active context), Episodic Memory (job-folder history, tool-calls.jsonl), Semantic Memory (Steering Docs, project knowledge), Procedural Memory (Skills, runtime prompts). Each tier has a product surface. The human should be able to see and edit each tier.
+- **Context health metric.** Detect stale, contradictory, or missing context before it becomes a failure. A project with no current AGENTS.md entry, conflicting ADRs, or a task with no Spec should surface a warning, the same way a project with no security baseline already does.
+- **Steering Docs Feedback Loop as a product action.** Today the meta-analysis can suggest steering doc updates (see Analysis Reports). Make this more explicit: a "Context Health" action produces a report on stale, contradictory, or missing context, and proposes specific patches as reviewable follow-up tasks. No silent rewriting of steering files.
+
+Hard rules:
+
+- Context is shown, not hidden. Every agent run should have a readable record of what context it was given, not just what it produced.
+- Context updates are explicit and reviewable. Nothing rewrites AGENTS.md, Skills, or ADRs silently. Every proposed context change becomes a task or a diff the human can accept or reject.
+- Context health is a project metric, not an afterthought. A project with poor context health (stale docs, missing Spec, contradicting ADRs) should be visually distinguishable from a project with healthy context.
+
+The full marketing framing lives in `agent-studio-marketing/06-website-planung/context-engineering.md`.
+
+First implementation order:
+
+1. Constitutional Layer surface on the project page: list all agent-facing documents, show freshness, flag conflicts and gaps.
+2. Per-task context panel in the task detail view: inherited steering docs, attached Spec, task contract, Nicht-Ziele, Akzeptanzkriterien.
+3. Context enrichment as a Planning step in the Intake phase, producing a richer task context before agent execution begins.
+4. Context health action: scheduled or manual report on stale, contradicting, or missing context, with proposed follow-up tasks.
+5. Memory tier surfaces: job-folder Episodic history, Steering Docs Semantic view, Skills Procedural catalog — unified as a readable project knowledge layer.
+
 ### Agent Message Bus and Observability
 
 Use a central, append-only Agent Message Bus as the product's communication spine. The bus is not a workflow engine and does not relax the one-coding-task-per-project boundary. It is a schema-first event log that records who observed, asked, decided, answered, intervened, spent tokens, and produced evidence.
