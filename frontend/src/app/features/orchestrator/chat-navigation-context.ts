@@ -1,0 +1,57 @@
+import type { ChatNavigationContext } from './models/orchestrator.model';
+
+/**
+ * Pure inputs that describe "where the operator is" when they hit send.
+ * Kept narrow so the builder is testable without dragging the side-sheet
+ * component into the test harness.
+ */
+export interface ChatNavigationContextInput {
+  activeJobId: string | null;
+  activeJobTitle: string | null;
+  activeJobState?: string | null;
+  laneFilter?: string | null;
+  /**
+   * Override for tests. Production should leave this undefined so the
+   * builder stamps the real wall-clock UTC ISO string at call time.
+   */
+  now?: () => Date;
+}
+
+/**
+ * Build the `navigationContext` block that ships with every project-chat
+ * POST. The contract is intentionally minimal: callers feed in router /
+ * detail-panel state, this function decides which `currentPage` token
+ * applies and emits a JSON-shaped object with absent fields omitted (so the
+ * backend's "no nav context" detection stays clean).
+ *
+ * Rules:
+ * - A non-empty `activeJobId` means the operator is on `task-detail`.
+ * - Otherwise the page is `kanban-board` (default surface).
+ * - `currentLaneFilter` is forwarded when the operator has filtered the
+ *   board; it disambiguates "what's on this page" when no task is open.
+ */
+export function buildChatNavigationContext(
+  input: ChatNavigationContextInput
+): ChatNavigationContext {
+  const out: ChatNavigationContext = {};
+  const taskId = sanitize(input.activeJobId);
+  const taskTitle = sanitize(input.activeJobTitle);
+  const taskState = sanitize(input.activeJobState ?? null);
+  const lane = sanitize(input.laneFilter ?? null);
+
+  out.currentPage = taskId ? 'task-detail' : 'kanban-board';
+  if (taskId) out.currentTaskId = taskId;
+  if (taskTitle) out.currentTaskTitle = taskTitle;
+  if (taskState) out.currentTaskState = taskState;
+  if (lane) out.currentLaneFilter = lane;
+
+  const now = (input.now ?? (() => new Date()))();
+  out.viewportTimestamp = now.toISOString();
+  return out;
+}
+
+function sanitize(value: string | null | undefined): string | null {
+  if (value == null) return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}

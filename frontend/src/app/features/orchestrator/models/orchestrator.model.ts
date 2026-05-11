@@ -84,3 +84,23 @@ export interface OrchestratorChatResponse {
   project: string;
   turns: OrchestratorChatTurn[];
 }
+
+/**
+ * Navigation context the frontend sends with every project-chat POST so the
+ * orchestrator can answer context-dependent questions ("what is the current
+ * task?", "explain this") against the page the operator is actually on.
+ *
+ * Background: before this field existed the chat agent answered context
+ * questions in vacuum and hallucinated freely (2026-05-09 "Conversation,
+ * Foul Conversation" incident). Every field is optional; the backend treats
+ * a missing `currentTaskId` as "no task in scope" and the agent must not
+ * invent one.
+ */
+export interface ChatNavigationContext {
+  currentPage?: string | null;
+  currentTaskId?: string | null;
+  currentTaskTitle?: string | null;
+  currentTaskState?: string | null;
+  currentLaneFilter?: string | null;
+  viewportTimestamp?: string | null;
+}

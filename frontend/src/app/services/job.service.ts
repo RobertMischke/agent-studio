@@ -719,7 +719,11 @@ export class JobService {
    */
   sendOrchestratorChat(
     projectName: string,
-    body: { text: string; attachments?: { alt: string; relativePath: string }[] }
+    body: {
+      text: string;
+      attachments?: { alt: string; relativePath: string }[];
+      navigationContext?: import('../features/orchestrator').ChatNavigationContext;
+    }
   ) {
     return this.http.post<{ project: string; reply: OrchestratorChatTurn }>(
       `${this.baseUrl}/runner/${encodeURIComponent(projectName)}/orchestrator-chat`,

@@ -12,4 +12,6 @@ export type {
   OrchestratorChatTurn,
   OrchestratorChatAttachment,
   OrchestratorChatResponse,
+  ChatNavigationContext,
 } from './models/orchestrator.model';
+export { buildChatNavigationContext } from './chat-navigation-context';

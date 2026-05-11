@@ -261,7 +261,31 @@ public static class OrchestratorChatRoles
 
 public sealed record SendOrchestratorChatRequest(
     string Text,
-    List<OrchestratorChatAttachment>? Attachments);
+    List<OrchestratorChatAttachment>? Attachments,
+    ChatNavigationContext? NavigationContext = null);
+
+/// <summary>
+/// Structured navigation context the frontend ships with every project-chat
+/// POST. The chat agent reads this to interpret context-dependent questions
+/// ("what is the current task?", "explain this") against the page the
+/// operator is actually looking at. Every field is optional from the
+/// agent's perspective: a missing or null <see cref="CurrentTaskId"/> means
+/// the operator is not on a task page and the agent must not invent one.
+///
+/// <para>
+/// Background: before this field existed the agent answered context
+/// questions in vacuum and hallucinated freely (see the 2026-05-09
+/// "Conversation, Foul Conversation" incident). Carrying the navigation
+/// state into the prompt closes that loop deterministically.
+/// </para>
+/// </summary>
+public sealed record ChatNavigationContext(
+    string? CurrentPage = null,
+    string? CurrentTaskId = null,
+    string? CurrentTaskTitle = null,
+    string? CurrentTaskState = null,
+    string? CurrentLaneFilter = null,
+    string? ViewportTimestamp = null);
 
 /// <summary>
 /// Service that turns a user message into an orchestrator reply by resuming
@@ -481,6 +505,8 @@ public class OrchestratorChatService
             // still answer general questions from session memory.
         }
 
+        AppendNavigationContext(sb, req.NavigationContext);
+
         sb.AppendLine("=== USER MESSAGE ===");
         sb.AppendLine(req.Text);
         sb.AppendLine();
@@ -500,6 +526,42 @@ public class OrchestratorChatService
         sb.AppendLine("Use Markdown for structure when helpful (lists, bold, code).");
         sb.AppendLine("Keep it short unless the user asked for depth.");
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Render the navigation-context block when the frontend sent one. The
+    /// rendered text is what the agent reads, so the wording is part of the
+    /// contract: it tells the agent how to interpret context-dependent
+    /// questions and explicitly forbids inventing a task when none is in
+    /// scope. Kept in one place so unit tests can pin the shape.
+    /// </summary>
+    internal static void AppendNavigationContext(StringBuilder sb, ChatNavigationContext? nav)
+    {
+        sb.AppendLine("=== NAVIGATION CONTEXT ===");
+        if (nav == null
+            || (string.IsNullOrWhiteSpace(nav.CurrentPage)
+                && string.IsNullOrWhiteSpace(nav.CurrentTaskId)
+                && string.IsNullOrWhiteSpace(nav.CurrentTaskTitle)
+                && string.IsNullOrWhiteSpace(nav.CurrentTaskState)
+                && string.IsNullOrWhiteSpace(nav.CurrentLaneFilter)
+                && string.IsNullOrWhiteSpace(nav.ViewportTimestamp)))
+        {
+            sb.AppendLine("No navigation context was sent with this message.");
+            sb.AppendLine("If the user asks a context-dependent question (\"what is the current task?\", \"explain this\"), say no specific task is in scope and ask which task they mean. Do NOT invent a task or hallucinate a context.");
+            sb.AppendLine();
+            return;
+        }
+
+        sb.AppendLine("The operator's UI state when they sent this message:");
+        if (!string.IsNullOrWhiteSpace(nav.CurrentPage)) sb.AppendLine($"  currentPage: {nav.CurrentPage}");
+        if (!string.IsNullOrWhiteSpace(nav.CurrentTaskId)) sb.AppendLine($"  currentTaskId: {nav.CurrentTaskId}");
+        if (!string.IsNullOrWhiteSpace(nav.CurrentTaskTitle)) sb.AppendLine($"  currentTaskTitle: {nav.CurrentTaskTitle}");
+        if (!string.IsNullOrWhiteSpace(nav.CurrentTaskState)) sb.AppendLine($"  currentTaskState: {nav.CurrentTaskState}");
+        if (!string.IsNullOrWhiteSpace(nav.CurrentLaneFilter)) sb.AppendLine($"  currentLaneFilter: {nav.CurrentLaneFilter}");
+        if (!string.IsNullOrWhiteSpace(nav.ViewportTimestamp)) sb.AppendLine($"  viewportTimestamp: {nav.ViewportTimestamp}");
+        sb.AppendLine();
+        sb.AppendLine("Use this when interpreting context-dependent questions. When currentTaskId is set, the operator is most likely asking about THAT task; answer with its title/state and refer to it by id. When currentTaskId is null, do NOT invent one; say no task is in scope and ask which task they mean. Never produce filler tokens or repeated greetings in place of a real answer.");
+        sb.AppendLine();
     }
 
     private string ResolveWorkingDirectory(string watchPath)
