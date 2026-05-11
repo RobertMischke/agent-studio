@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.AdHoc;
+using OrchestratorApi.Services.Cli.OneShot;
 using OrchestratorApi.Services.Jobs;
 
 namespace OrchestratorApi.Services.Runner;
@@ -38,18 +39,60 @@ public sealed class AspectRunnerService
     /// CLI runner injection point. Tests substitute a deterministic stub
     /// keyed on the aspect name (passed as the first argument so the test
     /// can return a different reply per aspect without re-parsing the
-    /// prompt).
+    /// prompt). Production wires it onto <see cref="ICliOneShot"/> via the
+    /// constructor; tests can still overwrite the property directly.
     /// </summary>
     public Func<string, string, string, string, TimeSpan, CancellationToken, Task<string>> CliRunner { get; set; }
         = DefaultRunCliAsync;
 
     private readonly AdHocUsageRecorder? _usage;
+    private readonly CliOneShotRegistry? _oneShotRegistry;
 
-    public AspectRunnerService(RuntimePromptService prompts, ILogger<AspectRunnerService> logger, AdHocUsageRecorder? usage = null)
+    public AspectRunnerService(
+        RuntimePromptService prompts,
+        ILogger<AspectRunnerService> logger,
+        AdHocUsageRecorder? usage = null,
+        CliOneShotRegistry? oneShotRegistry = null)
     {
         _prompts = prompts;
         _logger = logger;
         _usage = usage;
+        _oneShotRegistry = oneShotRegistry;
+
+        // Wire production CLI invocation to the OneShot service so prompts
+        // travel via stdin (the failure mode this fix exists to prevent
+        // was multi-KB prompts passed as -p argv on Windows). Tests that
+        // construct the service with no registry get DefaultRunCliAsync
+        // and substitute their own stub via the CliRunner property.
+        if (_oneShotRegistry != null)
+        {
+            CliRunner = (aspectId, cli, model, prompt, timeout, ct) =>
+                RunViaOneShotAsync(aspectId, cli, model, prompt, timeout, ct);
+        }
+    }
+
+    private async Task<string> RunViaOneShotAsync(string aspectId, string cli, string model, string prompt, TimeSpan timeout, CancellationToken ct)
+    {
+        var oneShot = _oneShotRegistry?.Get("claude");
+        if (oneShot == null) return await DefaultRunCliAsync(aspectId, cli, model, prompt, timeout, ct);
+
+        var result = await oneShot.RunAsync(new CliOneShotRequest(
+            CliType: "claude",
+            Model: model,
+            Prompt: prompt)
+        {
+            Timeout = timeout,
+            Source = AdHocUsageSources.ReviewDecision,
+            RecordUsage = false, // RunAsync caller (this service) records via AdHocClaudeInvoker.Record below
+        }, ct);
+
+        if (!result.Ok)
+        {
+            _logger.LogWarning(
+                "Aspect '{AspectId}' CLI call failed: exit={ExitCode} duration={Duration}ms error={Error}",
+                aspectId, result.ExitCode, result.Duration.TotalMilliseconds, result.Error);
+        }
+        return result.Stdout; // raw JSON wrapper; caller still runs ParseOrFallback
     }
 
     /// <summary>
@@ -253,11 +296,17 @@ public sealed class AspectRunnerService
         return $"## Model reply\n\n```\n{response.Trim()}\n```\n";
     }
 
+    /// <summary>
+    /// Legacy fallback CLI runner kept for backward compatibility with the
+    /// few tests that construct <see cref="AspectRunnerService"/> without
+    /// a <see cref="CliOneShotRegistry"/>. Production paths go through
+    /// <see cref="RunViaOneShotAsync"/>. Stdin-piped to match the canonical
+    /// pattern; we removed the previous <c>-p &lt;prompt&gt;</c> argv path
+    /// that caused the 2026-05-11 empty-reply incident.
+    /// </summary>
     private static async Task<string> DefaultRunCliAsync(
         string aspectId, string cli, string model, string prompt, TimeSpan timeout, CancellationToken ct)
     {
-        // Reuse the same shape as ReviewDecisionOrchestrator's default CLI
-        // runner: stdin-piped Claude with --dangerously-skip-permissions.
         var psi = new System.Diagnostics.ProcessStartInfo
         {
             FileName = cli,
@@ -266,37 +315,35 @@ public sealed class AspectRunnerService
             RedirectStandardError = true,
             UseShellExecute = false,
         };
-        psi.ArgumentList.Add("--dangerously-skip-permissions");
-        psi.ArgumentList.Add("--model");
-        psi.ArgumentList.Add(model);
+        psi.ArgumentList.Add("-p");
         psi.ArgumentList.Add("--output-format");
         psi.ArgumentList.Add("json");
-        psi.ArgumentList.Add("-p");
-        psi.ArgumentList.Add(prompt);
+        psi.ArgumentList.Add("--model");
+        psi.ArgumentList.Add(model);
+        psi.ArgumentList.Add("--dangerously-skip-permissions");
 
         using var p = System.Diagnostics.Process.Start(psi);
         if (p == null) return string.Empty;
-        var sb = new StringBuilder();
-        var readTask = Task.Run(async () =>
+        try
         {
-            string? line;
-            while ((line = await p.StandardOutput.ReadLineAsync(ct)) != null)
-            {
-                sb.AppendLine(line);
-            }
-        }, ct);
+            await p.StandardInput.WriteAsync(prompt.AsMemory(), ct);
+            p.StandardInput.Close();
+        }
+        catch { /* CLI may have closed stdin already */ }
+
+        var stdoutTask = p.StandardOutput.ReadToEndAsync(ct);
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(timeout);
         try
         {
             await p.WaitForExitAsync(cts.Token);
-            await readTask;
+            return await stdoutTask;
         }
         catch (OperationCanceledException)
         {
             try { p.Kill(true); } catch { }
+            return string.Empty;
         }
-        return sb.ToString();
     }
 }
 

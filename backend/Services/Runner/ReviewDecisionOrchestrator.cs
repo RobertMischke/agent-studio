@@ -114,6 +114,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         = DefaultRunCliAsync;
 
     private readonly OrchestratorApi.Services.AdHoc.AdHocUsageRecorder? _usage;
+    private readonly OrchestratorApi.Services.Cli.OneShot.CliOneShotRegistry? _oneShotRegistry;
 
     public ReviewDecisionOrchestrator(
         JobScannerService scanner,
@@ -124,7 +125,8 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         AutoReviewStatusSnapshot statusSnapshot,
         IConfiguration configuration,
         ILogger<ReviewDecisionOrchestrator> logger,
-        OrchestratorApi.Services.AdHoc.AdHocUsageRecorder? usage = null)
+        OrchestratorApi.Services.AdHoc.AdHocUsageRecorder? usage = null,
+        OrchestratorApi.Services.Cli.OneShot.CliOneShotRegistry? oneShotRegistry = null)
     {
         _scanner = scanner;
         _stateMachine = stateMachine;
@@ -135,6 +137,40 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _configuration = configuration;
         _logger = logger;
         _usage = usage;
+        _oneShotRegistry = oneShotRegistry;
+
+        // Route production CLI calls through ICliOneShot (stdin-piped,
+        // stderr-captured, exit-code-surfaced). The CliRunner property
+        // stays the test seam.
+        if (_oneShotRegistry != null)
+        {
+            CliRunner = (cli, model, prompt, timeout, ct) =>
+                RunViaOneShotAsync(cli, model, prompt, timeout, ct);
+        }
+    }
+
+    private async Task<string> RunViaOneShotAsync(string cli, string model, string prompt, TimeSpan timeout, CancellationToken ct)
+    {
+        var oneShot = _oneShotRegistry?.Get("claude");
+        if (oneShot == null) return await DefaultRunCliAsync(cli, model, prompt, timeout, ct);
+
+        var result = await oneShot.RunAsync(new OrchestratorApi.Services.Cli.OneShot.CliOneShotRequest(
+            CliType: "claude",
+            Model: model,
+            Prompt: prompt)
+        {
+            Timeout = timeout,
+            Source = OrchestratorApi.Models.AdHocUsageSources.ReviewDecision,
+            RecordUsage = false,
+        }, ct);
+
+        if (!result.Ok)
+        {
+            _logger.LogWarning(
+                "Review-decision CLI call failed: exit={ExitCode} duration={Duration}ms error={Error}",
+                result.ExitCode, result.Duration.TotalMilliseconds, result.Error);
+        }
+        return result.Stdout;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -1168,6 +1204,12 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         return _callTimestamps.Count < maxPerHour;
     }
 
+    /// <summary>
+    /// Legacy fallback for tests that construct the orchestrator without
+    /// a <see cref="OrchestratorApi.Services.Cli.OneShot.CliOneShotRegistry"/>.
+    /// Stdin-piped — replaces the previous <c>-p &lt;prompt&gt;</c> argv path
+    /// that caused the 2026-05-11 empty-reply incident on Windows.
+    /// </summary>
     private static async Task<string> DefaultRunCliAsync(string cli, string model, string prompt, TimeSpan timeout, CancellationToken ct)
     {
         var psi = new ProcessStartInfo
@@ -1178,37 +1220,35 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             RedirectStandardError = true,
             UseShellExecute = false,
         };
-        psi.ArgumentList.Add("--dangerously-skip-permissions");
-        psi.ArgumentList.Add("--model");
-        psi.ArgumentList.Add(model);
+        psi.ArgumentList.Add("-p");
         psi.ArgumentList.Add("--output-format");
         psi.ArgumentList.Add("json");
-        psi.ArgumentList.Add("-p");
-        psi.ArgumentList.Add(prompt);
+        psi.ArgumentList.Add("--model");
+        psi.ArgumentList.Add(model);
+        psi.ArgumentList.Add("--dangerously-skip-permissions");
 
         using var p = Process.Start(psi);
         if (p == null) return string.Empty;
-        var sb = new StringBuilder();
-        var readTask = Task.Run(async () =>
+        try
         {
-            string? line;
-            while ((line = await p.StandardOutput.ReadLineAsync(ct)) != null)
-            {
-                sb.AppendLine(line);
-            }
-        }, ct);
+            await p.StandardInput.WriteAsync(prompt.AsMemory(), ct);
+            p.StandardInput.Close();
+        }
+        catch { /* stdin may already be closed by CLI */ }
+
+        var stdoutTask = p.StandardOutput.ReadToEndAsync(ct);
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(timeout);
         try
         {
             await p.WaitForExitAsync(cts.Token);
-            await readTask;
+            return await stdoutTask;
         }
         catch (OperationCanceledException)
         {
             try { p.Kill(true); } catch { }
+            return string.Empty;
         }
-        return sb.ToString();
     }
 
     private enum ReviewSignalKind

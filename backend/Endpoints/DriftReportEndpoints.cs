@@ -491,7 +491,45 @@ public static class DriftReportEndpoints
             var saved = stateStore.Set(workspace!, project, modelId, elementId, parsed, body.Note);
             return Results.Ok(saved);
         });
+
+        // -----------------------------------------------------------------
+        // Code-pattern drift. Deterministic rule-based check that catches
+        // code-pattern duplication where one or more sites have diverged
+        // from the canonical implementation. No LLM call; analysis is a
+        // fast file walk + regex match. See
+        // CodePatternDriftAnalysisService for the rule set.
+        // -----------------------------------------------------------------
+
+        group.MapPost("/actions/code-pattern-drift", (
+            CodePatternDriftAnalysisService action) =>
+        {
+            var repoRoot = ResolveRepoRoot();
+            var report = action.Analyze(repoRoot);
+            var markdown = action.RenderMarkdown(report);
+            return Results.Ok(new CodePatternDriftResponse(report, markdown));
+        });
+
+        group.MapGet("/actions/code-pattern-drift/rules", (
+            CodePatternDriftAnalysisService action) =>
+        {
+            // Public introspection of the active rule set so the UI can
+            // render "we check for X, Y, Z" without re-implementing the list.
+            var summary = CodePatternDriftAnalysisService.DefaultRules
+                .Select(r => new CodePatternRuleSummary(r.Id, r.Title, r.CanonicalDescription, r.SeverityIfBad.ToString()))
+                .ToArray();
+            return Results.Ok(summary);
+        });
     }
+
+    public sealed record CodePatternDriftResponse(
+        CodePatternDriftReport Report,
+        string Markdown);
+
+    public sealed record CodePatternRuleSummary(
+        string Id,
+        string Title,
+        string CanonicalDescription,
+        string Severity);
 
     /// <summary>
     /// Resolves the source repository root by walking up from

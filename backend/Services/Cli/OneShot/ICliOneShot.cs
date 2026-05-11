@@ -1,0 +1,138 @@
+using OrchestratorApi.Models;
+using OrchestratorApi.Services.Bus;
+using OrchestratorApi.Services.Runner;
+
+namespace OrchestratorApi.Services.Cli.OneShot;
+
+/// <summary>
+/// Single point of code for one-shot CLI calls (Claude/Codex/Gemini in
+/// <c>-p</c> / <c>exec</c> / one-prompt-one-response mode).
+/// </summary>
+/// <remarks>
+/// <para>
+/// Replaces eight independent <c>DefaultRunCliAsync</c> helpers scattered
+/// across the runner / supervisor / ad-hoc services. Three of those eight
+/// historically passed the prompt as a positional argv argument
+/// (<c>-p &lt;multi-KB prompt&gt;</c>), which fails silently on Windows
+/// shims for prompts over ~8 KB and was the root cause of the 2026-05-11
+/// "every aspect verdict comes back Concerns" incident. The OneShot
+/// service exposes one contract that enforces stdin-piped prompts,
+/// captures latency, parses token + context-window data via
+/// <see cref="ICliUsageParser"/>, and surfaces stderr + non-zero exit
+/// codes that the legacy helpers ignored.
+/// </para>
+/// <para>
+/// Stateless and thread-safe; safe to share across the process. Per-CLI
+/// implementations live alongside this file and are dispatched via
+/// <see cref="CliOneShotRegistry"/>.
+/// </para>
+/// </remarks>
+public interface ICliOneShot
+{
+    /// <summary>CLI identifier this implementation handles (lowercase).</summary>
+    string CliType { get; }
+
+    /// <summary>
+    /// Run one prompt and return the full result envelope. Never throws on
+    /// CLI-level failures - those land as <c>Ok=false</c> with a populated
+    /// <see cref="CliOneShotResult.Error"/>. Process-spawn failures or
+    /// cancellation surface the same way so call sites can treat all
+    /// failure modes uniformly.
+    /// </summary>
+    Task<CliOneShotResult> RunAsync(CliOneShotRequest request, CancellationToken ct = default);
+}
+
+/// <summary>One CLI invocation request. All optional fields fall back to
+/// project / configuration defaults; the only required fields are the
+/// CLI type, model, and prompt.</summary>
+public sealed record CliOneShotRequest(
+    string CliType,
+    string Model,
+    string Prompt)
+{
+    /// <summary>Working directory the child process runs in. Defaults to
+    /// the backend's CWD when null - usually the workspace root.</summary>
+    public string? WorkingDirectory { get; init; }
+
+    /// <summary>Wall-clock cap. The child is killed when this elapses.
+    /// Defaults to two minutes when null.</summary>
+    public TimeSpan? Timeout { get; init; }
+
+    /// <summary>Tag for <see cref="AdHoc.AdHocUsageRecorder"/> so the
+    /// per-source usage chart can attribute spend.</summary>
+    public string? Source { get; init; }
+
+    /// <summary>Project slug for usage attribution. Optional.</summary>
+    public string? Project { get; init; }
+
+    /// <summary>Job slug for usage attribution. Optional.</summary>
+    public string? JobId { get; init; }
+
+    /// <summary>When false, the OneShot does not record this call into
+    /// <see cref="AdHoc.AdHocUsageRecorder"/>. Used by call sites that
+    /// own their own bookkeeping (e.g. ProjectRunner).</summary>
+    public bool RecordUsage { get; init; } = true;
+}
+
+/// <summary>Full result envelope. All fields are populated even on
+/// failure so call sites can log a consistent shape.</summary>
+public sealed record CliOneShotResult(
+    bool Ok,
+    int ExitCode,
+    string Stdout,
+    string Stderr,
+    TimeSpan Duration,
+    string ParsedText,
+    OrchestratorTokenUsage? Usage,
+    ParsedTurnUsage? RichUsage,
+    AgentMessageLatency Latency,
+    string? Error)
+{
+    /// <summary>Convenience: zero-token empty failure used when a child
+    /// could not be started at all.</summary>
+    public static CliOneShotResult SpawnFailure(string error, DateTime requestedAt, DateTime completedAt) => new(
+        Ok: false,
+        ExitCode: -1,
+        Stdout: string.Empty,
+        Stderr: string.Empty,
+        Duration: completedAt - requestedAt,
+        ParsedText: string.Empty,
+        Usage: null,
+        RichUsage: null,
+        Latency: new AgentMessageLatency(
+            RequestedAt: requestedAt,
+            CompletedAt: completedAt,
+            TotalMs: (long)(completedAt - requestedAt).TotalMilliseconds),
+        Error: error);
+}
+
+/// <summary>Dispatcher that picks the right one-shot implementation by
+/// CLI type. Singleton; the underlying implementations are stateless.</summary>
+public sealed class CliOneShotRegistry
+{
+    private readonly Dictionary<string, ICliOneShot> _byCli;
+
+    public CliOneShotRegistry(IEnumerable<ICliOneShot> implementations)
+    {
+        _byCli = implementations.ToDictionary(i => i.CliType, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Returns the implementation for the given CLI type, or null
+    /// when no implementation is registered. Caller decides whether to
+    /// throw or fall back.</summary>
+    public ICliOneShot? Get(string? cliType)
+    {
+        if (string.IsNullOrWhiteSpace(cliType)) return null;
+        return _byCli.TryGetValue(cliType, out var v) ? v : null;
+    }
+
+    /// <summary>Convenience: get the implementation or throw a clear
+    /// error. Use at call sites that cannot meaningfully recover from a
+    /// missing implementation.</summary>
+    public ICliOneShot Require(string cliType)
+    {
+        var impl = Get(cliType);
+        if (impl == null) throw new InvalidOperationException($"No ICliOneShot registered for CLI '{cliType}'");
+        return impl;
+    }
+}

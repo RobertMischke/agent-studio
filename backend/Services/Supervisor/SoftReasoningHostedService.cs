@@ -29,6 +29,7 @@ public sealed class SoftReasoningHostedService : BackgroundService
     private readonly ILogger<SoftReasoningHostedService> _logger;
     private readonly AgentMessageBusBridge? _bus;
     private readonly AdHocUsageRecorder? _usage;
+    private readonly OrchestratorApi.Services.Cli.OneShot.CliOneShotRegistry? _oneShotRegistry;
 
     private readonly Queue<DateTime> _callTimestamps = new();
 
@@ -39,7 +40,8 @@ public sealed class SoftReasoningHostedService : BackgroundService
         IConfiguration configuration,
         ILogger<SoftReasoningHostedService> logger,
         AgentMessageBusBridge? bus = null,
-        AdHocUsageRecorder? usage = null)
+        AdHocUsageRecorder? usage = null,
+        OrchestratorApi.Services.Cli.OneShot.CliOneShotRegistry? oneShotRegistry = null)
     {
         _taskRunner = taskRunner;
         _observe = observe;
@@ -48,6 +50,7 @@ public sealed class SoftReasoningHostedService : BackgroundService
         _logger = logger;
         _bus = bus;
         _usage = usage;
+        _oneShotRegistry = oneShotRegistry;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -102,7 +105,7 @@ public sealed class SoftReasoningHostedService : BackgroundService
                 if (string.IsNullOrEmpty(observation.CurrentJobId)) continue; // nothing to reason about while idle
                 var prompt = BuildPrompt(project, observation);
                 var sw = AdHocClaudeInvoker.StartTiming();
-                var rawOutput = await RunCliAsync(cliBinary, model, prompt, TimeSpan.FromSeconds(120), ct);
+                var rawOutput = await InvokeCliAsync(cliBinary, model, prompt, TimeSpan.FromSeconds(120), ct);
                 sw.Stop();
                 var (output, callUsage) = AdHocClaudeInvoker.ParseOrFallback(rawOutput, model);
                 AdHocClaudeInvoker.Record(_usage, AdHocUsageSources.SoftReasoning, model, callUsage, sw.ElapsedMilliseconds, ok: true, project: project, jobId: observation.CurrentJobId);
@@ -161,8 +164,34 @@ public sealed class SoftReasoningHostedService : BackgroundService
     private static string InlineFallback(Dictionary<string, string?> v) =>
         $"Project: {v["project"]}\nState: {v["runner_status"]} active={v["current_job_id"]}\nLast progress: {v["last_progress_at"]}\n\nRecent samples:\n{v["recent_samples"]}\n\nEmit observations as [[SUPERVISOR_OBSERVATION: severity=<info|warn|high>; topic=<tag>; message=<one-line>]] then [[TASK_DONE]].";
 
-    private static async Task<string> RunCliAsync(string cli, string model, string prompt, TimeSpan timeout, CancellationToken ct)
+    /// <summary>
+    /// Route to <see cref="OrchestratorApi.Services.Cli.OneShot.ICliOneShot"/>
+    /// when the registry is wired; fall back to a local stdin-piped variant
+    /// for test setups that build the service without DI. We removed the
+    /// previous <c>-p &lt;prompt&gt;</c> argv path that caused the
+    /// 2026-05-11 empty-reply incident.
+    /// </summary>
+    private async Task<string> InvokeCliAsync(string cli, string model, string prompt, TimeSpan timeout, CancellationToken ct)
     {
+        var oneShot = _oneShotRegistry?.Get("claude");
+        if (oneShot != null)
+        {
+            var r = await oneShot.RunAsync(new OrchestratorApi.Services.Cli.OneShot.CliOneShotRequest(
+                CliType: "claude", Model: model, Prompt: prompt)
+            {
+                Timeout = timeout,
+                Source = AdHocUsageSources.SoftReasoning,
+                RecordUsage = false,
+            }, ct);
+            if (!r.Ok)
+            {
+                _logger.LogWarning(
+                    "Soft-reasoning CLI call failed: exit={ExitCode} duration={Duration}ms error={Error}",
+                    r.ExitCode, r.Duration.TotalMilliseconds, r.Error);
+            }
+            return r.Stdout;
+        }
+
         var psi = new ProcessStartInfo
         {
             FileName = cli,
@@ -171,36 +200,34 @@ public sealed class SoftReasoningHostedService : BackgroundService
             RedirectStandardError = true,
             UseShellExecute = false,
         };
-        psi.ArgumentList.Add("--dangerously-skip-permissions");
-        psi.ArgumentList.Add("--model");
-        psi.ArgumentList.Add(model);
+        psi.ArgumentList.Add("-p");
         psi.ArgumentList.Add("--output-format");
         psi.ArgumentList.Add("json");
-        psi.ArgumentList.Add("-p");
-        psi.ArgumentList.Add(prompt);
+        psi.ArgumentList.Add("--model");
+        psi.ArgumentList.Add(model);
+        psi.ArgumentList.Add("--dangerously-skip-permissions");
 
         using var p = Process.Start(psi);
         if (p == null) return string.Empty;
-        var sb = new StringBuilder();
-        var readTask = Task.Run(async () =>
+        try
         {
-            string? line;
-            while ((line = await p.StandardOutput.ReadLineAsync(ct)) != null)
-            {
-                sb.AppendLine(line);
-            }
-        }, ct);
+            await p.StandardInput.WriteAsync(prompt.AsMemory(), ct);
+            p.StandardInput.Close();
+        }
+        catch { /* stdin may already be closed */ }
+
+        var stdoutTask = p.StandardOutput.ReadToEndAsync(ct);
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(timeout);
         try
         {
             await p.WaitForExitAsync(cts.Token);
-            await readTask;
+            return await stdoutTask;
         }
         catch (OperationCanceledException)
         {
             try { p.Kill(true); } catch { }
+            return string.Empty;
         }
-        return sb.ToString();
     }
 }
