@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnDestroy, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { UpdateClientService } from '../../../../services/update.service';
 import { DevToolsService } from '../../../../services/dev-tools.service';
@@ -23,7 +23,7 @@ import { UpdateHistoryEntry } from '../../../../models/update-service.model';
   templateUrl: './update-center.component.html',
   styleUrl: './update-center.component.scss'
 })
-export class UpdateCenterComponent {
+export class UpdateCenterComponent implements OnDestroy {
   private readonly client = inject(UpdateClientService);
   private readonly devTools = inject(DevToolsService);
   private readonly errors = inject(ErrorDialogService);
@@ -32,22 +32,49 @@ export class UpdateCenterComponent {
   readonly status = this.client.status;
   readonly isRunning = this.client.isRunning;
   readonly isDev = computed(() => this.devTools.flags().updateStableEnabled);
+  readonly serviceUnreachable = this.client.serviceUnreachable;
   readonly triggerInFlight = signal(false);
+  readonly refreshInFlight = signal(false);
   readonly history = signal<UpdateHistoryEntry[]>([]);
+  readonly canTrigger = computed(() =>
+    this.isDev() &&
+    !this.serviceUnreachable() &&
+    !this.triggerInFlight() &&
+    !this.isRunning()
+  );
+
+  private readonly historyTimer: ReturnType<typeof setInterval>;
 
   constructor() {
     // Re-load history every time the drawer opens.
-    setInterval(() => {
+    this.historyTimer = setInterval(() => {
       if (this.open()) this.refreshHistory();
     }, 5_000);
+  }
+
+  ngOnDestroy(): void {
+    clearInterval(this.historyTimer);
   }
 
   close(): void {
     this.client.closeCenter();
   }
 
+  async refreshStatus(): Promise<void> {
+    if (this.refreshInFlight()) return;
+    this.refreshInFlight.set(true);
+    try {
+      await Promise.all([
+        this.client.refreshNow(),
+        this.refreshHistory(),
+      ]);
+    } finally {
+      this.refreshInFlight.set(false);
+    }
+  }
+
   async trigger(): Promise<void> {
-    if (this.triggerInFlight()) return;
+    if (!this.canTrigger()) return;
     this.triggerInFlight.set(true);
     try {
       await this.client.trigger('manual via update center', false);

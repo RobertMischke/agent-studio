@@ -101,7 +101,7 @@
                           (click)="onPickUpdateStable()">
                     <span class="devtools-menu__icon">⟳</span>
                     <span class="devtools-menu__label">Update Stable</span>
-                    <span class="devtools-menu__hint">pull main, restart instance</span>
+                    <span class="devtools-menu__hint">open resilient update center</span>
                   </button>
                 }
                 @if (devToolsFlags().deleteE2EJobsEnabled) {
@@ -411,10 +411,6 @@
           (cliTypeChange)="onCreateCliTypeChange($event)"
           (cancel)="cancelCreate()"
           (submit)="submitCreate()" />
-      }
-
-      @if (showUpdateStable()) {
-        <app-update-stable-console (closed)="showUpdateStable.set(false)" />
       }
 
       @if (showE2ECleanup()) {

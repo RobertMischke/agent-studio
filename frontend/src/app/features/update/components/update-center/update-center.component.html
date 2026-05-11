@@ -2,9 +2,29 @@
   <div class="upd-center__backdrop" data-testid="update-center-backdrop" (click)="close()"></div>
   <aside class="upd-center" data-testid="update-center" role="dialog" aria-label="Update center">
     <header class="upd-center__head">
-      <h2 class="upd-center__title">Update Center</h2>
-      <button type="button" class="upd-center__close" data-testid="update-center-close" (click)="close()" aria-label="Close">×</button>
+      <div>
+        <h2 class="upd-center__title">Update Center</h2>
+        <p class="upd-center__lead">Stable updates run through the standalone UpdateService on port 5039.</p>
+      </div>
+      <div class="upd-center__head-actions">
+        <button type="button"
+                class="upd-center__icon-btn"
+                data-testid="update-center-refresh"
+                [disabled]="refreshInFlight()"
+                (click)="refreshStatus()"
+                aria-label="Refresh update status"
+                title="Refresh update status">
+          {{ refreshInFlight() ? '...' : '↻' }}
+        </button>
+        <button type="button" class="upd-center__close" data-testid="update-center-close" (click)="close()" aria-label="Close">×</button>
+      </div>
     </header>
+
+    @if (serviceUnreachable()) {
+      <section class="upd-center__service-warning" data-testid="update-center-service-warning">
+        UpdateService is not reachable. Start or repair the service before triggering a Stable update.
+      </section>
+    }
 
     <section class="upd-center__id">
       <div class="upd-center__row">
@@ -68,9 +88,10 @@
           type="button"
           class="upd-center__btn"
           data-testid="update-center-trigger"
-          [disabled]="triggerInFlight() || isRunning()"
+          [disabled]="!canTrigger()"
           (click)="trigger()">
           @if (triggerInFlight()) { Triggering… }
+          @else if (serviceUnreachable()) { UpdateService unreachable }
           @else if (isRunning()) { Update in progress… }
           @else if ((status()?.behindBy ?? 0) > 0) { Update now }
           @else { Re-run update (no changes) }

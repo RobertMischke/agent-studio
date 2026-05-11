@@ -27,15 +27,46 @@
   justify-content: space-between;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   padding-bottom: 0.5rem;
+  gap: 0.75rem;
 }
 .upd-center__title { font-size: 1rem; font-weight: 600; margin: 0; }
+.upd-center__lead {
+  margin: 0.2rem 0 0;
+  color: rgba(205, 214, 244, 0.58);
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+.upd-center__head-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+.upd-center__icon-btn,
 .upd-center__close {
   background: transparent;
   border: none;
   color: inherit;
-  font-size: 1.5rem;
   cursor: pointer;
   line-height: 1;
+}
+.upd-center__icon-btn {
+  width: 1.8rem;
+  height: 1.8rem;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 0.95rem;
+}
+.upd-center__icon-btn:disabled { cursor: progress; opacity: 0.55; }
+.upd-center__close { font-size: 1.5rem; }
+.upd-center__service-warning {
+  border: 1px solid rgba(243, 139, 168, 0.35);
+  background: rgba(243, 139, 168, 0.12);
+  color: #f5a9bd;
+  border-radius: 6px;
+  padding: 0.65rem 0.75rem;
+  font-size: 0.8125rem;
+  line-height: 1.35;
 }
 .upd-center__sub {
   font-size: 0.75rem;

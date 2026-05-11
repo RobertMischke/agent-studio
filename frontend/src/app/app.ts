@@ -34,7 +34,7 @@ import {
   WorkspaceOverlaysComponent,
   WorkspaceOverlaysService,
 } from './features/shell';
-import { E2ECleanupDialogComponent, UpdateStableConsoleComponent } from './features/dev-tools';
+import { E2ECleanupDialogComponent } from './features/dev-tools';
 import {
   UpdateBannerComponent,
   UpdateBlockModalComponent,
@@ -71,7 +71,7 @@ interface VerboseDebugContext {
 
 @Component({
   selector: 'app-root',
-  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorSideSheetComponent, ProjectOverlaysComponent, AutoReviewIndicatorComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceOverlaysComponent, WorkspaceBannerComponent, UpdateBannerComponent, UpdateVersionBadgeComponent, UpdateCenterComponent, UpdateBlockModalComponent, VerboseDebugOverlayComponent, FiltersDropdownComponent, KanbanFilterSidesheetComponent],
+  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorSideSheetComponent, ProjectOverlaysComponent, AutoReviewIndicatorComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, E2ECleanupDialogComponent, WorkspaceOverlaysComponent, WorkspaceBannerComponent, UpdateBannerComponent, UpdateVersionBadgeComponent, UpdateCenterComponent, UpdateBlockModalComponent, VerboseDebugOverlayComponent, FiltersDropdownComponent, KanbanFilterSidesheetComponent],
   // Cycle 7b: OnPush. The shell mounts kanban + detail panel + many
   // sheets; default (Default) change detection re-checked the whole
   // tree on every async event (every poll tick, every signal write).
@@ -200,7 +200,6 @@ export class App implements OnInit {
    * task by name. Persisted across reloads.
    */
   readonly compactCards = this.uiPrefs.compactCards;
-  readonly showUpdateStable = signal(false);
   readonly showE2ECleanup = signal(false);
   readonly devToolsMenuOpen = signal(false);
   /**
@@ -451,17 +450,8 @@ export class App implements OnInit {
 
   onPickUpdateStable(): void {
     this.devToolsMenuOpen.set(false);
-    const ok = window.confirm(
-      'Update Stable will:\n\n' +
-      '  • stop the stable backend and frontend\n' +
-      '  • git pull origin/main\n' +
-      '  • npm install if needed\n' +
-      '  • start stable again\n\n' +
-      'If you trigger this from the stable instance itself, this page will ' +
-      'lose the live console mid-run and you must reload after ~30 seconds.\n\n' +
-      'Continue?'
-    );
-    if (ok) this.showUpdateStable.set(true);
+    this.updateClient.openCenter();
+    void this.updateClient.refreshNow();
   }
 
   onPickDeleteE2E(): void {
@@ -473,6 +463,17 @@ export class App implements OnInit {
     this.devToolsMenuOpen.set(false);
     this.orchSideSheetRef?.show();
     this.orchSideSheetRef?.selectWindowMode('logic');
+  }
+
+  private toggleOrchestratorMode(mode: 'feed' | 'cli'): void {
+    const sheet = this.orchSideSheetRef;
+    if (!sheet) return;
+    if (sheet.open() && sheet.mode() === mode) {
+      sheet.hide();
+      return;
+    }
+    sheet.show();
+    sheet.selectWindowMode(mode);
   }
 
   constructor(
@@ -699,8 +700,7 @@ export class App implements OnInit {
    * overlay if it is already open.
    */
   toggleOrchFeed(): void {
-    this.orchSideSheetRef?.show();
-    this.orchSideSheetRef?.selectWindowMode('feed');
+    this.toggleOrchestratorMode('feed');
   }
 
   closeOrchFeed(): void {
@@ -899,8 +899,7 @@ export class App implements OnInit {
   openCliAdmin(): void { this.workspaceOverlays.openCliAdmin(); }
   closeCliAdmin(): void { this.workspaceOverlays.closeCliAdmin(); }
   toggleCliAdmin(): void {
-    this.orchSideSheetRef?.show();
-    this.orchSideSheetRef?.selectWindowMode('cli');
+    this.toggleOrchestratorMode('cli');
   }
 
   /**
