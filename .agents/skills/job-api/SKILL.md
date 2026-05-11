@@ -79,6 +79,28 @@ For self-contained projects (no `.orchestrator.yml` pointer) the `path` is
 7. **Failed-pickup orphans are not regular tasks.** Do not move them with the
    state API if they have no `job.json`. Delete the folder directly instead.
 
+## Process: finding existing jobs
+
+Before creating a new task, check whether one already exists. The server has
+no `?q=`-search endpoint today; it returns the full set and you filter
+client-side. The full payload is small (~1-2 MB for hundreds of jobs).
+
+```bash
+node scripts/find-jobs.js                       # every job, grouped by lane
+node scripts/find-jobs.js --lane 2-ready        # one lane only
+node scripts/find-jobs.js --grep "codex"        # id+title contains
+node scripts/find-jobs.js --project "Lotta"     # project name contains
+node scripts/find-jobs.js --lane 4-auto-review --grep "session"
+```
+
+Output: `<lane>\t<project>\t<slug>  -  <title>`, one line per match. Pipe to
+`grep` for further narrowing.
+
+Underlying call: `GET /api/jobs/grouped`. Returns
+`{ backlog: [], preparation: [], ready: [], progress: [], ... }`, each value
+an array of `JobInfo`-shaped objects with `id`, `title`, `projectName`,
+`state`, `cliType`, etc.
+
 ## Process: creating one job
 
 ```js
@@ -194,6 +216,7 @@ For larger triage operations, also produce a one-line summary per bucket
 
 ## Reference
 
+- [`scripts/find-jobs.js`](scripts/find-jobs.js) - list / filter / search across all projects
 - [`scripts/create-job.js`](scripts/create-job.js) - create one job (template)
 - [`scripts/move-state.js`](scripts/move-state.js) - move job to another lane
 - [`scripts/move-to-top.js`](scripts/move-to-top.js) - promote to head of `2-ready`
