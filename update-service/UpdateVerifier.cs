@@ -245,7 +245,7 @@ public sealed class UpdateVerifier
         if (status != 200)
             return new VerificationCheck(runId, "db-touch", false,
                 $"http={status} body={Truncate(body, 80)}",
-                "http=200 (Environment:IsDev=true gates this endpoint)",
+                "http=200 (Environment:IsDev or DevTools:UpdateStableEnabled gates this endpoint)",
                 DateTime.UtcNow, (int)sw.ElapsedMilliseconds);
 
         // The endpoint echoes the request, so the sentinel must round-trip.

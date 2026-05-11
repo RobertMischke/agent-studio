@@ -8,10 +8,12 @@ namespace OrchestratorApi.Endpoints;
 /// restart to prove the .NET request pipeline is alive end-to-end (not
 /// just /healthz which is a static literal).
 ///
-/// Gated by Environment:IsDev. The endpoint is registered unconditionally,
-/// but it returns 404 when the gate is off so production callers cannot
-/// see it. We deliberately do NOT use the routing-time gate here so the
-/// behaviour is observable in logs and overridable for tests.
+/// Gated by either Environment:IsDev or DevTools:UpdateStableEnabled. The
+/// stable instance is not branded as dev, but its local operator config
+/// enables the update tool; phase-6 verification must still be able to
+/// prove the restarted backend pipeline can round-trip JSON. The endpoint
+/// is registered unconditionally, but returns 404 when both gates are off
+/// so production callers cannot see it.
 /// </summary>
 public static class InternalProbeEndpoints
 {
@@ -19,8 +21,9 @@ public static class InternalProbeEndpoints
     {
         app.MapPost("/api/_internal/probe", async (HttpContext ctx, IConfiguration config) =>
         {
-            var isDev = config.GetValue<bool>("Environment:IsDev");
-            if (!isDev) return Results.NotFound();
+            var enabled = config.GetValue<bool>("Environment:IsDev")
+                || config.GetValue<bool>("DevTools:UpdateStableEnabled");
+            if (!enabled) return Results.NotFound();
 
             // Read the body, deserialise as JsonElement so we can echo any shape,
             // and return it back wrapped with a server-side timestamp.
