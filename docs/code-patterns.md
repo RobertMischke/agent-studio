@@ -133,6 +133,30 @@ goodVariant: FrontmatterParser\b
 severityIfBad: Warn
 ```
 
+```yaml
+# ---------------------------------------------------------------------------
+# Orchestrator resume + rejection-recovery. Direct `ResumeAsync` calls on
+# OrchestratorRunner skip the rejection-recovery fallback and re-introduce
+# the 2026-05-11 bug where a stale Anthropic session id wedged the global
+# orchestrator chat with "No conversation found with session ID: ..." until
+# backend restart. Callers must go through `ResumeWithFallbackAsync` so the
+# clear-session + one-shot fallback is impossible to skip.
+# ---------------------------------------------------------------------------
+id: orchestrator-resume-with-fallback
+title: Orchestrator callers resume via ResumeWithFallbackAsync, not ResumeAsync
+description: >
+  Direct OrchestratorRunner.ResumeAsync calls must handle the
+  "session rejected by Anthropic" recovery themselves. ResumeWithFallbackAsync
+  encapsulates the recovery in one place; missing it means the caller will
+  loop forever on a stale session id until the backend restarts.
+filePattern: \.cs$
+excludeFilePattern: backend\.Tests|Services[/\\]Runner[/\\]OrchestratorRunner\.cs
+candidateMarker: (_runner|_orchestratorRunner)\.Resume(WithFallback)?Async\s*\(
+badVariant: (_runner|_orchestratorRunner)\.ResumeAsync\s*\(
+goodVariant: (_runner|_orchestratorRunner)\.ResumeWithFallbackAsync\s*\(
+severityIfBad: High
+```
+
 ## Adding a rule — checklist
 
 1. **Catch a real incident.** Don't add a rule for a hypothetical drift; add

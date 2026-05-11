@@ -1010,24 +1010,24 @@ public class ProjectRunner
             if (session != null && !string.IsNullOrWhiteSpace(session.SessionId))
             {
                 var resumePrompt = BuildOrchestratorResumePrompt(info, lastAgentText, attachmentsList);
-                result = await _orchestratorRunner.ResumeAsync(
-                    session.SessionId, resumePrompt, modelToUse,
-                    Entry.RootPath, CancellationToken.None);
+                // Rejection-recovery lives on the runner (ResumeWithFallbackAsync)
+                // so the per-job and global-chat orchestrator paths cannot drift
+                // apart again - see docs/code-patterns.md "orchestrator-resume-with-fallback".
+                var resumeRejected = false;
+                result = await _orchestratorRunner.ResumeWithFallbackAsync(
+                    session.SessionId,
+                    resumePrompt,
+                    fallbackPromptBuilder: () => orchestratorPrompt,
+                    onSessionRejected: () =>
+                    {
+                        _orchestratorSessions.Clear(Entry.Path);
+                        resumeRejected = true;
+                    },
+                    modelToUse,
+                    Entry.RootPath,
+                    CancellationToken.None);
 
-                // If the session id was rejected (Anthropic rotated /
-                // retention expired), fall back to a fresh one-shot so
-                // the user's auto-mode is not stuck. Drop the stale
-                // session-id; the next boot tick will re-create one.
-                if (!result.Success && result.ErrorMessage != null
-                    && (result.ErrorMessage.Contains("session", StringComparison.OrdinalIgnoreCase)
-                        || result.ErrorMessage.Contains("not found", StringComparison.OrdinalIgnoreCase)))
-                {
-                    _logger.LogWarning("[orchestrator] resume rejected; clearing session and falling back to one-shot. error={Err}", result.ErrorMessage);
-                    _orchestratorSessions.Clear(Entry.Path);
-                    result = await _orchestratorRunner.DecideAsync(
-                        orchestratorPrompt, modelToUse, Entry.RootPath, CancellationToken.None);
-                }
-                else if (result.Success)
+                if (!resumeRejected && result.Success)
                 {
                     // Accumulate cumulative usage onto the persisted session.
                     var updated = OrchestratorSessionStore.AccumulateUsage(session, result.TokenUsage, error: null);

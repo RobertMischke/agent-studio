@@ -310,6 +310,7 @@ public class OrchestratorChatService
     private readonly OrchestratorChat _chat;
     private readonly OrchestratorRunner _runner;
     private readonly GlobalOrchestratorSessionStore _sessionStore;
+    private readonly GlobalOrchestratorBootstrap _bootstrap;
     private readonly JobScannerService _scanner;
     private readonly IConfiguration _config;
     private readonly ILogger<OrchestratorChatService> _logger;
@@ -338,6 +339,7 @@ public class OrchestratorChatService
         OrchestratorChat chat,
         OrchestratorRunner runner,
         GlobalOrchestratorSessionStore sessionStore,
+        GlobalOrchestratorBootstrap bootstrap,
         JobScannerService scanner,
         IConfiguration config,
         ILogger<OrchestratorChatService> logger)
@@ -345,6 +347,7 @@ public class OrchestratorChatService
         _chat = chat;
         _runner = runner;
         _sessionStore = sessionStore;
+        _bootstrap = bootstrap;
         _scanner = scanner;
         _config = config;
         _logger = logger;
@@ -401,10 +404,30 @@ public class OrchestratorChatService
             var modelId = _config["GlobalOrchestrator:Model"] ?? OrchestratorRunner.DefaultModel;
             var workingDirectory = ResolveWorkingDirectory(watchPath);
 
+            // Track whether the resume was rejected so we can persist a
+            // fresh session record after a successful fallback instead of
+            // accumulating onto the stale one. The lambda runs synchronously
+            // from inside ResumeWithFallbackAsync before the fallback fires,
+            // so reading the flag after the await is safe.
+            var resumeRejected = false;
             OrchestratorDecisionResult result;
             try
             {
-                result = await _runner.ResumeAsync(session.SessionId, prompt, modelId, workingDirectory, ct);
+                result = await _runner.ResumeWithFallbackAsync(
+                    session.SessionId,
+                    prompt,
+                    fallbackPromptBuilder: () => _bootstrap.BuildBootPrompt() + "\n\n" + prompt,
+                    onSessionRejected: () =>
+                    {
+                        _logger.LogWarning(
+                            "[global-orchestrator] resume rejected for {SessionId}; clearing session and re-bootstrapping for project {Project}",
+                            session.SessionId, projectName);
+                        _sessionStore.Clear();
+                        resumeRejected = true;
+                    },
+                    modelId,
+                    workingDirectory,
+                    ct);
             }
             catch (Exception ex)
             {
@@ -430,7 +453,7 @@ public class OrchestratorChatService
                     ErrorMessage = result.ErrorMessage ?? "Orchestrator reply was empty."
                 };
                 _chat.Append(watchPath, failure);
-                UpdateSessionUsage(session, result);
+                if (!resumeRejected) UpdateSessionUsage(session, result);
                 return failure;
             }
 
@@ -442,13 +465,44 @@ public class OrchestratorChatService
                 TokenUsage = result.TokenUsage
             };
             _chat.Append(watchPath, reply);
-            UpdateSessionUsage(session, result);
+
+            if (resumeRejected && !string.IsNullOrWhiteSpace(result.CapturedSessionId))
+            {
+                // Re-bootstrap succeeded: persist the freshly captured
+                // session id so future chat turns resume against it instead
+                // of looping on the stale id. Seed cumulative usage from the
+                // just-finished call so usage accounting stays contiguous.
+                var fresh = new GlobalOrchestratorSession(
+                    SessionId: result.CapturedSessionId!,
+                    Model: result.Model,
+                    BootedAt: DateTime.UtcNow,
+                    BootPromptPreview: "(rebooted after rejected resume)",
+                    BootReplyPreview: TruncatePreview(result.ReplyText, 600),
+                    CumulativeInputTokens: result.TokenUsage?.InputTokens ?? 0,
+                    CumulativeOutputTokens: result.TokenUsage?.OutputTokens ?? 0,
+                    CumulativeCacheReadTokens: result.TokenUsage?.CacheReadTokens ?? 0,
+                    CumulativeCacheCreationTokens: result.TokenUsage?.CacheCreationTokens ?? 0,
+                    Calls: 1,
+                    LastUsedAt: DateTime.UtcNow,
+                    LastError: null);
+                _sessionStore.Write(fresh);
+            }
+            else
+            {
+                UpdateSessionUsage(session, result);
+            }
             return reply;
         }
         finally
         {
             SessionGate.Release();
         }
+    }
+
+    private static string TruncatePreview(string s, int max)
+    {
+        if (string.IsNullOrEmpty(s)) return "";
+        return s.Length <= max ? s : s[..max] + "...";
     }
 
     private void UpdateSessionUsage(GlobalOrchestratorSession previous, OrchestratorDecisionResult result)

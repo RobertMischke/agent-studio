@@ -79,7 +79,7 @@ public class OrchestratorRunner
     /// to <see cref="DefaultModel"/> if the caller doesn't override it
     /// from project settings.
     /// </summary>
-    public Task<OrchestratorDecisionResult> DecideAsync(
+    public virtual Task<OrchestratorDecisionResult> DecideAsync(
         string prompt,
         string? model,
         string workingDirectory,
@@ -92,13 +92,74 @@ public class OrchestratorRunner
     /// activity) and accumulates conversation history, so subsequent
     /// decisions cost less on framing.
     /// </summary>
-    public Task<OrchestratorDecisionResult> ResumeAsync(
+    public virtual Task<OrchestratorDecisionResult> ResumeAsync(
         string sessionId,
         string prompt,
         string? model,
         string workingDirectory,
         CancellationToken ct = default)
         => InvokeAsync(prompt, model, workingDirectory, resumeSessionId: sessionId, ct);
+
+    /// <summary>
+    /// Resume a session and transparently fall back to a fresh one-shot if
+    /// the CLI rejects the session id (Anthropic rotates ids on retention
+    /// expiry, typically &gt;24h idle). This is the canonical recovery path
+    /// for every orchestrator caller — embedding it on the runner makes the
+    /// rejection-recovery semantics impossible to skip and prevents the
+    /// per-caller drift that produced the 2026-05-11 "No conversation found
+    /// with session ID: ..." stuck-chat bug in the global orchestrator chat.
+    ///
+    /// <para>
+    /// Contract: when <see cref="ResumeAsync"/> succeeds, the returned
+    /// result is the resume result and <paramref name="onSessionRejected"/>
+    /// is NOT called. When the resume fails with a rejection-shaped error,
+    /// <paramref name="onSessionRejected"/> runs first (callers use it to
+    /// clear their persisted session record), then
+    /// <paramref name="fallbackPromptBuilder"/> is invoked to produce the
+    /// prompt for a fresh one-shot <see cref="DecideAsync"/> call. The
+    /// fallback's result is returned. Non-rejection failures (timeout,
+    /// network) propagate as-is without firing the callback.
+    /// </para>
+    /// </summary>
+    public virtual async Task<OrchestratorDecisionResult> ResumeWithFallbackAsync(
+        string sessionId,
+        string resumePrompt,
+        Func<string> fallbackPromptBuilder,
+        Action onSessionRejected,
+        string? model,
+        string workingDirectory,
+        CancellationToken ct = default)
+    {
+        var result = await ResumeAsync(sessionId, resumePrompt, model, workingDirectory, ct).ConfigureAwait(false);
+        if (result.Success || !IsSessionRejection(result.ErrorMessage))
+            return result;
+
+        _logger.LogWarning(
+            "[orchestrator] resume rejected for session {SessionId}; falling back to one-shot. error={Err}",
+            sessionId, result.ErrorMessage);
+
+        try { onSessionRejected(); }
+        catch (Exception ex) { _logger.LogDebug(ex, "onSessionRejected callback threw"); }
+
+        var fallbackPrompt = fallbackPromptBuilder();
+        return await DecideAsync(fallbackPrompt, model, workingDirectory, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// True when an <see cref="OrchestratorDecisionResult.ErrorMessage"/>
+    /// looks like a rejected resume target. Claude reports these as
+    /// "No conversation found with session ID: ..." on stdout; the runner
+    /// surfaces stdout as the error string when the CLI exits non-zero
+    /// so this matcher catches the exact shape plus the looser variants
+    /// observed across CLI versions.
+    /// </summary>
+    public static bool IsSessionRejection(string? errorMessage)
+    {
+        if (string.IsNullOrWhiteSpace(errorMessage)) return false;
+        return errorMessage.Contains("No conversation found", StringComparison.OrdinalIgnoreCase)
+            || errorMessage.Contains("session", StringComparison.OrdinalIgnoreCase)
+            || errorMessage.Contains("not found", StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>
      /// Hard ceiling for one orchestrator decision call. The boot prompt

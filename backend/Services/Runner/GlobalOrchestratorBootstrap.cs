@@ -75,7 +75,15 @@ public sealed class GlobalOrchestratorBootstrap
         _store.Write(session);
     }
 
-    private string BuildBootPrompt()
+    /// <summary>
+    /// Render the boot prompt used to seed the singleton global session.
+    /// Exposed so <see cref="OrchestratorChatService"/> can reuse the same
+    /// framing when re-bootstrapping after a rejected resume (see
+    /// <see cref="OrchestratorRunner.ResumeWithFallbackAsync"/>). The
+    /// rendered text is snapshot of watched projects + a brief role
+    /// instruction; safe to recompute on demand.
+    /// </summary>
+    public string BuildBootPrompt()
     {
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("You are the GLOBAL orchestrator for Agent Software Studio.");
