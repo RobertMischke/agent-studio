@@ -1,7 +1,5 @@
 # Frontend
 
-> **TEST / Hinweis an alle Agenten:** MEMORY hilft mir nicht — Memory ist pro Agent / pro Session und propagiert nicht. Ich brauche **immer einen Eintrag in einer Datei** (README, AGENTS.md, etc.), damit Änderungen für **alle Agenten gleichzeitig** wirken. Bitte keine agentenspezifischen Anpassungen vorschlagen — ich brauche **Standards**, die für viele Agenten funktionieren.
-
 This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 21.2.7.
 
 ## Development server
