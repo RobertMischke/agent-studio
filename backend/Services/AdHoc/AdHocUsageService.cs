@@ -82,8 +82,13 @@ public sealed class AdHocUsageService
             Add(byDay, r.Ts.ToUniversalTime().ToString("yyyy-MM-dd"), r, cost);
         }
 
+        // Stable tie-break by source key so two sources with equal call counts
+        // always sort the same way regardless of insertion order. Without this,
+        // the bus-backed reader's order (ULID / arrival order) can diverge from
+        // the JSONL reader's order (file-write order) for tied buckets.
         var sourceList = bySource
             .OrderByDescending(kv => kv.Value.Calls)
+            .ThenBy(kv => kv.Key, StringComparer.Ordinal)
             .Select(kv => new AdHocUsageBySource(
                 Source: kv.Key,
                 Calls: kv.Value.Calls,
@@ -108,6 +113,7 @@ public sealed class AdHocUsageService
 
         var modelList = byModel
             .OrderByDescending(kv => kv.Value.Input + kv.Value.Output)
+            .ThenBy(kv => kv.Key, StringComparer.OrdinalIgnoreCase)
             .Select(kv =>
             {
                 var priced = TokenPricing.Estimate(kv.Key, 0, 0, 0, 0).ModelKnown;

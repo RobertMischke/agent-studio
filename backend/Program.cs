@@ -131,6 +131,7 @@ builder.Services.AddSingleton<ICliUsageParser, ClaudeUsageParser>();
 builder.Services.AddSingleton<ICliUsageParser, CodexUsageParser>();
 builder.Services.AddSingleton<CliUsageParserRegistry>();
 builder.Services.AddSingleton<BusAggregationCache>();
+builder.Services.AddSingleton<OrchestratorApi.Services.Tokens.BusBackedAdHocUsageReader>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Tokens.ITokenAggregator, OrchestratorApi.Services.Tokens.TokenAggregationService>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Cli.OneShot.ICliOneShot, OrchestratorApi.Services.Cli.OneShot.ClaudeOneShot>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Cli.OneShot.CliOneShotRegistry>();

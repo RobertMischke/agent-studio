@@ -115,12 +115,18 @@ public sealed class AdHocUsageRecorder
                     CacheReadTokens = (int)record.CacheReadTokens,
                     CacheCreationTokens = (int)record.CacheCreationTokens,
                 };
+                // Ad-hoc records are workspace-wide by design (the legacy JSONL is
+                // workspace-wide too), so route every message to the _workspace
+                // projection regardless of the record.Project metadata. The
+                // optional project / jobId stay on the message body for
+                // drill-down without affecting workspace-wide aggregation.
                 _ = _bus.EmitTokenUsageAsync(
-                    project: string.IsNullOrWhiteSpace(record.Project) ? null : record.Project,
+                    project: null,
                     jobId: string.IsNullOrWhiteSpace(record.JobId) ? null : record.JobId,
                     participantId: "support:adhoc",
                     topic: string.IsNullOrWhiteSpace(record.Source) ? AdHocUsageSources.Unknown : record.Source,
-                    usage: usage);
+                    usage: usage,
+                    createdAt: record.Ts == default ? null : DateTime.SpecifyKind(record.Ts, DateTimeKind.Utc));
             }
             return true;
         }

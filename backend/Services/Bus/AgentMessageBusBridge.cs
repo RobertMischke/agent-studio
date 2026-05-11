@@ -387,7 +387,7 @@ public sealed class AgentMessageBusBridge
     /// the token summary service; the bus carries one event per recorded
     /// usage so the timeline shows which turn was expensive.
     /// </summary>
-    public Task EmitTokenUsageAsync(string? project, string? jobId, string participantId, string? topic, OrchestratorTokenUsage usage, CancellationToken ct = default)
+    public Task EmitTokenUsageAsync(string? project, string? jobId, string participantId, string? topic, OrchestratorTokenUsage usage, DateTime? createdAt = null, CancellationToken ct = default)
     {
         if (usage == null) return Task.CompletedTask;
         var input  = (long)usage.InputTokens;
@@ -412,6 +412,7 @@ public sealed class AgentMessageBusBridge
             jobId: jobId,
             topic: topic ?? "orchestrator-turn",
             summary: TruncateSummary($"tokens: in={input} out={output} model={usage.Model ?? "?"}"),
+            createdAt: createdAt,
             tokens: tokens,
             tags: new[] { "token-usage" });
         return EmitAsync(msg, ct);
