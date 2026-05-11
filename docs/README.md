@@ -44,6 +44,16 @@ The repo's authoritative agent contract lives in [AGENTS.md](../AGENTS.md). This
 | [cli-skills/cli-copilot.md](cli-skills/cli-copilot.md) | GitHub Copilot CLI driver: PTY interaction, slash-command probes, model handling. |
 | [cli-skills/cli-gemini.md](cli-skills/cli-gemini.md) | Google Gemini CLI driver: stream-json parsing, session capture, /stats PTY probe. |
 
+## Setup and onboarding (operator-facing)
+
+| File | What's inside |
+|---|---|
+| [setup/README.md](setup/README.md) | Operator-facing setup guide index: attach a project, onboard a CLI, first task walkthrough, troubleshooting. Companion to `getting-started.md`. |
+| [setup/onboard-a-project.md](setup/onboard-a-project.md) | `WatchPaths` entry, backend restart, per-project defaults (`RunnerMode`, `AutoCommit`, `OrchestratorModel`, `AutonomyLevel`), first-task expectations. |
+| [setup/onboard-an-agent-cli.md](setup/onboard-an-agent-cli.md) | Per-CLI install / config / quirks (Claude, Codex, Copilot, Gemini). Includes the load-bearing Codex Windows-sandbox quirk and the cross-CLI sentinel-awareness note. |
+| [setup/your-first-task.md](setup/your-first-task.md) | "Project Overview Doc" pattern as a good first task, anti-patterns, where to watch the run, pointer to the Job API skill for scripted creation. |
+| [setup/troubleshooting.md](setup/troubleshooting.md) | FAQ-style: sandbox-only errors, auto-mode flip to manual, two jobs in 3-progress, missing-terminal-sentinel, crash-recovery auto-commits, `watchPath` quirk on the API. |
+
 ## Process surfaces (what each app surface owns)
 
 | File | What's inside |

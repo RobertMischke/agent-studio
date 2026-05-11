@@ -12,6 +12,8 @@ For product context, read [README.md](README.md) and [ROADMAP.md](ROADMAP.md). T
 
 [docs/README.md](docs/README.md) is the hierarchical index of every load-bearing document in this repository, with a one-line description per file. **When you need a doc and don't already know which one, start there** rather than scanning the tree blind. Categories: top-level entry points, architecture / decisions / contracts, CLI integration (per-CLI deep refs), process surfaces, mockups, research, schemas.
 
+For operator-side setup (attaching a new project, onboarding a new CLI agent, first task walkthrough, troubleshooting) see [docs/setup/](docs/setup/README.md). It's the user-facing companion to the install quickstart in [docs/getting-started.md](docs/getting-started.md).
+
 When you add a new document under `docs/`, add a one-line row to the index in the same commit so it stays a single grep target. Mockup README files and research notes nest under their existing parent rows; they do not each get their own line.
 
 ## Edit only the dev checkout
