@@ -301,6 +301,86 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
         }
     }
 
+    // ===== Cross-slug infra circuit breaker (loop-inventory:
+    // pickup.cross-slug-infra-circuit-breaker) =====
+
+    /// <summary>
+    /// Integration scenario for the cross-slug infra breaker. Three
+    /// 3-progress folders, all primed at the per-slug failure threshold,
+    /// all carrying <c>cliType=copilot</c>. The first dead-letter is the
+    /// 1st distinct slug for the (project, cliType) pair; the second is
+    /// the 2nd and trips the breaker, flipping the runner to manual. The
+    /// THIRD folder must NOT be dead-lettered - it stays in 3-progress
+    /// for the operator to inspect after fixing the infra.
+    /// </summary>
+    [Fact]
+    public void CrossSlug_TwoSpawnFailedDeadLetters_TripsBreakerAndHaltsThirdPickup()
+    {
+        WriteJob(JobStates.Progress, "stuck-a");
+        SetMtime(Path.Combine(_watchPath, JobStates.Progress, "stuck-a", "job.json"), TimeSpan.FromMinutes(-90));
+        WriteJob(JobStates.Progress, "stuck-b");
+        SetMtime(Path.Combine(_watchPath, JobStates.Progress, "stuck-b", "job.json"), TimeSpan.FromMinutes(-60));
+        WriteJob(JobStates.Progress, "stuck-c");
+        SetMtime(Path.Combine(_watchPath, JobStates.Progress, "stuck-c", "job.json"), TimeSpan.FromMinutes(-30));
+
+        var runner = BuildRunner();
+        runner.SetMode("auto-continuous");
+        runner.SetPickupAttemptsForTest("stuck-a", ProjectRunner.PickupFailureThreshold);
+        runner.SetPickupAttemptsForTest("stuck-b", ProjectRunner.PickupFailureThreshold);
+        runner.SetPickupAttemptsForTest("stuck-c", ProjectRunner.PickupFailureThreshold);
+
+        InvokePickerLoop(runner);
+
+        // Mode flipped to manual on the second dead-letter.
+        Assert.Equal("manual", runner.GetStatus().Mode);
+
+        // First two dead-lettered, third stays in 3-progress.
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "stuck-a")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "stuck-b")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "stuck-c")),
+            "third folder must NOT have been dead-lettered after the cross-slug breaker tripped");
+
+        // pickup-failures.jsonl carries exactly two rows (one per dead-letter).
+        var pickupJsonl = Path.Combine(_workspaceRoot, "logs", "pickup-failures.jsonl");
+        Assert.True(File.Exists(pickupJsonl));
+        Assert.Equal(2, File.ReadAllLines(pickupJsonl).Count(l => l.Length > 0));
+
+        // infra-halts.jsonl carries exactly one row.
+        var infraJsonl = Path.Combine(_workspaceRoot, "logs", "infra-halts.jsonl");
+        Assert.True(File.Exists(infraJsonl));
+        var infraRows = File.ReadAllLines(infraJsonl).Where(l => l.Length > 0).ToList();
+        Assert.Single(infraRows);
+        Assert.Contains("\"kind\":\"cross-slug-spawn-failed-cascade\"", infraRows[0]);
+        Assert.Contains("\"projectName\":\"demo\"", infraRows[0]);
+        Assert.Contains("\"cliType\":\"copilot\"", infraRows[0]);
+        Assert.Contains("\"slugs\":[\"stuck-a\",\"stuck-b\"]", infraRows[0]);
+    }
+
+    /// <summary>
+    /// A single dead-letter does NOT trip the cross-slug breaker. The
+    /// per-slug breaker still works the same way it did before this layer.
+    /// </summary>
+    [Fact]
+    public void CrossSlug_OneSpawnFailedDeadLetter_DoesNotTripBreakerOrFlipMode()
+    {
+        WriteJob(JobStates.Progress, "stuck-a");
+        WriteJob(JobStates.Progress, "stuck-b");
+
+        var runner = BuildRunner();
+        runner.SetMode("auto-continuous");
+        runner.SetPickupAttemptsForTest("stuck-a", ProjectRunner.PickupFailureThreshold);
+        // 'stuck-b' is healthy: not over threshold.
+
+        InvokePickerLoop(runner);
+
+        Assert.Equal("auto-continuous", runner.GetStatus().Mode);
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "stuck-a")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "stuck-b")));
+
+        var infraJsonl = Path.Combine(_workspaceRoot, "logs", "infra-halts.jsonl");
+        Assert.False(File.Exists(infraJsonl));
+    }
+
     // ===== Helpers =====
 
     /// <summary>
@@ -392,6 +472,8 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
         var quotaService = new QuotaService(NullLogger<QuotaService>.Instance, Array.Empty<IQuotaProbe>(), config, quotaCacheStore);
         var quotaCaps = new CliQuotaCapsService(NullLogger<CliQuotaCapsService>.Instance, config);
         var pickupFailures = new PickupFailureLog(config, NullLogger<PickupFailureLog>.Instance);
+        var infraHaltLog = new InfraHaltLog(config, NullLogger<InfraHaltLog>.Instance);
+        var infraBreaker = new CrossSlugInfraCircuitBreaker(config, NullLogger<CrossSlugInfraCircuitBreaker>.Instance, infraHaltLog);
 
         return new ProjectRunner(
             ProjectName, entry,
@@ -399,6 +481,6 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
             scanner, states, sessions, router,
             summary, prompts, transitions, chatLog, mutations,
             orchestratorLog, orchestratorRunner, orchestratorSessions,
-            settings, quotaService, quotaCaps, git, pickupFailures, bus: null);
+            settings, quotaService, quotaCaps, git, pickupFailures, infraBreaker, bus: null);
     }
 }

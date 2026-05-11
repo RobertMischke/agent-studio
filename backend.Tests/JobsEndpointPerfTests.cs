@@ -149,12 +149,14 @@ public class JobsEndpointPerfTests : IDisposable
         var quotaService = new QuotaService(NullLogger<QuotaService>.Instance, Array.Empty<IQuotaProbe>(), config, quotaCacheStore);
         var quotaCaps = new CliQuotaCapsService(NullLogger<CliQuotaCapsService>.Instance, config);
         var pickupFailures = new PickupFailureLog(config, NullLogger<PickupFailureLog>.Instance);
+        var infraHaltLog = new InfraHaltLog(config, NullLogger<InfraHaltLog>.Instance);
+        var infraBreaker = new CrossSlugInfraCircuitBreaker(config, NullLogger<CrossSlugInfraCircuitBreaker>.Instance, infraHaltLog);
 
         var runners = new TaskRunnerService(
             config, NullLogger<TaskRunnerService>.Instance, scanner, states, mutations, sessions,
             copilot, router, contextUsageParser, summary, prompts, transitions, projectSettings,
             quotaService, quotaCaps,
-            chatLog, orchestratorLog, orchestratorRunner, orchestratorSessions, globalBoot, git, pickupFailures);
+            chatLog, orchestratorLog, orchestratorRunner, orchestratorSessions, globalBoot, git, pickupFailures, infraBreaker);
         return (router, runners);
     }
 

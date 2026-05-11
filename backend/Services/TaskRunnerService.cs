@@ -40,6 +40,7 @@ public class TaskRunnerService : BackgroundService
     private readonly OrchestratorSessionStore _orchestratorSessions;
     private readonly GlobalOrchestratorBootstrap _globalOrchestrator;
     private readonly PickupFailureLog _pickupFailures;
+    private readonly CrossSlugInfraCircuitBreaker _infraBreaker;
     private readonly AgentMessageBusBridge? _bus;
     private readonly ConcurrentDictionary<string, ProjectRunner> _runners = new();
 
@@ -68,6 +69,7 @@ public class TaskRunnerService : BackgroundService
         GlobalOrchestratorBootstrap globalOrchestrator,
         GitService git,
         PickupFailureLog pickupFailures,
+        CrossSlugInfraCircuitBreaker infraBreaker,
         AgentMessageBusBridge? bus = null)
     {
         _config = config;
@@ -92,6 +94,7 @@ public class TaskRunnerService : BackgroundService
         _globalOrchestrator = globalOrchestrator;
         _git = git;
         _pickupFailures = pickupFailures;
+        _infraBreaker = infraBreaker;
         _bus = bus;
     }
 
@@ -127,7 +130,7 @@ public class TaskRunnerService : BackgroundService
                 continue;
             }
 
-            var runner = new ProjectRunner(entry.Name, entry, _logger, _scanner, _states, _sessions, _router, _summaryService, _prompts, _transitions, _chatLog, _mutations, _orchestratorLog, _orchestratorRunner, _orchestratorSessions, _projectSettings, _quotaService, _quotaCaps, _git, _pickupFailures, _bus);
+            var runner = new ProjectRunner(entry.Name, entry, _logger, _scanner, _states, _sessions, _router, _summaryService, _prompts, _transitions, _chatLog, _mutations, _orchestratorLog, _orchestratorRunner, _orchestratorSessions, _projectSettings, _quotaService, _quotaCaps, _git, _pickupFailures, _infraBreaker, _bus);
             runner.ConfigureWatchdog(LoadWatchdogConfig(_config));
             _stuckLoopBudget = LoadStuckLoopBudget(_config);
             runner.ConfigureStuckLoopBudget(_stuckLoopBudget);
@@ -248,6 +251,17 @@ public class TaskRunnerService : BackgroundService
         if (!_runners.TryGetValue(projectName, out var runner)) return false;
         var validModes = new[] { "manual", "auto-single", "auto-continuous", "paused" };
         if (!validModes.Contains(mode)) return false;
+        // Cross-slug infra breaker reset: when the operator flips back to
+        // an auto mode, treat that as "infra is fixed, run again" and clear
+        // the distinct-slug counter across all CLIs for this project. The
+        // breaker drives the auto -> manual transition itself, but it never
+        // sets an auto-* mode, so this hook reliably distinguishes operator
+        // intent from runner-internal mode flips.
+        if (mode is "auto-single" or "auto-continuous")
+        {
+            try { _infraBreaker.OnOperatorResumeAuto(projectName); }
+            catch (Exception ex) { _logger.LogWarning(ex, "CrossSlugInfraCircuitBreaker reset failed for {Project}", projectName); }
+        }
         runner.SetMode(mode);
         return true;
     }

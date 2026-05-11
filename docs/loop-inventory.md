@@ -47,13 +47,14 @@ Each entry uses the same fields:
 ### pickup.cross-slug-infra-circuit-breaker
 
 - **Kind:** Pre-Guard (cross-slug)
-- **Where:** [`backend/Services/TaskRunnerService.cs`](../backend/Services/TaskRunnerService.cs) tick loop (to be added with the implementation task)
+- **Where:** [`backend/Services/Runner/CrossSlugInfraCircuitBreaker.cs`](../backend/Services/Runner/CrossSlugInfraCircuitBreaker.cs); fed by `ProjectRunner.DeadLetterUnrecoverableFolder` (trip) and `ProjectRunner.RecordPickupAttemptResult` (productive-pickup reset); operator-resume reset hooked from `TaskRunnerService.SetMode`.
 - **Re-entry trigger:** Two consecutive distinct slugs hit `pickup.silent-runs-per-job` for the same `(cliType)` within a sliding window.
-- **Budget:** `CrossSlugInfraSilentLimit` (default 2 distinct slugs in 10 minutes for the same CLI)
-- **Action when budget exhausted:** Set the project's runner mode to `manual`, raise an infra-halt banner via the same path used by [ADR-0029](architecture-decisions.md), do **not** continue to drain `2-ready`. The diagnosis step (`pickup.diagnose-once-per-dead-letter`) still runs on the dead-letters that already happened.
-- **Breaker test:** `backend.Tests/Architecture/CrossSlugInfraCircuitBreakerTest.cs` (to be added)
-- **Last fired:** Not yet implemented; the 2026-05-06 incident is the motivating example (would have stopped the drain at job 2 of 22).
-- **Notes:** This is the loop guard the 2026-05-06 incident motivated. It deliberately distinguishes "this one job is broken" (per-slug counter, fine) from "the CLI itself is broken" (cross-slug counter, halt).
+- **Budget:** `CrossSlugInfraSilentLimit` (default 2 distinct slugs in 10 minutes for the same CLI). Configurable via `Supervisor:CrossSlugInfraSilentLimit` and `Supervisor:CrossSlugInfraSilentWindowMinutes`.
+- **Action when budget exhausted:** Set the project's runner mode to `manual` (via the same `SetMode` path the API uses), append one row to `<workspace>/logs/infra-halts.jsonl`, emit one `[supervisor]` chat note on the freshly dead-lettered job, and halt the in-flight pickup tick mid-iteration so the remaining `3-progress` folders are NOT dead-lettered too. The diagnosis step (`pickup.diagnose-once-per-dead-letter`) still runs on the dead-letters that already happened.
+- **Reset:** counter clears on (a) operator flip back to `auto-single` / `auto-continuous`, (b) any productive pickup (≥ 1 streamed CLI output line) on the same `(project, cliType)`, (c) 24 hours of inactivity (long-window cleanup).
+- **Breaker test:** [`backend.Tests/Architecture/CrossSlugInfraCircuitBreakerTest.cs`](../backend.Tests/Architecture/CrossSlugInfraCircuitBreakerTest.cs), plus the unit suite in [`backend.Tests/CrossSlugInfraCircuitBreakerTests.cs`](../backend.Tests/CrossSlugInfraCircuitBreakerTests.cs) and the runner-integration coverage in `PickupLoopStrictIterationTests.CrossSlug_*`.
+- **Last fired:** Not yet fired in production. The 2026-05-06 incident is the motivating example (would have stopped the drain at job 2 of 22).
+- **Notes:** This is the loop guard the 2026-05-06 incident motivated. It deliberately distinguishes "this one job is broken" (per-slug counter, fine) from "the CLI itself is broken" (cross-slug counter, halt). Detection is deterministic: typed counter, config constants, single-state-machine mode flip - no LLM in the code path (ADR-0032).
 
 ### pickup.diagnose-once-per-dead-letter
 

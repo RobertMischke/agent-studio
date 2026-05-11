@@ -111,12 +111,14 @@ internal sealed class PerfBaselineFixture : IDisposable
         var quotaService = new QuotaService(NullLogger<QuotaService>.Instance, Array.Empty<IQuotaProbe>(), Config, quotaCacheStore);
         var quotaCaps = new CliQuotaCapsService(NullLogger<CliQuotaCapsService>.Instance, Config);
         var pickupFailures = new PickupFailureLog(Config, NullLogger<PickupFailureLog>.Instance);
+        var infraHaltLog = new InfraHaltLog(Config, NullLogger<InfraHaltLog>.Instance);
+        var infraBreaker = new CrossSlugInfraCircuitBreaker(Config, NullLogger<CrossSlugInfraCircuitBreaker>.Instance, infraHaltLog);
 
         Runners = new TaskRunnerService(
             Config, NullLogger<TaskRunnerService>.Instance, Scanner, States, mutations, sessions,
             copilot, Router, contextUsageParser, Summary, prompts, transitions, projectSettings,
             quotaService, quotaCaps,
-            chatLog, orchestratorLog, orchestratorRunner, orchestratorSessions, globalBoot, git, pickupFailures);
+            chatLog, orchestratorLog, orchestratorRunner, orchestratorSessions, globalBoot, git, pickupFailures, infraBreaker);
 
         TokenUsage = new ProjectTokenUsageService(orchestratorLog, Scanner);
     }

@@ -77,10 +77,12 @@ public class ProjectObservationServiceTests : IDisposable
         var quota = new QuotaService(NullLogger<QuotaService>.Instance, Array.Empty<IQuotaProbe>(), config, quotaCache);
         var quotaCaps = new CliQuotaCapsService(NullLogger<CliQuotaCapsService>.Instance, config);
         var pickup = new PickupFailureLog(config, NullLogger<PickupFailureLog>.Instance);
+        var infraHaltLog = new InfraHaltLog(config, NullLogger<InfraHaltLog>.Instance);
+        var infraBreaker = new CrossSlugInfraCircuitBreaker(config, NullLogger<CrossSlugInfraCircuitBreaker>.Instance, infraHaltLog);
         _runners = new TaskRunnerService(
             config, NullLogger<TaskRunnerService>.Instance, scanner, states, mutations, sessions,
             copilot, router, new ContextUsageParser(), summary, prompts, transitions, projectSettings,
-            quota, quotaCaps, chatLog, orchestratorLog, orchestratorRunner, orchestratorSessions, globalBoot, git, pickup);
+            quota, quotaCaps, chatLog, orchestratorLog, orchestratorRunner, orchestratorSessions, globalBoot, git, pickup, infraBreaker);
 
         // Manually construct a runner status with one active job so the
         // observation path runs (TaskRunnerService is a BackgroundService;

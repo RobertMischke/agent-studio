@@ -34,6 +34,7 @@ public class ProjectRunner
     private readonly CliQuotaCapsService _quotaCaps;
     private readonly GitService _git;
     private readonly PickupFailureLog _pickupFailures;
+    private readonly CrossSlugInfraCircuitBreaker _infraBreaker;
     private readonly AgentMessageBusBridge? _bus;
     private string _mode = "manual";
     private string? _activeJobId;
@@ -132,6 +133,7 @@ public class ProjectRunner
         CliQuotaCapsService quotaCaps,
         GitService git,
         PickupFailureLog pickupFailures,
+        CrossSlugInfraCircuitBreaker infraBreaker,
         AgentMessageBusBridge? bus = null)
     {
         ProjectName = projectName;
@@ -154,6 +156,7 @@ public class ProjectRunner
         _quotaCaps = quotaCaps;
         _git = git;
         _pickupFailures = pickupFailures;
+        _infraBreaker = infraBreaker;
         _bus = bus;
 
         // Listen across all CLI backends for completion of the active job.
@@ -2046,7 +2049,15 @@ public class ProjectRunner
             var attempts = GetPickupAttempts(slug);
             if (attempts >= PickupFailureThreshold)
             {
-                DeadLetterUnrecoverableFolder(candidate, slug, attempts);
+                var trippedDuringThisDeadLetter = DeadLetterUnrecoverableFolder(candidate, slug, attempts);
+                // Cross-slug infra circuit breaker (loop-inventory:
+                // pickup.cross-slug-infra-circuit-breaker). If THIS
+                // dead-letter just tripped the breaker, halt the
+                // iteration so the remaining 3-progress folders are NOT
+                // dead-lettered too. The mode flip also short-circuits
+                // the next TickAsync via the "manual" gate at the head
+                // of the tick, so this guard is mid-iteration only.
+                if (trippedDuringThisDeadLetter) return null;
                 continue;
             }
             return candidate.Info ?? _scanner.FindJob(slug, Entry.Path);
@@ -2156,13 +2167,20 @@ public class ProjectRunner
     /// <c>&lt;workspace&gt;/logs/pickup-failures.jsonl</c> and clears the
     /// per-slug attempt counter.
     /// </summary>
-    private void DeadLetterUnrecoverableFolder(ProgressPickupCandidate candidate, string slug, int attempts)
+    /// <summary>
+    /// Dead-letter one over-budget 3-progress folder. Returns <c>true</c>
+    /// when this dead-letter just tripped the cross-slug infra circuit
+    /// breaker (caller halts the surrounding iteration); <c>false</c>
+    /// otherwise (caller continues to the next candidate).
+    /// </summary>
+    private bool DeadLetterUnrecoverableFolder(ProgressPickupCandidate candidate, string slug, int attempts)
     {
         var now = DateTime.UtcNow;
         var destinationSlug = PickupFailureLog.BuildArchiveSlug(slug, now,
             existsInDestination: name => Directory.Exists(Path.Combine(Entry.Path, JobStates.FailedPickup, name)));
 
         var jobIdBeforeMove = candidate.Info?.Id ?? slug;
+        var cliTypeBeforeMove = candidate.Info?.CliType;
         var historySnapshot = _pickupAttempts.TryGetValue(slug, out var state)
             ? state.History.ToList()
             : new List<PickupAttemptDiagnostic>();
@@ -2176,7 +2194,7 @@ public class ProjectRunner
             // Reset the counter so we don't loop on the same failed move every
             // tick. The folder stays in 3-progress; the operator can intervene.
             _pickupAttempts.TryRemove(slug, out _);
-            return;
+            return false;
         }
 
         var record = new PickupFailureRecord
@@ -2216,6 +2234,80 @@ public class ProjectRunner
         }
 
         _pickupAttempts.TryRemove(slug, out _);
+
+        // Cross-slug infra circuit breaker. The per-slug breaker just
+        // dead-lettered ONE folder; if the same CLI now has N distinct
+        // slugs dead-lettered within the rolling window, the failures are
+        // infra-shaped (broken CLI binary), not task-shaped, and pickup
+        // must halt across the project rather than continuing to drain
+        // 2-ready one slug at a time. Single-state-machine principle:
+        // the breaker raises a TripOutcome here; this method does the
+        // mode flip via the same SetMode path the API uses (so existing
+        // audit/event paths fire).
+        return TripInfraBreakerIfNeeded(cliTypeBeforeMove, slug, jobIdBeforeMove, now);
+    }
+
+    /// <summary>
+    /// Feed one spawn-failed dead-letter into
+    /// <see cref="CrossSlugInfraCircuitBreaker"/> and apply the trip
+    /// side-effects on the call that crosses the threshold: SetMode("manual")
+    /// + plain-text supervisor chat note on the moved job folder. Returns
+    /// <c>true</c> when this call just tripped the breaker.
+    /// </summary>
+    private bool TripInfraBreakerIfNeeded(string? cliType, string slug, string jobIdBeforeMove, DateTime now)
+    {
+        if (string.IsNullOrWhiteSpace(cliType)) return false;
+        TripOutcome? trip;
+        try
+        {
+            trip = _infraBreaker.RecordSpawnFailedDeadLetter(ProjectName, cliType, slug, now);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "CrossSlugInfraCircuitBreaker: record-trip failed for {Project}/{Slug}", ProjectName, slug);
+            return false;
+        }
+        if (trip == null) return false;
+
+        _logger.LogWarning(
+            "[taskboard] cross-slug infra breaker tripped for {Project} on {Cli} ({Slugs}); switching mode to manual",
+            ProjectName, cliType, string.Join(", ", trip.Slugs));
+
+        // Plain-text supervisor chat note on the freshly-moved dead-letter so
+        // the project chat surface shows one banner-shaped entry (not per-tick
+        // spam). The supervisor stream tag is the same channel ChatNoteHosted
+        // and the per-slug breaker use, so the activity-log renders it as a
+        // separate participant.
+        try
+        {
+            var moved = _scanner.FindJob(jobIdBeforeMove, Entry.Path);
+            if (moved != null)
+            {
+                _chatLog.AppendSupervisor(moved, "infra-halt", trip.BuildSupervisorChatMessage());
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "CrossSlugInfraCircuitBreaker: chat-log append failed for {Slug}", slug);
+        }
+
+        // Mode flip last so any throw above does not leave us paused
+        // without the banner. SetMode routes through OnModePersist so the
+        // backend-restart-safe persistence in ProjectSettingsService fires.
+        //
+        // Halt-iteration signal: only true when we actually transitioned
+        // out of an auto mode. If the runner was already manual or paused
+        // (e.g. test reflection invoking the picker against a paused
+        // runner), the breaker still records its row and notes the chat,
+        // but does not block the caller's iteration - the auto-pickup
+        // cascade we're protecting against can only happen when auto
+        // mode is what's driving the picker.
+        if (IsAutoMode(_mode))
+        {
+            SetMode("manual");
+            return true;
+        }
+        return false;
     }
 
     /// <summary>
@@ -2233,6 +2325,12 @@ public class ProjectRunner
             // Productive attempt: drop the slug from the counter so the next
             // failure starts a fresh streak instead of inheriting an old one.
             _pickupAttempts.TryRemove(slug, out _);
+            // Cross-slug infra breaker reset: ≥ 1 streamed CLI output line
+            // means the infra is healthy again for this CLI. Clear the
+            // distinct-slug counter so a future single bad job does not
+            // ride on top of a stale cascade.
+            try { _infraBreaker.OnProductivePickup(ProjectName, _activeCliType); }
+            catch (Exception ex) { _logger.LogDebug(ex, "CrossSlugInfraCircuitBreaker reset failed for {Project}", ProjectName); }
             return;
         }
 

@@ -121,6 +121,8 @@ builder.Services.AddSingleton<TaskRunnerService>();
 builder.Services.AddSingleton<CrashRecoveryService>();
 builder.Services.AddSingleton<StaleProgressArchiver>();
 builder.Services.AddSingleton<PickupFailureLog>();
+builder.Services.AddSingleton<InfraHaltLog>();
+builder.Services.AddSingleton<CrossSlugInfraCircuitBreaker>();
 builder.Services.AddSingleton<AgentMessageBusStore>();
 builder.Services.AddSingleton<AgentMessageBusBridge>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Runtime.ProductRuntimeEventStore>();
