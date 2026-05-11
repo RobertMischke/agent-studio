@@ -87,6 +87,33 @@ severityIfBad: Warn
 
 ```yaml
 # ---------------------------------------------------------------------------
+# Token aggregation should go through ITokenAggregator. Five services rolled
+# their own per-surface roll-up before the canonical aggregator existed
+# (see docs/token-aggregation.md). New token-aggregation code outside the
+# Tokens/ or Bus/ namespaces drifts from the single source of truth and
+# produces "tokens today" numbers that disagree across surfaces.
+#
+# Severity is Info while Phase 4 (legacy-service migration to bus-backed
+# shims) is in flight. Once the four legacy aggregators have been converted,
+# the excludeFilePattern shrinks back to just the canonical files and the
+# severity moves to Warn. Tracking: docs/token-aggregation.md "Migration order".
+# ---------------------------------------------------------------------------
+id: token-aggregation-canonical
+title: Token aggregation goes through ITokenAggregator
+description: >
+  Token roll-ups (per-job/per-day/per-model totals over OrchestratorLogEntry.TokenUsage
+  or AgentMessageTokens) belong in OrchestratorApi.Services.Tokens or
+  OrchestratorApi.Services.Bus. Rolling a private aggregator elsewhere drifts
+  from the canonical aggregator and produces inconsistent surface numbers.
+filePattern: backend/.*\.cs$
+excludeFilePattern: backend\.Tests|Services[/\\]Tokens[/\\]|Services[/\\]Bus[/\\]|Services[/\\]Runner[/\\](ProjectTokenUsageService|WorkspaceTokensTimelineService|TokenSummary|TokenSummaryCacheStore|OrchestratorLog|OrchestratorRunner|OrchestratorChat|OrchestratorSession|GlobalOrchestratorSession|StuckLoopGuard)\.cs|Services[/\\]AdHoc[/\\]
+candidateMarker: \.TokenUsage\b|AgentMessageTokens\b|TokenAggregateBucket\b
+goodVariant: ITokenAggregator|TokenAggregationService|BusAggregationCache
+severityIfBad: Info
+```
+
+```yaml
+# ---------------------------------------------------------------------------
 # Frontmatter parsing should go through FrontmatterParser. Four services
 # rolled their own regex+parser pair before the helper existed; they share
 # enough edge-case logic (folded scalars, quote stripping, empty handling)

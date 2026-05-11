@@ -105,6 +105,11 @@ public sealed class AgentMessageBusBridge
             new AgentParticipant { Id = "agent:codex", Kind = "CodingAgent", DisplayName = "Codex", Cli = "codex" },
             new AgentParticipant { Id = "agent:copilot", Kind = "CodingAgent", DisplayName = "Copilot", Cli = "copilot" },
             new AgentParticipant { Id = "agent:gemini", Kind = "CodingAgent", DisplayName = "Gemini", Cli = "gemini" },
+            // support:adhoc covers one-shot Haiku calls (TitleGen, SummaryGen,
+            // PromptEnhance, RoadmapIntake, CommitMessage, ReviewDecision,
+            // SoftReasoning). AdHocUsageRecorder mirrors every JSONL record
+            // onto the bus so token aggregation has a single source of truth.
+            new AgentParticipant { Id = "support:adhoc", Kind = "SupportingAgent", DisplayName = "Ad-hoc Haiku call", Cli = "claude" },
         };
         foreach (var p in participants)
         {
@@ -382,7 +387,7 @@ public sealed class AgentMessageBusBridge
     /// the token summary service; the bus carries one event per recorded
     /// usage so the timeline shows which turn was expensive.
     /// </summary>
-    public Task EmitTokenUsageAsync(string project, string? jobId, string participantId, string? topic, OrchestratorTokenUsage usage, CancellationToken ct = default)
+    public Task EmitTokenUsageAsync(string? project, string? jobId, string participantId, string? topic, OrchestratorTokenUsage usage, CancellationToken ct = default)
     {
         if (usage == null) return Task.CompletedTask;
         var input  = (long)usage.InputTokens;

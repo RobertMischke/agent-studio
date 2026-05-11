@@ -1,6 +1,8 @@
 using System.Text;
 using System.Text.Json;
 using OrchestratorApi.Models;
+using OrchestratorApi.Services.Bus;
+using OrchestratorApi.Services.Runner;
 
 namespace OrchestratorApi.Services.AdHoc;
 
@@ -45,12 +47,17 @@ public sealed class AdHocUsageRecorder
 
     private readonly ILogger<AdHocUsageRecorder> _logger;
     private readonly IConfiguration _configuration;
+    private readonly AgentMessageBusBridge? _bus;
     private readonly object _writeLock = new();
 
-    public AdHocUsageRecorder(ILogger<AdHocUsageRecorder> logger, IConfiguration configuration)
+    public AdHocUsageRecorder(
+        ILogger<AdHocUsageRecorder> logger,
+        IConfiguration configuration,
+        AgentMessageBusBridge? bus = null)
     {
         _logger = logger;
         _configuration = configuration;
+        _bus = bus;
     }
 
     /// <summary>
@@ -92,6 +99,29 @@ public sealed class AdHocUsageRecorder
             _logger.LogInformation(
                 "adhoc-usage-recorded source={Source} model={Model} input={Input} output={Output} durationMs={Duration}",
                 record.Source, record.Model, record.InputTokens, record.OutputTokens, record.DurationMs);
+
+            // Mirror onto the bus so token aggregation has a single source of
+            // truth. Fire-and-forget by design (the bus is observability;
+            // failures must not block the canonical write path). When tokens
+            // are zero (the plain-text fallback case) we still emit so the
+            // per-source call counts on the bus stay accurate.
+            if (_bus is not null)
+            {
+                var usage = new OrchestratorTokenUsage
+                {
+                    Model = record.Model,
+                    InputTokens = (int)record.InputTokens,
+                    OutputTokens = (int)record.OutputTokens,
+                    CacheReadTokens = (int)record.CacheReadTokens,
+                    CacheCreationTokens = (int)record.CacheCreationTokens,
+                };
+                _ = _bus.EmitTokenUsageAsync(
+                    project: string.IsNullOrWhiteSpace(record.Project) ? null : record.Project,
+                    jobId: string.IsNullOrWhiteSpace(record.JobId) ? null : record.JobId,
+                    participantId: "support:adhoc",
+                    topic: string.IsNullOrWhiteSpace(record.Source) ? AdHocUsageSources.Unknown : record.Source,
+                    usage: usage);
+            }
             return true;
         }
         catch (Exception ex)

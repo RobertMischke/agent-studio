@@ -1,0 +1,63 @@
+using OrchestratorApi.Models;
+using OrchestratorApi.Services.AdHoc;
+using OrchestratorApi.Services.Bus;
+using OrchestratorApi.Services.Runner;
+
+namespace OrchestratorApi.Services.Tokens;
+
+/// <summary>
+/// Canonical token-aggregation surface. The union of every roll-up the
+/// observability surfaces consume today (project-detail token-usage panel,
+/// workspace timeline, status-bar usage modal, ad-hoc usage chart, job-card
+/// footers). New consumers depend on this interface rather than the legacy
+/// per-surface services so the implementation can move under them without
+/// breaking call sites.
+///
+/// <para>
+/// <b>Consolidation status (2026-05-11).</b> Phase 3 ships the interface
+/// and a delegating implementation. The legacy services
+/// (<see cref="ProjectTokenUsageService"/>, <see cref="TokenSummaryService"/>,
+/// <see cref="WorkspaceTokensTimelineService"/>, <see cref="AdHocUsageService"/>)
+/// still hold the math; the implementation forwards to them. Phase 4 will
+/// flip each method one at a time to read from
+/// <see cref="BusAggregationCache"/>, gated by Phase 5 parity tests. See
+/// <c>docs/token-aggregation.md</c> for the full plan.
+/// </para>
+/// </summary>
+public interface ITokenAggregator
+{
+    /// <summary>
+    /// Bus-native rollup for one project. Pre-computed buckets when no
+    /// since/until is supplied; bounded scan otherwise. The canonical
+    /// dimensions are byModel / byParticipant / byDay; the response also
+    /// carries lifetime totals.
+    /// </summary>
+    TokenAggregateResponse ForProject(string project, DateTime? since = null, DateTime? until = null, CancellationToken ct = default);
+
+    /// <summary>Lifetime + last-24h totals with Job/Supporting/Orchestrator split.</summary>
+    ProjectTokenUsageSummary ProjectSummary(string projectName, string watchPath, DateTime? nowUtc = null);
+
+    /// <summary>Per-job × per-day heatmap over the requested window.</summary>
+    ProjectTokenHeatmap ProjectHeatmap(string projectName, string watchPath, int days, DateTime? nowUtc = null);
+
+    /// <summary>Top-N jobs by total token spend.</summary>
+    IReadOnlyList<ProjectExpensiveJob> ProjectExpensiveJobs(string projectName, string watchPath, int limit);
+
+    /// <summary>Per-call drill-down for one job with delta-vs-prior.</summary>
+    ProjectJobTokenDetail? ProjectJobDetail(string projectName, string watchPath, string jobId);
+
+    /// <summary>Per-project lifetime totals + per-model split + estimated USD.</summary>
+    TokenSummary LifetimeSummary(string projectName, string watchPath);
+
+    /// <summary>Workspace-wide aggregate across every watched project.</summary>
+    TokenSummaryAggregate WorkspaceAggregate(IEnumerable<(string Name, string WatchPath)> projects);
+
+    /// <summary>Per-job rollup pulled out of one project's orchestrator log.</summary>
+    Dictionary<string, JobTokenSummary> WorkspacePerJob(string watchPath);
+
+    /// <summary>(project, time-bucket) cells for the workspace tokens timeline.</summary>
+    TokenTimeline WorkspaceTimeline(IEnumerable<(string Name, string WatchPath)> projects, int windowHours, int bucketMinutes, DateTime? nowUtc = null);
+
+    /// <summary>Workspace-wide ad-hoc one-shot call rollup (TitleGen, SummaryGen, ...).</summary>
+    AdHocUsageAggregate AdHocAggregate(DateTime? since = null);
+}
