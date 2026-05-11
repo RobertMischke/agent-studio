@@ -77,6 +77,45 @@ public class CodexCliServiceTests
     }
 
     [Fact]
+    public void BuildSystemPromptPrefix_NonWindows_HasSentinelHintOnly()
+    {
+        var prefix = CodexCliService.BuildSystemPromptPrefix(isWindows: false);
+
+        Assert.Contains("[[TASK_DONE]]", prefix);
+        Assert.Contains("[[TASK_BLOCKED:", prefix);
+        Assert.Contains("[[TASK_NEEDS_INPUT:", prefix);
+        Assert.Contains("[[TASK_NOOP]]", prefix);
+        Assert.DoesNotContain("windows", prefix, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("CreateProcessAsUserW", prefix);
+        Assert.EndsWith("\n\n", prefix);
+    }
+
+    [Fact]
+    public void BuildSystemPromptPrefix_Windows_AppendsNoShellHint()
+    {
+        var prefix = CodexCliService.BuildSystemPromptPrefix(isWindows: true);
+
+        Assert.Contains("[[TASK_DONE]]", prefix);
+        Assert.Contains("windows sandbox: runner error", prefix);
+        Assert.Contains("CreateProcessAsUserW failed", prefix);
+        Assert.Contains("[[TASK_BLOCKED:windows-sandbox]]", prefix);
+        Assert.EndsWith("\n\n", prefix);
+    }
+
+    [Fact]
+    public void BuildSystemPromptPrefix_StaysShort()
+    {
+        // The prefix is paid on every invocation including resumes whose
+        // user prompt is one sentence. Lock the upper bound so a future
+        // edit can't bloat into a multi-paragraph essay.
+        var win = CodexCliService.BuildSystemPromptPrefix(isWindows: true);
+        var posix = CodexCliService.BuildSystemPromptPrefix(isWindows: false);
+
+        Assert.True(win.Length < 900, $"Windows prefix grew to {win.Length} chars");
+        Assert.True(posix.Length < 500, $"Non-Windows prefix grew to {posix.Length} chars");
+    }
+
+    [Fact]
     public void IsCompatibleSessionName_AcceptsUuidsRejectsSlugs()
     {
         var cfg = new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build();

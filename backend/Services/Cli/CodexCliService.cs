@@ -104,10 +104,59 @@ public sealed class CodexCliService : CliExecutionServiceBase
 
         if (!string.IsNullOrEmpty(prompt))
         {
-            psi.ArgumentList.Add(prompt);
+            psi.ArgumentList.Add(BuildSystemPromptPrefix(OperatingSystem.IsWindows()) + prompt);
         }
 
         return psi;
+    }
+
+    /// <summary>
+    /// Codex has no <c>--append-system-prompt</c> flag (Claude's mechanism),
+    /// so per-CLI orchestrator guidance must be prepended to the positional
+    /// prompt argument. This builds a short prefix with two prophylactic
+    /// hints that complement the reactive
+    /// <see cref="OrchestratorApi.Services.Runner.AgentEnvironmentDetector"/>
+    /// pipeline:
+    /// <list type="number">
+    ///   <item>Sentinel reminder. Codex's pass-through frame model means the
+    ///         fresh-start template's terminal-sentinel rule can drift out of
+    ///         view on a resume turn, where the user follow-up is the entire
+    ///         prompt. The "missing-terminal-sentinel" auto-review case noted
+    ///         in <c>AgentEnvironmentDetector</c>'s "why this exists" section
+    ///         was caused by exactly this gap.</item>
+    ///   <item>No-shell hint on Windows. Codex's Windows sandbox wrapper
+    ///         (<c>windows-sandbox-rs</c>) refuses <c>CreateProcessAsUserW</c>
+    ///         under common service / RDP logon-session configurations; the
+    ///         agent retries the same command 3-10 times and burns the silence
+    ///         budget without producing useful output. Telling Codex up front
+    ///         to prefer file reads and to report a single failure via
+    ///         <c>[[TASK_BLOCKED:windows-sandbox]]</c> short-circuits that
+    ///         retry loop.</item>
+    /// </list>
+    /// Kept deliberately short (~5 lines): every Codex invocation, including
+    /// resumes whose user prompt is one sentence, pays this prefix in tokens.
+    /// </summary>
+    internal static string BuildSystemPromptPrefix(bool isWindows)
+    {
+        const string sentinelLine =
+            "Orchestrator note: end your reply with one of `[[TASK_DONE]]`, " +
+            "`[[TASK_BLOCKED:<reason>]]`, `[[TASK_NEEDS_INPUT:<reason>]]`, or " +
+            "`[[TASK_NOOP]]` on its own line. The orchestrator parses this token; " +
+            "without it the run lands in auto-review as missing-terminal-sentinel.";
+
+        if (!isWindows)
+        {
+            return sentinelLine + "\n\n";
+        }
+
+        const string windowsShellLine =
+            "Windows note: if a shell command returns `windows sandbox: runner error` " +
+            "or `CreateProcessAsUserW failed`, do NOT retry; the host sandbox is " +
+            "refusing execution. Read files directly instead, and if you cannot make " +
+            "progress without shell access, stop and reply with " +
+            "`[[TASK_BLOCKED:windows-sandbox]]`.";
+
+        return sentinelLine + "\n" + windowsShellLine + "\n\n";
     }
 
     /// <summary>

@@ -60,6 +60,15 @@ codex exec resume <uuid> --json [-m <model>] "<prompt>"
 - **Don't** swap argument order. `codex exec --json resume <uuid> "<prompt>"` parses `resume` as the prompt.
 - **Don't** pass a non-UUID session id. `IsCompatibleSessionName` rejects non-UUIDs to keep cross-CLI session names from leaking through.
 
+### System-prompt prefix
+
+Codex has no `--append-system-prompt` flag, so `CodexCliService.BuildSystemPromptPrefix` prepends a short orchestrator note to the positional prompt argument on every invocation (fresh runs and resumes). The prefix carries two prophylactic hints:
+
+1. **Sentinel reminder.** Repeats the `[[TASK_DONE]] / [[TASK_BLOCKED:...]] / [[TASK_NEEDS_INPUT:...]] / [[TASK_NOOP]]` grammar. On a resume turn the fresh-start template is not re-rendered, so without this the agent regularly drops the terminal sentinel and the run lands in auto-review as "missing-terminal-sentinel".
+2. **Windows no-shell hint** (only when `OperatingSystem.IsWindows()`). Tells Codex not to retry on `windows sandbox: runner error` / `CreateProcessAsUserW failed` and to surface `[[TASK_BLOCKED:windows-sandbox]]` instead. This is the preventive complement to `AgentEnvironmentDetector`'s reactive in-stream match.
+
+Keep the prefix short — the length-guard test in `CodexCliServiceTests.BuildSystemPromptPrefix_StaysShort` enforces an upper bound because every Codex invocation pays this in tokens.
+
 ## `--json` frame model
 
 Codex emits JSON Lines on stdout. Unlike Claude's `stream-json`, Codex frames are **pass-through**: `TransformReadLine` is the identity transform (no per-CLI translation yet — see § Limitations). `OnOutputLine` parses the raw JSON directly to capture the session UUID.
