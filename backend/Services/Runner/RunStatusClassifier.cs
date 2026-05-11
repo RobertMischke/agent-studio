@@ -32,7 +32,14 @@ public enum RunStopReason
     /// Treated as a successful completion by the classifier - the agent did
     /// its job, only the lingering process was killed.
     /// </summary>
-    SentinelDetected
+    SentinelDetected,
+    /// <summary>
+    /// The CLI base class detected an OS-level / sandbox-level blocker in
+    /// the child's stdout/stderr (see <see cref="AgentEnvironmentDetector"/>)
+    /// and killed the process before the agent could burn the full silence
+    /// budget retrying against an unrecoverable host error.
+    /// </summary>
+    EnvironmentBlocker
 }
 
 /// <summary>String constants for <see cref="Models.CliExecution.Status"/>. Persisted; keep stable.</summary>

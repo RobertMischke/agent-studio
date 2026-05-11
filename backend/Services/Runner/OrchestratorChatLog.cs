@@ -140,7 +140,15 @@ public enum OrchestratorMessageKind
     /// <summary>The orchestrator gave up after a retry budget; user attention required.</summary>
     GiveUp,
     /// <summary>The orchestrator could not pick a path on its own but identified a concrete unblocking ask the user can resolve. Renders distinctly so the user sees a productive escalation, not a silent deferral.</summary>
-    Steer
+    Steer,
+    /// <summary>
+    /// An OS / sandbox / host-permission blocker was detected in-stream
+    /// by <see cref="AgentEnvironmentDetector"/>. The run was killed
+    /// before the silence budget elapsed; the job is escalated to human
+    /// review with a typed diagnosis instead of a generic
+    /// missing-terminal-sentinel verdict.
+    /// </summary>
+    EnvironmentBlocker
 }
 
 internal static class OrchestratorMessageKindExtensions
@@ -158,6 +166,7 @@ internal static class OrchestratorMessageKindExtensions
         OrchestratorMessageKind.ClassifierUnknown => "classifier-unknown",
         OrchestratorMessageKind.GiveUp            => "giveup",
         OrchestratorMessageKind.Steer             => "steer",
+        OrchestratorMessageKind.EnvironmentBlocker => "environment-blocker",
         _ => "info"
     };
 
@@ -170,6 +179,7 @@ internal static class OrchestratorMessageKindExtensions
         OrchestratorMessageKind.MissingTerminalSentinel => "missing-terminal-sentinel",
         OrchestratorMessageKind.HeuristicDone     => "heuristic-done",
         OrchestratorMessageKind.ClassifierUnknown => "classifier-unknown",
+        OrchestratorMessageKind.EnvironmentBlocker => "environment-blocker",
         _ => kind.ToString().ToLowerInvariant()
     };
 }

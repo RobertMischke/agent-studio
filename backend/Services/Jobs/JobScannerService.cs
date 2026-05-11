@@ -502,6 +502,16 @@ public class JobScannerService
         if (string.IsNullOrWhiteSpace(line)) return false;
 
         var lower = line.ToLowerInvariant();
+        // EnvironmentBlocker takes precedence: the marker is the runtime
+        // signal that the host environment (sandbox / logon session /
+        // ACLs) refused to let the agent execute. Surfaced as its own
+        // chip so the user does not waste time inspecting an empty
+        // change set as if it were a normal permission denial.
+        if (lower.Contains("environment-blocker") || lower.Contains("[environment-blocker]"))
+        {
+            issue = BuildOutcomeIssue("environment-blocker", "Environment blocker", "High", line, lastSeenAt);
+            return true;
+        }
         if (lower.Contains("permission-blocked") || lower.Contains("permission denied and could not request permission"))
         {
             issue = BuildOutcomeIssue("permission-blocked", "Permission blocked", "High", line, lastSeenAt);

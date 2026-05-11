@@ -546,6 +546,58 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
     /// </summary>
     public virtual void ReattachOnStartup() => ReapOrphans();
 
+    /// <summary>
+    /// Runs the canonical <see cref="AgentEnvironmentDetector"/> against a
+    /// freshly read line. When a recognised OS-level / sandbox blocker
+    /// fires often enough (or once for an unambiguous pattern), writes a
+    /// synthetic <c>[environment-blocker]</c> system line so
+    /// <see cref="Runner.AgentOutcomeAnalyzer"/> can pick it up post-run,
+    /// then terminates the child via <see cref="Stop(string, RunStopReason)"/>.
+    /// First-trip latches on <see cref="ProcInfo.EnvironmentBlockerTripped"/>
+    /// so a flurry of repeated stderr lines produces exactly one outcome.
+    /// </summary>
+    private void CheckEnvironmentBlocker(string jobKey, ProcInfo info, CliOutputLine rawLine)
+    {
+        if (info.EnvironmentBlockerTripped) return;
+        AgentEnvironmentDetector.EnvironmentBlockerPattern? match;
+        try { match = AgentEnvironmentDetector.Match(rawLine.Text); }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Environment-blocker detector threw for {JobKey}", jobKey);
+            return;
+        }
+        if (match == null) return;
+
+        info.EnvironmentBlockerHitCount++;
+        var threshold = match.ImmediateTerminate ? 1 : AgentEnvironmentDetector.HitThreshold;
+        if (info.EnvironmentBlockerHitCount < threshold) return;
+
+        info.EnvironmentBlockerTripped = true;
+        var diagnosis = AgentEnvironmentDetector.Diagnose(match, CliType);
+
+        var synthetic = new CliOutputLine
+        {
+            Timestamp = DateTime.UtcNow,
+            Stream = "system",
+            Text = $"[environment-blocker] {diagnosis}"
+        };
+        info.OutputBuffer.Add(synthetic);
+        try
+        {
+            if (!info.OutputLog.Append(synthetic))
+                _logger.LogWarning("Failed to persist environment-blocker marker for {JobKey}", jobKey);
+        }
+        catch (Exception ex) { _logger.LogDebug(ex, "Persisting environment-blocker marker failed for {JobKey}", jobKey); }
+        try { OnOutput?.Invoke(jobKey, synthetic); } catch { }
+
+        _logger.LogWarning(
+            "Environment blocker '{Pattern}' detected for {Cli} job {JobKey} after {Hits} hit(s); terminating run",
+            match.Id, CliType, jobKey, info.EnvironmentBlockerHitCount);
+
+        try { Stop(jobKey, RunStopReason.EnvironmentBlocker); }
+        catch (Exception ex) { _logger.LogWarning(ex, "Stop after environment-blocker failed for {JobKey}", jobKey); }
+    }
+
     private async Task ReadStreamAsync(string jobKey, StreamReader reader, string stream, ProcInfo info, CancellationToken ct)
     {
         try
@@ -576,6 +628,14 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
                 // OutputBuffer, not via this read loop) and therefore do not
                 // reset the clock.
                 info.LastStreamedAt = DateTime.UtcNow;
+
+                // Pre-emptive environment-blocker check: a recognised
+                // sandbox / OS-permission error means the agent cannot
+                // self-recover. Trip a synthetic marker line + Stop()
+                // immediately so the run finalizes with the correct
+                // typed outcome instead of consuming the silence budget
+                // while the agent retries against the same wall.
+                CheckEnvironmentBlocker(jobKey, info, rawLine);
 
                 // ADR-0013: typed events. Map this raw line to zero or more
                 // CliRunEvent instances and raise them on OnRunEvent. The
@@ -988,6 +1048,21 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         /// callers fall back to <c>Process.StandardInput</c> in that case.
         /// </summary>
         public Stream? ChildStdin { get; init; }
+
+        /// <summary>
+        /// Number of <see cref="AgentEnvironmentDetector"/> hits observed
+        /// in this run's raw output. The base class read loop increments
+        /// this per matching line; the threshold check decides whether
+        /// to trip the blocker.
+        /// </summary>
+        public int EnvironmentBlockerHitCount { get; set; }
+
+        /// <summary>
+        /// Latch set once the run has been killed for an environment
+        /// blocker. Stops subsequent matching lines from re-tripping the
+        /// detector or producing duplicate synthetic markers.
+        /// </summary>
+        public bool EnvironmentBlockerTripped { get; set; }
 
         /// <summary>
         /// Read-loop tasks captured at spawn time. <see cref="MonitorProcessAsync"/>

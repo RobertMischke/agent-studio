@@ -40,7 +40,16 @@ public enum RunIssueKind
     MissingTerminalSentinel,
     HeuristicDone,
     ClassifierUnknown,
-    NoAgentOutput
+    NoAgentOutput,
+    /// <summary>
+    /// An OS / sandbox / host-permission error blocked the agent from
+    /// making progress. Recognised in-stream by
+    /// <see cref="AgentEnvironmentDetector"/>, which writes a synthetic
+    /// <c>[environment-blocker]</c> marker the analyzer matches here.
+    /// Distinct from <see cref="PermissionBlocked"/>: the agent cannot
+    /// recover via a soft intervention, only the user can.
+    /// </summary>
+    EnvironmentBlocker
 }
 
 /// <summary>
@@ -133,6 +142,28 @@ public static class AgentOutcomeAnalyzer
 
         var failed = string.Equals(status, "failed", StringComparison.OrdinalIgnoreCase)
                   || string.Equals(status, "cancelled", StringComparison.OrdinalIgnoreCase);
+
+        // Environment blockers win over permission-denied: the runtime
+        // recogniser only fires on host-level failures the agent has no
+        // way to resolve (sandbox config, logon session, ACL), and the
+        // base class has already killed the process. Route as a typed
+        // EnvironmentBlocker so the policy layer does not waste a soft
+        // intervention asking the agent to "try again with available
+        // permissions".
+        var envDiagnosis = ExtractEnvironmentBlockerDiagnosis(rawText);
+        if (envDiagnosis != null)
+        {
+            return new AgentOutcome(
+                Kind: AgentOutcomeKind.Unknown,
+                Summary: envDiagnosis,
+                MatchedSentinel: false,
+                SentinelKeyword: null,
+                Reason: "environment blocker detected in CLI output",
+                AgentTextChars: agentText.Length,
+                OutputLineCount: lineCount,
+                DurationSeconds: durationSeconds)
+            { IssueKind = RunIssueKind.EnvironmentBlocker };
+        }
 
         if (IsPermissionBlocked(rawText))
         {
@@ -275,6 +306,30 @@ public static class AgentOutcomeAnalyzer
             AgentOutcomeKind.Unknown => RunIssueKind.MissingTerminalSentinel,
             _                        => RunIssueKind.None
         };
+    }
+
+    /// <summary>
+    /// Pull the diagnosis text out of the synthetic
+    /// <c>[environment-blocker] &lt;diagnosis&gt;</c> system line written by
+    /// <c>CliExecutionServiceBase.CheckEnvironmentBlocker</c>. Returns null
+    /// when the run did not trip the detector. The marker is the only
+    /// signal the analyzer trusts here: the underlying needles (codex
+    /// sandbox text, EPERM, etc.) can appear inside an agent's own prose
+    /// (paste of an error message, post-mortem). Gating on the synthetic
+    /// marker means a false positive is impossible without the runtime
+    /// detector itself firing.
+    /// </summary>
+    private static string? ExtractEnvironmentBlockerDiagnosis(string rawText)
+    {
+        if (string.IsNullOrEmpty(rawText)) return null;
+        const string marker = "[environment-blocker]";
+        var idx = rawText.IndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (idx < 0) return null;
+        var afterMarker = rawText[(idx + marker.Length)..];
+        var newline = afterMarker.IndexOf('\n');
+        var slice = newline >= 0 ? afterMarker[..newline] : afterMarker;
+        var trimmed = slice.Trim();
+        return trimmed.Length == 0 ? "environment blocker detected" : trimmed;
     }
 
     private static bool IsPermissionBlocked(string text)

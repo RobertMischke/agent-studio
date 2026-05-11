@@ -159,6 +159,34 @@ severityIfBad: High
 
 ```yaml
 # ---------------------------------------------------------------------------
+# Sandbox / OS-permission blockers detected by the canonical
+# AgentEnvironmentDetector. On 2026-05-11 a Codex run on the Lotta dashboard
+# project hit "windows sandbox: runner error: CreateProcessAsUserW failed:
+# 1312" on every shell call and burned nine seconds retrying before giving
+# up with no terminal sentinel, leaving the job as a generic
+# "missing-terminal-sentinel" in 4-auto-review. The canonical recogniser
+# now lives in AgentEnvironmentDetector + the CliExecutionServiceBase hook;
+# any other site that scans CLI output for these needles drifts from the
+# single source of truth and re-introduces the silent-fail path.
+# ---------------------------------------------------------------------------
+id: sandbox-blocker-detector
+title: Sandbox / OS-permission error detection goes through AgentEnvironmentDetector
+description: >
+  Recognition of OS-level / sandbox-level blockers (Codex Windows sandbox,
+  CreateProcessAsUserW 1312, EACCES/EPERM/Access-is-denied, claude tool
+  permission denial, codex sandbox_permissions) must go through
+  OrchestratorApi.Services.Runner.AgentEnvironmentDetector. Rolling a private
+  substring check elsewhere re-introduces the 2026-05-11 failure mode where
+  a host-level error read as a generic "missing-terminal-sentinel".
+filePattern: backend/.*\.cs$
+excludeFilePattern: backend\.Tests|Services[/\\]Runner[/\\]AgentEnvironmentDetector\.cs|Services[/\\]Runner[/\\]AgentOutcomeAnalyzer\.cs|Services[/\\]Cli[/\\]CliExecutionServiceBase\.cs|Services[/\\]Jobs[/\\]JobScannerService\.cs
+candidateMarker: windows sandbox: runner error|CreateProcessAsUserW failed: 1312|sandbox_permissions|Permission denied and could not request permission from user|EACCES\b|EPERM\b|Access is denied
+goodVariant: AgentEnvironmentDetector\b
+severityIfBad: High
+```
+
+```yaml
+# ---------------------------------------------------------------------------
 # Lane writes to 3-progress are reserved for the runner. On 2026-05-11 the
 # auto-review verdict path routed reissues straight to 3-progress while the
 # runner-pickup tick observed an empty lane mid-verdict and grabbed the next

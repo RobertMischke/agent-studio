@@ -81,6 +81,24 @@ public static class RunOutcomePolicy
             && string.Equals(plan.EventKind, "continue", StringComparison.OrdinalIgnoreCase)
             && plan.ResumeFlag;
 
+        if (outcome.IssueKind == RunIssueKind.EnvironmentBlocker)
+        {
+            // Environment blockers are unrecoverable by the agent. The
+            // base CLI service has already killed the process, so there
+            // is no retry to spend - we route straight to human review
+            // with the typed diagnosis. Auto-review aspects would be
+            // pointless: there is no change set to evaluate.
+            return new OutcomeAction(
+                Kind: OutcomeActionKind.NotifyUserAndStop,
+                MetaMessage: outcome.Summary
+                    ?? "An OS or sandbox blocker prevented the agent from making progress. Human attention required.",
+                IsHeuristicFallback: false)
+            {
+                IssueKind = RunIssueKind.EnvironmentBlocker,
+                MessageKind = OrchestratorMessageKind.EnvironmentBlocker
+            };
+        }
+
         if (outcome.IssueKind == RunIssueKind.PermissionBlocked)
         {
             if (reissueAttempt < MaxSoftInterventionAttempts)

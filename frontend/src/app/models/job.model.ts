@@ -129,7 +129,14 @@ export interface JobInfo {
 }
 
 export interface JobOutcomeIssue {
-  kind: 'permission-blocked' | 'watchdog-timeout' | 'missing-terminal-sentinel' | 'classifier-unknown' | 'heuristic-done' | string;
+  kind:
+    | 'permission-blocked'
+    | 'watchdog-timeout'
+    | 'missing-terminal-sentinel'
+    | 'classifier-unknown'
+    | 'heuristic-done'
+    | 'environment-blocker'
+    | string;
   label: string;
   severity: 'Info' | 'Warn' | 'High' | string;
   summary: string;

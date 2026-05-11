@@ -298,6 +298,32 @@ public class RunOutcomePolicyTests
     }
 
     [Fact]
+    public void EnvironmentBlocker_RoutesStraightToHumanReview_NoSoftIntervention()
+    {
+        // EnvironmentBlocker is unrecoverable by the agent: the OS / sandbox
+        // refused the work. Policy must NotifyUserAndStop on the first
+        // occurrence and tag the message kind so the chat log + the
+        // ProjectRunner human-review router pick it up.
+        var diagnosis = "Codex Windows sandbox refused to execute commands (cli=codex): set sandbox_mode = \"danger-full-access\".";
+        var action = RunOutcomePolicy.Decide(
+            RunIntent.AutoPickup,
+            ContinuePlan(),
+            Outcome(AgentOutcomeKind.Unknown, sentinel: false, duration: 3.2, agentChars: 0) with
+            {
+                IssueKind = RunIssueKind.EnvironmentBlocker,
+                Summary = diagnosis
+            },
+            followupPrompt: null,
+            reissueAttempt: 0);
+
+        Assert.Equal(OutcomeActionKind.NotifyUserAndStop, action.Kind);
+        Assert.Equal(RunIssueKind.EnvironmentBlocker, action.IssueKind);
+        Assert.Equal(OrchestratorMessageKind.EnvironmentBlocker, action.MessageKind);
+        Assert.Equal(diagnosis, action.MetaMessage);
+        Assert.Null(action.FollowupRetryPrompt);
+    }
+
+    [Fact]
     public void PermissionBlocked_FirstOccurrence_ReissuesOneSoftIntervention()
     {
         var action = RunOutcomePolicy.Decide(

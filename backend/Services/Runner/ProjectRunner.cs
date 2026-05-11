@@ -1839,16 +1839,19 @@ public class ProjectRunner
     }
 
     private static bool ShouldRouteIssueToHumanReview(RunIssueKind issueKind)
-        => issueKind is RunIssueKind.PermissionBlocked or RunIssueKind.WatchdogTimeout;
+        => issueKind is RunIssueKind.PermissionBlocked
+                     or RunIssueKind.WatchdogTimeout
+                     or RunIssueKind.EnvironmentBlocker;
 
     private static string ToIssueTopic(RunIssueKind issueKind) => issueKind switch
     {
         RunIssueKind.PermissionBlocked        => "permission-blocked",
         RunIssueKind.WatchdogTimeout          => "watchdog-timeout",
         RunIssueKind.MissingTerminalSentinel  => "missing-terminal-sentinel",
-        RunIssueKind.HeuristicDone            => "heuristic-done",
+        RunIssueKind.HeuristicDone             => "heuristic-done",
         RunIssueKind.ClassifierUnknown        => "classifier-unknown",
         RunIssueKind.NoAgentOutput            => "no-agent-output",
+        RunIssueKind.EnvironmentBlocker       => "environment-blocker",
         _                                     => "none"
     };
 
