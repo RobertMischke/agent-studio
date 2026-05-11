@@ -42,10 +42,11 @@ public sealed class JobIndexCache
     private DateTime _snapshotAtUtc = DateTime.MinValue;
     private bool _dirty = true;
 
-    // Single-flight: while one thread refreshes, others return the previous
-    // snapshot (correct enough; the next read after they're done sees the
-    // fresh one).
+    // Single-flight: while one thread refreshes, others wait briefly for it to
+    // finish so that a post-Invalidate read always sees the fresh snapshot.
+    // A round counter lets waiters detect completion without holding a lock.
     private int _refreshing;
+    private long _scanRound;
 
     // Cheap diagnostics so a perf regression here is visible in /healthz or
     // a future debug endpoint without spinning up a profiler.
@@ -80,12 +81,14 @@ public sealed class JobIndexCache
             }
         }
 
-        // Single-flight: only one thread does the disk walk; the others
-        // return the previous snapshot (correct enough because the dirty
-        // flag stays set until the refresh completes, so the next reader
-        // after that sees the fresh one).
+        // Single-flight: only one thread does the disk walk. Concurrent readers
+        // wait up to 500 ms for it to finish so that a post-Invalidate read
+        // always sees the fresh snapshot (read-after-write guarantee). Disk
+        // rescans typically finish in <50 ms; the timeout is a safety valve.
+        var roundBefore = Volatile.Read(ref _scanRound);
         if (Interlocked.CompareExchange(ref _refreshing, 1, 0) != 0)
         {
+            SpinWait.SpinUntil(() => Volatile.Read(ref _scanRound) != roundBefore, 500);
             lock (_lock) return _snapshot;
         }
         try
@@ -102,6 +105,7 @@ public sealed class JobIndexCache
         }
         finally
         {
+            Interlocked.Increment(ref _scanRound);
             Interlocked.Exchange(ref _refreshing, 0);
         }
     }
