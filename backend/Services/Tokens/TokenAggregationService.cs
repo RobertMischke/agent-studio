@@ -6,35 +6,52 @@ using OrchestratorApi.Services.Runner;
 namespace OrchestratorApi.Services.Tokens;
 
 /// <summary>
-/// Phase-3 delegating implementation of <see cref="ITokenAggregator"/>.
-/// Forwards every call to the legacy per-surface aggregator that owns the
-/// math today. Phase 4 will replace each forward one at a time with a
-/// direct <see cref="BusAggregationCache"/> read, gated by Phase 5
-/// parity tests.
+/// Phase-4 implementation of <see cref="ITokenAggregator"/>. Every per-project
+/// surface reads through a bus-backed reader so the workspace bus is the
+/// single source of truth (see <c>docs/token-aggregation.md</c>). The
+/// pure-function folds still live on the legacy services
+/// (<see cref="TokenSummaryService"/>, <see cref="WorkspaceTokensTimelineService"/>,
+/// <see cref="ProjectTokenUsageService"/>) so the math is identical to the
+/// pre-Phase-4 reader; the readers only swap the input source.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Each bus-backed reader has a Phase-5 parity test
+/// (<c>TokenSummaryBusParityTests</c>,
+/// <c>WorkspaceTokensTimelineBusParityTests</c>,
+/// <c>ProjectTokenUsageBusParityTests</c>) that drives both the legacy
+/// reader and the bus reader over a fixed data set and asserts numeric
+/// equality. The legacy services stay registered for historical-data
+/// fallback and for the parity-test fixture, but
+/// <see cref="ITokenAggregator"/> consumers never hit them directly.
+/// </para>
+/// </remarks>
 public sealed class TokenAggregationService : ITokenAggregator
 {
     private readonly BusAggregationCache _bus;
     private readonly IConfiguration _config;
-    private readonly ProjectTokenUsageService _projectUsage;
-    private readonly TokenSummaryService _summary;
-    private readonly WorkspaceTokensTimelineService _timeline;
     private readonly AdHocUsageService _adHoc;
+    private readonly TokenSummaryCacheStore _summaryCache;
+    private readonly BusBackedTokenSummaryReader _busSummary;
+    private readonly BusBackedWorkspaceTimelineReader _busTimeline;
+    private readonly BusBackedProjectTokenUsageReader _busProjectUsage;
 
     public TokenAggregationService(
         BusAggregationCache bus,
         IConfiguration config,
-        ProjectTokenUsageService projectUsage,
-        TokenSummaryService summary,
-        WorkspaceTokensTimelineService timeline,
-        AdHocUsageService adHoc)
+        AdHocUsageService adHoc,
+        TokenSummaryCacheStore summaryCache,
+        BusBackedTokenSummaryReader busSummary,
+        BusBackedWorkspaceTimelineReader busTimeline,
+        BusBackedProjectTokenUsageReader busProjectUsage)
     {
         _bus = bus;
         _config = config;
-        _projectUsage = projectUsage;
-        _summary = summary;
-        _timeline = timeline;
         _adHoc = adHoc;
+        _summaryCache = summaryCache;
+        _busSummary = busSummary;
+        _busTimeline = busTimeline;
+        _busProjectUsage = busProjectUsage;
     }
 
     public TokenAggregateResponse ForProject(string project, DateTime? since = null, DateTime? until = null, CancellationToken ct = default)
@@ -56,29 +73,62 @@ public sealed class TokenAggregationService : ITokenAggregator
     }
 
     public ProjectTokenUsageSummary ProjectSummary(string projectName, string watchPath, DateTime? nowUtc = null)
-        => _projectUsage.BuildSummary(projectName, watchPath, nowUtc);
+        => _busProjectUsage.BuildSummary(projectName, watchPath, nowUtc);
 
     public ProjectTokenHeatmap ProjectHeatmap(string projectName, string watchPath, int days, DateTime? nowUtc = null)
-        => _projectUsage.BuildHeatmap(projectName, watchPath, days, nowUtc);
+        => _busProjectUsage.BuildHeatmap(projectName, watchPath, days, nowUtc);
 
     public IReadOnlyList<ProjectExpensiveJob> ProjectExpensiveJobs(string projectName, string watchPath, int limit)
-        => _projectUsage.BuildExpensiveJobs(projectName, watchPath, limit);
+        => _busProjectUsage.BuildExpensiveJobs(projectName, watchPath, limit);
 
     public ProjectJobTokenDetail? ProjectJobDetail(string projectName, string watchPath, string jobId)
-        => _projectUsage.BuildJobDetail(projectName, watchPath, jobId);
+        => _busProjectUsage.BuildJobDetail(projectName, watchPath, jobId);
 
     public TokenSummary LifetimeSummary(string projectName, string watchPath)
-        => _summary.Summarize(projectName, watchPath);
+        => _busSummary.Summarize(projectName);
 
     public TokenSummaryAggregate WorkspaceAggregate(IEnumerable<(string Name, string WatchPath)> projects)
-        => _summary.Aggregate(projects);
+        => _busSummary.Aggregate(projects, _summaryCache);
 
     public Dictionary<string, JobTokenSummary> WorkspacePerJob(string watchPath)
-        => _summary.SummarizePerJob(watchPath);
+    {
+        // The kanban-card token bubble keys off jobId, so it can fold every
+        // project's bus into one map. Workspace projects share the same bus
+        // store so we look up by the project-name index we already keep on
+        // disk through the watch-path resolver. We do not have project-name
+        // here; the legacy reader used watchPath because orchestrator.jsonl
+        // was scoped that way. The bus is keyed by project slug, so we read
+        // every project that maps to this watchPath. The current callers
+        // pass the watchPath of a single project, so we resolve its name
+        // through the configured watch entries.
+        var workspace = _config["TaskRepository"];
+        if (string.IsNullOrWhiteSpace(workspace) || string.IsNullOrWhiteSpace(watchPath))
+            return new Dictionary<string, JobTokenSummary>(StringComparer.Ordinal);
+        var projectName = ResolveProjectName(watchPath!) ?? Path.GetFileName(watchPath!.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        return _busSummary.SummarizePerJob(projectName);
+    }
 
     public TokenTimeline WorkspaceTimeline(IEnumerable<(string Name, string WatchPath)> projects, int windowHours, int bucketMinutes, DateTime? nowUtc = null)
-        => _timeline.Build(projects, windowHours, bucketMinutes, nowUtc);
+        => _busTimeline.Build(projects, windowHours, bucketMinutes, nowUtc);
 
     public AdHocUsageAggregate AdHocAggregate(DateTime? since = null)
         => _adHoc.Aggregate(since);
+
+    /// <summary>
+    /// Best-effort lookup of the project slug for a watch path. Reads the
+    /// <c>WatchedPaths</c> config the same way <see cref="JobScannerService"/>
+    /// does; falls back to the folder name if nothing matches.
+    /// </summary>
+    private string? ResolveProjectName(string watchPath)
+    {
+        var section = _config.GetSection("WatchedPaths");
+        foreach (var child in section.GetChildren())
+        {
+            var path = child["Path"];
+            var name = child["Name"];
+            if (string.IsNullOrWhiteSpace(path) || string.IsNullOrWhiteSpace(name)) continue;
+            if (string.Equals(path, watchPath, StringComparison.OrdinalIgnoreCase)) return name;
+        }
+        return null;
+    }
 }

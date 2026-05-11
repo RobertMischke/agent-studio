@@ -167,6 +167,21 @@ public class TokenSummaryService
     /// </summary>
     public TokenSummaryAggregate Aggregate(IEnumerable<(string Name, string WatchPath)> projects)
     {
+        var perProject = projects.Select(p => (p.Name, Summary: Summarize(p.Name, p.WatchPath))).ToList();
+        return AggregateSummaries(perProject, _cache);
+    }
+
+    /// <summary>
+    /// Pure overload: fold a pre-computed list of (project, summary) pairs
+    /// into the workspace aggregate. Both the legacy reader and the
+    /// Phase-4 bus-backed reader (<c>BusBackedTokenSummaryReader</c>) call
+    /// this so the workspace fold is one piece of code regardless of
+    /// where the per-project summaries came from.
+    /// </summary>
+    public static TokenSummaryAggregate AggregateSummaries(
+        IReadOnlyList<(string Name, TokenSummary Summary)> projectSummaries,
+        TokenSummaryCacheStore? cache = null)
+    {
         var perProject = new List<TokenSummaryByProject>();
         var perModel = new Dictionary<string, ModelBucket>(StringComparer.OrdinalIgnoreCase);
         long totalInput = 0, totalOutput = 0, totalCacheRead = 0, totalCacheCreate = 0;
@@ -175,10 +190,9 @@ public class TokenSummaryService
         bool allPriced = true;
         bool anyPricedAtAll = false;
 
-        foreach (var (name, watchPath) in projects)
+        foreach (var (name, summary) in projectSummaries)
         {
             projectCount++;
-            var summary = Summarize(name, watchPath);
             totalEntries += summary.OrchestratorEntries;
             totalCalls += summary.OrchestratorLlmCalls;
             totalInput += summary.TotalInputTokens;
@@ -249,7 +263,7 @@ public class TokenSummaryService
             Disclaimer: DefaultDisclaimer);
 
         // Persist for next-app-start display. Best-effort.
-        try { _cache?.Write(aggregate); } catch { /* swallow; tolerant by design */ }
+        try { cache?.Write(aggregate); } catch { /* swallow; tolerant by design */ }
 
         return aggregate;
     }
