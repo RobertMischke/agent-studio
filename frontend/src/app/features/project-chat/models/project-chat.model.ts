@@ -58,3 +58,15 @@ export interface ProjectChatTurnResponse {
   project: string;
   turn: ProjectChatTurn;
 }
+
+/**
+ * Returned by /api/projects/{project}/chat/stats. Drives the
+ * step-load panel headline ("47,238 messages total, you are viewing
+ * 1,000 of them, going back to 2026-04-15").
+ */
+export interface ProjectChatStatsResponse {
+  project: string;
+  totalCount: number;
+  oldestTs: string | null;
+  newestTs: string | null;
+}

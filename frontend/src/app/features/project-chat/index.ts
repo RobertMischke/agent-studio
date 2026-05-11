@@ -7,4 +7,5 @@ export type {
   ProjectChatSearchHit,
   ProjectChatSearchResponse,
   ProjectChatTurnResponse,
+  ProjectChatStatsResponse,
 } from './models/project-chat.model';

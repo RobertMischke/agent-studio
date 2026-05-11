@@ -18,6 +18,7 @@ import { JobService } from '../../../../services/job.service';
 import type { ProjectChatSearchHit, ProjectChatTurn } from '../../../../features/project-chat';
 import { markdownToHtml } from '../../../../components/markdown-utils';
 import { ProjectChatRailComponent } from '../project-chat-rail/project-chat-rail.component';
+import { decideLoadAction, formatLoadedSummary } from './load-strategy';
 
 /**
  * Slice D virtualised chat list. Replaces the previous "render every
@@ -76,6 +77,20 @@ export class ProjectChatListComponent implements OnInit, OnDestroy {
   readonly rowHeightPx = 120; // estimate; tuned for typical short turns
   readonly bufferRows = 50;
 
+  // ── Step-load panel state ─────────────────────────────────────────
+  /**
+   * Past this many loaded turns, the silent on-scroll backfill stops
+   * and the step-load panel takes over. Operator decides how much
+   * further to go — see prompt's "scroll for days/weeks must not freeze
+   * the browser" requirement.
+   */
+  readonly deepHistoryThreshold = 1000;
+  /** Confirm before doing a "jump to start" when total exceeds this. */
+  readonly jumpToStartConfirmAt = 2000;
+  readonly totalCount = signal<number | null>(null);
+  readonly oldestServerTs = signal<string | null>(null);
+  readonly jumpDate = signal('');
+
   readonly flashTurnId = signal<string | null>(null);
   private flashTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -90,6 +105,21 @@ export class ProjectChatListComponent implements OnInit, OnDestroy {
   readonly bottomSpacerPx = computed(() => {
     const remaining = this.allTurns().length - this.visibleEnd();
     return Math.max(0, remaining) * this.rowHeightPx;
+  });
+
+  /** Threshold reached + still more older history available + not searching. */
+  readonly showStepLoadPanel = computed(() => {
+    if (this.mode() !== 'live') return false;
+    if (!this.hasMoreOlder()) return false;
+    return this.allTurns().length >= this.deepHistoryThreshold;
+  });
+
+  /** Headline rendered inside the step-load panel. Pure-function call
+   *  keeps the wording locked by `load-strategy.spec.ts`. */
+  readonly stepLoadSummary = computed(() => {
+    const all = this.allTurns();
+    const oldest = all.length ? all[0].ts : this.oldestServerTs();
+    return formatLoadedSummary(all.length, this.totalCount(), oldest);
   });
 
   private readonly jobService = inject(JobService);
@@ -141,11 +171,22 @@ export class ProjectChatListComponent implements OnInit, OnDestroy {
     this.hasMoreOlder.set(true);
     this.loadingInitial.set(true);
     this.errorMsg.set(null);
+    this.totalCount.set(null);
+    this.oldestServerTs.set(null);
     const proj = this.project();
     if (!proj) {
       this.loadingInitial.set(false);
       return;
     }
+    // Stats is best-effort: drives the panel headline. Failure should
+    // not abort the chat load itself.
+    this.jobService.getProjectChatStats(proj).subscribe({
+      next: (resp) => {
+        this.totalCount.set(resp.totalCount ?? null);
+        this.oldestServerTs.set(resp.oldestTs ?? null);
+      },
+      error: () => { /* tolerate; panel falls back to loaded-only counts */ },
+    });
     this.jobService.scrollProjectChat(proj, { limit: 50 }).subscribe({
       next: (resp) => {
         // The /scroll tail returns reverse-chronological; flip so the
@@ -168,44 +209,65 @@ export class ProjectChatListComponent implements OnInit, OnDestroy {
     });
   }
 
-  private loadOlder(): void {
-    if (this.loadingOlder() || !this.hasMoreOlder()) return;
-    const proj = this.project();
-    if (!proj) return;
-    const all = this.allTurns();
-    if (all.length === 0) return;
-    this.loadingOlder.set(true);
-    const oldest = all[0].ts;
-    const host = this.scrollHost.nativeElement;
-    const beforeHeight = host.scrollHeight;
-    const beforeTop = host.scrollTop;
-    this.jobService.scrollProjectChat(proj, { before: oldest, limit: 50 }).subscribe({
-      next: (resp) => {
-        const fetched = [...(resp.turns ?? [])].reverse(); // chronological
-        const fresh = fetched.filter((t) => !this.seenIds.has(t.turnId));
-        for (const t of fresh) this.seenIds.add(t.turnId);
-        if (fresh.length === 0) this.hasMoreOlder.set(false);
-        this.allTurns.update((curr) => [...fresh, ...curr]);
-        this.loadingOlder.set(false);
-        if (resp.turns && resp.turns.length < 50) this.hasMoreOlder.set(false);
-        // Preserve scroll position relative to the previously-top item.
-        queueMicrotask(() => {
-          const afterHeight = host.scrollHeight;
-          host.scrollTop = beforeTop + (afterHeight - beforeHeight);
-          this.recomputeWindow();
-        });
-      },
-      error: (err) => {
-        this.errorMsg.set(err?.error?.error || err?.message || 'Failed to load older turns');
-        this.loadingOlder.set(false);
-      },
+  /**
+   * Internal one-page backfill. Returns the number of fresh turns that
+   * actually landed in the list (deduped by id) so the step-load loop
+   * can decide whether to keep paging.
+   */
+  private loadOlder(pageSize = 50): Promise<number> {
+    return new Promise((resolve) => {
+      if (this.loadingOlder() || !this.hasMoreOlder()) { resolve(0); return; }
+      const proj = this.project();
+      if (!proj) { resolve(0); return; }
+      const all = this.allTurns();
+      if (all.length === 0) { resolve(0); return; }
+      this.loadingOlder.set(true);
+      const oldest = all[0].ts;
+      const host = this.scrollHost.nativeElement;
+      const beforeHeight = host.scrollHeight;
+      const beforeTop = host.scrollTop;
+      this.jobService.scrollProjectChat(proj, { before: oldest, limit: pageSize }).subscribe({
+        next: (resp) => {
+          const fetched = [...(resp.turns ?? [])].reverse(); // chronological
+          const fresh = fetched.filter((t) => !this.seenIds.has(t.turnId));
+          for (const t of fresh) this.seenIds.add(t.turnId);
+          if (fresh.length === 0) this.hasMoreOlder.set(false);
+          this.allTurns.update((curr) => [...fresh, ...curr]);
+          this.loadingOlder.set(false);
+          if (resp.turns && resp.turns.length < pageSize) this.hasMoreOlder.set(false);
+          // Preserve scroll position relative to the previously-top item.
+          queueMicrotask(() => {
+            const afterHeight = host.scrollHeight;
+            host.scrollTop = beforeTop + (afterHeight - beforeHeight);
+            this.recomputeWindow();
+            resolve(fresh.length);
+          });
+        },
+        error: (err) => {
+          this.errorMsg.set(err?.error?.error || err?.message || 'Failed to load older turns');
+          this.loadingOlder.set(false);
+          resolve(0);
+        },
+      });
     });
   }
 
   onScroll(): void {
     this.recomputeWindow();
     const host = this.scrollHost.nativeElement;
-    if (host.scrollTop < 200) this.loadOlder();
+    const isNearTop = host.scrollTop < 200;
+    const action = decideLoadAction({
+      loadedCount: this.allTurns().length,
+      hasMoreOlder: this.hasMoreOlder(),
+      isLoading: this.loadingOlder(),
+      isNearTop,
+      threshold: this.deepHistoryThreshold,
+    });
+    if (action === 'continue-backfill') {
+      void this.loadOlder();
+    }
+    // 'show-panel' is implicit via showStepLoadPanel() in the template;
+    // there is nothing to do here. 'no-op' speaks for itself.
   }
 
   private recomputeWindow(): void {
@@ -334,6 +396,86 @@ export class ProjectChatListComponent implements OnInit, OnDestroy {
     return (snippet || '')
       .replace(/<b>/g, '<mark>')
       .replace(/<\/b>/g, '</mark>');
+  }
+
+  // ── Step-load actions ─────────────────────────────────────────────
+  /**
+   * Page repeatedly until the oldest loaded turn predates `targetTs`,
+   * or the server says there is no more older history, or we hit the
+   * count safety cap. Each page is `loadOlder(200)`; scroll-position
+   * preservation is handled by `loadOlder` itself.
+   */
+  async loadBackTo(targetTs: string, safetyCap = 5000): Promise<void> {
+    const targetMs = new Date(targetTs).getTime();
+    if (!Number.isFinite(targetMs)) return;
+    let safety = 0;
+    while (this.hasMoreOlder()) {
+      const all = this.allTurns();
+      const oldestLoaded = all.length ? new Date(all[0].ts).getTime() : Number.POSITIVE_INFINITY;
+      if (oldestLoaded <= targetMs) break;
+      if (safety++ > Math.ceil(safetyCap / 200)) break;
+      const fresh = await this.loadOlder(200);
+      if (fresh === 0) break;
+    }
+  }
+
+  /** Page repeatedly until we have at least `targetCount` more turns or
+   *  the server reports end-of-history. */
+  async loadMoreMessages(targetExtra: number): Promise<void> {
+    const startCount = this.allTurns().length;
+    let safety = 0;
+    while (this.hasMoreOlder()) {
+      if (this.allTurns().length - startCount >= targetExtra) break;
+      if (safety++ > Math.ceil(targetExtra / 200) + 1) break;
+      const remaining = targetExtra - (this.allTurns().length - startCount);
+      const page = Math.max(50, Math.min(200, remaining));
+      const fresh = await this.loadOlder(page);
+      if (fresh === 0) break;
+    }
+  }
+
+  /** "Another day / week / month" — shifts the target backwards from
+   *  the currently-oldest loaded turn by the given delta. */
+  stepBackByDays(days: number): void {
+    const all = this.allTurns();
+    if (all.length === 0) return;
+    const oldestMs = new Date(all[0].ts).getTime();
+    if (!Number.isFinite(oldestMs)) return;
+    const target = new Date(oldestMs - days * 24 * 3600 * 1000).toISOString();
+    void this.loadBackTo(target);
+  }
+
+  /** "+N messages" step. */
+  stepBackByCount(count: number): void {
+    void this.loadMoreMessages(count);
+  }
+
+  /** "Jump to date…" — load every turn from the chosen day onward. */
+  jumpToDate(): void {
+    const raw = this.jumpDate();
+    if (!raw) return;
+    // <input type="date"> gives "YYYY-MM-DD"; treat as start-of-day UTC.
+    const target = new Date(raw + 'T00:00:00Z').toISOString();
+    void this.loadBackTo(target);
+  }
+
+  /** "Jump to start" — irreversibly load everything. Confirmed when
+   *  total exceeds the soft threshold so a misclick on a giant chat
+   *  cannot freeze the UI. */
+  jumpToStart(): void {
+    const total = this.totalCount();
+    if (total != null && total > this.jumpToStartConfirmAt) {
+      const ok = typeof confirm === 'function'
+        ? confirm(`Load all ${total.toLocaleString('en-US')} messages? This may take a moment.`)
+        : true;
+      if (!ok) return;
+    }
+    void this.loadMoreMessages(Number.MAX_SAFE_INTEGER);
+  }
+
+  onJumpDateInput(event: Event): void {
+    const v = (event.target as HTMLInputElement | null)?.value ?? '';
+    this.jumpDate.set(v);
   }
 
   formatTs(iso: string): string {

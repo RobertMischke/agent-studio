@@ -35,6 +35,89 @@
       data-testid="pchat-scroll"
       (scroll)="onScroll()">
       @if (mode() === 'live') {
+        @if (showStepLoadPanel()) {
+          <section
+            class="pchat__step-panel"
+            data-testid="pchat-step-load-panel"
+            aria-label="Load more chat history">
+            <div class="pchat__step-summary" data-testid="pchat-step-summary">
+              {{ stepLoadSummary() }}
+            </div>
+            <div class="pchat__step-row">
+              <span class="pchat__step-label">Load more by time:</span>
+              <button
+                type="button"
+                class="pchat__step-btn"
+                data-testid="pchat-step-day"
+                title="Load one more day of history"
+                (click)="stepBackByDays(1)">
+                Another day
+              </button>
+              <button
+                type="button"
+                class="pchat__step-btn"
+                data-testid="pchat-step-week"
+                title="Load one more week of history"
+                (click)="stepBackByDays(7)">
+                Another week
+              </button>
+              <button
+                type="button"
+                class="pchat__step-btn"
+                data-testid="pchat-step-month"
+                title="Load one more month of history"
+                (click)="stepBackByDays(30)">
+                Another month
+              </button>
+            </div>
+            <div class="pchat__step-row">
+              <span class="pchat__step-label">Load more by count:</span>
+              <button
+                type="button"
+                class="pchat__step-btn"
+                data-testid="pchat-step-500"
+                (click)="stepBackByCount(500)">
+                +500 messages
+              </button>
+              <button
+                type="button"
+                class="pchat__step-btn"
+                data-testid="pchat-step-2000"
+                (click)="stepBackByCount(2000)">
+                +2000 messages
+              </button>
+            </div>
+            <div class="pchat__step-row">
+              <span class="pchat__step-label">Jump:</span>
+              <input
+                type="date"
+                class="pchat__step-date"
+                data-testid="pchat-step-date-input"
+                [value]="jumpDate()"
+                (input)="onJumpDateInput($event)" />
+              <button
+                type="button"
+                class="pchat__step-btn"
+                data-testid="pchat-step-jump-date"
+                [disabled]="!jumpDate()"
+                (click)="jumpToDate()">
+                Jump to date
+              </button>
+              <button
+                type="button"
+                class="pchat__step-btn pchat__step-btn--quiet"
+                data-testid="pchat-step-jump-start"
+                title="Load every message from the start of this chat"
+                (click)="jumpToStart()">
+                Jump to start
+              </button>
+            </div>
+            @if (loadingOlder()) {
+              <div class="pchat__step-loading" data-testid="pchat-step-loading">Loading…</div>
+            }
+          </section>
+        }
+
         <div
           class="pchat__spacer pchat__spacer--top"
           [style.height.px]="topSpacerPx()"></div>

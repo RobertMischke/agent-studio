@@ -5,7 +5,7 @@ import type { ClaudeSessionResponse } from '../features/claude';
 import type { CopilotModelCatalog, CliModelCatalog, CliUsageReport } from '../features/cli';
 import type { GitFileChange, GitStatus, JobCommitDetail } from '../features/git';
 import type { OrchestratorLogResponse, OrchestratorSessionResponse, OrchestratorChatResponse, OrchestratorChatTurn } from '../features/orchestrator';
-import type { ProjectChatScrollResponse, ProjectChatSearchResponse, ProjectChatTurnResponse } from '../features/project-chat';
+import type { ProjectChatScrollResponse, ProjectChatSearchResponse, ProjectChatTurnResponse, ProjectChatStatsResponse } from '../features/project-chat';
 import type { ProjectTokenUsageSummary, ProjectTokenHeatmap, ProjectExpensiveJobsResponse, ProjectJobTokenDetail } from '../features/project-token-usage';
 import type { RoadmapIntakeCandidate, RoadmapIntakeResponse, RoadmapIntakeConfirmResponse } from '../features/roadmap';
 import type { RunTimeline, RunCommitsResponse, RunFilesResponse, RunDiffResponse } from '../features/run-timeline';
@@ -775,6 +775,16 @@ export class JobService {
     return this.http.get<ProjectChatSearchResponse>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/chat/search`,
       { params }
+    );
+  }
+
+  /**
+   * Per-project chat stats: total message count, oldest / newest ts.
+   * Drives the step-load panel's "viewing N of M, going back to …" line.
+   */
+  getProjectChatStats(projectName: string) {
+    return this.http.get<ProjectChatStatsResponse>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/chat/stats`
     );
   }
 

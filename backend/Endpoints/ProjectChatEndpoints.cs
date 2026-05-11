@@ -68,6 +68,23 @@ public static class ProjectChatEndpoints
                 });
             });
 
+        group.MapGet("/stats",
+            (string project,
+             JobScannerService scanner,
+             ProjectChatStore store) =>
+            {
+                var entry = scanner.GetWatchPaths().FirstOrDefault(e => e.Name == project);
+                if (entry == null) return Results.NotFound(new { error = $"Unknown project '{project}'" });
+                var (total, oldest, newest) = store.Stats(entry.Path);
+                return Results.Ok(new
+                {
+                    project,
+                    totalCount = total,
+                    oldestTs = oldest?.ToString("o", CultureInfo.InvariantCulture),
+                    newestTs = newest?.ToString("o", CultureInfo.InvariantCulture)
+                });
+            });
+
         group.MapGet("/scroll",
             (string project, string? before, string? after, int? limit,
              JobScannerService scanner,

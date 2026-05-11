@@ -75,6 +75,7 @@
   border-radius: 8px;
   color: #e2e8f0;
   transition: background 0.4s ease;
+  contain: layout paint;
 }
 .pchat__turn--user {
   background: rgba(99,102,241,0.18);
@@ -156,4 +157,67 @@
   border-radius: 2px;
 }
 .pchat__spacer { width: 100%; }
-  
+
+.pchat__step-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 6px 0 10px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  color: #cbd5e1;
+  font-size: 12px;
+  contain: layout paint;
+}
+.pchat__step-summary {
+  color: #e2e8f0;
+  font-size: 12px;
+}
+.pchat__step-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.pchat__step-label {
+  color: #94a3b8;
+  font-size: 11px;
+  min-width: 130px;
+}
+.pchat__step-btn {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  color: #e2e8f0;
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  transition: background 0.15s ease;
+}
+.pchat__step-btn:hover { background: rgba(124,58,237,0.18); }
+.pchat__step-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.pchat__step-btn--quiet {
+  background: transparent;
+  color: #94a3b8;
+}
+.pchat__step-date {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 6px;
+  color: #e2e8f0;
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 6px;
+  color-scheme: dark;
+}
+.pchat__step-loading {
+  color: #94a3b8;
+  font-size: 11px;
+  font-style: italic;
+}

@@ -150,6 +150,52 @@ public sealed class ProjectChatStore
         return n;
     }
 
+    /// <summary>
+    /// Stats used by the step-load panel: total count + oldest/newest
+    /// timestamps. Counts are filesystem-only; the timestamps require
+    /// reading one turn from the earliest and latest month folder.
+    /// </summary>
+    public (int Total, DateTime? OldestTs, DateTime? NewestTs) Stats(string projectFolder)
+    {
+        var chatRoot = ProjectChatPaths.ChatRoot(projectFolder);
+        if (!Directory.Exists(chatRoot)) return (0, null, null);
+
+        int total = 0;
+        DateTime? oldest = null;
+        DateTime? newest = null;
+
+        foreach (var month in ProjectChatPaths.EnumerateMonthFolders(chatRoot))
+        {
+            var files = Directory.EnumerateFiles(month, "*.md").ToList();
+            total += files.Count;
+            if (files.Count == 0) continue;
+
+            if (oldest == null)
+            {
+                // Earliest month folder seen — read every file to find the
+                // chronological minimum (filenames are turn-ids, not sorted by ts).
+                foreach (var f in files)
+                {
+                    var t = ReadFile(f);
+                    if (t == null) continue;
+                    if (oldest == null || t.Ts < oldest) oldest = t.Ts;
+                }
+            }
+
+            // Always update newest from the last-seen non-empty month.
+            DateTime? monthNewest = null;
+            foreach (var f in files)
+            {
+                var t = ReadFile(f);
+                if (t == null) continue;
+                if (monthNewest == null || t.Ts > monthNewest) monthNewest = t.Ts;
+            }
+            if (monthNewest.HasValue) newest = monthNewest;
+        }
+
+        return (total, oldest, newest);
+    }
+
     private static IEnumerable<string> EnumerateMonthFoldersDescending(string chatRoot)
     {
         var dirs = Directory.EnumerateDirectories(chatRoot)
