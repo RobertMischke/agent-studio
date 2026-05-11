@@ -1,9 +1,14 @@
 # Token Aggregation — Audit and Consolidation Plan
 
 > **Status (2026-05-11):** Audit + Phase 2 (bus emission for ad-hoc calls) +
-> Phase 3 (interface skeleton) + Phase 6 (drift rule) landed in this commit.
-> Phases 4 (legacy-service migration to shims) and 5 (parity tests) are queued
-> as follow-up tasks. See "Migration order" below.
+> Phase 3 (interface skeleton) + Phase 6 (drift rule) shipped first. The
+> follow-up pass landed the first Phase-4 read path
+> (`BusBackedAdHocUsageReader`) and its Phase-5 parity test
+> (`AdHocUsageBusParityTests`) proving that the bus-backed reader and the
+> legacy `adhoc-usage.jsonl` reader produce byte-identical aggregates for
+> records written through the recorder. The remaining three Phase-4 surfaces
+> (`TokenSummaryService`, `WorkspaceTokensTimelineService`,
+> `ProjectTokenUsageService`) are queued as follow-up tasks.
 
 ## Why this document exists
 
@@ -97,12 +102,19 @@ this document. The remaining phases are:
 Land one shim at a time, in this order, so each migration is independently
 verifiable:
 
-1. `AdHocUsageService` (read path). Today its records are workspace-wide and
-   have no project scope, so the bus path requires a `project: "(workspace)"`
-   convention or a workspace-scoped bus folder. The write path
-   (`AdHocUsageRecorder`) stays because it is the legacy disk format readers
-   of `adhoc-usage.jsonl` expect, but Phase 2 already mirrors every record
-   onto the bus, so the read path can switch.
+1. **Landed.** `AdHocUsageService` read path. `BusBackedAdHocUsageReader`
+   queries `support:adhoc` / `kind=token-usage` messages from the
+   `_workspace` bus projection and folds them through the same pure
+   aggregator function as the JSONL reader. The `AdHocUsageRecorder`
+   emits to the workspace scope (`project=null`) and stamps the bus
+   message's `CreatedAt` with the record's `Ts` so multi-day rollups
+   match. The parity test
+   [`AdHocUsageBusParityTests`](../backend.Tests/AdHocUsageBusParityTests.cs)
+   drives nine realistic records (every named source, mixed days, mixed
+   models including one unpriced) and asserts byte-identical output.
+   The `AdHocUsageService.Aggregate` source/model ordering picked up
+   stable tie-breakers in the same change so insertion-order differences
+   between JSONL and bus paths can no longer leak into the output.
 2. `TokenSummaryService.Summarize` (lifetime per-project totals + per-model
    split). Simplest of the orchestrator-log readers; pure-function fold.
 3. `WorkspaceTokensTimelineService.Build`. Bucketing logic is straightforward
