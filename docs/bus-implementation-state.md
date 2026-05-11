@@ -2,7 +2,7 @@
 
 > **Maintained by agents.** Update this file whenever you change the bus implementation, wire a new bridge, or discover a gap. The formal contract is `agent-message-bus.md`; this file records the *current reality* vs. what the spec promises.
 >
-> Last updated: 2026-05-11
+> Last updated: 2026-05-11 (roadmap-implementation pass: latency + context-window tracking + aggregation-cache + unified-timeline + busMessageAdded push)
 
 ---
 
@@ -32,15 +32,16 @@
 
 | Gap | Impact | Notes |
 |-----|--------|-------|
-| **No SignalR push for bus events** | UI must poll; no live updates | Documented in spec Section 3.2 but not wired to `JobHub.cs` |
-| **No token aggregation endpoint** | Can't quickly sum tokens by model/participant/day | Need `/api/bus/{project}/token-aggregate` or query parameter on /summary |
-| **No context-window tracking** | Can't see how large the context was, what was loaded | Needs new `contextWindow` field on `kind:token-usage` messages |
-| **No latency tracking** | Can't see TTFB or total response time per turn | Needs new `latency` field on token-usage or a new `kind:latency` |
-| **No unified chat aggregation** | Three systems (bus, ProjectChat, OrchestratorChat) not merged into one timeline | Cross-system correlation is manual |
-| **No unified TypeScript model** | Frontend has three separate message shapes | Needs adapter/mapper to a common `TimelineEntry` |
-| **No real-time bus subscription** | No `/api/bus/{project}/stream` or SSE endpoint | All consumers are polling |
+| ~~No SignalR push~~ | ✅ DONE | `busMessageAdded` broadcast from `Program.cs` on every successful append; frontend client not yet adopted (no SignalR client in Angular today) |
+| ~~No token aggregation endpoint~~ | ✅ DONE | `GET /api/bus/{project}/token-aggregate?since=&until=` backed by `BusAggregationCache` (O(1) on cache hit) |
+| ~~No context-window tracking~~ | ✅ DONE | Optional `tokens.contextWindow` field; populated by `ClaudeUsageParser` + `CliModelRegistry` |
+| ~~No latency tracking~~ | ✅ DONE | Optional `latency` field on envelope; `OrchestratorRunner` captures `requestedAt`/`completedAt` |
+| ~~No unified TS model~~ | ✅ DONE | `TimelineEntry` + adapters in `frontend/src/app/models/timeline-entry.model.ts` |
+| **No real-time bus subscription (frontend)** | Frontend still polls; `busMessageAdded` is broadcast but no Angular consumer | Frontend doesn't import `@microsoft/signalr` today; add when the panel adopts streaming |
 | **No workspace-wide message index** | Can't search "all messages with 'timeout' across all projects" | Per-project chat FTS only |
 | **Participant graph not computed** | Schema supports `replyToId`/`correlationId` graph; no service builds it | Planned for Project Screen observability panel |
+| **`contextWindow.systemPromptTokens` / `conversationTokens` split** | Schema supports it; runner does not populate yet | Needs cross-turn cache-write aggregation; deferred |
+| **`latency.firstTokenAt` on streaming path** | One-shot orchestrator path is end-of-turn only; streaming task agent has the data via `OutputDelta` | Hook required in `ClaudeEventAdapter` → runner |
 
 ---
 
