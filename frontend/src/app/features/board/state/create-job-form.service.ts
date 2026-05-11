@@ -5,6 +5,7 @@ import type { CliModelInfo } from '../../../features/cli';
 import type { PendingAttachment } from '../components/create-job-dialog/create-job-dialog.component';
 import { JobService } from '../../../services/job.service';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
+import { CLIENT_ID } from '../../../services/client-id.interceptor';
 
 /**
  * Cycle 10a board-feature service: owns every field the create-job
@@ -260,7 +261,7 @@ export class CreateJobFormService {
         form.append('file', att.file, att.file.name || `${att.alt}.png`);
         const url = `/api/jobs/${encodeURIComponent(jobId)}/attachments`
           + (watchPath ? `?watchPath=${encodeURIComponent(watchPath)}` : '');
-        const res = await fetch(url, { method: 'POST', body: form });
+        const res = await fetch(url, { method: 'POST', body: form, headers: { 'X-Client-Id': CLIENT_ID } });
         if (!res.ok) {
           this.errorDialog.show(new Error(`Upload failed (${res.status}) for ${att.file.name || att.alt}`), {
             title: 'Attachment upload failed',
