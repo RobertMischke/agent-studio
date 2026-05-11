@@ -67,6 +67,18 @@ The rule of thumb:
 
 This lookup section matters because users may work both through the orchestrator and directly in Codex, Claude Code, Copilot, or Gemini from VS Code. Managed taskboard runs can attach selected skills explicitly; direct CLI sessions rely on the watched project's README or AGENTS.md lookup section. Native CLI skill exports may come later, but the Markdown lookup is the shared baseline.
 
+### Central skill library
+
+The active skill set lives under [`.agents/skills/`](.agents/skills/README.md). Today:
+
+| Skill | Read when |
+|-------|-----------|
+| [**Job API**](.agents/skills/job-api/SKILL.md) | The task includes creating, moving, reissuing, archiving, or bulk-triaging jobs via HTTP. Required reading before any scripted board mutation; covers the `watchPath`-quirk, `X-Client-Id` header, lane vocabulary, and ready-to-use Node templates for create / move-state / move-to-top / triage. Examples of "this applies": "lege einen Bug-Job an", "schick die Open-Items zurück nach Ready", "räum die Failed-Pickup-Lane auf". |
+| [Regenerate README](.agents/skills/regenerate-readme/SKILL.md) | A load-bearing change requires a README rewrite. |
+| [Runtime log analysis](.agents/skills/runtime-log-analysis/SKILL.md) | Inspecting backend / runner / CLI logs after an incident. |
+
+The library is for **every** CLI driving this repo - Claude Code, Codex, Copilot, Gemini. If you write a one-off shell snippet to move a job, you missed the Job API skill; copy the Node template from [`scripts/`](.agents/skills/job-api/scripts) instead.
+
 When changing skill behavior, keep [docs/architecture-decisions.md](docs/architecture-decisions.md) in sync if the change affects this boundary.
 
 ## Stable update policy
