@@ -328,7 +328,7 @@ Successful CLI runs move from `3-progress` to `4-auto-review` through applicatio
 
 ### Job organization rule: API first
 
-Agents must organize jobs through the application API, not by directly creating, moving, deleting, or reordering folders in `agent-taskboard-workspace/projects/<projectKey>/`.
+Agents must organize jobs through the application API, not by directly creating, moving, deleting, or reordering folders in `agent-taskboard-workspace/projects/<projectKey>/`. This applies to **every agent surface**: the orchestrator-managed CLI runs, direct-from-VS-Code Codex / Claude Code / Copilot / Gemini sessions, and any ad-hoc shell session a human or LLM drives.
 
 Use:
 
@@ -336,9 +336,16 @@ Use:
 - `POST /api/jobs` with `CreateJobRequest` to create jobs.
 - `POST /api/jobs/{jobId}/move?watchPath=...` to move jobs.
 - `POST /api/jobs/reorder` to reorder jobs.
+- `POST /api/jobs/{jobId}/move-to-top?watchPath=...` to promote a queued job.
+- `POST /api/jobs/{jobId}/change-project?watchPath=...` to relocate a job between watched workspaces.
 - `DELETE /api/jobs/{jobId}?watchPath=...` to delete jobs.
+- `PUT /api/jobs/{jobId}/state?watchPath=...` plus the other `PUT /api/jobs/{jobId}/*` field-edit endpoints for content changes.
 
-Direct filesystem changes are only for backend implementation, migrations, recovery tasks, and tests that intentionally exercise the filesystem contract. Normal planning and queue management must go through the API so validation, ownership, live updates, and the future Task Access layer stay authoritative.
+**Forbidden, even as a one-shot convenience:** `mv`, `rm`, `cp`, `mkdir`, `Move-Item`, `Remove-Item`, `Rename-Item`, or any other shell / filesystem command against a slug folder under `agent-taskboard-workspace/projects/<projectKey>/<lane>/`. Editing `state` inside a `job.json` by hand to "fix" a lane mismatch is the same bypass and is also forbidden. Filesystem state and the in-memory index diverge silently when these run, which is exactly what produced the 2026-05-09 zombie folder + 409 conflict. The architecture test [`backend.Tests/Architecture/JobFolderAccessIsolationTest.cs`](backend.Tests/Architecture/JobFolderAccessIsolationTest.cs) catches code-side bypasses; the LLM behavioural side is this rule.
+
+If you need an operation the API does not expose (currently: batch restore / batch move; archived-folder content reads after archive sweep), surface the gap as a queued task rather than reaching past the API. Bulk operations are explicitly an open follow-up - see the API completeness audit at the top of [`task-access-api-layer-extraction`](docs/architecture-decisions.md) (ADR-0024) and queue a new task if you hit a missing surface.
+
+Direct filesystem changes by application code itself are bounded by the same architecture test: only `backend/Services/Jobs/*`, `backend/Services/JobWatcherService.cs`, `backend/Services/Runner/CrashRecoveryService.cs`, and the `backend/Services/TaskAccess/` layer (today only the contract; phases 2-4 land the implementation) may construct lane folder paths or call `Directory.Move` / `Directory.Delete`. Everything else - endpoints, hosted services, analysis services - goes through the typed API. Backend migrations, recovery code paths, and tests that intentionally exercise the filesystem contract live behind that boundary; new direct-access call sites trip the architecture test on the way in.
 
 See `docs/filesystem-contract.md` for full details.
 
