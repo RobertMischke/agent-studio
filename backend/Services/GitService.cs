@@ -89,19 +89,22 @@ public record GitHygieneStatus
 }
 
 /// <summary>
-/// Per-job hygiene overlay: did the platform stamp a commit on the job
-/// (<see cref="JobInfoCommitPresent"/>), and does the job's lane plus the
-/// current working tree look like accepted task work was left uncommitted
-/// (<see cref="AcceptedTaskUncommitted"/>)? The latter is the "dirty after
-/// accept" signal the reviewer should not be able to miss.
+/// Per-job hygiene overlay. Scope is intentionally narrow: it answers
+/// task-scoped questions only - did the platform stamp a commit on
+/// this job (<see cref="JobInfoCommitPresent"/>), and does this task
+/// (only when active) look like its accepted work was left
+/// uncommitted (<see cref="AcceptedTaskUncommitted"/>)? Repo-level
+/// signals (ahead of upstream, push pending, branch behind, untracked
+/// files in the repo root) live on the project-level
+/// <see cref="GitHygieneStatus"/> fields and are surfaced on a
+/// project-scoped UI surface, never on a per-task detail page.
 /// </summary>
 public record JobHygieneContext(
     string JobId,
     string State,
     bool JobInfoCommitPresent,
     string? StampedCommitSha,
-    bool AcceptedTaskUncommitted,
-    bool CommitUnpushed);
+    bool AcceptedTaskUncommitted);
 
 /// <summary>
 /// Thin wrapper around git CLI for the per-task Git view. Operates on the
@@ -269,12 +272,6 @@ public class GitService
             lane == JobStates.Archive;
         var acceptedUncommitted = isActiveJob && isPostProgress && project.IsRepo && project.IsDirty;
 
-        // "Committed but unpushed": a stamped SHA exists *and* the project
-        // has an upstream that is behind by at least one commit. With no
-        // upstream configured we can't tell - report false (UI shows the
-        // separate "no upstream" affordance via HasUpstream=false).
-        var commitUnpushed = jobCommitPresent && project.IsRepo && project.HasUpstream && project.Ahead > 0;
-
         return project with
         {
             Job = new JobHygieneContext(
@@ -282,8 +279,7 @@ public class GitService
                 State: info.State,
                 JobInfoCommitPresent: jobCommitPresent,
                 StampedCommitSha: info.Commit?.Sha,
-                AcceptedTaskUncommitted: acceptedUncommitted,
-                CommitUnpushed: commitUnpushed)
+                AcceptedTaskUncommitted: acceptedUncommitted)
         };
     }
 

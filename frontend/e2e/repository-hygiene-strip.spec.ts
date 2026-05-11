@@ -2,20 +2,21 @@ import { test, expect, Page } from '@playwright/test';
 import * as path from 'path';
 
 /**
- * Repository-hygiene strip - visible review/completed UI states.
+ * Per-task hygiene strip - visible review/completed UI states.
  *
- * The strip shows three signals on jobs in `4-auto-review`,
+ * The strip shows two task-scoped signals on jobs in `4-auto-review`,
  * `5-human-review`, `6-completed`, and `7-archive`:
  *  - whether the task carries a platform-owned commit stamp,
- *  - whether the working tree is dirty (accepted task work uncommitted),
- *  - whether the stamped commit is still ahead of the upstream
- *    (push pending).
+ *  - whether the working tree is dirty for the runner's active job
+ *    (accepted task work uncommitted).
+ *
+ * Repo-level signals (push pending, ahead of upstream, untracked files
+ * at the repo root) are explicitly NOT on this surface - they live on
+ * the project-level hygiene badge next to the project name. See the
+ * `task-detail-no-repo-level-hygiene-banners` task for the rationale.
  *
  * The endpoint surface is pure-read so we mock it directly with
- * `page.route` and screenshot each of the load-bearing states. Any
- * regression in the strip rendering will fail the visual assert below
- * (presence of testids) and leave a screenshot under the job's
- * `results/` folder for human review.
+ * `page.route` and screenshot each of the load-bearing states.
  */
 
 interface OutLine { timestamp: string; stream: string; text: string; }
@@ -43,7 +44,6 @@ interface HygieneShape {
     jobInfoCommitPresent: boolean;
     stampedCommitSha: string | null;
     acceptedTaskUncommitted: boolean;
-    commitUnpushed: boolean;
   } | null;
   error: string | null;
 }
@@ -82,7 +82,7 @@ function makeJobDetail(jobId: string, watchPath: string, state: string, hasCommi
   };
 }
 
-function makeHygiene(state: string, kind: 'clean-committed' | 'dirty-after-accept' | 'ahead-unpushed'): HygieneShape {
+function makeHygiene(state: string, kind: 'clean-committed' | 'dirty-after-accept' | 'committed-while-repo-ahead'): HygieneShape {
   const base: HygieneShape = {
     projectName: 'fixture',
     repoRoot: 'C:/fixtures/repo',
@@ -110,8 +110,7 @@ function makeHygiene(state: string, kind: 'clean-committed' | 'dirty-after-accep
         jobId: 'fixture-job', state,
         jobInfoCommitPresent: true,
         stampedCommitSha: 'abcdef1234567890abcdef1234567890abcdef12',
-        acceptedTaskUncommitted: false,
-        commitUnpushed: false
+        acceptedTaskUncommitted: false
       }
     };
   }
@@ -126,11 +125,15 @@ function makeHygiene(state: string, kind: 'clean-committed' | 'dirty-after-accep
         jobId: 'fixture-job', state,
         jobInfoCommitPresent: false,
         stampedCommitSha: null,
-        acceptedTaskUncommitted: true,
-        commitUnpushed: false
+        acceptedTaskUncommitted: true
       }
     };
   }
+  // 'committed-while-repo-ahead': the project has unpushed commits at
+  // the repo level, but the task itself is fine - it has a stamped
+  // commit and a clean tree. We assert here that the per-task strip
+  // does NOT surface the project-level "push pending" signal; the
+  // project-hygiene-badge does.
   return {
     ...base,
     ahead: 2,
@@ -138,8 +141,7 @@ function makeHygiene(state: string, kind: 'clean-committed' | 'dirty-after-accep
       jobId: 'fixture-job', state,
       jobInfoCommitPresent: true,
       stampedCommitSha: 'abcdef1234567890abcdef1234567890abcdef12',
-      acceptedTaskUncommitted: false,
-      commitUnpushed: true
+      acceptedTaskUncommitted: false
     }
   };
 }
@@ -289,7 +291,7 @@ test.describe('Repository hygiene - review/completed strip', () => {
     });
   });
 
-  test('clean committed task: ✓ task committed, ✓ tree clean, ✓ in sync', async ({ page }) => {
+  test('clean committed task: ✓ task committed, ✓ tree clean (no push icon on task surface)', async ({ page }) => {
     const target = TARGET;
     await installFixtureRoutes(page, target, '6-completed', true, makeHygiene('6-completed', 'clean-committed'));
 
@@ -301,7 +303,9 @@ test.describe('Repository hygiene - review/completed strip', () => {
     // lost — the tooltip carries the same wording as the old verbose row.
     await expect(page.getByTestId('hygiene-commit')).toHaveAttribute('title', /Task committed/i);
     await expect(page.getByTestId('hygiene-tree')).toHaveAttribute('title', /Working tree clean/i);
-    await expect(page.getByTestId('hygiene-push')).toHaveAttribute('title', /In sync/i);
+    // Push state is repo-level, never per-task: no push icon, no
+    // push-pending warning banner here regardless of upstream state.
+    await expect(page.getByTestId('hygiene-push')).toHaveCount(0);
     await expect(page.getByTestId('hygiene-warning-dirty-after-accept')).toHaveCount(0);
     await expect(page.getByTestId('hygiene-warning-unpushed')).toHaveCount(0);
     await captureStrip(page, 'clean-committed');
@@ -324,18 +328,21 @@ test.describe('Repository hygiene - review/completed strip', () => {
     await captureStrip(page, 'dirty-after-accept');
   });
 
-  test('ahead/unpushed state: ✓ committed but ↑ N ahead, push-pending warning visible', async ({ page }) => {
+  test('repo ahead of upstream: task-detail strip stays clean; project badge surfaces unpushed', async ({ page }) => {
     const target = TARGET;
-    await installFixtureRoutes(page, target, '6-completed', true, makeHygiene('6-completed', 'ahead-unpushed'));
+    await installFixtureRoutes(page, target, '6-completed', true, makeHygiene('6-completed', 'committed-while-repo-ahead'));
 
     await page.goto(`/?job=${encodeURIComponent(target.id)}&watchPath=${encodeURIComponent(target.watchPath)}`);
     await ensureProtocolPaneOpen(page);
     await expect(page.getByTestId('hygiene-strip')).toBeVisible({ timeout: 10_000 });
     await expect(page.getByTestId('hygiene-commit')).toHaveAttribute('title', /Task committed/i);
-    await expect(page.getByTestId('hygiene-push')).toHaveAttribute('title', /2 commits ahead/i);
-    await expect(page.getByTestId('hygiene-warning-unpushed')).toBeVisible();
+    // No per-task push icon and no push-pending banner: repo-level
+    // signal must NOT bleed onto a per-task surface.
+    await expect(page.getByTestId('hygiene-push')).toHaveCount(0);
+    await expect(page.getByTestId('hygiene-warning-unpushed')).toHaveCount(0);
+    // The project-level badge in the detail header still surfaces it.
     await expect(page.getByTestId('project-hygiene-badge')).toContainText(/unpushed/i);
-    await captureStrip(page, 'ahead-unpushed');
+    await captureStrip(page, 'repo-ahead');
   });
 
   test('hygiene strip is not rendered for in-progress jobs', async ({ page }) => {

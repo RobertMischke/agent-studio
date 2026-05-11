@@ -17,10 +17,6 @@
     background: rgba(249, 226, 175, 0.08);
   }
 
-  &--unpushed .hygiene-strip__warning--unpushed {
-    border-color: #fab387;
-  }
-
   &__icons {
     display: inline-flex;
     align-items: center;
@@ -78,11 +74,6 @@
     border-radius: 4px;
     background: rgba(249, 226, 175, 0.12);
     border-left: 3px solid #f9e2af;
-
-    &--unpushed {
-      background: rgba(250, 179, 135, 0.12);
-      border-left-color: #fab387;
-    }
 
     code {
       font-family: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;

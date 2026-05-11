@@ -1,8 +1,7 @@
 @if (visibleForState()) {
   <section class="hygiene-strip"
            [attr.data-testid]="'hygiene-strip'"
-           [class.hygiene-strip--dirty]="hygiene()?.job?.acceptedTaskUncommitted"
-           [class.hygiene-strip--unpushed]="hygiene()?.job?.commitUnpushed">
+           [class.hygiene-strip--dirty]="hygiene()?.job?.acceptedTaskUncommitted">
     <div class="hygiene-strip__icons" role="group" aria-label="Repository hygiene">
       <span class="hygiene-strip__icon"
             [class.hygiene-strip__icon--ok]="hygiene()?.job?.jobInfoCommitPresent"
@@ -20,15 +19,6 @@
               [attr.aria-label]="treeTooltip()"
               [title]="treeTooltip()">
           {{ h.isDirty ? '✱' : '■' }}
-        </span>
-        <span class="hygiene-strip__icon"
-              [class.hygiene-strip__icon--ok]="h.hasUpstream && h.ahead === 0"
-              [class.hygiene-strip__icon--warn]="h.hasUpstream && h.ahead > 0"
-              [class.hygiene-strip__icon--neutral]="!h.hasUpstream"
-              [attr.data-testid]="'hygiene-push'"
-              [attr.aria-label]="pushTooltip()"
-              [title]="pushTooltip()">
-          {{ pushIconChar(h) }}
         </span>
       } @else {
         <span class="hygiene-strip__icon hygiene-strip__icon--loading"
@@ -55,22 +45,5 @@
         </button>
       </div>
     }
-
-    @if (hygiene()?.job?.commitUnpushed) {
-      <div class="hygiene-strip__warning hygiene-strip__warning--unpushed"
-           data-testid="hygiene-warning-unpushed">
-        <span class="hygiene-strip__warning-icon" aria-hidden="true">↑</span>
-        <div class="hygiene-strip__warning-body">
-          <strong>Push pending.</strong>
-          The recorded task commit hasn't reached
-          <code>{{ hygiene()?.upstream }}</code> yet
-          ({{ hygiene()?.ahead }} commit{{ hygiene()?.ahead === 1 ? '' : 's' }}
-          ahead of upstream).
-          Push from your local checkout when you're ready — the platform
-          does not push automatically.
-        </div>
-      </div>
-    }
   </section>
 }
-  

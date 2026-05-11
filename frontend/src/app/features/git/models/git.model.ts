@@ -65,13 +65,19 @@ export interface GitHygieneStatus {
   error: string | null;
 }
 
+/**
+ * Per-task hygiene overlay. Task-scoped fields only - repo-level
+ * signals (ahead of upstream, push pending, untracked files in the
+ * repo root) live on the surrounding {@link GitHygieneStatus} fields
+ * and belong on the project-level surface, never on a per-task
+ * detail page.
+ */
 export interface JobHygieneContext {
   jobId: string;
   state: string;
   jobInfoCommitPresent: boolean;
   stampedCommitSha: string | null;
   acceptedTaskUncommitted: boolean;
-  commitUnpushed: boolean;
 }
 
 export interface JobCommitInfo {

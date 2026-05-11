@@ -147,7 +147,7 @@ async function installRoutes(page: Page) {
   await page.route(new RegExp(`/api/jobs/${idEsc}/claude-session(\\?|$)`), (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: 'null' }));
   await page.route(new RegExp(`/api/jobs/${idEsc}/git/hygiene(\\?|$)`), (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ projectName: PROJECT, isRepo: true, isDirty: false, hasUpstream: true, ahead: 0, behind: 0, job: { jobId: JOB_ID, state: '5-human-review', jobInfoCommitPresent: true, stampedCommitSha: COMMITS[2].sha, acceptedTaskUncommitted: false, commitUnpushed: false }, error: null }) }));
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ projectName: PROJECT, isRepo: true, isDirty: false, hasUpstream: true, ahead: 0, behind: 0, job: { jobId: JOB_ID, state: '5-human-review', jobInfoCommitPresent: true, stampedCommitSha: COMMITS[2].sha, acceptedTaskUncommitted: false }, error: null }) }));
   await page.route(new RegExp(`/api/jobs/${idEsc}/git/status(\\?|$)`), (route) =>
     route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ isRepo: true, branch: 'main', filesChanged: 0, totalAdded: 0, totalRemoved: 0, files: [], error: null }) }));
   await page.route(new RegExp(`/api/jobs/${idEsc}/commit(\\?|$)`), (route) =>

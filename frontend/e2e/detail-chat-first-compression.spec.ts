@@ -46,7 +46,6 @@ interface HygieneShape {
     jobInfoCommitPresent: boolean;
     stampedCommitSha: string | null;
     acceptedTaskUncommitted: boolean;
-    commitUnpushed: boolean;
   } | null;
   error: string | null;
 }
@@ -110,8 +109,7 @@ function makeHygiene(state: string): HygieneShape {
       jobId: TARGET.id, state,
       jobInfoCommitPresent: true,
       stampedCommitSha: 'abcdef1234567890abcdef1234567890abcdef12',
-      acceptedTaskUncommitted: false,
-      commitUnpushed: false
+      acceptedTaskUncommitted: false
     },
     error: null
   };
@@ -191,14 +189,16 @@ test.describe('Detail page chat-first compression — Slice 1', () => {
     });
   });
 
-  test('hygiene strip renders as a 3-icon row with full-data tooltips', async ({ page }) => {
+  test('hygiene strip renders as a task-scoped icon row with full-data tooltips', async ({ page }) => {
     await installFixtureRoutes(page, '6-completed');
     await page.goto(`/?job=${encodeURIComponent(TARGET.id)}&watchPath=${encodeURIComponent(TARGET.watchPath)}`);
     await expect(page.getByTestId('hygiene-strip')).toBeVisible({ timeout: 10_000 });
 
     // Each icon is a small square (≤ 24px wide). The visible glyph is a
-    // single character; the data lives on the tooltip.
-    for (const id of ['hygiene-commit', 'hygiene-tree', 'hygiene-push'] as const) {
+    // single character; the data lives on the tooltip. Only task-scoped
+    // signals are surfaced here (commit + tree); repo-level state lives
+    // on the project-hygiene-badge near the project name.
+    for (const id of ['hygiene-commit', 'hygiene-tree'] as const) {
       const el = page.getByTestId(id);
       await expect(el).toBeVisible();
       const box = await el.boundingBox();
@@ -206,12 +206,13 @@ test.describe('Detail page chat-first compression — Slice 1', () => {
       expect(box!.width, `${id} should be a small icon, not a pill`).toBeLessThanOrEqual(28);
       expect(box!.height, `${id} should be a small icon`).toBeLessThanOrEqual(28);
     }
+    // hygiene-push is a repo-level concern and must not appear here.
+    await expect(page.getByTestId('hygiene-push')).toHaveCount(0);
 
     // No information loss: tooltips carry the full sentence the verbose
     // strip used to render in visible text.
     await expect(page.getByTestId('hygiene-commit')).toHaveAttribute('title', /Task committed/i);
     await expect(page.getByTestId('hygiene-tree')).toHaveAttribute('title', /Working tree clean/i);
-    await expect(page.getByTestId('hygiene-push')).toHaveAttribute('title', /In sync/i);
 
     // The strip itself is shorter than the previous multi-row card. The
     // 60 px ceiling is generous: the icon row is ~24 px plus margin.
@@ -315,7 +316,9 @@ test.describe('Detail page chat-first compression — Slice 1', () => {
     const HOVERABLE: Array<{ testid: string; mustContain?: RegExp }> = [
       { testid: 'hygiene-commit',           mustContain: /Task committed|No task commit/i },
       { testid: 'hygiene-tree',             mustContain: /Working tree (clean|dirty)/i },
-      { testid: 'hygiene-push',             mustContain: /In sync|ahead|No upstream/i },
+      // hygiene-push removed: push-state is repo-level and lives on
+      // the project-hygiene-badge in the detail header, not on the
+      // per-task strip.
       // The pane toggles carry their label only in the tooltip now
       // that the icon row replaced the verbose button row.
       { testid: 'pane-toggle-prompt' },

@@ -60,7 +60,6 @@ interface HygieneShape {
     jobInfoCommitPresent: boolean;
     stampedCommitSha: string | null;
     acceptedTaskUncommitted: boolean;
-    commitUnpushed: boolean;
   } | null;
   error: string | null;
 }
@@ -129,8 +128,7 @@ function makeHygiene(state: string, isDirty: boolean, hasCommit: boolean): Hygie
       state,
       jobInfoCommitPresent: hasCommit,
       stampedCommitSha: hasCommit ? 'abcdef1234567890abcdef1234567890abcdef12' : null,
-      acceptedTaskUncommitted: false,
-      commitUnpushed: false
+      acceptedTaskUncommitted: false
     },
     error: null
   };

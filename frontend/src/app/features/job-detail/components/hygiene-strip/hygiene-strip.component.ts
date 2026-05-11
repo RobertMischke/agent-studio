@@ -7,15 +7,16 @@ import { ErrorDialogService } from '../../../../services/error-dialog.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
 
 /**
- * Repository-hygiene strip rendered at the top of the protocol pane for
+ * Per-task hygiene strip rendered at the top of the protocol pane for
  * jobs in `4-auto-review`, `5-human-review`, `6-completed`, or `7-archive`.
  *
- * The strip is the calm, angular icon-only variant introduced by the
- * "task detail page chat-first" redesign: three tiny squares (commit /
- * tree / push) carry the same data the verbose strip used to show, with
- * hover-tooltips for the breakdown. The full warning banners
- * ("accepted task work uncommitted", "push pending") still expand
- * inline because those carry user actions, not just status.
+ * Scope is intentionally narrow: this strip answers "is THIS task in
+ * good shape?" - did the platform stamp a commit, and (only on the
+ * runner's currently-active job) is accepted work sitting uncommitted.
+ * Repo-level concerns (ahead of upstream, push pending, branch behind,
+ * untracked files in the repo root) belong on a project-level surface
+ * - see the project header badge - and must NOT bleed onto a per-task
+ * page. Approval and push are decoupled in the workflow.
  */
 @Component({
   selector: 'app-hygiene-strip',
@@ -69,20 +70,6 @@ export class HygieneStripComponent implements OnDestroy {
     if (!h.isDirty) return 'Working tree clean';
     return `Working tree dirty — ${h.stagedCount} staged · ${h.unstagedCount} unstaged · ${h.untrackedCount} untracked`;
   });
-
-  readonly pushTooltip = computed(() => {
-    const h = this.hygiene();
-    if (!h) return 'Push state — loading…';
-    if (!h.hasUpstream) return 'No upstream configured';
-    if (h.ahead > 0) return `${h.ahead} commit${h.ahead === 1 ? '' : 's'} ahead — push pending (${h.upstream})`;
-    return `In sync with ${h.upstream}`;
-  });
-
-  pushIconChar(h: GitHygieneStatus): string {
-    if (!h.hasUpstream) return '·';
-    if (h.ahead > 0) return '↑';
-    return '✓';
-  }
 
   private pollTimer: VisibleIntervalHandle | null = null;
   private currentJobKey: string | null = null;
