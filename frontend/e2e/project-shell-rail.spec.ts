@@ -5,14 +5,12 @@ import { api } from './helpers/api';
 import { startLongTaskRecorder } from './helpers/timing';
 
 /**
- * Slice 2 of the quality-system mockup: project page shell with left-rail
- * navigation. The shell ships the navigation skeleton plus a placeholder
- * panel per rail item; real per-panel content lands in follow-up slices.
+ * Project page shell with left-rail navigation. Some rails still use the
+ * generic placeholder panel while shipped slices mount their real content.
  *
  * This spec proves:
  *   1. The kanban project tab opens the shell and lands on Overview.
- *   2. All eleven rail entries render and route to their placeholder panel
- *      with the expected title and description copy.
+ *   2. All rail entries render and route to the correct panel surface.
  *   3. Clicking a rail entry updates the URL hash (deep-link contract).
  *   4. Reload preserves the active rail (deep-link survives reload).
  *   5. Mounting a panel does not block the main thread > 50 ms (the long-
@@ -34,7 +32,21 @@ interface WatchPath { name: string; path: string }
  * `project-shell-panel-desc`, and `project-shell-panel-empty` for these
  * keys; the per-slice spec asserts the real content instead.
  */
-const RAILS_WITH_CUSTOM_PANEL = new Set<string>(['security', 'token-usage', 'observability', 'steering']);
+const RAILS_WITH_CUSTOM_PANEL = new Set<string>([
+  'overview',
+  'jobs',
+  'security',
+  'visual-evidence',
+  'architecture',
+  'uxui',
+  'token-usage',
+  'observability',
+  'product-runtime',
+  'steering',
+  'settings',
+  'orchestrator',
+  'activity',
+]);
 
 const RAIL_ITEMS: ReadonlyArray<{ key: string; label: string; title: string; descriptionFragment: string }> = [
   { key: 'overview',     label: 'Overview',        title: 'Overview',        descriptionFragment: 'Snapshot of project health' },
@@ -84,8 +96,7 @@ test('opens the project shell from the kanban tab and lands on Overview', async 
   await expect(page.getByTestId('project-shell-title')).toHaveText(projectName);
   await expect(page.getByTestId('project-shell-chip')).toHaveText('this repo');
   await expect(page.getByTestId('project-shell-rail-overview')).toHaveAttribute('aria-current', 'page');
-  await expect(page.getByTestId('project-shell-panel-title')).toContainText('Overview');
-  await expect(page.getByTestId('project-shell-panel-empty')).toBeVisible();
+  await expect(page.getByTestId('project-detail-overview')).toBeVisible();
 
   // Hash reflects the slug-only form for the default rail.
   expect(page.url()).toContain(`#/projects/${slugFor(projectName)}`);
@@ -93,7 +104,7 @@ test('opens the project shell from the kanban tab and lands on Overview', async 
   await page.screenshot({ path: path.join(SCREENSHOT_DIR, '00-shell-overview.png'), fullPage: true });
 });
 
-test('every rail entry routes to its placeholder panel', async ({ page }) => {
+test('every rail entry routes to its panel', async ({ page }) => {
   await page.goto('/');
   await page.getByTestId(`project-shell-open-${projectName}`).click();
   await expect(page.getByTestId('project-shell')).toBeVisible({ timeout: 10_000 });
