@@ -1,169 +1,225 @@
-/*
- * Visual redesign: drop the dense gear-icon + uppercase header in
- * favor of a stacked title block with a quiet subtitle. Less
- * "control panel", more "page". Width is also widened from 880px
- * so the longer entry summaries breathe.
- */
-:host { display: block; padding: 24px 28px; max-width: 920px; margin: 0 auto; }
+:host { display: block; min-height: 0; height: 100%; }
+.orch-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  height: 100%;
+  color: #e2e8f0;
+}
 .orch-feed__head {
   display: flex;
   align-items: flex-start;
   gap: 16px;
-  margin-bottom: 24px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(148,163,184,.18);
 }
-.orch-feed__title-block { flex: 1; }
-.orch-feed__title {
-  margin: 0;
-  color: #f1f5f9;
-  font-size: 1.35rem;
-  font-weight: 600;
-  letter-spacing: 0;
-}
-.orch-feed__sub {
-  margin: 4px 0 0;
-  color: rgba(255,255,255,0.50);
-  font-size: 0.86rem;
-}
+.orch-feed__title-block { flex: 1; min-width: 0; }
+.orch-feed__title { margin: 0; color: #f8fafc; font-size: 18px; font-weight: 650; }
+.orch-feed__sub { margin: 3px 0 0; color: #94a3b8; font-size: 13px; }
 .orch-feed__refresh {
   margin-left: auto;
-  background: rgba(255,255,255,0.06);
-  color: #cdd6f4;
-  border: 1px solid rgba(255,255,255,0.12);
+  background: rgba(148,163,184,.10);
+  color: #cbd5e1;
+  border: 1px solid rgba(148,163,184,.22);
   border-radius: 6px;
-  padding: 4px 10px;
-  font-size: 0.78rem;
+  padding: 6px 11px;
+  font-size: 12px;
   cursor: pointer;
 }
-.orch-feed__refresh:hover:not(:disabled) { background: rgba(255,255,255,0.1); }
-.orch-feed__refresh:disabled { opacity: 0.5; cursor: progress; }
+.orch-feed__refresh:hover:not(:disabled) { background: rgba(148,163,184,.16); }
+.orch-feed__refresh:disabled { opacity: .5; cursor: progress; }
 .orch-feed__error {
   color: #fda4af;
-  background: rgba(244, 63, 94, 0.10);
-  border: 1px solid rgba(244, 63, 94, 0.25);
+  background: rgba(244,63,94,.10);
+  border: 1px solid rgba(244,63,94,.25);
   padding: 8px 10px;
-  border-radius: 6px;
-  margin-bottom: 12px;
+  border-radius: 7px;
 }
-.orch-feed__empty {
-  color: rgba(255,255,255,0.5);
-  font-style: italic;
-  padding: 24px 0;
-  text-align: center;
-}
-/*
- * Entry layout: drop the boxy card treatment in favor of a left
- * accent line + generous gap. The summary is the headline (1rem,
- * relaxed line height); kind / topic / time / tokens collapse into
- * a single quiet line below it. Closer to a feed of human notes,
- * further from the previous "control panel" feel.
- */
-.orch-feed__list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 22px; }
-.orch-feed__entry {
-  padding: 0 0 0 14px;
-  border-left: 2px solid rgba(255,255,255,0.10);
-  background: none;
-}
-.orch-feed__entry--decision { border-left-color: rgba(196,181,253,0.55); }
-.orch-feed__entry--action { border-left-color: rgba(125,211,252,0.55); }
-.orch-feed__entry--observation { border-left-color: rgba(148,163,184,0.40); }
-.orch-feed__entry--intervention { border-left-color: rgba(249,226,175,0.65); }
-.orch-feed__summary {
-  color: #f1f5f9;
-  margin: 0 0 6px;
-  font-size: 1.0rem;
-  line-height: 1.55;
-}
-.orch-feed__entry-head {
-  display: flex;
-  align-items: baseline;
+.orch-feed__grid {
+  display: grid;
+  grid-template-columns: 230px minmax(0, 1fr) minmax(290px, 34%);
   gap: 12px;
-  font-size: 0.78rem;
-  color: rgba(255,255,255,0.55);
-  flex-wrap: wrap;
+  flex: 1 1 auto;
+  min-height: 0;
 }
-.orch-feed__kind { font-weight: 600; color: #cbd5e1; }
-.orch-feed__topic { padding: 1px 6px; border-radius: 3px; background: rgba(255,255,255,0.05); font-family: var(--font-mono, monospace); font-size: 0.74rem; }
-.orch-feed__ts { font-variant-numeric: tabular-nums; }
-.orch-feed__tokens {
-  margin-left: auto;
-  font-family: var(--font-mono, monospace);
-  font-size: 0.74rem;
-  color: rgba(255,255,255,0.45);
-  cursor: help;
+.orch-feed__filters,
+.orch-feed__stream,
+.orch-feed__detail {
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid rgba(148,163,184,.16);
+  border-radius: 8px;
+  background: rgba(15,23,42,.36);
 }
-.orch-feed__reasoning summary {
-  cursor: pointer;
-  color: rgba(255,255,255,0.55);
-  font-size: 0.78rem;
-  user-select: none;
+.orch-feed__filters { padding: 10px; display: flex; flex-direction: column; gap: 10px; }
+.orch-feed__filter-group h3 {
+  margin: 10px 0 7px;
+  color: #94a3b8;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
 }
-.orch-feed__reasoning summary:hover { color: #cdd6f4; }
-.orch-feed__reasoning p { margin: 6px 0 0; color: rgba(255,255,255,0.75); font-size: 0.84rem; }
-/*
- * Override controls. The plain "Override this decision" link sits
- * unobtrusively under the summary; clicking it expands an inline
- * textarea + Send/Cancel pair. Loud styling on Send so the user is
- * sure they are taking an action that goes back to the agent.
- */
-.orch-feed__override {
-  margin-top: 6px;
+.orch-feed__filter {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+  border: 0;
+  border-radius: 6px;
   background: transparent;
-  border: 1px dashed rgba(249, 226, 175, 0.35);
+  color: #bac2de;
+  padding: 7px 8px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+.orch-feed__filter:hover,
+.orch-feed__filter--active { background: rgba(125,211,252,.12); color: #f8fafc; }
+.orch-feed__list {
+  list-style: none;
+  padding: 8px;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.orch-feed__entry {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  gap: 7px 9px;
+  align-items: start;
+  text-align: left;
+  border: 1px solid rgba(148,163,184,.14);
+  border-left: 3px solid rgba(148,163,184,.30);
+  border-radius: 7px;
+  background: rgba(30,41,59,.56);
+  color: #cbd5e1;
+  padding: 9px 10px;
+  cursor: pointer;
+  font: inherit;
+}
+.orch-feed__entry:hover,
+.orch-feed__entry--selected { background: rgba(51,65,85,.78); border-color: rgba(125,211,252,.28); }
+.orch-feed__entry--decision { border-left-color: #c4b5fd; }
+.orch-feed__entry--action { border-left-color: #7dd3fc; }
+.orch-feed__entry--observation { border-left-color: #94a3b8; }
+.orch-feed__entry--intervention { border-left-color: #facc15; }
+.orch-feed__summary {
+  grid-column: 1 / -1;
+  color: #f8fafc;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.orch-feed__kind {
+  font-weight: 700;
+  color: #dbeafe;
+  font-size: 12px;
+}
+.orch-feed__topic {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(148,163,184,.10);
+  color: #bac2de;
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+}
+.orch-feed__ts,
+.orch-feed__tokens {
+  color: #94a3b8;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.orch-feed__tokens { grid-column: 3 / -1; justify-self: end; cursor: help; }
+.orch-feed__empty {
+  color: #94a3b8;
+  padding: 20px;
+  font-size: 13px;
+}
+.orch-feed__detail {
+  padding: 12px;
+}
+.orch-feed__detail-head {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.orch-feed__detail h3 { margin: 0 0 10px; color: #f8fafc; font-size: 16px; line-height: 1.35; }
+.orch-feed__meta {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 12px;
+}
+.orch-feed__meta div { display: grid; grid-template-columns: 78px minmax(0, 1fr); gap: 8px; }
+.orch-feed__meta dt { color: #64748b; }
+.orch-feed__meta dd { margin: 0; color: #cbd5e1; min-width: 0; overflow-wrap: anywhere; }
+.orch-feed__detail-section {
+  border-top: 1px solid rgba(148,163,184,.14);
+  padding-top: 10px;
+  margin-top: 10px;
+}
+.orch-feed__detail-section h4 { margin: 0 0 5px; color: #f8fafc; font-size: 12px; }
+.orch-feed__detail-section p { margin: 0; color: #cbd5e1; font-size: 13px; }
+.orch-feed__override {
+  margin-top: 8px;
+  background: transparent;
+  border: 1px dashed rgba(249,226,175,.38);
   color: #fcd34d;
   border-radius: 6px;
-  padding: 4px 10px;
-  font-size: 0.78rem;
+  padding: 6px 10px;
+  font-size: 12px;
   cursor: pointer;
 }
-.orch-feed__override:hover { background: rgba(249, 226, 175, 0.08); }
+.orch-feed__override:hover { background: rgba(249,226,175,.08); }
 .orch-feed__override-form {
   margin-top: 8px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 7px;
   padding: 8px;
-  border: 1px solid rgba(249, 226, 175, 0.40);
-  border-radius: 8px;
-  background: rgba(249, 226, 175, 0.06);
+  border: 1px solid rgba(249,226,175,.40);
+  border-radius: 7px;
+  background: rgba(249,226,175,.06);
 }
 .orch-feed__override-input {
   width: 100%;
   box-sizing: border-box;
-  background: rgba(0,0,0,0.30);
+  background: rgba(0,0,0,.30);
   color: #cdd6f4;
-  border: 1px solid rgba(255,255,255,0.10);
+  border: 1px solid rgba(255,255,255,.10);
   border-radius: 6px;
-  padding: 6px 8px;
+  padding: 7px 8px;
   font-family: inherit;
-  font-size: 0.85rem;
+  font-size: 13px;
   resize: vertical;
-  min-height: 60px;
 }
-.orch-feed__override-input:focus { outline: none; border-color: rgba(249, 226, 175, 0.60); }
 .orch-feed__override-actions { display: flex; gap: 8px; justify-content: flex-end; }
 .orch-feed__override-cancel,
 .orch-feed__override-submit {
   border-radius: 6px;
-  padding: 4px 12px;
-  font-size: 0.80rem;
+  padding: 5px 11px;
+  font-size: 12px;
   cursor: pointer;
   border: 1px solid transparent;
 }
 .orch-feed__override-cancel {
-  background: rgba(255,255,255,0.06);
+  background: rgba(255,255,255,.06);
   color: #cdd6f4;
-  border-color: rgba(255,255,255,0.12);
+  border-color: rgba(255,255,255,.12);
 }
-.orch-feed__override-cancel:hover:not(:disabled) { background: rgba(255,255,255,0.10); }
 .orch-feed__override-submit {
-  background: rgba(249, 226, 175, 0.20);
-  color: #1e1e2e;
-  border-color: rgba(249, 226, 175, 0.50);
+  background: rgba(249,226,175,.24);
+  color: #fef3c7;
+  border-color: rgba(249,226,175,.50);
   font-weight: 700;
 }
-.orch-feed__override-submit:hover:not(:disabled) { background: rgba(249, 226, 175, 0.35); }
 .orch-feed__override-submit:disabled,
-.orch-feed__override-cancel:disabled { opacity: 0.5; cursor: not-allowed; }
-  
+.orch-feed__override-cancel:disabled { opacity: .5; cursor: not-allowed; }
+
+@media (max-width: 1060px) {
+  .orch-feed__grid { grid-template-columns: 1fr; }
+}

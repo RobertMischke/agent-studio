@@ -73,13 +73,6 @@ public sealed class MetaCycleHostedService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var defaults = MetaCycleConfig.FromConfiguration(_configuration);
-        if (!defaults.Enabled)
-        {
-            _logger.LogInformation("MetaCycleHostedService disabled (Supervisor:MetaCycleEnabled = false).");
-            return;
-        }
-
         var workspace = _configuration["TaskRepository"];
         if (string.IsNullOrWhiteSpace(workspace))
         {
@@ -93,10 +86,15 @@ public sealed class MetaCycleHostedService : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            try { await TickOnceAsync(workspace!, stoppingToken); }
+            try
+            {
+                if (MetaCycleConfig.FromConfiguration(_configuration).Enabled)
+                    await TickOnceAsync(workspace!, stoppingToken);
+            }
             catch (OperationCanceledException) { break; }
             catch (Exception ex) { _logger.LogWarning(ex, "MetaCycle tick failed"); }
 
+            intervalSeconds = _configuration.GetValue("Supervisor:MetaCycleTickSeconds", 30);
             try { await Task.Delay(TimeSpan.FromSeconds(intervalSeconds), stoppingToken); }
             catch (OperationCanceledException) { break; }
         }

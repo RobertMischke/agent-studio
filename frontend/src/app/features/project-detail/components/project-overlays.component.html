@@ -38,6 +38,13 @@
               (auditQueuedEvent)="securityAuditQueued.emit($event)" />
           }
         }
+        @defer (when overlays.projectShellRail() === 'visual-evidence') {
+          @if (overlays.projectShellRail() === 'visual-evidence') {
+            <app-workspace-screenshots
+              [projectName]="projShell"
+              (openTask)="openTask.emit($event)" />
+          }
+        }
         @defer (when overlays.projectShellRail() === 'uxui') {
           @if (overlays.projectShellRail() === 'uxui') {
             <app-uxui-panel
@@ -64,6 +71,14 @@
         @defer (when overlays.projectShellRail() === 'steering') {
           @if (overlays.projectShellRail() === 'steering') {
             <app-project-steering-docs-section [projectName]="projShell" />
+          }
+        }
+        @defer (when overlays.projectShellRail() === 'settings') {
+          @if (overlays.projectShellRail() === 'settings') {
+            <app-project-detail
+              [projectName]="projShell"
+              (openFeed)="overlays.openFeedFromDetail($event)"
+              (openReport)="overlays.openAnalysisReport(projShell, $event.reportId)" />
           }
         }
       </app-project-shell>

@@ -11,6 +11,8 @@ import { ProjectProductRuntimePanelComponent } from './project-product-runtime/p
 import { ProjectSteeringDocsSectionComponent } from './project-steering-docs-section';
 import { AnalysisReportDrilldownComponent } from './analysis-report-drilldown';
 import { ProjectRailKey } from './project-shell/project-shell.config';
+import { WorkspaceScreenshotsComponent } from '../../screenshots';
+import type { JobScreenshot } from '../../screenshots';
 
 /**
  * Cycle 9g project-detail-feature container: renders the four
@@ -35,6 +37,7 @@ import { ProjectRailKey } from './project-shell/project-shell.config';
     ProjectProductRuntimePanelComponent,
     ProjectSteeringDocsSectionComponent,
     AnalysisReportDrilldownComponent,
+    WorkspaceScreenshotsComponent,
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-overlays.component.html',
@@ -49,17 +52,20 @@ export class ProjectOverlaysComponent {
   readonly securityAuditQueued = output<{ projectName: string; jobId: string }>();
   readonly uxuiFollowUp = output<{ projectName: string; prefill: string; title: string }>();
   readonly uxuiActionQueued = output<{ projectName: string; action: string; jobId: string }>();
+  readonly openTask = output<JobScreenshot>();
 
   /** The shell needs to provide watchPaths for hash → name resolution on rail change. */
   readonly railChangeNeedsWatchPaths = output<ProjectRailKey>();
 
   hasCustomPanel(rail: ProjectRailKey): boolean {
     return rail === 'security'
+      || rail === 'visual-evidence'
       || rail === 'uxui'
       || rail === 'token-usage'
       || rail === 'observability'
       || rail === 'product-runtime'
-      || rail === 'steering';
+      || rail === 'steering'
+      || rail === 'settings';
   }
 
   setProjectShellRail(key: ProjectRailKey): void {

@@ -1,0 +1,102 @@
+<section class="logic" data-testid="orchestrator-logic-panel">
+  <header class="logic__head">
+    <div>
+      <h2>Orchestrator logic</h2>
+      <p>Runtime flags for orchestrator, supervisor, meta-cycle, and auto-intervention loops.</p>
+    </div>
+    <button type="button"
+            class="logic__refresh"
+            data-testid="orchestrator-logic-refresh"
+            (click)="config.load()">
+      Refresh
+    </button>
+  </header>
+
+  @if (snapshot(); as snap) {
+    <div class="logic__status" data-testid="orchestrator-logic-status">
+      <span>Persisted in <code>{{ snap.overrideFilePath }}</code></span>
+      <span class="logic__pill logic__pill--ok">changes apply to runtime</span>
+    </div>
+  }
+
+  @if (config.loadError(); as err) {
+    <div class="logic__banner logic__banner--err">Could not load config: {{ err }}</div>
+  }
+  @if (saveError(); as err) {
+    <div class="logic__banner logic__banner--err">Save failed: {{ err }}</div>
+  }
+  @if (config.pendingRestart()) {
+    <div class="logic__banner logic__banner--ok" data-testid="orchestrator-logic-applied">
+      Saved and reloaded. Hot-readable runtime loops pick up the new values on their next tick.
+    </div>
+  }
+
+  @for (group of groups(); track group.name) {
+    <section class="logic__group" [attr.data-testid]="'orchestrator-logic-group-' + group.name.toLowerCase()">
+      <h3>{{ group.name }}</h3>
+      @for (opt of group.options; track opt.key) {
+        <div class="logic__row" [attr.data-testid]="'orchestrator-logic-row-' + opt.key">
+          <div class="logic__main">
+            <strong>{{ opt.label }}</strong>
+            <p>{{ opt.description }}</p>
+            <div class="logic__meta">
+              <code>{{ opt.key }}</code>
+              <span>default {{ formatDefault(opt) }}</span>
+              <span>active {{ activeLabel(opt) }}</span>
+              @if (opt.hasOverride) {
+                <span class="logic__pill">override</span>
+              }
+              @if (opt.restartRequired) {
+                <span class="logic__pill logic__pill--warn">restart-only</span>
+              } @else {
+                <span class="logic__pill logic__pill--ok">hot</span>
+              }
+            </div>
+          </div>
+          <div class="logic__control">
+            @switch (opt.type) {
+              @case ('bool') {
+                <label class="logic__toggle">
+                  <input type="checkbox"
+                         [checked]="asBool(valueFor(opt))"
+                         (change)="onChange(opt, ($any($event.target)).checked)">
+                  <span>{{ asBool(valueFor(opt)) ? 'On' : 'Off' }}</span>
+                </label>
+              }
+              @case ('int') {
+                <input class="logic__number"
+                       type="number"
+                       [value]="valueFor(opt)"
+                       (input)="onChange(opt, asInt(($any($event.target)).value))">
+              }
+              @case ('enum') {
+                <select class="logic__select"
+                        [value]="valueFor(opt)"
+                        (change)="onChange(opt, ($any($event.target)).value)">
+                  @for (choice of opt.enumOptions ?? []; track choice) {
+                    <option [value]="choice">{{ choice }}</option>
+                  }
+                </select>
+              }
+            }
+          </div>
+        </div>
+      }
+    </section>
+  }
+
+  <footer class="logic__foot">
+    <button type="button"
+            class="logic__save"
+            data-testid="orchestrator-logic-save"
+            [disabled]="!hasPending() || saving()"
+            (click)="save()">
+      @if (saving()) { Saving... }
+      @else if (hasPending()) { Save {{ pendingCount() }} change{{ pendingCount() === 1 ? '' : 's' }} }
+      @else { No changes }
+    </button>
+    @if (hasPending()) {
+      <button type="button" class="logic__ghost" (click)="discard()">Discard</button>
+    }
+  </footer>
+</section>

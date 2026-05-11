@@ -64,13 +64,6 @@ public sealed class ChatNoteHostedService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var enabled = _configuration.GetValue("Supervisor:ChatNoteEnabled", true);
-        if (!enabled)
-        {
-            _logger.LogInformation("ChatNoteHostedService disabled via configuration.");
-            return;
-        }
-
         var workspace = _configuration["TaskRepository"];
         if (string.IsNullOrWhiteSpace(workspace))
         {
@@ -87,10 +80,15 @@ public sealed class ChatNoteHostedService : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            try { await TickOnceAsync(workspace!, stoppingToken); }
+            try
+            {
+                if (_configuration.GetValue("Supervisor:ChatNoteEnabled", true))
+                    await TickOnceAsync(workspace!, stoppingToken);
+            }
             catch (OperationCanceledException) { break; }
             catch (Exception ex) { _logger.LogWarning(ex, "ChatNote tick failed"); }
 
+            tickSeconds = _configuration.GetValue("Supervisor:ChatNoteTickSeconds", 60);
             try { await Task.Delay(TimeSpan.FromSeconds(tickSeconds), stoppingToken); }
             catch (OperationCanceledException) { break; }
         }

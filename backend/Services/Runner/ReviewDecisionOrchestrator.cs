@@ -139,13 +139,6 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var enabled = _configuration.GetValue("ReviewDecisionOrchestrator:Enabled", false);
-        if (!enabled)
-        {
-            _logger.LogInformation("ReviewDecisionOrchestrator disabled via configuration.");
-            return;
-        }
-
         var workspace = _configuration["TaskRepository"];
         if (string.IsNullOrWhiteSpace(workspace))
         {
@@ -166,21 +159,29 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             catch (OperationCanceledException) { return; }
         }
 
-        try
+        if (_configuration.GetValue("ReviewDecisionOrchestrator:Enabled", false))
         {
-            _logger.LogInformation("ReviewDecisionOrchestrator boot sweep starting (one-shot full backfill).");
-            await TickOnceAsync(workspace!, stoppingToken);
-            _logger.LogInformation("ReviewDecisionOrchestrator boot sweep complete; entering recurring tick loop.");
+            try
+            {
+                _logger.LogInformation("ReviewDecisionOrchestrator boot sweep starting (one-shot full backfill).");
+                await TickOnceAsync(workspace!, stoppingToken);
+                _logger.LogInformation("ReviewDecisionOrchestrator boot sweep complete; entering recurring tick loop.");
+            }
+            catch (OperationCanceledException) { return; }
+            catch (Exception ex) { _logger.LogWarning(ex, "ReviewDecisionOrchestrator boot sweep failed"); }
         }
-        catch (OperationCanceledException) { return; }
-        catch (Exception ex) { _logger.LogWarning(ex, "ReviewDecisionOrchestrator boot sweep failed"); }
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            intervalSeconds = _configuration.GetValue("ReviewDecisionOrchestrator:IntervalSeconds", 30);
             try { await Task.Delay(TimeSpan.FromSeconds(intervalSeconds), stoppingToken); }
             catch (OperationCanceledException) { break; }
 
-            try { await TickOnceAsync(workspace!, stoppingToken); }
+            try
+            {
+                if (_configuration.GetValue("ReviewDecisionOrchestrator:Enabled", false))
+                    await TickOnceAsync(workspace!, stoppingToken);
+            }
             catch (OperationCanceledException) { break; }
             catch (Exception ex) { _logger.LogWarning(ex, "ReviewDecisionOrchestrator tick failed"); }
         }

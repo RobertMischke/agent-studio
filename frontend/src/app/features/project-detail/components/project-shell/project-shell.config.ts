@@ -10,6 +10,7 @@ export type ProjectRailGroup = 'project' | 'configuration';
 
 export type ProjectRailKey =
   | 'overview'
+  | 'visual-evidence'
   | 'security'
   | 'architecture'
   | 'uxui'
@@ -57,6 +58,15 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Baseline, reviews, and active findings for this project',
     empty: 'No security baseline yet. The Security slice ships the baseline action and review history.',
     icon: '🔒',
+  },
+  {
+    key: 'visual-evidence',
+    group: 'project',
+    label: 'Visual Evidence',
+    panelTitle: 'Visual Evidence',
+    description: 'Project screenshots, UI evidence, and task links',
+    empty: 'No visual evidence yet. Screenshots created by Playwright or browser checks will appear here.',
+    icon: '📷',
   },
   {
     key: 'architecture',

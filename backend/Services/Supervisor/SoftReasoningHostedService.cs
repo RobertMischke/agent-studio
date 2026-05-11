@@ -52,13 +52,6 @@ public sealed class SoftReasoningHostedService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var enabled = _configuration.GetValue("Supervisor:SoftReasoningEnabled", false);
-        if (!enabled)
-        {
-            _logger.LogInformation("SoftReasoningHostedService disabled via configuration.");
-            return;
-        }
-
         var workspace = _configuration["TaskRepository"];
         if (string.IsNullOrWhiteSpace(workspace))
         {
@@ -72,10 +65,15 @@ public sealed class SoftReasoningHostedService : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            try { await TickOnceAsync(workspace!, stoppingToken); }
+            try
+            {
+                if (_configuration.GetValue("Supervisor:SoftReasoningEnabled", false))
+                    await TickOnceAsync(workspace!, stoppingToken);
+            }
             catch (OperationCanceledException) { break; }
             catch (Exception ex) { _logger.LogWarning(ex, "SoftReasoning tick failed"); }
 
+            intervalSeconds = _configuration.GetValue("Supervisor:SoftReasoningIntervalSeconds", 600);
             try { await Task.Delay(TimeSpan.FromSeconds(intervalSeconds), stoppingToken); }
             catch (OperationCanceledException) { break; }
         }

@@ -151,7 +151,6 @@
 
       <app-update-banner />
       <app-update-center />
-      <app-orchestrator-config-panel #orchConfigPanel />
       <app-update-block-modal />
       <app-workspace-banner [projects]="bannerProjects()" />
 
@@ -389,7 +388,8 @@
         (securityOpenEvidence)="onSecurityOpenEvidence($event)"
         (securityAuditQueued)="onSecurityAuditQueued($event)"
         (uxuiFollowUp)="onUxuiFollowUp($event)"
-        (uxuiActionQueued)="onUxuiActionQueued($event)" />
+        (uxuiActionQueued)="onUxuiActionQueued($event)"
+        (openTask)="onOpenTaskFromReel($event)" />
 
 
       <app-workspace-overlays (openTask)="onOpenTaskFromReel($event)" />

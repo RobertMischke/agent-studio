@@ -52,23 +52,21 @@ public sealed class OrchestratorPrepHostedService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var enabled = _configuration.GetValue("Orchestrator:PrepEnabled", false);
-        if (!enabled)
-        {
-            _logger.LogInformation("OrchestratorPrepHostedService disabled via configuration.");
-            return;
-        }
-
         var intervalSeconds = _configuration.GetValue("Orchestrator:PrepTickSeconds", 60);
 
         try { await Task.Delay(TimeSpan.FromSeconds(20), stoppingToken); } catch (OperationCanceledException) { return; }
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            try { await TickOnceAsync(stoppingToken); }
+            try
+            {
+                if (_configuration.GetValue("Orchestrator:PrepEnabled", false))
+                    await TickOnceAsync(stoppingToken);
+            }
             catch (OperationCanceledException) { break; }
             catch (Exception ex) { _logger.LogWarning(ex, "OrchestratorPrep tick failed"); }
 
+            intervalSeconds = _configuration.GetValue("Orchestrator:PrepTickSeconds", 60);
             try { await Task.Delay(TimeSpan.FromSeconds(intervalSeconds), stoppingToken); }
             catch (OperationCanceledException) { break; }
         }

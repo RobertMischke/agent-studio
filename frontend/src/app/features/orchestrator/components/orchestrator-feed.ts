@@ -33,6 +33,8 @@ export class OrchestratorFeedComponent implements OnInit, OnDestroy {
   readonly entries = signal<OrchestratorLogEntry[]>([]);
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
+  readonly kindFilter = signal<string>('all');
+  readonly selectedEntry = signal<OrchestratorLogEntry | null>(null);
   /** Timestamp of the entry currently being overridden (one at a time). */
   readonly overridingTs = signal<string | null>(null);
   /** Submit-in-flight flag so the user cannot double-send. */
@@ -41,8 +43,26 @@ export class OrchestratorFeedComponent implements OnInit, OnDestroy {
   overrideDraft = '';
   private pollTimer: ReturnType<typeof setInterval> | null = null;
 
+  readonly kindFilters = [
+    { id: 'all', label: 'All' },
+    { id: 'decision', label: 'Decisions' },
+    { id: 'action', label: 'Actions' },
+    { id: 'observation', label: 'Observations' },
+    { id: 'intervention', label: 'Interventions' }
+  ];
+
   /** UI shows newest entries first; the on-disk log is oldest first. */
   readonly reversed = computed(() => [...this.entries()].reverse());
+  readonly visibleEntries = computed(() => {
+    const filter = this.kindFilter();
+    const items = this.reversed();
+    return filter === 'all' ? items : items.filter(e => e.kind === filter);
+  });
+  readonly countsByKind = computed(() => {
+    const counts = new Map<string, number>();
+    for (const entry of this.entries()) counts.set(entry.kind, (counts.get(entry.kind) ?? 0) + 1);
+    return counts;
+  });
 
   ngOnInit(): void {
     this.refresh();
@@ -58,7 +78,12 @@ export class OrchestratorFeedComponent implements OnInit, OnDestroy {
     if (!silent) this.loading.set(true);
     this.jobService.getOrchestratorLog(this.projectName()).subscribe({
       next: (resp) => {
-        this.entries.set(resp.entries ?? []);
+        const entries = resp.entries ?? [];
+        this.entries.set(entries);
+        const selected = this.selectedEntry();
+        if (!selected && entries.length > 0) {
+          this.selectedEntry.set(entries[entries.length - 1]);
+        }
         this.error.set(null);
         if (!silent) this.loading.set(false);
       },
@@ -78,6 +103,26 @@ export class OrchestratorFeedComponent implements OnInit, OnDestroy {
       case 'intervention': return 'Intervention';
       default: return kind;
     }
+  }
+
+  filterCount(kind: string): number {
+    if (kind === 'all') return this.entries().length;
+    return this.countsByKind().get(kind) ?? 0;
+  }
+
+  selectFilter(kind: string): void {
+    this.kindFilter.set(kind);
+    const first = this.visibleEntries()[0] ?? null;
+    this.selectedEntry.set(first);
+  }
+
+  selectEntry(entry: OrchestratorLogEntry): void {
+    this.selectedEntry.set(entry);
+  }
+
+  isSelected(entry: OrchestratorLogEntry): boolean {
+    const selected = this.selectedEntry();
+    return !!selected && selected.ts === entry.ts && selected.summary === entry.summary;
   }
 
   formatTime(iso: string): string {

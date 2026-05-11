@@ -19,7 +19,7 @@ import {
 } from './features/board';
 import { JobDetailComponent, JobSelectionService, TriageController } from './features/job-detail';
 import { CliUsageSheetComponent } from './features/cli';
-import { OrchestratorConfigPanelComponent, OrchestratorSideSheetComponent } from './features/orchestrator';
+import { OrchestratorSideSheetComponent } from './features/orchestrator';
 import {
   DEFAULT_PROJECT_RAIL_KEY,
   ProjectOverlaysComponent,
@@ -71,7 +71,7 @@ interface VerboseDebugContext {
 
 @Component({
   selector: 'app-root',
-  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorSideSheetComponent, ProjectOverlaysComponent, AutoReviewIndicatorComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceOverlaysComponent, WorkspaceBannerComponent, UpdateBannerComponent, UpdateVersionBadgeComponent, UpdateCenterComponent, OrchestratorConfigPanelComponent, UpdateBlockModalComponent, VerboseDebugOverlayComponent, FiltersDropdownComponent, KanbanFilterSidesheetComponent],
+  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorSideSheetComponent, ProjectOverlaysComponent, AutoReviewIndicatorComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ProjectTabsComponent, UpdateStableConsoleComponent, E2ECleanupDialogComponent, WorkspaceOverlaysComponent, WorkspaceBannerComponent, UpdateBannerComponent, UpdateVersionBadgeComponent, UpdateCenterComponent, UpdateBlockModalComponent, VerboseDebugOverlayComponent, FiltersDropdownComponent, KanbanFilterSidesheetComponent],
   // Cycle 7b: OnPush. The shell mounts kanban + detail panel + many
   // sheets; default (Default) change detection re-checked the whole
   // tree on every async event (every poll tick, every signal write).
@@ -103,7 +103,7 @@ export class App implements OnInit {
   readonly triageToast = this.jobSelection.triageToast;
 
   @ViewChild('jobDetail') private jobDetailRef?: JobDetailComponent;
-  @ViewChild('orchConfigPanel') private orchConfigPanelRef?: OrchestratorConfigPanelComponent;
+  @ViewChild('orchSideSheet') private orchSideSheetRef?: OrchestratorSideSheetComponent;
   /** Records the lane the user was triaging in. When the open job's state
    *  diverges from this (e.g. an external client moved it) we treat that as
    *  an auto-advance and toast accordingly. */
@@ -471,7 +471,8 @@ export class App implements OnInit {
 
   onPickOrchestratorConfig(): void {
     this.devToolsMenuOpen.set(false);
-    void this.orchConfigPanelRef?.openPanel();
+    this.orchSideSheetRef?.show();
+    this.orchSideSheetRef?.selectWindowMode('logic');
   }
 
   constructor(
@@ -698,12 +699,8 @@ export class App implements OnInit {
    * overlay if it is already open.
    */
   toggleOrchFeed(): void {
-    if (this.orchFeedProject() != null) {
-      this.closeOrchFeed();
-      return;
-    }
-    const project = this.pickOrchFeedProject();
-    if (project) this.orchFeedProject.set(project);
+    this.orchSideSheetRef?.show();
+    this.orchSideSheetRef?.selectWindowMode('feed');
   }
 
   closeOrchFeed(): void {
@@ -901,7 +898,10 @@ export class App implements OnInit {
   toggleWorkspaceScreenshots(): void { this.workspaceOverlays.toggleScreenshots(); }
   openCliAdmin(): void { this.workspaceOverlays.openCliAdmin(); }
   closeCliAdmin(): void { this.workspaceOverlays.closeCliAdmin(); }
-  toggleCliAdmin(): void { this.workspaceOverlays.toggleCliAdmin(); }
+  toggleCliAdmin(): void {
+    this.orchSideSheetRef?.show();
+    this.orchSideSheetRef?.selectWindowMode('cli');
+  }
 
   /**
    * "Open task" link inside the workspace reel lightbox: close the

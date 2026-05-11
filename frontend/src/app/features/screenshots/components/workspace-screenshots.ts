@@ -5,6 +5,7 @@ import {
   OnInit,
   computed,
   inject,
+  input,
   output,
   signal
 } from '@angular/core';
@@ -49,6 +50,7 @@ const WINDOW_OPTIONS: { hours: number; label: string; testId: string }[] = [
   styleUrl: './workspace-screenshots.scss'
 })
 export class WorkspaceScreenshotsComponent implements OnInit, OnDestroy {
+  readonly projectName = input<string | null>(null);
   readonly openTask = output<JobScreenshot>();
 
   readonly windowOptions = WINDOW_OPTIONS;
@@ -68,6 +70,7 @@ export class WorkspaceScreenshotsComponent implements OnInit, OnDestroy {
   });
 
   readonly projectCount = computed(() => this.projects().length);
+  readonly effectiveProjectFilter = computed(() => this.projectName() ?? this.projectFilter());
 
   readonly buckets = computed<HourBucket[]>(() => {
     const items = this.entries();
@@ -112,6 +115,7 @@ export class WorkspaceScreenshotsComponent implements OnInit, OnDestroy {
   }
 
   setProject(value: string): void {
+    if (this.projectName()) return;
     const v = value && value.length > 0 ? value : null;
     this.projectFilter.set(v);
     try {
@@ -123,7 +127,7 @@ export class WorkspaceScreenshotsComponent implements OnInit, OnDestroy {
 
   refresh(silent: boolean = false): void {
     if (!silent) this.loading.set(true);
-    this.jobs.getWorkspaceScreenshots(this.windowHours(), this.projectFilter()).subscribe({
+    this.jobs.getWorkspaceScreenshots(this.windowHours(), this.effectiveProjectFilter()).subscribe({
       next: (res) => {
         this.entries.set(res?.screenshots ?? []);
         this.loaded.set(true);

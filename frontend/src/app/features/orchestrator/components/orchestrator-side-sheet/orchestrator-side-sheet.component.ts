@@ -21,6 +21,19 @@ import { ChatComponent } from '../../../../components/chat/chat.component';
 import { ChatEvent, ChatMessage, ChatSubmitEvent } from '../../../../components/chat/chat-types';
 import { RoadmapIntakePanelComponent } from '../../../roadmap/components/roadmap-intake/roadmap-intake-panel.component';
 import { ProjectChatListComponent } from '../../../project-chat/components/project-chat-list/project-chat-list.component';
+import { OrchestratorFeedComponent } from '../orchestrator-feed';
+import { OrchestratorLogicPanelComponent } from '../orchestrator-logic-panel/orchestrator-logic-panel.component';
+import { CliAdminPanelComponent, CliSessionsPanelComponent } from '../../../cli';
+
+type OrchestratorWindowMode =
+  | 'project'
+  | 'task'
+  | 'intake'
+  | 'feed'
+  | 'logic'
+  | 'cli'
+  | 'sessions'
+  | 'supervisor';
 
 /**
  * Right-hand side sheet that hosts the orchestrator chat. Shell follows
@@ -41,7 +54,15 @@ import { ProjectChatListComponent } from '../../../project-chat/components/proje
 @Component({
   selector: 'app-orchestrator-side-sheet',
   standalone: true,
-  imports: [ChatComponent, RoadmapIntakePanelComponent, ProjectChatListComponent],
+  imports: [
+    ChatComponent,
+    RoadmapIntakePanelComponent,
+    ProjectChatListComponent,
+    OrchestratorFeedComponent,
+    OrchestratorLogicPanelComponent,
+    CliAdminPanelComponent,
+    CliSessionsPanelComponent,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './orchestrator-side-sheet.component.html',
   styleUrl: './orchestrator-side-sheet.component.scss',
@@ -126,7 +147,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
    * active task's Continue-mode follow-up chat, or the roadmap intake
    * panel that splits a long dump into reviewable task drafts.
    */
-  readonly mode = signal<'project' | 'task' | 'intake'>('project');
+  readonly mode = signal<OrchestratorWindowMode>('project');
 
   /**
    * Resolve the active project name to its on-disk watch path so the
@@ -469,6 +490,12 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   selectIntakeTab(): void {
     if (!this.activeProject()) return;
     this.mode.set('intake');
+  }
+
+  selectWindowMode(mode: OrchestratorWindowMode): void {
+    if ((mode === 'project' || mode === 'intake' || mode === 'feed' || mode === 'supervisor') && !this.activeProject()) return;
+    if (mode === 'task' && !this.activeJobId()) return;
+    this.mode.set(mode);
   }
 
   onOpenVerboseDebug(): void {

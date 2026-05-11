@@ -1,6 +1,5 @@
 import { Component, OnDestroy, OnInit, signal, computed } from '@angular/core';
 import { JobService } from '../../../services/job.service';
-import { CliConsoleComponent } from './cli-console';
 import { QuotaStripComponent } from '../../quota/components/quota-strip';
 import type { CliOutputLine, CliType } from '../../../models/job.model';
 import type { CliSessionInfo, CliUsageProjectGroup, CliUsageReport, CliUsageSection } from '../../../features/cli';
@@ -27,7 +26,7 @@ interface SelectedSession {
 @Component({
   selector: 'app-cli-usage-sheet',
   standalone: true,
-  imports: [CliConsoleComponent, QuotaStripComponent],
+  imports: [QuotaStripComponent],
   templateUrl: './cli-usage-sheet.html',
   styleUrl: './cli-usage-sheet.scss',
   host: {
@@ -70,26 +69,13 @@ export class CliUsageSheetComponent implements OnInit, OnDestroy {
 
   constructor(private jobService: JobService) {}
 
-  show() { this.open.set(true); this.refreshSessions(); }
+  show() { this.open.set(true); }
   hide() { this.open.set(false); }
   toggle() { this.open() ? this.hide() : this.show(); }
 
   ngOnInit() {
-    // Cycle-2 perf: /api/cli/usage walks every CLI's session history on
-    // disk; each call costs ~2 s of backend CPU. CLI sessions don't change
-    // every 15 s (minutes-to-hours scale), so polling that fast paid 13 %
-    // backend CPU continuously while the sheet was open for no real-time
-    // benefit. Three guards now:
-    //   - 60 s base interval (still picks up new sessions within a minute)
-    //   - skip when document.hidden (other tab / minimised window)
-    //   - existing guards: only when sheet open AND sessions segment open
-    //     AND not already loading
-    this.refreshTimer = setInterval(() => {
-      if (typeof document !== 'undefined' && document.hidden) return;
-      if (this.open() && !this.loading() && !this.isSegmentCollapsed('sessions')) {
-        this.refreshSessions(true);
-      }
-    }, 60_000);
+    // Sessions intentionally do not load from this usage sheet anymore.
+    // The native CLI session scan is lazy in Orchestrator -> Sessions.
   }
 
   ngOnDestroy() {

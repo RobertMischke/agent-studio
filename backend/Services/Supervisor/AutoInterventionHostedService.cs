@@ -46,13 +46,6 @@ public sealed class AutoInterventionHostedService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var enabled = _configuration.GetValue("Supervisor:AutoInterventionEnabled", false);
-        if (!enabled)
-        {
-            _logger.LogInformation("AutoInterventionHostedService disabled (default).");
-            return;
-        }
-
         var workspace = _configuration["TaskRepository"];
         if (string.IsNullOrWhiteSpace(workspace))
         {
@@ -64,7 +57,11 @@ public sealed class AutoInterventionHostedService : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            try { await TickOnceAsync(workspace!, stoppingToken); }
+            try
+            {
+                if (_configuration.GetValue("Supervisor:AutoInterventionEnabled", false))
+                    await TickOnceAsync(workspace!, stoppingToken);
+            }
             catch (OperationCanceledException) { break; }
             catch (Exception ex) { _logger.LogWarning(ex, "AutoIntervention tick failed"); }
 

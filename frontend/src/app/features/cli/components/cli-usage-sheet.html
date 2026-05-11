@@ -2,22 +2,14 @@
   <header class="sheet__header">
     <div>
       <h2 class="sheet__title">CLI Usage</h2>
-      <div class="sheet__subtitle">Quota and live sessions per CLI</div>
+      <div class="sheet__subtitle">Quota windows only. Sessions live in the Orchestrator window.</div>
     </div>
     <div class="sheet__header-actions">
-      <button class="sheet__btn" (click)="refreshSessions()" [disabled]="loading()" title="Reload session list">
-        {{ loading() ? '⏳' : '↻' }}
-      </button>
       <button class="sheet__close" type="button" (click)="closed.emit()" title="Close panel">✕</button>
     </div>
   </header>
 
-  @if (errorMsg(); as err) {
-    <div class="sheet__error">{{ err }}</div>
-  }
-
   <div class="sheet__body">
-    <!-- Segment 1: Quota -->
     <section class="seg">
       <button class="seg__head" type="button" (click)="toggleSegment('quota')">
         <span class="seg__chev">{{ isSegmentCollapsed('quota') ? '▶' : '▼' }}</span>
@@ -29,107 +21,10 @@
       }
     </section>
 
-    <!-- Segment 2: Sessions -->
     <section class="seg">
-      <button class="seg__head" type="button" (click)="toggleSegment('sessions')">
-        <span class="seg__chev">{{ isSegmentCollapsed('sessions') ? '▶' : '▼' }}</span>
-        <span class="seg__title">Sessions</span>
-        <span class="seg__hint">{{ totalSessionCount() }} total</span>
-      </button>
-
-      @if (!isSegmentCollapsed('sessions')) {
-        <div class="seg__body">
-          @for (section of visibleSections(); track section.cliType) {
-            <section class="cli-section">
-              <button class="cli-section__head"
-                      type="button"
-                      (click)="toggleCli(section.cliType)">
-                <span class="cli-section__chev">{{ isCliCollapsed(section.cliType) ? '▶' : '▼' }}</span>
-                <span class="cli-section__title">{{ cliLabel(section.cliType) }}</span>
-                @if (section.available && section.version) {
-                  <span class="pill pill--ok">{{ section.version }}</span>
-                }
-                <span class="cli-section__count">
-                  {{ totalSessions(section) }} sessions
-                </span>
-              </button>
-
-              @if (!isCliCollapsed(section.cliType)) {
-                @if (section.error) {
-                  <div class="sheet__error sheet__error--inline">{{ section.error }}</div>
-                }
-                @if (section.projects.length === 0) {
-                  <div class="sheet__empty">No sessions found yet for {{ cliLabel(section.cliType) }}.</div>
-                }
-                @for (project of section.projects; track project.projectName) {
-                  <div class="proj">
-                    <button class="proj__head" type="button" [title]="project.rootPath || ''" (click)="toggleProject(section.cliType, project)">
-                      <span class="proj__chev" [class.proj__chev--open]="!isProjectCollapsed(section.cliType, project)"></span>
-                      <span class="proj__name">📁 {{ project.projectName }}</span>
-                      <span class="proj__meta">{{ project.sessions.length }} sessions</span>
-                    </button>
-                    <div class="proj__summary">
-                      @if (latestSession(project)?.updatedAt; as latest) {
-                        <span>latest {{ formatTime(latest) }}</span>
-                      }
-                      @if (usageSessionCount(project) > 0) {
-                        <span>{{ usageSessionCount(project) }} with usage</span>
-                      } @else {
-                        <span>metadata only</span>
-                      }
-                    </div>
-                    @if (!isProjectCollapsed(section.cliType, project)) {
-                    <ul class="sess-list">
-                      @for (s of project.sessions; track s.id) {
-                        <li class="sess"
-                            [class.sess--active]="isSelected(section.cliType, project, s)"
-                            (click)="select(section.cliType, project, s)">
-                          <div class="sess__row">
-                            <span class="sess__id" [title]="s.id">
-                              {{ s.label || shortId(s.id) }}
-                            </span>
-                            @if (s.updatedAt) {
-                              <span class="sess__time">{{ formatTime(s.updatedAt) }}</span>
-                            }
-                          </div>
-                          @if (s.lastUsage?.tokens) {
-                            <div class="sess__usage">🪙 {{ s.lastUsage?.tokens }}</div>
-                          } @else {
-                            <div class="sess__usage sess__usage--muted">No parsed token summary</div>
-                          }
-                        </li>
-                      }
-                    </ul>
-                    }
-                  </div>
-                }
-              }
-            </section>
-          }
-        </div>
-      }
+      <div class="sheet__detail-empty">
+        Full CLI session inventory moved to <strong>Orchestrator → Sessions</strong> and loads only when opened.
+      </div>
     </section>
   </div>
-
-  @if (selected(); as sel) {
-    <div class="sheet__detail">
-      <div class="sheet__detail-head">
-        <strong>{{ cliLabel(sel.cliType) }}</strong>
-        · {{ sel.session.label || shortId(sel.session.id) }}
-      </div>
-      @if (sel.session.lastUsage; as u) {
-        <div class="sheet__detail-usage">
-          <div><span>Tokens</span><span>{{ u.tokens || '—' }}</span></div>
-          <div><span>Changes</span><span>{{ u.changes || '—' }}</span></div>
-          <div><span>Requests</span><span>{{ u.requests || '—' }}</span></div>
-        </div>
-      } @else {
-        <div class="sheet__detail-empty">
-          This session only has id, project path and last-modified time. No token summary has been parsed yet.
-        </div>
-      }
-      <app-cli-console [lines]="detailLines()" [title]="'Session ' + shortId(sel.session.id)" [bodyMaxHeight]="'30vh'" />
-    </div>
-  }
 </aside>
-  

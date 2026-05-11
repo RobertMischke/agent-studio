@@ -10,7 +10,7 @@ namespace OrchestratorApi.Endpoints;
 /// <see cref="OrchestratorApi.Services.Clients.ClientIdentityMiddleware"/>.
 /// All flags require a backend restart to take effect; the response
 /// surfaces that explicitly so the frontend can render the
-/// "Restart required" banner.
+/// "saved and active" state.
 /// </summary>
 public static class AdminConfigEndpoints
 {

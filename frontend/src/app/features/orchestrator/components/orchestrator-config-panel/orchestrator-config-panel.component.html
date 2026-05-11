@@ -18,16 +18,15 @@
     <p class="ocp__lede">
       Hosted-service lifecycle and supervisor policy flags. All
       changes write to <code>{{ snapshot()?.overrideFilePath }}</code>
-      and require a backend restart to take effect.
+      and are reloaded by the running backend.
     </p>
 
     @if (config.pendingRestart()) {
       <div class="ocp__banner ocp__banner--warn"
            data-testid="orch-config-restart-banner">
-        <strong>Restart required.</strong>
-        New values are in <code>appsettings.Local.json</code> but the
-        running backend still uses the old ones. Restart the API
-        (e.g. <code>./api.sh restart</code>) to apply.
+        <strong>Saved.</strong>
+        New values are in <code>appsettings.Local.json</code> and runtime
+        loops will pick them up on their next tick.
       </div>
     }
 
@@ -67,22 +66,22 @@
                   <label class="ocp__toggle">
                     <input type="checkbox"
                            [attr.data-testid]="'orch-config-input-' + opt.key"
-                           [checked]="asBool(pending()[opt.key] ?? opt.currentValue)"
+                           [checked]="asBool(valueFor(opt))"
                            (change)="onChange(opt, ($any($event.target)).checked)">
-                    <span>{{ asBool(pending()[opt.key] ?? opt.currentValue) ? 'On' : 'Off' }}</span>
+                    <span>{{ asBool(valueFor(opt)) ? 'On' : 'Off' }}</span>
                   </label>
                 }
                 @case ('int') {
                   <input type="number"
                          class="ocp__num"
                          [attr.data-testid]="'orch-config-input-' + opt.key"
-                         [value]="pending()[opt.key] ?? opt.currentValue"
+                         [value]="valueFor(opt)"
                          (input)="onChange(opt, asInt(($any($event.target)).value))">
                 }
                 @case ('enum') {
                   <select class="ocp__sel"
                           [attr.data-testid]="'orch-config-input-' + opt.key"
-                          [value]="pending()[opt.key] ?? opt.currentValue"
+                          [value]="valueFor(opt)"
                           (change)="onChange(opt, ($any($event.target)).value)">
                     @for (choice of opt.enumOptions ?? []; track choice) {
                       <option [value]="choice">{{ choice }}</option>

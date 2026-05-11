@@ -64,7 +64,8 @@ public class OrchestratorConfigServiceTests : IDisposable
         Assert.Equal(false, meta.DefaultValue);
         Assert.Equal(true, meta.CurrentValue);
         Assert.True(meta.HasOverride);
-        Assert.True(meta.RestartRequired);
+        Assert.False(meta.RestartRequired);
+        Assert.True(meta.AppliesImmediately);
 
         var rate = snap.Options.Single(o => o.Key == "Supervisor:AutoInterventionRateLimit");
         Assert.Equal(3, rate.DefaultValue);
@@ -145,25 +146,18 @@ public class OrchestratorConfigServiceTests : IDisposable
         var svc = Build();
         Assert.False(svc.GetSnapshot().Options.Single(o => o.Key == "Supervisor:MetaCycleEnabled").HasOverride);
 
-        // Apply a write; the JSON file is updated, but the in-memory IConfiguration
-        // is unchanged in this test (no reload). Re-build a service over a config
-        // that now includes the file to mimic what a hot-reload would surface.
+        // Apply a write; the JSON file is updated and the service reads
+        // appsettings.Local.json back for the post-write snapshot so the
+        // UI sees the persisted value immediately.
         svc.ApplyOverrides(new Dictionary<string, JsonElement>
         {
             ["Supervisor:MetaCycleEnabled"] = ParseElem("true")
         });
 
-        var reloaded = new ConfigurationBuilder()
-            .AddJsonFile(Path.Combine(_contentRoot, "appsettings.Local.json"), optional: false, reloadOnChange: false)
-            .Build();
-        var svc2 = new OrchestratorConfigService(
-            reloaded,
-            new TestHostEnvironment(_contentRoot),
-            NullLogger<OrchestratorConfigService>.Instance);
-
-        var meta = svc2.GetSnapshot().Options.Single(o => o.Key == "Supervisor:MetaCycleEnabled");
+        var meta = svc.GetSnapshot().Options.Single(o => o.Key == "Supervisor:MetaCycleEnabled");
         Assert.True(meta.HasOverride);
         Assert.Equal(true, meta.CurrentValue);
+        Assert.Equal(true, meta.ActiveValue);
     }
 
     private static JsonElement ParseElem(string json) => JsonDocument.Parse(json).RootElement.Clone();

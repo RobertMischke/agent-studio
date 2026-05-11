@@ -13,6 +13,9 @@ export interface OrchestratorConfigOption {
   enumOptions?: string[];
   defaultValue: boolean | number | string | null;
   currentValue: boolean | number | string | null;
+  activeValue?: boolean | number | string | null;
+  appliesImmediately?: boolean;
+  restartRequiredReason?: string | null;
   hasOverride: boolean;
   restartRequired: boolean;
   sourceFile: string;
@@ -27,8 +30,8 @@ export interface OrchestratorConfigSnapshot {
 /**
  * Backs the Orchestrator config drawer. Reads the typed catalog +
  * current values from the backend, applies a partial override map,
- * and exposes a `pendingRestart` signal so the panel can render the
- * "Restart required" banner across reloads of the panel.
+ * and exposes a short saved/applied signal so the panel can render the
+ * "saved and active" banner after a successful write.
  */
 @Injectable({ providedIn: 'root' })
 export class OrchestratorConfigService {

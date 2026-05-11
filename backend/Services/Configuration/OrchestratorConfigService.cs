@@ -8,8 +8,9 @@ namespace OrchestratorApi.Services.Configuration;
 /// flags that previously could only be flipped by hand-editing
 /// <c>backend/appsettings.Local.json</c>. The catalog is intentionally
 /// finite: only flags that gate hosted-service lifecycles or supervisor
-/// policy are exposed. All flags require a backend restart to take
-/// effect; the UI surfaces that obligation explicitly.
+/// policy are exposed. Writes persist to disk and reload the in-process
+/// configuration immediately; hosted loops read these values at tick
+/// boundaries so a backend restart is not required for the exposed flags.
 ///
 /// Stable and dev each have their own <c>appsettings.Local.json</c>; the
 /// service writes to whichever copy belongs to the running checkout
@@ -52,10 +53,7 @@ public sealed class OrchestratorConfigService
     /// <summary>
     /// Applies a partial override map to <c>appsettings.Local.json</c>.
     /// Unknown keys are rejected; type mismatches are rejected. Returns
-    /// the post-write snapshot. The hot-reloaded
-    /// <see cref="IConfiguration"/> picks up the file change for new
-    /// reads, but hosted services that already short-circuited on a
-    /// disabled flag stay parked until the backend restarts.
+    /// the post-write snapshot after reloading the active configuration.
     /// </summary>
     public OrchestratorConfigSnapshot ApplyOverrides(IDictionary<string, JsonElement> values)
     {
@@ -101,8 +99,13 @@ public sealed class OrchestratorConfigService
             try { File.Replace(temp, path, destinationBackupFileName: null); }
             catch (FileNotFoundException) { File.Move(temp, path); }
 
+            if (_configuration is IConfigurationRoot rootConfig)
+            {
+                rootConfig.Reload();
+            }
+
             _logger.LogInformation(
-                "Wrote {Count} orchestrator/supervisor override(s) to {Path}",
+                "Wrote {Count} orchestrator/supervisor override(s) to {Path} and reloaded configuration",
                 coerced.Count, path);
         }
 
@@ -111,7 +114,9 @@ public sealed class OrchestratorConfigService
 
     private OrchestratorConfigOption BuildOption(OrchestratorConfigDefinition def)
     {
-        var raw = _configuration[def.Key];
+        var overrideRaw = ReadOverrideValue(def.Key);
+        var configRaw = _configuration[def.Key];
+        var raw = overrideRaw ?? configRaw;
         var current = ParseValue(def, raw);
         return new OrchestratorConfigOption
         {
@@ -123,10 +128,42 @@ public sealed class OrchestratorConfigService
             EnumOptions = def.EnumOptions,
             DefaultValue = def.DefaultValue,
             CurrentValue = current ?? def.DefaultValue,
-            HasOverride = !string.IsNullOrEmpty(raw),
-            RestartRequired = true,
+            ActiveValue = current ?? def.DefaultValue,
+            HasOverride = !string.IsNullOrEmpty(overrideRaw) || !string.IsNullOrEmpty(configRaw),
+            AppliesImmediately = true,
+            RestartRequired = false,
+            RestartRequiredReason = null,
             SourceFile = def.SourceFile
         };
+    }
+
+    private string? ReadOverrideValue(string key)
+    {
+        var path = OverrideFilePath;
+        if (!File.Exists(path)) return null;
+        try
+        {
+            var root = JsonNode.Parse(File.ReadAllText(path)) as JsonObject;
+            if (root == null) return null;
+            JsonNode? cursor = root;
+            foreach (var segment in key.Split(':'))
+            {
+                if (cursor is not JsonObject obj) return null;
+                cursor = obj[segment];
+                if (cursor == null) return null;
+            }
+            return cursor switch
+            {
+                JsonValue v when v.TryGetValue<bool>(out var b) => b.ToString(),
+                JsonValue v when v.TryGetValue<int>(out var i) => i.ToString(),
+                JsonValue v when v.TryGetValue<string>(out var s) => s,
+                _ => cursor.ToJsonString()
+            };
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private static object? ParseValue(OrchestratorConfigDefinition def, string? raw)
@@ -210,8 +247,11 @@ public sealed class OrchestratorConfigOption
     public string[]? EnumOptions { get; set; }
     public object? DefaultValue { get; set; }
     public object? CurrentValue { get; set; }
+    public object? ActiveValue { get; set; }
+    public bool AppliesImmediately { get; set; } = true;
     public bool HasOverride { get; set; }
-    public bool RestartRequired { get; set; } = true;
+    public bool RestartRequired { get; set; }
+    public string? RestartRequiredReason { get; set; }
     public string SourceFile { get; set; } = "";
 }
 

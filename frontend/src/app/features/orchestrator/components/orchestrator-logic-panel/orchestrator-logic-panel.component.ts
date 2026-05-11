@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { OrchestratorConfigOption, OrchestratorConfigService } from '../../../../services/orchestrator-config.service';
@@ -8,28 +8,16 @@ interface OptionGroup {
   options: OrchestratorConfigOption[];
 }
 
-/**
- * Drawer-style overlay (mirrors UpdateCenterComponent shape) that
- * renders the orchestrator + supervisor flag catalog as a grouped
- * list of toggles / number inputs / enum dropdowns. Writes go to
- * `appsettings.Local.json` via PUT; the backend reloads the active
- * configuration so hosted loops read the changes on their next tick.
- *
- * Reads stay open (the backend gates writes via X-Client-Id, the
- * frontend's interceptor stamps every request).
- */
 @Component({
-  selector: 'app-orchestrator-config-panel',
+  selector: 'app-orchestrator-logic-panel',
   standalone: true,
   imports: [CommonModule, FormsModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  templateUrl: './orchestrator-config-panel.component.html',
-  styleUrl: './orchestrator-config-panel.component.scss'
+  templateUrl: './orchestrator-logic-panel.component.html',
+  styleUrl: './orchestrator-logic-panel.component.scss',
 })
-export class OrchestratorConfigPanelComponent {
+export class OrchestratorLogicPanelComponent implements OnInit {
   readonly config = inject(OrchestratorConfigService);
-
-  readonly open = signal(false);
   readonly snapshot = this.config.snapshot;
   readonly saving = signal(false);
   readonly saveError = signal<string | null>(null);
@@ -53,41 +41,28 @@ export class OrchestratorConfigPanelComponent {
   readonly hasPending = computed(() => Object.keys(this.pending()).length > 0);
   readonly pendingCount = computed(() => Object.keys(this.pending()).length);
 
-  async openPanel(): Promise<void> {
-    this.open.set(true);
-    this.saveError.set(null);
-    this.pending.set({});
-    await this.config.load();
-  }
-
-  close(): void {
-    this.open.set(false);
-    this.pending.set({});
-    this.saveError.set(null);
-  }
-
-  discard(): void {
-    this.pending.set({});
+  ngOnInit(): void {
+    void this.config.load();
   }
 
   onChange(opt: OrchestratorConfigOption, value: boolean | number | string): void {
     const next = { ...this.pending() };
-    if (this.equals(opt.currentValue, value)) {
-      delete next[opt.key];
-    } else {
-      next[opt.key] = value;
-    }
+    if (this.equals(opt.currentValue, value)) delete next[opt.key];
+    else next[opt.key] = value;
     this.pending.set(next);
   }
 
+  discard(): void {
+    this.pending.set({});
+    this.saveError.set(null);
+  }
+
   async save(): Promise<void> {
-    if (this.saving()) return;
-    const values = this.pending();
-    if (Object.keys(values).length === 0) return;
+    if (this.saving() || !this.hasPending()) return;
     this.saving.set(true);
     this.saveError.set(null);
     try {
-      await this.config.update(values);
+      await this.config.update(this.pending());
       this.pending.set({});
     } catch (err: unknown) {
       this.saveError.set(this.describe(err));
@@ -101,19 +76,23 @@ export class OrchestratorConfigPanelComponent {
     const n = Number(v);
     return Number.isFinite(n) ? Math.trunc(n) : 0;
   }
-  valueFor(opt: OrchestratorConfigOption): boolean | number | string | null {
-    const pendingValue = this.pending()[opt.key];
-    return pendingValue !== undefined ? pendingValue : opt.currentValue;
-  }
   formatDefault(opt: OrchestratorConfigOption): string {
-    if (opt.defaultValue === null || opt.defaultValue === undefined) return '—';
+    if (opt.defaultValue === null || opt.defaultValue === undefined) return '-';
     return String(opt.defaultValue);
+  }
+  activeLabel(opt: OrchestratorConfigOption): string {
+    const active = opt.activeValue ?? opt.currentValue;
+    return active === null || active === undefined ? '-' : String(active);
+  }
+  valueFor(opt: OrchestratorConfigOption): boolean | number | string | null {
+    const pending = this.pending();
+    return Object.prototype.hasOwnProperty.call(pending, opt.key)
+      ? pending[opt.key]
+      : opt.currentValue;
   }
 
   private equals(a: unknown, b: unknown): boolean {
-    if (typeof a === 'number' || typeof b === 'number') {
-      return Number(a) === Number(b);
-    }
+    if (typeof a === 'number' || typeof b === 'number') return Number(a) === Number(b);
     return a === b;
   }
 

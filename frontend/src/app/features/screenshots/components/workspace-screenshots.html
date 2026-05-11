@@ -3,7 +3,11 @@
     <div>
       <h2 class="wss__title">Visual evidence</h2>
       <p class="wss__sub">
-        Recent screenshots harvested from every watched project.
+        @if (projectName()) {
+          Recent screenshots harvested for {{ projectName() }}.
+        } @else {
+          Recent screenshots harvested from every watched project.
+        }
         @if (loaded() && entries().length > 0) {
           <span class="wss__sub-stats">
             · {{ entries().length }} image{{ entries().length === 1 ? '' : 's' }}
@@ -26,7 +30,7 @@
           </button>
         }
       </div>
-      @if (projects().length > 1) {
+      @if (!projectName() && projects().length > 1) {
         <select class="wss__project"
                 data-testid="wss-project-filter"
                 [value]="projectFilter() ?? ''"
