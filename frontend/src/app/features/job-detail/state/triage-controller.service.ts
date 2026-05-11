@@ -140,10 +140,20 @@ export class TriageController {
     });
   }
 
-  // ---------- peer navigation (j / k / arrows) ----------
+  // ---------- peer navigation (j / k / arrows / pager buttons) ----------
 
-  /** j / ↓: walk to the next peer in the current lane. */
+  /**
+   * j / ↓ / → / pager-next: advance through the snapshot captured when
+   * the user entered the detail view. The snapshot is intentionally
+   * stable - a status change on the currently visible job preserves its
+   * slot in the iteration, so this call still lands on the next slug
+   * captured at entry time, not on whatever live ordering shows now.
+   *
+   * Falls back to the live lane peers when no snapshot is available
+   * (e.g. detail opened from a URL with no prior iteration).
+   */
   next(info: JobInfo): void {
+    if (this.jobSelection.pagerStep(1)) return;
     const peers = this.jobSelection.triageLanePeers();
     if (peers.length === 0) return;
     const idx = peers.findIndex((p) => p.jobKey === info.jobKey);
@@ -152,8 +162,9 @@ export class TriageController {
     this.jobSelection.openDetail(peers[nextIdx]);
   }
 
-  /** k / ↑: walk to the previous peer in the current lane. */
+  /** k / ↑ / ← / pager-prev: see `next` - same snapshot semantics. */
   prev(info: JobInfo): void {
+    if (this.jobSelection.pagerStep(-1)) return;
     const peers = this.jobSelection.triageLanePeers();
     if (peers.length === 0) return;
     const idx = peers.findIndex((p) => p.jobKey === info.jobKey);

@@ -133,6 +133,12 @@ export class BoardMutationsService {
    */
   changeStateFromDetail(info: JobInfo, targetState: string): void {
     if (!targetState || targetState === info.state) return;
+    // Re-anchor the triage lane to the user-chosen target so the
+    // app-shell's external-advance effect does not interpret the user's
+    // own dropdown change as a foreign reshuffle and jump away. The
+    // LanePager snapshot keeps its original lane intentionally - the
+    // iteration order survives status changes by design.
+    this.jobSelection.triageLaneState = targetState;
     const snapshot = this.jobService.applyOptimisticMove(info.id, info.watchPath, targetState);
     this.jobService.beginOptimisticPersist();
     this.jobService.moveJob(info.id, targetState, info.watchPath).subscribe({

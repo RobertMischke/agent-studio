@@ -31,6 +31,14 @@ export class DetailHeaderComponent {
   readonly completingAndNext = input(false);
   readonly changingState = input(false);
   readonly movingToTop = input(false);
+  /** Lane pager position (1-based). 0 means no pager snapshot active. */
+  readonly pagerPosition = input(0);
+  /** Lane pager total. 0 hides the pager. */
+  readonly pagerTotal = input(0);
+  readonly pagerCanPrev = input(false);
+  readonly pagerCanNext = input(false);
+  /** Human-readable label of the snapshot's original lane (e.g. "Ready"). */
+  readonly pagerLaneLabel = input<string>('');
 
   readonly back = output<void>();
   readonly startTitleEdit = output<void>();
@@ -41,6 +49,20 @@ export class DetailHeaderComponent {
   readonly deleteRequested = output<void>();
   readonly stateChange = output<string>();
   readonly moveToTop = output<void>();
+  readonly pagerPrev = output<void>();
+  readonly pagerNext = output<void>();
+
+  /**
+   * Plain-text tooltip explaining the snapshot iteration. Stays inside
+   * the `title` attribute (default browser delay, no rich HTML) per the
+   * project's tooltip rule.
+   */
+  readonly pagerTooltip = computed(() => {
+    const total = this.pagerTotal();
+    if (total <= 0) return '';
+    const lane = this.pagerLaneLabel() || 'this lane';
+    return `Iterating jobs in the ${lane} lane. Showing job ${this.pagerPosition()} of ${total} captured when you entered this view.`;
+  });
 
   /**
    * Lane dropdown options surfaced in the detail header. The order mirrors

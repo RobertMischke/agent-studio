@@ -2,6 +2,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { JobDetail, JobInfo } from '../../../models/job.model';
 import { JobService } from '../../../services/job.service';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
+import { LanePagerService } from './lane-pager.service';
 
 /**
  * Cycle 9j job-detail-feature service: owns the "currently selected
@@ -25,6 +26,7 @@ import { ErrorDialogService } from '../../../services/error-dialog.service';
 export class JobSelectionService {
   private readonly jobService = inject(JobService);
   private readonly errorDialog = inject(ErrorDialogService);
+  private readonly pager = inject(LanePagerService);
 
   readonly selected = signal<JobDetail | null>(null);
 
@@ -77,10 +79,18 @@ export class JobSelectionService {
     return this.selected()?.info.jobKey === job.jobKey;
   }
 
-  /** Open the side panel for `job`. Updates URL + fetches detail. */
-  openDetail(job: JobInfo): void {
+  /**
+   * Open the side panel for `job`. Updates URL + fetches detail. By
+   * default captures a fresh lane-pager snapshot anchored on `job` —
+   * pass `{ keepPagerSnapshot: true }` from the pager step itself so
+   * the in-progress iteration is preserved rather than re-captured.
+   */
+  openDetail(job: JobInfo, opts: { keepPagerSnapshot?: boolean } = {}): void {
     history.replaceState(null, '', `?job=${encodeURIComponent(job.id)}&watchPath=${encodeURIComponent(job.watchPath)}`);
     this.triageLaneState = job.state;
+    if (!opts.keepPagerSnapshot) {
+      this.pager.capture(job.state, this.triageLanePeers(), job.jobKey);
+    }
     const token = ++this.openDetailToken;
     this.jobService.getDetail(job.id, job.watchPath).subscribe({
       next: (detail) => {
@@ -99,6 +109,41 @@ export class JobSelectionService {
     });
   }
 
+  /**
+   * Pager Prev / Next: step the snapshot's index and fetch the detail
+   * at the new position. The snapshot is preserved (we don't re-capture
+   * from the current live lane), so a status change on the previously
+   * visible job does not break the iteration order. Returns true when
+   * a step actually happened.
+   */
+  pagerStep(direction: -1 | 1): boolean {
+    const entry = this.pager.step(direction);
+    if (!entry) return false;
+    history.replaceState(null, '', `?job=${encodeURIComponent(entry.id)}&watchPath=${encodeURIComponent(entry.watchPath)}`);
+    const token = ++this.openDetailToken;
+    this.jobService.getDetail(entry.id, entry.watchPath).subscribe({
+      next: (detail) => {
+        if (token !== this.openDetailToken) return;
+        // Re-anchor the triage lane to the snapshot's lane so the
+        // external-advance effect in the shell doesn't fire on the
+        // brand-new selection (the new job's state matches the lane
+        // for as long as it's still in it; once the user mutates it
+        // the suppress-once flag below handles the divergence).
+        this.triageLaneState = this.pager.snapshot()?.lane ?? detail.info.state;
+        this.selected.set(detail);
+      },
+      error: (err) => {
+        if (token !== this.openDetailToken) return;
+        this.errorDialog.show(err, {
+          title: 'Failed to load task details',
+          fallbackMessage: 'Failed to load task details',
+          source: `Task ${entry.id}`,
+        });
+      },
+    });
+    return true;
+  }
+
   closeDetail(): void {
     // Bump the token so any in-flight `openDetail` reply (e.g. user
     // pressed `j` then immediately Esc) drops its `selected.set` and
@@ -106,6 +151,7 @@ export class JobSelectionService {
     this.openDetailToken++;
     this.selected.set(null);
     this.triageLaneState = null;
+    this.pager.clear();
     history.replaceState(null, '', window.location.pathname);
   }
 
@@ -121,9 +167,28 @@ export class JobSelectionService {
     const watchPath = params.get('watchPath');
     if (jobId && watchPath) {
       this.jobService.getDetail(jobId, watchPath).subscribe({
-        next: (detail) => this.selected.set(detail),
+        next: (detail) => {
+          this.selected.set(detail);
+          // Re-anchor the pager to the restored job's position in the
+          // existing sessionStorage snapshot (if any). If the open job
+          // isn't part of the stored snapshot, drop it — iteration was
+          // never about this job.
+          const snap = this.pager.snapshot();
+          if (snap) {
+            const inSnap = snap.jobs.some(j => j.jobKey === detail.info.jobKey);
+            if (inSnap) {
+              this.triageLaneState = snap.lane;
+              this.pager.reanchorTo(detail.info.jobKey);
+            } else {
+              this.pager.clear();
+            }
+          }
+        },
         error: () => history.replaceState(null, '', window.location.pathname),
       });
+    } else {
+      // No URL detail to restore - any stored pager snapshot is stale.
+      this.pager.clear();
     }
   }
 

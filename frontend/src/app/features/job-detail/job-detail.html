@@ -8,6 +8,11 @@
     [completingAndNext]="completingAndNext()"
     [changingState]="changingState()"
     [movingToTop]="movingToTop()"
+    [pagerPosition]="pagerPosition()"
+    [pagerTotal]="pagerTotal()"
+    [pagerCanPrev]="pagerCanPrev()"
+    [pagerCanNext]="pagerCanNext()"
+    [pagerLaneLabel]="pagerLaneLabel()"
     (back)="back.emit()"
     (titleDraftChange)="titleDraft.set($event)"
     (startTitleEdit)="startTitleEdit()"
@@ -16,7 +21,9 @@
     (completeAndNext)="completeAndNext()"
     (stateChange)="onStateChange($event)"
     (moveToTop)="moveToTopOfReady()"
-    (deleteRequested)="deleteRequested.emit()" />
+    (deleteRequested)="deleteRequested.emit()"
+    (pagerPrev)="prevInLaneRequested.emit()"
+    (pagerNext)="nextInLaneRequested.emit()" />
 
   <app-command-deck
     [currentWatchPath]="detail().info.watchPath"

@@ -18,6 +18,7 @@ import {
   cliTypeLabel as fmtCliTypeLabel
 } from '../../services/format.util';
 import { LayoutPanesService } from './services/layout-panes.service';
+import { LanePagerService } from './state/lane-pager.service';
 import { ClaudeSessionPollService } from '../polling/services/claude-session-poll.service';
 import { SessionEventsPollService } from '../polling/services/session-events-poll.service';
 import { RunTimelinePollService } from '../polling/services/run-timeline-poll.service';
@@ -78,10 +79,18 @@ export class JobDetailComponent implements OnDestroy {
   readonly triageDeleteRequested = output<{ actionId: string }>();
   /** "Run now" — start the CLI for a 2-ready job. Parent has runner state. */
   readonly triageStartRequested = output<{ actionId: string }>();
-  /** Walk to the next peer in the current lane (j / ↓). */
+  /** Walk to the next peer in the current lane (j / ↓ / → / Next button). */
   readonly nextInLaneRequested = output<void>();
-  /** Walk to the previous peer in the current lane (k / ↑). */
+  /** Walk to the previous peer in the current lane (k / ↑ / ← / Prev button). */
   readonly prevInLaneRequested = output<void>();
+
+  /** Lane-pager snapshot state for the header (read-only facades). */
+  private readonly lanePager = inject(LanePagerService);
+  readonly pagerPosition = this.lanePager.position;
+  readonly pagerTotal = this.lanePager.total;
+  readonly pagerCanPrev = this.lanePager.canPrev;
+  readonly pagerCanNext = this.lanePager.canNext;
+  readonly pagerLaneLabel = this.lanePager.laneLabel;
 
   readonly editingPrompt = signal(false);
 
@@ -761,11 +770,13 @@ export class JobDetailComponent implements OnDestroy {
     switch (event.key) {
       case 'j':
       case 'ArrowDown':
+      case 'ArrowRight':
         event.preventDefault();
         this.nextInLaneRequested.emit();
         return;
       case 'k':
       case 'ArrowUp':
+      case 'ArrowLeft':
         event.preventDefault();
         this.prevInLaneRequested.emit();
         return;
