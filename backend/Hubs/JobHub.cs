@@ -10,4 +10,5 @@ public class JobHub : Hub
     // - cliStarted(jobId, processId, startedAt)              → CLI process started
     // - cliFinished(jobId, exitCode, duration, status)       → CLI process finished
     // - runnerStatusChanged(projectName, mode, activeJobId)  → runner mode/status change
+    // - busMessageAdded(AgentMessage)                        → new bus event appended
 }

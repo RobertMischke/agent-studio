@@ -5,6 +5,7 @@ import {
   AgentMessage,
   AgentMessageQuery,
   AgentMessageSummary,
+  TokenAggregateResponse,
 } from '../models/agent-bus.model';
 
 /**
@@ -72,6 +73,25 @@ export class AgentBusService {
     return this.http.get<AgentMessage>(url).pipe(
       map(m => m ?? null),
       catchError(() => of<AgentMessage | null>(null)),
+    );
+  }
+
+  /**
+   * Token-spend rollup for one project. Backed by `BusAggregationCache` so
+   * the unfiltered request is O(1); since/until trigger a fast in-memory
+   * pass over the projection.
+   */
+  getTokenAggregate(
+    project: string,
+    options: { since?: string; until?: string } = {},
+  ): Observable<TokenAggregateResponse | null> {
+    const url = `/api/bus/${encodeURIComponent(project)}/token-aggregate`;
+    let params = new HttpParams();
+    if (options.since) params = params.set('since', options.since);
+    if (options.until) params = params.set('until', options.until);
+    return this.http.get<TokenAggregateResponse>(url, { params }).pipe(
+      map(r => r ?? null),
+      catchError(() => of<TokenAggregateResponse | null>(null)),
     );
   }
 }

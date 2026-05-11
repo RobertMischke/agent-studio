@@ -413,6 +413,50 @@ public sealed class AgentMessageBusBridge
     }
 
     /// <summary>
+    /// Token-usage attribution with optional context-window snapshot and
+    /// per-turn latency. Preferred over <see cref="EmitTokenUsageAsync(string, string?, string, string?, OrchestratorTokenUsage, CancellationToken)"/>
+    /// when the runner has access to the parsed CLI frame (full
+    /// <see cref="ParsedTurnUsage"/>) and timing markers.
+    /// </summary>
+    public Task EmitTokenUsageRichAsync(
+        string project,
+        string? jobId,
+        string? runId,
+        string participantId,
+        string? topic,
+        ParsedTurnUsage usage,
+        AgentMessageLatency? latency = null,
+        string? correlationId = null,
+        CancellationToken ct = default)
+    {
+        if (usage == null) return Task.CompletedTask;
+
+        var tokens = usage.ToBusTokens();
+        var pct = usage.ContextWindow?.TotalSize is { } total and > 0
+            ? $" ctx={usage.ContextUsed * 100 / total}%"
+            : string.Empty;
+        var ttfb = latency?.TtfbMs is { } t ? $" ttfb={t}ms" : string.Empty;
+        var summary = TruncateSummary(
+            $"tokens: in={usage.Input} out={usage.Output} model={usage.Model ?? "?"}{pct}{ttfb}");
+
+        var msg = NewMessage(
+            participantId: participantId,
+            role: "evidence",
+            kind: "token-usage",
+            severity: "Info",
+            project: project,
+            jobId: jobId,
+            runId: runId,
+            topic: topic ?? "orchestrator-turn",
+            summary: summary,
+            tokens: tokens,
+            latency: latency,
+            correlationId: correlationId,
+            tags: new[] { "token-usage" });
+        return EmitAsync(msg, ct);
+    }
+
+    /// <summary>
     /// Free-form structured event emit. Awaitable, so tests and future
     /// producers that want backpressure can chain off the result. Production
     /// callers should discard the task (<c>_ = bridge.EmitAsync(...)</c>) so
@@ -449,6 +493,7 @@ public sealed class AgentMessageBusBridge
         DateTime? createdAt = null,
         object? payload = null,
         AgentMessageTokens? tokens = null,
+        AgentMessageLatency? latency = null,
         IReadOnlyList<AgentArtifactRef>? artifacts = null,
         IReadOnlyList<string>? tags = null,
         string? correlationId = null,
@@ -478,6 +523,7 @@ public sealed class AgentMessageBusBridge
             Summary = summary,
             Body = body,
             Tokens = tokens,
+            Latency = latency,
             Artifacts = artifacts,
             Payload = payloadElement,
             Tags = tags,

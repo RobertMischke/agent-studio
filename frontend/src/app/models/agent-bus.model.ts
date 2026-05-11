@@ -6,6 +6,24 @@
  * any side effects.
  */
 
+export interface AgentMessageContextWindow {
+  totalSize?: number | null;
+  used?: number | null;
+  remaining?: number | null;
+  systemPromptTokens?: number | null;
+  conversationTokens?: number | null;
+  filesLoadedCount?: number | null;
+  largestFiles?: string[] | null;
+}
+
+export interface AgentMessageLatency {
+  requestedAt?: string | null;
+  firstTokenAt?: string | null;
+  completedAt?: string | null;
+  ttfbMs?: number | null;
+  totalMs?: number | null;
+}
+
 export interface AgentMessageTokens {
   input: number;
   output: number;
@@ -13,6 +31,7 @@ export interface AgentMessageTokens {
   cacheWrite?: number | null;
   model?: string | null;
   dollars?: number | null;
+  contextWindow?: AgentMessageContextWindow | null;
 }
 
 export interface AgentArtifactRef {
@@ -43,6 +62,7 @@ export interface AgentMessage {
   replyToId?: string | null;
   correlationId?: string | null;
   tokens?: AgentMessageTokens | null;
+  latency?: AgentMessageLatency | null;
   artifacts?: AgentArtifactRef[] | null;
   payload?: unknown;
   tags?: string[] | null;
@@ -88,3 +108,34 @@ export const AGENT_MESSAGE_KINDS = [
 ] as const;
 
 export const AGENT_MESSAGE_SEVERITIES = ['Info', 'Warn', 'High'] as const;
+
+/** Per-bucket aggregate row, returned by `/token-aggregate`. */
+export interface TokenAggregateBucket {
+  key: string;
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  messages: number;
+  dollars?: number | null;
+}
+
+export interface TokenAggregateTotals {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  messages: number;
+  dollars?: number | null;
+}
+
+export interface TokenAggregateResponse {
+  project: string;
+  totalMessages: number;
+  since?: string | null;
+  until?: string | null;
+  byModel: TokenAggregateBucket[];
+  byParticipant: TokenAggregateBucket[];
+  byDay: TokenAggregateBucket[];
+  totals: TokenAggregateTotals;
+}

@@ -1,5 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
+using OrchestratorApi.Models;
+using OrchestratorApi.Services.Bus;
 using OrchestratorApi.Services.Cli;
 
 namespace OrchestratorApi.Services.Runner;
@@ -11,13 +13,23 @@ namespace OrchestratorApi.Services.Runner;
 /// resume the same session on the next call), and a flag for whether the
 /// underlying CLI errored.
 /// </summary>
+/// <remarks>
+/// <see cref="ParsedUsage"/> and <see cref="Latency"/> were added when the
+/// bus gained context-window + latency tracking. <see cref="TokenUsage"/>
+/// remains the legacy view consumed by <c>OrchestratorChatLog</c> and the
+/// orchestrator.jsonl writer; new bus emits prefer the richer fields.
+/// </remarks>
 public sealed record OrchestratorDecisionResult(
     bool Success,
     string ReplyText,
     string Model,
     OrchestratorTokenUsage? TokenUsage,
     string? CapturedSessionId,
-    string? ErrorMessage);
+    string? ErrorMessage)
+{
+    public ParsedTurnUsage? ParsedUsage { get; init; }
+    public AgentMessageLatency? Latency { get; init; }
+}
 
 /// <summary>
 /// Invokes the Claude CLI in one-shot JSON mode to produce an orchestrator
@@ -42,11 +54,19 @@ public class OrchestratorRunner
 
     private readonly ClaudeCliService _claude;
     private readonly ILogger<OrchestratorRunner> _logger;
+    private readonly ICliUsageParser? _claudeUsageParser;
+    private readonly ICliModelRegistry? _modelRegistry;
 
-    public OrchestratorRunner(ClaudeCliService claude, ILogger<OrchestratorRunner> logger)
+    public OrchestratorRunner(
+        ClaudeCliService claude,
+        ILogger<OrchestratorRunner> logger,
+        CliUsageParserRegistry? parsers = null,
+        ICliModelRegistry? modelRegistry = null)
     {
         _claude = claude;
         _logger = logger;
+        _claudeUsageParser = parsers?.Get("claude");
+        _modelRegistry = modelRegistry;
     }
 
     /// <summary>
@@ -121,6 +141,12 @@ public class OrchestratorRunner
         timeoutCts.CancelAfter(DefaultTimeout);
         var effectiveCt = timeoutCts.Token;
 
+        // Latency capture: requestedAt = moment we send the prompt to the CLI;
+        // completedAt = moment the CLI exits. firstTokenAt is unavailable on
+        // -p (one-shot, the CLI buffers and emits a single JSON blob at exit),
+        // so we leave it null on this path; the streaming task agent path
+        // (Claude stream-json) populates it from the first OutputDelta.
+        var requestedAt = DateTime.UtcNow;
         try
         {
             using var process = new Process { StartInfo = psi, EnableRaisingEvents = true };
@@ -174,7 +200,9 @@ public class OrchestratorRunner
                 return new OrchestratorDecisionResult(false, "", modelId, null, null, combined);
             }
 
-            return ParseResult(stdout, modelId);
+            var completedAt = DateTime.UtcNow;
+            var result = ParseResult(stdout, modelId);
+            return EnrichWithLatencyAndContext(result, requestedAt, completedAt);
         }
         catch (OperationCanceledException)
         {
@@ -275,6 +303,53 @@ public class OrchestratorRunner
         if (obj.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out var n))
             return n;
         return 0;
+    }
+
+    /// <summary>
+    /// Attach latency + context-window data parsed from the raw CLI JSON to
+    /// the decision result. Best-effort: if the parser registry was not
+    /// injected (legacy test ctor) the result is returned unchanged.
+    /// </summary>
+    private OrchestratorDecisionResult EnrichWithLatencyAndContext(
+        OrchestratorDecisionResult result,
+        DateTime requestedAtUtc,
+        DateTime completedAtUtc)
+    {
+        var totalMs = (long)(completedAtUtc - requestedAtUtc).TotalMilliseconds;
+        var latency = new AgentMessageLatency(
+            RequestedAt: requestedAtUtc,
+            FirstTokenAt: null,
+            CompletedAt: completedAtUtc,
+            TtfbMs: null,
+            TotalMs: totalMs);
+
+        ParsedTurnUsage? parsed = null;
+        if (_claudeUsageParser is not null && _modelRegistry is not null && result.TokenUsage is not null)
+        {
+            // Re-shape via the parser so the context-window block is computed
+            // from the same model-registry the rest of the bus uses.
+            parsed = new ParsedTurnUsage(
+                Model: result.TokenUsage.Model,
+                Input: result.TokenUsage.InputTokens,
+                Output: result.TokenUsage.OutputTokens,
+                CacheRead: result.TokenUsage.CacheReadTokens,
+                CacheWrite: result.TokenUsage.CacheCreationTokens,
+                ReasoningOutput: null,
+                ContextWindow: BuildContextWindow(result.TokenUsage, _modelRegistry));
+        }
+
+        return result with { Latency = latency, ParsedUsage = parsed };
+    }
+
+    private static AgentMessageContextWindow? BuildContextWindow(OrchestratorTokenUsage usage, ICliModelRegistry registry)
+    {
+        var total = registry.TotalContextSize(usage.Model);
+        long used = usage.InputTokens + usage.CacheReadTokens;
+        if (total is null && used == 0) return null;
+        return new AgentMessageContextWindow(
+            TotalSize: total,
+            Used: used,
+            Remaining: total is { } t ? Math.Max(0, t - used) : null);
     }
 
     private static string Quote(string s) => $"\"{s.Replace("\"", "\\\"")}\"";

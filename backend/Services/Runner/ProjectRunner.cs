@@ -841,8 +841,23 @@ public class ProjectRunner
         });
 
         // Mirror the boot's token spend onto the bus so the workspace timeline
-        // captures the boot cost as a first-class event.
-        if (result.TokenUsage != null)
+        // captures the boot cost as a first-class event. Prefer the rich emit
+        // (carries context-window snapshot + per-call latency) when the runner
+        // has the parsed usage; fall back to the legacy emit otherwise.
+        if (result.ParsedUsage != null)
+        {
+            try
+            {
+                _ = _bus?.EmitTokenUsageRichAsync(
+                    ProjectName, jobId: null, runId: null,
+                    AgentMessageBusBridge.ParticipantOrchestratorFor(ProjectName),
+                    topic: "orchestrator-boot",
+                    usage: result.ParsedUsage,
+                    latency: result.Latency);
+            }
+            catch (Exception ex) { _logger.LogDebug(ex, "Bus mirror of orchestrator boot token usage failed for {Project}", ProjectName); }
+        }
+        else if (result.TokenUsage != null)
         {
             try
             {
@@ -1113,7 +1128,20 @@ public class ProjectRunner
                     TokenUsage = result.TokenUsage
                 });
 
-                if (result.TokenUsage != null)
+                if (result.ParsedUsage != null)
+                {
+                    try
+                    {
+                        _ = _bus?.EmitTokenUsageRichAsync(
+                            info.ProjectName, info.Id, runId: null,
+                            AgentMessageBusBridge.ParticipantOrchestratorFor(info.ProjectName),
+                            topic: "orchestrator-steer",
+                            usage: result.ParsedUsage,
+                            latency: result.Latency);
+                    }
+                    catch (Exception ex) { _logger.LogDebug(ex, "Bus mirror of orchestrator steer token usage failed for {JobId}", jobId); }
+                }
+                else if (result.TokenUsage != null)
                 {
                     try
                     {
@@ -1158,7 +1186,20 @@ public class ProjectRunner
             // screen can rank expensive turns. orchestrator.jsonl stays
             // canonical for the per-job rollup; the bus carries one event
             // per decision turn.
-            if (result.TokenUsage != null)
+            if (result.ParsedUsage != null)
+            {
+                try
+                {
+                    _ = _bus?.EmitTokenUsageRichAsync(
+                        info.ProjectName, info.Id, runId: null,
+                        AgentMessageBusBridge.ParticipantOrchestratorFor(info.ProjectName),
+                        topic: "orchestrator-decision",
+                        usage: result.ParsedUsage,
+                        latency: result.Latency);
+                }
+                catch (Exception ex) { _logger.LogDebug(ex, "Bus mirror of orchestrator token usage failed for {JobId}", jobId); }
+            }
+            else if (result.TokenUsage != null)
             {
                 try
                 {

@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agent Message Bus — Architecture Report</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #222635;
+    --border: #2e3347;
+    --text: #e2e8f0;
+    --muted: #8892a4;
+    --green: #34d399;
+    --red: #f87171;
+    --yellow: #fbbf24;
+    --blue: #60a5fa;
+    --purple: #a78bfa;
+    --cyan: #22d3ee;
+    --orange: #fb923c;
+    --accent: #6366f1;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    padding: 2rem;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  h1 { font-size: 2rem; font-weight: 700; margin-bottom: 0.25rem; }
+  h2 { font-size: 1.4rem; font-weight: 600; margin: 2.5rem 0 1rem; color: var(--blue); border-bottom: 1px solid var(--border); padding-bottom: 0.4rem; }
+  h3 { font-size: 1.1rem; font-weight: 600; margin: 1.5rem 0 0.5rem; color: var(--cyan); }
+  p { margin-bottom: 0.8rem; color: var(--text); }
+  .subtitle { color: var(--muted); font-size: 0.95rem; margin-bottom: 2rem; }
+  .badge { display: inline-block; padding: 0.2em 0.6em; border-radius: 4px; font-size: 0.75rem; font-weight: 600; }
+  .badge-green { background: rgba(52,211,153,.15); color: var(--green); border: 1px solid rgba(52,211,153,.3); }
+  .badge-red { background: rgba(248,113,113,.15); color: var(--red); border: 1px solid rgba(248,113,113,.3); }
+  .badge-yellow { background: rgba(251,191,36,.15); color: var(--yellow); border: 1px solid rgba(251,191,36,.3); }
+  .badge-blue { background: rgba(96,165,250,.15); color: var(--blue); border: 1px solid rgba(96,165,250,.3); }
+  .badge-purple { background: rgba(167,139,250,.15); color: var(--purple); border: 1px solid rgba(167,139,250,.3); }
+
+  /* Diagram */
+  .diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 2rem;
+    overflow-x: auto;
+    margin: 1.5rem 0;
+  }
+  .flow {
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+    min-width: 820px;
+  }
+  .flow-col {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+  }
+  .flow-col-label {
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .08em;
+    color: var(--muted);
+    text-align: center;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px dashed var(--border);
+    margin-bottom: 0.5rem;
+  }
+  .box {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.5rem 0.7rem;
+    font-size: 0.78rem;
+    text-align: center;
+    position: relative;
+  }
+  .box-writer { border-color: rgba(96,165,250,.5); }
+  .box-store { border-color: rgba(52,211,153,.5); background: rgba(52,211,153,.05); }
+  .box-api { border-color: rgba(251,191,36,.5); }
+  .box-ui { border-color: rgba(167,139,250,.5); }
+  .arrow-col {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding-top: 1.5rem;
+    min-width: 32px;
+    color: var(--muted);
+    font-size: 1.1rem;
+    gap: 8px;
+  }
+  .arrow-label { font-size: 0.6rem; color: var(--muted); text-align: center; line-height: 1.2; }
+
+  /* Tables */
+  table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.85rem; }
+  th { background: var(--surface2); color: var(--muted); font-weight: 600; padding: 0.6rem 0.8rem; text-align: left; border-bottom: 2px solid var(--border); }
+  td { padding: 0.55rem 0.8rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:hover td { background: rgba(255,255,255,.02); }
+  code {
+    font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+    font-size: 0.82em;
+    background: rgba(255,255,255,.06);
+    padding: 0.1em 0.4em;
+    border-radius: 3px;
+    color: var(--cyan);
+  }
+  pre {
+    font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
+    font-size: 0.8rem;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1rem 1.2rem;
+    overflow-x: auto;
+    margin: 0.8rem 0 1.2rem;
+    line-height: 1.5;
+    color: #c9d1d9;
+  }
+  .highlight { color: var(--green); }
+  .hl-yellow { color: var(--yellow); }
+  .hl-blue { color: var(--blue); }
+  .hl-purple { color: var(--purple); }
+  .hl-red { color: var(--red); }
+  .hl-orange { color: var(--orange); }
+
+  /* Cards */
+  .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; margin: 1rem 0; }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1rem 1.2rem;
+  }
+  .card h4 { font-size: 0.9rem; font-weight: 600; margin-bottom: 0.4rem; }
+  .card p { font-size: 0.82rem; color: var(--muted); margin: 0; }
+  .card-green { border-color: rgba(52,211,153,.3); }
+  .card-red { border-color: rgba(248,113,113,.3); }
+  .card-yellow { border-color: rgba(251,191,36,.3); }
+
+  /* Roadmap */
+  .roadmap { list-style: none; padding: 0; }
+  .roadmap li {
+    display: flex;
+    gap: 1rem;
+    padding: 0.9rem 0;
+    border-bottom: 1px solid var(--border);
+    align-items: flex-start;
+  }
+  .roadmap-num {
+    width: 28px; height: 28px;
+    background: var(--accent);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 0.75rem; font-weight: 700;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .roadmap-body h4 { font-size: 0.9rem; font-weight: 600; margin-bottom: 0.2rem; }
+  .roadmap-body p { font-size: 0.82rem; color: var(--muted); margin: 0; }
+
+  /* Schema diff */
+  .schema-new { background: rgba(52,211,153,.08); border-left: 3px solid var(--green); }
+  .schema-existing { opacity: .5; }
+
+  /* Separator */
+  hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+  .toc { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.4rem; margin-bottom: 2rem; }
+  .toc ul { padding-left: 1.2rem; }
+  .toc li { margin: 0.25rem 0; }
+  .toc a { color: var(--blue); text-decoration: none; font-size: 0.875rem; }
+  .toc a:hover { text-decoration: underline; }
+  .info-box {
+    background: rgba(96,165,250,.07);
+    border: 1px solid rgba(96,165,250,.25);
+    border-radius: 8px;
+    padding: 0.9rem 1.1rem;
+    margin: 1rem 0;
+    font-size: 0.85rem;
+    color: var(--text);
+  }
+  .warn-box {
+    background: rgba(251,191,36,.07);
+    border: 1px solid rgba(251,191,36,.25);
+    border-radius: 8px;
+    padding: 0.9rem 1.1rem;
+    margin: 1rem 0;
+    font-size: 0.85rem;
+    color: var(--text);
+  }
+</style>
+</head>
+<body>
+
+<h1>Agent Message Bus</h1>
+<p class="subtitle">Architecture Report &mdash; Stand 2026-05-11 &mdash; Erzeugt von Claude (claude-sonnet-4-6)</p>
+
+<div class="toc">
+  <strong>Inhalt</strong>
+  <ul>
+    <li><a href="#concept">1. Konzept &amp; Zweck</a></li>
+    <li><a href="#architecture">2. Architektur &amp; Datenfluss</a></li>
+    <li><a href="#message-model">3. Nachrichten-Modell</a></li>
+    <li><a href="#implemented">4. Was ist implementiert</a></li>
+    <li><a href="#gaps">5. Grenzen &amp; Lücken</a></li>
+    <li><a href="#requirements">6. Neue Anforderungen (Token / Kontext / Latenz)</a></li>
+    <li><a href="#roadmap">7. Roadmap</a></li>
+  </ul>
+</div>
+
+<!-- 1. Konzept -->
+<h2 id="concept">1. Konzept &amp; Zweck</h2>
+
+<p>Der <strong>Agent Message Bus</strong> ist ein <em>append-only JSONL-Event-Store</em>, der alle relevanten Ereignisse aus dem System an einem zentralen Ort sammelt: Entscheidungen des Orchestrators, Advisory-Meldungen des Supervisors, Interventionen, Lifecycle-Events von Jobs sowie Token-Verbrauch pro Turn.</p>
+
+<p>Der Bus ist <strong>kein primärer Schreibpfad</strong>. Kanonische Writer (z.B. <code>cli-output.log</code>, <code>observations.jsonl</code>) schreiben zuerst &mdash; der Bus-Emit folgt <em>best-effort</em> nach. Wenn der Bus-Write scheitert, verliert das System keine Daten, nur Sichtbarkeit.</p>
+
+<div class="info-box">
+  <strong>Metapher:</strong> Stell dir den Bus wie ein Audit-Log vor. Alle Subsysteme berichten dorthin, was sie tun. Die Frontend-UI liest nur aus dem Bus &mdash; sie fragt nie direkt beim Orchestrator oder Supervisor nach.
+</div>
+
+<h3>Wofür ist der Bus gedacht?</h3>
+<div class="card-grid">
+  <div class="card card-green">
+    <h4>Observability</h4>
+    <p>Live-Überblick was gerade passiert: welcher Agent arbeitet, wie viele Tokens verbraucht, welche Entscheidung wurde getroffen.</p>
+  </div>
+  <div class="card card-green">
+    <h4>Debugging</h4>
+    <p>Nachvollziehen warum ein Job fehlgeschlagen ist &mdash; Timeline aus Entscheidungen, Interventionen und Fehlermeldungen.</p>
+  </div>
+  <div class="card card-green">
+    <h4>Cost Tracking</h4>
+    <p>Token-Verbrauch je Job, je Modell, je Tag aggregierbar &mdash; ohne in Raw-Logs zu suchen.</p>
+  </div>
+  <div class="card card-yellow">
+    <h4>Unified Timeline (geplant)</h4>
+    <p>Bus + ProjectChat + OrchestratorChat in einer einzigen chronologischen Ansicht.</p>
+  </div>
+  <div class="card card-yellow">
+    <h4>Performance Tracking (geplant)</h4>
+    <p>Latenz pro Modell-Turn, Context-Window-Auslastung &mdash; Kapazitätsplanung und Bottleneck-Analyse.</p>
+  </div>
+</div>
+
+<!-- 2. Architektur -->
+<h2 id="architecture">2. Architektur &amp; Datenfluss</h2>
+
+<div class="diagram">
+  <div class="flow">
+
+    <div class="flow-col">
+      <div class="flow-col-label">Quellen (Writer)</div>
+      <div class="box box-writer">OrchestratorChatLog<br><small style="color:var(--muted)">decision / reissue / giveUp</small></div>
+      <div class="box box-writer">HardHealthCheckHostedService<br><small style="color:var(--muted)">advisory</small></div>
+      <div class="box box-writer">SupervisorInterventionService<br><small style="color:var(--muted)">intervention</small></div>
+      <div class="box box-writer">Runner (CLI-Output-Parser)<br><small style="color:var(--muted)">token-usage, lifecycle</small></div>
+      <div class="box box-writer">SupportingAgent<br><small style="color:var(--muted)">observation / artifact</small></div>
+    </div>
+
+    <div class="arrow-col">
+      <span>&rarr;</span>
+      <div class="arrow-label">via<br>Bridge</div>
+    </div>
+
+    <div class="flow-col" style="flex:0 0 200px">
+      <div class="flow-col-label">Bus-Kern</div>
+      <div class="box box-store" style="margin-bottom:6px">
+        <strong>AgentMessageBusBridge</strong><br>
+        <small style="color:var(--muted)">Typisierte Emitter-Methoden</small>
+      </div>
+      <div class="box box-store" style="margin-bottom:6px">
+        <strong>AgentMessageBusStore</strong><br>
+        <small style="color:var(--muted)">AppendAsync / QueryAsync<br>JSONL + In-Memory-Projection<br>Semaphore per File</small>
+      </div>
+      <div class="box box-store">
+        <strong>AgentMessageValidator</strong><br>
+        <small style="color:var(--muted)">Validiert gegen Enums</small>
+      </div>
+    </div>
+
+    <div class="arrow-col">
+      <span>&rarr;</span>
+      <div class="arrow-label">JSONL<br>auf Disk</div>
+    </div>
+
+    <div class="flow-col" style="flex:0 0 170px">
+      <div class="flow-col-label">Storage</div>
+      <div class="box" style="font-size:0.72rem; text-align:left; padding: 0.6rem 0.8rem; line-height:1.7">
+        <span style="color:var(--muted)">logs/bus/</span><br>
+        &nbsp;&nbsp;<span style="color:var(--cyan)">participants/</span><br>
+        &nbsp;&nbsp;<span style="color:var(--cyan)">agent-taskboard/</span><br>
+        &nbsp;&nbsp;&nbsp;&nbsp;<span style="color:var(--green)">2026-05-11.jsonl</span><br>
+        &nbsp;&nbsp;<span style="color:var(--cyan)">_workspace/</span>
+      </div>
+    </div>
+
+    <div class="arrow-col">
+      <span>&rarr;</span>
+      <div class="arrow-label">HTTP<br>GET</div>
+    </div>
+
+    <div class="flow-col">
+      <div class="flow-col-label">API (Read-Only)</div>
+      <div class="box box-api"><code>/summary</code></div>
+      <div class="box box-api"><code>/recent</code></div>
+      <div class="box box-api"><code>/messages</code><br><small style="color:var(--muted)">(Filter: job/run/kind/...)</small></div>
+      <div class="box box-api"><code>/messages/{id}</code></div>
+    </div>
+
+    <div class="arrow-col">
+      <span>&rarr;</span>
+      <div class="arrow-label">Polling<br>(kein Push)</div>
+    </div>
+
+    <div class="flow-col">
+      <div class="flow-col-label">Frontend</div>
+      <div class="box box-ui">AgentBusService<br><small style="color:var(--muted)">HTTP-Polling-Wrapper</small></div>
+      <div class="box box-ui" style="opacity:.45">Bus-Timeline-Panel<br><small style="color:var(--muted)">(nicht eingebaut)</small></div>
+      <div class="box box-ui" style="opacity:.45">Token-Aggregation-View<br><small style="color:var(--muted)">(nicht eingebaut)</small></div>
+    </div>
+
+  </div>
+</div>
+
+<div class="warn-box">
+  <strong>Aktuell kein Push:</strong> Das Frontend pollt per HTTP. SignalR (<code>busMessageAdded</code> via <code>JobHub.cs</code>) ist im Spec dokumentiert, aber noch nicht verdrahtet. Bis dahin: kein Live-Update ohne manuelles Reload oder Polling-Interval.
+</div>
+
+<!-- 3. Nachrichten-Modell -->
+<h2 id="message-model">3. Nachrichten-Modell</h2>
+
+<h3>Envelope (AgentMessage)</h3>
+<pre>{
+  <span class="hl-blue">"id"</span>:            <span class="highlight">"msg_01abc..."</span>,         <span style="color:var(--muted)">// UUID</span>
+  <span class="hl-blue">"timestamp"</span>:     <span class="highlight">"2026-05-11T13:30:00Z"</span>,
+  <span class="hl-blue">"project"</span>:       <span class="highlight">"agent-taskboard"</span>,
+  <span class="hl-blue">"jobId"</span>:         <span class="highlight">"fix-auth-bug"</span>,
+  <span class="hl-blue">"runId"</span>:         <span class="highlight">"run-42"</span>,
+
+  <span class="hl-blue">"sender"</span>: {
+    <span class="hl-blue">"id"</span>:   <span class="highlight">"orchestrator"</span>,
+    <span class="hl-blue">"kind"</span>: <span class="hl-purple">"Orchestrator"</span>,           <span style="color:var(--muted)">// 8 Kinds (siehe unten)</span>
+    <span class="hl-blue">"model"</span>: <span class="highlight">"claude-sonnet-4-6"</span>
+  },
+
+  <span class="hl-blue">"kind"</span>:     <span class="hl-purple">"token-usage"</span>,             <span style="color:var(--muted)">// Nachrichtentyp (7 Arten)</span>
+  <span class="hl-blue">"severity"</span>: <span class="hl-yellow">"info"</span>,                  <span style="color:var(--muted)">// debug|info|warn|error|fatal</span>
+
+  <span class="hl-blue">"body"</span>:    <span class="highlight">"Turn 3 completed"</span>,
+  <span class="hl-blue">"replyToId"</span>: <span class="highlight">null</span>,
+  <span class="hl-blue">"correlationId"</span>: <span class="highlight">"run-42"</span>,
+
+  <span class="hl-blue">"tokens"</span>: {
+    <span class="hl-blue">"input"</span>: 12400, <span class="hl-blue">"output"</span>: 850,
+    <span class="hl-blue">"cacheRead"</span>: 67200, <span class="hl-blue">"cacheWrite"</span>: 0,
+    <span class="hl-blue">"model"</span>: <span class="highlight">"claude-sonnet-4-6"</span>
+  },
+
+  <span class="hl-blue">"artifacts"</span>: []
+}</pre>
+
+<h3>Participant Kinds</h3>
+<table>
+  <tr><th>Kind</th><th>Beschreibung</th><th>Beispiele</th></tr>
+  <tr><td><code>User</code></td><td>Menschlicher Nutzer</td><td>Chat-Inputs</td></tr>
+  <tr><td><code>Orchestrator</code></td><td>Haupt-Claude-Agent</td><td>Entscheidungen, Reissues</td></tr>
+  <tr><td><code>Supervisor</code></td><td>Aufsicht / Health-Check</td><td>Advisories, Interventionen</td></tr>
+  <tr><td><code>CodingAgent</code></td><td>Coding-Subagent (z.B. Aider)</td><td>Code-Changes</td></tr>
+  <tr><td><code>SupportingAgent</code></td><td>Roadmap, Analyse, etc.</td><td>Observations</td></tr>
+  <tr><td><code>SystemReview</code></td><td>Automatische Code-Review</td><td>Review-Ergebnisse</td></tr>
+  <tr><td><code>Runtime</code></td><td>System-Lifecycle</td><td>Job-Started, Job-Completed</td></tr>
+  <tr><td><code>External</code></td><td>Externe Dienste (GitHub, CI)</td><td>PR-Events</td></tr>
+</table>
+
+<h3>Message Kinds</h3>
+<table>
+  <tr><th>Kind</th><th>Von wem</th><th>Beschreibung</th></tr>
+  <tr><td><code>decision</code></td><td>Orchestrator</td><td>Was der Orchestrator als nächstes tun wird und warum</td></tr>
+  <tr><td><code>advisory</code></td><td>Supervisor</td><td>Warnungen ohne Eingriff (z.B. hoher Token-Verbrauch)</td></tr>
+  <tr><td><code>intervention</code></td><td>Supervisor</td><td>Aktiver Eingriff: neuer Plan, Abort</td></tr>
+  <tr><td><code>lifecycle</code></td><td>Runtime</td><td>job-started, run-started, job-completed, job-failed</td></tr>
+  <tr><td><code>token-usage</code></td><td>Orchestrator / Runner</td><td>Token-Verbrauch nach jedem API-Turn</td></tr>
+  <tr><td><code>observation</code></td><td>Supporting Agent</td><td>Ergebnisse von Analysen, z.B. Roadmap-Alignment</td></tr>
+  <tr><td><code>artifact</code></td><td>Alle</td><td>Erzeugte Dateien, Diffs, Reports</td></tr>
+</table>
+
+<!-- 4. Implementiert -->
+<h2 id="implemented">4. Was ist implementiert <span class="badge badge-green">grün</span></h2>
+
+<table>
+  <tr><th>Komponente</th><th>Datei</th><th>Status</th></tr>
+  <tr>
+    <td><strong>AgentMessageBusStore</strong></td>
+    <td><code>backend/Services/Bus/AgentMessageBusStore.cs</code></td>
+    <td><span class="badge badge-green">fertig</span> JSONL-Append, In-Memory-Projection, atomarer Semaphore</td>
+  </tr>
+  <tr>
+    <td><strong>AgentMessageBusBridge</strong></td>
+    <td><code>backend/Services/Bus/AgentMessageBusBridge.cs</code></td>
+    <td><span class="badge badge-green">fertig</span> Typisierte Emitter für alle Subsysteme</td>
+  </tr>
+  <tr>
+    <td><strong>AgentMessageValidator</strong></td>
+    <td><code>backend/Services/Bus/AgentMessageValidator.cs</code></td>
+    <td><span class="badge badge-green">fertig</span> Validiert gegen bekannte Enums</td>
+  </tr>
+  <tr>
+    <td><strong>AgentMessageBusPaths</strong></td>
+    <td><code>backend/Services/Bus/AgentMessageBusPaths.cs</code></td>
+    <td><span class="badge badge-green">fertig</span> Pfad-Management nach Schema</td>
+  </tr>
+  <tr>
+    <td><strong>BusEndpoints</strong></td>
+    <td><code>backend/Endpoints/BusEndpoints.cs</code></td>
+    <td><span class="badge badge-green">fertig</span> 4 GET-Endpunkte: summary, recent, messages, messages/{id}</td>
+  </tr>
+  <tr>
+    <td><strong>AgentBusService</strong></td>
+    <td><code>frontend/src/app/services/agent-bus.service.ts</code></td>
+    <td><span class="badge badge-green">fertig</span> HTTP-Polling-Wrapper mit Fallback</td>
+  </tr>
+  <tr>
+    <td><strong>C#-Models</strong></td>
+    <td><code>backend/Models/AgentBus.cs</code></td>
+    <td><span class="badge badge-green">fertig</span> AgentMessage, AgentParticipant, AgentArtifactRef, ...</td>
+  </tr>
+  <tr>
+    <td><strong>Bridge: OrchestratorChatLog</strong></td>
+    <td><code>OrchestratorChatLog.cs</code></td>
+    <td><span class="badge badge-green">fertig</span> Decision / Reissue / HeuristicFallback / GiveUp</td>
+  </tr>
+  <tr>
+    <td><strong>Bridge: Supervisor-Advisories</strong></td>
+    <td><code>HardHealthCheckHostedService</code></td>
+    <td><span class="badge badge-green">fertig</span></td>
+  </tr>
+  <tr>
+    <td><strong>Bridge: Supervisor-Interventionen</strong></td>
+    <td><code>SupervisorInterventionService</code></td>
+    <td><span class="badge badge-green">fertig</span></td>
+  </tr>
+  <tr>
+    <td><strong>Token-Usage-Nachrichten</strong></td>
+    <td>via Bridge nach Orchestrator-Turn</td>
+    <td><span class="badge badge-green">fertig</span> input / output / cacheRead / cacheWrite / model</td>
+  </tr>
+  <tr>
+    <td><strong>Backend-Tests</strong></td>
+    <td><code>AgentMessageBusStoreTests.cs</code>, <code>AgentMessageBusBridgeTests.cs</code></td>
+    <td><span class="badge badge-green">fertig</span> Contract-Tests für Append, Query, Bridge-Mapping</td>
+  </tr>
+  <tr>
+    <td><strong>JSON-Schemas</strong></td>
+    <td><code>docs/schemas/agent-message.schema.json</code></td>
+    <td><span class="badge badge-green">fertig</span></td>
+  </tr>
+</table>
+
+<!-- 5. Grenzen -->
+<h2 id="gaps">5. Grenzen &amp; Lücken <span class="badge badge-red">offen</span></h2>
+
+<table>
+  <tr><th>Lücke</th><th>Auswirkung</th></tr>
+  <tr>
+    <td><strong>Kein SignalR-Push</strong></td>
+    <td>UI muss pollen &mdash; kein Live-Update ohne Polling-Interval. <code>busMessageAdded</code> im Spec, nicht in <code>JobHub.cs</code> verdrahtet.</td>
+  </tr>
+  <tr>
+    <td><strong>Kein Token-Aggregation-Endpoint</strong></td>
+    <td>Man kann nicht schnell "gesamt je Modell heute" abfragen. Die Rohdaten sind da; es fehlt nur ein Rollup.</td>
+  </tr>
+  <tr>
+    <td><strong>Kein Context-Window-Tracking</strong></td>
+    <td>Unklar wie groß der Kontext war, was drin war, wie nah man am Limit ist.</td>
+  </tr>
+  <tr>
+    <td><strong>Kein Latenz-Tracking</strong></td>
+    <td>Kein TTFB, keine Gesamtdauer je Turn &mdash; kein Anhaltspunkt für Rate-Limiting oder Kapazitätsplanung.</td>
+  </tr>
+  <tr>
+    <td><strong>Kein Unified Timeline Model</strong></td>
+    <td>Bus, ProjectChat und OrchestratorChat sind drei separate Systeme mit drei verschiedenen Shapes. Korrelation ist manuell.</td>
+  </tr>
+  <tr>
+    <td><strong>Kein SSE/Stream-Endpoint</strong></td>
+    <td>Kein <code>/api/bus/{project}/stream</code> &mdash; nur Polling möglich.</td>
+  </tr>
+  <tr>
+    <td><strong>Kein Workspace-weiter Index</strong></td>
+    <td>Suche über alle Projekte ("alle Nachrichten mit 'timeout'") nicht möglich. Nur per-Projekt.</td>
+  </tr>
+  <tr>
+    <td><strong>Participant-Graph nicht berechnet</strong></td>
+    <td>Schema unterstützt <code>replyToId</code> / <code>correlationId</code> für einen Graphen, aber kein Service baut ihn auf.</td>
+  </tr>
+</table>
+
+<!-- 6. Neue Anforderungen -->
+<h2 id="requirements">6. Neue Anforderungen</h2>
+
+<h3>6a. Token-Usage-Aggregation</h3>
+<p>Ziel: Schnell den Token-Verbrauch nach Participant, Modell oder Tag aufaddieren &mdash; ohne alle JSONL-Files selbst zu parsen.</p>
+
+<p>Alle Daten sind bereits als <code>kind:token-usage</code>-Nachrichten im Bus. Es fehlt nur ein Rollup-Pass über die In-Memory-Projection.</p>
+
+<p><strong>Vorgeschlagener Endpunkt:</strong></p>
+<pre>GET /api/bus/{project}/token-aggregate?groupBy=model|participant|day&since=...&until=...
+
+Response:
+{
+  <span class="hl-blue">"byModel"</span>: [
+    { <span class="hl-blue">"model"</span>: <span class="highlight">"claude-sonnet-4-6"</span>, <span class="hl-blue">"input"</span>: 1240000, <span class="hl-blue">"output"</span>: 85000, <span class="hl-blue">"cacheRead"</span>: 6720000, <span class="hl-blue">"cacheWrite"</span>: 120000 },
+    ...
+  ],
+  <span class="hl-blue">"byParticipant"</span>: [
+    { <span class="hl-blue">"participantId"</span>: <span class="highlight">"orchestrator"</span>, <span class="hl-blue">"input"</span>: 800000, ... },
+    ...
+  ],
+  <span class="hl-blue">"byDay"</span>: [
+    { <span class="hl-blue">"date"</span>: <span class="highlight">"2026-05-11"</span>, <span class="hl-blue">"input"</span>: 1240000, ... },
+    ...
+  ]
+}</pre>
+
+<div class="info-box"><strong>Schema-Änderung:</strong> Keine &mdash; die Daten sind bereits vorhanden.</div>
+
+<h3>6b. Context-Window-Tracking</h3>
+<p>Ziel: Wissen, wie groß der Kontext war, was drin stand, wie nah man am Limit ist &mdash; per Turn.</p>
+
+<p>Claude gibt beim API-Call zurück wie viele Tokens verbraucht wurden. Durch die Differenz aus <code>cache_read_input_tokens</code> und <code>input_tokens</code> lässt sich ableiten wie viel vom Kontext gecacht war. Claude gibt außerdem optional den Context-Usage-Prozentsatz in der CLI-Ausgabe aus.</p>
+
+<p><strong>Vorgeschlagenes neues Feld auf <code>AgentMessageTokens</code>:</strong></p>
+<pre class="schema-new">"contextWindow": {
+  <span class="hl-blue">"totalSize"</span>:            <span class="hl-orange">200000</span>,    <span style="color:var(--muted)">// Modell-Limit in Tokens</span>
+  <span class="hl-blue">"used"</span>:                 <span class="hl-orange">87432</span>,     <span style="color:var(--muted)">// tatsächlich verbraucht (input + cacheRead)</span>
+  <span class="hl-blue">"remaining"</span>:            <span class="hl-orange">112568</span>,    <span style="color:var(--muted)">// totalSize - used</span>
+  <span class="hl-blue">"systemPromptTokens"</span>:   <span class="hl-orange">12000</span>,     <span style="color:var(--muted)">// geschätzt aus Cache-Write beim ersten Turn</span>
+  <span class="hl-blue">"conversationTokens"</span>:   <span class="hl-orange">71000</span>,     <span style="color:var(--muted)">// Konversations-History</span>
+  <span class="hl-blue">"filesLoadedCount"</span>:     <span class="hl-orange">14</span>,        <span style="color:var(--muted)">// aus CLI-Output parsbar (ToolUse: Read)</span>
+  <span class="hl-blue">"largestFiles"</span>: [<span class="highlight">"path/to/file.ts (4200 tok)"</span>, <span class="highlight">"..."</span>]
+}</pre>
+
+<div class="info-box"><strong>Schema-Änderung:</strong> Neues optionales <code>contextWindow</code>-Objekt in <code>agent-message-tokens.schema.json</code>. Das Feld ist optional &mdash; rückwärtskompatibel.</div>
+
+<h3>6c. Latenz-Tracking</h3>
+<p>Ziel: Wissen wie schnell ein Modell antwortet &mdash; Time-to-First-Byte (TTFB) und Gesamtdauer je Turn. Besonders wichtig bei Aufgaben, wo Reaktionszeit kritisch ist.</p>
+
+<p>Der Runner (CLI-Output-Parser) kennt den Zeitpunkt des CLI-Inputs und kann den ersten Token auf stdout tracken.</p>
+
+<p><strong>Vorgeschlagenes neues Feld auf dem <code>AgentMessage</code>-Envelope:</strong></p>
+<pre class="schema-new">"latency": {
+  <span class="hl-blue">"requestedAt"</span>:   <span class="highlight">"2026-05-11T13:30:00.000Z"</span>,    <span style="color:var(--muted)">// CLI-Input gesendet</span>
+  <span class="hl-blue">"firstTokenAt"</span>:  <span class="highlight">"2026-05-11T13:30:02.300Z"</span>,    <span style="color:var(--muted)">// erster stdout-Byte</span>
+  <span class="hl-blue">"completedAt"</span>:   <span class="highlight">"2026-05-11T13:30:15.700Z"</span>,    <span style="color:var(--muted)">// CLI-Exit</span>
+  <span class="hl-blue">"ttfbMs"</span>:        <span class="hl-orange">2300</span>,                           <span style="color:var(--muted)">// firstToken - requested</span>
+  <span class="hl-blue">"totalMs"</span>:       <span class="hl-orange">15700</span>                           <span style="color:var(--muted)">// completed - requested</span>
+}</pre>
+
+<div class="info-box"><strong>Schema-Änderung:</strong> Neues optionales <code>latency</code>-Objekt in <code>agent-message.schema.json</code>. Rückwärtskompatibel &mdash; bestehende Nachrichten haben das Feld nicht.</div>
+
+<p><strong>Anwendungsfälle:</strong></p>
+<ul style="padding-left:1.5rem; color: var(--muted); font-size:0.875rem; line-height:2">
+  <li>Rate-Limiting erkennen: TTFB plötzlich &gt; 10s deutet auf Throttling hin</li>
+  <li>Modell-Vergleich: Sonnet vs. Haiku &mdash; wie unterscheidet sich TTFB bei gleicher Task-Art?</li>
+  <li>Kapazitätsplanung: Durchschnittliche Turn-Dauer bestimmt wie viele parallele Jobs möglich sind</li>
+  <li>Debugging: Warum hat ein Job 45min gebraucht? &mdash; Timeline aus Latenz-Daten</li>
+</ul>
+
+<!-- 7. Roadmap -->
+<h2 id="roadmap">7. Roadmap (Priorität)</h2>
+
+<ul class="roadmap">
+  <li>
+    <div class="roadmap-num">1</div>
+    <div class="roadmap-body">
+      <h4>Token-Aggregation-Endpoint</h4>
+      <p>Quick Win &mdash; Daten sind da. Nur ein Rollup-Pass über In-Memory-Projection. Kein Schema-Change. Neuer GET-Endpoint in <code>BusEndpoints.cs</code>.</p>
+    </div>
+  </li>
+  <li>
+    <div class="roadmap-num">2</div>
+    <div class="roadmap-body">
+      <h4>SignalR <code>busMessageAdded</code></h4>
+      <p>Verdrahte <code>JobHub.cs</code> mit <code>AgentMessageBusStore.AppendAsync</code>. Push nach jedem Write. Dann entfällt Polling im Frontend.</p>
+    </div>
+  </li>
+  <li>
+    <div class="roadmap-num">3</div>
+    <div class="roadmap-body">
+      <h4>Latenz-Feld</h4>
+      <p>Günstiger Schema-Extension. Runner trackt <code>requestedAt</code> / <code>firstTokenAt</code> / <code>completedAt</code>. Hoher diagnostischer Wert.</p>
+    </div>
+  </li>
+  <li>
+    <div class="roadmap-num">4</div>
+    <div class="roadmap-body">
+      <h4>Context-Window-Feld</h4>
+      <p>Hängt von CLI-Output-Parsing ab. Claude gibt Context-Prozentsatz aus &mdash; muss zuverlässig geparst werden. Schema-Extension auf <code>AgentMessageTokens</code>.</p>
+    </div>
+  </li>
+  <li>
+    <div class="roadmap-num">5</div>
+    <div class="roadmap-body">
+      <h4>Unified Timeline Model (TypeScript)</h4>
+      <p>Adapter-Schicht über Bus + ProjectChat + OrchestratorChat &rarr; gemeinsames <code>TimelineEntry</code>. Ermöglicht eine einheitliche UI-Ansicht.</p>
+    </div>
+  </li>
+</ul>
+
+<hr>
+<p style="color:var(--muted); font-size:0.8rem; text-align:center">
+  Erzeugt 2026-05-11 &mdash; Claude (claude-sonnet-4-6) &mdash; Formaler Spec: <code>docs/agent-message-bus.md</code> &mdash; Living State: <code>docs/bus-implementation-state.md</code>
+</p>
+
+</body>
+</html>

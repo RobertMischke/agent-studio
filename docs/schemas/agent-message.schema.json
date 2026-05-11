@@ -130,7 +130,33 @@
         "dollars": {
           "type": ["number", "null"],
           "minimum": 0
+        },
+        "contextWindow": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "description": "Optional snapshot of the model's context-window state at the moment this turn completed. All fields optional; populated as the CLI surfaces them.",
+          "properties": {
+            "totalSize": { "type": ["integer", "null"], "minimum": 0, "description": "Model context-window limit in tokens (from local model-registry, not CLI)." },
+            "used": { "type": ["integer", "null"], "minimum": 0, "description": "input + cacheRead - everything the model loaded this turn." },
+            "remaining": { "type": ["integer", "null"], "minimum": 0, "description": "totalSize - used. Convenience field." },
+            "systemPromptTokens": { "type": ["integer", "null"], "minimum": 0 },
+            "conversationTokens": { "type": ["integer", "null"], "minimum": 0 },
+            "filesLoadedCount": { "type": ["integer", "null"], "minimum": 0 },
+            "largestFiles": { "type": ["array", "null"], "items": { "type": "string", "maxLength": 200 }, "maxItems": 20 }
+          }
         }
+      }
+    },
+    "latency": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "description": "Wall-clock latency for the model turn this message refers to. Populated by the runner; absent on messages that did not call an LLM.",
+      "properties": {
+        "requestedAt": { "type": ["string", "null"], "format": "date-time" },
+        "firstTokenAt": { "type": ["string", "null"], "format": "date-time" },
+        "completedAt": { "type": ["string", "null"], "format": "date-time" },
+        "ttfbMs": { "type": ["integer", "null"], "minimum": 0, "description": "firstTokenAt - requestedAt, milliseconds." },
+        "totalMs": { "type": ["integer", "null"], "minimum": 0, "description": "completedAt - requestedAt, milliseconds." }
       }
     },
     "artifacts": {

@@ -67,6 +67,9 @@ public sealed record AgentMessage
     [JsonPropertyName("tokens")]
     public AgentMessageTokens? Tokens { get; init; }
 
+    [JsonPropertyName("latency")]
+    public AgentMessageLatency? Latency { get; init; }
+
     [JsonPropertyName("artifacts")]
     public IReadOnlyList<AgentArtifactRef>? Artifacts { get; init; }
 
@@ -83,7 +86,48 @@ public sealed record AgentMessageTokens(
     [property: JsonPropertyName("cacheRead")] long? CacheRead = null,
     [property: JsonPropertyName("cacheWrite")] long? CacheWrite = null,
     [property: JsonPropertyName("model")] string? Model = null,
-    [property: JsonPropertyName("dollars")] double? Dollars = null);
+    [property: JsonPropertyName("dollars")] double? Dollars = null,
+    [property: JsonPropertyName("contextWindow")] AgentMessageContextWindow? ContextWindow = null);
+
+/// <summary>
+/// Snapshot of the model's context-window state at the moment one turn completed.
+/// All fields optional - producers fill what they can derive from the CLI output.
+/// </summary>
+/// <remarks>
+/// <para>
+/// <see cref="TotalSize"/> comes from a model-registry lookup, not the CLI: Claude
+/// does not echo "your context window is 200_000". The runner resolves the limit
+/// for the model in use and stashes it here so the UI can compute pct without a
+/// second lookup.
+/// </para>
+/// <para>
+/// <see cref="Used"/> = input_tokens + cache_read_input_tokens (everything the
+/// model loaded for this turn, cached or not). Cache hits still occupy context.
+/// </para>
+/// </remarks>
+public sealed record AgentMessageContextWindow(
+    [property: JsonPropertyName("totalSize")] long? TotalSize = null,
+    [property: JsonPropertyName("used")] long? Used = null,
+    [property: JsonPropertyName("remaining")] long? Remaining = null,
+    [property: JsonPropertyName("systemPromptTokens")] long? SystemPromptTokens = null,
+    [property: JsonPropertyName("conversationTokens")] long? ConversationTokens = null,
+    [property: JsonPropertyName("filesLoadedCount")] int? FilesLoadedCount = null,
+    [property: JsonPropertyName("largestFiles")] IReadOnlyList<string>? LargestFiles = null);
+
+/// <summary>
+/// Wall-clock latency for one model turn. The runner captures
+/// <see cref="RequestedAt"/> when it dispatches the CLI input,
+/// <see cref="FirstTokenAt"/> on the first stdout byte from the model,
+/// and <see cref="CompletedAt"/> on CLI exit. <see cref="TtfbMs"/> /
+/// <see cref="TotalMs"/> are convenience derivations the UI does not have
+/// to recompute.
+/// </summary>
+public sealed record AgentMessageLatency(
+    [property: JsonPropertyName("requestedAt")] DateTime? RequestedAt = null,
+    [property: JsonPropertyName("firstTokenAt")] DateTime? FirstTokenAt = null,
+    [property: JsonPropertyName("completedAt")] DateTime? CompletedAt = null,
+    [property: JsonPropertyName("ttfbMs")] long? TtfbMs = null,
+    [property: JsonPropertyName("totalMs")] long? TotalMs = null);
 
 public sealed record AgentArtifactRef
 {

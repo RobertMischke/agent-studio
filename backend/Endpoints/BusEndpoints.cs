@@ -101,7 +101,34 @@ public static class BusEndpoints
             var msg = store.GetById(workspace!, project, id, ct);
             return msg is null ? Results.NotFound() : Results.Ok(msg);
         });
+
+        group.MapGet("/{project}/token-aggregate", (
+            string project,
+            IConfiguration config,
+            BusAggregationCache cache,
+            DateTime? since,
+            DateTime? until,
+            CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(project))
+                return Results.BadRequest(new { error = "project required" });
+            var workspace = config["TaskRepository"];
+            if (string.IsNullOrWhiteSpace(workspace))
+                return Results.Ok(EmptyAggregate(project));
+            var snapshot = cache.Aggregate(workspace!, project, since, until, ct);
+            return Results.Ok(snapshot);
+        });
     }
+
+    private static TokenAggregateResponse EmptyAggregate(string project) => new(
+        Project: project,
+        TotalMessages: 0,
+        Since: null,
+        Until: null,
+        ByModel: Array.Empty<TokenAggregateBucket>(),
+        ByParticipant: Array.Empty<TokenAggregateBucket>(),
+        ByDay: Array.Empty<TokenAggregateBucket>(),
+        Totals: new TokenAggregateTotals(0, 0, 0, 0, 0, null));
 
     private static AgentMessageSummary EmptySummary(string project) => new(
         project,

@@ -125,6 +125,11 @@ builder.Services.AddSingleton<InfraHaltLog>();
 builder.Services.AddSingleton<CrossSlugInfraCircuitBreaker>();
 builder.Services.AddSingleton<AgentMessageBusStore>();
 builder.Services.AddSingleton<AgentMessageBusBridge>();
+builder.Services.AddSingleton<ICliModelRegistry, CliModelRegistry>();
+builder.Services.AddSingleton<ICliUsageParser, ClaudeUsageParser>();
+builder.Services.AddSingleton<ICliUsageParser, CodexUsageParser>();
+builder.Services.AddSingleton<CliUsageParserRegistry>();
+builder.Services.AddSingleton<BusAggregationCache>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Runtime.ProductRuntimeEventStore>();
 builder.Services.AddSingleton<OrchestratorApi.Services.State.SupervisorAdvisoryStore>();
 builder.Services.AddSingleton<OrchestratorApi.Services.State.SupervisorInterventionStore>();
@@ -280,6 +285,27 @@ try
     _ = bus.SeedBuiltInParticipantsAsync();
 }
 catch (Exception ex) { crashRecorder.Record("AgentMessageBusBridge.Seed", ex); }
+
+// Wire the aggregation cache onto the bus store. Every successful append
+// updates the per-project tallies in O(1), so /token-aggregate requests
+// do not scan messages. The cache backfills lazily on first use.
+//
+// SignalR push: also broadcast every appended message as `busMessageAdded`
+// so the Observability panel can drop its polling loop. The push is
+// fire-and-forget; subscribers reconnect their own snapshot if they fall
+// behind.
+try
+{
+    var store = app.Services.GetRequiredService<AgentMessageBusStore>();
+    var cache = app.Services.GetRequiredService<BusAggregationCache>();
+    var pushHub = app.Services.GetRequiredService<IHubContext<JobHub>>();
+    store.OnAppended = (workspace, msg) =>
+    {
+        try { cache.OnAppended(workspace, msg); } catch { /* best-effort */ }
+        try { _ = pushHub.Clients.All.SendAsync("busMessageAdded", msg); } catch { /* best-effort */ }
+    };
+}
+catch (Exception ex) { crashRecorder.Record("BusAggregationCache.Wire", ex); }
 
 // Slice D project-chat: migrate the legacy `orchestrator-chat.jsonl`
 // per-project file into the new per-month markdown tree, then ensure

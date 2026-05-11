@@ -40,6 +40,13 @@ public sealed class AgentMessageBusStore
 
     public static JsonSerializerOptions SerializerOptions => JsonOptions;
 
+    /// <summary>
+    /// Optional sink that observes every successful append. Used by the
+    /// in-memory aggregation cache so token rollups stay O(1) on update.
+    /// Set once at startup; the store itself does not own the sink.
+    /// </summary>
+    public Action<string, AgentMessage>? OnAppended { get; set; }
+
     public void InvalidateProjection(string workspaceRoot, string? project)
     {
         _projections.TryRemove(new ProjectionKey(workspaceRoot, project), out _);
@@ -85,6 +92,15 @@ public sealed class AgentMessageBusStore
         if (_projections.TryGetValue(key, out var existing))
         {
             existing.Append(message);
+        }
+
+        // Notify observers (aggregation cache, SignalR push, ...). Observer
+        // failures must not break the write path; the bus contract is best-effort.
+        var sink = OnAppended;
+        if (sink != null)
+        {
+            try { sink(workspaceRoot, message); }
+            catch { /* observers are best-effort */ }
         }
     }
 
