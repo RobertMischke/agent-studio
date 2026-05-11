@@ -94,7 +94,7 @@ Do not paraphrase the tokens or wrap them in code fences. Multiple tokens in a s
 
 `[[TASK_NOOP]]` is a **recoverable signal, not a terminal state**. When a job lands in `4-auto-review` ending in NOOP, the orchestrator inspects the task and decides deterministically:
 
-- If the task title and prompt body are real (non-empty, non-placeholder) and the per-job reissue budget has not been exhausted, the orchestrator reissues the task back to `3-progress` with a sharpened framing built from `RunOutcomePolicy.BuildReissueFollowupPrompt` and writes it as `orchestrator-follow-up.md`.
+- If the task title and prompt body are real (non-empty, non-placeholder) and the per-job reissue budget has not been exhausted, the orchestrator reissues the task to `2-ready` at order 0 (the runner picks it as the very next task without displacing whatever is currently in `3-progress`) with a sharpened framing built from `RunOutcomePolicy.BuildReissueFollowupPrompt` and writes it as `orchestrator-follow-up.md`. The card is also stamped with the `reissue:autoreview` tag so the kanban can highlight it distinctly from a fresh queued task.
 - If the title or prompt is empty / placeholder, the orchestrator promotes the task to `5-human-review` with a `[supervisor] [escalate]` chat-note and creates a `human-decision-needed-<slug>` intake in `1-preparation`.
 - If the task has already passed the reissue budget (default 2, shared with NEEDS_INPUT-driven reissues so the agent never sees double-spend), the orchestrator escalates the same way.
 

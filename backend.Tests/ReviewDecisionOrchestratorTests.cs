@@ -17,8 +17,9 @@ namespace OrchestratorApi.Tests;
 /// human-decision intake creation.
 ///
 /// ADR-0025 routing: tasks land in <c>4-auto-review</c>; reissue moves
-/// back to <c>3-progress</c>; accept-as-done and escalate both promote
-/// to <c>5-human-review</c>.
+/// to <c>2-ready</c> at order 0 (the runner picks it next without
+/// displacing a currently active job); accept-as-done and escalate
+/// both promote to <c>5-human-review</c>.
 /// </summary>
 public class ReviewDecisionOrchestratorTests : IDisposable
 {
@@ -42,23 +43,38 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     }
 
     [Fact]
-    public async Task Reissue_TransitionsBackToProgress_AppendsChatLog_AndJournalsRecord()
+    public async Task Reissue_LandsInReadyTop_NotProgress_AndJournalsRecord()
     {
+        // Race-fix: the pre-fix path moved the reissue straight to
+        // 3-progress while the runner-pickup tick observed an empty
+        // lane and grabbed the next queued job. The reissue now parks
+        // in 2-ready at order 0 so the runner picks it next without
+        // displacing whoever is currently running.
         SeedReviewJobWithNeedsInput("fix-layout", "which column is primary?");
         var orchestrator = BuildOrchestrator(
             cliResponse: "[[ORCHESTRATOR_DECISION: action=reissue; reason=Roadmap names option A.]]\n[[TASK_DONE]]");
 
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "fix-layout")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Ready, "fix-layout")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "fix-layout")));
         Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.AutoReview, "fix-layout")));
 
-        var log = ReadCliLog(JobStates.Progress, "fix-layout");
+        // Order 0 puts the reissue ahead of any fresh ready jobs that
+        // typically use order >= 10.
+        Assert.Equal(0, ReadJobOrder(JobStates.Ready, "fix-layout"));
+
+        // UI hint: reissue tag is stamped so the kanban can render the
+        // card distinctly from a plain queued task.
+        var tags = ReadJobTags(JobStates.Ready, "fix-layout");
+        Assert.Contains(ReviewDecisionOrchestrator.ReissueTagId, tags);
+
+        var log = ReadCliLog(JobStates.Ready, "fix-layout");
         Assert.Contains("[orchestrator]", log);
         Assert.Contains("[reissue]", log);
         Assert.Contains("Roadmap names option A.", log);
 
-        var followUp = Path.Combine(_watchPath, JobStates.Progress, "fix-layout", "orchestrator-follow-up.md");
+        var followUp = Path.Combine(_watchPath, JobStates.Ready, "fix-layout", "orchestrator-follow-up.md");
         Assert.True(File.Exists(followUp));
 
         var record = ReadOnlyDecisionRecord();
@@ -66,6 +82,35 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         Assert.Equal("fix-layout", record.JobId);
         Assert.Contains("option A", record.Reason);
         Assert.False(string.IsNullOrEmpty(record.FollowUp));
+    }
+
+    [Fact]
+    public async Task Reissue_WithAnotherJobActiveInProgress_DoesNotDisplaceIt()
+    {
+        // Regression for the 2026-05-11 race: while auto-review verdicts
+        // run (~1.5 min for aspect runs), the runner-pickup tick can
+        // observe an empty 3-progress and grab the next ready job. If
+        // the verdict then routed the reissue into 3-progress directly,
+        // both jobs ended up in the active lane and the running one was
+        // silently parked. The fix routes reissues to 2-ready at order 0
+        // so the lane invariant "at most one job in 3-progress" holds
+        // across the entire verdict window.
+        SeedProgressJob("currently-running");
+        SeedReviewJobWithNeedsInput("reissued-task", "which column is primary?");
+
+        var orchestrator = BuildOrchestrator(
+            cliResponse: "[[ORCHESTRATOR_DECISION: action=reissue; reason=ok]]\n[[TASK_DONE]]");
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        // Active job stays where it was; reissue lands in ready, not progress.
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "currently-running")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Ready, "reissued-task")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "reissued-task")));
+
+        // Order 0 means the runner picks the reissue as the very next
+        // task once 'currently-running' finishes.
+        Assert.Equal(0, ReadJobOrder(JobStates.Ready, "reissued-task"));
     }
 
     [Fact]
@@ -157,15 +202,17 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         // No fast-model call should have been made.
         Assert.Equal(0, calls);
 
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "flesh-out-readme")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Ready, "flesh-out-readme")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "flesh-out-readme")));
         Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.AutoReview, "flesh-out-readme")));
+        Assert.Equal(0, ReadJobOrder(JobStates.Ready, "flesh-out-readme"));
 
-        var log = ReadCliLog(JobStates.Progress, "flesh-out-readme");
+        var log = ReadCliLog(JobStates.Ready, "flesh-out-readme");
         Assert.Contains("[orchestrator]", log);
         Assert.Contains("[reissue]", log);
         Assert.Contains("NOOP recovery", log);
 
-        var followUpPath = Path.Combine(_watchPath, JobStates.Progress, "flesh-out-readme", "orchestrator-follow-up.md");
+        var followUpPath = Path.Combine(_watchPath, JobStates.Ready, "flesh-out-readme", "orchestrator-follow-up.md");
         Assert.True(File.Exists(followUpPath));
         var followUp = File.ReadAllText(followUpPath);
         Assert.Contains("Do not reply 'task done'", followUp);
@@ -433,7 +480,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     }
 
     [Fact]
-    public async Task TaskDone_OneAspectBlocks_ReissuesToProgress_WithFollowUpFile()
+    public async Task TaskDone_OneAspectBlocks_ReissuesToReadyTop_WithFollowUpFile()
     {
         SeedReviewJobWithDone("blocked-job");
         var orchestrator = BuildOrchestratorWithAspects(aspectStub: aspect => aspect switch
@@ -444,18 +491,22 @@ public class ReviewDecisionOrchestratorTests : IDisposable
 
         await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
 
-        // A blocking aspect routes the job back to 3-progress, not human-review.
-        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "blocked-job")));
+        // A blocking aspect parks the job in 2-ready at order 0 (never
+        // straight to 3-progress - that's the race the lane-write rule
+        // forbids).
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Ready, "blocked-job")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "blocked-job")));
         Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.AutoReview, "blocked-job")));
         Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.HumanReview, "blocked-job")));
+        Assert.Equal(0, ReadJobOrder(JobStates.Ready, "blocked-job"));
 
         // Follow-up file lists the per-aspect findings.
-        var followUp = File.ReadAllText(Path.Combine(_watchPath, JobStates.Progress, "blocked-job", "orchestrator-follow-up.md"));
+        var followUp = File.ReadAllText(Path.Combine(_watchPath, JobStates.Ready, "blocked-job", "orchestrator-follow-up.md"));
         Assert.Contains("requirement-fit", followUp);
         Assert.Contains("Acceptance criterion 2 missing.", followUp);
 
-        // Aspect MDs travel with the folder back to 3-progress.
-        Assert.True(File.Exists(Path.Combine(_watchPath, JobStates.Progress, "blocked-job", "aspect-requirement-fit.md")));
+        // Aspect MDs travel with the folder to 2-ready.
+        Assert.True(File.Exists(Path.Combine(_watchPath, JobStates.Ready, "blocked-job", "aspect-requirement-fit.md")));
 
         var record = ReadOnlyDecisionRecord();
         Assert.Equal(ReviewDecisionKind.Reissue, record.Kind);
@@ -553,6 +604,18 @@ public class ReviewDecisionOrchestratorTests : IDisposable
             suffix);
     }
 
+    private int ReadJobOrder(string state, string slug)
+    {
+        var jobJsonPath = Path.Combine(_watchPath, state, slug, "job.json");
+        var json = System.Text.Json.JsonDocument.Parse(File.ReadAllText(jobJsonPath));
+        if (json.RootElement.TryGetProperty("order", out var orderEl) &&
+            orderEl.ValueKind == System.Text.Json.JsonValueKind.Number)
+        {
+            return orderEl.GetInt32();
+        }
+        return -1;
+    }
+
     private List<string> ReadJobTags(string state, string slug)
     {
         var jobJsonPath = Path.Combine(_watchPath, state, slug, "job.json");
@@ -617,6 +680,15 @@ public class ReviewDecisionOrchestratorTests : IDisposable
             scanner, stateMachine, chatLog, prompts, aspectRunner, statusSnapshot ?? new AutoReviewStatusSnapshot(), config,
             NullLogger<ReviewDecisionOrchestrator>.Instance);
         return orchestrator;
+    }
+
+    private void SeedProgressJob(string slug)
+    {
+        var dir = Path.Combine(_watchPath, JobStates.Progress, slug);
+        Directory.CreateDirectory(Path.Combine(dir, "logs"));
+        File.WriteAllText(Path.Combine(dir, "job.json"),
+            $"{{\"id\":\"{slug}\",\"title\":\"{slug} title\",\"state\":\"{JobStates.Progress}\",\"order\":1,\"agent\":\"claude\"}}");
+        File.WriteAllText(Path.Combine(dir, "prompt.md"), $"# {slug}\n\nDo the thing.\n");
     }
 
     private void SeedReviewJobWithBlocked(string slug, string reason)

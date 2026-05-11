@@ -9,11 +9,14 @@ namespace OrchestratorApi.Services.Runner;
 /// Background loop that reads the <c>4-auto-review</c> lane (ADR-0025) and
 /// acts on tasks that ended in <c>[[TASK_NEEDS_INPUT]]</c>,
 /// <c>[[TASK_NOOP]]</c>, or <c>[[TASK_BLOCKED]]</c>. Reissue moves the
-/// task back to <c>3-progress</c>; accept-as-done moves it forward to
-/// <c>5-human-review</c> (the user always gets the final say on
-/// completion); escalate also moves it to <c>5-human-review</c> with a
-/// <c>[supervisor]</c> chat-note explaining why the orchestrator could
-/// not decide.
+/// task to <c>2-ready</c> at order 0 (next pickup) so the runner picks
+/// it ahead of fresh queued tasks but never displaces a currently
+/// running job - the race where the runner saw an empty
+/// <c>3-progress</c> mid-verdict and picked the next ready job is gone.
+/// Accept-as-done moves the task forward to <c>5-human-review</c> (the
+/// user always gets the final say on completion); escalate also moves
+/// it to <c>5-human-review</c> with a <c>[supervisor]</c> chat-note
+/// explaining why the orchestrator could not decide.
 ///
 /// <para>
 /// The user framing: when a job lands in 4-review with an unanswered
@@ -461,33 +464,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _chatLog.Append(current, OrchestratorMessageKind.Reissue,
             $"Decision: reissue (NOOP recovery). Reason: {reason}");
 
-        var move = _stateMachine.MoveJob(current.Id, JobStates.Progress, entry.Path);
-        if (move.Status != MoveJobStatus.Success)
+        var moved = MoveReissueToReadyTop(current, entry, "NOOP");
+        if (moved != null)
         {
-            _logger.LogWarning(
-                "ReviewDecisionOrchestrator: failed to move {JobId} back to progress after NOOP: {Status} {Message}",
-                current.Id, move.Status, move.Message);
-        }
-        else
-        {
-            try
-            {
-                var moved = _scanner.FindJob(current.Id, entry.Path);
-                if (moved != null)
-                {
-                    var followUpPath = Path.Combine(moved.FolderPath, "orchestrator-follow-up.md");
-                    await File.WriteAllTextAsync(
-                        followUpPath,
-                        $"# Orchestrator follow-up\n\n{followUp}\n",
-                        ct);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex,
-                    "ReviewDecisionOrchestrator: failed to write NOOP follow-up file for {JobId}",
-                    current.Id);
-            }
+            await WriteFollowUpFileAsync(moved, followUp, ct);
         }
 
         ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
@@ -690,33 +670,10 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             "then re-run the task and end with [[TASK_DONE]]:\n\n" +
             report.FollowUpSummary;
 
-        var move = _stateMachine.MoveJob(current.Id, JobStates.Progress, entry.Path);
-        if (move.Status != MoveJobStatus.Success)
+        var moved = MoveReissueToReadyTop(current, entry, "multi-aspect block");
+        if (moved != null)
         {
-            _logger.LogWarning(
-                "ReviewDecisionOrchestrator: failed to move {JobId} back to progress after multi-aspect block: {Status} {Message}",
-                current.Id, move.Status, move.Message);
-        }
-        else
-        {
-            try
-            {
-                var moved = _scanner.FindJob(current.Id, entry.Path);
-                if (moved != null)
-                {
-                    var followUpPath = Path.Combine(moved.FolderPath, "orchestrator-follow-up.md");
-                    await File.WriteAllTextAsync(
-                        followUpPath,
-                        $"# Orchestrator follow-up\n\n{followUp}\n",
-                        ct);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex,
-                    "ReviewDecisionOrchestrator: failed to write multi-aspect follow-up file for {JobId}",
-                    current.Id);
-            }
+            await WriteFollowUpFileAsync(moved, followUp, ct);
         }
 
         _statusSnapshot.RecordReissue();
@@ -836,34 +793,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         _chatLog.Append(current, OrchestratorMessageKind.Reissue,
             $"Decision: reissue. Reason: {verdict.Reason}. Follow-up: {followUp}");
 
-        var move = _stateMachine.MoveJob(current.Id, JobStates.Progress, entry.Path);
-        if (move.Status != MoveJobStatus.Success)
+        // Persist the orchestrator's answer next to the prompt so the next
+        // run picks it up. A small follow-up file is enough; the runner
+        // already knows how to compose continue-prompts from the chat log.
+        var moved = MoveReissueToReadyTop(current, entry, "NEEDS_INPUT");
+        if (moved != null)
         {
-            _logger.LogWarning(
-                "ReviewDecisionOrchestrator: failed to move {JobId} back to progress: {Status} {Message}",
-                current.Id, move.Status, move.Message);
-        }
-        else
-        {
-            // Persist the orchestrator's answer next to the prompt so the next
-            // run picks it up. A small follow-up file is enough; the runner
-            // already knows how to compose continue-prompts from the chat log.
-            try
-            {
-                var moved = _scanner.FindJob(current.Id, entry.Path);
-                if (moved != null)
-                {
-                    var followUpPath = Path.Combine(moved.FolderPath, "orchestrator-follow-up.md");
-                    await File.WriteAllTextAsync(
-                        followUpPath,
-                        $"# Orchestrator follow-up\n\n{followUp}\n",
-                        ct);
-                }
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "ReviewDecisionOrchestrator: failed to write follow-up file for {JobId}", current.Id);
-            }
+            await WriteFollowUpFileAsync(moved, followUp, ct);
         }
 
         ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
@@ -1248,6 +1184,86 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         {
             try { p.Kill(true); } catch { }
             return string.Empty;
+        }
+    }
+
+    /// <summary>
+    /// Reissue tag id stamped on the job's tags array when an auto-review
+    /// reissue parks it in <c>2-ready</c>. UI-only signal so the kanban
+    /// can render the card distinctly from a fresh queued task; the
+    /// runtime priority is carried by order 0, not by this tag.
+    /// </summary>
+    internal const string ReissueTagId = "reissue:autoreview";
+
+    /// <summary>
+    /// Lane-target for every auto-review reissue path (NEEDS_INPUT,
+    /// NOOP recovery, multi-aspect block). Routes the task to
+    /// <c>2-ready</c> at order 0, stamps the reissue tag for UI
+    /// highlighting, and returns the moved <see cref="JobInfo"/> so the
+    /// caller can write follow-up evidence next to the prompt. Returning
+    /// <c>null</c> means the move did not complete (logged and recorded
+    /// in the decision journal upstream); the caller then skips the
+    /// follow-up file write.
+    ///
+    /// <para>
+    /// Why not 3-progress: the pre-fix path moved straight to
+    /// <c>3-progress</c> while the runner-pickup tick observed an empty
+    /// lane and grabbed the next queued job (the 2026-05-11 incident).
+    /// Routing to <c>2-ready</c> instead keeps reissues out of the
+    /// "currently running" bucket; order 0 guarantees the runner picks
+    /// the reissue as the very next task without displacing the active
+    /// one. See ADR-0025 and the lane-write-3-progress-forbidden drift
+    /// rule.
+    /// </para>
+    /// </summary>
+    private JobInfo? MoveReissueToReadyTop(JobInfo current, WatchPathEntry entry, string causeLabel)
+    {
+        var move = _stateMachine.MoveJob(current.Id, JobStates.Ready, entry.Path);
+        if (move.Status != MoveJobStatus.Success)
+        {
+            _logger.LogWarning(
+                "ReviewDecisionOrchestrator: failed to move {JobId} to ready (reissue after {Cause}): {Status} {Message}",
+                current.Id, causeLabel, move.Status, move.Message);
+            return null;
+        }
+
+        var moved = _scanner.FindJob(current.Id, entry.Path);
+        if (moved == null)
+        {
+            _logger.LogWarning(
+                "ReviewDecisionOrchestrator: re-scan after reissue move returned null for {JobId}",
+                current.Id);
+            return null;
+        }
+
+        // Order 0 lifts the reissue ahead of any fresh ready job (which
+        // typically uses order >= 10) without rewriting their orders.
+        // The runner picks by OrderBy(j => j.Order).
+        JobJsonFile.UpdateOrder(moved.FolderPath, 0, _logger);
+        // UI hint only; the kanban shows the reissue tag distinctly.
+        // Routed through ConcernTagWriter because the tag id uses the
+        // namespace:value grammar that JobMutationService.NormalizeTagId
+        // would strip the colon from.
+        ConcernTagWriter.MergeConcernTags(moved.FolderPath, new[] { ReissueTagId }, _logger);
+        _scanner.InvalidateCache();
+        return moved;
+    }
+
+    private async Task WriteFollowUpFileAsync(JobInfo moved, string followUp, CancellationToken ct)
+    {
+        try
+        {
+            var followUpPath = Path.Combine(moved.FolderPath, "orchestrator-follow-up.md");
+            await File.WriteAllTextAsync(
+                followUpPath,
+                $"# Orchestrator follow-up\n\n{followUp}\n",
+                ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex,
+                "ReviewDecisionOrchestrator: failed to write follow-up file for {JobId}",
+                moved.Id);
         }
     }
 

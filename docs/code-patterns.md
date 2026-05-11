@@ -157,6 +157,34 @@ goodVariant: (_runner|_orchestratorRunner)\.ResumeWithFallbackAsync\s*\(
 severityIfBad: High
 ```
 
+```yaml
+# ---------------------------------------------------------------------------
+# Lane writes to 3-progress are reserved for the runner. On 2026-05-11 the
+# auto-review verdict path routed reissues straight to 3-progress while the
+# runner-pickup tick observed an empty lane mid-verdict and grabbed the next
+# queued job - two jobs in 3-progress at once, violating the "one running
+# job per project" invariant (ADR-0001). Every reissue path now parks the
+# task in 2-ready at order 0 instead. The only legitimate writer of
+# 3-progress is the pickup loop in ProjectRunner.TickAsync; everywhere else
+# must route through 2-ready (with order 0 for priority) so the runner
+# stays the single owner of "what is currently running".
+# ---------------------------------------------------------------------------
+id: lane-write-3-progress-forbidden
+title: MoveJob to JobStates.Progress is reserved for the runner pickup path
+description: >
+  Only ProjectRunner.TickAsync (the pickup loop) may move a job into
+  3-progress. Auto-review reissues, supervisor interventions, and meta-cycle
+  follow-ups must park their target in 2-ready (order 0 for priority) so
+  the runner is the sole writer of the active lane; otherwise a reissue
+  fired during a pickup gap can leave two jobs in 3-progress and silently
+  park whichever the runner had just started.
+filePattern: backend/.*\.cs$
+excludeFilePattern: backend\.Tests|\.claude[/\\]|Services[/\\]Runner[/\\]ProjectRunner\.cs|Services[/\\]Jobs[/\\]JobStateMachine\.cs|Services[/\\]Jobs[/\\]JobTransitionService\.cs
+candidateMarker: \.MoveJob\s*\(
+badVariant: \.MoveJob\s*\([^,]+,\s*(?:JobStates\.Progress\b|"3-progress")
+severityIfBad: High
+```
+
 ## Adding a rule — checklist
 
 1. **Catch a real incident.** Don't add a rule for a hypothetical drift; add

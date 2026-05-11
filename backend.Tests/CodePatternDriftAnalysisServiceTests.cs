@@ -157,6 +157,82 @@ public class CodePatternDriftAnalysisServiceTests : IDisposable
         Assert.Equal(0, cli.DriftSites);
     }
 
+    [Fact]
+    public void Analyze_FlagsMoveJobToProgress_OutsideRunnerPickupPath()
+    {
+        // lane-write-3-progress-forbidden rule (added in response to the
+        // 2026-05-11 race where the auto-review reissue path moved a job
+        // straight into 3-progress while the runner picked another in
+        // the same window). Inject the rule directly so the fixture
+        // doesn't depend on docs/code-patterns.md being loaded.
+        WriteFile("backend/Services/Runner/SomeOtherService.cs", """
+            public class SomeOtherService {
+              private readonly object _states = null!;
+              public void Run(string jobId, string watchPath) {
+                ((dynamic)_states).MoveJob(jobId, JobStates.Progress, watchPath);
+              }
+            }
+            """);
+
+        WriteFile("backend/Services/Runner/CleanReissue.cs", """
+            public class CleanReissue {
+              private readonly object _states = null!;
+              public void Run(string jobId, string watchPath) {
+                ((dynamic)_states).MoveJob(jobId, JobStates.Ready, watchPath);
+              }
+            }
+            """);
+
+        var rule = new CodePatternRule(
+            Id: "lane-write-3-progress-forbidden",
+            Title: "MoveJob to JobStates.Progress is reserved for the runner pickup path",
+            CanonicalDescription: "Only ProjectRunner.TickAsync may move a job into 3-progress.",
+            FilePattern: @"backend/.*\.cs$",
+            ExcludeFilePattern: @"Services[/\\]Runner[/\\]ProjectRunner\.cs",
+            CandidateMarker: new System.Text.RegularExpressions.Regex(@"\.MoveJob\s*\("),
+            BadVariant: new System.Text.RegularExpressions.Regex(
+                @"\.MoveJob\s*\([^,]+,\s*(?:JobStates\.Progress\b|""3-progress"")"),
+            GoodVariant: null,
+            SeverityIfBad: DriftSeverity.High);
+
+        var svc = new CodePatternDriftAnalysisService(
+            NullLogger<CodePatternDriftAnalysisService>.Instance,
+            rules: new[] { rule });
+        var report = svc.Analyze(_root);
+        var finding = report.Findings.Single(f => f.RuleId == "lane-write-3-progress-forbidden");
+
+        Assert.Equal(1, finding.DriftSites);
+        Assert.Contains(finding.Hits, h => h.IsDrift && h.FilePath.EndsWith("SomeOtherService.cs"));
+        Assert.DoesNotContain(finding.Hits, h => h.IsDrift && h.FilePath.EndsWith("CleanReissue.cs"));
+        Assert.Equal(DriftSeverity.High, finding.OverallSeverity);
+    }
+
+    [Fact]
+    public void Analyze_AgainstLiveDevCheckout_ReportsZeroLaneWriteDriftAfterFix()
+    {
+        // The post-fix invariant: ProjectRunner.TickAsync is the only
+        // legitimate writer of 3-progress; every other call site routes
+        // through 2-ready (with order 0). Live-repo smoke test mirrors
+        // the cli-one-shot-stdin assertion above.
+        var repo = LocateRepoRoot();
+        if (repo is null)
+        {
+            _out.WriteLine("No AGENTS.md upstream; skipping live-repo smoke test");
+            return;
+        }
+
+        var svc = new CodePatternDriftAnalysisService(NullLogger<CodePatternDriftAnalysisService>.Instance);
+        var report = svc.Analyze(repo);
+        var finding = report.Findings.Single(f => f.RuleId == "lane-write-3-progress-forbidden");
+
+        _out.WriteLine($"live-lane-write-3-progress-forbidden: total={finding.TotalSites} canonical={finding.CanonicalSites} drift={finding.DriftSites}");
+        foreach (var drift in finding.Hits.Where(h => h.IsDrift))
+        {
+            _out.WriteLine($"  drift: {drift.FilePath}:{drift.LineNumber} ({drift.Evidence})");
+        }
+        Assert.Equal(0, finding.DriftSites);
+    }
+
     private void WriteFile(string relativePath, string contents)
     {
         var full = Path.Combine(_root, relativePath);
