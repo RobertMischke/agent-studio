@@ -1,4 +1,14 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, input, output, signal } from '@angular/core';
+import {
+  AfterViewInit,
+  ChangeDetectionStrategy,
+  Component,
+  ElementRef,
+  OnDestroy,
+  input,
+  output,
+  signal,
+  viewChild,
+} from '@angular/core';
 import { CliOutputLine, JobLogEntry } from '../../../../models/job.model';
 import { ActivityLogViewComponent } from '../activity-log-view';
 import { formatTime as fmtTime } from '../../../../services/format.util';
@@ -7,7 +17,9 @@ import { copyTextToClipboard } from '../../../../services/clipboard.util';
 /**
  * Modal overlay that shows the live CLI output and the parsed protocol
  * log side-by-side. Triggered from the protocol pane's "Maximize log"
- * button. Backdrop click closes.
+ * button. Uses a native <dialog> via showModal() so the browser owns
+ * focus trapping, top-layer rendering, and ESC handling. Backdrop click
+ * also closes.
  */
 @Component({
   selector: 'app-log-overlay',
@@ -16,7 +28,7 @@ import { copyTextToClipboard } from '../../../../services/clipboard.util';
   imports: [ActivityLogViewComponent],
   templateUrl: './log-overlay.component.html'
 })
-export class LogOverlayComponent implements OnDestroy {
+export class LogOverlayComponent implements AfterViewInit, OnDestroy {
   readonly cliOutput = input<CliOutputLine[]>([]);
   readonly log = input<JobLogEntry[]>([]);
   readonly isRunning = input(false);
@@ -26,10 +38,41 @@ export class LogOverlayComponent implements OnDestroy {
   readonly copyState = signal<'idle' | 'copied' | 'failed'>('idle');
   private copyResetTimer: ReturnType<typeof setTimeout> | null = null;
 
+  private readonly dlg = viewChild<ElementRef<HTMLDialogElement>>('dlg');
+
+  ngAfterViewInit(): void {
+    const el = this.dlg()?.nativeElement;
+    if (el && !el.open && typeof el.showModal === 'function') {
+      el.showModal();
+    }
+  }
+
   ngOnDestroy(): void {
     if (this.copyResetTimer !== null) {
       clearTimeout(this.copyResetTimer);
       this.copyResetTimer = null;
+    }
+    const el = this.dlg()?.nativeElement;
+    if (el?.open) el.close();
+  }
+
+  dismiss(): void {
+    const el = this.dlg()?.nativeElement;
+    if (el?.open) {
+      el.close(); // fires `close` event -> emits this.close
+    } else {
+      this.close.emit();
+    }
+  }
+
+  /**
+   * <dialog> click events fire on the dialog element itself when the user
+   * clicks the backdrop area outside the panel. We stop propagation on the
+   * panel, so any click reaching the dialog is a backdrop click.
+   */
+  onBackdropClick(event: MouseEvent): void {
+    if (event.target === this.dlg()?.nativeElement) {
+      this.dismiss();
     }
   }
 
