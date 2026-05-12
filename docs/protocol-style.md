@@ -65,7 +65,7 @@ Lines may contain:
 ```markdown
 # Status
 
-- Result: <Success|Partial|Failed>
+- Result: <Success|Failed|NoOp|Blocked|NeedsInput|Partial>
 - Duration: <for example, 4 min>
 
 ## What Was Done
@@ -88,6 +88,7 @@ Hard rules:
 - Paths and commands in single backticks.
 - No marketing tone, no recap of what the user already asked for.
 - No em dashes.
+- The application enforces the `Result` line from the deterministic run-outcome contract after summarization, so the protocol, lane routing, and failure toast share one classification.
 
 If you change the prompt, mirror the change here and bump the example.
 

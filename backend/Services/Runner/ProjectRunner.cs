@@ -1594,6 +1594,7 @@ public class ProjectRunner
                 liveOutputSnapshot,
                 execution.Status ?? "completed",
                 execution.DurationSeconds ?? 0.0);
+            var terminalOutcome = TerminalRunOutcomeClassifier.Classify(execution.Status, outcome);
             OutcomeAction? action = capturedPlan != null
                 ? RunOutcomePolicy.Decide(capturedIntent, capturedPlan, outcome, capturedFollowup, capturedAttempt)
                 : null;
@@ -1702,7 +1703,7 @@ public class ProjectRunner
             // job starts a fresh loop with a fresh budget.
             _stuckLoops.TryRemove(jobId, out _);
 
-            var movedToReview = RunCompletionPolicy.ShouldMoveToReview(execution.Status);
+            var movedToReview = RunCompletionPolicy.ShouldMoveToReview(terminalOutcome);
             if (movedToReview)
             {
                 // Drop a completion marker BEFORE the move so a crash between
@@ -1733,7 +1734,7 @@ public class ProjectRunner
                         try
                         {
                             var info = _scanner.FindJob(jobId, Entry.Path);
-                            if (info != null) await _summaryService.GenerateAsync(info);
+                            if (info != null) await _summaryService.GenerateAsync(info, terminalOutcome);
                         }
                         catch (Exception ex)
                         {

@@ -24,6 +24,7 @@ import { SessionEventsPollService } from '../polling/services/session-events-pol
 import { RunTimelinePollService } from '../polling/services/run-timeline-poll.service';
 import { ScreenshotsPollService } from '../polling/services/screenshots-poll.service';
 import { GitPaneService } from './services/git-pane.service';
+import { shouldShowFailureToast } from './services/run-outcome.util';
 import { GitPaneComponent } from './components/git-pane/git-pane.component';
 import { CliOutputPollService } from '../polling/services/cli-output-poll.service';
 import { CommandDeckComponent } from './components/command-deck/command-deck.component';
@@ -661,7 +662,7 @@ export class JobDetailComponent implements OnDestroy {
       this.errorMsg.set(null);
       return;
     }
-    if (execution.status === 'failed') {
+    if (shouldShowFailureToast(execution)) {
       const message = execution.exitCode === null
         ? 'Task execution failed.'
         : `Task execution failed with exit code ${execution.exitCode}.`;

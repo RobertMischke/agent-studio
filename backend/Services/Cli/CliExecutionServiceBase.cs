@@ -724,12 +724,18 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             int? exitCode = null;
             try { exitCode = process.ExitCode; } catch { }
             var status = RunStatusClassifier.Classify(exitCode, info.StopReason);
+            var terminalOutcome = TerminalRunOutcomeClassifier.Classify(
+                status,
+                info.OutputBuffer.ToList(),
+                duration);
+            status = TerminalRunOutcomeClassifier.ExecutionStatusFor(terminalOutcome, status);
 
             var finalExecution = info.Execution with
             {
                 Status = status,
                 ExitCode = exitCode,
-                DurationSeconds = duration
+                DurationSeconds = duration,
+                RunOutcome = terminalOutcome.Kind
             };
             info.Execution = finalExecution;
 

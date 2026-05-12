@@ -51,6 +51,19 @@ public static class ProjectSettingsEndpoints
             return Results.Ok(settings.Get(projectName));
         });
 
+        app.MapPut("/api/projects/{projectName}/auto-push-strategy", (string projectName, SetAutoPushStrategyRequest req, ProjectSettingsService settings, JobScannerService scanner) =>
+        {
+            var known = scanner.GetWatchPaths().Any(e => string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
+            if (!known) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
+
+            if (!AutoPushStrategies.All.Contains(req.Strategy, StringComparer.OrdinalIgnoreCase))
+                return Results.BadRequest(new { error = $"Unsupported auto-push strategy '{req.Strategy}'" });
+
+            var normalized = AutoPushStrategies.Normalize(req.Strategy);
+            settings.SetAutoPushStrategy(projectName, normalized);
+            return Results.Ok(settings.Get(projectName));
+        });
+
         // The orchestrator's model can be tuned per project. Defaults to
         // Opus when null. This is the only knob today; per-call overrides
         // are not exposed.

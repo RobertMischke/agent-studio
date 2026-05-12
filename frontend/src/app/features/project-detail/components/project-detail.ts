@@ -18,9 +18,12 @@ import { AnalysisReport } from '../../../models/analysis-report.model';
 
 interface ProjectSettingsRow {
   autoCommit: boolean;
+  autoPushStrategy: AutoPushStrategy;
   runnerMode: string | null;
   orchestratorModel: string | null;
 }
+
+type AutoPushStrategy = 'never' | 'on-completed' | 'always-immediate';
 
 export type ProjectDetailView =
   | 'overview'
@@ -91,6 +94,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   // Two-way bound drafts so the form is responsive even before the
   // server round-trip completes.
   autoCommitDraft = false;
+  autoPushStrategyDraft: AutoPushStrategy = 'on-completed';
   orchModelDraft = '';
 
   /**
@@ -106,6 +110,24 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   ];
 
   readonly orchModelOptions = OrchestratorRunner_KnownModels;
+  readonly autoPushOptions: ReadonlyArray<{ id: AutoPushStrategy; label: string; tooltip: string; isDefault?: boolean }> = [
+    {
+      id: 'never',
+      label: 'Never',
+      tooltip: 'Do not push automatically; the operator pushes manually.'
+    },
+    {
+      id: 'on-completed',
+      label: 'On completed',
+      tooltip: 'Default. Push only after the job commit reaches 6-completed, after review.',
+      isDefault: true
+    },
+    {
+      id: 'always-immediate',
+      label: 'Immediate',
+      tooltip: 'Push right after auto-commit too. Higher rebase risk if review findings require rewriting local history.'
+    }
+  ];
 
   readonly effectiveMode = computed(() => {
     const status = this.runnerStatus();
@@ -213,11 +235,13 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
       next: (snap) => {
         const row = {
           autoCommit: snap.settings.autoCommit,
+          autoPushStrategy: snap.settings.autoPushStrategy,
           runnerMode: snap.settings.runnerMode,
           orchestratorModel: snap.settings.orchestratorModel
         };
         this.settings.set(row);
         if (this.autoCommitDraft !== row.autoCommit) this.autoCommitDraft = row.autoCommit;
+        if (this.autoPushStrategyDraft !== row.autoPushStrategy) this.autoPushStrategyDraft = row.autoPushStrategy;
         const wantedModel = row.orchestratorModel ?? '';
         if (this.orchModelDraft !== wantedModel) this.orchModelDraft = wantedModel;
 
@@ -282,6 +306,15 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
 
   onAutoCommitChange(): void {
     this.jobService.setProjectAutoCommit(this.projectName(), this.autoCommitDraft).subscribe({
+      next: () => this.refreshAll(true),
+      error: () => {}
+    });
+  }
+
+  setAutoPushStrategy(strategy: AutoPushStrategy): void {
+    if (this.autoPushStrategyDraft === strategy) return;
+    this.autoPushStrategyDraft = strategy;
+    this.jobService.setProjectAutoPushStrategy(this.projectName(), strategy).subscribe({
       next: () => this.refreshAll(true),
       error: () => {}
     });

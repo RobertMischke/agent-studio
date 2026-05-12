@@ -116,6 +116,7 @@ public static class ProjectSnapshotEndpoints
                 settings = new
                 {
                     autoCommit = settings.AutoCommit,
+                    autoPushStrategy = AutoPushStrategies.Normalize(settings.AutoPushStrategy),
                     runnerMode = settings.RunnerMode,
                     orchestratorModel = settings.OrchestratorModel
                 },

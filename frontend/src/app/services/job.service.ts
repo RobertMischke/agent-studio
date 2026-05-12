@@ -576,15 +576,19 @@ export class JobService {
     );
   }
 
-  /** All per-project settings (auto-commit, runner mode, orchestrator model). */
+  /** All per-project settings (auto-commit, auto-push, runner mode, orchestrator model). */
   getAllProjectSettings() {
-    return this.http.get<{ [project: string]: { autoCommit: boolean; runnerMode: string | null; orchestratorModel: string | null } }>(
+    return this.http.get<{ [project: string]: { autoCommit: boolean; autoPushStrategy: 'never' | 'on-completed' | 'always-immediate'; runnerMode: string | null; orchestratorModel: string | null } }>(
       `${this.baseUrl}/projects/settings`
     );
   }
 
   setProjectAutoCommit(projectName: string, enabled: boolean) {
     return this.http.put(`${this.baseUrl}/projects/${encodeURIComponent(projectName)}/auto-commit`, { enabled });
+  }
+
+  setProjectAutoPushStrategy(projectName: string, strategy: 'never' | 'on-completed' | 'always-immediate') {
+    return this.http.put(`${this.baseUrl}/projects/${encodeURIComponent(projectName)}/auto-push-strategy`, { strategy });
   }
 
   setProjectOrchestratorModel(projectName: string, model: string | null) {

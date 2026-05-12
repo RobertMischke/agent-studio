@@ -5,6 +5,7 @@ using OrchestratorApi.Models;
 using OrchestratorApi.Services.AdHoc;
 using OrchestratorApi.Services.Cli;
 using OrchestratorApi.Services.Cli.OneShot;
+using OrchestratorApi.Services.Runner;
 
 namespace OrchestratorApi.Services;
 
@@ -66,7 +67,10 @@ public sealed class SummaryGenerationService
         return (nowUtc - prev.StartedAt.Value).TotalSeconds < timeoutSeconds;
     }
 
-    public async Task GenerateAsync(JobInfo info, CancellationToken ct = default)
+    public Task GenerateAsync(JobInfo info, CancellationToken ct = default)
+        => GenerateAsync(info, runOutcome: null, ct);
+
+    public async Task GenerateAsync(JobInfo info, TerminalRunOutcome? runOutcome, CancellationToken ct = default)
     {
         var key = info.JobKey;
 
@@ -101,6 +105,7 @@ public sealed class SummaryGenerationService
 
             var rawLog = await File.ReadAllTextAsync(logPath, ct);
             var truncated = TruncateTail(rawLog, MaxLogChars);
+            runOutcome ??= TerminalRunOutcomeClassifier.TryClassifyRenderedLog(rawLog)?.Outcome;
             var prompt = _prompts.Render(RuntimePromptService.SummaryProtocol,
                 new Dictionary<string, string?> { ["log"] = truncated });
 
@@ -109,6 +114,11 @@ public sealed class SummaryGenerationService
             {
                 Fail(key, error ?? "Empty Haiku response");
                 return;
+            }
+
+            if (runOutcome != null)
+            {
+                summary = ApplyOutcomeResultLine(summary, runOutcome.ProtocolResult);
             }
 
             var target = Path.Combine(info.FolderPath, "status.md");
@@ -243,6 +253,32 @@ public sealed class SummaryGenerationService
             if (trimmed.EndsWith("```")) trimmed = trimmed[..^3].TrimEnd();
         }
         return trimmed;
+    }
+
+    public static string ApplyOutcomeResultLine(string markdown, string protocolResult)
+    {
+        if (string.IsNullOrWhiteSpace(markdown) || string.IsNullOrWhiteSpace(protocolResult)) return markdown;
+
+        var lines = markdown.Replace("\r\n", "\n").Replace('\r', '\n').Split('\n').ToList();
+        for (var i = 0; i < lines.Count; i++)
+        {
+            if (lines[i].TrimStart().StartsWith("- Result:", StringComparison.OrdinalIgnoreCase))
+            {
+                lines[i] = $"- Result: {protocolResult}";
+                return string.Join(Environment.NewLine, lines).TrimEnd() + Environment.NewLine;
+            }
+        }
+
+        var statusIndex = lines.FindIndex(l => string.Equals(l.Trim(), "# Status", StringComparison.OrdinalIgnoreCase));
+        if (statusIndex >= 0)
+        {
+            lines.Insert(statusIndex + 1, "");
+            lines.Insert(statusIndex + 2, $"- Result: {protocolResult}");
+            return string.Join(Environment.NewLine, lines).TrimEnd() + Environment.NewLine;
+        }
+
+        lines.Insert(0, $"- Result: {protocolResult}");
+        return string.Join(Environment.NewLine, lines).TrimEnd() + Environment.NewLine;
     }
 
     private static void WriteAllTextWithRetry(string filePath, string content)

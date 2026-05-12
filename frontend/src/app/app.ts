@@ -512,6 +512,7 @@ export class App implements OnInit {
       const latestExecution = latest.execution;
       const executionChanged =
         (currentExecution?.status ?? null) !== (latestExecution?.status ?? null) ||
+        (currentExecution?.runOutcome ?? null) !== (latestExecution?.runOutcome ?? null) ||
         (currentExecution?.processId ?? null) !== (latestExecution?.processId ?? null) ||
         (currentExecution?.exitCode ?? null) !== (latestExecution?.exitCode ?? null) ||
         (currentExecution?.durationSeconds ?? null) !== (latestExecution?.durationSeconds ?? null);

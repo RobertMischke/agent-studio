@@ -8,4 +8,7 @@ public static class RunCompletionPolicy
 {
     public static bool ShouldMoveToReview(string? executionStatus) =>
         string.Equals(executionStatus, "completed", StringComparison.OrdinalIgnoreCase);
+
+    public static bool ShouldMoveToReview(TerminalRunOutcome outcome) =>
+        outcome.ShouldMoveToReview;
 }

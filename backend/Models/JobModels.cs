@@ -772,8 +772,15 @@ public record GitCommitRequest
 
 public record ProjectSettings
 {
-    /// <summary>When true, transition <c>3-progress → 4-review</c> auto-commits and stamps the SHA on the job.</summary>
-    public bool AutoCommit { get; init; }
+    /// <summary>When true, transition <c>3-progress → 4-auto-review</c> auto-commits and stamps the SHA on the job.</summary>
+    public bool AutoCommit { get; init; } = true;
+
+    /// <summary>
+    /// Controls when the platform pushes runner-owned commits. Default is
+    /// <see cref="AutoPushStrategies.OnCompleted"/> so only commits that have
+    /// passed human review and reached <c>6-completed</c> are pushed.
+    /// </summary>
+    public string AutoPushStrategy { get; init; } = AutoPushStrategies.OnCompleted;
 
     /// <summary>
     /// Last runner mode chosen by the user for this project ("manual", "auto-single",
@@ -827,9 +834,33 @@ public record ProjectSettings
     public bool? IntakeEnabled { get; init; }
 }
 
+public static class AutoPushStrategies
+{
+    public const string Never = "never";
+    public const string OnCompleted = "on-completed";
+    public const string AlwaysImmediate = "always-immediate";
+
+    public static readonly string[] All = [Never, OnCompleted, AlwaysImmediate];
+
+    public static string Normalize(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return OnCompleted;
+        var v = value.Trim();
+        foreach (var strategy in All)
+            if (string.Equals(strategy, v, StringComparison.OrdinalIgnoreCase))
+                return strategy;
+        return OnCompleted;
+    }
+}
+
 public record SetAutoCommitRequest
 {
     public bool Enabled { get; init; }
+}
+
+public record SetAutoPushStrategyRequest
+{
+    public string Strategy { get; init; } = AutoPushStrategies.OnCompleted;
 }
 
 public record SetOrchestratorModelRequest
@@ -893,6 +924,12 @@ public record CliExecution
     public int? ExitCode { get; init; }
     public double? DurationSeconds { get; init; }
     public string? Model { get; init; }
+    /// <summary>
+    /// Canonical terminal run outcome once known: success, failed, noop,
+    /// blocked, needs-input, interrupted, or unknown. Null while running and
+    /// on legacy in-memory records.
+    /// </summary>
+    public string? RunOutcome { get; init; }
 }
 
 public static class JobIdentity

@@ -459,6 +459,7 @@ export interface CliExecution {
   exitCode: number | null;
   durationSeconds: number | null;
   model: string | null;
+  runOutcome?: string | null;
 }
 
 export interface CliOutputLine {
@@ -497,6 +498,7 @@ export interface ProjectSnapshot {
   };
   settings: {
     autoCommit: boolean;
+    autoPushStrategy: 'never' | 'on-completed' | 'always-immediate';
     runnerMode: string | null;
     orchestratorModel: string | null;
   };

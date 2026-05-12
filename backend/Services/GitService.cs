@@ -19,6 +19,7 @@ public record GitStatusResult(
     string? Error);
 
 public record GitCommitResult(bool Success, string? Sha, string? Error);
+public record GitPushResult(bool Success, string Sha, string Status, string? Error);
 
 /// <summary>
 /// One commit in a per-run commit lookup. The numbers are derived from
@@ -425,6 +426,28 @@ public class GitService
         return ResolveGitToplevel(configured) ?? configured;
     }
 
+    public string? ResolveRepoRootForWatchPath(string? watchPath)
+    {
+        var entries = _scanner.GetWatchPaths();
+        WatchPathEntry? entry = null;
+        if (!string.IsNullOrWhiteSpace(watchPath))
+        {
+            entry = entries.FirstOrDefault(e =>
+                string.Equals(e.Path, watchPath, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(e.RootPath, watchPath, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(e.RepositoryPath, watchPath, StringComparison.OrdinalIgnoreCase));
+        }
+        else if (entries.Count == 1)
+        {
+            entry = entries[0];
+        }
+
+        if (entry == null) return null;
+        var configured = ResolveConfiguredRepositoryPath(entry);
+        if (string.IsNullOrWhiteSpace(configured)) return null;
+        return ResolveGitToplevel(configured) ?? configured;
+    }
+
     /// <summary>
     /// True when the repo at <paramref name="repoRoot"/> has any uncommitted
     /// modifications (staged, unstaged, or untracked). Cheap-by-design helper
@@ -767,6 +790,51 @@ public class GitService
         }
         var result = Commit(jobId, watchPath, message);
         return (result, message);
+    }
+
+    public Task<GitPushResult> PushShaAsync(string sha, string? watchPath, CancellationToken ct = default)
+    {
+        if (ct.IsCancellationRequested)
+            return Task.FromResult(new GitPushResult(false, sha, "cancelled", "Push cancelled."));
+
+        if (!IsLikelyShaOrRef(sha))
+            return Task.FromResult(new GitPushResult(false, sha, "invalid-sha", "Invalid SHA."));
+
+        var root = ResolveRepoRootForWatchPath(watchPath);
+        if (root == null)
+            return Task.FromResult(new GitPushResult(false, sha, "repo-missing", "Could not resolve repo root."));
+
+        var (_, existsErr, existsCode) = RunGit(root, $"cat-file -e {sha}^{{commit}}");
+        if (existsCode != 0)
+            return Task.FromResult(new GitPushResult(false, sha, "missing-sha", existsErr.Trim()));
+
+        RunGit(root, "fetch origin main");
+
+        var (_, remoteErr, remoteCode) = RunGit(root, "rev-parse --verify origin/main");
+        if (remoteCode == 0)
+        {
+            var (_, ancestorErr, ancestorCode) = RunGit(root, $"merge-base --is-ancestor {sha} origin/main");
+            if (ancestorCode == 0)
+                return Task.FromResult(new GitPushResult(true, sha, "already-remote", null));
+            if (ancestorCode != 1)
+                _logger.LogInformation("Auto-push ancestor check for {Sha} returned {Code}: {Error}", sha, ancestorCode, ancestorErr.Trim());
+        }
+        else
+        {
+            _logger.LogInformation("Auto-push did not find origin/main before pushing {Sha}: {Error}", sha, remoteErr.Trim());
+        }
+
+        var (pushOut, pushErr, pushCode) = RunGit(root, $"push origin {sha}:refs/heads/main");
+        if (pushCode == 0)
+            return Task.FromResult(new GitPushResult(true, sha, "pushed", null));
+
+        var err = string.IsNullOrWhiteSpace(pushErr) ? pushOut.Trim() : pushErr.Trim();
+        var status = err.Contains("non-fast-forward", StringComparison.OrdinalIgnoreCase)
+            || err.Contains("fetch first", StringComparison.OrdinalIgnoreCase)
+            || err.Contains("rejected", StringComparison.OrdinalIgnoreCase)
+                ? "remote-rejected"
+                : "failed";
+        return Task.FromResult(new GitPushResult(false, sha, status, err));
     }
 
     /// <summary>

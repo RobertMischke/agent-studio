@@ -12,7 +12,7 @@ Use exactly this structure:
 
 # Status
 
-- Result: <Success|Partial|Failed>
+- Result: <Success|Failed|NoOp|Blocked|NeedsInput|Partial>
 - Duration: <for example, 4 min>
 
 ## What Was Done
@@ -36,6 +36,7 @@ Rules:
 - Put paths and commands in backticks.
 - Keep text under 250 words. Images do not count.
 - Reply only with Markdown. Do not wrap the answer in code fences.
+- The application may replace the `Result` line with its deterministic run outcome after you reply.
 
 LOG:
 {{log}}

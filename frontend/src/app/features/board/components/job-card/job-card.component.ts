@@ -6,6 +6,7 @@ import { AutoReviewStatusStore } from '../../../../services/auto-review-status.s
 import { cliTypeIcon } from '../../../../services/format.util';
 import { projectIdentity } from '../../../../services/project-identity.util';
 import { TagRegistryStore } from '../../../../services/tag-registry.store';
+import { shouldShowFailureToast } from '../../../job-detail/services/run-outcome.util';
 
 // Shared 'now' signal that ticks every 30s so all relative timestamps update in lockstep
 // without re-reading Date.now() during change detection (which causes NG0100).
@@ -220,8 +221,20 @@ export class JobCardComponent implements OnInit, OnDestroy {
       return { label: 'Running live', tone: 'running' };
     }
 
-    if (execution.status === 'failed') {
+    if (shouldShowFailureToast(execution)) {
       return { label: execution.exitCode === null ? 'Failed' : `Failed (${execution.exitCode})`, tone: 'failed' };
+    }
+
+    if (execution.runOutcome === 'noop') {
+      return { label: 'NoOp', tone: 'cancelled' };
+    }
+
+    if (execution.runOutcome === 'blocked') {
+      return { label: 'Blocked', tone: 'cancelled' };
+    }
+
+    if (execution.runOutcome === 'needs-input') {
+      return { label: 'Needs input', tone: 'cancelled' };
     }
 
     // 'stopped' is the new deliberate-kill status from the backend

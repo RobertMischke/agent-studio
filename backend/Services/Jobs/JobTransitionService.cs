@@ -61,15 +61,22 @@ public sealed class JobTransitionService
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return new MoveJobOutcome(MoveJobStatus.NotFound);
 
+        var settings = _settings.Get(info.ProjectName);
+        var autoPushStrategy = AutoPushStrategies.Normalize(settings.AutoPushStrategy);
+
         var shouldAutoCommit =
             info.State == JobStates.Progress &&
             targetState == JobStates.AutoReview &&
-            _settings.Get(info.ProjectName).AutoCommit;
+            settings.AutoCommit;
 
         JobCommitInfo? commitToStamp = null;
         if (shouldAutoCommit)
         {
             commitToStamp = await TryAutoCommitAsync(jobId, watchPath, ct);
+            if (commitToStamp != null && autoPushStrategy == AutoPushStrategies.AlwaysImmediate)
+            {
+                await TryPushCommitAsync(commitToStamp.Sha, info.WatchPath, jobId, "auto-commit", ct);
+            }
         }
 
         var fromState = info.State;
@@ -87,6 +94,15 @@ public sealed class JobTransitionService
 
         if (outcome.Status == MoveJobStatus.Success && fromState != targetState)
         {
+            if (targetState == JobStates.Completed && autoPushStrategy != AutoPushStrategies.Never)
+            {
+                var moved = _scanner.FindJob(jobId, watchPath);
+                if (moved != null)
+                {
+                    await PushCompletedJobCommitsAsync(moved, autoPushStrategy, ct);
+                }
+            }
+
             try
             {
                 OnJobMoved?.Invoke(projectName, jobId, fromState, targetState);
@@ -126,6 +142,46 @@ public sealed class JobTransitionService
         {
             _logger.LogWarning(ex, "Auto-commit threw for {JobId}. Moving without a recorded SHA.", jobId);
             return null;
+        }
+    }
+
+    public async Task<int> PushCompletedJobCommitsAsync(JobInfo job, string strategy, CancellationToken ct = default)
+    {
+        if (AutoPushStrategies.Normalize(strategy) == AutoPushStrategies.Never) return 0;
+        if (job.State != JobStates.Completed) return 0;
+
+        var commits = job.Commits.Count > 0
+            ? job.Commits
+            : job.Commit is null ? [] : [job.Commit];
+
+        var pushed = 0;
+        foreach (var commit in commits.Where(c => !string.IsNullOrWhiteSpace(c.Sha)).OrderBy(c => c.At))
+        {
+            if (await TryPushCommitAsync(commit.Sha, job.WatchPath, job.Id, "completed", ct))
+                pushed++;
+        }
+        return pushed;
+    }
+
+    private async Task<bool> TryPushCommitAsync(string sha, string watchPath, string jobId, string reason, CancellationToken ct)
+    {
+        try
+        {
+            var result = await _git.PushShaAsync(sha, watchPath, ct);
+            if (result.Success)
+            {
+                _logger.LogInformation("Auto-push {Status} for {JobId} at {Sha} ({Reason})", result.Status, jobId, sha, reason);
+                return result.Status == "pushed";
+            }
+
+            _logger.LogWarning("Auto-push skipped for {JobId} at {Sha} ({Reason}): {Status} {Error}",
+                jobId, sha, reason, result.Status, result.Error);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Auto-push threw for {JobId} at {Sha} ({Reason})", jobId, sha, reason);
+            return false;
         }
     }
 }

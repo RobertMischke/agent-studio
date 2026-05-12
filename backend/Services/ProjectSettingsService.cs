@@ -52,6 +52,18 @@ public class ProjectSettingsService
         }
     }
 
+    public void SetAutoPushStrategy(string projectName, string strategy)
+    {
+        EnsureLoaded();
+        var normalized = AutoPushStrategies.Normalize(strategy);
+        lock (_lock)
+        {
+            var current = _cache.TryGetValue(projectName, out var s) ? s : new ProjectSettings();
+            _cache[projectName] = current with { AutoPushStrategy = normalized };
+            Persist();
+        }
+    }
+
     /// <summary>
     /// Persists the runner mode for a project so the auto-pickup toggle survives
     /// a backend restart. Null clears the persisted value (revert to default).
