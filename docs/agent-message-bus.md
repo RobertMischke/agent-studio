@@ -263,6 +263,12 @@ Each project-level supporting action declares the same five-field contract. The 
 - First wired path: `POST /api/analysis/{project}/actions/roadmap-alignment` in [`backend/Endpoints/AnalysisReportEndpoints.cs`](../backend/Endpoints/AnalysisReportEndpoints.cs). The endpoint emits the bus mirror only when `agentResponse` is supplied; the evidence-only path stays a Manual report so the timeline does not falsely advertise a supporting-agent run that never happened.
 - Tests: `backend.Tests/AgentMessageBusBridgeTests.cs` locks the supporting-agent message shape (participant id, kind, severity mapping, artifact list, parse-failure fallback). The endpoint integration test lives in `backend.Tests/RoadmapAlignmentReviewServiceTests.cs`.
 
+## 9c. Auto-review diff discovery
+
+Auto-review aspect runners must receive a full job-range diff summary, not a HEAD-only or latest-commit-only view. The summary is built from every commit attributed to the job across all runs (`HeadShaBefore..HeadShaAfter` ranges from the run timeline, deduped) plus the auto-commit recorded on `JobInfo.Commit`. This matches the `/api/jobs/{id}/commits` protocol-pane aggregation so the automated reviewer and the human reviewer inspect the same commit set.
+
+Crash-recovery commits are often empty fixups on top of the real work. If an aspect prompt only receives that latest recovery commit, it can falsely report "0 files changed" and block a successful task. Truly empty aggregates must be stated explicitly as "No commits attributed to this task" rather than rendered as a zero-file commit.
+
 ## 10. Changing this contract
 
 Before you touch any of the moving parts:
