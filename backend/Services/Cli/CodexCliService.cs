@@ -162,8 +162,9 @@ public sealed class CodexCliService : CliExecutionServiceBase
     /// <summary>
     /// ADR-0014: Codex receives the prompt as a positional argv (see
     /// <see cref="BuildStartInfo"/>). Returning null tells the base class
-    /// not to redirect stdin, preventing the pipe-inheritance race that
-    /// motivated ADR-0014.
+    /// not to write a stdin payload — combined with
+    /// <see cref="ForceCloseStdinWhenNoPayload"/> the base still redirects
+    /// stdin and immediately closes it so Codex sees EOF on its first read.
     /// </summary>
     protected override string? GetPromptStdinPayload(
         string prompt,
@@ -171,6 +172,22 @@ public sealed class CodexCliService : CliExecutionServiceBase
         bool resumeSession,
         string? model)
         => null;
+
+    /// <summary>
+    /// Codex 0.130+ (<c>codex exec --json [PROMPT]</c>) always logs
+    /// "Reading additional input from stdin..." on startup and, if a stdin
+    /// handle is connected, appends whatever it can read as a <c>&lt;stdin&gt;</c>
+    /// block onto the positional prompt. When the parent is an interactive
+    /// shell or an IDE-launched dotnet, the inherited stdin can be a live
+    /// console handle; Codex then reads partial or empty data and the model
+    /// answers <c>[[TASK_NOOP]]</c> ("no actionable task provided"), burning
+    /// the whole prompt as a no-op. Forcing redirect-and-close gives Codex a
+    /// guaranteed-EOF stdin so the positional prompt is the only input
+    /// source. Verified locally: identical prompt that NOOPs under inherited
+    /// stdin produces <c>[[TASK_DONE]]</c> with real file changes under
+    /// <c>&lt; NUL</c>.
+    /// </summary>
+    protected override bool ForceCloseStdinWhenNoPayload => true;
 
     /// <summary>
     /// Bridge to <see cref="CodexEventAdapter"/>. Each raw stdout line is
