@@ -67,18 +67,20 @@ public sealed class CodexCliService : CliExecutionServiceBase
         string? model)
     {
         // For Codex, sessionName is the session UUID (or null for a fresh session).
-        // codex exec [resume <uuid>] [--json] [-m <model>] [PROMPT]
+        // codex exec [resume <uuid>] [--json] [-m <model>] -
         //
-        // ADR-0014 default-deny stdin: prompt is the LAST positional argv,
-        // not piped via stdin. Codex's "-" arg ("read instructions from
-        // stdin") is the alternative path; we use the positional path
-        // because it removes the inherited-pipe-handle race that Anthropic
-        // documented in claude-code#771 and that the OSS-orchestration
-        // survey identified across all four CLIs. ProcessStartInfo
-        // .ArgumentList lets .NET escape per Win32 CommandLineToArgvW
-        // rules, which preserves multi-line / quoted prompt content
-        // verbatim - Windows' command-line cap is 32767 chars; rendered
-        // prompts are well under that.
+        // 2026-05-12: Codex 0.130 changed positional-PROMPT semantics so a
+        // rules-heavy prompt got interpreted as "initial instructions" and
+        // the model answered `[[TASK_NOOP]]` ("no actionable task provided")
+        // — the entire prompt was consumed as a system-side header. Switching
+        // to `-` (read instructions from stdin) restores the user-message
+        // path: Codex blocks on stdin, we write the full prompt + system
+        // prefix, then close stdin. The model then sees the prompt as the
+        // actual user turn and acts on it.
+        //
+        // Reproduced on Sternstunde batch + 3 Agent TP Codex jobs; manual
+        // verification under `< NUL` confirms positional NOOPs even on
+        // simple tasks once the prompt has a few "Rules for this run" lines.
         var psi = new ProcessStartInfo
         {
             FileName = ResolveExecutable(GetCliPath()),
@@ -102,9 +104,12 @@ public sealed class CodexCliService : CliExecutionServiceBase
             psi.ArgumentList.Add(model);
         }
 
+        // Use `-` to tell Codex to read the prompt from stdin instead of
+        // taking it as a positional argv. The actual bytes are written by
+        // the base class via GetPromptStdinPayload below.
         if (!string.IsNullOrEmpty(prompt))
         {
-            psi.ArgumentList.Add(BuildSystemPromptPrefix(OperatingSystem.IsWindows()) + prompt);
+            psi.ArgumentList.Add("-");
         }
 
         return psi;
@@ -160,34 +165,22 @@ public sealed class CodexCliService : CliExecutionServiceBase
     }
 
     /// <summary>
-    /// ADR-0014: Codex receives the prompt as a positional argv (see
-    /// <see cref="BuildStartInfo"/>). Returning null tells the base class
-    /// not to write a stdin payload — combined with
-    /// <see cref="ForceCloseStdinWhenNoPayload"/> the base still redirects
-    /// stdin and immediately closes it so Codex sees EOF on its first read.
+    /// Deliver the full prompt (system-prompt prefix + rendered template) to
+    /// Codex via stdin. <see cref="BuildStartInfo"/> passes <c>-</c> as the
+    /// positional, telling Codex to read instructions from stdin; the base
+    /// class then writes this payload and closes the pipe so Codex sees EOF
+    /// after the prompt and starts the turn. This is the only delivery path
+    /// that survived Codex 0.130's stricter positional-PROMPT semantics
+    /// without provoking <c>[[TASK_NOOP]]</c>.
     /// </summary>
     protected override string? GetPromptStdinPayload(
         string prompt,
         string? sessionName,
         bool resumeSession,
         string? model)
-        => null;
-
-    /// <summary>
-    /// Codex 0.130+ (<c>codex exec --json [PROMPT]</c>) always logs
-    /// "Reading additional input from stdin..." on startup and, if a stdin
-    /// handle is connected, appends whatever it can read as a <c>&lt;stdin&gt;</c>
-    /// block onto the positional prompt. When the parent is an interactive
-    /// shell or an IDE-launched dotnet, the inherited stdin can be a live
-    /// console handle; Codex then reads partial or empty data and the model
-    /// answers <c>[[TASK_NOOP]]</c> ("no actionable task provided"), burning
-    /// the whole prompt as a no-op. Forcing redirect-and-close gives Codex a
-    /// guaranteed-EOF stdin so the positional prompt is the only input
-    /// source. Verified locally: identical prompt that NOOPs under inherited
-    /// stdin produces <c>[[TASK_DONE]]</c> with real file changes under
-    /// <c>&lt; NUL</c>.
-    /// </summary>
-    protected override bool ForceCloseStdinWhenNoPayload => true;
+        => string.IsNullOrEmpty(prompt)
+            ? null
+            : BuildSystemPromptPrefix(OperatingSystem.IsWindows()) + prompt;
 
     /// <summary>
     /// Bridge to <see cref="CodexEventAdapter"/>. Each raw stdout line is

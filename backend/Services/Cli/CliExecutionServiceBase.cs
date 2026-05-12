@@ -164,30 +164,6 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         bool resumeSession,
         string? model) => null;
 
-    /// <summary>
-    /// When true, the base spawn forces <c>RedirectStandardInput=true</c> even
-    /// when <see cref="GetPromptStdinPayload"/> returns null, and closes the
-    /// child's stdin immediately after start. This gives the child a
-    /// guaranteed-closed (EOF-on-first-read) pipe instead of inheriting the
-    /// parent's stdin.
-    ///
-    /// <para>
-    /// Why this exists: Codex 0.130+ runs <c>codex exec [PROMPT]</c> with
-    /// "Reading additional input from stdin..." behavior — if a stdin handle
-    /// is connected and not piped (the .NET default when
-    /// <c>RedirectStandardInput=false</c> and <c>UseShellExecute=false</c>),
-    /// the child inherits the parent's stdin handle. When the parent's stdin
-    /// is a real console (interactive launch, dev shell, IDE terminal), Codex
-    /// reads it as a <c>&lt;stdin&gt;</c> block appended to the positional
-    /// prompt; depending on console state it may see empty bytes, partial
-    /// data, or a long-blocking read that the model interprets as "no user
-    /// task provided" and answers with <c>[[TASK_NOOP]]</c>. Explicitly
-    /// closing stdin sends EOF on the first read and makes the prompt the
-    /// only input source, so the model treats it as an actionable task.
-    /// </para>
-    /// </summary>
-    protected virtual bool ForceCloseStdinWhenNoPayload => false;
-
     /// <summary>Subclass hook: try to extract session metadata from a fresh output line.</summary>
     protected virtual void OnOutputLine(ProcInfo info, CliOutputLine line) { }
 
@@ -261,8 +237,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         // first read. When no payload is needed, the child inherits the
         // parent's already-non-interactive stdin and the race goes away.
         var stdinPayload = GetPromptStdinPayload(prompt, sessionName, resumeSession, model);
-        var forceCloseStdin = ForceCloseStdinWhenNoPayload && string.IsNullOrEmpty(stdinPayload);
-        psi.RedirectStandardInput = !string.IsNullOrEmpty(stdinPayload) || forceCloseStdin;
+        psi.RedirectStandardInput = !string.IsNullOrEmpty(stdinPayload);
         psi.UseShellExecute = false;
         psi.CreateNoWindow  = true;
         psi.WorkingDirectory = workingDirectory;
@@ -309,11 +284,10 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             child = await SpawnChildAsync(psi, prompt, sessionName, resumeSession, model, ct);
             // ADR-0014: only write to stdin when the subclass said it has a
             // payload (and the base class therefore set RedirectStandardInput
-            // = true above). When no payload AND ForceCloseStdinWhenNoPayload
-            // is true (Codex 0.130+), we still redirected stdin so we close
-            // the handle here — child sees EOF on first read, equivalent to
-            // `< NUL`. Otherwise the child inherits the host's stdin, which
-            // is the ADR-0014 workaround for claude-code#771.
+            // = true above). When no payload, the child inherits the host's
+            // non-interactive stdin (or NUL on a daemon) - same effect as
+            // Python's stdin=DEVNULL or Node's stdio:'ignore', which is the
+            // documented Anthropic workaround for claude-code#771.
             if (!string.IsNullOrEmpty(stdinPayload))
             {
                 try
@@ -328,12 +302,11 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
                 }
                 finally
                 {
+                    // Close *only* when we actually opened it. Closing
+                    // Stream.Null is a no-op so the guard is defensive
+                    // rather than load-bearing.
                     try { child.Stdin.Close(); } catch { }
                 }
-            }
-            else if (forceCloseStdin)
-            {
-                try { child.Stdin.Close(); } catch { }
             }
         }
         catch (Exception ex)
