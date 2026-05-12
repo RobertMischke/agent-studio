@@ -223,6 +223,46 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     }
 
     [Fact]
+    public async Task NoOp_AfterNoProgressReissue_EscalatesToNeedsHumanReview()
+    {
+        SeedReviewJobWithDoubleNoProgressNoOp("double-noop",
+            title: "Implement no-op recovery guard",
+            promptBody: "# Implement guard\n\nAdd a deterministic guard for repeated Codex NOOP recovery loops.\n");
+
+        ReviewDecisionLog.Append(_workspace, new ReviewDecisionRecord(
+            CreatedAt: DateTime.UtcNow.AddMinutes(-2),
+            JobId: "double-noop",
+            Project: Project,
+            Kind: ReviewDecisionKind.Reissue,
+            Reason: "Agent emitted [[TASK_NOOP]] but the task description is real; reissuing with sharpened framing.",
+            Prompt: "(deterministic NOOP branch)",
+            Response: "(no fast-model call)",
+            FollowUp: "(test seed)"));
+
+        var calls = 0;
+        var orchestrator = BuildOrchestrator(cliResponse: "", onCall: () => calls++);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        Assert.Equal(0, calls);
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.NeedsHumanReview, "double-noop")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Ready, "double-noop")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.AutoReview, "double-noop")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "double-noop")));
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.HumanReview, "double-noop")));
+
+        var log = ReadCliLog(JobStates.NeedsHumanReview, "double-noop");
+        Assert.Contains("[supervisor]", log);
+        Assert.Contains("[escalate]", log);
+        Assert.Contains("Escalated: 2 consecutive NOOPs without progress", log);
+
+        var records = ReviewDecisionLog.ReadAll(_workspace, Project);
+        Assert.Equal(2, records.Count);
+        Assert.Equal(ReviewDecisionKind.Escalate, records[^1].Kind);
+        Assert.Contains("Escalated: 2 consecutive NOOPs without progress", records[^1].Reason);
+    }
+
+    [Fact]
     public async Task NoOp_WithEmptyPrompt_PromotesToHumanReview_AndCreatesIntake()
     {
         SeedReviewJobWithNoOp("placeholder-task",
@@ -807,6 +847,24 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         File.WriteAllText(Path.Combine(dir, "logs", "cli-output.log"),
             $"[12:00:00.000] [stdout] starting{Environment.NewLine}" +
             $"[12:00:01.000] [stdout] [[TASK_NOOP]]{Environment.NewLine}");
+    }
+
+    private void SeedReviewJobWithDoubleNoProgressNoOp(string slug, string title, string promptBody)
+    {
+        var dir = Path.Combine(_watchPath, JobStates.AutoReview, slug);
+        Directory.CreateDirectory(Path.Combine(dir, "logs"));
+        File.WriteAllText(Path.Combine(dir, "job.json"),
+            $"{{\"id\":\"{slug}\",\"title\":{System.Text.Json.JsonSerializer.Serialize(title)},\"state\":\"{JobStates.AutoReview}\",\"order\":1,\"agent\":\"codex\"}}");
+        File.WriteAllText(Path.Combine(dir, "prompt.md"), promptBody);
+        File.WriteAllText(Path.Combine(dir, "logs", "cli-output.log"),
+            $"[12:00:00.000] [stdout] {{\"type\":\"thread.started\",\"thread_id\":\"test-session\"}}{Environment.NewLine}" +
+            $"[12:00:01.000] [stdout] {{\"type\":\"turn.started\"}}{Environment.NewLine}" +
+            $"[12:00:02.000] [stdout] {{\"type\":\"item.completed\",\"item\":{{\"type\":\"agent_message\",\"text\":\"[[TASK_NOOP]]\"}}}}{Environment.NewLine}" +
+            $"[12:00:02.001] [stdout] [[TASK_NOOP]]{Environment.NewLine}" +
+            $"[12:00:30.000] [orchestrator] [reissue] Decision: reissue (NOOP recovery). Reason: Agent emitted [[TASK_NOOP]] but the task description is real; reissuing with sharpened framing.{Environment.NewLine}" +
+            $"[12:01:00.000] [stdout] {{\"type\":\"turn.started\"}}{Environment.NewLine}" +
+            $"[12:01:01.000] [stdout] {{\"type\":\"item.completed\",\"item\":{{\"type\":\"agent_message\",\"text\":\"[[TASK_NOOP]]\"}}}}{Environment.NewLine}" +
+            $"[12:01:01.001] [stdout] [[TASK_NOOP]]{Environment.NewLine}");
     }
 
     private string JobPathLog(string state, string slug) =>
