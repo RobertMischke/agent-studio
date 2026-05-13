@@ -2,16 +2,18 @@ import { test, expect } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 
 /**
- * The bottom status-bar's quota strip exposes a click-open detail modal
- * with the full subscription windows for every primary CLI and the
- * workspace-wide token aggregate, all in one place.
+ * The bottom status-bar's quota strip exposes a hover-open detail
+ * modal with the full subscription windows for every primary CLI and
+ * the workspace-wide token aggregate, all in one place. Click and
+ * Enter still open the modal for keyboard / touch users.
  *
  * That modal is owned by `<app-usage-hover-panel>`, which wraps the
  * existing quota strip (`<app-header-quota>`) and renders a deferred
  * dialog with subscription quota, token trend, model spend, and top tasks.
  *
  * This spec asserts:
- * - Clicking the strip opens the large modal.
+ * - Hovering the strip opens the large modal.
+ * - Clicking the strip also opens it (touch / accessibility fallback).
  * - The modal carries both the quota table and the tokens block.
  * - Esc closes the modal.
  *
@@ -30,18 +32,18 @@ test.describe('Status bar usage detail modal', () => {
     await page.waitForTimeout(800);
   });
 
-  test('clicking the strip opens a modal with quota and token sections', async ({ page }) => {
+  test('hovering the strip opens a modal with quota and token sections', async ({ page }) => {
     const statusBar = page.getByTestId('status-bar');
     await expect(statusBar).toBeVisible();
 
     // Pre-state: the modal is not in the DOM until the strip is hovered.
     await expect(page.getByTestId('usage-hover-panel-pop')).toHaveCount(0);
 
-    // The wrapper hosts the strip and listens for click / keyboard open.
+    // The wrapper hosts the strip and listens for hover / click / keyboard open.
     const anchor = page.getByTestId('usage-hover-panel');
     await expect(anchor).toBeVisible();
     await anchor.scrollIntoViewIfNeeded();
-    await anchor.click();
+    await anchor.hover();
 
     const modal = page.getByTestId('usage-hover-panel-pop');
     await expect(modal).toBeVisible({ timeout: 2_000 });
@@ -71,6 +73,15 @@ test.describe('Status bar usage detail modal', () => {
     });
   });
 
+  test('clicking the strip also opens the modal (touch / accessibility fallback)', async ({ page }) => {
+    const anchor = page.getByTestId('usage-hover-panel');
+    await anchor.scrollIntoViewIfNeeded();
+    await anchor.click();
+
+    const modal = page.getByTestId('usage-hover-panel-pop');
+    await expect(modal).toBeVisible({ timeout: 2_000 });
+  });
+
   test('modal supports keyboard open and close button', async ({ page }) => {
     const anchor = page.getByTestId('usage-hover-panel');
     await anchor.focus();
@@ -85,7 +96,7 @@ test.describe('Status bar usage detail modal', () => {
 
   test('Escape closes the modal', async ({ page }) => {
     const anchor = page.getByTestId('usage-hover-panel');
-    await anchor.click();
+    await anchor.hover();
 
     const modal = page.getByTestId('usage-hover-panel-pop');
     await expect(modal).toBeVisible({ timeout: 2_000 });

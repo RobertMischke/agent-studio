@@ -26,20 +26,37 @@ public static class WorkspaceEndpoints
         // range values snap to the defaults rather than failing - the
         // status-bar entry into this view should always render.
         group.MapGet("/tokens/timeline",
-            (int? windowHours, int? bucketMinutes, JobScannerService scanner, ITokenAggregator tokens) =>
+            (int? windowHours, int? bucketMinutes, JobScannerService scanner, ITokenAggregator tokens, WorkspaceTokensCacheStore cache) =>
             {
                 var projects = scanner.GetWatchPaths()
                     .Select(e => (e.Name, e.Path))
                     .ToList();
-                var result = tokens.WorkspaceTimeline(
-                    projects,
-                    windowHours ?? WorkspaceTokensTimelineService.DefaultWindowHours,
-                    bucketMinutes ?? WorkspaceTokensTimelineService.DefaultBucketMinutes);
+                var resolvedWindowHours = windowHours ?? WorkspaceTokensTimelineService.DefaultWindowHours;
+                var resolvedBucketMinutes = bucketMinutes ?? WorkspaceTokensTimelineService.DefaultBucketMinutes;
+                var result = tokens.WorkspaceTimeline(projects, resolvedWindowHours, resolvedBucketMinutes);
+                // Persist the snapshot so the next hover renders before the
+                // live aggregator has finished. Snapshot files are keyed by
+                // (windowHours, bucketMinutes) so the 24h and 7d views don't
+                // overwrite each other.
+                cache.WriteTimeline(result.WindowHours, result.BucketMinutes, result);
                 return Results.Ok(result);
             });
 
+        // Cache-only timeline read: returns the persisted snapshot for
+        // the (windowHours, bucketMinutes) combo without re-folding the
+        // bus. The hover panel calls this on first paint so historical
+        // numbers appear instantly; 204 No Content means no cache yet.
+        group.MapGet("/tokens/timeline/cached",
+            (int? windowHours, int? bucketMinutes, WorkspaceTokensCacheStore cache) =>
+            {
+                var resolvedWindowHours = windowHours ?? WorkspaceTokensTimelineService.DefaultWindowHours;
+                var resolvedBucketMinutes = bucketMinutes ?? WorkspaceTokensTimelineService.DefaultBucketMinutes;
+                var snap = cache.ReadTimeline(resolvedWindowHours, resolvedBucketMinutes);
+                return snap == null ? Results.NoContent() : Results.Ok(snap);
+            });
+
         group.MapGet("/tokens/expensive-jobs",
-            (int? limit, JobScannerService scanner, ITokenAggregator tokens) =>
+            (int? limit, JobScannerService scanner, ITokenAggregator tokens, WorkspaceTokensCacheStore cache) =>
             {
                 var perProjectLimit = Math.Clamp(limit ?? ProjectTokenUsageService.DefaultExpensiveLimit, 1, 50);
                 var jobs = scanner.GetWatchPaths()
@@ -57,7 +74,17 @@ public static class WorkspaceEndpoints
                     .OrderByDescending(job => job.TotalTokens)
                     .Take(perProjectLimit)
                     .ToList();
-                return Results.Ok(new WorkspaceExpensiveJobsResponse(jobs));
+                var response = new WorkspaceExpensiveJobsResponse(jobs);
+                cache.WriteExpensiveJobs(response);
+                return Results.Ok(response);
+            });
+
+        // Cache-only expensive-jobs read.
+        group.MapGet("/tokens/expensive-jobs/cached",
+            (WorkspaceTokensCacheStore cache) =>
+            {
+                var snap = cache.ReadExpensiveJobs();
+                return snap == null ? Results.NoContent() : Results.Ok(snap);
             });
 
         // Workspace-wide visual evidence reel. Folds the per-job

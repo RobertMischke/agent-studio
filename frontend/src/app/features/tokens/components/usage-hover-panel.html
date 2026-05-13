@@ -3,6 +3,8 @@
      role="button"
      tabindex="0"
      aria-label="Open CLI usage detail"
+     (mouseenter)="onAnchorEnter()"
+     (mouseleave)="onAnchorLeave()"
      (click)="openPanel($event)"
      (keydown)="onTriggerKeydown($event)">
   <app-header-quota />
@@ -10,17 +12,21 @@
 
 @if (open()) {
   @defer (when open()) {
-    <app-cli-usage-detail-modal
-      [quotaRows]="quotaRows()"
-      [tokens]="tokens()"
-      [adhoc]="adhoc()"
-      [timeline24h]="timeline24h()"
-      [timeline7d]="timeline7d()"
-      [expensiveJobs]="expensiveJobs()"
-      [refreshing]="refreshing()"
-      [refreshingAll]="refreshingAll()"
-      (closed)="closePanel()"
-      (refreshAll)="refreshAll($event)"
-      (refreshOne)="refreshOneFromModal($event)" />
+    <div class="uhp__pop-wrap"
+         (mouseenter)="onPopEnter()"
+         (mouseleave)="onPopLeave()">
+      <app-cli-usage-detail-modal
+        [quotaRows]="quotaRows()"
+        [tokens]="tokens()"
+        [adhoc]="adhoc()"
+        [timeline24h]="timeline24h()"
+        [timeline7d]="timeline7d()"
+        [expensiveJobs]="expensiveJobs()"
+        [refreshing]="refreshing()"
+        [refreshingAll]="refreshingAll()"
+        (closed)="closePanel()"
+        (refreshAll)="refreshAll($event)"
+        (refreshOne)="refreshOneFromModal($event)" />
+    </div>
   }
 }

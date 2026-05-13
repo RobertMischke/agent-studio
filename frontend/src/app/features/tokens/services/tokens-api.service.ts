@@ -81,12 +81,40 @@ export class TokensApiService {
     );
   }
 
+  /**
+   * Cache-only timeline read. Returns the on-disk snapshot for the
+   * given (windowHours, bucketMinutes) combo without re-folding the
+   * workspace bus. The status-bar hover modal calls this on first
+   * paint so the historical sparklines appear instantly; 204 No
+   * Content means no cached snapshot exists yet.
+   */
+  getWorkspaceTokensTimelineCached(windowHours: number, bucketMinutes: number) {
+    const params = new HttpParams()
+      .set('windowHours', String(windowHours))
+      .set('bucketMinutes', String(bucketMinutes));
+    return this.http.get<TokenTimeline>(
+      `${this.baseUrl}/workspace/tokens/timeline/cached`,
+      { params, observe: 'response' },
+    );
+  }
+
   /** Top token-consuming jobs folded across every watched project. */
   getWorkspaceExpensiveJobs(limit = 8) {
     const params = new HttpParams().set('limit', String(limit));
     return this.http.get<WorkspaceExpensiveJobsResponse>(
       `${this.baseUrl}/workspace/tokens/expensive-jobs`,
       { params },
+    );
+  }
+
+  /**
+   * Cache-only expensive-jobs read. Same instant-first-paint pattern
+   * as the cached timeline endpoint.
+   */
+  getWorkspaceExpensiveJobsCached() {
+    return this.http.get<WorkspaceExpensiveJobsResponse>(
+      `${this.baseUrl}/workspace/tokens/expensive-jobs/cached`,
+      { observe: 'response' },
     );
   }
 }

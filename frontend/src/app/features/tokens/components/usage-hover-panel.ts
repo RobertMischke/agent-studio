@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  HostListener,
   OnDestroy,
   OnInit,
   computed,
@@ -45,8 +46,14 @@ interface QuotaRow {
  *   falls back to the on-disk cache so the value is visible immediately.
  *
  * The strip itself is delegated to <app-header-quota>; this component
- * owns the click/keyboard modal state and preloads all read-only data so
- * the dialog renders immediately when opened.
+ * owns the hover / click / keyboard modal state and preloads all
+ * read-only data so the dialog renders immediately when opened.
+ *
+ * Hover open has a 120 ms grace period (so accidental fly-throughs do
+ * not pop the modal) and a 220 ms close grace (so the user can move
+ * their cursor from the trigger onto the modal itself without losing
+ * it). Click and Enter still open the modal instantly for keyboard /
+ * touch users.
  */
 @Component({
   selector: 'app-usage-hover-panel',
@@ -79,6 +86,8 @@ export class UsageHoverPanelComponent implements OnInit, OnDestroy {
   // refresh, paused-on-hidden would show a stale "5 min ago" the moment
   // the user comes back to the tab. Same exception as NowTickService.
   private tickTimer: ReturnType<typeof setInterval> | null = null;
+  private openTimer: ReturnType<typeof setTimeout> | null = null;
+  private closeTimer: ReturnType<typeof setTimeout> | null = null;
 
   readonly quotaRows = computed<QuotaRow[]>(() => {
     const r = this.report();
@@ -93,6 +102,7 @@ export class UsageHoverPanelComponent implements OnInit, OnDestroy {
     this.fetchTokensCached();
     this.fetchTokensFresh();
     this.fetchAdHoc();
+    this.fetchDetailCached();
     this.fetchDetail();
     this.quotaPollTimer = setVisibleInterval(() => this.fetchQuota(), 60_000);
     this.tokenPollTimer = setVisibleInterval(() => this.fetchTokensFresh(), 30_000);
@@ -107,10 +117,14 @@ export class UsageHoverPanelComponent implements OnInit, OnDestroy {
     if (this.adhocPollTimer != null) clearVisibleInterval(this.adhocPollTimer);
     if (this.detailPollTimer != null) clearVisibleInterval(this.detailPollTimer);
     if (this.tickTimer != null) clearInterval(this.tickTimer);
+    if (this.openTimer != null) clearTimeout(this.openTimer);
+    if (this.closeTimer != null) clearTimeout(this.closeTimer);
   }
 
   openPanel(ev?: Event): void {
     ev?.stopPropagation();
+    this.cancelOpen();
+    this.cancelClose();
     this.open.set(true);
     this.fetchQuota();
     this.fetchTokensFresh();
@@ -119,6 +133,8 @@ export class UsageHoverPanelComponent implements OnInit, OnDestroy {
   }
 
   closePanel(): void {
+    this.cancelOpen();
+    this.cancelClose();
     this.open.set(false);
   }
 
@@ -126,6 +142,55 @@ export class UsageHoverPanelComponent implements OnInit, OnDestroy {
     if (event.key !== 'Enter' && event.key !== ' ') return;
     event.preventDefault();
     this.openPanel(event);
+  }
+
+  // ---- Hover gating with grace periods ----
+  // Hover open after 120 ms so a cursor flying through the bar doesn't
+  // pop the modal; close after 220 ms so the user can move from the
+  // trigger onto the modal itself without losing it.
+
+  onAnchorEnter(): void { this.scheduleOpen(); }
+  onAnchorLeave(): void { this.scheduleClose(); }
+  onPopEnter(): void { this.cancelClose(); }
+  onPopLeave(): void { this.scheduleClose(); }
+
+  @HostListener('document:keydown.escape')
+  onEscape(): void { this.closePanel(); }
+
+  private scheduleOpen(): void {
+    this.cancelClose();
+    if (this.open() || this.openTimer != null) return;
+    this.openTimer = setTimeout(() => {
+      this.openTimer = null;
+      this.open.set(true);
+      this.fetchQuota();
+      this.fetchTokensFresh();
+      this.fetchAdHoc();
+      this.fetchDetail();
+    }, 120);
+  }
+
+  private scheduleClose(): void {
+    this.cancelOpen();
+    if (!this.open() || this.closeTimer != null) return;
+    this.closeTimer = setTimeout(() => {
+      this.closeTimer = null;
+      this.open.set(false);
+    }, 220);
+  }
+
+  private cancelOpen(): void {
+    if (this.openTimer != null) {
+      clearTimeout(this.openTimer);
+      this.openTimer = null;
+    }
+  }
+
+  private cancelClose(): void {
+    if (this.closeTimer != null) {
+      clearTimeout(this.closeTimer);
+      this.closeTimer = null;
+    }
   }
 
   // ---- Data fetches ----
@@ -172,6 +237,27 @@ export class UsageHoverPanelComponent implements OnInit, OnDestroy {
     this.tokensApi.getWorkspaceExpensiveJobs(8).subscribe({
       next: (r) => this.expensiveJobs.set(r.jobs ?? []),
       error: () => { /* keep last value */ },
+    });
+  }
+
+  /**
+   * On-disk snapshot read for timeline + expensive-jobs. Runs once on
+   * panel init so a hover triggered before the live aggregator has
+   * answered still renders real numbers from the last successful run.
+   * 204 responses fall through silently.
+   */
+  fetchDetailCached(): void {
+    this.tokensApi.getWorkspaceTokensTimelineCached(24, 60).subscribe({
+      next: (resp) => { if (resp.status === 200 && resp.body) this.timeline24h.set(resp.body); },
+      error: () => { /* tolerated */ },
+    });
+    this.tokensApi.getWorkspaceTokensTimelineCached(168, 60).subscribe({
+      next: (resp) => { if (resp.status === 200 && resp.body) this.timeline7d.set(resp.body); },
+      error: () => { /* tolerated */ },
+    });
+    this.tokensApi.getWorkspaceExpensiveJobsCached().subscribe({
+      next: (resp) => { if (resp.status === 200 && resp.body) this.expensiveJobs.set(resp.body.jobs ?? []); },
+      error: () => { /* tolerated */ },
     });
   }
 
