@@ -92,6 +92,25 @@ The project page should therefore expose two layers:
 
 When a meta-analysis finds a recurring failure pattern across jobs, the UI should connect the dots: evidence first, then the suspected steering gap, then the proposed README, AGENTS, skill, prompt, task-contract, or process update. The user can inspect the raw reports and create a normal follow-up task. The app should not silently change steering documents behind the user's back.
 
+## Inline meta: explain decisions next to the lever
+
+Settings, toggles, mode pickers, and configuration surfaces are not bare controls. Every controllable behavior the platform exposes — agent permission modes, sandbox / YOLO toggles, auto-commit/push strategy, review thresholds, drift rules, skill activation, watchdog timing, model routing — must carry its meta-context *in the surface itself*:
+
+- **What this setting does** in one short sentence.
+- **What we default to and why** — the decision basis, not just the value.
+- **Risk rating** when the setting trades safety for throughput (e.g. YOLO mode).
+- **How to verify** the setting is actually in effect (a probe URL, a CLI command, a log line to grep).
+- **Link to the deeper doc** as a drill-down, never as the only source.
+
+The product's value comes partly from the patterns and decisions it has *already made* on the user's behalf. Hiding those decisions in `docs/` or a wiki forfeits that value. The user — and a future agent reading the surface — should be able to pause on any control and read, in-line, why it exists and how to think about flipping it.
+
+Two implementation rules follow:
+
+1. **One source, two views.** The deep explanation lives in a Markdown doc under `docs/` (e.g. `docs/cli-skills/sandbox-and-yolo.md`). The UI embeds the short version inline (or even renders the relevant Markdown section in-place). When the doc changes, the UI updates without copy-paste drift.
+2. **Decision rationale, not just behavior.** A help blurb that only says "Enables danger-full-access" is incomplete. It must also say "We default this on because the orchestrated runner gets blocked by interactive sandbox prompts that have no human in the loop; the risk is X; if you don't want this, do Y."
+
+A setting without inline meta is a regression against this principle and should be fixed before shipping.
+
 ## See What Happened With Confidence
 
 The user must always have a confident, current picture of what the agents and the software did. Three rules follow:

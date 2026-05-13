@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using System.Text.Json;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.Jobs;
 
@@ -439,11 +440,37 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             return;
         }
 
-        // Branch 2: budget exhausted -> escalate. We share the counter
+        var prior = CountPriorReissues(workspace, entry.Name, pending.Job.Id);
+
+        // Branch 2: a reissued Codex NOOP that came back as another
+        // sentinel-only NOOP without any tool/file activity is not
+        // recoverable by another sharpened prompt. Route it back to the
+        // early human-review lane so it is not picked again automatically.
+        var noProgressEvidence = InspectNoOpProgressSinceLastRecovery(pending);
+        if (prior > 0
+            && noProgressEvidence.SawNoOpRecoveryReissue
+            && noProgressEvidence.ToolCalls == 0
+            && noProgressEvidence.FileChanges == 0
+            && noProgressEvidence.AgentSubstanceChars == 0)
+        {
+            var count = prior + 1;
+            var reason =
+                $"Escalated: {count} consecutive NOOPs without progress. " +
+                "The latest retry emitted only [[TASK_NOOP]] after NOOP recovery, with 0 tool calls and 0 file changes.";
+            await EscalateNoOpAsync(workspace, entry, pending, reason, ct,
+                targetState: JobStates.NeedsHumanReview,
+                createHumanDecisionIntake: false);
+            _logger.LogWarning(
+                "ReviewDecisionOrchestrator escalated {Project}/{JobId} after {NoOpCount} consecutive NOOPs without progress: toolCalls={ToolCalls} fileChanges={FileChanges} agentSubstanceChars={AgentSubstanceChars}",
+                entry.Name, pending.Job.Id, count, noProgressEvidence.ToolCalls,
+                noProgressEvidence.FileChanges, noProgressEvidence.AgentSubstanceChars);
+            return;
+        }
+
+        // Branch 3: budget exhausted -> escalate. We share the counter
         // with the existing NEEDS_INPUT-driven reissues so a job that has
         // already been retried multiple times by either path doesn't get
         // double-spent here.
-        var prior = CountPriorReissues(workspace, entry.Name, pending.Job.Id);
         if (prior >= maxReissues)
         {
             var reason = $"NOOP after {prior} prior orchestrator reissue(s); user attention required.";
@@ -451,7 +478,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             return;
         }
 
-        // Branch 3: usable prompt + budget left -> reissue with the
+        // Branch 4: usable prompt + budget left -> reissue with the
         // sharpened framing from RunOutcomePolicy.
         var followUp = RunOutcomePolicy.BuildReissueFollowupPrompt(taskBody);
         await ReissueNoOpAsync(workspace, entry, pending, followUp, ct);
@@ -492,25 +519,29 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         WatchPathEntry entry,
         PendingDecision pending,
         string reason,
-        CancellationToken ct)
+        CancellationToken ct,
+        string targetState = JobStates.HumanReview,
+        bool createHumanDecisionIntake = true)
     {
         var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
 
         _chatLog.AppendSupervisor(current, "escalate",
-            $"Orchestrator could not auto-recover NOOP. Reason: {reason}. Promoted to 5-human-review.");
+            $"Orchestrator could not auto-recover NOOP. Reason: {reason}. Promoted to {targetState}.");
 
         var verdict = new OrchestratorDecisionVerdict(OrchestratorDecisionAction.Escalate, reason);
 
-        // ADR-0025: NOOP escalations also move the task to 5-human-review.
-        var move = _stateMachine.MoveJob(current.Id, JobStates.HumanReview, entry.Path);
+        var move = _stateMachine.MoveJob(current.Id, targetState, entry.Path);
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
-                "ReviewDecisionOrchestrator: failed to move {JobId} to human-review after NOOP escalate: {Status} {Message}",
-                current.Id, move.Status, move.Message);
+                "ReviewDecisionOrchestrator: failed to move {JobId} to {TargetState} after NOOP escalate: {Status} {Message}",
+                current.Id, targetState, move.Status, move.Message);
         }
 
-        await CreateHumanDecisionIntakeAsync(entry, pending, verdict, ct);
+        if (createHumanDecisionIntake)
+        {
+            await CreateHumanDecisionIntakeAsync(entry, pending, verdict, ct);
+        }
 
         ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
             CreatedAt: DateTime.UtcNow,
@@ -809,6 +840,138 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     {
         return ReviewDecisionLog.ReadAll(workspace, project)
             .Count(r => r.JobId == jobId && r.Kind == ReviewDecisionKind.Reissue);
+    }
+
+    private static NoOpProgressEvidence InspectNoOpProgressSinceLastRecovery(PendingDecision pending)
+    {
+        var logPath = JobPaths.CliOutputLog(pending.Job.FolderPath);
+        if (!File.Exists(logPath)) return NoOpProgressEvidence.None;
+
+        string log;
+        try { log = File.ReadAllText(logPath); }
+        catch { return NoOpProgressEvidence.None; }
+
+        if (string.IsNullOrWhiteSpace(log)) return NoOpProgressEvidence.None;
+        var lines = log.Split('\n');
+        var noopIndex = Math.Clamp(pending.LineNumber - 1, 0, Math.Max(lines.Length - 1, 0));
+
+        var reissueIndex = -1;
+        for (var i = noopIndex - 1; i >= 0; i--)
+        {
+            var line = lines[i];
+            if (line.Contains("[orchestrator]", StringComparison.Ordinal)
+                && line.Contains("[reissue]", StringComparison.Ordinal)
+                && line.Contains("NOOP recovery", StringComparison.OrdinalIgnoreCase))
+            {
+                reissueIndex = i;
+                break;
+            }
+        }
+
+        if (reissueIndex < 0) return NoOpProgressEvidence.None;
+
+        var toolCalls = 0;
+        var fileChanges = 0;
+        var agentSubstanceChars = 0;
+
+        for (var i = reissueIndex + 1; i <= noopIndex && i < lines.Length; i++)
+        {
+            InspectProgressLine(lines[i], ref toolCalls, ref fileChanges, ref agentSubstanceChars);
+        }
+
+        return new NoOpProgressEvidence(
+            SawNoOpRecoveryReissue: true,
+            ToolCalls: toolCalls,
+            FileChanges: fileChanges,
+            AgentSubstanceChars: agentSubstanceChars);
+    }
+
+    private static void InspectProgressLine(
+        string line,
+        ref int toolCalls,
+        ref int fileChanges,
+        ref int agentSubstanceChars)
+    {
+        var jsonStart = line.IndexOf('{');
+        if (jsonStart >= 0)
+        {
+            var json = line[jsonStart..].Trim();
+            try
+            {
+                using var doc = JsonDocument.Parse(json);
+                var root = doc.RootElement;
+                if (!root.TryGetProperty("type", out var typeProp)) return;
+                var type = typeProp.GetString();
+                if (!string.Equals(type, "item.started", StringComparison.Ordinal)
+                    && !string.Equals(type, "item.completed", StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                if (!root.TryGetProperty("item", out var item)
+                    || item.ValueKind != JsonValueKind.Object
+                    || !item.TryGetProperty("type", out var itemTypeProp))
+                {
+                    return;
+                }
+
+                var itemType = itemTypeProp.GetString();
+                if (string.Equals(itemType, "agent_message", StringComparison.Ordinal))
+                {
+                    var text = item.TryGetProperty("text", out var textProp)
+                        ? textProp.GetString()
+                        : null;
+                    agentSubstanceChars += CountAgentSubstanceChars(text);
+                    return;
+                }
+
+                if (string.Equals(itemType, "file_change", StringComparison.Ordinal))
+                {
+                    fileChanges++;
+                    return;
+                }
+
+                if (!string.IsNullOrWhiteSpace(itemType))
+                {
+                    toolCalls++;
+                }
+                return;
+            }
+            catch (JsonException)
+            {
+                // Fall through and treat it as ordinary output text.
+            }
+        }
+
+        var payloadText = ExtractStreamPayload(line);
+        agentSubstanceChars += CountAgentSubstanceChars(payloadText);
+    }
+
+    private static string ExtractStreamPayload(string line)
+    {
+        var stdoutMarker = "] [stdout] ";
+        var stderrMarker = "] [stderr] ";
+        var stdoutAt = line.IndexOf(stdoutMarker, StringComparison.Ordinal);
+        if (stdoutAt >= 0) return line[(stdoutAt + stdoutMarker.Length)..];
+        var stderrAt = line.IndexOf(stderrMarker, StringComparison.Ordinal);
+        if (stderrAt >= 0) return line[(stderrAt + stderrMarker.Length)..];
+        return line;
+    }
+
+    private static int CountAgentSubstanceChars(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return 0;
+        var trimmed = text.Trim();
+        if (trimmed.StartsWith("[[TASK_NOOP", StringComparison.OrdinalIgnoreCase)
+            && trimmed.EndsWith("]]", StringComparison.Ordinal))
+        {
+            return 0;
+        }
+
+        var withoutNoOp = text
+            .Replace("[[TASK_NOOP]]", "", StringComparison.OrdinalIgnoreCase)
+            .Trim();
+        return withoutNoOp.Length;
     }
 
     private static (string Title, string Body) LoadTaskTitleAndBody(PendingDecision pending)
@@ -1364,4 +1527,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         int LineNumber,
         string? Reason,
         NeedsInputState? NeedsInput);
+
+    private sealed record NoOpProgressEvidence(
+        bool SawNoOpRecoveryReissue,
+        int ToolCalls,
+        int FileChanges,
+        int AgentSubstanceChars)
+    {
+        public static readonly NoOpProgressEvidence None = new(false, 0, 0, 0);
+    }
 }
