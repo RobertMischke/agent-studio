@@ -1,6 +1,8 @@
-# Agent Software Studio
+# agent-orchestrator
 
 **Stop being the bottleneck.** A local Kanban board that feeds your coding-agent CLIs a continuous queue of work, using the subscriptions you already pay for, on the machine you already own.
+
+> **Naming note:** The product is **`agent-orchestrator`** (kebab-case, identical to the domain `agent-orchestrator.dev` — developer-tool convention like `fly.io`, `vercel`, `stripe`). The repository slug and several runtime strings still say "agent-orchestrator" as a follow-up cleanup; see [docs/architecture-decisions.md](docs/architecture-decisions.md) for the load-bearing rename note.
 
 ![Board overview](docs/images/board-overview.png)
 
@@ -10,7 +12,7 @@
 
 ## Security first
 
-Agent Software Studio makes security work repeatable instead of heroic. A human reviewer can miss an edge case because they are tired, rushed, or carrying the context in their head. A queued agent can spend millions of tokens on the same class of review every time, write down what it checked, preserve evidence, and leave a durable protocol for human review.
+agent-orchestrator makes security work repeatable instead of heroic. A human reviewer can miss an edge case because they are tired, rushed, or carrying the context in their head. A queued agent can spend millions of tokens on the same class of review every time, write down what it checked, preserve evidence, and leave a durable protocol for human review.
 
 That is the product bet: **with enough inference budget, the right process, and documented evidence, AI-assisted review can become more thorough than ordinary human-only security review.** The goal is not to trust a model blindly. The goal is to put frontier cyber capability inside a controlled workflow: clear task scope, project conventions, repeatable skills, logs, screenshots, summaries, and review gates.
 
@@ -29,7 +31,7 @@ Modern coding agents can run for hours. They don't get tired. They don't context
 The bottleneck isn't the model. It's the human babysitting it: paste a prompt, watch it run, review, paste the next one. Every minute spent on that loop is a minute your subscription's token bucket sits idle.
 
 ```
-  WITHOUT a queue                          WITH Agent Software Studio
+  WITHOUT a queue                          WITH agent-orchestrator
   ───────────────                          ─────────────────────────
 
   you ──► prompt ──► agent ──► review      queue ──► agent ──► review
@@ -62,7 +64,7 @@ The board exists to make the queue the only thing you maintain. Tasks land in `2
 
 **Use what you already pay for.** The runner drives **your** Claude Code, Codex, Copilot, and Gemini CLIs through their existing subscriptions. **No API keys. No per-token billing.** Your Pro/Max plan is the budget; the board's job is to use as much of it as productively as possible.
 
-**Use existing coding agents, not a custom agent runtime.** Agent Software Studio deliberately sits above productized coding agents instead of rebuilding their agent loop against raw model APIs. Claude Code, Codex, Copilot, and Gemini already bundle planning, editing, tool use, approvals, authentication, model routing, and subscription economics. The app's job is queueing, lifecycle control, evidence capture, review handoff, and cross-CLI fallback. If a run gets awkward, the user can still drop into the native CLI or VS Code integration with the same subscription and provider-owned session artifacts where the provider exposes them.
+**Use existing coding agents, not a custom agent runtime.** agent-orchestrator deliberately sits above productized coding agents instead of rebuilding their agent loop against raw model APIs. Claude Code, Codex, Copilot, and Gemini already bundle planning, editing, tool use, approvals, authentication, model routing, and subscription economics. The app's job is queueing, lifecycle control, evidence capture, review handoff, and cross-CLI fallback. If a run gets awkward, the user can still drop into the native CLI or VS Code integration with the same subscription and provider-owned session artifacts where the provider exposes them.
 
 Building a custom coding agent is not a forbidden idea. Many projects do it. It is out of scope for this product while the best price/performance sits in polished subscription coding agents, especially Codex and Claude Code. This boundary can be revisited if model economics or provider capabilities make API-native execution clearly better.
 
@@ -186,7 +188,7 @@ Skills are reusable specialist workflows: security review, Playwright visual ver
 
 The skill model has two layers:
 
-1. **Central skill library.** Agent Software Studio owns the canonical skill library. Standard skills ship with the processor; project-specific skills are managed there too, scoped to one or more watched projects.
+1. **Central skill library.** agent-orchestrator owns the canonical skill library. Standard skills ship with the processor; project-specific skills are managed there too, scoped to one or more watched projects.
 2. **Project lookup contract.** Each watched project should expose a small README or agent-instruction section that tells direct CLI agents where to find the relevant central skills. That keeps skills useful even when the user works directly in Codex, Claude Code, Copilot, or Gemini outside the orchestrator.
 
 During a managed taskboard run, the orchestrator can attach selected skills to the prompt stack explicitly. During direct CLI work, the project's README acts as the common lookup point. Native CLI skill exports may be added later, but the Markdown lookup contract is the agent-neutral base.

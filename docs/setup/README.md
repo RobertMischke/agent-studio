@@ -1,6 +1,6 @@
 # Setup guide
 
-Agent Software Studio is a local Kanban board that drives your Claude Code, Codex, Copilot, or Gemini CLIs through a sequential task queue per watched project. The product pitch lives in [../../README.md](../../README.md); the near-term direction lives in [../../ROADMAP.md](../../ROADMAP.md). The hard rules every CLI driving the repo must follow are in [../../AGENTS.md](../../AGENTS.md).
+agent-orchestrator is a local Kanban board that drives your Claude Code, Codex, Copilot, or Gemini CLIs through a sequential task queue per watched project. The product pitch lives in [../../README.md](../../README.md); the near-term direction lives in [../../ROADMAP.md](../../ROADMAP.md). The hard rules every CLI driving the repo must follow are in [../../AGENTS.md](../../AGENTS.md).
 
 This folder is the **operator-facing setup guide**: how to attach a new project to the board, how to onboard a new CLI agent, what a good first task looks like, and what to check when something is off. It complements [../getting-started.md](../getting-started.md), which is the bare install / run quickstart.
 

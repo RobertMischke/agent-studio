@@ -31,7 +31,7 @@ agent-taskboard/      = Source-Code der App (dieses Repo)
 ## Operating Model
 - Worker: Copilot (or any coding agent) — arbeitet im Ziel-Projekt
 - Contract: Folder and file conventions — leben im Ziel-Projekt unter `.orchestrator/jobs/`
-- Control Tower: Agent Software Studio app — eigenständige App, liest/beobachtet von außen
+- Control Tower: agent-orchestrator app — eigenständige App, liest/beobachtet von außen
 
 ## Filesystem Contract
 Watch path (konfigurierbar):

@@ -118,7 +118,7 @@ A project with no architecture model produces drift reports with `architectureMo
 ```markdown
 ---
 modelId: agent-taskboard-core
-title: Agent Software Studio - Core Architecture
+title: agent-orchestrator - Core Architecture
 project: agent-taskboard
 updatedAt: 2026-05-05T12:00:00Z
 owner: rmisc
@@ -181,7 +181,7 @@ elements:
 schemaVersion: 1
 ---
 
-# Agent Software Studio - Core Architecture
+# agent-orchestrator - Core Architecture
 
 Two rows. Backend, runtime, and observation surfaces on the bottom row;
 frontend and operator-facing surfaces on the top row.

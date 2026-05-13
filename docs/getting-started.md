@@ -1,6 +1,6 @@
 # Getting started
 
-Manual install and configuration for Agent Software Studio. Most users do not need to read this — see the README for the recommended path of letting your coding agent install and run it from the AGENTS.md instructions.
+Manual install and configuration for agent-orchestrator. Most users do not need to read this — see the README for the recommended path of letting your coding agent install and run it from the AGENTS.md instructions.
 
 ## Running
 
@@ -17,7 +17,7 @@ All code edits happen in the **dev** checkout. The stable checkout exists for re
 
 - An orange "DEV" stripe is pinned to the top of the window.
 - The PWA install icon and favicon use an orange variant with a "DEV" corner ribbon.
-- The window title becomes `Agent Software Studio (DEV)`.
+- The window title becomes `agent-orchestrator (DEV)`.
 
 These markers activate when the backend serves `/api/environment` with `{ isDev: true }`, which it does iff a local-only `backend/appsettings.Local.json` file is present:
 

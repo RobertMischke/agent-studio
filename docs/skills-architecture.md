@@ -2,7 +2,7 @@
 
 ## Summary
 
-Agent Software Studio treats skills as portable workspace knowledge, not as a feature owned by one CLI. The canonical skill library lives in the task processor, while each watched project exposes a small, predictable lookup section in its README or agent instructions. The orchestrator can then attach skills during managed task runs, and direct CLI work in VS Code can still discover the same skills through the project lookup document.
+agent-orchestrator treats skills as portable workspace knowledge, not as a feature owned by one CLI. The canonical skill library lives in the task processor, while each watched project exposes a small, predictable lookup section in its README or agent instructions. The orchestrator can then attach skills during managed task runs, and direct CLI work in VS Code can still discover the same skills through the project lookup document.
 
 External background reference: https://gemini.google.com/share/3d87737b325d
 
@@ -21,7 +21,7 @@ That split would make skills feel fragile and would discourage using the orchest
 
 Use a two-layer model:
 
-1. **Central skill library in Agent Software Studio.** General reusable skills live with the task processor and can be selected, suggested, and attached to managed task runs.
+1. **Central skill library in agent-orchestrator.** General reusable skills live with the task processor and can be selected, suggested, and attached to managed task runs.
 2. **Project skill lookup contract in watched projects.** Each child project has a README or agent-instruction section that points agents to the relevant central skills and any project-specific skills managed by the task processor.
 
 The orchestrator owns skill selection for managed task runs. The project README owns discoverability for direct CLI sessions.
@@ -47,7 +47,7 @@ These skills are optional. They should never replace core lifecycle rules.
 Project-specific skills are created and managed in the task processor, but apply to one or more watched projects. Examples:
 
 - "Runbook PWA constraints."
-- "Agent Software Studio CLI driver rules."
+- "agent-orchestrator CLI driver rules."
 - "Project-specific security model."
 - "Preferred screenshot review style for this app."
 
@@ -72,10 +72,17 @@ Skills may explain how to perform a workflow, but they must not own these rules.
 
 Every watched project should expose a small section with a stable heading. The first naive version can be this:
 
+> **Naming note (2026-05-13 rename):** the literal heading below is the
+> wire-level contract checked by `backend/Services/SkillReadinessService.cs`.
+> It still reads "Agent Software Studio Skills" because the backend lookup
+> has not been migrated to the new product name yet. Do not change the
+> literal heading in watched projects until the backend lookup is updated
+> in lock-step; otherwise readiness checks will fail.
+
 ```markdown
 ## Agent Software Studio Skills
 
-This project is managed by Agent Software Studio.
+This project is managed by agent-orchestrator (skill heading kept as the documented contract until the backend lookup is updated).
 
 Core task lifecycle rules live in the task processor and are applied during managed task runs.
 

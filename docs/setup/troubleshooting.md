@@ -1,6 +1,6 @@
 # Troubleshooting
 
-FAQ-style: known failure modes you may hit while operating Agent Software Studio, what they look like, and what to do. New entries belong here when the symptom is recurring and the root cause is non-obvious from the UI.
+FAQ-style: known failure modes you may hit while operating agent-orchestrator, what they look like, and what to do. New entries belong here when the symptom is recurring and the root cause is non-obvious from the UI.
 
 For deeper context, the structural references are:
 

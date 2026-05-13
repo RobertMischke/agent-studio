@@ -1,6 +1,6 @@
 # Supported CLIs
 
-This document is the **contract** every CLI integration in the Agent Software Studio must satisfy. It describes:
+This document is the **contract** every CLI integration in the agent-orchestrator must satisfy. It describes:
 
 1. What "supported" means.
 2. The capabilities every supported CLI must provide.

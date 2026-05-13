@@ -1,4 +1,4 @@
-# Agent Software Studio Paths
+# agent-orchestrator Paths
 
 ## Trennung: App-Code vs. Beobachtete Daten
 
