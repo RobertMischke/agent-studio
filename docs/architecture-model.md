@@ -226,3 +226,16 @@ Warnings are reported as drift findings on the next analyzer run; they do not bl
 - New element added: bump `updatedAt`; the next drift run includes it with an "Unknown" or initial score.
 - Element retired: leave the id in retired state in the analyzer's history; remove from this file.
 - Schema change: bump `schemaVersion` and update [`drift-report.schema.json`](schemas/drift-report.schema.json) in the same commit. Old models keep working until they are migrated; the analyzer logs a `schema-version-mismatch` finding.
+
+## 8. Implementation status and parser ownership
+
+This document and [`docs/schemas/architecture-model.schema.json`](schemas/architecture-model.schema.json) are the contract slice. They are intentionally shipped without a backend parser, validator, or in-code projection. Architecture models describe the *watched project's* software and live with project evidence (section 3); the agent-taskboard backend never reads them at runtime today. The matching record type and round-trip test pattern used for other schemas (see [`docs/schemas/README.md`](schemas/README.md), "Validation") do not apply here because there is no in-process consumer yet.
+
+Parser, validator, and per-element scoring code are owned by the first consumer: the **Software / Architecture Drift** action (queued at `agent-taskboard/2-ready/software-architecture-drift-analysis-action/`). That task's "Read: architecture model document" deliverable covers:
+
+- YAML frontmatter parsing.
+- Schema validation against `architecture-model.schema.json`.
+- The author-time warnings listed in section 6 (duplicate `elementId`, unresolved `allowedDependencies`, `ownershipBoundary` patterns that match nothing, unresolved `sourceRefs` / `relevantTests` / `relevantSchemas`).
+- Per-element scoring that emits the `architectureModel.elements[]` projection inside a [`drift-report`](schemas/drift-report.schema.json) (the C# record `DriftArchitectureElement` already exists in [`backend/Services/Drift/DriftReportContract.cs`](../backend/Services/Drift/DriftReportContract.cs)).
+
+Treat this split the same way schemas were introduced for the supervisor, agent message bus, product runtime observability, and the drift report itself: contract first, consumer-driven parser second. If a different consumer needs to read architecture models before the drift action lands, that consumer owns its own reader and tests.
