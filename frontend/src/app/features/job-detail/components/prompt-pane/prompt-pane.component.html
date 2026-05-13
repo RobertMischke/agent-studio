@@ -29,7 +29,8 @@
               <span class="prompt-history__badge">{{ entry.fileName }}</span>
               <span class="prompt-history__time">{{ formatTime(entry.writtenAt) }}</span>
             </header>
-            <div class="prompt-history__body markdown" [innerHTML]="renderMarkdown(entry.markdown)"></div>
+            <div class="prompt-history__body markdown markdown-body markdown-body--dense"
+                 [innerHTML]="renderMarkdown(entry.markdown)"></div>
           </article>
         }
       </section>

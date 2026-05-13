@@ -70,11 +70,5 @@
   font-variant-numeric: tabular-nums;
 }
 
-.prompt-history__body {
-  color: #e2e8f0;
-  font-size: 0.86rem;
-  line-height: 1.5;
-}
-
-.prompt-history__body p { margin: 0 0 6px; }
-.prompt-history__body p:last-child { margin-bottom: 0; }
+/* Typography for the history entry body comes from the global
+ * `.markdown-body` / `.markdown-body--dense` class. */

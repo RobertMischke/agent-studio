@@ -44,6 +44,8 @@
               </header>
               <div class="chat__msg-body"
                    [class.chat__msg-body--markdown]="item.message.role !== 'user'"
+                   [class.markdown-body]="item.message.role !== 'user'"
+                   [class.markdown-body--dense]="item.message.role !== 'user'"
                    [class.chat__msg-body--collapsed]="item.collapsed"
                    [attr.data-testid]="item.message.role !== 'user' ? 'chat-turn-md' : null"
                    [innerHTML]="item.bodyHtml"></div>

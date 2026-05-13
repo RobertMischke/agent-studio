@@ -148,132 +148,19 @@ $ctp-crust:     #11111b;
 .results-banner[data-kind="needsInput"] .results-banner__icon { color: $ctp-yellow; }
 .results-banner[data-kind="noop"] .results-banner__icon { color: $ctp-overlay2; }
 
-/* ---------- Body prose ------------------------------------------------ */
+/* ---------- Body prose ------------------------------------------------ *
+ * Typography (paragraphs, headings, lists, blockquote, links, hr, inline
+ * code, tables, images) is owned by the global `.markdown-body` class in
+ * `src/styles/_markdown-body.scss`. We only set a comfortable reading
+ * width here. The `.results-code` / `.results-diff` / `.results-figure`
+ * blocks below are intentionally NOT in markdown-body because they have
+ * a richer structural wrapper that the renderer emits (figure with
+ * caption, code header with copy button, diff2html output). */
 .results-view__body {
-  font-size: 15px;
-  line-height: 1.65;
-  color: $ctp-text;
   max-width: 78ch;
-  hyphens: auto;
-  word-wrap: break-word;
 }
 
-.results-view__body p {
-  margin: 0 0 14px;
-}
-
-.results-view__body h1,
-.results-view__body h2,
-.results-view__body h3,
-.results-view__body h4 {
-  font-weight: 600;
-  color: $ctp-rosewater;
-  letter-spacing: -0.01em;
-  line-height: 1.25;
-  margin: 28px 0 10px;
-}
-
-.results-view__body h1 {
-  font-size: 28px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid rgba($ctp-overlay0, 0.4);
-}
-.results-view__body h2 {
-  font-size: 22px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid rgba($ctp-overlay0, 0.25);
-}
-.results-view__body h3 { font-size: 17px; color: $ctp-lavender; }
-.results-view__body h4 { font-size: 15px; color: $ctp-blue; text-transform: uppercase; letter-spacing: 0.05em; }
-
-.results-view__body ul,
-.results-view__body ol {
-  margin: 0 0 14px;
-  padding-left: 26px;
-}
-.results-view__body li {
-  margin: 4px 0;
-  &::marker { color: $ctp-mauve; }
-}
-.results-view__body li > ul,
-.results-view__body li > ol {
-  margin: 4px 0;
-}
-
-.results-view__body blockquote {
-  margin: 14px 0;
-  padding: 8px 16px;
-  border-left: 4px solid $ctp-mauve;
-  background: rgba($ctp-surface0, 0.45);
-  color: $ctp-subtext1;
-  border-radius: 0 4px 4px 0;
-  font-style: italic;
-}
-
-.results-view__body a {
-  color: $ctp-sky;
-  text-decoration: underline;
-  text-decoration-color: rgba($ctp-sky, 0.45);
-  text-underline-offset: 2px;
-  transition: color 0.12s ease, text-decoration-color 0.12s ease;
-  &:hover { color: $ctp-sapphire; text-decoration-color: $ctp-sapphire; }
-}
-
-.results-view__body hr {
-  border: none;
-  height: 1px;
-  background: rgba($ctp-overlay0, 0.45);
-  margin: 22px 0;
-}
-
-.results-view__body strong { color: $ctp-rosewater; font-weight: 600; }
-.results-view__body em { color: $ctp-flamingo; }
-
-/* Inline code */
-.results-view__body :not(pre) > code,
-.results-view__body :not(pre) > code[data-results-code] {
-  padding: 1px 6px;
-  background: rgba($ctp-surface1, 0.7);
-  border: 1px solid rgba($ctp-overlay0, 0.3);
-  border-radius: 3px;
-  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.88em;
-  color: $ctp-peach;
-}
-
-/* Tables */
-.results-view__body table {
-  width: 100%;
-  border-collapse: collapse;
-  margin: 14px 0;
-  font-size: 14px;
-  border: 1px solid rgba($ctp-overlay0, 0.4);
-  border-radius: 4px;
-  overflow: hidden;
-}
-.results-view__body th,
-.results-view__body td {
-  padding: 8px 12px;
-  text-align: left;
-  border-bottom: 1px solid rgba($ctp-overlay0, 0.25);
-}
-.results-view__body th {
-  background: rgba($ctp-surface1, 0.6);
-  color: $ctp-lavender;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-}
-.results-view__body tr:nth-child(even) td {
-  background: rgba($ctp-surface0, 0.35);
-}
-.results-view__body tr:last-child td { border-bottom: none; }
-
-/* Inline images that fell through outside our <figure> wrapper */
-.results-view__body img {
-  max-width: 100%;
-  border-radius: 4px;
-  border: 1px solid rgba($ctp-overlay0, 0.3);
-}
+.results-view__body[data-results-code-block] { /* unused — kept as anchor */ }
 
 /* ---------- Figures & lightbox --------------------------------------- */
 .results-figure {

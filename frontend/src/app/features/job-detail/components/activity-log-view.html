@@ -88,7 +88,7 @@
                       <span class="convo-turn__role">Agent</span>
                       <span class="convo-turn__time">{{ formatTime(item.turn.timestamp) }}</span>
                     </header>
-                    <div class="convo-turn__body convo-turn__body--agent markdown"
+                    <div class="convo-turn__body convo-turn__body--agent markdown markdown-body markdown-body--dense"
                          [innerHTML]="item.bodyHtml"></div>
                   }
                   @case ('system') {

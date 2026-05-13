@@ -130,9 +130,14 @@
   border-radius: 10px;
   background: rgba(0,0,0,0.18);
   color: #cbd5e1;
-  font: 14px/1.65 var(--font-mono, 'Consolas', monospace);
   overflow: auto;
   transition: border-color 200ms ease, box-shadow 200ms ease;
+}
+/* Source-mode textarea still uses the mono font; the rich-mode contenteditable
+ * inherits typography from the global `.markdown-body` class applied via
+ * TipTap's `editorProps.attributes`. */
+.md-editor__source {
+  font: 14px/1.65 var(--font-mono, 'Consolas', monospace);
 }
 .md-editor--dirty .md-editor__rich,
 .md-editor--dirty .md-editor__source {
@@ -190,44 +195,17 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
-.md-editor__source:focus,
-:host ::ng-deep .ProseMirror:focus {
+.md-editor__source:focus {
   outline: none;
 }
-:host ::ng-deep .ProseMirror {
-  min-height: 124px;
-  white-space: pre-wrap;
-}
-:host ::ng-deep .ProseMirror p {
-  margin: 0 0 8px;
-}
-:host ::ng-deep .ProseMirror h1,
-:host ::ng-deep .ProseMirror h2,
-:host ::ng-deep .ProseMirror h3 {
-  margin: 0 0 8px;
-  color: #f8fafc;
-  line-height: 1.25;
-}
-:host ::ng-deep .ProseMirror ul {
-  margin: 0 0 8px;
-  padding-left: 18px;
-}
-:host ::ng-deep .ProseMirror code {
-  color: #c4b5fd;
-  background: rgba(124,58,237,0.16);
-  border-radius: 4px;
-  padding: 1px 4px;
-}
+/* ProseMirror prose styling lives in `src/styles/_markdown-body.scss` —
+ * the global rules pick it up via the `markdown-body markdown-body--editor`
+ * class attached through TipTap's `editorProps.attributes`. Only the
+ * image max-height tweak below is editor-local (we want screenshots to
+ * stay scrollable inside the edit pane). */
 :host ::ng-deep .ProseMirror img {
-  max-width: 100%;
   max-height: 360px;
   display: block;
   margin: 6px 0;
-  border-radius: 8px;
-  border: 1px solid rgba(255,255,255,0.08);
-}
-:host ::ng-deep .ProseMirror img.ProseMirror-selectednode {
-  outline: 2px solid #818cf8;
-  outline-offset: 2px;
 }
   

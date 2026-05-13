@@ -113,6 +113,11 @@ export class MarkdownRichEditorComponent implements AfterViewInit, OnDestroy {
       content: this.toHtml(this.sourceValue()),
       editable: !this.readOnly(),
       editorProps: {
+        // Attach the shared markdown typography to the contenteditable
+        // surface so the live edit view matches the protocol pane.
+        attributes: {
+          class: 'markdown-body markdown-body--editor'
+        },
         handleKeyDown: (_view, event) => {
           if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's') {
             event.preventDefault();

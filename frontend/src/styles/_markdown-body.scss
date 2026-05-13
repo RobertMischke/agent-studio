@@ -1,0 +1,320 @@
+/*
+ * Shared markdown / rich-text typography.
+ *
+ * Single source of truth for prose styling across surfaces that render
+ * markdown: protocol pane (beautiful-results), task description editor,
+ * activity-log agent turns, chat bubbles, prompt history, info-button
+ * drawer, project chat. Every host applies `class="markdown-body"`
+ * (optionally with the `markdown-body--dense` variant for chat-width
+ * surfaces) and stops re-declaring h/li/code/pre/table/a rules.
+ *
+ * Palette is Catppuccin Mocha to match the rest of the dark UI. Tokens
+ * are exposed as CSS custom properties so a future light-mode swap can
+ * override them at :root without rewriting every selector here.
+ *
+ * Long-string handling (URLs, file paths, identifiers) is deliberate:
+ *   - prose uses `overflow-wrap: anywhere` so a single long URL can break
+ *     instead of overflowing the pane
+ *   - <pre> blocks scroll horizontally (never wrap source code)
+ *   - inline code allows mid-token break; block code does not
+ */
+
+.markdown-body {
+  /* -- Tunable density tokens -------------------------------------- */
+  --md-font-size: 14.5px;
+  --md-line-height: 1.65;
+
+  /* -- Palette (Catppuccin Mocha) ---------------------------------- */
+  --md-fg:           #cdd6f4;            /* text       */
+  --md-fg-strong:   #f5e0dc;            /* rosewater  */
+  --md-fg-em:        #f2cdcd;            /* flamingo   */
+  --md-fg-muted:     #a6adc8;            /* subtext0   */
+  --md-fg-link:      #89dceb;            /* sky        */
+  --md-fg-link-hov:  #74c7ec;            /* sapphire   */
+  --md-fg-code:      #fab387;            /* peach      */
+  --md-fg-h3:        #b4befe;            /* lavender   */
+  --md-fg-h4:        #89b4fa;            /* blue       */
+  --md-marker:       #cba6f7;            /* mauve      */
+  --md-border-soft:  rgba(127, 132, 156, 0.30);
+  --md-border:       rgba(127, 132, 156, 0.45);
+  --md-rule:         rgba(127, 132, 156, 0.40);
+  --md-surface-soft: rgba(49, 50, 68, 0.45);
+  --md-surface:      rgba(49, 50, 68, 0.70);
+  --md-code-bg:      #181825;            /* mantle     */
+
+  color: var(--md-fg);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+               system-ui, sans-serif;
+  font-size: var(--md-font-size);
+  line-height: var(--md-line-height);
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  hyphens: auto;
+}
+
+/* Surrounding margin is owned by the host. The first / last block in
+ * the body never adds its own outer margin so the pane edge stays clean. */
+.markdown-body > :first-child { margin-top: 0; }
+.markdown-body > :last-child  { margin-bottom: 0; }
+
+/* -- Paragraphs --------------------------------------------------- */
+.markdown-body p {
+  margin: 0 0 0.85em;
+}
+
+/* -- Headings ----------------------------------------------------- */
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4,
+.markdown-body h5,
+.markdown-body h6 {
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--md-fg-strong);
+  margin: 1.6em 0 0.45em;
+}
+.markdown-body > h1:first-child,
+.markdown-body > h2:first-child,
+.markdown-body > h3:first-child,
+.markdown-body > h4:first-child,
+.markdown-body > h5:first-child,
+.markdown-body > h6:first-child {
+  margin-top: 0;
+}
+.markdown-body h1 {
+  font-size: 1.6em;
+  padding-bottom: 0.3em;
+  border-bottom: 1px solid var(--md-rule);
+}
+.markdown-body h2 {
+  font-size: 1.32em;
+  padding-bottom: 0.22em;
+  border-bottom: 1px solid var(--md-border-soft);
+}
+.markdown-body h3 {
+  font-size: 1.15em;
+  color: var(--md-fg-h3);
+}
+.markdown-body h4 {
+  font-size: 1em;
+  color: var(--md-fg-h4);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.markdown-body h5 { font-size: 0.98em; }
+.markdown-body h6 { font-size: 0.92em; color: var(--md-fg-muted); }
+
+/* -- Emphasis ----------------------------------------------------- */
+.markdown-body strong,
+.markdown-body b { color: var(--md-fg-strong); font-weight: 600; }
+.markdown-body em,
+.markdown-body i { color: var(--md-fg-em); font-style: italic; }
+
+/* A lone-bold-line paragraph is a common "section header" in agent
+ * prose ("**Fixes**", "**Evidence**"). Treat it as a real break.
+ * :has() is widely shipped now; older browsers fall back to the
+ * default paragraph rhythm. */
+.markdown-body p:has(> strong:only-child) {
+  margin-top: 1.3em;
+  margin-bottom: 0.4em;
+  color: var(--md-fg-strong);
+  font-size: 1.02em;
+}
+.markdown-body > p:first-child:has(> strong:only-child) { margin-top: 0; }
+
+/* -- Lists -------------------------------------------------------- */
+.markdown-body ul,
+.markdown-body ol {
+  margin: 0 0 0.9em;
+  padding-left: 1.7em;
+}
+.markdown-body li { margin: 0.25em 0; }
+.markdown-body li::marker { color: var(--md-marker); }
+.markdown-body li > p { margin: 0.2em 0; }
+.markdown-body li > ul,
+.markdown-body li > ol { margin: 0.25em 0; }
+
+/* GFM task lists ([ ] / [x]) render as <li><input type=checkbox>…  */
+.markdown-body li > input[type='checkbox'] {
+  margin-right: 6px;
+  vertical-align: middle;
+  accent-color: var(--md-marker);
+}
+
+/* -- Blockquote --------------------------------------------------- */
+.markdown-body blockquote {
+  margin: 0.9em 0;
+  padding: 0.5em 1em;
+  border-left: 4px solid var(--md-marker);
+  background: var(--md-surface-soft);
+  color: var(--md-fg-muted);
+  border-radius: 0 4px 4px 0;
+  font-style: italic;
+}
+.markdown-body blockquote > :first-child { margin-top: 0; }
+.markdown-body blockquote > :last-child  { margin-bottom: 0; }
+
+/* -- Horizontal rule --------------------------------------------- */
+.markdown-body hr {
+  border: 0;
+  height: 1px;
+  background: var(--md-rule);
+  margin: 1.4em 0;
+}
+
+/* -- Links -------------------------------------------------------- */
+.markdown-body a {
+  color: var(--md-fg-link);
+  text-decoration: underline;
+  text-decoration-color: rgba(137, 220, 235, 0.45);
+  text-underline-offset: 2px;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  transition: color 0.12s ease, text-decoration-color 0.12s ease;
+}
+.markdown-body a:hover {
+  color: var(--md-fg-link-hov);
+  text-decoration-color: var(--md-fg-link-hov);
+}
+
+/* -- Inline code (anything not nested in <pre>) ------------------- */
+.markdown-body :not(pre) > code {
+  padding: 1px 6px;
+  background: var(--md-surface);
+  border: 1px solid var(--md-border-soft);
+  border-radius: 3px;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo,
+               Consolas, monospace;
+  font-size: 0.88em;
+  color: var(--md-fg-code);
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+/* -- Fenced code blocks ------------------------------------------ */
+/* Surfaces with a richer code-block markup (eg. beautiful-results
+ * .results-code) override this with their own wrapper; the plain
+ * pre+code path here is the chat / activity-log / prompt-history
+ * fallback. */
+.markdown-body pre {
+  margin: 0.85em 0;
+  padding: 12px 14px;
+  background: var(--md-code-bg);
+  border: 1px solid var(--md-border-soft);
+  border-radius: 4px;
+  overflow-x: auto;
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo,
+               Consolas, monospace;
+  font-size: 0.85em;
+  line-height: 1.55;
+  max-height: 480px;
+  overflow-y: auto;
+}
+.markdown-body pre code {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: var(--md-fg);
+  font-size: inherit;
+  white-space: pre;
+  word-break: normal;
+  overflow-wrap: normal;
+}
+
+/* Numbered fenced blocks (markdown-utils' opt-in numbered shape used by
+ * the chat surface). Keep the grid here so the surface CSS stays slim. */
+.markdown-body pre.md-code--numbered {
+  padding: 8px 0;
+}
+.markdown-body pre.md-code--numbered code {
+  display: block;
+  line-height: 1.55;
+}
+.markdown-body .md-code-row {
+  display: grid;
+  grid-template-columns: 36px 1fr;
+  column-gap: 12px;
+}
+.markdown-body .md-code-num {
+  text-align: right;
+  color: rgba(148, 163, 184, 0.55);
+  user-select: none;
+  font-variant-numeric: tabular-nums;
+  padding-right: 2px;
+  border-right: 1px solid rgba(148, 163, 184, 0.12);
+}
+.markdown-body .md-code-text {
+  padding-left: 8px;
+  white-space: pre;
+  color: var(--md-fg);
+}
+
+/* -- Tables ------------------------------------------------------- */
+.markdown-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.9em 0;
+  font-size: 0.93em;
+  border: 1px solid var(--md-border-soft);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.markdown-body th,
+.markdown-body td {
+  padding: 0.5em 0.8em;
+  text-align: left;
+  border-bottom: 1px solid var(--md-border-soft);
+  vertical-align: top;
+}
+.markdown-body th {
+  background: var(--md-surface);
+  color: var(--md-fg-h3);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.markdown-body tr:nth-child(even) td { background: var(--md-surface-soft); }
+.markdown-body tr:last-child td { border-bottom: none; }
+
+/* -- Images ------------------------------------------------------- */
+.markdown-body img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  border: 1px solid var(--md-border-soft);
+}
+
+/* -- Dense variant (chat width, activity-log, prompt-history) ---- *
+ * Smaller default size and tighter heading rhythm; no heading
+ * underlines so the layout doesn't fragment in a narrow column. */
+.markdown-body.markdown-body--dense {
+  --md-font-size: 13.5px;
+  --md-line-height: 1.55;
+}
+.markdown-body.markdown-body--dense h1,
+.markdown-body.markdown-body--dense h2 {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.markdown-body.markdown-body--dense h1 { font-size: 1.3em; }
+.markdown-body.markdown-body--dense h2 { font-size: 1.18em; }
+.markdown-body.markdown-body--dense h3 { font-size: 1.08em; }
+.markdown-body.markdown-body--dense h4 { font-size: 0.98em; }
+
+/* -- Editor variant (TipTap ProseMirror) ------------------------- *
+ * The contenteditable surface gets a small min-height so it doesn't
+ * collapse before the user has typed anything. The caret is allowed
+ * back (global styles hide it by default on non-input surfaces). */
+.markdown-body.markdown-body--editor {
+  min-height: 124px;
+  white-space: pre-wrap;
+  caret-color: auto;
+}
+.markdown-body.markdown-body--editor:focus {
+  outline: none;
+}
+.markdown-body.markdown-body--editor img.ProseMirror-selectednode {
+  outline: 2px solid #818cf8;
+  outline-offset: 2px;
+}

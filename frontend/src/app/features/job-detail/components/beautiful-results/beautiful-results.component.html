@@ -39,7 +39,7 @@
   @if (viewMode() === 'rendered') {
     @if (hasBody()) {
       <article #body
-               class="results-view__body"
+               class="results-view__body markdown-body"
                data-testid="results-rendered"
                (click)="onBodyClick($event)"
                [innerHTML]="bodyHtml()"></article>
