@@ -274,7 +274,16 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
         var runner = BuildRunner();
         runner.SetMode("auto-continuous");
 
-        InvokePickerLoop(runner);
+        var picked = InvokePickerLoop(runner);
+
+        // Picker returned null after moving the orphan, which is what lets
+        // TickAsync fall through to GetNextReadyJob() on the same tick. The
+        // production observation (2026-05-11) was that an orphan was picked
+        // as if it were a runnable job, a short CLI execution failed against
+        // the empty folder, and the cross-slug infra breaker flipped mode to
+        // manual. Asserting the picker returns null pins down that the
+        // orphan path no longer hands a JobInfo back to the runner.
+        Assert.Null(picked);
 
         Assert.Equal("auto-continuous", runner.GetStatus().Mode);
         Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "duplicate-later-lane")));
@@ -289,6 +298,44 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
         Assert.True(File.Exists(Path.Combine(only, "logs", "cli-output.log")));
         Assert.True(File.Exists(Path.Combine(only, "job.json")));
         Assert.True(File.Exists(Path.Combine(only, "failed-pickup-reason.md")));
+
+        Assert.False(File.Exists(Path.Combine(_workspaceRoot, "logs", "infra-halts.jsonl")),
+            "stale metadata orphans are queue-hygiene issues, not CLI infra failures");
+    }
+
+    /// <summary>
+    /// Variant of the orphan scenario where the canonical copy of the slug
+    /// lives in 4-auto-review (the orchestrator's review lane), not
+    /// 5-human-review. The production incident on 2026-05-11 saw both shapes
+    /// on the same project (bug-agent-log-modal-zu-klein had copies in
+    /// 3-progress, 4-auto-review, AND 5-human-review). The picker must
+    /// treat both lanes identically: detect the missing job.json, route the
+    /// orphan into 3a-failed-pickup, and leave auto-continuous untouched.
+    /// </summary>
+    [Fact]
+    public void StrictIteration_ProgressOrphanWithCanonicalInAutoReview_IsMovedWithoutFlippingMode()
+    {
+        WriteOrphanProgressFolder("canonical-in-auto-review");
+        WriteJob(JobStates.AutoReview, "canonical-in-auto-review");
+        WriteJob(JobStates.Ready, "ready-after-orphan");
+
+        var runner = BuildRunner();
+        runner.SetMode("auto-continuous");
+
+        var picked = InvokePickerLoop(runner);
+
+        Assert.Null(picked);
+        Assert.Equal("auto-continuous", runner.GetStatus().Mode);
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "canonical-in-auto-review")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.AutoReview, "canonical-in-auto-review")));
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Ready, "ready-after-orphan")));
+
+        var failedPickupRoot = Path.Combine(_watchPath, JobStates.FailedPickup);
+        var moved = Directory.EnumerateDirectories(failedPickupRoot)
+            .Where(d => Path.GetFileName(d).StartsWith("orphan-canonical-in-auto-review-", StringComparison.Ordinal))
+            .ToList();
+        var only = Assert.Single(moved);
+        Assert.True(File.Exists(Path.Combine(only, "logs", "cli-output.log")));
 
         Assert.False(File.Exists(Path.Combine(_workspaceRoot, "logs", "infra-halts.jsonl")),
             "stale metadata orphans are queue-hygiene issues, not CLI infra failures");
@@ -420,8 +467,13 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
     /// behavior we want to test; we don't want to spin up a real CLI to
     /// observe its decisions. Fragile against rename, but the rename will
     /// fail this test at the same time as the production change.
+    ///
+    /// Returns the picker's verdict (the <see cref="JobInfo"/> it would
+    /// hand to <c>RunCliAsync</c>, or <c>null</c> if 3-progress drained
+    /// and <c>TickAsync</c> will fall through to <see cref="JobInfo"/> from
+    /// 2-ready next).
     /// </summary>
-    private static void InvokePickerLoop(ProjectRunner runner)
+    private static JobInfo? InvokePickerLoop(ProjectRunner runner)
     {
         var method = typeof(ProjectRunner).GetMethod("TryPickProgressJobOrDeadLetter",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic);
@@ -432,7 +484,7 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
         // all folders were exhausted. That single-call shape matches what
         // TickAsync invokes; tests that need multiple ticks can call this
         // helper repeatedly.
-        method!.Invoke(runner, null);
+        return method!.Invoke(runner, null) as JobInfo;
     }
 
     private void WriteJob(string state, string slug)
