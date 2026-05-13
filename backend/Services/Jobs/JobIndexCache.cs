@@ -48,6 +48,19 @@ public sealed class JobIndexCache
     private int _refreshing;
     private long _scanRound;
 
+    // Invalidation generation counter. Incremented on every Invalidate so the
+    // refresher can detect "did a mutation land while my disk walk was in
+    // flight?" — captured before ScanAllJobsRaw, compared after. When the
+    // counter has advanced, the just-read snapshot is racy relative to that
+    // mutation: we install the snapshot (it's still better than nothing) but
+    // leave _dirty=true so the very next read forces another refresh that
+    // observes the post-mutation state. Without this guard, a torn read can
+    // overwrite a true invalidation with stale data and the cache happily
+    // serves the stale snapshot until the next external watcher event or the
+    // 30s safety TTL, producing the "optimistic reorder reverts to the old
+    // order after the next poll" symptom.
+    private long _invalidationGen;
+
     // Cheap diagnostics so a perf regression here is visible in /healthz or
     // a future debug endpoint without spinning up a profiler.
     public long Hits;
@@ -93,12 +106,25 @@ public sealed class JobIndexCache
         }
         try
         {
+            // Capture the invalidation generation BEFORE the disk walk. Any
+            // Invalidate() that lands while ScanAllJobsRaw is in flight bumps
+            // the counter, so when we take the lock below we can tell whether
+            // our just-read snapshot is racy. Without this, a mutation that
+            // happens during the disk walk gets stomped by `_dirty = false`
+            // and the cache serves stale data for the rest of the safety TTL.
+            var genBefore = Volatile.Read(ref _invalidationGen);
             var fresh = _scanner.ScanAllJobsRaw();
             lock (_lock)
             {
                 _snapshot = fresh.ToImmutableList();
                 _snapshotAtUtc = DateTime.UtcNow;
-                _dirty = false;
+                // If no invalidation landed during the disk walk, the snapshot
+                // is authoritative. If one did, leave _dirty=true so the next
+                // reader rescans and observes the post-mutation state.
+                if (Volatile.Read(ref _invalidationGen) == genBefore)
+                {
+                    _dirty = false;
+                }
                 Interlocked.Increment(ref Misses);
                 return _snapshot;
             }
@@ -118,6 +144,12 @@ public sealed class JobIndexCache
     /// </summary>
     public void Invalidate(InvalidationSource source = InvalidationSource.Mutation)
     {
+        // Bump the invalidation generation BEFORE setting _dirty so the
+        // refresher's post-scan check (see GetSnapshot) sees a strictly
+        // higher value than its captured `genBefore`. Without the bump,
+        // a concurrent refresher could observe the same generation it
+        // captured before the disk walk and still clear _dirty.
+        Interlocked.Increment(ref _invalidationGen);
         lock (_lock) { _dirty = true; }
         if (source == InvalidationSource.External)
             Interlocked.Increment(ref ExternalInvalidations);
