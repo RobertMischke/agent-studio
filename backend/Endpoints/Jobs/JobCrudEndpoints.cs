@@ -2,7 +2,7 @@ using OrchestratorApi.Models;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.Cli;
 using OrchestratorApi.Services.Jobs;
-using OrchestratorApi.Services.Runner;
+using OrchestratorApi.Services.Tokens;
 using static OrchestratorApi.Endpoints.Jobs.JobEndpointHelpers;
 
 namespace OrchestratorApi.Endpoints.Jobs;
@@ -17,7 +17,7 @@ public static class JobCrudEndpoints
 {
     public static void MapJobCrudEndpoints(this RouteGroupBuilder group)
     {
-        group.MapGet("/", (bool? includeFixtures, JobScannerService scanner, CliRouter router, TaskRunnerService runners, TokenSummaryService tokens, IConfiguration configuration) =>
+        group.MapGet("/", (bool? includeFixtures, JobScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration) =>
         {
             var raw = scanner.ScanAllJobs();
             if (includeFixtures != true) raw = raw.Where(j => !j.Fixture).ToList();
@@ -27,7 +27,7 @@ public static class JobCrudEndpoints
             return Results.Ok(jobs);
         });
 
-        group.MapGet("/grouped", (bool? includeFixtures, JobScannerService scanner, CliRouter router, TaskRunnerService runners, TokenSummaryService tokens, IConfiguration configuration) =>
+        group.MapGet("/grouped", (bool? includeFixtures, JobScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration) =>
         {
             var raw = scanner.ScanAllJobs();
             if (includeFixtures != true) raw = raw.Where(j => !j.Fixture).ToList();
@@ -67,7 +67,7 @@ public static class JobCrudEndpoints
             return Results.Ok(grouped);
         });
 
-        group.MapGet("/{jobId}", (string jobId, string? watchPath, JobScannerService scanner, CliRouter router, TaskRunnerService runners, TokenSummaryService tokens, IConfiguration configuration) =>
+        group.MapGet("/{jobId}", (string jobId, string? watchPath, JobScannerService scanner, CliRouter router, TaskRunnerService runners, ITokenAggregator tokens, IConfiguration configuration) =>
         {
             var detail = scanner.GetJobDetail(jobId, watchPath);
             if (detail is null) return Results.NotFound();

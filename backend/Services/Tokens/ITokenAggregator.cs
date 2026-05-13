@@ -14,14 +14,12 @@ namespace OrchestratorApi.Services.Tokens;
 /// breaking call sites.
 ///
 /// <para>
-/// <b>Consolidation status (2026-05-11).</b> Phase 3 ships the interface
-/// and a delegating implementation. The legacy services
+/// <b>Consolidation status (2026-05-11).</b> Phase 4+5 has flipped the
+/// public read surface to bus-backed readers. The legacy services
 /// (<see cref="ProjectTokenUsageService"/>, <see cref="TokenSummaryService"/>,
 /// <see cref="WorkspaceTokensTimelineService"/>, <see cref="AdHocUsageService"/>)
-/// still hold the math; the implementation forwards to them. Phase 4 will
-/// flip each method one at a time to read from
-/// <see cref="BusAggregationCache"/>, gated by Phase 5 parity tests. See
-/// <c>docs/token-aggregation.md</c> for the full plan.
+/// still hold pure fold helpers and parity fixtures, but new consumers use
+/// this interface. See <c>docs/token-aggregation.md</c> for the full plan.
 /// </para>
 /// </summary>
 public interface ITokenAggregator
@@ -55,8 +53,8 @@ public interface ITokenAggregator
     /// <summary>Last persisted workspace aggregate, used for instant status-bar rendering.</summary>
     TokenSummaryAggregate? CachedWorkspaceAggregate();
 
-    /// <summary>Per-job rollup pulled out of one project's orchestrator log.</summary>
-    Dictionary<string, JobTokenSummary> WorkspacePerJob(string watchPath);
+    /// <summary>Per-job rollup for one project's job-card token footers.</summary>
+    Dictionary<string, JobTokenSummary> WorkspacePerJob(string projectName, string watchPath);
 
     /// <summary>(project, time-bucket) cells for the workspace tokens timeline.</summary>
     TokenTimeline WorkspaceTimeline(IEnumerable<(string Name, string WatchPath)> projects, int windowHours, int bucketMinutes, DateTime? nowUtc = null);

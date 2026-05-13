@@ -10,6 +10,7 @@ using OrchestratorApi.Services.Jobs;
 using OrchestratorApi.Services.Pty;
 using OrchestratorApi.Services.Quota;
 using OrchestratorApi.Services.Runner;
+using OrchestratorApi.Services.Tokens;
 using Xunit;
 
 namespace OrchestratorApi.Tests;
@@ -95,6 +96,38 @@ public class JobsEndpointPerfTests : IDisposable
             "per-job overlay loop.");
     }
 
+    [Fact]
+    public void BuildTokenLookup_UsesCanonicalAggregatorOncePerProject()
+    {
+        var jobs = new[]
+        {
+            MakeJob("job-a", "project-a", Path.Combine(_watchPath, "a")),
+            MakeJob("job-b", "project-a", Path.Combine(_watchPath, "a")),
+            MakeJob("job-a", "project-b", Path.Combine(_watchPath, "b")),
+        };
+        var tokens = new FakeTokenAggregator(new Dictionary<string, Dictionary<string, JobTokenSummary>>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["project-a"] = new(StringComparer.Ordinal)
+            {
+                ["job-a"] = new JobTokenSummary { TotalTokens = 10 },
+                ["job-b"] = new JobTokenSummary { TotalTokens = 20 },
+            },
+            ["project-b"] = new(StringComparer.Ordinal)
+            {
+                ["job-a"] = new JobTokenSummary { TotalTokens = 30 },
+            },
+        });
+
+        var lookup = JobEndpointHelpersAccessor.BuildTokenLookup(jobs, tokens);
+
+        Assert.Equal(2, tokens.Calls.Count);
+        Assert.Contains(tokens.Calls, c => c.ProjectName == "project-a" && c.WatchPath == jobs[0].WatchPath);
+        Assert.Contains(tokens.Calls, c => c.ProjectName == "project-b" && c.WatchPath == jobs[2].WatchPath);
+        Assert.Equal(10, lookup[jobs[0].JobKey].TotalTokens);
+        Assert.Equal(20, lookup[jobs[1].JobKey].TotalTokens);
+        Assert.Equal(30, lookup[jobs[2].JobKey].TotalTokens);
+    }
+
     private void WriteJob(string state, string slug)
     {
         var dir = Path.Combine(_watchPath, state, slug);
@@ -102,6 +135,17 @@ public class JobsEndpointPerfTests : IDisposable
         File.WriteAllText(Path.Combine(dir, "job.json"),
             $"{{\"id\":\"{slug}\",\"title\":\"{slug}\",\"state\":\"{state}\",\"order\":1,\"agent\":\"copilot\"}}");
     }
+
+    private static JobInfo MakeJob(string id, string projectName, string watchPath) => new()
+    {
+        Id = id,
+        JobKey = $"{watchPath}::{id}",
+        Title = id,
+        State = JobStates.Progress,
+        ProjectName = projectName,
+        WatchPath = watchPath,
+        FolderPath = Path.Combine(watchPath, JobStates.Progress, id),
+    };
 
     private JobScannerService BuildScanner()
     {
@@ -175,6 +219,36 @@ public class JobsEndpointPerfTests : IDisposable
     }
 }
 
+internal sealed class FakeTokenAggregator : ITokenAggregator
+{
+    private readonly IReadOnlyDictionary<string, Dictionary<string, JobTokenSummary>> _perProject;
+    public List<(string ProjectName, string WatchPath)> Calls { get; } = [];
+
+    public FakeTokenAggregator(IReadOnlyDictionary<string, Dictionary<string, JobTokenSummary>> perProject)
+    {
+        _perProject = perProject;
+    }
+
+    public TokenAggregateResponse ForProject(string project, DateTime? since = null, DateTime? until = null, CancellationToken ct = default) => throw new NotImplementedException();
+    public ProjectTokenUsageSummary ProjectSummary(string projectName, string watchPath, DateTime? nowUtc = null) => throw new NotImplementedException();
+    public ProjectTokenHeatmap ProjectHeatmap(string projectName, string watchPath, int days, DateTime? nowUtc = null) => throw new NotImplementedException();
+    public IReadOnlyList<ProjectExpensiveJob> ProjectExpensiveJobs(string projectName, string watchPath, int limit) => throw new NotImplementedException();
+    public ProjectJobTokenDetail? ProjectJobDetail(string projectName, string watchPath, string jobId) => throw new NotImplementedException();
+    public TokenSummary LifetimeSummary(string projectName, string watchPath) => throw new NotImplementedException();
+    public TokenSummaryAggregate WorkspaceAggregate(IEnumerable<(string Name, string WatchPath)> projects) => throw new NotImplementedException();
+    public TokenSummaryAggregate? CachedWorkspaceAggregate() => throw new NotImplementedException();
+    public TokenTimeline WorkspaceTimeline(IEnumerable<(string Name, string WatchPath)> projects, int windowHours, int bucketMinutes, DateTime? nowUtc = null) => throw new NotImplementedException();
+    public AdHocUsageAggregate AdHocAggregate(DateTime? since = null) => throw new NotImplementedException();
+
+    public Dictionary<string, JobTokenSummary> WorkspacePerJob(string projectName, string watchPath)
+    {
+        Calls.Add((projectName, watchPath));
+        return _perProject.TryGetValue(projectName, out var perJob)
+            ? perJob
+            : new Dictionary<string, JobTokenSummary>(StringComparer.Ordinal);
+    }
+}
+
 /// <summary>
 /// JobEndpointHelpers.WithRuntime is internal; this thin accessor lets the
 /// regression test reach it without making the helper public on its own.
@@ -192,5 +266,15 @@ internal static class JobEndpointHelpersAccessor
             System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic,
             new[] { typeof(JobInfo), typeof(CliRouter), typeof(TaskRunnerService) })!;
         return (JobInfo)m.Invoke(null, new object[] { job, router, runners })!;
+    }
+
+    public static Dictionary<string, JobTokenSummary> BuildTokenLookup(IEnumerable<JobInfo> jobs, ITokenAggregator tokens)
+    {
+        var t = typeof(OrchestratorApi.Endpoints.Jobs.JobCrudEndpoints).Assembly
+            .GetType("OrchestratorApi.Endpoints.Jobs.JobEndpointHelpers")!;
+        var m = t.GetMethod("BuildTokenLookup",
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.NonPublic,
+            new[] { typeof(IEnumerable<JobInfo>), typeof(ITokenAggregator) })!;
+        return (Dictionary<string, JobTokenSummary>)m.Invoke(null, new object[] { jobs, tokens })!;
     }
 }

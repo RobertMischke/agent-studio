@@ -4,8 +4,7 @@
 > `ITokenAggregator` exposes now reads through a bus-backed reader; the
 > legacy services (`TokenSummaryService`, `WorkspaceTokensTimelineService`,
 > `ProjectTokenUsageService`) stay registered for the parity-test fixture
-> and for callers that still go through their concrete types
-> (`JobEndpointHelpers.BuildTokenLookup` is the last such caller), but
+> and for older direct callers that still go through their concrete types, but
 > `TokenAggregationService` never reaches into them. Each surface ships
 > with a Phase-5 parity test
 > (`TokenSummaryBusParityTests`, `WorkspaceTokensTimelineBusParityTests`,
@@ -210,3 +209,4 @@ The good variant is membership in the `Tokens` or `Bus` namespace.
 | `backend/Services/Tokens/BusBackedTokenSummaryReader.cs` | Phase-4 read path for the lifetime + per-model summary |
 | `backend/Services/Tokens/BusBackedWorkspaceTimelineReader.cs` | Phase-4 read path for the workspace timeline |
 | `backend/Services/Tokens/BusBackedProjectTokenUsageReader.cs` | Phase-4 read path for the four project-detail surfaces |
+| `backend/Endpoints/Jobs/JobEndpointHelpers.cs` | Job-card token footer lookup through `ITokenAggregator.WorkspacePerJob` |

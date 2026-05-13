@@ -93,22 +93,15 @@ public sealed class TokenAggregationService : ITokenAggregator
     public TokenSummaryAggregate? CachedWorkspaceAggregate()
         => _summaryCache.Read();
 
-    public Dictionary<string, JobTokenSummary> WorkspacePerJob(string watchPath)
+    public Dictionary<string, JobTokenSummary> WorkspacePerJob(string projectName, string watchPath)
     {
-        // The kanban-card token bubble keys off jobId, so it can fold every
-        // project's bus into one map. Workspace projects share the same bus
-        // store so we look up by the project-name index we already keep on
-        // disk through the watch-path resolver. We do not have project-name
-        // here; the legacy reader used watchPath because orchestrator.jsonl
-        // was scoped that way. The bus is keyed by project slug, so we read
-        // every project that maps to this watchPath. The current callers
-        // pass the watchPath of a single project, so we resolve its name
-        // through the configured watch entries.
         var workspace = _config["TaskRepository"];
         if (string.IsNullOrWhiteSpace(workspace) || string.IsNullOrWhiteSpace(watchPath))
             return new Dictionary<string, JobTokenSummary>(StringComparer.Ordinal);
-        var projectName = ResolveProjectName(watchPath!) ?? Path.GetFileName(watchPath!.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-        return _busSummary.SummarizePerJob(projectName);
+        var resolvedProject = !string.IsNullOrWhiteSpace(projectName)
+            ? projectName
+            : ResolveProjectName(watchPath!) ?? Path.GetFileName(watchPath!.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        return _busSummary.SummarizePerJob(resolvedProject);
     }
 
     public TokenTimeline WorkspaceTimeline(IEnumerable<(string Name, string WatchPath)> projects, int windowHours, int bucketMinutes, DateTime? nowUtc = null)

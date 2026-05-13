@@ -2,6 +2,7 @@ using OrchestratorApi.Models;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.Cli;
 using OrchestratorApi.Services.Runner;
+using OrchestratorApi.Services.Tokens;
 
 namespace OrchestratorApi.Endpoints.Jobs;
 
@@ -140,26 +141,29 @@ internal static class JobEndpointHelpers
     }
 
     /// <summary>
-    /// Builds the per-watch-path → per-job token lookup used by
+    /// Builds the per-project → per-job token lookup used by
     /// <c>WithRuntime</c> in the listing endpoints. Reads each unique
-    /// orchestrator log file at most once.
+    /// project bus projection at most once.
     /// </summary>
     internal static Dictionary<string, JobTokenSummary> BuildTokenLookup(
         IEnumerable<JobInfo> jobs,
-        TokenSummaryService tokens)
+        ITokenAggregator tokens)
     {
-        // Read each watch path's orchestrator log at most once. Keyed by
-        // JobKey (watchPath::jobId) so jobs that share an id across
-        // watched workspaces stay distinct.
-        var byWatchPath = new Dictionary<string, Dictionary<string, JobTokenSummary>>(StringComparer.OrdinalIgnoreCase);
+        // Read each project projection at most once. Keyed by JobKey
+        // (watchPath::jobId) so jobs that share an id across watched
+        // workspaces stay distinct.
+        var byProject = new Dictionary<string, Dictionary<string, JobTokenSummary>>(StringComparer.OrdinalIgnoreCase);
         var merged = new Dictionary<string, JobTokenSummary>(StringComparer.Ordinal);
         foreach (var job in jobs)
         {
             if (string.IsNullOrWhiteSpace(job.WatchPath)) continue;
-            if (!byWatchPath.TryGetValue(job.WatchPath, out var perJob))
+            var projectKey = string.IsNullOrWhiteSpace(job.ProjectName)
+                ? job.WatchPath
+                : $"{job.ProjectName}\n{job.WatchPath}";
+            if (!byProject.TryGetValue(projectKey, out var perJob))
             {
-                perJob = tokens.SummarizePerJob(job.WatchPath);
-                byWatchPath[job.WatchPath] = perJob;
+                perJob = tokens.WorkspacePerJob(job.ProjectName, job.WatchPath);
+                byProject[projectKey] = perJob;
             }
             if (perJob.TryGetValue(job.Id, out var t))
             {
