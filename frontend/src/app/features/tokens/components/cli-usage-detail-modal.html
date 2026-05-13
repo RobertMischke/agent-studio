@@ -1,0 +1,233 @@
+<div class="cli-usage-modal__backdrop"
+     data-testid="usage-hover-panel-pop">
+  <section #dialog
+           class="cli-usage-modal"
+           role="dialog"
+           aria-modal="true"
+           aria-labelledby="cli-usage-modal-title"
+           tabindex="-1"
+           data-testid="hquota-modal"
+           (keydown)="onDialogKeydown($event)">
+    <header class="cli-usage-modal__head">
+      <div>
+        <h2 id="cli-usage-modal-title">CLI usage detail</h2>
+        <p>Quota, token trend, model spend, and routing headroom.</p>
+      </div>
+      <div class="cli-usage-modal__actions">
+        <a class="cli-usage-modal__button"
+           data-testid="usage-hover-panel-open-timeline"
+           href="#/workspace/tokens"
+           title="Open workspace token timeline">
+          Timeline
+        </a>
+        <button type="button"
+                class="cli-usage-modal__button cli-usage-modal__button--primary"
+                data-testid="usage-hover-panel-refresh-all"
+                [disabled]="refreshingAll"
+                (click)="refreshAll.emit($event)"
+                title="Re-probe every CLI now">
+          {{ refreshingAll ? 'Refreshing...' : 'Refresh all' }}
+        </button>
+        <button type="button"
+                class="cli-usage-modal__close"
+                data-testid="cli-usage-detail-close"
+                aria-label="Close CLI usage detail"
+                (click)="closed.emit()">×</button>
+      </div>
+    </header>
+
+    <section class="cli-usage-modal__compare" data-testid="usage-hover-panel-quota">
+      <h3>Routing headroom</h3>
+      <div class="cli-usage-modal__headroom">
+        @for (row of quotaRows; track row.cliType) {
+          <article class="cli-usage-modal__headroom-card" [attr.data-tone]="row.primaryTone">
+            <div class="cli-usage-modal__headroom-main">
+              <span aria-hidden="true">{{ row.icon }}</span>
+              <strong>{{ row.label }}</strong>
+              <span>{{ row.primaryPct === null ? '?' : row.primaryPct + '%' }}</span>
+            </div>
+            <div class="cli-usage-modal__meter" aria-hidden="true">
+              <span [style.width.%]="row.primaryPct === null ? 0 : row.primaryPct"></span>
+            </div>
+            <div class="cli-usage-modal__headroom-sub">
+              <span>{{ headroom(row) }} headroom</span>
+              <span>{{ row.primary?.label ?? 'no window' }}</span>
+            </div>
+          </article>
+        }
+      </div>
+    </section>
+
+    <section class="cli-usage-modal__trend" data-testid="usage-hover-panel-tokens">
+      <div class="cli-usage-modal__trend-head">
+        <h3>Token trend</h3>
+        @if (tokens; as t) {
+          <span>{{ formatTokens(t.totalInputTokens + t.totalOutputTokens + t.totalCacheReadTokens + t.totalCacheCreationTokens) }} total · {{ formatUsd(t.estimatedApiCostUsd) }} theoretical API cost</span>
+        }
+      </div>
+      <div class="cli-usage-modal__sparks">
+        <div class="cli-usage-modal__spark">
+          <div class="cli-usage-modal__spark-label">Last 24h</div>
+          <div class="cli-usage-modal__bars" aria-label="Token trend for the last 24 hours">
+            @for (p of spark24h(); track p.label) {
+              <span [style.height.%]="p.pct" [title]="p.label + ': ' + formatTokens(p.total)"></span>
+            }
+          </div>
+        </div>
+        <div class="cli-usage-modal__spark">
+          <div class="cli-usage-modal__spark-label">Last 7d</div>
+          <div class="cli-usage-modal__bars" aria-label="Token trend for the last seven days">
+            @for (p of spark7d(); track p.label) {
+              <span [style.height.%]="p.pct" [title]="p.label + ': ' + formatTokens(p.total)"></span>
+            }
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="cli-usage-modal__sections">
+      @for (row of quotaRows; track row.cliType) {
+        <section class="cli-usage-modal__cli" [attr.data-testid]="'hquota-modal-cli-' + row.cliType">
+          <header class="cli-usage-modal__cli-head">
+            <div>
+              <h3><span aria-hidden="true">{{ row.icon }}</span> {{ row.label }}</h3>
+              <p>
+                {{ row.plan ?? 'No plan reported' }}
+                @if (row.source) { <span> · {{ row.source }}</span> }
+                <span> · {{ row.freshness }}</span>
+              </p>
+            </div>
+            <button type="button"
+                    class="cli-usage-modal__icon-button"
+                    [disabled]="refreshing[row.cliType]"
+                    (click)="refreshOne.emit({ cliType: row.cliType, event: $event })"
+                    [attr.data-testid]="'usage-hover-panel-refresh-' + row.cliType"
+                    [title]="'Re-probe ' + row.label">
+              {{ refreshing[row.cliType] ? '...' : '↻' }}
+            </button>
+          </header>
+
+          @if (row.error) {
+            <div class="cli-usage-modal__error">{{ row.error }}</div>
+          }
+
+          <div class="cli-usage-modal__grid">
+            <div class="cli-usage-modal__panel">
+              <h4>Quota windows</h4>
+              @if (row.windows.length === 0) {
+                <p class="cli-usage-modal__empty">No quota window data.</p>
+              } @else {
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Window</th>
+                      <th class="cli-usage-modal__num">Used</th>
+                      <th>Limit</th>
+                      <th>Reset</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (w of row.windows; track w.label) {
+                      <tr>
+                        <td>{{ w.label }}</td>
+                        <td class="cli-usage-modal__num">{{ w.usedPct === null ? '?' : w.usedPct + '%' }}</td>
+                        <td>{{ limitText(w) }}</td>
+                        <td>{{ w.resetLabel ?? 'n/a' }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              }
+            </div>
+
+            <div class="cli-usage-modal__panel">
+              <h4>Top models</h4>
+              @if (modelRowsFor(row.cliType).length === 0) {
+                <p class="cli-usage-modal__empty">No model usage attributed.</p>
+              } @else {
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Model</th>
+                      <th class="cli-usage-modal__num">Tokens</th>
+                      <th class="cli-usage-modal__num">Cost</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (m of modelRowsFor(row.cliType); track m.source + ':' + m.model) {
+                      <tr>
+                        <td><code>{{ m.model }}</code><span class="cli-usage-modal__muted"> {{ m.source }}</span></td>
+                        <td class="cli-usage-modal__num">{{ formatTokens(totalTokens(m)) }}</td>
+                        <td class="cli-usage-modal__num">{{ costLabel(m.estimatedApiCostUsd, m.modelPriced) }}</td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              }
+            </div>
+          </div>
+
+          @if (sourceRowsFor(row.cliType).length > 0) {
+            <div class="cli-usage-modal__panel">
+              <h4>Top sources</h4>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Source</th>
+                    <th class="cli-usage-modal__num">Calls</th>
+                    <th class="cli-usage-modal__num">Tokens</th>
+                    <th class="cli-usage-modal__num">Cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  @for (source of sourceRowsFor(row.cliType); track source.source) {
+                    <tr>
+                      <td><code>{{ source.source }}</code></td>
+                      <td class="cli-usage-modal__num">{{ source.calls }}</td>
+                      <td class="cli-usage-modal__num">{{ formatTokens(source.inputTokens + source.outputTokens + source.cacheReadTokens + source.cacheCreationTokens) }}</td>
+                      <td class="cli-usage-modal__num">{{ formatUsd(source.estimatedApiCostUsd) }}</td>
+                    </tr>
+                  }
+                </tbody>
+              </table>
+            </div>
+          }
+        </section>
+      }
+    </div>
+
+    <section class="cli-usage-modal__jobs" data-testid="usage-hover-panel-top-jobs">
+      <h3>Top tasks</h3>
+      @if (topJobs().length === 0) {
+        <p class="cli-usage-modal__empty">No task token usage recorded.</p>
+      } @else {
+        <table>
+          <thead>
+            <tr>
+              <th>Task</th>
+              <th>Project</th>
+              <th>Model</th>
+              <th class="cli-usage-modal__num">Calls</th>
+              <th class="cli-usage-modal__num">Tokens</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (job of topJobs(); track job.project + ':' + job.jobId) {
+              <tr>
+                <td>{{ job.title || job.jobId }}</td>
+                <td>{{ job.project }}</td>
+                <td><code>{{ job.lastModel ?? 'n/a' }}</code></td>
+                <td class="cli-usage-modal__num">{{ job.calls }}</td>
+                <td class="cli-usage-modal__num">{{ formatTokens(job.totalTokens) }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      }
+    </section>
+
+    @if (tokens; as t) {
+      <p class="cli-usage-modal__disc">{{ t.disclaimer }}</p>
+    }
+  </section>
+</div>

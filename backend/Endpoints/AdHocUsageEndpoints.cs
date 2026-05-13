@@ -1,4 +1,5 @@
 using OrchestratorApi.Services.AdHoc;
+using OrchestratorApi.Services.Tokens;
 
 namespace OrchestratorApi.Endpoints;
 
@@ -23,7 +24,7 @@ public static class AdHocUsageEndpoints
         var group = app.MapGroup("/api/adhoc-usage");
 
         group.MapGet("/",
-            (string? since, AdHocUsageService svc) =>
+            (string? since, ITokenAggregator tokens) =>
             {
                 DateTime? cutoff = null;
                 if (!string.IsNullOrWhiteSpace(since)
@@ -31,7 +32,7 @@ public static class AdHocUsageEndpoints
                 {
                     cutoff = parsed;
                 }
-                return Results.Ok(svc.Aggregate(cutoff));
+                return Results.Ok(tokens.AdHocAggregate(cutoff));
             });
 
         group.MapGet("/log-path",

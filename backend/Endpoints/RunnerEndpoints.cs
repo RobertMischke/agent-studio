@@ -2,6 +2,7 @@ using OrchestratorApi.Models;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.Jobs;
 using OrchestratorApi.Services.Runner;
+using OrchestratorApi.Services.Tokens;
 
 namespace OrchestratorApi.Endpoints;
 
@@ -116,11 +117,11 @@ public static class RunnerEndpoints
         // renders amounts prominently, the cost smaller and behind a
         // disclaimer (the user pays via CLI subscriptions, not API).
         runnerGroup.MapGet("/{projectName}/token-summary",
-            (string projectName, JobScannerService scanner, TokenSummaryService tokens) =>
+            (string projectName, JobScannerService scanner, ITokenAggregator tokens) =>
             {
                 var entry = scanner.GetWatchPaths().FirstOrDefault(e => e.Name == projectName);
                 if (entry == null) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
-                return Results.Ok(tokens.Summarize(projectName, entry.Path));
+                return Results.Ok(tokens.LifetimeSummary(projectName, entry.Path));
             });
 
         // Workspace-wide token aggregate: same shape as TokenSummary but
@@ -129,12 +130,12 @@ public static class RunnerEndpoints
         // the whole workspace" number on hover. Persisted to disk so
         // the modal renders last-known totals immediately on app start.
         runnerGroup.MapGet("/token-summary-aggregate",
-            (JobScannerService scanner, TokenSummaryService tokens) =>
+            (JobScannerService scanner, ITokenAggregator tokens) =>
             {
                 var projects = scanner.GetWatchPaths()
                     .Select(e => (e.Name, e.Path))
                     .ToList();
-                var agg = tokens.Aggregate(projects);
+                var agg = tokens.WorkspaceAggregate(projects);
                 return Results.Ok(agg);
             });
 
@@ -143,9 +144,9 @@ public static class RunnerEndpoints
         // this on first paint so the cached value appears even before
         // the live aggregator finishes scanning the JSONL files.
         runnerGroup.MapGet("/token-summary-aggregate/cached",
-            (TokenSummaryService tokens) =>
+            (ITokenAggregator tokens) =>
             {
-                var snap = tokens.ReadCachedAggregate();
+                var snap = tokens.CachedWorkspaceAggregate();
                 return snap == null ? Results.NoContent() : Results.Ok(snap);
             });
 

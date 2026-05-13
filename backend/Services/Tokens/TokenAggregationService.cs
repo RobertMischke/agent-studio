@@ -30,8 +30,8 @@ public sealed class TokenAggregationService : ITokenAggregator
 {
     private readonly BusAggregationCache _bus;
     private readonly IConfiguration _config;
-    private readonly AdHocUsageService _adHoc;
     private readonly TokenSummaryCacheStore _summaryCache;
+    private readonly BusBackedAdHocUsageReader _busAdHoc;
     private readonly BusBackedTokenSummaryReader _busSummary;
     private readonly BusBackedWorkspaceTimelineReader _busTimeline;
     private readonly BusBackedProjectTokenUsageReader _busProjectUsage;
@@ -39,16 +39,16 @@ public sealed class TokenAggregationService : ITokenAggregator
     public TokenAggregationService(
         BusAggregationCache bus,
         IConfiguration config,
-        AdHocUsageService adHoc,
         TokenSummaryCacheStore summaryCache,
+        BusBackedAdHocUsageReader busAdHoc,
         BusBackedTokenSummaryReader busSummary,
         BusBackedWorkspaceTimelineReader busTimeline,
         BusBackedProjectTokenUsageReader busProjectUsage)
     {
         _bus = bus;
         _config = config;
-        _adHoc = adHoc;
         _summaryCache = summaryCache;
+        _busAdHoc = busAdHoc;
         _busSummary = busSummary;
         _busTimeline = busTimeline;
         _busProjectUsage = busProjectUsage;
@@ -90,6 +90,9 @@ public sealed class TokenAggregationService : ITokenAggregator
     public TokenSummaryAggregate WorkspaceAggregate(IEnumerable<(string Name, string WatchPath)> projects)
         => _busSummary.Aggregate(projects, _summaryCache);
 
+    public TokenSummaryAggregate? CachedWorkspaceAggregate()
+        => _summaryCache.Read();
+
     public Dictionary<string, JobTokenSummary> WorkspacePerJob(string watchPath)
     {
         // The kanban-card token bubble keys off jobId, so it can fold every
@@ -112,7 +115,7 @@ public sealed class TokenAggregationService : ITokenAggregator
         => _busTimeline.Build(projects, windowHours, bucketMinutes, nowUtc);
 
     public AdHocUsageAggregate AdHocAggregate(DateTime? since = null)
-        => _adHoc.Aggregate(since);
+        => _busAdHoc.Aggregate(since);
 
     /// <summary>
     /// Best-effort lookup of the project slug for a watch path. Reads the

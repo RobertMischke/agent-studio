@@ -1,5 +1,6 @@
 using OrchestratorApi.Services.Jobs;
 using OrchestratorApi.Services.Runner;
+using OrchestratorApi.Services.Tokens;
 
 namespace OrchestratorApi.Endpoints;
 
@@ -7,7 +8,7 @@ namespace OrchestratorApi.Endpoints;
 /// Read surface for the project Token Usage panel (slice 8 of the
 /// quality-system mockup, docs/mockups/quality-system/, "Token Usage"
 /// surface). Four routes that all read the same project's
-/// <c>orchestrator.jsonl</c> through <see cref="ProjectTokenUsageService"/>:
+/// canonical token aggregation surface:
 ///
 /// <list type="bullet">
 ///   <item>Summary: lifetime + last-24h totals plus the Job / Supporting
@@ -28,7 +29,7 @@ public static class ProjectTokenUsageEndpoints
         app.MapGet("/api/projects/{projectName}/token-usage/summary", (
             string projectName,
             JobScannerService scanner,
-            ProjectTokenUsageService svc) =>
+            ITokenAggregator tokens) =>
         {
             if (string.IsNullOrWhiteSpace(projectName))
                 return Results.BadRequest(new { error = "project required" });
@@ -36,14 +37,14 @@ public static class ProjectTokenUsageEndpoints
                 string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
             if (entry is null)
                 return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
-            return Results.Ok(svc.BuildSummary(projectName, entry.Path));
+            return Results.Ok(tokens.ProjectSummary(projectName, entry.Path));
         });
 
         app.MapGet("/api/projects/{projectName}/token-usage/heatmap", (
             string projectName,
             int? days,
             JobScannerService scanner,
-            ProjectTokenUsageService svc) =>
+            ITokenAggregator tokens) =>
         {
             if (string.IsNullOrWhiteSpace(projectName))
                 return Results.BadRequest(new { error = "project required" });
@@ -51,7 +52,7 @@ public static class ProjectTokenUsageEndpoints
                 string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
             if (entry is null)
                 return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
-            return Results.Ok(svc.BuildHeatmap(projectName, entry.Path,
+            return Results.Ok(tokens.ProjectHeatmap(projectName, entry.Path,
                 days ?? ProjectTokenUsageService.DefaultHeatmapDays));
         });
 
@@ -59,7 +60,7 @@ public static class ProjectTokenUsageEndpoints
             string projectName,
             int? limit,
             JobScannerService scanner,
-            ProjectTokenUsageService svc) =>
+            ITokenAggregator tokens) =>
         {
             if (string.IsNullOrWhiteSpace(projectName))
                 return Results.BadRequest(new { error = "project required" });
@@ -67,7 +68,7 @@ public static class ProjectTokenUsageEndpoints
                 string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
             if (entry is null)
                 return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
-            var list = svc.BuildExpensiveJobs(projectName, entry.Path,
+            var list = tokens.ProjectExpensiveJobs(projectName, entry.Path,
                 limit ?? ProjectTokenUsageService.DefaultExpensiveLimit);
             return Results.Ok(new { project = projectName, jobs = list });
         });
@@ -76,7 +77,7 @@ public static class ProjectTokenUsageEndpoints
             string projectName,
             string jobId,
             JobScannerService scanner,
-            ProjectTokenUsageService svc) =>
+            ITokenAggregator tokens) =>
         {
             if (string.IsNullOrWhiteSpace(projectName))
                 return Results.BadRequest(new { error = "project required" });
@@ -86,7 +87,7 @@ public static class ProjectTokenUsageEndpoints
                 string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
             if (entry is null)
                 return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
-            var detail = svc.BuildJobDetail(projectName, entry.Path, jobId);
+            var detail = tokens.ProjectJobDetail(projectName, entry.Path, jobId);
             if (detail is null)
                 return Results.NotFound(new { error = $"No token activity recorded for job '{jobId}'." });
             return Results.Ok(detail);

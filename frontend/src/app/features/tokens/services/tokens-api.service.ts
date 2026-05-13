@@ -5,6 +5,7 @@ import type {
   TokenSummary,
   TokenSummaryAggregate,
   TokenTimeline,
+  WorkspaceExpensiveJobsResponse,
 } from '../models/tokens.model';
 
 /**
@@ -76,6 +77,15 @@ export class TokensApiService {
       .set('bucketMinutes', String(bucketMinutes));
     return this.http.get<TokenTimeline>(
       `${this.baseUrl}/workspace/tokens/timeline`,
+      { params },
+    );
+  }
+
+  /** Top token-consuming jobs folded across every watched project. */
+  getWorkspaceExpensiveJobs(limit = 8) {
+    const params = new HttpParams().set('limit', String(limit));
+    return this.http.get<WorkspaceExpensiveJobsResponse>(
+      `${this.baseUrl}/workspace/tokens/expensive-jobs`,
       { params },
     );
   }

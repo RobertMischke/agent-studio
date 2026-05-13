@@ -52,6 +52,9 @@ public interface ITokenAggregator
     /// <summary>Workspace-wide aggregate across every watched project.</summary>
     TokenSummaryAggregate WorkspaceAggregate(IEnumerable<(string Name, string WatchPath)> projects);
 
+    /// <summary>Last persisted workspace aggregate, used for instant status-bar rendering.</summary>
+    TokenSummaryAggregate? CachedWorkspaceAggregate();
+
     /// <summary>Per-job rollup pulled out of one project's orchestrator log.</summary>
     Dictionary<string, JobTokenSummary> WorkspacePerJob(string watchPath);
 

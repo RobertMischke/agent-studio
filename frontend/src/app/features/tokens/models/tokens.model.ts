@@ -188,3 +188,19 @@ export interface TokenTimelineProject {
   peakBucketTotal: number;
   lastActivity: string | null;
 }
+
+export interface WorkspaceExpensiveJobsResponse {
+  jobs: WorkspaceExpensiveJob[];
+}
+
+export interface WorkspaceExpensiveJob {
+  project: string;
+  jobId: string;
+  title: string;
+  state: string | null;
+  category: string;
+  totalTokens: number;
+  calls: number;
+  lastActivity: string | null;
+  lastModel: string | null;
+}

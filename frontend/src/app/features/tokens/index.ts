@@ -2,6 +2,7 @@
 export { TokensApiService } from './services/tokens-api.service';
 export { TokenSummaryBlockComponent } from './components/token-summary-block';
 export { UsageHoverPanelComponent } from './components/usage-hover-panel';
+export { CliUsageDetailModalComponent } from './components/cli-usage-detail-modal';
 export { WorkspaceTokenTimelineComponent } from './components/workspace-token-timeline';
 export type {
   JobTokenCall,
@@ -17,4 +18,6 @@ export type {
   TokenTimeline,
   TokenTimelineCell,
   TokenTimelineProject,
+  WorkspaceExpensiveJob,
+  WorkspaceExpensiveJobsResponse,
 } from './models/tokens.model';

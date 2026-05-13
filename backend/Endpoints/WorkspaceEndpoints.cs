@@ -1,6 +1,7 @@
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.Jobs;
 using OrchestratorApi.Services.Runner;
+using OrchestratorApi.Services.Tokens;
 
 namespace OrchestratorApi.Endpoints;
 
@@ -25,16 +26,38 @@ public static class WorkspaceEndpoints
         // range values snap to the defaults rather than failing - the
         // status-bar entry into this view should always render.
         group.MapGet("/tokens/timeline",
-            (int? windowHours, int? bucketMinutes, JobScannerService scanner, WorkspaceTokensTimelineService timeline) =>
+            (int? windowHours, int? bucketMinutes, JobScannerService scanner, ITokenAggregator tokens) =>
             {
                 var projects = scanner.GetWatchPaths()
                     .Select(e => (e.Name, e.Path))
                     .ToList();
-                var result = timeline.Build(
+                var result = tokens.WorkspaceTimeline(
                     projects,
                     windowHours ?? WorkspaceTokensTimelineService.DefaultWindowHours,
                     bucketMinutes ?? WorkspaceTokensTimelineService.DefaultBucketMinutes);
                 return Results.Ok(result);
+            });
+
+        group.MapGet("/tokens/expensive-jobs",
+            (int? limit, JobScannerService scanner, ITokenAggregator tokens) =>
+            {
+                var perProjectLimit = Math.Clamp(limit ?? ProjectTokenUsageService.DefaultExpensiveLimit, 1, 50);
+                var jobs = scanner.GetWatchPaths()
+                    .SelectMany(entry => tokens.ProjectExpensiveJobs(entry.Name, entry.Path, perProjectLimit)
+                        .Select(job => new WorkspaceExpensiveJobDto(
+                            Project: entry.Name,
+                            JobId: job.JobId,
+                            Title: job.Title,
+                            State: job.State,
+                            Category: job.Category,
+                            TotalTokens: job.TotalTokens,
+                            Calls: job.Calls,
+                            LastActivity: job.LastActivity,
+                            LastModel: job.LastModel)))
+                    .OrderByDescending(job => job.TotalTokens)
+                    .Take(perProjectLimit)
+                    .ToList();
+                return Results.Ok(new WorkspaceExpensiveJobsResponse(jobs));
             });
 
         // Workspace-wide visual evidence reel. Folds the per-job
@@ -72,3 +95,16 @@ public static class WorkspaceEndpoints
             });
     }
 }
+
+public sealed record WorkspaceExpensiveJobsResponse(IReadOnlyList<WorkspaceExpensiveJobDto> Jobs);
+
+public sealed record WorkspaceExpensiveJobDto(
+    string Project,
+    string JobId,
+    string Title,
+    string? State,
+    string Category,
+    long TotalTokens,
+    int Calls,
+    string? LastActivity,
+    string? LastModel);
