@@ -26,12 +26,12 @@ async function cleanup(watchPath: string): Promise<void> {
 }
 
 test.describe('Drag auto-scroll', () => {
-  test('dragging near the top edge scrolls the page up so other lanes become reachable', async ({ page }) => {
+  test('dragging near the top edge of an overstocked lane scrolls that lane back up', async ({ page }) => {
     const wp = await getFirstWatchPath();
     const watchPath = wp.path;
     await cleanup(watchPath);
 
-    // Create enough Ready cards to make the column extend below the viewport.
+    // Create enough Ready cards to make the column body scroll internally.
     const created: { id: string; title: string }[] = [];
     try {
       for (let i = 0; i < 30; i++) {
@@ -49,7 +49,7 @@ test.describe('Drag auto-scroll', () => {
       await page.goto('/');
       await expect(page.locator('.column__title').first()).toBeVisible({ timeout: 10_000 });
 
-      // Wait for the freshly created cards to appear.
+      // Wait for the freshly created cards to appear in the Ready lane.
       await expect.poll(async () => {
         return await page.evaluate((prefix) => {
           return document.querySelectorAll('app-job-card').length > 0
@@ -58,29 +58,43 @@ test.describe('Drag auto-scroll', () => {
         }, PREFIX);
       }, { timeout: 10_000 }).toBe(true);
 
-      // Scroll the page down so a card from the bottom of the Ready column is
-      // in view and the lane headers / the top of all columns are above the
-      // viewport. Use the very bottom of the page.
-      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-      const scrollBefore = await page.evaluate(() => window.scrollY);
-      expect(scrollBefore).toBeGreaterThan(50);
+      // Scroll the Ready column's body to the bottom so a card from the
+      // bottom is in view and the top of the lane is above the body's
+      // viewport. After ADR-0xxx the page itself no longer scrolls
+      // vertically: each lane owns its own scroll container.
+      const scrollBefore = await page.evaluate(() => {
+        const body = document.querySelector('[data-testid="lane-2-ready"] .column__body') as HTMLElement | null;
+        if (!body) throw new Error('Ready lane body not found');
+        body.scrollTop = body.scrollHeight;
+        return body.scrollTop;
+      });
+      expect(
+        scrollBefore,
+        'Ready lane body should be scrollable when 30 cards live in it',
+      ).toBeGreaterThan(50);
 
-      // Pick a card that's currently in view to drag.
+      // Pick a card from the bottom of the Ready lane to drag.
       const sourceCardTitle = created[created.length - 1].title;
 
       // Simulate the drag: dispatch dragstart on the card so the column
       // installs its document-level dragover listener, then dispatch dragover
-      // on document with clientY=10 (well inside the 80px top edge zone).
-      // Auto-scroll runs in requestAnimationFrame, so we wait a few frames.
+      // on document with clientY near the top edge of the Ready lane body
+      // (well inside the 80 px edge zone). Auto-scroll runs in
+      // requestAnimationFrame, so we wait a few frames.
       await page.evaluate((title) => {
         const cards = Array.from(document.querySelectorAll('app-job-card')) as HTMLElement[];
         const card = cards.find(c => c.querySelector('.job-card__title')?.textContent?.trim() === title);
         if (!card) throw new Error(`Card "${title}" not found`);
+        const body = document.querySelector('[data-testid="lane-2-ready"] .column__body') as HTMLElement | null;
+        if (!body) throw new Error('Ready lane body not found');
+        const rect = body.getBoundingClientRect();
         const dt = new DataTransfer();
         card.dispatchEvent(new DragEvent('dragstart', { bubbles: true, cancelable: true, dataTransfer: dt }));
-        // Fire dragover at the very top of the viewport.
+        // Fire dragover ~10 px inside the lane body's top edge.
         document.dispatchEvent(new DragEvent('dragover', {
-          bubbles: true, cancelable: true, dataTransfer: dt, clientX: 200, clientY: 10
+          bubbles: true, cancelable: true, dataTransfer: dt,
+          clientX: rect.left + Math.floor(rect.width / 2),
+          clientY: Math.floor(rect.top + 10),
         }));
       }, sourceCardTitle);
 
@@ -88,17 +102,30 @@ test.describe('Drag auto-scroll', () => {
       // near the very edge, so 500ms should consume hundreds of px.
       await page.waitForTimeout(500);
 
-      const scrollDuringTopEdge = await page.evaluate(() => window.scrollY);
-      expect(scrollDuringTopEdge).toBeLessThan(scrollBefore - 100);
+      const scrollDuringTopEdge = await page.evaluate(() => {
+        const body = document.querySelector('[data-testid="lane-2-ready"] .column__body') as HTMLElement | null;
+        return body ? body.scrollTop : -1;
+      });
+      expect(
+        scrollDuringTopEdge,
+        `Ready lane body should have scrolled back toward the top during the drag-near-edge hold; ` +
+        `was ${scrollBefore}px before, ${scrollDuringTopEdge}px after the dragover.`,
+      ).toBeLessThan(scrollBefore - 100);
 
       // Releasing the drag should stop the auto-scroll loop.
       await page.evaluate(() => {
         document.dispatchEvent(new DragEvent('dragend', { bubbles: true, cancelable: true }));
       });
       await page.waitForTimeout(150);
-      const scrollAfterEnd = await page.evaluate(() => window.scrollY);
+      const scrollAfterEnd = await page.evaluate(() => {
+        const body = document.querySelector('[data-testid="lane-2-ready"] .column__body') as HTMLElement | null;
+        return body ? body.scrollTop : -1;
+      });
       await page.waitForTimeout(250);
-      const scrollAfterIdle = await page.evaluate(() => window.scrollY);
+      const scrollAfterIdle = await page.evaluate(() => {
+        const body = document.querySelector('[data-testid="lane-2-ready"] .column__body') as HTMLElement | null;
+        return body ? body.scrollTop : -1;
+      });
       expect(scrollAfterIdle).toBe(scrollAfterEnd);
 
       // Snapshot showing the post-drag state for the job's results folder.

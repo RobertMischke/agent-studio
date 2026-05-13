@@ -1,5 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, output, signal } from '@angular/core';
-import { ScrollingModule } from '@angular/cdk/scrolling';
+import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, output } from '@angular/core';
 import { JobInfo, JobOrderItem } from '../../../models/job.model';
 import { JobCardComponent } from './job-card/job-card.component';
 import { projectIdentity } from '../../../services/project-identity.util';
@@ -11,24 +10,10 @@ import { InfoButtonComponent } from '../../../components/info-button/info-button
 
 const ARCHIVE_VISIBLE_LIMIT = 20;
 
-/**
- * Cycle 7c2: virtualization kicks in once a non-archive, non-review
- * lane crosses VIRTUAL_SCROLL_THRESHOLD cards. Below that, the
- * existing per-card drop-zone path stays in place so day-to-day
- * reorder UX is unchanged. The estimate VIRTUAL_ITEM_SIZE_PX is the
- * average non-compact card height; CDK's FixedSize strategy uses it
- * to compute the scroll buffer + which range to render. Real cards
- * may be slightly taller (extra commit chips, longer titles) - the
- * size estimate just needs to be in the right ballpark; mismatches
- * cause a small visual jump on scroll, never wrong content.
- */
-const VIRTUAL_SCROLL_THRESHOLD = 50;
-const VIRTUAL_ITEM_SIZE_PX = 160;
-
 @Component({
   selector: 'app-job-column',
   standalone: true,
-  imports: [JobCardComponent, InstantTooltipDirective, InfoButtonComponent, ScrollingModule],
+  imports: [JobCardComponent, InstantTooltipDirective, InfoButtonComponent],
   // Cycle 7b: OnPush. The board mounts ~10 columns and re-renders the
   // full @for of cards every CD pass under Default. JobCard is already
   // OnPush; promoting the column propagates that benefit upward so a
@@ -42,10 +27,6 @@ const VIRTUAL_ITEM_SIZE_PX = 160;
 export class JobColumnComponent implements OnInit, OnDestroy {
   private readonly autoReviewStatus = inject(AutoReviewStatusStore);
 
-  // Template literals exposed as instance fields so the component
-  // template can bind them without going through computeds.
-  readonly VIRTUAL_ITEM_SIZE_PX = VIRTUAL_ITEM_SIZE_PX;
-
   readonly title = input.required<string>();
   readonly icon = input<string>('');
   readonly state = input.required<string>();
@@ -55,18 +36,6 @@ export class JobColumnComponent implements OnInit, OnDestroy {
   readonly compact = input<boolean>(false);
   readonly archiving = input<boolean>(false);
 
-  /** True when this lane should render its cards through CDK virtual
-   *  scrolling instead of the default @for. Archive and review have
-   *  their own templates and stay on the legacy path. */
-  readonly useVirtualScroll = computed(() =>
-    !this.isArchive()
-    && !this.isReview()
-    && this.jobs().length > VIRTUAL_SCROLL_THRESHOLD
-  );
-
-  /** trackBy for *cdkVirtualFor: stable key per row keeps DOM nodes
-   *  reused on lane updates instead of full re-create. */
-  readonly trackByJobKey = (_: number, job: JobInfo) => job.jobKey;
   readonly jobClick = output<JobInfo>();
   readonly jobDrop = output<{ jobId: string; watchPath: string; targetState: string }>();
   readonly jobReorder = output<{ state: string; jobs: JobOrderItem[] }>();
@@ -123,12 +92,16 @@ export class JobColumnComponent implements OnInit, OnDestroy {
   isDragOver = false;
   dropIndex = -1;
 
-  // Auto-scroll the page while a card is being dragged near the viewport edges.
+  // Auto-scroll while a card is being dragged near a lane's vertical edges.
   // HTML5 drag suppresses wheel/keyboard scroll, so without this the user is
-  // stuck at whatever scroll position the drag started in. Active only between
-  // dragstart and dragend on a card from this column.
+  // stuck at whatever scroll position the drag started in. With every lane
+  // owning its own internal scroll container the auto-scroll target is the
+  // .column__body under the cursor (or the window when no lane sits under
+  // the cursor — e.g. the gap between groups). Active only between dragstart
+  // and dragend on a card from this column.
   private autoScrollVelocity = 0;
   private autoScrollRaf: number | null = null;
+  private autoScrollTarget: HTMLElement | Window = window;
   private readonly onAutoScrollDragOver = (e: DragEvent) => this.updateAutoScrollVelocity(e);
   private readonly onAutoScrollEnd = () => this.stopAutoScroll();
 
@@ -320,26 +293,72 @@ export class JobColumnComponent implements OnInit, OnDestroy {
   private updateAutoScrollVelocity(event: DragEvent) {
     const EDGE_PX = 80;
     const MAX_SPEED = 22;
+    const x = event.clientX;
     const y = event.clientY;
-    const h = window.innerHeight;
-    let velocity = 0;
-    if (y >= 0 && y < EDGE_PX) {
-      velocity = -MAX_SPEED * (1 - y / EDGE_PX);
-    } else if (y > h - EDGE_PX && y <= h) {
-      velocity = MAX_SPEED * (1 - (h - y) / EDGE_PX);
+    // Resolve which lane body (if any) the cursor is currently over. Scrolling
+    // happens against that body rather than the window because the page no
+    // longer scrolls vertically: each lane owns its scroll viewport.
+    const laneBody = this.findLaneBodyAt(x, y);
+    if (laneBody) {
+      const rect = laneBody.getBoundingClientRect();
+      let velocity = 0;
+      if (y >= rect.top && y < rect.top + EDGE_PX) {
+        velocity = -MAX_SPEED * (1 - (y - rect.top) / EDGE_PX);
+      } else if (y > rect.bottom - EDGE_PX && y <= rect.bottom) {
+        velocity = MAX_SPEED * (1 - (rect.bottom - y) / EDGE_PX);
+      }
+      this.autoScrollVelocity = velocity;
+      this.autoScrollTarget = laneBody;
+    } else {
+      // Cursor is in the gap or off-board: fall back to window scrolling so
+      // dragging works in detail-view contexts where the page itself can
+      // scroll (e.g. .layout--focus).
+      const h = window.innerHeight;
+      let velocity = 0;
+      if (y >= 0 && y < EDGE_PX) {
+        velocity = -MAX_SPEED * (1 - y / EDGE_PX);
+      } else if (y > h - EDGE_PX && y <= h) {
+        velocity = MAX_SPEED * (1 - (h - y) / EDGE_PX);
+      }
+      this.autoScrollVelocity = velocity;
+      this.autoScrollTarget = window;
     }
-    this.autoScrollVelocity = velocity;
-    if (velocity !== 0 && this.autoScrollRaf === null) {
+    if (this.autoScrollVelocity !== 0 && this.autoScrollRaf === null) {
       const tick = () => {
         if (this.autoScrollVelocity === 0) {
           this.autoScrollRaf = null;
           return;
         }
-        window.scrollBy(0, this.autoScrollVelocity);
+        const t = this.autoScrollTarget;
+        if (t instanceof Window) {
+          t.scrollBy(0, this.autoScrollVelocity);
+        } else {
+          t.scrollTop += this.autoScrollVelocity;
+        }
         this.autoScrollRaf = requestAnimationFrame(tick);
       };
       this.autoScrollRaf = requestAnimationFrame(tick);
     }
+  }
+
+  private findLaneBodyAt(x: number, y: number): HTMLElement | null {
+    // elementsFromPoint walks the topmost layer; we want the first ancestor
+    // that is itself a vertical scroll container. The dragover event's
+    // composedPath would also work but elementsFromPoint is more reliable
+    // when the drag image hovers above the actual target.
+    const els = typeof document.elementsFromPoint === 'function'
+      ? document.elementsFromPoint(x, y) as Element[]
+      : [];
+    for (const el of els) {
+      let cursor: Element | null = el;
+      while (cursor && cursor !== document.body) {
+        if (cursor instanceof HTMLElement && cursor.classList.contains('column__body')) {
+          return cursor;
+        }
+        cursor = cursor.parentElement;
+      }
+    }
+    return null;
   }
 
   private stopAutoScroll() {

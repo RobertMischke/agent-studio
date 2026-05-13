@@ -137,47 +137,6 @@
               }
             </section>
           }
-        } @else if (useVirtualScroll()) {
-          <!-- Cycle 7c2: virtualised path for big lanes (>VIRTUAL_SCROLL_THRESHOLD).
-               Per-card drop zones are dropped because the virtualizer
-               only renders the visible window; we keep top + bottom
-               drop zones so drag-to-this-lane still works at scale.
-               Below the threshold, the path below preserves the full
-               drop-zone-per-card UX so day-to-day reorder is unchanged. -->
-          @if (!reorderDisabled()) {
-            <div class="column__drop-zone column__drop-zone--first"
-                 [class.column__drop-zone--active]="dropIndex === 0"
-                 (dragover)="onCardDragOver($event, 0)"
-                 (dragleave)="onCardDragLeave()"
-                 (drop)="onCardDrop($event, 0)">
-            </div>
-          }
-          <cdk-virtual-scroll-viewport [itemSize]="VIRTUAL_ITEM_SIZE_PX"
-                                       [minBufferPx]="VIRTUAL_ITEM_SIZE_PX * 4"
-                                       [maxBufferPx]="VIRTUAL_ITEM_SIZE_PX * 8"
-                                       class="column__virtual-scroll">
-            <app-job-card *cdkVirtualFor="let job of jobs(); trackBy: trackByJobKey"
-              [job]="job"
-              [compact]="compact()"
-              (click)="jobClick.emit(job)"
-              (deleteRequested)="jobDeleteRequest.emit($event)"
-              draggable="true"
-              (dragstart)="onDragStart($event, job)" />
-          </cdk-virtual-scroll-viewport>
-          @if (!reorderDisabled()) {
-            <div class="column__drop-zone column__drop-zone--last"
-                 [class.column__drop-zone--active]="dropIndex === jobs().length"
-                 (dragover)="onCardDragOver($event, jobs().length)"
-                 (dragleave)="onCardDragLeave()"
-                 (drop)="onCardDrop($event, jobs().length)">
-            </div>
-          }
-          @if (canAddTask()) {
-            <button type="button" class="column__add" (click)="addTask.emit(state())">
-              <span class="column__add-icon">＋</span>
-              <span>Add task</span>
-            </button>
-          }
         } @else {
           @for (job of jobs(); track job.jobKey; let i = $index) {
             @if (!reorderDisabled()) {

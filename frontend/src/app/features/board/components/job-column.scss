@@ -101,24 +101,24 @@
       flex-direction: column;
       gap: 8px;
       flex: 1;
-      min-height: 0; /* let virtual viewport child claim available space */
-    }
-    /* Cycle 7c2: CDK virtual scroll viewport. Needs explicit height
-       so the virtualizer knows how many items fit; flex:1 + min-height:0
-       on the parent gives it the lane's remaining space. The internal
-       cdk-virtual-scroll-content-wrapper handles overflow itself, so we
-       hide overflow at the viewport. */
-    .column__virtual-scroll {
-      flex: 1;
-      min-height: 200px;
-      width: 100%;
-      contain: strict;
-    }
-    .column__virtual-scroll ::ng-deep .cdk-virtual-scroll-content-wrapper {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      width: 100%;
+      min-height: 0;
+      /*
+       * Single shared scroll model for every lane: each column body is
+       * its own vertical scroll container so a tall lane never widens
+       * the dashboard, never pushes the page scrollbar, and never
+       * differs from its neighbours. Previously only the lane that
+       * crossed a virtualization threshold (Human Review under load)
+       * got a per-lane scrollbar; everything else scrolled the entire
+       * page. The user reported that as a broken / inconsistent feel.
+       *
+       * The 4 px right padding leaves room for the WebKit scrollbar so
+       * cards do not slide under it on hover; min-width: 0 lets the
+       * body shrink below its content's intrinsic min-width so card
+       * content cannot widen the column past its flex share.
+       */
+      overflow-y: auto;
+      min-width: 0;
+      padding-right: 4px;
     }
     .column__empty {
       text-align: center;

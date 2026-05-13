@@ -1301,14 +1301,22 @@
     .field__textarea { font-family: 'Consolas', monospace; resize: vertical; }
 
     /* Layout fills the scroll container; the app__body now provides
-       the scrollbar so the header and status bar stay pinned. */
+       the scrollbar so the header and status bar stay pinned. The
+       Kanban view itself scrolls per-lane (see .column__body), so
+       the layout is locked to its parent's height when no detail
+       view is open. min-height: 100% on the focus variant (detail
+       view) keeps long detail content scrollable through .app__body
+       like before. */
     .layout {
-      min-height: 100%;
+      height: 100%;
+      min-height: 0;
       transition: all 0.3s ease;
       display: flex;
       flex-direction: column;
     }
     .layout--focus {
+      height: auto;
+      min-height: 100%;
       padding: 12px;
     }
     .dashboard {
@@ -1318,6 +1326,16 @@
       overflow-x: auto;
       flex: 1;
       min-width: 0;
+      /*
+       * min-height: 0 lets the dashboard (and the chain below it) be
+       * smaller than its content's natural height. Without it the
+       * default `min-height: auto` would let a column body's tall
+       * content propagate all the way up the flex chain and break the
+       * per-lane internal scroll model: the column body grows to fit
+       * its cards instead of staying at the lane's viewport-sized
+       * share.
+       */
+      min-height: 0;
       align-items: stretch;
     }
     /*
@@ -1436,8 +1454,14 @@
        * preserving the auto value keeps each group at least as wide
        * as its lanes need and pushes the overflow into the
        * dashboard's horizontal scroll, where it belongs.
+       *
+       * min-height: 0 IS required, however: the per-lane internal
+       * scroll model needs every parent in the chain to allow the
+       * inner .column__body to be smaller than its content height,
+       * which the default `min-height: auto` would block.
        */
       flex: 1 1 0;
+      min-height: 0;
     }
     .lane-group__head {
       display: flex;
@@ -1494,6 +1518,9 @@
          and their sum (plus gaps) is the natural floor of this row.
          Allowing it to shrink below that floor is exactly the
          lane-overlap regression. */
+      /* min-height: 0 is required so the inner .column__body can be
+         smaller than its content height and own its own scrollbar. */
+      min-height: 0;
     }
     /* The app-job-column host is transparent to flex layout so the
        inner .column div participates as the actual flex item with its
