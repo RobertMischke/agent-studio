@@ -164,6 +164,16 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         bool resumeSession,
         string? model) => null;
 
+    /// <summary>
+    /// Subclass hook: normalize or replace a persisted job model before it
+    /// reaches argv, telemetry, or the synthetic started line. Most CLIs can
+    /// use the stored value verbatim; drivers with CLI-specific model
+    /// namespaces override this to prevent a stale model from another CLI
+    /// being passed through after the job's <c>cliType</c> changes.
+    /// </summary>
+    protected virtual string? NormalizeModelForInvocation(string? model)
+        => string.IsNullOrWhiteSpace(model) ? null : model.Trim();
+
     /// <summary>Subclass hook: try to extract session metadata from a fresh output line.</summary>
     protected virtual void OnOutputLine(ProcInfo info, CliOutputLine line) { }
 
@@ -224,7 +234,8 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             _processes.TryRemove(jobKey, out _);
         }
 
-        var psi = BuildStartInfo(prompt, workingDirectory, sessionName, resumeSession, model);
+        var invocationModel = NormalizeModelForInvocation(model);
+        var psi = BuildStartInfo(prompt, workingDirectory, sessionName, resumeSession, invocationModel);
         psi.RedirectStandardOutput = true;
         psi.RedirectStandardError  = true;
         // ADR-0014: stdin is default-deny. We only redirect (and pipe a
@@ -236,7 +247,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         // hosting where the parent's writer-end close races the child's
         // first read. When no payload is needed, the child inherits the
         // parent's already-non-interactive stdin and the race goes away.
-        var stdinPayload = GetPromptStdinPayload(prompt, sessionName, resumeSession, model);
+        var stdinPayload = GetPromptStdinPayload(prompt, sessionName, resumeSession, invocationModel);
         psi.RedirectStandardInput = !string.IsNullOrEmpty(stdinPayload);
         psi.UseShellExecute = false;
         psi.CreateNoWindow  = true;
@@ -281,7 +292,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         ChildHandle child;
         try
         {
-            child = await SpawnChildAsync(psi, prompt, sessionName, resumeSession, model, ct);
+            child = await SpawnChildAsync(psi, prompt, sessionName, resumeSession, invocationModel, ct);
             // ADR-0014: only write to stdin when the subclass said it has a
             // payload (and the base class therefore set RedirectStandardInput
             // = true above). When no payload, the child inherits the host's
@@ -323,7 +334,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             ProcessId = process.Id,
             StartedAt = DateTime.UtcNow,
             Status = "running",
-            Model = string.IsNullOrWhiteSpace(model) ? null : model
+            Model = string.IsNullOrWhiteSpace(invocationModel) ? null : invocationModel
         };
 
         var logPath = GetOutputLogPath(jobKey);
@@ -365,7 +376,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         // ADR-0013: typed event channel. Subclasses with an adapter raise
         // their own events from the read loop; the base class always
         // raises RunStarted so the runner's phase tracker can initialize.
-        RaiseRunEvent(jobKey, new CliRunEvent.RunStarted(process.Id, CliType, model) { JobKey = jobKey });
+        RaiseRunEvent(jobKey, new CliRunEvent.RunStarted(process.Id, CliType, invocationModel) { JobKey = jobKey });
 
         _logger.LogInformation("Started {Cli} CLI for job {JobId} (PID {Pid}) in {Cwd}",
             CliType, jobId, process.Id, workingDirectory);
@@ -378,10 +389,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         {
             Timestamp = DateTime.UtcNow,
             Stream = "system",
-            Text = $"[taskboard] Started {CliType} CLI (PID {process.Id})"
-                   + (string.IsNullOrWhiteSpace(model) ? "" : $", model={model}")
-                   + (string.IsNullOrWhiteSpace(sessionName) ? "" : $", session={sessionName}")
-                   + (resumeSession ? " (resume)" : "")
+            Text = BuildStartedLineText(CliType, process.Id, invocationModel, sessionName, resumeSession)
         };
         info.OutputBuffer.Add(startedLine);
         if (!info.OutputLog.Append(startedLine))
@@ -396,6 +404,17 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
 
         return (execution, null);
     }
+
+    internal static string BuildStartedLineText(
+        string cliType,
+        int processId,
+        string? model,
+        string? sessionName,
+        bool resumeSession)
+        => $"[taskboard] Started {cliType} CLI (PID {processId})"
+           + (string.IsNullOrWhiteSpace(model) ? "" : $", model={model}")
+           + (string.IsNullOrWhiteSpace(sessionName) ? "" : $", session={sessionName}")
+           + (resumeSession ? " (resume)" : "");
 
     /// <summary>
     /// Subclass hook: spawn the child process. Default uses

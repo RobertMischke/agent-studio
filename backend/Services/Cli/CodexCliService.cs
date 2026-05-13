@@ -18,6 +18,8 @@ namespace OrchestratorApi.Services.Cli;
 /// </summary>
 public sealed class CodexCliService : CliExecutionServiceBase
 {
+    internal const string FallbackModel = "gpt-5-codex";
+
     private readonly CodexModelDiscovery _modelDiscovery;
     private readonly CliUsageParserRegistry _usageParsers;
     private readonly ICliModelRegistry _modelRegistry;
@@ -113,6 +115,58 @@ public sealed class CodexCliService : CliExecutionServiceBase
         }
 
         return psi;
+    }
+
+    protected override string? NormalizeModelForInvocation(string? model)
+        => ResolveInvocationModel(model, _configuration);
+
+    internal static string ResolveInvocationModel(string? model, IConfiguration configuration)
+    {
+        var requested = string.IsNullOrWhiteSpace(model) ? null : model.Trim();
+        if (!IsForeignModelId(requested)) return requested ?? DefaultCodexModel(configuration);
+
+        return DefaultCodexModel(configuration);
+    }
+
+    private static string DefaultCodexModel(IConfiguration configuration)
+    {
+        var configured = configuration["CodexCli:Model"]?.Trim();
+        if (!string.IsNullOrWhiteSpace(configured)) return configured;
+
+        configured = configuration["CodexCli:DefaultModel"]?.Trim();
+        return string.IsNullOrWhiteSpace(configured) ? FallbackModel : configured;
+    }
+
+    internal ProcessStartInfo BuildStartInfoForTest(
+        string prompt,
+        string workingDirectory,
+        string? sessionName,
+        bool resumeSession,
+        string? model)
+        => BuildStartInfo(
+            prompt,
+            workingDirectory,
+            sessionName,
+            resumeSession,
+            NormalizeModelForInvocation(model));
+
+    internal string? BuildPromptStdinPayloadForTest(
+        string prompt,
+        string? sessionName,
+        bool resumeSession,
+        string? model)
+        => GetPromptStdinPayload(
+            prompt,
+            sessionName,
+            resumeSession,
+            NormalizeModelForInvocation(model));
+
+    private static bool IsForeignModelId(string? model)
+    {
+        if (string.IsNullOrWhiteSpace(model)) return false;
+        return model.StartsWith("claude-", StringComparison.OrdinalIgnoreCase)
+               || model.StartsWith("gemini-", StringComparison.OrdinalIgnoreCase)
+               || model.StartsWith("copilot", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

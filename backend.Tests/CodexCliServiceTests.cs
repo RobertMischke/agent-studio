@@ -1,5 +1,6 @@
 using OrchestratorApi.Services.Bus;
 using OrchestratorApi.Services.Cli;
+using OrchestratorApi.Models;
 using Xunit;
 
 namespace OrchestratorApi.Tests;
@@ -116,10 +117,123 @@ public class CodexCliServiceTests
     }
 
     [Fact]
-    public void IsCompatibleSessionName_AcceptsUuidsRejectsSlugs()
+    public void ResolveInvocationModel_ReplacesForeignClaudeModelWithCodexDefault()
+    {
+        var cfg = new Microsoft.Extensions.Configuration.ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["CodexCli:Model"] = "gpt-5-codex"
+            })
+            .Build();
+
+        Assert.Equal("gpt-5-codex",
+            CodexCliService.ResolveInvocationModel("claude-opus-4-7", cfg));
+    }
+
+    [Fact]
+    public void ResolveInvocationModel_PreservesExplicitCodexModel()
     {
         var cfg = new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build();
-        var svc = new CodexCliService(
+
+        Assert.Equal("gpt-5.5",
+            CodexCliService.ResolveInvocationModel("gpt-5.5", cfg));
+    }
+
+    [Fact]
+    public void ResolveInvocationModel_DefaultsEmptyModelToFallback()
+    {
+        var cfg = new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build();
+
+        Assert.Equal(CodexCliService.FallbackModel,
+            CodexCliService.ResolveInvocationModel(null, cfg));
+    }
+
+    [Fact]
+    public void BuildStartInfo_LongPromptKeepsPromptOutOfArgvAndUsesStdin()
+    {
+        var svc = BuildService();
+        var prompt = new string('x', 12_000);
+
+        var psi = svc.BuildStartInfoForTest(
+            prompt,
+            workingDirectory: Environment.CurrentDirectory,
+            sessionName: "019dee65-7a9b-7843-bfd9-06e555fff02b",
+            resumeSession: true,
+            model: "claude-opus-4-7");
+
+        Assert.DoesNotContain(prompt, psi.ArgumentList);
+        Assert.Contains("-", psi.ArgumentList);
+        Assert.Contains("gpt-5-codex", psi.ArgumentList);
+        Assert.DoesNotContain("claude-opus-4-7", psi.ArgumentList);
+
+        var argvText = psi.FileName + " " + string.Join(" ", psi.ArgumentList);
+        Assert.True(argvText.Length < 8000, $"Codex argv grew to {argvText.Length} chars");
+
+        var stdin = svc.BuildPromptStdinPayloadForTest(
+            prompt,
+            sessionName: "019dee65-7a9b-7843-bfd9-06e555fff02b",
+            resumeSession: true,
+            model: "claude-opus-4-7");
+        Assert.NotNull(stdin);
+        Assert.Contains(prompt, stdin);
+        Assert.Contains("[[TASK_DONE]]", stdin);
+    }
+
+    [Fact]
+    public void BuildStartInfo_ArgvSizeDoesNotGrowWithReissuePromptLength()
+    {
+        var svc = BuildService();
+        var shortRetry = "Reissue: do the work.";
+        var longRetry = "Reissue: " + new string('y', 20_000);
+
+        var shortArgs = svc.BuildStartInfoForTest(
+            shortRetry,
+            Environment.CurrentDirectory,
+            sessionName: "019dee65-7a9b-7843-bfd9-06e555fff02b",
+            resumeSession: true,
+            model: "gpt-5-codex").ArgumentList.ToArray();
+        var longArgs = svc.BuildStartInfoForTest(
+            longRetry,
+            Environment.CurrentDirectory,
+            sessionName: "019dee65-7a9b-7843-bfd9-06e555fff02b",
+            resumeSession: true,
+            model: "gpt-5-codex").ArgumentList.ToArray();
+
+        Assert.Equal(shortArgs, longArgs);
+    }
+
+    [Fact]
+    public void StartedLine_UsesNormalizedCodexModel()
+    {
+        var cfg = new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build();
+        var model = CodexCliService.ResolveInvocationModel("claude-opus-4-7", cfg);
+
+        var line = CliExecutionServiceBase.BuildStartedLineText(
+            CliTypes.Codex,
+            processId: 1234,
+            model,
+            sessionName: null,
+            resumeSession: false);
+
+        Assert.Contains("model=gpt-5-codex", line);
+        Assert.DoesNotContain("claude-opus-4-7", line);
+    }
+
+    [Fact]
+    public void IsCompatibleSessionName_AcceptsUuidsRejectsSlugs()
+    {
+        var svc = BuildService();
+
+        Assert.True(svc.IsCompatibleSessionName("019dee65-7a9b-7843-bfd9-06e555fff02b"));
+        Assert.False(svc.IsCompatibleSessionName(null));
+        Assert.False(svc.IsCompatibleSessionName(""));
+        Assert.False(svc.IsCompatibleSessionName("taskboard-fix-bug-202604282114"));
+    }
+
+    private static CodexCliService BuildService()
+    {
+        var cfg = new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build();
+        return new CodexCliService(
             Microsoft.Extensions.Logging.Abstractions.NullLogger<CodexCliService>.Instance,
             cfg,
             new OrchestratorApi.Services.Pty.CodexModelDiscovery(
@@ -127,10 +241,5 @@ public class CodexCliServiceTests
                 cfg),
             new CliUsageParserRegistry(new ICliUsageParser[] { new CodexUsageParser() }),
             new CliModelRegistry());
-
-        Assert.True(svc.IsCompatibleSessionName("019dee65-7a9b-7843-bfd9-06e555fff02b"));
-        Assert.False(svc.IsCompatibleSessionName(null));
-        Assert.False(svc.IsCompatibleSessionName(""));
-        Assert.False(svc.IsCompatibleSessionName("taskboard-fix-bug-202604282114"));
     }
 }
