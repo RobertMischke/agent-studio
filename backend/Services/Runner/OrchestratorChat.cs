@@ -527,31 +527,12 @@ public class OrchestratorChatService
         sb.AppendLine("Answer ONLY about \"" + projectName + "\". Do not refer to other projects unless the user asks.");
         sb.AppendLine();
 
-        // Project-state snapshot so the orchestrator answers "where do you
-        // stand on this project?" against current reality, not stale memory.
-        // The global session is shared across projects, so prior turns may
-        // have cached counts for a different project; mark this snapshot
-        // authoritative so the model uses it instead of recalling stale data.
         try
         {
             var tasks = _scanner.ScanAllJobs()
                 .Where(j => string.Equals(j.ProjectName, projectName, StringComparison.OrdinalIgnoreCase))
                 .ToList();
-            sb.AppendLine($"AUTHORITATIVE current state of \"{projectName}\" ({tasks.Count} tasks total):");
-            if (tasks.Count == 0)
-            {
-                sb.AppendLine("  (no tasks)");
-            }
-            else
-            {
-                foreach (var sg in tasks.GroupBy(j => j.State).OrderBy(g => g.Key))
-                {
-                    sb.AppendLine($"  {sg.Key}: {sg.Count()}");
-                }
-            }
-            sb.AppendLine("Use these exact numbers. Any counts you remember from earlier in this session are stale and must be ignored.");
-            sb.AppendLine("These items are called \"tasks\" (not \"jobs\") in the user-facing vocabulary.");
-            sb.AppendLine();
+            AppendProjectStateSnapshot(sb, projectName, tasks);
         }
         catch
         {
@@ -580,6 +561,42 @@ public class OrchestratorChatService
         sb.AppendLine("Use Markdown for structure when helpful (lists, bold, code).");
         sb.AppendLine("Keep it short unless the user asked for depth.");
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Render the AUTHORITATIVE project-state snapshot block. The global
+    /// session is shared across projects, so without a per-turn snapshot
+    /// the model recalls stale counts from a different project (the
+    /// "Runbook has 21 jobs" incident, where the 21 actually belonged to
+    /// the Agent Task Processor board the user had been chatting about
+    /// earlier). The block names the project explicitly, gives an exact
+    /// count, breaks it down by lane, and tells the model in two places
+    /// to use "tasks" not "jobs" in the user-facing reply.
+    ///
+    /// Kept as an internal static helper so unit tests can pin the shape
+    /// without spinning up a scanner; <see cref="BuildPrompt"/> calls it
+    /// with the already-filtered tasks for the active project.
+    /// </summary>
+    internal static void AppendProjectStateSnapshot(
+        StringBuilder sb,
+        string projectName,
+        IReadOnlyCollection<JobInfo> tasksForProject)
+    {
+        sb.AppendLine($"AUTHORITATIVE current state of \"{projectName}\" ({tasksForProject.Count} tasks total):");
+        if (tasksForProject.Count == 0)
+        {
+            sb.AppendLine("  (no tasks)");
+        }
+        else
+        {
+            foreach (var sg in tasksForProject.GroupBy(j => j.State).OrderBy(g => g.Key))
+            {
+                sb.AppendLine($"  {sg.Key}: {sg.Count()}");
+            }
+        }
+        sb.AppendLine("Use these exact numbers. Any counts you remember from earlier in this session are stale and must be ignored.");
+        sb.AppendLine("These items are called \"tasks\" (not \"jobs\") in the user-facing vocabulary.");
+        sb.AppendLine();
     }
 
     /// <summary>
