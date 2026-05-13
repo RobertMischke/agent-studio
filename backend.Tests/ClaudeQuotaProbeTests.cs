@@ -1,3 +1,4 @@
+using OrchestratorApi.Models;
 using OrchestratorApi.Services.Cli;
 using OrchestratorApi.Services.Quota;
 using Xunit;
@@ -6,6 +7,64 @@ namespace OrchestratorApi.Tests;
 
 public class ClaudeQuotaProbeTests
 {
+    /// <summary>
+    /// Live capture from claude --version 2.1.140 on 2026-05-13. The probe
+    /// sent "1&lt;Enter&gt;" to a trust prompt that never appeared (the scratch
+    /// folder was already trusted via ~/.claude.json), the "1" was treated as
+    /// chat input, "/usage" never executed, and the snapshot has no Current
+    /// session / Current week lines. ParseUsageWindows must return empty AND
+    /// LooksLikeParserDrift must flag this as drift so it shows up in logs.
+    /// Source: backend.Tests/Fixtures/claude-usage-v2.1.140-broken-snapshot.txt
+    /// </summary>
+    private const string BrokenSnapshotV2_1_140 =
+        "▐▛███▜▌ClaudeCodev2.1.140\r\n" +
+        "▝▜█████▛▘Opus4.7withxhigheffort·ClaudePro▘▘▝▝~\\AppData\\Local\\Temp\\agent-taskboard-quota\\claude\r\n" +
+        "❯ Try\"refactor<filepath>\"\r\n" +
+        "? for shortcuts ◉ x high · /effort❯ 1\r\n" +
+        "\r\n✻ Cultivating…\r\n" +
+        "esc to interrupt\r\n" +
+        "● It looks like you sent just \"1\"—did you mean to send a question or task? Let me know what you'd like help with.✶ Cultivating… (2s · ↓ 9 tokens)\r\n";
+
+    [Fact]
+    public void ParseUsageWindows_ReturnsEmpty_OnBrokenV2_1_140_Snapshot()
+    {
+        // The snapshot contains the banner but no /usage panel — the parser is
+        // correct to return empty. The point of the test is to pin the regression:
+        // this exact rawSample shipped on 2026-05-13 with windows: [] and the
+        // detail modal showed no 5h / 7d windows. The fix lives in the probe
+        // step, not the parser.
+        var windows = ClaudeQuotaProbe.ParseUsageWindows(BrokenSnapshotV2_1_140);
+
+        Assert.Empty(windows);
+    }
+
+    [Fact]
+    public void LooksLikeParserDrift_FlagsBannerWithoutWindows()
+    {
+        // Drift signature: banner is visible (we got a session) but Windows is
+        // empty. This is what the runtime warn-log triggers on.
+        var windows = ClaudeQuotaProbe.ParseUsageWindows(BrokenSnapshotV2_1_140);
+
+        Assert.True(ClaudeQuotaProbe.LooksLikeParserDrift(BrokenSnapshotV2_1_140, windows),
+            "v2.1.140 broken snapshot should be flagged as parser drift");
+    }
+
+    [Fact]
+    public void LooksLikeParserDrift_DoesNotFlag_WhenWindowsParsed()
+    {
+        var windows = new List<QuotaWindow> { new() { Label = "Current session (5h)", UsedPct = 12 } };
+        Assert.False(ClaudeQuotaProbe.LooksLikeParserDrift(BrokenSnapshotV2_1_140, windows));
+    }
+
+    [Fact]
+    public void LooksLikeParserDrift_DoesNotFlag_OnEmptySnapshot()
+    {
+        // Empty snapshot means the CLI never even spawned; that is "probe broke"
+        // (caught by the Error field), not "format drifted".
+        Assert.False(ClaudeQuotaProbe.LooksLikeParserDrift("", Array.Empty<QuotaWindow>()));
+        Assert.False(ClaudeQuotaProbe.LooksLikeParserDrift("   \r\n  ", Array.Empty<QuotaWindow>()));
+    }
+
     [Fact]
     public void ParseUsageWindows_ReadsCompactCurrentWeekWithoutDate()
     {

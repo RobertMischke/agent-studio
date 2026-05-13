@@ -105,9 +105,11 @@ public abstract class QuotaProbeBase : IQuotaProbe
         foreach (var step in steps)
         {
             if (step.ClearBufferBefore) pty.ClearBuffer();
+            bool patternMatched = step.WaitForPattern == null;
             if (step.WaitForPattern != null)
             {
                 var match = await pty.WaitForPatternAsync(step.WaitForPattern, timeoutMs: step.WaitTimeoutMs, ct);
+                patternMatched = match != null;
                 if (match == null)
                 {
                     _logger.LogDebug("Probe step '{Step}' did not see expected pattern within {Ms}ms",
@@ -121,8 +123,16 @@ public abstract class QuotaProbeBase : IQuotaProbe
             }
             if (!string.IsNullOrEmpty(step.SendKeys))
             {
-                await pty.SendKeysAsync(step.SendKeys, ct);
-                await pty.WaitForIdleAsync(idleMs: step.SettleIdleMs, timeoutMs: step.SettleTimeoutMs, ct);
+                if (step.SendKeysOnlyIfMatched && !patternMatched)
+                {
+                    _logger.LogDebug("Probe step '{Step}' skipping SendKeys because pattern did not match",
+                        step.Name);
+                }
+                else
+                {
+                    await pty.SendKeysAsync(step.SendKeys, ct);
+                    await pty.WaitForIdleAsync(idleMs: step.SettleIdleMs, timeoutMs: step.SettleTimeoutMs, ct);
+                }
             }
         }
 
@@ -145,7 +155,12 @@ public abstract class QuotaProbeBase : IQuotaProbe
         /// <summary>Wipe the PTY buffer before this step's pattern wait. Lets you scope
         /// pattern matches to "what the CLI prints from now on" instead of accidentally
         /// matching residual content from earlier screens.</summary>
-        bool ClearBufferBefore = false);
+        bool ClearBufferBefore = false,
+        /// <summary>When true, only send <see cref="SendKeys"/> if <see cref="WaitForPattern"/>
+        /// actually matched. Required for trust-prompt steps that, once dismissed once,
+        /// never reappear: blindly sending the dismissal keys after the timeout leaks them
+        /// into the chat input as a stray message and corrupts the next slash command.</summary>
+        bool SendKeysOnlyIfMatched = false);
 
     /// <summary>Truncate snapshots before storing them on a QuotaSnapshot to keep payloads small.</summary>
     protected static string TruncateForDebug(string? snapshot, int max = 1500)

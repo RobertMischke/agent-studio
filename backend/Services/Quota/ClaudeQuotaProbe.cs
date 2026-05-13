@@ -50,6 +50,13 @@ public sealed class ClaudeQuotaProbe : QuotaProbeBase
         @"out\s*of\s*(?<bucket>\w+)\s*usage[^·]*·\s*resets\s*(?<time>\d{1,2}:\d{2}\s*(?:am|pm)?)\s*(?:\((?<tz>[^\)]+)\))?",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    // "Banner is present (we got a session) but the /usage panel never rendered."
+    // When this matches and Windows ends up empty, log Warn so a future CLI-output
+    // format change is visible in logs instead of silently returning windows: [].
+    private static readonly Regex WelcomeBannerRegex = new(
+        @"Claude\s*Code\s*v|Welcome\s*back|Tips\s*for\s*getting\s*started",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     private readonly IConfiguration _configuration;
 
     public ClaudeQuotaProbe(
@@ -74,9 +81,16 @@ public sealed class ClaudeQuotaProbe : QuotaProbeBase
 
             // Two-step: confirm trust, wait for welcome, send /usage, wait for the
             // usage panel to render. /usage works even when over quota.
+            //
+            // The trust step uses SendKeysOnlyIfMatched: once trust has been accepted
+            // for the scratch folder (Claude persists "hasTrustDialogAccepted: true" in
+            // ~/.claude.json keyed by absolute path), the dialog never appears again
+            // and blindly sending "1<Enter>" leaks "1" into the chat input box as a
+            // real prompt — which then turns the following "/usage" into a chat reply
+            // instead of a slash command, leaving windows[] empty.
             var snap = await ProbeWithStepsAsync(
             [
-                new ProbeStep("await-trust",   WaitForPattern: trustPattern,   WaitTimeoutMs: 10000, SendKeys: "1<Enter>", SettleTimeoutMs: 6000),
+                new ProbeStep("await-trust",   WaitForPattern: trustPattern,   WaitTimeoutMs: 4000, SendKeys: "1<Enter>", SettleTimeoutMs: 6000, SendKeysOnlyIfMatched: true),
                 new ProbeStep("await-welcome", WaitForPattern: welcomePattern, WaitTimeoutMs: 10000, SendKeys: "/usage<Enter>", SettleIdleMs: 1500, SettleTimeoutMs: 8000),
                 new ProbeStep("await-usage",   WaitForPattern: usagePattern,   WaitTimeoutMs: 8000,  SettleIdleMs: 1200, SettleTimeoutMs: 5000)
             ],
@@ -110,6 +124,16 @@ public sealed class ClaudeQuotaProbe : QuotaProbeBase
                 });
             }
 
+            if (LooksLikeParserDrift(snap, windows))
+            {
+                _logger.LogWarning(
+                    "Claude /usage probe returned 0 windows but the welcome banner is present in the snapshot. " +
+                    "Likely causes: (1) /usage output format changed in a new Claude Code release and the parser regexes need updating, " +
+                    "or (2) the slash command never executed (chat-input leak from a stale trust step). " +
+                    "Raw sample (tail): {Sample}",
+                    TruncateForDebug(snap, 400));
+            }
+
             return new QuotaSnapshot
             {
                 CliType   = CliType,
@@ -127,6 +151,20 @@ public sealed class ClaudeQuotaProbe : QuotaProbeBase
             _logger.LogWarning(ex, "Claude quota probe failed");
             return new QuotaSnapshot { CliType = CliType, Source = "/usage", Error = ex.Message };
         }
+    }
+
+    /// <summary>
+    /// Drift detector: true when the snapshot clearly contains a Claude session
+    /// (banner / welcome-back / tips line) but the parser produced no windows.
+    /// That combination is the signature of a CLI-output format change or a
+    /// probe-step bug that prevented /usage from rendering. Public so tests can
+    /// pin the heuristic against the cached real-world rawSample.
+    /// </summary>
+    public static bool LooksLikeParserDrift(string snap, IReadOnlyCollection<QuotaWindow> windows)
+    {
+        if (windows.Count > 0) return false;
+        if (string.IsNullOrEmpty(snap)) return false;
+        return WelcomeBannerRegex.IsMatch(snap);
     }
 
     private static string NormalizePlan(string raw)
