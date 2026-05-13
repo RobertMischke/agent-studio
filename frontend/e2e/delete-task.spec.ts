@@ -12,7 +12,8 @@ async function getFirstWatchPath(): Promise<WatchPath> {
 
 async function deleteJobApi(jobId: string, watchPath: string): Promise<void> {
   await fetch(`${BACKEND}/api/jobs/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`, {
-    method: 'DELETE'
+    method: 'DELETE',
+    headers: { 'x-client-id': process.env.PW_CLIENT_ID?.trim() || 'local-default' }
   });
 }
 
@@ -43,7 +44,8 @@ test.describe('Delete task', () => {
       title: `e2e-del-card-${id}`,
       watchPath,
       targetState: '1-preparation',
-      promptMarkdown: 'Fixture for delete-from-card test.'
+      promptMarkdown: 'Fixture for delete-from-card test.',
+      fixture: false
     });
 
     page.on('dialog', d => d.accept());
@@ -75,12 +77,16 @@ test.describe('Delete task', () => {
       title: `e2e-del-detail-${id}`,
       watchPath,
       targetState: '1-preparation',
-      promptMarkdown: 'Fixture for delete-from-detail test.'
+      promptMarkdown: 'Fixture for delete-from-detail test.',
+      fixture: false
     });
 
     page.on('dialog', d => d.accept());
 
-    await page.goto(`/?job=${encodeURIComponent(job.id)}&watchPath=${encodeURIComponent(watchPath)}`);
+    await page.goto('/');
+    const card = cardLocator(page, job.id);
+    await expect(card).toBeVisible({ timeout: 10_000 });
+    await card.click();
 
     const menuBtn = page.getByTestId('detail-menu-btn');
     await expect(menuBtn).toBeVisible({ timeout: 10_000 });
@@ -88,13 +94,20 @@ test.describe('Delete task', () => {
 
     const deleteItem = page.getByTestId('detail-menu-delete');
     await expect(deleteItem).toBeVisible();
+    const deleteResponse = page.waitForResponse(resp =>
+      resp.request().method() === 'DELETE'
+      && resp.url().includes(`/api/jobs/${encodeURIComponent(job.id)}`)
+    );
     await deleteItem.click();
+    await expect((await deleteResponse).ok()).toBeTruthy();
 
     // Detail view closes; the kanban dashboard becomes visible again.
     await expect(page.getByTestId('kanban-dashboard')).toBeVisible({ timeout: 10_000 });
 
-    const after = await listJobs();
-    expect(after.find(j => j.id === job.id)).toBeUndefined();
+    await expect.poll(async () => {
+      const after = await listJobs();
+      return after.find(j => j.id === job.id);
+    }, { timeout: 10_000 }).toBeUndefined();
   });
 
   test('cancelling the confirm dialog leaves the task in place', async ({ page }) => {
@@ -108,7 +121,8 @@ test.describe('Delete task', () => {
       title: `e2e-del-cancel-${id}`,
       watchPath,
       targetState: '1-preparation',
-      promptMarkdown: 'Fixture for cancel-delete test.'
+      promptMarkdown: 'Fixture for cancel-delete test.',
+      fixture: false
     });
 
     page.on('dialog', d => d.dismiss());
