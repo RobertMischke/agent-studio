@@ -41,6 +41,89 @@ public static class JobCodeReviewEndpoints
 
     public static void MapJobCodeReviewEndpoints(this RouteGroupBuilder group)
     {
+        // GET /api/jobs/{jobId}/code-review/list
+        // Returns the list of code-review-*.md artifacts in the job folder,
+        // newest-first. Each entry carries the parsed frontmatter so the
+        // frontend can render verdict + summary without fetching each file.
+        group.MapGet("/{jobId}/code-review/list",
+            (string jobId, string? watchPath, JobScannerService scanner) =>
+        {
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info == null) return Results.NotFound(new { error = $"No job '{jobId}'" });
+
+            var entries = new List<CodeReviewListEntry>();
+            try
+            {
+                if (Directory.Exists(info.FolderPath))
+                {
+                    foreach (var path in Directory.EnumerateFiles(info.FolderPath, "code-review-*.md"))
+                    {
+                        var fileName = Path.GetFileName(path);
+                        try
+                        {
+                            var content = File.ReadAllText(path);
+                            var fm = OrchestratorApi.Services.Markdown.FrontmatterParser.Parse(content);
+                            var fields = fm.Ok ? fm.Fields : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                            entries.Add(new CodeReviewListEntry
+                            {
+                                FileName = fileName,
+                                Verdict = fields.GetValueOrDefault("verdict") ?? "unknown",
+                                Summary = fields.GetValueOrDefault("summary") ?? string.Empty,
+                                Model = fields.GetValueOrDefault("model") ?? string.Empty,
+                                CliType = fields.GetValueOrDefault("cliType") ?? string.Empty,
+                                Commit = fields.GetValueOrDefault("commit"),
+                                RunAt = fields.GetValueOrDefault("runAt") ?? string.Empty,
+                            });
+                        }
+                        catch
+                        {
+                            // Skip unreadable files; they should not break the list.
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // Folder enumeration failure: return empty list rather than 500.
+            }
+
+            entries.Sort((a, b) => string.CompareOrdinal(b.RunAt, a.RunAt));
+            return Results.Ok(new CodeReviewListResponse { Entries = entries });
+        });
+
+        // GET /api/jobs/{jobId}/code-review/{fileName}
+        // Returns the raw MD body for one review. The caller passes a file
+        // name that came from the list endpoint; we never accept arbitrary
+        // paths.
+        group.MapGet("/{jobId}/code-review/{fileName}",
+            (string jobId, string fileName, string? watchPath, JobScannerService scanner) =>
+        {
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info == null) return Results.NotFound(new { error = $"No job '{jobId}'" });
+
+            // Path-traversal guard: only accept files whose name matches the
+            // expected pattern and that resolve inside the job folder.
+            if (string.IsNullOrWhiteSpace(fileName)
+                || !fileName.StartsWith("code-review-", StringComparison.OrdinalIgnoreCase)
+                || !fileName.EndsWith(".md", StringComparison.OrdinalIgnoreCase)
+                || fileName.Contains('/') || fileName.Contains('\\') || fileName.Contains(".."))
+            {
+                return Results.BadRequest(new { error = "Invalid review file name." });
+            }
+
+            var path = Path.Combine(info.FolderPath, fileName);
+            if (!File.Exists(path)) return Results.NotFound(new { error = "Review not found." });
+
+            try
+            {
+                return Results.Ok(new { fileName, content = File.ReadAllText(path) });
+            }
+            catch
+            {
+                return Results.NotFound(new { error = "Review unreadable." });
+            }
+        });
+
         // POST /api/jobs/{jobId}/code-review
         // Body: { "watchPath"?: string, "model"?: string, "cliType"?: string, "commit"?: string }
         // Synchronous: returns the report once the review finishes.
@@ -115,6 +198,24 @@ public static class JobCodeReviewEndpoints
             });
         });
     }
+}
+
+/// <summary>One row in the per-job code-review listing.</summary>
+public sealed record CodeReviewListEntry
+{
+    public required string FileName { get; init; }
+    public required string Verdict { get; init; }
+    public required string Summary { get; init; }
+    public required string Model { get; init; }
+    public required string CliType { get; init; }
+    public string? Commit { get; init; }
+    public required string RunAt { get; init; }
+}
+
+/// <summary>Response for <c>GET /api/jobs/{jobId}/code-review/list</c>.</summary>
+public sealed record CodeReviewListResponse
+{
+    public required IReadOnlyList<CodeReviewListEntry> Entries { get; init; }
 }
 
 /// <summary>Body for <c>POST /api/jobs/{jobId}/code-review</c>. All fields optional.</summary>

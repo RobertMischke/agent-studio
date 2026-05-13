@@ -13,6 +13,30 @@ import type { JobScreenshotsResponse, WorkspaceScreenshotsResponse } from '../fe
 import type { SessionEventsResponse } from '../features/session-events';
 import { ErrorDialogService } from './error-dialog.service';
 
+/** One row in the code-review list endpoint response (see backend `CodeReviewListEntry`). */
+export interface CodeReviewListEntry {
+  fileName: string;
+  verdict: string;
+  summary: string;
+  model: string;
+  cliType: string;
+  commit?: string | null;
+  runAt: string;
+}
+
+/** Reply from `POST /api/jobs/{id}/code-review` (see backend `CodeReviewStepEndpointResponse`). */
+export interface CodeReviewRunResponse {
+  fileName: string;
+  verdict: string;
+  summary: string;
+  model: string;
+  cliType: string;
+  commit?: string | null;
+  concernTagId?: string | null;
+  durationMs: number;
+  startedAt: string;
+}
+
 type LaneKey = keyof GroupedJobs;
 // ADR-0025: state strings use the new seven-lane order.
 // ADR-0026: 1a-orchestrator-prep + 1b-needs-human-review join the catalog.
@@ -271,6 +295,42 @@ export class JobService {
     return this.http.put(
       `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/tags`,
       { tags },
+      this.withWatchPath(watchPath));
+  }
+
+  /**
+   * List the code-review-step artifacts for one job. Each entry carries the
+   * frontmatter fields (verdict, summary, model, runAt) so the panel can
+   * render rows without fetching every MD body.
+   */
+  listCodeReviews(jobId: string, watchPath?: string) {
+    return this.http.get<{ entries: CodeReviewListEntry[] }>(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/code-review/list`,
+      this.withWatchPath(watchPath));
+  }
+
+  /**
+   * Run one user-triggered code-review step against the job's most recent
+   * commit. Synchronous: the response arrives once the underlying CLI call
+   * has finished, so the UI can keep a spinner up for the duration.
+   */
+  runCodeReview(
+    jobId: string,
+    body: { model?: string; cliType?: string; commit?: string },
+    watchPath?: string
+  ) {
+    return this.http.post<CodeReviewRunResponse>(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/code-review`,
+      body,
+      this.withWatchPath(watchPath));
+  }
+
+  /**
+   * Read one code-review MD body. Used by the panel to expand a row inline.
+   */
+  readCodeReview(jobId: string, fileName: string, watchPath?: string) {
+    return this.http.get<{ fileName: string; content: string }>(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/code-review/${encodeURIComponent(fileName)}`,
       this.withWatchPath(watchPath));
   }
 

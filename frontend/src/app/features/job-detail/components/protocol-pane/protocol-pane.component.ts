@@ -25,6 +25,7 @@ import { FeatureFlagsService } from '../../../../services/feature-flags.service'
 import { VerboseDebugOverlayComponent } from '../../../../features/verbose-debug/components/verbose-debug-overlay.component';
 import { HygieneStripComponent } from '../hygiene-strip/hygiene-strip.component';
 import { ReviewEvidencePanelComponent } from './review-evidence-panel.component';
+import { CodeReviewPanelComponent } from './code-review-panel.component';
 import { JobService } from '../../../../services/job.service';
 import type { RawLineRange } from '../../../../components/chat/conversation-event';
 import { BeautifulResultsComponent } from '../beautiful-results/beautiful-results.component';
@@ -41,7 +42,7 @@ export type InspectorTab = 'protocol' | 'activity';
   selector: 'app-protocol-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, ActivityLogViewComponent, RunTimelineComponent, RunGitViewerComponent, ScreenshotStripComponent, VerboseDebugOverlayComponent, HygieneStripComponent, ReviewEvidencePanelComponent, BeautifulResultsComponent],
+  imports: [CommonModule, ActivityLogViewComponent, RunTimelineComponent, RunGitViewerComponent, ScreenshotStripComponent, VerboseDebugOverlayComponent, HygieneStripComponent, ReviewEvidencePanelComponent, BeautifulResultsComponent, CodeReviewPanelComponent],
   templateUrl: './protocol-pane.component.html',
   styleUrls: ['./protocol-pane.component.scss']
 })

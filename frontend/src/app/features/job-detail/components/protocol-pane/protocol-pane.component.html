@@ -148,6 +148,8 @@
       [job]="detail().info"
       (acknowledge)="onEvidenceAcknowledge($event, evidencePanel)"
       (createFollowup)="onEvidenceCreateFollowup($event, evidencePanel)" />
+    <app-code-review-panel
+      [job]="detail().info" />
     @if (followupCreated(); as fc) {
       <div class="evidence-followup-banner"
            data-testid="review-evidence-followup-banner">
