@@ -4,10 +4,34 @@ import { createJob } from './helpers/jobs';
 
 interface WatchPath { path: string; name?: string }
 
-async function pickWatchPath(): Promise<string> {
+async function pickWatchPath(): Promise<WatchPath> {
   const paths = await api<WatchPath[]>('/api/watch-paths');
   if (!paths.length) throw new Error('No watch paths configured');
-  return paths[0].path;
+  return paths[0];
+}
+
+/**
+ * The detail endpoint can lag the create endpoint by ~1 s while the
+ * scanner cache refreshes (mutation invalidates, next read rescans, but
+ * a fresh fixture occasionally needs a second tick before the
+ * `watchPath`-filtered lookup matches). Poll until the lookup the
+ * frontend will issue from `restoreFromUrl` succeeds, so the
+ * subsequent `page.goto(...)` lands on the detail pane instead of the
+ * board view.
+ */
+async function waitForDetailVisible(jobId: string, watchPath: string): Promise<void> {
+  const deadline = Date.now() + 10_000;
+  let lastError: unknown = null;
+  while (Date.now() < deadline) {
+    try {
+      await api(`/api/jobs/${encodeURIComponent(jobId)}?watchPath=${encodeURIComponent(watchPath)}`);
+      return;
+    } catch (err) {
+      lastError = err;
+      await new Promise(r => setTimeout(r, 200));
+    }
+  }
+  throw new Error(`Job ${jobId} not visible via detail endpoint within 10s: ${lastError}`);
 }
 
 /**
@@ -35,7 +59,9 @@ test('git file tree renders without NG0600 (signal write inside computed)', asyn
   const pageErrors: string[] = [];
   page.on('pageerror', err => pageErrors.push(err.stack ?? err.message));
 
-  const watchPath = await pickWatchPath();
+  const watch = await pickWatchPath();
+  const watchPath = watch.path;
+  const projectName = watch.name ?? 'Runbook';
   const job = await createJob({
     title: `git-tree-ng0600-${Date.now()}`,
     watchPath,
@@ -46,6 +72,31 @@ test('git file tree renders without NG0600 (signal write inside computed)', asyn
   });
 
   try {
+    await waitForDetailVisible(job.id, watchPath);
+
+    // The git pane's worktree path only renders for the project's
+    // active job (otherwise: "Working-tree changes belong to whichever
+    // task the agent is currently editing"). Mock the runner status so
+    // our fixture becomes "active" for the project and the file tree
+    // actually renders.
+    await page.route('**/api/runner/status', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          projects: {
+            [projectName]: {
+              projectName,
+              mode: 'manual',
+              activeJobId: job.id,
+              activeExecution: null,
+              queuedJobIds: []
+            }
+          }
+        })
+      });
+    });
+
     await page.route('**/api/jobs/*/git/status**', async (route) => {
       await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(STATUS_PAYLOAD) });
     });
