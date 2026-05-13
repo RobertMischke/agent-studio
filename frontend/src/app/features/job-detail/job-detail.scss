@@ -1096,8 +1096,19 @@
        Height is an explicit 92vh (not max-height) so the inner flex column
        has a fixed track for `flex: 1` to claim. Width is generous: the
        previous 1280px cap left the activity log noticeably cramped on
-       wide displays. */
+       wide displays.
+
+       Explicit `position: fixed; inset: 0; margin: auto;` pins the dialog
+       to the viewport and centers it on both axes. UA defaults vary across
+       browsers for top-layer dialogs (Chromium's positioned-from-document-flow
+       behaviour left the panel anchored to its DOM ancestor and produced a
+       left-edge dock on wide viewports). Pinning matches the .overlay
+       pattern used by the rest of the app so every large modal lands in
+       the same place. */
     .log-overlay {
+      position: fixed;
+      inset: 0;
+      margin: auto;
       width: min(1400px, 96vw);
       height: 92vh;
       max-width: 96vw;

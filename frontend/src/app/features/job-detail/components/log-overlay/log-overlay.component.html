@@ -1,4 +1,4 @@
-<dialog #dlg class="log-overlay" data-testid="log-overlay" (close)="close.emit()" (click)="onBackdropClick($event)">
+<dialog #dlg class="log-overlay" data-testid="log-overlay" aria-label="Agent log" (close)="close.emit()" (click)="onBackdropClick($event)">
   <div class="log-overlay__panel" (click)="$event.stopPropagation()">
     <div class="log-overlay__header">
       <div>
