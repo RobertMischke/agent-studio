@@ -151,6 +151,7 @@
               [job]="job"
               [compact]="compact()"
               (click)="jobClick.emit(job)"
+              (deleteRequested)="jobDeleteRequest.emit($event)"
               draggable="true"
               (dragstart)="onDragStart($event, job)" />
           </cdk-virtual-scroll-viewport>
@@ -182,6 +183,7 @@
               [job]="job"
               [compact]="compact()"
               (click)="jobClick.emit(job)"
+              (deleteRequested)="jobDeleteRequest.emit($event)"
               draggable="true"
               (dragstart)="onDragStart($event, job)" />
           }
@@ -206,4 +208,3 @@
       </div>
     </div>
     }
-  

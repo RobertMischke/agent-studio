@@ -5,6 +5,7 @@ import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { JobColumnComponent } from './job-column';
+import type { JobInfo } from '../../../models/job.model';
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.
@@ -43,4 +44,58 @@ describe('JobColumnComponent (smoke)', () => {
     }
     expect(fixture.componentInstance).toBeTruthy();
   });
+
+  it('forwards card delete requests from regular lanes', async () => {
+    await TestBed.configureTestingModule({
+      imports: [JobColumnComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(JobColumnComponent);
+    const job = makeJob();
+    const deleted: JobInfo[] = [];
+    fixture.componentInstance.jobDeleteRequest.subscribe((value) => deleted.push(value));
+    fixture.componentRef.setInput('title', 'Ready');
+    fixture.componentRef.setInput('state', '2-ready');
+    fixture.componentRef.setInput('jobs', [job]);
+    fixture.detectChanges();
+
+    const button = fixture.nativeElement.querySelector('[data-testid="job-card-delete"]') as HTMLButtonElement | null;
+    expect(button).toBeTruthy();
+    button!.click();
+
+    expect(deleted).toEqual([job]);
+  });
 });
+
+function makeJob(overrides: Partial<JobInfo> = {}): JobInfo {
+  return {
+    id: 'task-1',
+    jobKey: 'test::task-1',
+    title: 'Task 1',
+    state: '2-ready',
+    order: 1,
+    agent: 'codex',
+    createdAt: '2026-05-11T09:00:00Z',
+    watchPath: '/tmp/watch',
+    projectName: 'Test',
+    folderPath: '/tmp/watch/2-ready/task-1',
+    lastActivity: '2026-05-11T09:30:00Z',
+    sessionName: null,
+    model: null,
+    cliType: 'codex',
+    useOwnSession: null,
+    lastUsage: null,
+    execution: null,
+    commit: null,
+    commits: [],
+    ownerClientId: 'local-default',
+    tags: [],
+    ...overrides,
+  };
+}
