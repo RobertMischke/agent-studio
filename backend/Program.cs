@@ -162,6 +162,7 @@ builder.Services.AddHostedService<MetaCycleHostedService>();
 builder.Services.AddHostedService<OrchestratorPrepHostedService>();
 builder.Services.AddHostedService<ChatNoteHostedService>();
 builder.Services.AddSingleton<AspectRunnerService>();
+builder.Services.AddSingleton<OrchestratorApi.Services.Review.CodeReviewStepService>();
 builder.Services.AddSingleton<AutoReviewStatusSnapshot>();
 builder.Services.AddHostedService<ReviewDecisionOrchestrator>();
 // Orchestrator-intake (ready-orchestrator-intake-lane). Off by default per
