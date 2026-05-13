@@ -2,6 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { JobInfo } from '../../../models/job.model';
 import { JobService } from '../../../services/job.service';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
+import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
 import { JobSelectionService } from './job-selection.service';
 
 /**
@@ -23,6 +24,7 @@ import { JobSelectionService } from './job-selection.service';
 export class TriageController {
   private readonly jobService = inject(JobService);
   private readonly errorDialog = inject(ErrorDialogService);
+  private readonly confirmDialog = inject(ConfirmDialogService);
   private readonly jobSelection = inject(JobSelectionService);
 
   /**
@@ -92,17 +94,23 @@ export class TriageController {
 
   /**
    * Triage "Delete". Confirm-on-first-click already happened in the
-   * panel; we still surface the standard system confirm to match the
+   * panel; we still surface the unified confirm dialog to match the
    * menu's delete flow (so the user does not lose the safety net by
    * accident).
    */
-  delete(info: JobInfo, _ev: { actionId: string }): void {
+  async delete(info: JobInfo, _ev: { actionId: string }): Promise<void> {
     const lane = this.jobSelection.triageLaneState ?? info.state;
     const peers = this.jobSelection.triageLanePeers();
     const label = info.title || info.id;
-    const message =
-      `Delete this task?\n\n"${label}"\n\nThis removes the job folder and all its files (prompt, logs, results). Do you really want this?`;
-    if (typeof window !== 'undefined' && !window.confirm(message)) {
+    const ok = await this.confirmDialog.confirm({
+      title: 'Delete this task?',
+      message: 'This removes the job folder and all its files (prompt, logs, results). Do you really want this?',
+      detail: label,
+      confirmLabel: 'Delete',
+      cancelLabel: 'Keep',
+      kind: 'danger',
+    });
+    if (!ok) {
       this.clearActing();
       return;
     }

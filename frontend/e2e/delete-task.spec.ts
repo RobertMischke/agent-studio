@@ -39,16 +39,15 @@ test.describe('Delete task', () => {
     await cleanupTestJobs(watchPath);
 
     const id = uid();
+    const title = `e2e-del-card-${id}`;
     const job = await createJob({
       id,
-      title: `e2e-del-card-${id}`,
+      title,
       watchPath,
       targetState: '1-preparation',
       promptMarkdown: 'Fixture for delete-from-card test.',
       fixture: false
     });
-
-    page.on('dialog', d => d.accept());
 
     await page.goto('/');
     const card = cardLocator(page, job.id);
@@ -58,6 +57,13 @@ test.describe('Delete task', () => {
     const trash = card.getByTestId('job-card-delete');
     await expect(trash).toBeVisible();
     await trash.click();
+
+    // Unified confirm dialog replaces window.confirm; click the danger
+    // button to accept.
+    const confirmDialog = page.getByTestId('confirm-dialog-panel');
+    await expect(confirmDialog).toBeVisible({ timeout: 5_000 });
+    await expect(confirmDialog.getByTestId('confirm-dialog-detail')).toContainText(title);
+    await page.getByTestId('confirm-dialog-confirm').click();
 
     // Card should disappear after the backend confirms + refresh tick.
     await expect(card).toHaveCount(0, { timeout: 10_000 });
@@ -81,8 +87,6 @@ test.describe('Delete task', () => {
       fixture: false
     });
 
-    page.on('dialog', d => d.accept());
-
     await page.goto('/');
     const card = cardLocator(page, job.id);
     await expect(card).toBeVisible({ timeout: 10_000 });
@@ -94,11 +98,15 @@ test.describe('Delete task', () => {
 
     const deleteItem = page.getByTestId('detail-menu-delete');
     await expect(deleteItem).toBeVisible();
+    await deleteItem.click();
+
+    const confirmDialog = page.getByTestId('confirm-dialog-panel');
+    await expect(confirmDialog).toBeVisible({ timeout: 5_000 });
     const deleteResponse = page.waitForResponse(resp =>
       resp.request().method() === 'DELETE'
       && resp.url().includes(`/api/jobs/${encodeURIComponent(job.id)}`)
     );
-    await deleteItem.click();
+    await page.getByTestId('confirm-dialog-confirm').click();
     await expect((await deleteResponse).ok()).toBeTruthy();
 
     // Detail view closes; the kanban dashboard becomes visible again.
@@ -125,13 +133,16 @@ test.describe('Delete task', () => {
       fixture: false
     });
 
-    page.on('dialog', d => d.dismiss());
-
     await page.goto('/');
     const card = cardLocator(page, job.id);
     await expect(card).toBeVisible({ timeout: 10_000 });
     await card.hover();
     await card.getByTestId('job-card-delete').click();
+
+    const confirmDialog = page.getByTestId('confirm-dialog-panel');
+    await expect(confirmDialog).toBeVisible({ timeout: 5_000 });
+    await page.getByTestId('confirm-dialog-cancel').click();
+    await expect(confirmDialog).toBeHidden({ timeout: 5_000 });
 
     // Wait briefly to make sure no delete went through.
     await page.waitForTimeout(500);
@@ -139,6 +150,39 @@ test.describe('Delete task', () => {
     expect(after.find(j => j.id === job.id)).toBeDefined();
 
     // Final cleanup so the spec leaves no fixture behind.
+    await deleteJobApi(job.id, watchPath);
+  });
+
+  test('Esc on the unified confirm dialog dismisses it without deleting', async ({ page }) => {
+    const wp = await getFirstWatchPath();
+    const watchPath = wp.path;
+    await cleanupTestJobs(watchPath);
+
+    const id = uid();
+    const job = await createJob({
+      id,
+      title: `e2e-del-esc-${id}`,
+      watchPath,
+      targetState: '1-preparation',
+      promptMarkdown: 'Fixture for Esc-dismiss confirm test.',
+      fixture: false
+    });
+
+    await page.goto('/');
+    const card = cardLocator(page, job.id);
+    await expect(card).toBeVisible({ timeout: 10_000 });
+    await card.hover();
+    await card.getByTestId('job-card-delete').click();
+
+    const confirmDialog = page.getByTestId('confirm-dialog-panel');
+    await expect(confirmDialog).toBeVisible({ timeout: 5_000 });
+    await page.keyboard.press('Escape');
+    await expect(confirmDialog).toBeHidden({ timeout: 5_000 });
+
+    await page.waitForTimeout(300);
+    const after = await listJobs();
+    expect(after.find(j => j.id === job.id)).toBeDefined();
+
     await deleteJobApi(job.id, watchPath);
   });
 });

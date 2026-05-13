@@ -1,6 +1,7 @@
-import { Component, EventEmitter, OnInit, Output, signal } from '@angular/core';
+import { Component, EventEmitter, OnInit, Output, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DevToolsService, E2EJob, DeleteE2EReport } from '../../../services/dev-tools.service';
+import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
 
 type Phase = 'loading' | 'list' | 'deleting' | 'report' | 'error';
 
@@ -30,6 +31,8 @@ export class E2ECleanupDialogComponent implements OnInit {
   readonly errorText = signal<string>('');
   readonly report = signal<DeleteE2EReport | null>(null);
   readonly pendingCount = signal(0);
+
+  private readonly confirmDialog = inject(ConfirmDialogService);
 
   constructor(private devTools: DevToolsService) {}
 
@@ -66,10 +69,17 @@ export class E2ECleanupDialogComponent implements OnInit {
     else this.selected.set(new Set());
   }
 
-  confirmDelete(): void {
+  async confirmDelete(): Promise<void> {
     const keys = [...this.selected()];
     if (keys.length === 0) return;
-    if (!window.confirm(`Delete ${keys.length} E2E job(s) across all projects?`)) return;
+    const ok = await this.confirmDialog.confirm({
+      title: 'Delete E2E jobs?',
+      message: `Delete ${keys.length} E2E job(s) across all projects?`,
+      confirmLabel: 'Delete',
+      cancelLabel: 'Keep',
+      kind: 'danger',
+    });
+    if (!ok) return;
     this.pendingCount.set(keys.length);
     this.phase.set('deleting');
     this.devTools.deleteE2EJobs(keys).subscribe({

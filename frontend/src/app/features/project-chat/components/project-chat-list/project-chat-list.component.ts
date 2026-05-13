@@ -15,6 +15,7 @@ import {
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { JobService } from '../../../../services/job.service';
+import { ConfirmDialogService } from '../../../../services/confirm-dialog.service';
 import type { ProjectChatSearchHit, ProjectChatTurn } from '../../../../features/project-chat';
 import { markdownToHtml } from '../../../../components/markdown-utils';
 import { ProjectChatRailComponent } from '../project-chat-rail/project-chat-rail.component';
@@ -189,6 +190,7 @@ export class ProjectChatListComponent implements OnInit, OnDestroy {
   });
 
   private readonly jobService = inject(JobService);
+  private readonly confirmDialog = inject(ConfirmDialogService);
   private searchDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor() {
@@ -538,12 +540,16 @@ export class ProjectChatListComponent implements OnInit, OnDestroy {
   /** "Jump to start" — irreversibly load everything. Confirmed when
    *  total exceeds the soft threshold so a misclick on a giant chat
    *  cannot freeze the UI. */
-  jumpToStart(): void {
+  async jumpToStart(): Promise<void> {
     const total = this.totalCount();
     if (total != null && total > this.jumpToStartConfirmAt) {
-      const ok = typeof confirm === 'function'
-        ? confirm(`Load all ${total.toLocaleString('en-US')} messages? This may take a moment.`)
-        : true;
+      const ok = await this.confirmDialog.confirm({
+        title: 'Load entire chat history?',
+        message: `Load all ${total.toLocaleString('en-US')} messages? This may take a moment.`,
+        confirmLabel: 'Load all',
+        cancelLabel: 'Cancel',
+        kind: 'primary',
+      });
       if (!ok) return;
     }
     void this.loadMoreMessages(Number.MAX_SAFE_INTEGER);

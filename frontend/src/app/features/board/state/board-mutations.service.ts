@@ -3,6 +3,7 @@ import { forkJoin } from 'rxjs';
 import { JobInfo } from '../../../models/job.model';
 import { JobService } from '../../../services/job.service';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
+import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
 import { JobSelectionService } from '../../job-detail';
 
 /**
@@ -17,7 +18,7 @@ import { JobSelectionService } from '../../job-detail';
  *   - reverts the snapshot + raises an ErrorDialog on failure
  *   - keeps the open detail in sync via JobSelectionService
  *
- * The shell's `confirm()` UX gate (window.confirm for delete) lives in
+ * The shell's confirm-UX gate (unified `ConfirmDialogService`) lives in
  * `confirmAndDeleteJob` so the service is the single place a delete
  * needs to round-trip user intent + backend + detail-close handling.
  */
@@ -25,6 +26,7 @@ import { JobSelectionService } from '../../job-detail';
 export class BoardMutationsService {
   private readonly jobService = inject(JobService);
   private readonly errorDialog = inject(ErrorDialogService);
+  private readonly confirmDialog = inject(ConfirmDialogService);
   private readonly jobSelection = inject(JobSelectionService);
 
   // ---------- drag-and-drop move ----------
@@ -100,11 +102,17 @@ export class BoardMutationsService {
     this.confirmAndDeleteJob(info, true);
   }
 
-  private confirmAndDeleteJob(job: JobInfo, closeDetailOnSuccess: boolean): void {
+  private async confirmAndDeleteJob(job: JobInfo, closeDetailOnSuccess: boolean): Promise<void> {
     const label = job.title || job.id;
-    const message =
-      `Delete this task?\n\n"${label}"\n\nThis removes the job folder and all its files (prompt, logs, results). Do you really want this?`;
-    if (typeof window === 'undefined' || !window.confirm(message)) return;
+    const ok = await this.confirmDialog.confirm({
+      title: 'Delete this task?',
+      message: 'This removes the job folder and all its files (prompt, logs, results). Do you really want this?',
+      detail: label,
+      confirmLabel: 'Delete',
+      cancelLabel: 'Keep',
+      kind: 'danger',
+    });
+    if (!ok) return;
 
     this.jobService.deleteJob(job.id, job.watchPath).subscribe({
       next: () => {

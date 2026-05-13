@@ -406,6 +406,9 @@
           (openCliConfig)="openCliConfigFromError()" />
       }
 
+      <app-confirm-dialog />
+      <app-notification-stack />
+
       @defer (when verboseDebugContext() !== null) {
         @if (verboseDebugContext(); as ctx) {
           <app-verbose-debug-overlay

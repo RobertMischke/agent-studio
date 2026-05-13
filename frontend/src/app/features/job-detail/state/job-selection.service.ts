@@ -2,6 +2,7 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { JobDetail, JobInfo } from '../../../models/job.model';
 import { JobService } from '../../../services/job.service';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
+import { NotificationService } from '../../../services/notification.service';
 import { LanePagerService } from './lane-pager.service';
 
 /**
@@ -26,13 +27,21 @@ import { LanePagerService } from './lane-pager.service';
 export class JobSelectionService {
   private readonly jobService = inject(JobService);
   private readonly errorDialog = inject(ErrorDialogService);
+  private readonly notifications = inject(NotificationService);
   private readonly pager = inject(LanePagerService);
 
   readonly selected = signal<JobDetail | null>(null);
 
-  /** Transient banner shown by the triage panel auto-advance flow. */
+  /**
+   * Transient banner shown by the triage panel auto-advance flow.
+   * Kept as a signal so the existing template binding in the detail
+   * pane (`@if (triageToast(); as toast) { … }`) keeps working; the
+   * shared notification stack mirrors the same message so the user gets
+   * it from either surface depending on what is on screen.
+   */
   readonly triageToast = signal<string | null>(null);
   private triageToastTimer: ReturnType<typeof setTimeout> | null = null;
+  private lastTriageNotificationId: number | null = null;
 
   /**
    * Anchors `triageLanePeers` to the lane the panel was opened in, so
@@ -208,7 +217,13 @@ export class JobSelectionService {
     return ++this.openDetailToken;
   }
 
-  /** Show a transient triage banner; auto-clears after 3 s. */
+  /**
+   * Show a transient triage banner; auto-clears after `durationMs`.
+   * Also raises a unified `info` notification so the same outcome shows
+   * up in the shared notification stack — keeping the look consistent
+   * with other app-wide feedback while the detail-anchored banner stays
+   * for users focused on the panel.
+   */
   showTriageToast(msg: string, durationMs: number = 3000): void {
     if (this.triageToastTimer) clearTimeout(this.triageToastTimer);
     this.triageToast.set(msg);
@@ -216,5 +231,13 @@ export class JobSelectionService {
       this.triageToast.set(null);
       this.triageToastTimer = null;
     }, durationMs);
+    if (this.lastTriageNotificationId != null) {
+      this.notifications.dismiss(this.lastTriageNotificationId);
+    }
+    this.lastTriageNotificationId = this.notifications.notify({
+      message: msg,
+      kind: 'info',
+      durationMs,
+    });
   }
 }

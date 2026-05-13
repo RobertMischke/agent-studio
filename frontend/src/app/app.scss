@@ -1017,6 +1017,213 @@
     }
     .create-dialog__title { margin: 0 0 20px; font-size: 18px; }
     .create-dialog__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+
+    /* ─────────────────────────────────────────────────────────────────
+       Unified confirm dialog + notification stack
+       The .app-dialog block is shared by the confirm-dialog component
+       and matches the spacing/typography of .error-dialog (errors keep
+       their own variant for the stack-trace surface). .btn--danger /
+       .btn--primary inside the dialog footer reuse the existing button
+       tokens so every confirm/notify looks native to the app shell.
+       ───────────────────────────────────────────────────────────────── */
+    .overlay--confirm {
+      z-index: 130;
+      padding: 24px;
+    }
+    .app-dialog {
+      position: relative;
+      background: #1e1e2e;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 18px;
+      padding: 22px 24px;
+      width: min(480px, 100%);
+      box-shadow: 0 24px 80px rgba(0,0,0,0.45);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      outline: none;
+    }
+    .app-dialog--danger {
+      border-color: rgba(248,113,113,0.32);
+    }
+    .app-dialog--primary {
+      border-color: rgba(129,140,248,0.32);
+    }
+    .app-dialog__header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+    }
+    .app-dialog__eyebrow {
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #94a3b8;
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+    .app-dialog--danger .app-dialog__eyebrow {
+      color: #fca5a5;
+    }
+    .app-dialog--primary .app-dialog__eyebrow {
+      color: #a5b4fc;
+    }
+    .app-dialog__title {
+      margin: 0;
+      font-size: 18px;
+      color: #f8fafc;
+      line-height: 1.3;
+    }
+    .app-dialog__close {
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: #f8fafc;
+      width: 30px;
+      height: 30px;
+      border-radius: 999px;
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+    .app-dialog__close:hover { background: rgba(255,255,255,0.12); }
+    .app-dialog__body {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .app-dialog__message {
+      margin: 0;
+      font-size: 14px;
+      line-height: 1.55;
+      color: #e2e8f0;
+    }
+    .app-dialog__detail {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.45;
+      color: #cbd5e1;
+      padding: 10px 12px;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.06);
+      font-family: 'Consolas', 'SFMono-Regular', monospace;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .app-dialog__actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 4px;
+    }
+    .btn--danger {
+      background: rgba(239,68,68,0.75);
+      border-color: rgba(248,113,113,0.85);
+      color: #ffffff;
+    }
+    .btn--danger:hover:not(:disabled) {
+      background: rgba(239,68,68,0.92);
+      border-color: rgba(252,165,165,0.95);
+    }
+
+    /* Notification stack: top-right, vertical pile, manual or auto-dismiss. */
+    .app-notify-stack {
+      position: fixed;
+      top: 14px;
+      right: 14px;
+      z-index: 150;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+      max-width: min(420px, 92vw);
+    }
+    .app-notify {
+      pointer-events: auto;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 12px;
+      align-items: flex-start;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: rgba(17,17,27,0.96);
+      border: 1px solid rgba(255,255,255,0.08);
+      box-shadow: 0 12px 32px rgba(0,0,0,0.45);
+      color: #e2e8f0;
+      font-size: 13px;
+      line-height: 1.45;
+      animation: app-notify-in 0.18s ease-out;
+    }
+    .app-notify__icon {
+      font-size: 16px;
+      line-height: 1.2;
+      width: 22px;
+      height: 22px;
+      display: grid;
+      place-items: center;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.06);
+      color: #cbd5e1;
+      flex-shrink: 0;
+    }
+    .app-notify__body { min-width: 0; }
+    .app-notify__title {
+      font-weight: 600;
+      color: #f8fafc;
+      margin-bottom: 2px;
+    }
+    .app-notify__message {
+      word-break: break-word;
+    }
+    .app-notify__close {
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      cursor: pointer;
+      font-size: 13px;
+      line-height: 1;
+      padding: 2px 4px;
+      border-radius: 4px;
+    }
+    .app-notify__close:hover {
+      background: rgba(255,255,255,0.08);
+      color: #f8fafc;
+    }
+    .app-notify--success {
+      border-color: rgba(74,222,128,0.32);
+    }
+    .app-notify--success .app-notify__icon {
+      background: rgba(74,222,128,0.16);
+      color: #86efac;
+    }
+    .app-notify--info {
+      border-color: rgba(129,140,248,0.32);
+    }
+    .app-notify--info .app-notify__icon {
+      background: rgba(129,140,248,0.16);
+      color: #c7d2fe;
+    }
+    .app-notify--warning {
+      border-color: rgba(251,191,36,0.32);
+    }
+    .app-notify--warning .app-notify__icon {
+      background: rgba(251,191,36,0.16);
+      color: #fde68a;
+    }
+    .app-notify--error {
+      border-color: rgba(248,113,113,0.4);
+    }
+    .app-notify--error .app-notify__icon {
+      background: rgba(248,113,113,0.18);
+      color: #fda4af;
+    }
+    @keyframes app-notify-in {
+      from { opacity: 0; transform: translateY(-6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
     .create-cli-picker {
       display: inline-flex;
       gap: 2px;
