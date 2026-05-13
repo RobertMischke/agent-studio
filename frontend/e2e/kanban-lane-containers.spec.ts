@@ -1,15 +1,12 @@
 import { test, expect, Page } from '@playwright/test';
 
 /**
- * Kanban container collapse / focus-expand spec.
+ * Kanban container header / focus-expand spec.
  *
  * The board renders three containers - Backlog, Active, Done & Decide.
- * Each container header has a collapse toggle and a focus-expand button.
- * Collapsing a container replaces its lane row with a thin summary strip
- * (`<icon>×N` chips). Focus-expand collapses the OTHER two containers and
- * is reversible on a second click. Keyboard `1`/`2`/`3` focuses
- * Backlog/Active/Decide; `0` resets all to expanded. State persists
- * across reload under `atp.kanban.containers.*`.
+ * Container headers do not have collapse toggles. The right-side
+ * focus-expand button remains and is reversible on a second click.
+ * Keyboard `1`/`2`/`3` focuses Backlog/Active/Decide; `0` exits focus.
  */
 
 const FIXTURE_WATCH = 'C:/fixtures/lane-containers-demo';
@@ -125,7 +122,7 @@ async function laneCount(page: Page, container: 'backlog' | 'active' | 'decide')
   return await c.locator('app-job-column').count();
 }
 
-test.describe('Kanban container collapse / focus-expand', () => {
+test.describe('Kanban container header / focus-expand', () => {
   test.use({ viewport: { width: 1600, height: 900 } });
 
   test.beforeEach(async ({ page }) => {
@@ -137,43 +134,31 @@ test.describe('Kanban container collapse / focus-expand', () => {
     // persistence test.
   });
 
-  test('default = all containers expanded; collapse hides lanes and shows summary chips', async ({ page }) => {
+  test('default = all containers expanded with no header collapse toggles or summary strips', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByTestId('kanban-dashboard')).toBeVisible({ timeout: 10_000 });
 
-    // Default: each container shows its full lanes; no strip rendered.
-    await expect(page.getByTestId('lane-group-strip-backlog')).toHaveCount(0);
-    expect(await laneCount(page, 'backlog')).toBeGreaterThan(0);
-
-    // Collapse Backlog -> the full lane row is gone, replaced by a chip strip.
-    await page.getByTestId('lane-group-toggle-backlog').click();
-    await expect(page.getByTestId('lane-group-strip-backlog')).toBeVisible();
-    expect(await laneCount(page, 'backlog')).toBe(0);
-    // Chips for the lanes inside Backlog (0-backlog … 2-ready) are present.
-    await expect(page.getByTestId('lane-group-chip-0-backlog')).toBeVisible();
-    await expect(page.getByTestId('lane-group-chip-2-ready')).toBeVisible();
-
-    // Re-expand restores the lane row.
-    await page.getByTestId('lane-group-toggle-backlog').click();
-    await expect(page.getByTestId('lane-group-strip-backlog')).toHaveCount(0);
-    expect(await laneCount(page, 'backlog')).toBeGreaterThan(0);
+    for (const id of ['backlog', 'active', 'decide'] as const) {
+      await expect(page.getByTestId(`lane-group-${id}`)).toBeVisible();
+      await expect(page.getByTestId(`lane-group-toggle-${id}`)).toHaveCount(0);
+      await expect(page.getByTestId(`lane-group-strip-${id}`)).toHaveCount(0);
+      expect(await laneCount(page, id)).toBeGreaterThan(0);
+    }
   });
 
-  test('focus-expand collapses the other two; second click restores', async ({ page }) => {
+  test('focus-expand hides the other two; second click restores', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByTestId('kanban-dashboard')).toBeVisible({ timeout: 10_000 });
 
     await page.getByTestId('lane-group-focus-active').click();
-    // Active stays expanded; backlog and decide collapse to strips.
-    await expect(page.getByTestId('lane-group-strip-backlog')).toBeVisible();
-    await expect(page.getByTestId('lane-group-strip-decide')).toBeVisible();
-    await expect(page.getByTestId('lane-group-strip-active')).toHaveCount(0);
+    await expect(page.getByTestId('lane-group-active')).toBeVisible();
+    await expect(page.getByTestId('lane-group-backlog')).toBeHidden();
+    await expect(page.getByTestId('lane-group-decide')).toBeHidden();
     expect(await laneCount(page, 'active')).toBeGreaterThan(0);
 
-    // Toggle off restores the previous state (all expanded).
     await page.getByTestId('lane-group-focus-active').click();
-    await expect(page.getByTestId('lane-group-strip-backlog')).toHaveCount(0);
-    await expect(page.getByTestId('lane-group-strip-decide')).toHaveCount(0);
+    await expect(page.getByTestId('lane-group-backlog')).toBeVisible();
+    await expect(page.getByTestId('lane-group-decide')).toBeVisible();
   });
 
   test('keyboard 1/2/3/0 drives container focus + reset', async ({ page }) => {
@@ -182,40 +167,43 @@ test.describe('Kanban container collapse / focus-expand', () => {
 
     await page.locator('body').click();
     await page.keyboard.press('2');
-    await expect(page.getByTestId('lane-group-strip-backlog')).toBeVisible();
-    await expect(page.getByTestId('lane-group-strip-decide')).toBeVisible();
+    await expect(page.getByTestId('lane-group-active')).toBeVisible();
+    await expect(page.getByTestId('lane-group-backlog')).toBeHidden();
+    await expect(page.getByTestId('lane-group-decide')).toBeHidden();
 
     // `3` swaps focus to Decide.
     await page.keyboard.press('3');
-    await expect(page.getByTestId('lane-group-strip-backlog')).toBeVisible();
-    await expect(page.getByTestId('lane-group-strip-active')).toBeVisible();
-    await expect(page.getByTestId('lane-group-strip-decide')).toHaveCount(0);
+    await expect(page.getByTestId('lane-group-decide')).toBeVisible();
+    await expect(page.getByTestId('lane-group-backlog')).toBeHidden();
+    await expect(page.getByTestId('lane-group-active')).toBeHidden();
 
     // `0` resets to all expanded.
     await page.keyboard.press('0');
-    await expect(page.getByTestId('lane-group-strip-backlog')).toHaveCount(0);
-    await expect(page.getByTestId('lane-group-strip-active')).toHaveCount(0);
-    await expect(page.getByTestId('lane-group-strip-decide')).toHaveCount(0);
+    await expect(page.getByTestId('lane-group-backlog')).toBeVisible();
+    await expect(page.getByTestId('lane-group-active')).toBeVisible();
+    await expect(page.getByTestId('lane-group-decide')).toBeVisible();
   });
 
-  test('collapse state persists across reload', async ({ page }) => {
+  test('focus state does not persist across reload', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByTestId('kanban-dashboard')).toBeVisible({ timeout: 10_000 });
 
-    await page.getByTestId('lane-group-toggle-decide').click();
-    await expect(page.getByTestId('lane-group-strip-decide')).toBeVisible();
+    await page.getByTestId('lane-group-focus-active').click();
+    await expect(page.getByTestId('lane-group-backlog')).toBeHidden();
 
     await page.reload();
     await expect(page.getByTestId('kanban-dashboard')).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByTestId('lane-group-strip-decide')).toBeVisible();
+    await expect(page.getByTestId('lane-group-backlog')).toBeVisible();
+    await expect(page.getByTestId('lane-group-active')).toBeVisible();
+    await expect(page.getByTestId('lane-group-decide')).toBeVisible();
   });
 
-  test('collapse / focus-expand stay under the longtask budget', async ({ page }) => {
+  test('focus-expand stays under the longtask budget', async ({ page }) => {
     await page.goto('/');
     await expect(page.getByTestId('kanban-dashboard')).toBeVisible({ timeout: 10_000 });
 
     // Install a longtask observer; the spec requires < 50 ms per
-    // collapse/expand/focus-expand transition. By definition a
+    // focus-expand transition. By definition a
     // `longtask` is >= 50 ms - so the budget guard here is "no
     // longtasks fire during the transition window at all". Initial
     // render can produce its own longtask, so we mark a baseline
@@ -238,8 +226,6 @@ test.describe('Kanban container collapse / focus-expand', () => {
       (window as unknown as { __longTasksBaseline: number }).__longTasksBaseline = performance.now();
     });
 
-    await page.getByTestId('lane-group-toggle-backlog').click();
-    await page.getByTestId('lane-group-toggle-backlog').click();
     await page.getByTestId('lane-group-focus-active').click();
     await page.getByTestId('lane-group-focus-active').click();
 
@@ -249,7 +235,7 @@ test.describe('Kanban container collapse / focus-expand', () => {
     });
     expect(
       transitionLongTasks.length,
-      `${transitionLongTasks.length} longtasks (>= 50ms) fired during container transitions; budget is 0`
+      `${transitionLongTasks.length} longtasks (>= 50ms) fired during container focus transitions; budget is 0`
     ).toBe(0);
   });
 });

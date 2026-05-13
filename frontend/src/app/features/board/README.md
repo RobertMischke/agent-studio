@@ -9,7 +9,7 @@ Imports go via `from './features/board'` (the barrel). See [`index.ts`](./index.
 **State services** (cross-shell singletons):
 
 - `BoardFiltersService` — search query + 4 faceted filter axes (owner / project / type / tags), URL hash + query-param round-trip, `filteredGrouped` derivation.
-- `LaneCollapseService` — per-lane + per-container collapse + focus-expand state.
+- `LaneCollapseService` - per-lane collapse + container focus-expand state.
 - `CreateJobFormService` (Cycle 10a) — every field the create-job dialog binds + open / cancel / submit + the four pre-filled entry points (default / security-follow-up / uxui-follow-up / orchestrator-draft-follow-up).
 - `BoardMutationsService` (Cycle 10b) — drag/drop move, within-lane reorder, delete (board + detail), lane-dropdown move, archive-all, file-saved refresh, project-changed reopen.
 

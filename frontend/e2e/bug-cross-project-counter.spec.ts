@@ -34,8 +34,6 @@ test.describe('project chip strip: single-select switch', () => {
     await page.evaluate(() => {
       localStorage.removeItem('activeProjects');
       localStorage.removeItem('collapsedLanes');
-      localStorage.removeItem('atp.kanban.containers.collapsed');
-      localStorage.removeItem('atp.kanban.containers.focused');
       location.hash = '';
     });
     await page.reload();

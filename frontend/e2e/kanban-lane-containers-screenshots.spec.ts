@@ -3,16 +3,16 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 /**
- * Visual evidence spec for the lane-container restructure: captures
- * the four documented states (default expanded, Backlog collapsed,
- * Active focus-expanded, Decide focus-expanded) into the job folder's
+ * Visual evidence spec for the lane-container header cleanup: captures
+ * the default board and focus-expanded states into the job folder's
  * `results/` directory so they survive the `test-results/` rotation.
  */
 
 const FIXTURE_WATCH = 'C:/fixtures/lane-containers-shots';
 const FIXTURE_PROJECT = 'lane-containers-shots';
 
-const JOB_RESULTS = 'C:/Projects/agent-taskboard-workspace/projects/agent-taskboard/3-progress/lane-containers-restructure-human-review-out-of-active-collapsible-focus-mode/results';
+const JOB_RESULTS = process.env.JOB_RESULTS_DIR
+  ?? 'C:/Projects/agent-taskboard-workspace/projects/agent-taskboard/3-progress/remove-useless-lane-collapse-triangles-from-rail-headers/results';
 
 function jobInfo(over: Partial<Record<string, unknown>>): Record<string, unknown> {
   const id = String(over['id'] ?? 'fx-job');
@@ -134,32 +134,30 @@ async function installBoardMocks(page: Page): Promise<void> {
 test.describe('Lane container visual evidence', () => {
   test.use({ viewport: { width: 1600, height: 900 } });
 
-  test('capture all four states into the job results folder', async ({ page }) => {
+  test('capture cleaned rail headers into the job results folder', async ({ page }) => {
     fs.mkdirSync(JOB_RESULTS, { recursive: true });
     await installBoardMocks(page);
     await page.goto('/');
     await expect(page.getByTestId('kanban-dashboard')).toBeVisible({ timeout: 10_000 });
 
-    await page.screenshot({ path: path.join(JOB_RESULTS, '01-default-all-expanded.png'), fullPage: false });
+    await expect(page.getByTestId('lane-group-toggle-backlog')).toHaveCount(0);
+    await expect(page.getByTestId('lane-group-toggle-active')).toHaveCount(0);
+    await expect(page.getByTestId('lane-group-toggle-decide')).toHaveCount(0);
+    await page.screenshot({ path: path.join(JOB_RESULTS, 'after-rail-header-triangles-removed.png'), fullPage: false });
 
-    // Backlog collapsed, others expanded.
-    await page.getByTestId('lane-group-toggle-backlog').click();
-    await expect(page.getByTestId('lane-group-strip-backlog')).toBeVisible();
-    await page.screenshot({ path: path.join(JOB_RESULTS, '02-backlog-collapsed.png'), fullPage: false });
-    // Restore.
-    await page.getByTestId('lane-group-toggle-backlog').click();
-
-    // Active focus-expanded -> Backlog and Decide collapse to strips.
+    // Active focus-expanded.
     await page.getByTestId('lane-group-focus-active').click();
-    await expect(page.getByTestId('lane-group-strip-backlog')).toBeVisible();
-    await expect(page.getByTestId('lane-group-strip-decide')).toBeVisible();
-    await page.screenshot({ path: path.join(JOB_RESULTS, '03-active-focused.png'), fullPage: false });
+    await expect(page.getByTestId('lane-group-active')).toBeVisible();
+    await expect(page.getByTestId('lane-group-backlog')).toBeHidden();
+    await expect(page.getByTestId('lane-group-decide')).toBeHidden();
+    await page.screenshot({ path: path.join(JOB_RESULTS, 'after-active-focused.png'), fullPage: false });
     await page.getByTestId('lane-group-focus-active').click();
 
     // Done & Decide focus-expanded.
     await page.getByTestId('lane-group-focus-decide').click();
-    await expect(page.getByTestId('lane-group-strip-backlog')).toBeVisible();
-    await expect(page.getByTestId('lane-group-strip-active')).toBeVisible();
-    await page.screenshot({ path: path.join(JOB_RESULTS, '04-decide-focused.png'), fullPage: false });
+    await expect(page.getByTestId('lane-group-decide')).toBeVisible();
+    await expect(page.getByTestId('lane-group-backlog')).toBeHidden();
+    await expect(page.getByTestId('lane-group-active')).toBeHidden();
+    await page.screenshot({ path: path.join(JOB_RESULTS, 'after-decide-focused.png'), fullPage: false });
   });
 });

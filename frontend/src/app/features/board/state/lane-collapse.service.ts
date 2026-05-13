@@ -1,24 +1,10 @@
 import { Injectable, signal } from '@angular/core';
 
 /**
- * Cycle 9 board feature service: lane and container collapse state for
- * the kanban shell. Lifted out of `app.ts` per ADR-0034 so the shell
- * stays a thin coordinator and the collapse state machine has a single
- * grep target. The state is persisted to localStorage under three keys
- * the shell already used:
- *
- *   - `collapsedLanes`                              - per-lane collapse Set
- *   - `atp.kanban.containers.collapsed`             - per-container collapse Set
- *   - `atp.kanban.containers.focused`               - container id under focus
- *   - `atp.kanban.containers.prefocus`              - pre-focus collapse snapshot
- *
- * Behaviour mirrors the pre-extraction app.ts methods one-to-one so
- * existing call sites only need to change `this.foo()` to
- * `this.laneCollapse.foo()`. The two methods that previously read
- * `this.laneGroups()` from the shell (`toggleContainerFocus`,
- * `containerSummary`) now take that data as a parameter instead - the
- * service stays pure state, the shell stays the source of truth for
- * the lane catalogue.
+ * Board feature service for per-lane collapse state and container focus.
+ * Per-lane collapse remains a customization for individual job columns;
+ * top-level Backlog / Active / Done containers do not have their own
+ * collapse state.
  */
 @Injectable({ providedIn: 'root' })
 export class LaneCollapseService {
@@ -26,30 +12,7 @@ export class LaneCollapseService {
     new Set(safeParseStringArray(localStorage.getItem('collapsedLanes')))
   );
 
-  readonly collapsedContainers = signal<Set<string>>(
-    new Set(safeParseStringArray(localStorage.getItem('atp.kanban.containers.collapsed')))
-  );
-
-  readonly focusedContainer = signal<string | null>(
-    localStorage.getItem('atp.kanban.containers.focused') || null
-  );
-
-  /**
-   * Snapshot of the collapse Set captured the moment the user focus-
-   * expanded a container, so a second click on the same focus button
-   * restores whatever state the user had before. `null` when no focus
-   * is active.
-   */
-  private prefocusCollapsedContainers: string[] | null = (() => {
-    const raw = localStorage.getItem('atp.kanban.containers.prefocus');
-    if (!raw) return null;
-    try {
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed.filter((s): s is string => typeof s === 'string') : null;
-    } catch {
-      return null;
-    }
-  })();
+  readonly focusedContainer = signal<string | null>(null);
 
   // ---------- per-lane collapse ----------
 
@@ -81,111 +44,29 @@ export class LaneCollapseService {
     return group.lanes.reduce((n, l) => n + (this.isLaneCollapsed(l.state) ? 0 : 1), 0);
   }
 
-  // ---------- per-container collapse + focus ----------
-
-  isContainerCollapsed(id: string): boolean {
-    return this.collapsedContainers().has(id);
-  }
-
-  toggleContainerCollapse(id: string): void {
-    // A direct toggle drops focus mode if it was active for this id
-    // (the user is taking manual control), but leaves focus alone if
-    // the toggle targets a container that was already collapsed by
-    // focus mode - they're just toggling a non-focused container.
-    if (this.focusedContainer() === id) {
-      this.clearFocus();
-    }
-    const current = new Set(this.collapsedContainers());
-    if (current.has(id)) current.delete(id);
-    else current.add(id);
-    this.collapsedContainers.set(current);
-    this.persistContainerState();
-  }
+  // ---------- container focus ----------
 
   isContainerFocused(id: string): boolean {
     return this.focusedContainer() === id;
   }
 
   /**
-   * Focus-expand a container by collapsing the others to summary strips.
+   * Focus-expand a container by hiding the other two containers.
    * `allContainerIds` is the full id list from the shell's `laneGroups`
    * (the service stays decoupled from how lanes are grouped).
    */
   toggleContainerFocus(id: string, allContainerIds: string[]): void {
     if (this.focusedContainer() === id) {
-      // Second click on the same focus button: restore the pre-focus
-      // snapshot so a tap is reversible.
-      const restored = new Set(this.prefocusCollapsedContainers ?? []);
-      this.collapsedContainers.set(restored);
-      this.focusedContainer.set(null);
-      this.prefocusCollapsedContainers = null;
-      localStorage.removeItem('atp.kanban.containers.focused');
-      localStorage.removeItem('atp.kanban.containers.prefocus');
-      this.persistContainerState();
+      this.clearContainerFocus();
       return;
     }
-    // Snapshot the current collapse set so the toggle is reversible.
-    if (this.focusedContainer() === null) {
-      this.prefocusCollapsedContainers = [...this.collapsedContainers()];
-      localStorage.setItem(
-        'atp.kanban.containers.prefocus',
-        JSON.stringify(this.prefocusCollapsedContainers)
-      );
+    if (allContainerIds.includes(id)) {
+      this.focusedContainer.set(id);
     }
-    const next = new Set<string>();
-    for (const other of allContainerIds) {
-      if (other !== id) next.add(other);
-    }
-    this.collapsedContainers.set(next);
-    this.focusedContainer.set(id);
-    localStorage.setItem('atp.kanban.containers.focused', id);
-    this.persistContainerState();
   }
 
-  resetContainers(): void {
-    this.collapsedContainers.set(new Set());
+  clearContainerFocus(): void {
     this.focusedContainer.set(null);
-    this.prefocusCollapsedContainers = null;
-    localStorage.removeItem('atp.kanban.containers.focused');
-    localStorage.removeItem('atp.kanban.containers.prefocus');
-    this.persistContainerState();
-  }
-
-  /**
-   * Per-container summary chips shown when the container is collapsed.
-   * One chip per lane: `<icon>x<count>`. Empty lanes are kept so the
-   * shape of the container stays readable at a glance.
-   *
-   * Takes the lane group as a parameter because the lane catalogue is
-   * derived in the shell (from the JobService grouped feed); the
-   * service stays free of UI / job-shape coupling.
-   */
-  containerSummary(
-    group: { lanes: ReadonlyArray<{ state: string; icon: string; title: string; jobs: ReadonlyArray<unknown> }> } | null | undefined
-  ): Array<{ state: string; icon: string; title: string; count: number }> {
-    if (!group) return [];
-    return group.lanes.map(l => ({
-      state: l.state,
-      icon: l.icon,
-      title: l.title,
-      count: l.jobs.length
-    }));
-  }
-
-  private clearFocus(): void {
-    if (this.focusedContainer() !== null) {
-      this.focusedContainer.set(null);
-      this.prefocusCollapsedContainers = null;
-      localStorage.removeItem('atp.kanban.containers.focused');
-      localStorage.removeItem('atp.kanban.containers.prefocus');
-    }
-  }
-
-  private persistContainerState(): void {
-    localStorage.setItem(
-      'atp.kanban.containers.collapsed',
-      JSON.stringify([...this.collapsedContainers()])
-    );
   }
 }
 

@@ -276,32 +276,11 @@
             @for (g of laneGroups(); track g.id) {
               <section class="lane-group"
                        [attr.data-testid]="'lane-group-' + g.id"
-                       [class.lane-group--collapsed]="isContainerCollapsed(g.id)"
                        [class.lane-group--focused]="isContainerFocused(g.id)"
+                       [class.lane-group--hidden-by-focus]="focusedContainer() !== null && !isContainerFocused(g.id)"
                        [style.flex-grow]="expandedLaneCount(g)">
                 <header class="lane-group__head">
-                  <button type="button"
-                          class="lane-group__toggle"
-                          [attr.data-testid]="'lane-group-toggle-' + g.id"
-                          [attr.aria-expanded]="!isContainerCollapsed(g.id)"
-                          [attr.aria-label]="(isContainerCollapsed(g.id) ? 'Expand ' : 'Collapse ') + g.label"
-                          (click)="toggleContainerCollapse(g.id)">
-                    {{ isContainerCollapsed(g.id) ? '▶' : '▼' }}
-                  </button>
                   <span class="lane-group__label">{{ g.label }}</span>
-                  @if (isContainerCollapsed(g.id)) {
-                    <span class="lane-group__strip"
-                          [attr.data-testid]="'lane-group-strip-' + g.id">
-                      @for (chip of containerSummary(g.id); track chip.state) {
-                        <span class="lane-group__chip"
-                              [attr.data-testid]="'lane-group-chip-' + chip.state"
-                              [title]="chip.title">
-                          <span class="lane-group__chip-icon" aria-hidden="true">{{ chip.icon }}</span>
-                          <span class="lane-group__chip-count">×{{ chip.count }}</span>
-                        </span>
-                      }
-                    </span>
-                  }
                   <button type="button"
                           class="lane-group__focus"
                           [attr.data-testid]="'lane-group-focus-' + g.id"
@@ -309,26 +288,24 @@
                           [attr.aria-label]="(isContainerFocused(g.id) ? 'Exit focus on ' : 'Focus ') + g.label"
                           (click)="toggleContainerFocus(g.id)">⤢</button>
                 </header>
-                @if (!isContainerCollapsed(g.id)) {
-                  <div class="lane-group__lanes">
-                    @for (lane of g.lanes; track lane.state) {
-                      <app-job-column
-                        [title]="lane.title"
-                        [icon]="lane.icon"
-                        [state]="lane.state"
-                        [jobs]="lane.jobs"
-                        [collapsed]="isLaneCollapsed(lane.state)"
-                        [compact]="compactCards()"
-                        (collapseToggle)="toggleLaneCollapse(lane.state)"
-                        (jobClick)="openDetail($event)"
-                        (jobDrop)="onJobDrop($event)"
-                        (jobReorder)="onJobReorder($event)"
-                        (jobDeleteRequest)="onDeleteFromBoard($event)"
-                        (addTask)="openCreate($event)"
-                        (archiveAll)="onArchiveAll()" />
-                    }
-                  </div>
-                }
+                <div class="lane-group__lanes">
+                  @for (lane of g.lanes; track lane.state) {
+                    <app-job-column
+                      [title]="lane.title"
+                      [icon]="lane.icon"
+                      [state]="lane.state"
+                      [jobs]="lane.jobs"
+                      [collapsed]="isLaneCollapsed(lane.state)"
+                      [compact]="compactCards()"
+                      (collapseToggle)="toggleLaneCollapse(lane.state)"
+                      (jobClick)="openDetail($event)"
+                      (jobDrop)="onJobDrop($event)"
+                      (jobReorder)="onJobReorder($event)"
+                      (jobDeleteRequest)="onDeleteFromBoard($event)"
+                      (addTask)="openCreate($event)"
+                      (archiveAll)="onArchiveAll()" />
+                  }
+                </div>
               </section>
             }
           </main>

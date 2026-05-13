@@ -179,16 +179,14 @@ export class App implements OnInit {
    * to keep the first-run board useful before any customisation.
    */
   /**
-   * Cycle 9 / ADR-0034: lane and container collapse state lives in
+   * Cycle 9 / ADR-0034: lane collapse and container focus state live in
    * LaneCollapseService (features/board/state/lane-collapse.service.ts).
-   * The shell exposes the same `collapsedLanes` / `collapsedContainers`
-   * / `focusedContainer` signal references so existing template
-   * bindings and computeds keep working unchanged. Methods further
-   * down delegate to the service.
+   * The shell exposes the same `collapsedLanes` and `focusedContainer`
+   * signal references so existing template bindings and computeds keep
+   * working unchanged. Methods further down delegate to the service.
    */
   private readonly laneCollapse = inject(LaneCollapseService);
   readonly collapsedLanes = this.laneCollapse.collapsedLanes;
-  readonly collapsedContainers = this.laneCollapse.collapsedContainers;
   readonly focusedContainer = this.laneCollapse.focusedContainer;
   readonly taskNavCollapsed = this.uiPrefs.taskNavCollapsed;
   /**
@@ -265,13 +263,10 @@ export class App implements OnInit {
    */
   scrollToFailedPickupLane(): void {
     // The failed-pickup lane lives inside the Active container. If the
-    // user has collapsed Active (or focus-expanded another container),
-    // the lane element is not in the DOM and a scroll target would be
-    // silently missing. Reset focus and expand Active before we look.
+    // user has focus-expanded another container, the lane element is not
+    // in the DOM and a scroll target would be silently missing.
     if (this.focusedContainer() !== null && this.focusedContainer() !== 'active') {
-      this.resetContainers();
-    } else if (this.isContainerCollapsed('active')) {
-      this.toggleContainerCollapse('active');
+      this.clearContainerFocus();
     }
     queueMicrotask(() => {
       const el = document.querySelector('[data-testid="lane-3a-failed-pickup"]') as HTMLElement | null;
@@ -586,7 +581,7 @@ export class App implements OnInit {
     window.addEventListener('hashchange', this.hashListener);
 
     // Keyboard shortcuts for kanban container focus-expand: 1/2/3 focus
-    // the corresponding container, 0 resets all. Suppressed while the
+    // the corresponding container, 0 exits focus. Suppressed while the
     // user is typing in an input/textarea/contenteditable and while a
     // detail/overlay is open (the kanban isn't visible then).
     this.kanbanKeyListener = (ev: KeyboardEvent) => {
@@ -605,7 +600,7 @@ export class App implements OnInit {
       if (ev.key === '1' && ids[0]) { this.toggleContainerFocus(ids[0]); ev.preventDefault(); return; }
       if (ev.key === '2' && ids[1]) { this.toggleContainerFocus(ids[1]); ev.preventDefault(); return; }
       if (ev.key === '3' && ids[2]) { this.toggleContainerFocus(ids[2]); ev.preventDefault(); return; }
-      if (ev.key === '0') { this.resetContainers(); ev.preventDefault(); return; }
+      if (ev.key === '0') { this.clearContainerFocus(); ev.preventDefault(); return; }
     };
     window.addEventListener('keydown', this.kanbanKeyListener);
   }
@@ -1129,7 +1124,7 @@ export class App implements OnInit {
     return this.collapsedGroups().has(state);
   }
 
-  // Cycle 9: collapse + focus methods delegate to LaneCollapseService.
+  // Cycle 9: per-lane collapse + container focus methods delegate to LaneCollapseService.
   // The shell forwards the lane-id list so the service stays free of
   // the kanban catalogue shape; everything else is straight pass-through.
 
@@ -1138,16 +1133,11 @@ export class App implements OnInit {
   expandedLaneCount(group: { lanes: Array<{ state: string }> }): number {
     return this.laneCollapse.expandedLaneCount(group);
   }
-  isContainerCollapsed(id: string): boolean { return this.laneCollapse.isContainerCollapsed(id); }
-  toggleContainerCollapse(id: string): void { this.laneCollapse.toggleContainerCollapse(id); }
   isContainerFocused(id: string): boolean { return this.laneCollapse.isContainerFocused(id); }
   toggleContainerFocus(id: string): void {
     this.laneCollapse.toggleContainerFocus(id, this.laneGroups().map(g => g.id));
   }
-  resetContainers(): void { this.laneCollapse.resetContainers(); }
-  containerSummary(id: string): Array<{ state: string; icon: string; title: string; count: number }> {
-    return this.laneCollapse.containerSummary(this.laneGroups().find(g => g.id === id));
-  }
+  clearContainerFocus(): void { this.laneCollapse.clearContainerFocus(); }
 
   // Cycle 9: UI-pref methods delegate to UiPreferencesService.
   setTaskNavCollapsed(collapsed: boolean): void { this.uiPrefs.setTaskNavCollapsed(collapsed); }

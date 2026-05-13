@@ -1182,8 +1182,7 @@
      *   Active (agent)     -> In Progress, Review
      *   Done               -> Completed, Archive
      * The group is just a contiguous flex container with a small header.
-     * It does not eat horizontal space when the inner lanes collapse, so
-     * the overall board reflows the same way it always did.
+     * The overall board reflows with the visible expanded lane count.
      */
     .lane-group {
       display: flex;
@@ -1247,7 +1246,6 @@
       font-weight: 700;
       color: #cbd5e1;
     }
-    .lane-group__toggle,
     .lane-group__focus {
       background: rgba(255,255,255,0.04);
       border: 1px solid rgba(255,255,255,0.06);
@@ -1264,7 +1262,6 @@
       flex: 0 0 auto;
     }
     .lane-group__focus { margin-left: auto; }
-    .lane-group__toggle:hover,
     .lane-group__focus:hover {
       background: rgba(255,255,255,0.10);
       color: #f8fafc;
@@ -1274,40 +1271,11 @@
       color: #f8fafc;
       border-color: rgba(148,163,184,0.35);
     }
-    .lane-group__strip {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      flex-wrap: nowrap;
-      overflow-x: auto;
-      min-height: 24px;
-      padding: 0 4px;
-      flex: 1 1 auto;
-      text-transform: none;
-      letter-spacing: 0;
-    }
-    .lane-group__chip {
-      display: inline-flex;
-      align-items: center;
-      gap: 3px;
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(255,255,255,0.06);
-      border-radius: 3px;
-      padding: 2px 6px;
-      font-size: 11px;
-      color: #cbd5e1;
-      white-space: nowrap;
-    }
-    .lane-group__chip-icon { font-size: 12px; line-height: 1; }
-    .lane-group__chip-count {
-      color: #94a3b8;
-      font-variant-numeric: tabular-nums;
-    }
-    .lane-group--collapsed {
-      flex: 0 0 auto;
-    }
     .lane-group--focused {
       flex: 1 1 100%;
+    }
+    .lane-group--hidden-by-focus {
+      display: none;
     }
     .lane-group__lanes {
       display: flex;
@@ -1790,4 +1758,3 @@
       border-radius: 6px;
       padding: 8px 4px;
     }
-  
