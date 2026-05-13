@@ -288,9 +288,12 @@ test.describe('Verbose Debug overlay - task workbench', () => {
     await expect(artifactRows).toBeVisible();
     await expect(artifactRows).toContainText('parser-regression-passed.png');
 
-    // Trace tab: ranges are listed and the "open trace" button is visible.
-    await page.getByTestId('verbose-debug-tab-trace').click();
-    await expect(page.getByTestId('verbose-debug-trace-rows')).toBeVisible();
+    // Regression: the dedicated Trace tab was removed. The tab button must
+    // not appear in the navigation, and per-row trace buttons in other tabs
+    // (orchestrator decisions, task runs) carry the open-raw-lines affordance.
+    await expect(page.getByTestId('verbose-debug-tab-trace')).toHaveCount(0);
+    const tabStrip = page.getByTestId('verbose-debug-tabs');
+    await expect(tabStrip).not.toContainText('Trace');
 
     // Light theme: toggle and snapshot.
     await page.getByTestId('verbose-debug-theme-toggle').click();
@@ -301,15 +304,13 @@ test.describe('Verbose Debug overlay - task workbench', () => {
       fullPage: false
     });
 
-    // Raw trace routing: clicking "Open lines" closes the overlay and opens
-    // the activity-log maximize view (the existing log overlay).
-    const traceOpen = page.getByTestId('verbose-debug-trace-open').first();
-    if (await traceOpen.count() > 0) {
-      await page.getByTestId('verbose-debug-tab-trace').click();
-      await traceOpen.click();
+    // Raw trace routing still works from other tabs: a click on the task-run
+    // trace button closes the overlay and hands the range off to the host.
+    await page.getByTestId('verbose-debug-tab-tasks').click();
+    const runTrace = page.getByTestId('verbose-debug-run-trace-2');
+    if (await runTrace.count() > 0) {
+      await runTrace.click();
       await expect(overlay).not.toBeVisible();
-      // The existing log overlay surface uses the `log-overlay__panel` class
-      // (no testid), so we just assert the verbose debug closed cleanly.
     }
   });
 

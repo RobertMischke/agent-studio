@@ -1,6 +1,6 @@
 # verbose-debug
 
-Debug overlay for the active job: tabs for overview / actors / orchestrator / tools / raw trace / etc. Opened from a header button in the protocol pane (gated by feature flag).
+Debug overlay for the active job: tabs for overview / actors / orchestrator / tools / warnings / tasks / tokens / artifacts. Opened from a header button in the protocol pane (gated by feature flag). Per-row "Open trace" buttons (on orchestrator decisions and task runs) emit a raw-line range back to the host so the activity-log viewer can jump to it — there is no longer a dedicated trace tab.
 
 ## Public API
 

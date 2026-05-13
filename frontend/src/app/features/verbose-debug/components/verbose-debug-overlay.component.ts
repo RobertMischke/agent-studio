@@ -28,8 +28,7 @@ export type VerboseDebugTab =
   | 'warnings'
   | 'tasks'
   | 'tokens'
-  | 'artifacts'
-  | 'trace';
+  | 'artifacts';
 
 interface ActorRow {
   key: string;
@@ -70,14 +69,6 @@ interface ArtifactRow {
   url?: string;
   status?: string | null;
   timestamp?: string;
-}
-
-interface TraceLinkRow {
-  label: string;
-  start: number;
-  end: number;
-  range: RawLineRange;
-  kind: string;
 }
 
 const TOOL_LABELS: Record<ToolFamily, string> = {
@@ -131,16 +122,14 @@ export class VerboseDebugOverlayComponent {
     { id: 'warnings', label: 'Warnings', icon: '⚠' },
     { id: 'tasks', label: 'Tasks', icon: '🎯' },
     { id: 'tokens', label: 'Tokens', icon: '🪙' },
-    { id: 'artifacts', label: 'Artifacts', icon: '🖼' },
-    { id: 'trace', label: 'Trace', icon: '📜' }
+    { id: 'artifacts', label: 'Artifacts', icon: '🖼' }
   ];
 
   constructor() {
-    // Defer initial-input application to a microtask after Angular wires inputs.
-    // Using effect would also work, but avoiding the additional import keeps
-    // the change footprint small.
     queueMicrotask(() => {
-      this.activeTab.set(this.initialTab());
+      const requested = this.initialTab() as VerboseDebugTab | string;
+      const known = this.tabs.some((t) => t.id === requested);
+      this.activeTab.set(known ? (requested as VerboseDebugTab) : 'overview');
       this.theme.set(this.initialTheme());
     });
   }
@@ -212,12 +201,6 @@ export class VerboseDebugOverlayComponent {
   // Stable arrow function for use from the template (Angular templates can't
   // reference arrow type guards inside filter callbacks otherwise).
   readonly supervisorIsResumed = (w: { state: string }) => w.state === 'resumed';
-
-  readonly traceLinkEvents = computed(() => {
-    return this.events().filter(
-      (e): e is Extract<ConversationEvent, { kind: 'traceLink' }> => e.kind === 'traceLink'
-    );
-  });
 
   // --------------------------------------------------------------------
   // Aggregate getters
@@ -433,32 +416,6 @@ export class VerboseDebugOverlayComponent {
       status: s.status,
       timestamp: s.timestampUtc
     }));
-  });
-
-  readonly traceLinkRows = computed<TraceLinkRow[]>(() => {
-    const rows: TraceLinkRow[] = [];
-    const debug = this.debugEvent();
-    if (debug) {
-      for (const link of debug.traceLinks) {
-        rows.push({
-          label: link.label ?? `${link.range.start}-${link.range.end}`,
-          start: link.range.start,
-          end: link.range.end,
-          range: link.range,
-          kind: link.label?.split(' ')[0] ?? 'event'
-        });
-      }
-    }
-    for (const link of this.traceLinkEvents()) {
-      rows.push({
-        label: link.label,
-        start: link.link.range.start,
-        end: link.link.range.end,
-        range: link.link.range,
-        kind: link.target
-      });
-    }
-    return rows.slice(0, 80);
   });
 
   readonly overviewBands = computed(() => {

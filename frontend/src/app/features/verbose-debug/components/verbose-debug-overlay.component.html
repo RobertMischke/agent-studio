@@ -304,40 +304,6 @@
               </article>
             }
 
-            @case ('trace') {
-              <article class="vdbg__card">
-                <h3>Raw trace ranges</h3>
-                <p class="vdbg__hint">
-                  Every chat-lens event keeps a back-reference to the raw activity log. Click a row to copy the line range
-                  or hand it to the host's trace viewer.
-                </p>
-                <div class="vdbg__rows" data-testid="verbose-debug-trace-rows">
-                  @for (row of traceLinkRows(); track row.label) {
-                    <div class="vdbg__row" [attr.data-testid]="'verbose-debug-trace-row'">
-                      <span class="vdbg__row-icon" aria-hidden="true">📜</span>
-                      <span class="vdbg__row-label">{{ row.kind }}</span>
-                      <span class="vdbg__row-meta">{{ row.label }}</span>
-                      <button type="button"
-                              class="vdbg__link-btn"
-                              data-testid="verbose-debug-trace-open"
-                              (click)="emitTrace(row.range)">Open lines {{ row.start }}–{{ row.end }}</button>
-                    </div>
-                  }
-                  @if (traceLinkRows().length === 0) {
-                    <p class="vdbg__empty">No trace ranges yet.</p>
-                  }
-                </div>
-              </article>
-              <article class="vdbg__card">
-                <h3>Source pointer</h3>
-                <p class="vdbg__hint">
-                  The raw Activity Log remains one click away. Trace ranges are 1-based line numbers into <code>cli-output.log</code>.
-                </p>
-                @if (latestResult()) {
-                  <p data-testid="verbose-debug-latest-result"><strong>Latest result:</strong> {{ latestResult() }}</p>
-                }
-              </article>
-            }
           }
         </div>
       </section>
