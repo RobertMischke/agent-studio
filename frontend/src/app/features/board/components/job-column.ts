@@ -53,6 +53,7 @@ export class JobColumnComponent implements OnInit, OnDestroy {
   readonly reorderDisabled = input<boolean>(false);
   readonly collapsed = input<boolean>(false);
   readonly compact = input<boolean>(false);
+  readonly archiving = input<boolean>(false);
 
   /** True when this lane should render its cards through CDK virtual
    *  scrolling instead of the default @for. Archive and review have

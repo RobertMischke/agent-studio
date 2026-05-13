@@ -297,6 +297,7 @@
                       [jobs]="lane.jobs"
                       [collapsed]="isLaneCollapsed(lane.state)"
                       [compact]="compactCards()"
+                      [archiving]="archivingInProgress()"
                       (collapseToggle)="toggleLaneCollapse(lane.state)"
                       (jobClick)="openDetail($event)"
                       (jobDrop)="onJobDrop($event)"

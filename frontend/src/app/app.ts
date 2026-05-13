@@ -126,6 +126,9 @@ export class App implements OnInit {
   readonly createJobForm = inject(CreateJobFormService);
   /** Cycle 10b: board-mutation handlers (drag/drop, reorder, delete, archive, etc.) live here. */
   private readonly boardMutations = inject(BoardMutationsService);
+  /** Re-exposed for the column template so the Archive-all button can disable
+   *  itself + show a spinner while a bulk archive is in flight. */
+  readonly archivingInProgress = this.boardMutations.archiving;
   /** Cycle 10c: triage panel + j/k navigation + auto-advance live here. */
   private readonly triage = inject(TriageController);
   readonly showCreate = this.createJobForm.visible;

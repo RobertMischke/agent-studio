@@ -1,4 +1,4 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import { forkJoin } from 'rxjs';
 import { JobInfo } from '../../../models/job.model';
 import { JobService } from '../../../services/job.service';
@@ -165,16 +165,30 @@ export class BoardMutationsService {
   // ---------- bulk archive ----------
 
   /**
+   * Live flag for the Archive-all button: true while a bulk archive is
+   * in flight so the column header can disable the trigger and show a
+   * spinner. A double-click while archiving would re-submit the same N
+   * folder moves and surface a 409 storm from the second pass.
+   */
+  readonly archiving = signal(false);
+
+  /**
    * Move every job in `completed` to 7-archive in parallel. The shell
    * passes the list (typically `filteredGrouped().completed`) so the
    * service stays free of BoardFilters coupling.
    */
   archiveAllCompleted(completed: ReadonlyArray<JobInfo>): void {
     if (completed.length === 0) return;
+    if (this.archiving()) return;
+    this.archiving.set(true);
     const moves = completed.map((job) => this.jobService.moveJob(job.id, '7-archive', job.watchPath));
     forkJoin(moves).subscribe({
-      next: () => this.jobService.refresh(),
+      next: () => {
+        this.archiving.set(false);
+        this.jobService.refresh();
+      },
       error: (err) => {
+        this.archiving.set(false);
         this.errorDialog.show(err, {
           title: 'Failed to archive tasks',
           fallbackMessage: 'One or more tasks could not be moved to Archive',

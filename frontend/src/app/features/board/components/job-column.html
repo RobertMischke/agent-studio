@@ -61,10 +61,19 @@
         @if (canArchiveAll()) {
           <button type="button"
                   class="column__archive-all"
+                  [class.column__archive-all--loading]="archiving()"
                   data-testid="archive-all-btn"
-                  [appTip]="'Move all completed tasks to Archive'"
+                  [attr.data-archiving]="archiving() ? 'true' : null"
+                  [attr.aria-busy]="archiving() ? 'true' : null"
+                  [disabled]="archiving()"
+                  [appTip]="archiving() ? 'Archiving in progress…' : 'Move all completed tasks to Archive'"
                   (click)="archiveAll.emit()">
-            ⬇ Archive all
+            @if (archiving()) {
+              <span class="column__archive-all__spinner" aria-hidden="true"></span>
+              <span>Archiving…</span>
+            } @else {
+              ⬇ Archive all
+            }
           </button>
         }
         @if (!isFailedPickup()) {
