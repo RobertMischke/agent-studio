@@ -70,3 +70,47 @@ This task was flagged as "currently active; 50 min runtime is suspect" in the or
 - `lastProgressAt` in `job.json` is 13:00:19; the folder has been quiet since.
 
 So the task is not stuck mid-run; it is queued. No supervisor force-fail or extended-watch is needed. If the next pickup runs into the same 15 min ceiling, that is the time to escalate. Recommendation: let the queue replay it once. If the next attempt also exits with `status=stopped`, write a real `[supervisor]` chat-note then.
+
+## Re-issue resolution, 2026-05-14
+
+The reconciliation was reissued in `5-human-review` on 2026-05-11 with two open items:
+
+1. Duplicate `kanban-lane-grouping-collapse-empty-2026-05-05` in `7-archive` still present (DELETE returned 404 because `JobScannerService` requires a `job.json`).
+2. Lane naming: the prompt referenced the pre-ADR-0025 lanes (`4-review`, `6-archive`).
+
+### Item 1: duplicate folder
+
+Status today: the orphan folder is still on disk and the API still cannot reach it. Per the durable feedback rule that the LLM may not mutate job folders directly, this run did not delete the folder. The systemic fix already has a queued backlog task:
+
+- `bug-stale-archiver-creates-phantoms-on-backend-restart-mid-move` (currently in `0-backlog`).
+
+That task's solution sketch already covers the same root cause this reconciliation called out: a pre-sweep cross-lane reconciliation in `StaleProgressArchiver` that silently drops a `3-progress` (or otherwise-staged) folder when an intact same-slug folder exists in a later lane. Its acceptance criteria match what is needed to stop new orphans of this shape. Backfill cleanup of folders that already exist is explicitly listed as out-of-scope in that task ("manueller cleanup-Pfad, kein Backend-Job").
+
+What this means for the current orphan:
+
+- The systemic fix is tracked. No new follow-up task is required.
+- The current orphan needs the user to either run the manual delete on the filesystem or, if they would prefer an API-only path, extend `JobStateMachine.DeleteJob` to admit a `7-archive` folder without `job.json`. Both options remain documented in the "Duplicate folder in 7-archive" section above; this run made no change to either.
+
+### Item 2: lane naming
+
+Already addressed inline in this document. The "Lane-name correction" section at the top maps `4-review` to `4-auto-review` / `5-human-review` and `6-archive` to `6-completed` / `7-archive`, and every task-by-task entry below it uses the post-ADR names. No further patch is required for this item.
+
+### Lane drift since the original reconciliation
+
+The seven layout tasks have moved on. As of 2026-05-14:
+
+| Task                                     | Lane in original doc | Lane today        |
+|------------------------------------------|----------------------|-------------------|
+| vscode-style-layout-density-and-tabs     | 4-auto-review        | 7-archive         |
+| kanban-lane-grouping-collapse            | 4-auto-review        | 7-archive         |
+| expanded-lifecycle-lanes-concept         | 4-auto-review        | 7-archive         |
+| lanes-with-explicit-human-review-step    | 4-auto-review        | 2-ready (reissue) |
+| fix-kanban-lane-layout-overflow          | 2-ready (1)          | 7-archive         |
+| chat-layout-integration-bridge           | 2-ready              | 7-archive         |
+| improve-layout-of-the-details-page       | 2-ready              | 7-archive         |
+
+The body of this document is preserved as-is; the lane column in the per-task headers reflects the state at the time of the original pass, not today. The reconciliation verdicts themselves still stand; only the on-board lane has shifted.
+
+### Verdict on `fix-kanban-lane-layout-overflow`, refreshed
+
+The original verdict ("queued, not stuck; let the queue replay it once") played out as expected. The task is now in `7-archive`. No supervisor action needed; the recommendation is closed.
