@@ -2322,6 +2322,46 @@ public class ProjectRunner
             slug, ProjectName, destinationSlug);
     }
 
+    /// <summary>
+    /// Returns true when a folder with the given slug exists in any of the
+    /// lanes a job can move into after <c>3-progress</c>. Used to distinguish
+    /// post-move cleanup debris from a genuine pickup orphan: if the job's
+    /// real folder lives downstream, the empty shell that remained in
+    /// <c>3-progress</c> is just a Windows file-handle race, not a failure
+    /// the operator needs to see.
+    /// </summary>
+    internal bool TryFindSlugInPostProgressLane(string slug, out string lane)
+    {
+        foreach (var laneName in PostProgressLanes)
+        {
+            var candidate = Path.Combine(Entry.Path, laneName, slug);
+            if (Directory.Exists(candidate))
+            {
+                lane = laneName;
+                return true;
+            }
+        }
+        lane = string.Empty;
+        return false;
+    }
+
+    /// <summary>
+    /// Every lane a job can land in after leaving <c>3-progress</c>. Used by
+    /// <see cref="TryFindSlugInPostProgressLane"/> to decide whether a
+    /// skeleton folder in <c>3-progress</c> represents post-move cleanup
+    /// debris (real job is downstream) or a genuine orphan (no downstream
+    /// twin). The intake / pre-progress lanes are deliberately excluded:
+    /// they cannot be the move target of an in-flight job, so a slug
+    /// match there does not indicate cleanup debris.
+    /// </summary>
+    internal static readonly string[] PostProgressLanes =
+    [
+        JobStates.AutoReview,
+        JobStates.HumanReview,
+        JobStates.Completed,
+        JobStates.Archive,
+    ];
+
     internal static string BuildProgressOrphanSlug(string slug, DateTime utcNow, Func<string, bool> existsInDestination)
     {
         var baseSlug = $"orphan-{slug}-{utcNow:yyyy-MM-dd}";

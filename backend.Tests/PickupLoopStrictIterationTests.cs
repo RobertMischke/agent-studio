@@ -265,8 +265,14 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
     }
 
     [Fact]
-    public void StrictIteration_ProgressFolderWithoutJobJson_IsMovedToFailedPickupWithoutFlippingMode()
+    public void StrictIteration_PostMoveSkeleton_TwinInHumanReview_IsSilentlyDeleted()
     {
+        // Setup mirrors the Windows file-handle race that produces the
+        // skeleton in production: a job runs in 3-progress, the move to
+        // 5-human-review succeeds for most of the tree, but a logs/* file
+        // stays locked by an in-process writer and leaves an empty shell
+        // behind in 3-progress while the canonical folder (with job.json)
+        // lives in the downstream lane.
         WriteOrphanProgressFolder("duplicate-later-lane");
         WriteJob(JobStates.HumanReview, "duplicate-later-lane");
         WriteJob(JobStates.Ready, "ready-after-orphan");
@@ -276,44 +282,40 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
 
         var picked = InvokePickerLoop(runner);
 
-        // Picker returned null after moving the orphan, which is what lets
-        // TickAsync fall through to GetNextReadyJob() on the same tick. The
-        // production observation (2026-05-11) was that an orphan was picked
-        // as if it were a runnable job, a short CLI execution failed against
-        // the empty folder, and the cross-slug infra breaker flipped mode to
-        // manual. Asserting the picker returns null pins down that the
-        // orphan path no longer hands a JobInfo back to the runner.
+        // Returns null so TickAsync falls through to GetNextReadyJob on the
+        // same tick (the 2026-05-11 root cause was the picker handing the
+        // orphan back as if it were runnable). Mode stays auto-continuous.
         Assert.Null(picked);
-
         Assert.Equal("auto-continuous", runner.GetStatus().Mode);
+
+        // The shell folder is gone, the downstream twin is untouched, and
+        // the ready job is still in line.
         Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "duplicate-later-lane")));
         Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.HumanReview, "duplicate-later-lane")));
         Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Ready, "ready-after-orphan")));
 
+        // No orphan entry is written: this was cleanup debris, not a
+        // pickup failure. 3a-failed-pickup stays clean.
         var failedPickupRoot = Path.Combine(_watchPath, JobStates.FailedPickup);
-        var moved = Directory.EnumerateDirectories(failedPickupRoot)
-            .Where(d => Path.GetFileName(d).StartsWith("orphan-duplicate-later-lane-", StringComparison.Ordinal))
-            .ToList();
-        var only = Assert.Single(moved);
-        Assert.True(File.Exists(Path.Combine(only, "logs", "cli-output.log")));
-        Assert.True(File.Exists(Path.Combine(only, "job.json")));
-        Assert.True(File.Exists(Path.Combine(only, "failed-pickup-reason.md")));
+        var entries = Directory.Exists(failedPickupRoot)
+            ? Directory.EnumerateDirectories(failedPickupRoot)
+                .Where(d => Path.GetFileName(d).Contains("duplicate-later-lane", StringComparison.Ordinal))
+                .ToList()
+            : new List<string>();
+        Assert.Empty(entries);
 
         Assert.False(File.Exists(Path.Combine(_workspaceRoot, "logs", "infra-halts.jsonl")),
-            "stale metadata orphans are queue-hygiene issues, not CLI infra failures");
+            "post-move skeletons are not infra failures");
     }
 
     /// <summary>
-    /// Variant of the orphan scenario where the canonical copy of the slug
-    /// lives in 4-auto-review (the orchestrator's review lane), not
-    /// 5-human-review. The production incident on 2026-05-11 saw both shapes
-    /// on the same project (bug-agent-log-modal-zu-klein had copies in
-    /// 3-progress, 4-auto-review, AND 5-human-review). The picker must
-    /// treat both lanes identically: detect the missing job.json, route the
-    /// orphan into 3a-failed-pickup, and leave auto-continuous untouched.
+    /// Same shape as the human-review variant but with the downstream twin
+    /// in 4-auto-review. The picker must treat every post-progress lane
+    /// identically: a slug match anywhere downstream is the signal that the
+    /// 3-progress remnant is cleanup debris and should be deleted silently.
     /// </summary>
     [Fact]
-    public void StrictIteration_ProgressOrphanWithCanonicalInAutoReview_IsMovedWithoutFlippingMode()
+    public void StrictIteration_PostMoveSkeleton_TwinInAutoReview_IsSilentlyDeleted()
     {
         WriteOrphanProgressFolder("canonical-in-auto-review");
         WriteJob(JobStates.AutoReview, "canonical-in-auto-review");
@@ -331,11 +333,47 @@ public sealed class PickupLoopStrictIterationTests : IDisposable
         Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.Ready, "ready-after-orphan")));
 
         var failedPickupRoot = Path.Combine(_watchPath, JobStates.FailedPickup);
+        var entries = Directory.Exists(failedPickupRoot)
+            ? Directory.EnumerateDirectories(failedPickupRoot)
+                .Where(d => Path.GetFileName(d).Contains("canonical-in-auto-review", StringComparison.Ordinal))
+                .ToList()
+            : new List<string>();
+        Assert.Empty(entries);
+
+        Assert.False(File.Exists(Path.Combine(_workspaceRoot, "logs", "infra-halts.jsonl")),
+            "post-move skeletons are not infra failures");
+    }
+
+    /// <summary>
+    /// Genuine orphan: a 3-progress folder with no job.json AND no twin in
+    /// any post-progress lane. This is the case a manual filesystem
+    /// intervention or a hard backend crash before the move leaves behind.
+    /// It must still produce a loud failed-pickup entry with the canonical
+    /// reason file, because there is no provenance trail to recover from.
+    /// </summary>
+    [Fact]
+    public void StrictIteration_GenuineOrphan_NoTwin_IsMovedToFailedPickup()
+    {
+        WriteOrphanProgressFolder("genuine-orphan-no-twin");
+        WriteJob(JobStates.Ready, "ready-after-orphan");
+
+        var runner = BuildRunner();
+        runner.SetMode("auto-continuous");
+
+        var picked = InvokePickerLoop(runner);
+
+        Assert.Null(picked);
+        Assert.Equal("auto-continuous", runner.GetStatus().Mode);
+        Assert.False(Directory.Exists(Path.Combine(_watchPath, JobStates.Progress, "genuine-orphan-no-twin")));
+
+        var failedPickupRoot = Path.Combine(_watchPath, JobStates.FailedPickup);
         var moved = Directory.EnumerateDirectories(failedPickupRoot)
-            .Where(d => Path.GetFileName(d).StartsWith("orphan-canonical-in-auto-review-", StringComparison.Ordinal))
+            .Where(d => Path.GetFileName(d).StartsWith("orphan-genuine-orphan-no-twin-", StringComparison.Ordinal))
             .ToList();
         var only = Assert.Single(moved);
         Assert.True(File.Exists(Path.Combine(only, "logs", "cli-output.log")));
+        Assert.True(File.Exists(Path.Combine(only, "job.json")));
+        Assert.True(File.Exists(Path.Combine(only, "failed-pickup-reason.md")));
 
         Assert.False(File.Exists(Path.Combine(_workspaceRoot, "logs", "infra-halts.jsonl")),
             "stale metadata orphans are queue-hygiene issues, not CLI infra failures");
