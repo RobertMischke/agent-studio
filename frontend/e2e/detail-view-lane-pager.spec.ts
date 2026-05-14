@@ -259,6 +259,38 @@ test.describe('Detail view - lane pager', () => {
     }
   });
 
+  test('deep-link with no stored iteration still shows the pager without keyboard nav', async ({ page }) => {
+    const wp = await getFirstWatchPath();
+    const ids = [1, 2, 3].map(i => uid(`deep-link-${i}`));
+    for (const id of ids) {
+      await createJob({ id, title: id, watchPath: wp.path, targetState: '2-ready', fixture: false });
+    }
+
+    try {
+      // Hit the board first so the fixture cards land in /api/jobs/grouped;
+      // then wipe sessionStorage so the next navigation has no stored
+      // pager snapshot to restore.
+      await page.goto('/');
+      await waitForFixtureCards(page, ids);
+      await page.evaluate(() => sessionStorage.clear());
+
+      // Navigate directly to the detail URL. Before the fix this scenario
+      // showed no pager until the user pressed an arrow key; the snapshot
+      // was only captured on board click or pager step.
+      await page.goto(`/?job=${encodeURIComponent(ids[1])}&watchPath=${encodeURIComponent(wp.path)}`);
+      await expect(page.getByTestId('detail-state-select')).toBeVisible({ timeout: 10_000 });
+
+      const pager = page.getByTestId('lane-pager');
+      await expect(pager).toBeVisible({ timeout: 10_000 });
+      const count = page.getByTestId('lane-pager-count');
+      await expect(count).toContainText(/^\d+ \/ \d+$/);
+      const [, totalStr] = (await count.textContent())!.trim().split('/').map(s => s.trim());
+      expect(Number(totalStr)).toBeGreaterThanOrEqual(ids.length);
+    } finally {
+      for (const id of ids) await deleteJob(id, wp.path).catch(() => {});
+    }
+  });
+
   test('disables prev at the first slot and next at the last', async ({ page }) => {
     const wp = await getFirstWatchPath();
     const ids = [1, 2, 3].map(i => uid(`bounds-${i}`));

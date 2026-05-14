@@ -1,4 +1,4 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { JobDetail, JobInfo } from '../../../models/job.model';
 import { JobService } from '../../../services/job.service';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
@@ -29,6 +29,47 @@ export class JobSelectionService {
   private readonly errorDialog = inject(ErrorDialogService);
   private readonly notifications = inject(NotificationService);
   private readonly pager = inject(LanePagerService);
+
+  constructor() {
+    // Ensure the lane-pager snapshot covers the currently selected job.
+    // `openDetail` captures synchronously on the board-click path, so this
+    // effect is a no-op there. The deep-link / URL-restore path sets
+    // `selected` without capturing (no preceding click, and grouped() may
+    // still be loading) - the effect re-runs once grouped() lands and
+    // captures from the live lane peers so the pager appears without
+    // requiring the user to press an arrow key first.
+    //
+    // `lastEnsuredJobKey` guards against re-capture after a mutation that
+    // removes the open job from the snapshot (delete from menu, lane
+    // dropdown move): `removeAndAdvance` shrinks the iteration BEFORE
+    // `selected` is reset to the next job, so for one effect tick `snap`
+    // no longer contains `selected.jobKey`. Without the guard the effect
+    // would re-capture from the live (still-stale) grouped lane and
+    // clobber the carefully-preserved iteration ordering.
+    effect(() => {
+      const sel = this.selected();
+      if (!sel) {
+        this.lastEnsuredJobKey = null;
+        return;
+      }
+      const jobKey = sel.info.jobKey;
+      const snap = this.pager.snapshot();
+      if (snap && snap.jobs.some(j => j.jobKey === jobKey)) {
+        // Existing iteration covers the open job; just keep the index
+        // aligned (no-op when already aligned).
+        this.pager.reanchorTo(jobKey);
+        this.lastEnsuredJobKey = jobKey;
+        return;
+      }
+      if (this.lastEnsuredJobKey === jobKey) return;
+      const peers = this.peersForLane(sel.info.state);
+      if (peers.length === 0) return;
+      this.pager.capture(sel.info.state, peers, jobKey);
+      this.lastEnsuredJobKey = jobKey;
+    });
+  }
+
+  private lastEnsuredJobKey: string | null = null;
 
   readonly selected = signal<JobDetail | null>(null);
 
@@ -195,17 +236,20 @@ export class JobSelectionService {
           this.selected.set(detail);
           // Re-anchor the pager to the restored job's position in the
           // existing sessionStorage snapshot (if any). If the open job
-          // isn't part of the stored snapshot, drop it — iteration was
-          // never about this job.
+          // isn't part of the stored snapshot, drop it - the
+          // ensure-snapshot effect then captures a fresh iteration from
+          // the job's lane once grouped() lands, so the pager appears
+          // without requiring keyboard navigation first.
           const snap = this.pager.snapshot();
-          if (snap) {
-            const inSnap = snap.jobs.some(j => j.jobKey === detail.info.jobKey);
-            if (inSnap) {
-              this.triageLaneState = snap.lane;
-              this.pager.reanchorTo(detail.info.jobKey);
-            } else {
-              this.pager.clear();
-            }
+          if (snap && snap.jobs.some(j => j.jobKey === detail.info.jobKey)) {
+            this.triageLaneState = snap.lane;
+            this.pager.reanchorTo(detail.info.jobKey);
+          } else {
+            if (snap) this.pager.clear();
+            // Anchor triage navigation on the restored job's lane so the
+            // external-move auto-advance in the shell still has a lane
+            // to compare against after a deep-link restore.
+            this.triageLaneState = detail.info.state;
           }
         },
         error: () => history.replaceState(null, '', window.location.pathname),
