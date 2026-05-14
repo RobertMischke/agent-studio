@@ -2224,6 +2224,70 @@ public class ProjectRunner
 
     private void MoveProgressOrphanToFailedPickup(ProgressPickupCandidate candidate, string slug)
     {
+        // Distinguish a genuine pickup orphan from post-move cleanup debris.
+        //
+        // Cleanup debris happens because the Windows + ASP.NET combination
+        // sometimes leaves a skeleton 3-progress folder behind after the
+        // job has already moved on. The race: while ProjectRunner finishes
+        // a job and JobStateMachine.MoveJob renames 3-progress/<slug> ->
+        // <lane>/<slug>, another in-process writer (CliOutputLogStore on
+        // cli-output.log, JobSessionLog on session-events.jsonl) may still
+        // hold a Read/Write file handle on a file inside that folder.
+        // Those handles are opened with FileShare.ReadWrite but NOT
+        // FileShare.Delete, which is exactly the share-flag that blocks
+        // the Win32 directory-rename operation from completing for the
+        // locked sub-file. Directory.Move() succeeds for the rest of the
+        // tree (and returns success) but a stub folder containing just
+        // the still-locked file or its parent <c>logs/</c> sub-folder is
+        // left behind in 3-progress. The job.json is gone (it moved with
+        // the rest), so the next pickup tick walks into this method.
+        //
+        // From the user's point of view, calling that "failed pickup" is
+        // wrong: there was no CLI spawn, no missing prompt, no broken
+        // config. The job moved on cleanly; only the empty shell remained.
+        // Surfacing it as a pickup failure pollutes the 3a-failed-pickup
+        // lane with entries that are not actionable and obscures genuine
+        // CLI spawn failures.
+        //
+        // Decision rule: if any post-progress lane contains a folder with
+        // this slug, treat the leftover 3-progress folder as cleanup debris
+        // and best-effort delete it. The job is provably elsewhere; the
+        // skeleton has no claim on the kanban. If the delete fails because
+        // the locking handle is still open, leave the folder and retry
+        // next tick — the slug-in-post-lane check stays true, so the next
+        // tick will not mis-classify it either. No orphan entry is ever
+        // written for cleanup debris.
+        //
+        // The original genuine-orphan path (no post-progress twin) is
+        // preserved verbatim below: a user who manually creates an empty
+        // 3-progress/<slug>/ folder, or a hard backend crash that loses
+        // job.json without moving the job on, still produces a loud
+        // failed-pickup entry the operator can investigate.
+        if (TryFindSlugInPostProgressLane(slug, out var locatedLane))
+        {
+            try
+            {
+                Directory.Delete(candidate.FolderPath, recursive: true);
+                _logger.LogInformation(
+                    "[taskboard] cleaned up post-move skeleton for {Slug} on {Project} (real job lives in {Lane})",
+                    slug, ProjectName, locatedLane);
+            }
+            catch (IOException ioex)
+            {
+                _logger.LogDebug(ioex,
+                    "[taskboard] post-move skeleton {Folder} for {Slug} still locked; will retry next tick",
+                    candidate.FolderPath, slug);
+            }
+            catch (UnauthorizedAccessException uae)
+            {
+                _logger.LogWarning(uae,
+                    "[taskboard] post-move skeleton {Folder} for {Slug} cannot be deleted (access denied); manual cleanup required",
+                    candidate.FolderPath, slug);
+            }
+            _pickupAttempts.TryRemove(slug, out _);
+            return;
+        }
+
         var now = DateTime.UtcNow;
         var destinationSlug = BuildProgressOrphanSlug(slug, now,
             existsInDestination: name => Directory.Exists(Path.Combine(Entry.Path, JobStates.FailedPickup, name)));
