@@ -200,31 +200,136 @@ already lists them. No new top-level chat window is introduced.
 - Promote consumes tokens at the moment the task re-enters `3-progress`,
   exactly as a normal Continue would. No new accounting needed.
 
-## Open Questions
+## Resolved Decisions
 
-These need a decision before implementation, not before the user signs off
-on the design.
+The points below were carried as Open Questions in the first draft and were
+raised again in human review on 2026-05-11. They are decided here so the
+implementation job has a contract. The reasoning is preserved next to each
+decision so a future change can be made deliberately.
 
-1. **Auto-classifying Ask vs Defer.** The product could try to guess the
-   intent from the comment text ("Why does X happen?" -> Ask;
-   "Please also do Y" -> Defer). The current proposal keeps it explicit so
-   the user always controls outcome. A future iteration may add a soft hint
-   from the orchestrator without removing the manual choice.
-2. **Re-opening a 6-completed task is a state change.** The existing
-   lifecycle treats `6-completed` as terminal except via archive. Promote
-   needs a backend lane-move that is currently not exposed; this is a small
-   API addition (`POST /api/jobs/{id}/reopen?watchPath=...`).
-3. **Side-sheet vs task-chat duplication.** A defer comment posted in the
-   side sheet about a closed task should still create the marker on the
-   task-chat side. The shared grammar makes this easy; the host adapter
-   needs a small subscription so updates appear in both places.
-4. **Quota for Ask.** Read-only Ask should still count against the user's
-   quota window. This must surface in the existing quota probe so the
-   feature does not become a stealth quota drain.
-5. **Time-to-pickup signalling.** The current label says "I'll get to this
-   when there's bandwidth". A later iteration may want a lightweight ETA
-   ("queued behind 3 tasks") if the project queue exposes a depth signal,
-   but this is a polish item, not a blocker.
+### 1. Manual Ask vs Defer in v1 - no auto-classification
+
+**Decision:** v1 ships with the user explicitly picking Ask or Defer from the
+composer mode bar. The product does not auto-classify intent from the comment
+text. The default mode for a closed-task chat is `Defer`.
+
+**Why:** Misclassifying a comment as Ask would silently swallow a real change
+request; misclassifying it as Defer would create unwanted follow-up tasks
+during a review pass. Both failure modes erode trust in the composer and are
+hard to debug after the fact.
+
+**Future iteration (not implemented now):** the orchestrator may *suggest* a
+mode by highlighting one button based on a heuristic ("starts with a
+question word" -> Ask). The user still has to press Send. No silent
+auto-submit. This polish is tracked but is not blocking.
+
+### 2. Backend lane-move is required for Promote - `POST /api/jobs/{id}/reopen`
+
+**Decision:** Promote depends on a new backend endpoint that moves a job
+from `6-completed` (or `7-archive`) back into `3-progress`. Until the
+endpoint lands, the Promote mode is **hidden in the composer**, and the
+implementation job must guard the UI on a server capability probe
+(`/api/jobs/capabilities` already advertises feature flags). Ask and Defer
+ship without the endpoint.
+
+**Endpoint contract (proposed):**
+
+```text
+POST /api/jobs/{id}/reopen
+Body:  { "watchPath": "<repo-relative path>", "confirmedAt": <iso-8601> }
+200:   updated JobInfo with state="3-progress"
+409:   { "error": "lane_locked" }   if the lane move is not allowed
+```
+
+The endpoint is idempotent on the `confirmedAt` token so a double-click does
+not produce two state transitions. The server emits a
+`decision.orchestrator` row into the conversation feed so the lane move is
+auditable inside the same chat that triggered it.
+
+**Why:** without the endpoint, Promote is a UI lie. The Defer/Ask experience
+is the larger feature; gating Promote behind a server flag keeps the v1
+slice deliverable without backend coupling.
+
+### 3. Side sheet and task chat share the `feedback.queued` stream
+
+**Decision:** `feedback.queued` events are published on the per-job event
+stream the existing job feed already uses (`/api/jobs/{id}/events` SSE).
+Both surfaces subscribe by job id and render the same marker row through the
+shared `ConversationEventRenderer`. There is no second write path and no
+separate side-sheet event kind.
+
+**Implementation note:** the side-sheet task tab already filters the job
+event channel; the only addition is that `feedback.queued` becomes a
+recognised kind. The host adapter does not duplicate it; it forwards.
+
+**Why:** any second write path would drift. The shared SSE channel is the
+contract that already keeps task chat and side sheet aligned for the rest of
+the conversation grammar; reusing it is cheaper than maintaining a mirror.
+
+### 4. Ask counts against the same quota window as Continue
+
+**Decision:** Ask calls go through the same CLI invocation path as a
+read-only Continue and are billed identically. The CLI usage log adds an
+`intent: 'ask' | 'continue' | 'steer' | 'extend'` tag so the existing usage
+surfaces (`status-bar`, `cli-usage-sheet`, `usage-hover-panel`,
+`workspace-token-timeline`) can attribute and filter without inventing a new
+metric. Verbose Debug gets an `intent` chip on the usage panel.
+
+**Why:** quota stealth-drain is a known failure mode for "free" actions.
+Tagging the existing usage record is the smallest change that keeps the
+existing dashboards correct. A separate quota lane would be a new surface
+the proposal explicitly avoids.
+
+### 5. Time-to-pickup label is static in v1
+
+**Decision:** the default Defer marker copy stays `"I'll get to this when
+there's bandwidth"`. v1 does not compute or display a queue-depth ETA on
+the marker row. The label is a configuration constant in the renderer.
+
+**Why:** an ETA depends on a project queue depth signal that does not exist
+yet, and on the actual order the orchestrator picks tasks, which is not
+deterministic. Showing a wrong ETA on a closed-task marker is worse than
+showing none.
+
+**Future iteration (not implemented now):** when the project queue exposes a
+depth signal, the marker row can carry a tiny `queued behind N` chip on
+hover. This is a polish task tracked separately and does not change the
+composer behaviour.
+
+## Cross-Document Reflection - Scope Note
+
+This proposal is the design contract; the doc lives in
+`docs/mockups/chat-window-next-gen/feedback-queued-from-chat.md` and the
+scenario row is already cross-linked from `scenarios.md` and `README.md`.
+
+Reflecting the contract into the rollout artefacts
+(`host-inventory.md`, `integration-plan.md`, `angular-prototype.md`,
+`found-next-ux-review.md`) is **deliberately out of scope** for this design
+task. Those documents describe the rollout sequencing, host wiring, and
+prototype-status snapshots, and updating them belongs to the implementation
+job that actually adds the composer modes and the `feedback.queued` event
+kind. Touching them during the design phase would mix design intent with
+implementation reality and force the implementation task to re-edit them
+anyway.
+
+Captured as a successor follow-up:
+
+- Slug: `chat-feedback-queued-implementation`
+- Lane on creation: `1-preparation`
+- Required edits:
+  - `host-inventory.md`: extend the composer-surface inventory with the
+    new lane-aware modes (Ask, Defer, Promote) and list
+    `feedback.queued` under the renderer event kinds.
+  - `integration-plan.md`: append `chat-feedback-queued` to the
+    `Queue Alignment` rollout order, after
+    `chat-actor-decision-cards`, with a one-line scope summary.
+  - `angular-prototype.md` and `found-next-ux-review.md`: add a single
+    cross-link line each to this proposal under the relevant section
+    ("Composer Behaviour" and "Closed-Task Chat" respectively); no
+    structural changes.
+- Acceptance criteria: see the Acceptance Criteria block below; the
+  follow-up job carries those forward and reuses this proposal as its
+  design contract.
 
 ## Acceptance Criteria For The Implementation Job
 
