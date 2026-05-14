@@ -281,6 +281,16 @@ public class ProjectRunner
         // Check if there's a running process for this project on any CLI
         if (_router.All.Any(c => c.IsRunningForProject(Entry.RootPath))) return;
 
+        // Pickup gating ends here. The picker below considers 3-progress and
+        // 2-ready only; jobs sitting in 1-preparation, 1a-orchestrator-prep,
+        // 1b-needs-human-review, 4-auto-review, or 5-human-review do NOT
+        // block this tick. Those lanes are owned by their own background
+        // services (OrchestratorPrepHostedService, IntakeHostedService,
+        // ReviewDecisionOrchestrator) and run in parallel with the runner.
+        // ADR-0001 is preserved by the active-job latch above (one coding
+        // CLI per project at a time); ADR-0026 was clarified to make the
+        // parallelism explicit. See ParallelLanesPickupTests.
+
         // Strict progress-first pickup: walk every 3-progress folder oldest-first
         // by mtime BEFORE considering 2-ready. A folder qualifies for resume
         // regardless of whether it carries a captured session id or even a
@@ -2075,7 +2085,22 @@ public class ProjectRunner
         }
     }
 
-    private JobInfo? GetNextReadyJob()
+    /// <summary>
+    /// Returns the oldest pickup-eligible job in <c>2-ready</c> for this
+    /// project, or <c>null</c> when the lane is empty (or every entry is
+    /// blocked by an active intake-running phase).
+    /// </summary>
+    /// <remarks>
+    /// Filters strictly on <c>State == 2-ready</c>. Jobs sitting in
+    /// <c>1-preparation</c>, <c>1a-orchestrator-prep</c>,
+    /// <c>1b-needs-human-review</c>, <c>4-auto-review</c>, or
+    /// <c>5-human-review</c> have no influence here - those lanes are
+    /// processed by their own background services in parallel with the
+    /// runner. The single-state-machine rule (ADR-0001) is preserved by
+    /// the active-job latch in <see cref="TickAsync"/>, not by lane
+    /// coupling. Pinned by <c>ParallelLanesPickupTests</c>.
+    /// </remarks>
+    internal JobInfo? GetNextReadyJob()
     {
         var intakeEnabled = _projectSettings.Get(ProjectName).IntakeEnabled == true;
         return _scanner.ScanAllJobs()

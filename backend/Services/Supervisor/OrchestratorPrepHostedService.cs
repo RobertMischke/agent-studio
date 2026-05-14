@@ -15,8 +15,17 @@ namespace OrchestratorApi.Services.Supervisor;
 /// <para>Off by default. Enable with <c>Orchestrator:PrepEnabled = true</c>.
 /// Rate-limited via <c>Orchestrator:PrepCallsPerHour</c> (default 30).</para>
 ///
-/// <para>The loop is sequential-per-project: it never runs while a project's
-/// runner is mid-task. ADR-0001 still holds.</para>
+/// <para>The loop runs in parallel with the runner's pickup tick. Preparation
+/// is its own pipeline phase and does not start a coding CLI; it only reads
+/// jobs in <c>1-preparation</c> / <c>1a-orchestrator-prep</c> and writes
+/// verdicts into <c>2-ready</c> / <c>1b-needs-human-review</c>. ADR-0001's
+/// boundary (one coding CLI per project at a time) is unchanged - that
+/// invariant is enforced inside <see cref="OrchestratorApi.Services.Runner.ProjectRunner.TickAsync"/>
+/// via the active-job latch, not here. The runner consumes from
+/// <c>2-ready</c> on its own tick, so state mutations written by this
+/// service are picked up without explicit coordination. Review-decision
+/// processing (ADR-0025) and intake checks run in parallel for the same
+/// reason: distinct lanes, single-state-machine authority.</para>
 ///
 /// <para>This first slice is heuristic-only (no LLM calls). The clarity
 /// score in <see cref="OrchestratorPrepRules.ScoreClarity"/> is auditable
