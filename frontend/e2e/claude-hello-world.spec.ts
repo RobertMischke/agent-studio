@@ -70,7 +70,13 @@ test.describe('Claude Code — hello world @billable', () => {
       e.status,
       `Expected completed/finished, got ${e.status} (exit=${e.exitCode}, dur=${e.durationSeconds}s)`
     ).toBe('completed');
-    expect(e.exitCode, 'Exit code should be 0').toBe(0);
+    // No exitCode === 0 assertion: when the agent emits a sentinel
+    // ([[TASK_DONE]] here), RunStatusClassifier.Classify uses the
+    // SentinelDetected stop reason to map the run to `completed` even
+    // though Process.Kill on Windows hands back exitCode = -1. The
+    // `status === 'completed'` check above is the authoritative clean-
+    // shutdown signal; gating on exitCode would reject every sentinel
+    // exit on Windows.
 
     // Output endpoint should return something non-empty.
     const out = await getJobOutput(created.id, WATCH_PATH);
