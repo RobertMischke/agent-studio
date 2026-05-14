@@ -67,8 +67,18 @@ export class JobSelectionService {
   readonly triageLanePeers = computed<JobInfo[]>(() => {
     const sel = this.selected();
     if (!sel) return [];
+    return this.peersForLane(sel.info.state);
+  });
+
+  /**
+   * Peers in a specific on-disk lane. Used by `openDetail` to capture
+   * the lane-pager snapshot at the moment of click, where `selected` is
+   * still the previous detail (or null) and the lookup must key off the
+   * incoming job's state, not the stale signal.
+   */
+  peersForLane(state: string): JobInfo[] {
     const g = this.jobService.grouped();
-    switch (sel.info.state) {
+    switch (state) {
       case '0-backlog':              return g.backlog ?? [];
       case '1-preparation':          return g.preparation ?? [];
       case '1a-orchestrator-prep':   return g.orchestratorPrep ?? [];
@@ -82,7 +92,7 @@ export class JobSelectionService {
       case '7-archive':              return g.archive ?? [];
       default:                       return [];
     }
-  });
+  }
 
   isSelected(job: JobInfo): boolean {
     return this.selected()?.info.jobKey === job.jobKey;
@@ -98,7 +108,12 @@ export class JobSelectionService {
     history.replaceState(null, '', `?job=${encodeURIComponent(job.id)}&watchPath=${encodeURIComponent(job.watchPath)}`);
     this.triageLaneState = job.state;
     if (!opts.keepPagerSnapshot) {
-      this.pager.capture(job.state, this.triageLanePeers(), job.jobKey);
+      // Capture peers for `job.state` directly: at this point `selected`
+      // may still be null or pointing at a prior detail in a different
+      // lane, so the `triageLanePeers` computed (which keys off
+      // `selected.info.state`) would yield the wrong list or an empty
+      // list. `peersForLane` looks up the live grouped lane.
+      this.pager.capture(job.state, this.peersForLane(job.state), job.jobKey);
     }
     const token = ++this.openDetailToken;
     this.jobService.getDetail(job.id, job.watchPath).subscribe({
@@ -210,6 +225,60 @@ export class JobSelectionService {
   setSelectedFromAdvance(detail: JobDetail, expectedToken: number): void {
     if (expectedToken !== this.openDetailToken) return;
     this.selected.set(detail);
+  }
+
+  /**
+   * After a user-initiated mutation removes the currently visible job
+   * from the lane (delete from detail, lane change via state dropdown,
+   * triage move/delete): drop the job from the pager snapshot and
+   * navigate to the entry that now sits at its slot. When the lane is
+   * empty (the job was the last in the iteration) close the panel and
+   * surface a "Lane cleared." toast so the user knows the iteration
+   * finished.
+   *
+   * Returns `true` when an advance happened (the panel now shows the
+   * next job), `false` when the lane was cleared or there is no active
+   * pager snapshot (e.g. the detail was opened from a deep-link with
+   * no preceding board click); in the latter case the caller's default
+   * post-mutation behaviour - usually `closeDetail()` - still applies.
+   */
+  advanceAfterMutation(departingJobKey: string): boolean {
+    const snapBefore = this.pager.snapshot();
+    const wasInSnapshot = !!snapBefore && snapBefore.jobs.some(j => j.jobKey === departingJobKey);
+    const entry = this.pager.removeAndAdvance(departingJobKey);
+    if (!entry) {
+      if (wasInSnapshot) {
+        // Snapshot existed and the departing job was in it: removeAndAdvance
+        // cleared the iteration. Close the panel and toast so the user knows
+        // they finished the lane.
+        this.closeDetail();
+        this.showTriageToast('Lane cleared.');
+        return true;
+      }
+      return false;
+    }
+    this.triageLaneState = this.pager.snapshot()?.lane ?? this.triageLaneState;
+    history.replaceState(
+      null,
+      '',
+      `?job=${encodeURIComponent(entry.id)}&watchPath=${encodeURIComponent(entry.watchPath)}`,
+    );
+    const token = ++this.openDetailToken;
+    this.jobService.getDetail(entry.id, entry.watchPath).subscribe({
+      next: (detail) => {
+        if (token !== this.openDetailToken) return;
+        this.selected.set(detail);
+      },
+      error: (err) => {
+        if (token !== this.openDetailToken) return;
+        this.errorDialog.show(err, {
+          title: 'Failed to load task details',
+          fallbackMessage: 'Failed to load task details',
+          source: `Task ${entry.id}`,
+        });
+      },
+    });
+    return true;
   }
 
   /** Bumps the request token and returns the new value. Use from advance handlers. */

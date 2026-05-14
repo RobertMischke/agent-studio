@@ -296,12 +296,22 @@ export class JobDetailComponent implements OnDestroy {
    *  state string so it also fires for moves the parent triggered via
    *  drag-and-drop on the kanban behind the open detail view. */
   private lastObservedState: string | null = null;
+  private lastObservedJobKeyForChangingState: string | null = null;
   private resetChangingStateOnUpdate = effect(() => {
     const state = this.detail().info.state;
-    if (this.lastObservedState !== null && state !== this.lastObservedState && this.changingState()) {
+    const jobKey = this.detail().info.jobKey;
+    const stateChanged = this.lastObservedState !== null && state !== this.lastObservedState;
+    // After a lane-pager auto-advance the panel lands on a new job whose
+    // state may happen to match the previous one (e.g. triaging a 2-ready
+    // lane: every advance shows another 2-ready job). The dropdown's
+    // "changing" flag belongs to the action on the OLD job and must clear
+    // when we switch, otherwise the next dropdown click is disabled.
+    const jobSwitched = this.lastObservedJobKeyForChangingState !== null && jobKey !== this.lastObservedJobKeyForChangingState;
+    if ((stateChanged || jobSwitched) && this.changingState()) {
       this.changingState.set(false);
     }
     this.lastObservedState = state;
+    this.lastObservedJobKeyForChangingState = jobKey;
   });
 
   private detailEffect = effect(() => {

@@ -95,14 +95,14 @@ export class BoardMutationsService {
   // ---------- delete (board + detail) ----------
 
   deleteFromBoard(job: JobInfo): void {
-    this.confirmAndDeleteJob(job, false);
+    this.confirmAndDeleteJob(job, 'board');
   }
 
   deleteFromDetail(info: JobInfo): void {
-    this.confirmAndDeleteJob(info, true);
+    this.confirmAndDeleteJob(info, 'detail');
   }
 
-  private async confirmAndDeleteJob(job: JobInfo, closeDetailOnSuccess: boolean): Promise<void> {
+  private async confirmAndDeleteJob(job: JobInfo, source: 'board' | 'detail'): Promise<void> {
     const label = job.title || job.id;
     const ok = await this.confirmDialog.confirm({
       title: 'Delete this task?',
@@ -116,7 +116,15 @@ export class BoardMutationsService {
 
     this.jobService.deleteJob(job.id, job.watchPath).subscribe({
       next: () => {
-        if (closeDetailOnSuccess) this.jobSelection.closeDetail();
+        if (source === 'detail') {
+          // Advance the pager iteration past the deleted job so the user can
+          // keep triaging the lane without losing their place. When the
+          // pager has no active iteration (deep-link entry, no preceding
+          // board click) advanceAfterMutation returns false and we fall
+          // back to closing the detail like the legacy behaviour.
+          const advanced = this.jobSelection.advanceAfterMutation(job.jobKey);
+          if (!advanced) this.jobSelection.closeDetail();
+        }
         this.jobService.refresh();
       },
       error: (err) => {
@@ -141,21 +149,30 @@ export class BoardMutationsService {
    */
   changeStateFromDetail(info: JobInfo, targetState: string): void {
     if (!targetState || targetState === info.state) return;
-    // Re-anchor the triage lane to the user-chosen target so the
-    // app-shell's external-advance effect does not interpret the user's
-    // own dropdown change as a foreign reshuffle and jump away. The
-    // LanePager snapshot keeps its original lane intentionally - the
-    // iteration order survives status changes by design.
-    this.jobSelection.triageLaneState = targetState;
     const snapshot = this.jobService.applyOptimisticMove(info.id, info.watchPath, targetState);
     this.jobService.beginOptimisticPersist();
     this.jobService.moveJob(info.id, targetState, info.watchPath).subscribe({
       next: () => {
         this.jobService.endOptimisticPersist();
-        this.jobService.getDetail(info.id, info.watchPath).subscribe({
-          next: (detail) => this.jobSelection.selected.set(detail),
-          error: () => { /* polling will reconcile */ },
-        });
+        // The user just moved THIS job out of the iteration lane (5-human-review
+        // -> 7-archive, 2-ready, ...). Drop it from the pager snapshot and
+        // advance the detail panel to the next item still in the original
+        // lane so the user can keep triaging without re-navigating. When
+        // there is no active snapshot (deep-link entry, no preceding click),
+        // fall back to re-fetching the just-moved job so the lane dropdown
+        // reflects the new state without surprising the user with a forced
+        // close.
+        const advanced = this.jobSelection.advanceAfterMutation(info.jobKey);
+        if (!advanced) {
+          // Re-anchor the triage lane to the user-chosen target so the
+          // app-shell's external-advance effect does not interpret the user's
+          // own dropdown change as a foreign reshuffle.
+          this.jobSelection.triageLaneState = targetState;
+          this.jobService.getDetail(info.id, info.watchPath).subscribe({
+            next: (detail) => this.jobSelection.selected.set(detail),
+            error: () => { /* polling will reconcile */ },
+          });
+        }
       },
       error: (err) => {
         this.jobService.endOptimisticPersist();

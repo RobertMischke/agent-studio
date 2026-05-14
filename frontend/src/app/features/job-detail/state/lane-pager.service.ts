@@ -126,6 +126,38 @@ export class LanePagerService {
   }
 
   /**
+   * Drop `jobKey` from the snapshot and yield the entry that now sits
+   * at its slot. Use after a user-initiated mutation removes the
+   * currently visible job from the iteration (delete from detail,
+   * lane change via state dropdown, triage move/delete) so the pager
+   * auto-advances to the next item the user wanted to triage.
+   *
+   * The numeric index is preserved across the removal: dropping the
+   * entry at index `i` shifts the entry that was at `i + 1` down to
+   * `i`, which is the "k+1" the user asked for. When the dropped
+   * entry was the last in the list, the new index clamps to
+   * `length - 1` so Prev/Next stay valid. Returns `null` (and clears
+   * the snapshot) when the lane is now empty, or when `jobKey` was
+   * not part of the snapshot.
+   */
+  removeAndAdvance(jobKey: string): LanePagerEntry | null {
+    const s = this.snapshot();
+    if (!s) return null;
+    const idx = s.jobs.findIndex(j => j.jobKey === jobKey);
+    if (idx < 0) return null;
+    const newJobs = [...s.jobs.slice(0, idx), ...s.jobs.slice(idx + 1)];
+    if (newJobs.length === 0) {
+      this.clear();
+      return null;
+    }
+    const newIdx = Math.min(idx, newJobs.length - 1);
+    const updated: LanePagerSnapshot = { ...s, jobs: newJobs, index: newIdx };
+    this.snapshot.set(updated);
+    this.persist(updated);
+    return newJobs[newIdx];
+  }
+
+  /**
    * Reconcile the snapshot's index to a specific job key. Used when
    * selection lands on a snapshot member through a path other than
    * pager step (e.g. URL restore on reload). No-op when the job is

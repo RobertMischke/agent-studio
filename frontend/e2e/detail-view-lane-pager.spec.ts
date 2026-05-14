@@ -27,6 +27,20 @@ async function clickCardAndWaitForDetail(page: Page, jobId: string): Promise<voi
 }
 
 /**
+ * Ensure every job in `ids` is rendered as a card on the kanban before the
+ * test proceeds. The pager snapshot is captured at the moment of click, so
+ * if even one fixture has not landed in `/api/jobs/grouped` yet the
+ * iteration starts short and the rest of the test asserts against stale
+ * state.
+ */
+async function waitForFixtureCards(page: Page, ids: ReadonlyArray<string>): Promise<void> {
+  for (const id of ids) {
+    await expect(page.locator('[data-testid="job-card"]', { hasText: id }).first())
+      .toBeVisible({ timeout: 15_000 });
+  }
+}
+
+/**
  * Detail-header lane pager. The Prev / N of M / Next controls iterate the
  * snapshot captured when the user clicked into the detail view, NOT the
  * live lane: changing a job's status mid-iteration must keep the pager's
@@ -41,11 +55,12 @@ test.describe('Detail view - lane pager', () => {
     const ids = [1, 2, 3, 4, 5].map(i => uid(`walk-${i}`));
     const created: { id: string }[] = [];
     for (const id of ids) {
-      created.push(await createJob({ id, title: id, watchPath: wp.path, targetState: '2-ready' }));
+      created.push(await createJob({ id, title: id, watchPath: wp.path, targetState: '2-ready', fixture: false }));
     }
 
     try {
       await page.goto('/');
+      await waitForFixtureCards(page, ids);
       // Land on the third created job. Created in order so it's the third
       // of our fixture set; we click by its unique title.
       await clickCardAndWaitForDetail(page, ids[2]);
@@ -83,40 +98,137 @@ test.describe('Detail view - lane pager', () => {
     }
   });
 
-  test('status change preserves snapshot position - Next walks to the next captured slug, not the live lane', async ({ page }) => {
+  test('state change from the detail header auto-advances to the next captured slug and removes the moved task from the pager', async ({ page }) => {
     const wp = await getFirstWatchPath();
     const ids = [1, 2, 3, 4, 5].map(i => uid(`stable-${i}`));
     for (const id of ids) {
-      await createJob({ id, title: id, watchPath: wp.path, targetState: '2-ready' });
+      await createJob({ id, title: id, watchPath: wp.path, targetState: '2-ready', fixture: false });
     }
-
     try {
       await page.goto('/');
+      // Wait for every fixture card to render BEFORE the click that captures
+      // the pager snapshot - otherwise openDetail can grab a list that's
+      // missing the last-created jobs and the rest of the test races.
+      await waitForFixtureCards(page, ids);
       // Open the third job, then advance once so we're on the fourth.
       await clickCardAndWaitForDetail(page, ids[2]);
       const count = page.getByTestId('lane-pager-count');
       const initial = (await count.textContent())!.trim();
-      const [posStr] = initial.split('/').map(s => s.trim());
+      const [posStr, totalStr] = initial.split('/').map(s => s.trim());
       const startPos = Number(posStr);
+      const startTotal = Number(totalStr);
 
       await page.getByTestId('lane-pager-next').click();
       await expect(page).toHaveURL(new RegExp(`job=${encodeURIComponent(ids[3])}`), { timeout: 10_000 });
 
-      // Now move the current job (the fourth) to 4-auto-review. The pager
-      // must NOT lose its place - the captured iteration is for "2-ready",
-      // independent of the moved job's current state.
+      // Move the current (4th) job out of 2-ready. The user wants to keep
+      // triaging the 2-ready lane, so the detail panel must auto-advance to
+      // ids[4] - the next captured slug - and the moved task must vanish
+      // from the pager (k / N-1, where the same numeric index now points at
+      // the next job in the iteration).
+      const moveResponse = page.waitForResponse(resp =>
+        resp.request().method() === 'POST'
+        && resp.url().includes(`/api/jobs/${encodeURIComponent(ids[3])}/move`)
+      );
       await page.getByTestId('detail-state-select').selectOption('4-auto-review');
-      // Wait for the select to reflect the new state - the move has landed.
-      await expect(page.getByTestId('detail-state-select')).toHaveValue('4-auto-review', { timeout: 10_000 });
+      await moveResponse;
 
-      // The pager is still on the same captured slot (the moved job).
-      await expect(count).toHaveText(`${startPos + 1} / ${initial.split('/')[1].trim()}`, { timeout: 5_000 });
-
-      // Clicking Next now must advance through the ORIGINAL snapshot.
-      await page.getByTestId('lane-pager-next').click();
       await expect(page).toHaveURL(new RegExp(`job=${encodeURIComponent(ids[4])}`), { timeout: 10_000 });
+      // The new detail view is anchored on ids[4], which is still in 2-ready.
+      await expect(page.getByTestId('detail-state-select')).toHaveValue('2-ready', { timeout: 10_000 });
+      // Pager count shrunk by one and the position is preserved.
+      await expect(count).toHaveText(`${startPos + 1} / ${startTotal - 1}`, { timeout: 5_000 });
     } finally {
       // The fourth job was moved to auto-review; the rest are in 2-ready.
+      for (const id of ids) {
+        await moveJob(id, wp.path, '7-archive').catch(() => {});
+        await deleteJob(id, wp.path).catch(() => {});
+      }
+    }
+  });
+
+  test('delete from the detail menu auto-advances to the next captured slug in the original lane', async ({ page }) => {
+    const wp = await getFirstWatchPath();
+    const ids = [1, 2, 3, 4, 5].map(i => uid(`del-adv-${i}`));
+    for (const id of ids) {
+      await createJob({ id, title: id, watchPath: wp.path, targetState: '2-ready', fixture: false });
+    }
+    try {
+      await page.goto('/');
+      await waitForFixtureCards(page, ids);
+      await clickCardAndWaitForDetail(page, ids[2]);
+      const count = page.getByTestId('lane-pager-count');
+      const initial = (await count.textContent())!.trim();
+      const [posStr, totalStr] = initial.split('/').map(s => s.trim());
+      const startPos = Number(posStr);
+      const startTotal = Number(totalStr);
+
+      // Walk Next once so we're on the fourth slot (ids[3]).
+      await page.getByTestId('lane-pager-next').click();
+      await expect(page).toHaveURL(new RegExp(`job=${encodeURIComponent(ids[3])}`), { timeout: 10_000 });
+
+      // Delete via the detail-header menu. The view must land on the next
+      // slot (ids[4]) and the pager count must drop by one with the position
+      // preserved.
+      await page.getByTestId('detail-menu-btn').click();
+      await page.getByTestId('detail-menu-delete').click();
+      const confirmDialog = page.getByTestId('confirm-dialog-panel');
+      await expect(confirmDialog).toBeVisible({ timeout: 5_000 });
+      const deleteResponse = page.waitForResponse(resp =>
+        resp.request().method() === 'DELETE'
+        && resp.url().includes(`/api/jobs/${encodeURIComponent(ids[3])}`)
+      );
+      await page.getByTestId('confirm-dialog-confirm').click();
+      await deleteResponse;
+
+      await expect(page).toHaveURL(new RegExp(`job=${encodeURIComponent(ids[4])}`), { timeout: 10_000 });
+      await expect(count).toHaveText(`${startPos + 1} / ${startTotal - 1}`, { timeout: 5_000 });
+    } finally {
+      for (const id of ids) await deleteJob(id, wp.path).catch(() => {});
+    }
+  });
+
+  test('multiple state changes in a row keep the pager anchored on the original lane', async ({ page }) => {
+    const wp = await getFirstWatchPath();
+    const ids = [1, 2, 3, 4, 5].map(i => uid(`multi-${i}`));
+    for (const id of ids) {
+      await createJob({ id, title: id, watchPath: wp.path, targetState: '2-ready', fixture: false });
+    }
+
+    try {
+      await page.goto('/');
+      await waitForFixtureCards(page, ids);
+      // Open the first fixture job. The pager captures the 2-ready iteration;
+      // total includes our 5 fixtures plus any leftover 2-ready peers.
+      await clickCardAndWaitForDetail(page, ids[0]);
+      const count = page.getByTestId('lane-pager-count');
+      const initial = (await count.textContent())!.trim();
+      const [posStr, totalStr] = initial.split('/').map(s => s.trim());
+      const startPos = Number(posStr);
+      const startTotal = Number(totalStr);
+
+      // Triage three of the five fixtures in a row via the lane dropdown.
+      // The pager must keep the same numeric position while the total drops
+      // by one each time, and the panel must land on the next captured slug
+      // each time without the user touching prev/next.
+      for (let i = 0; i < 3; i++) {
+        const movingId = ids[i];
+        await expect(page).toHaveURL(new RegExp(`job=${encodeURIComponent(movingId)}`), { timeout: 10_000 });
+        const moveResp = page.waitForResponse(resp =>
+          resp.request().method() === 'POST'
+          && resp.url().includes(`/api/jobs/${encodeURIComponent(movingId)}/move`)
+        );
+        await page.getByTestId('detail-state-select').selectOption('4-auto-review');
+        await moveResp;
+        await expect(page).toHaveURL(new RegExp(`job=${encodeURIComponent(ids[i + 1])}`), { timeout: 10_000 });
+        await expect(count).toHaveText(`${startPos} / ${startTotal - (i + 1)}`, { timeout: 5_000 });
+        // The lane the detail header shows must still be 2-ready - the next
+        // captured slug is anchored on the original lane, not on the lane the
+        // user just moved the previous job to.
+        await expect(page.getByTestId('detail-state-select')).toHaveValue('2-ready', { timeout: 10_000 });
+      }
+    } finally {
+      // Three of the fixtures landed in auto-review; the rest in 2-ready.
       for (const id of ids) {
         await moveJob(id, wp.path, '7-archive').catch(() => {});
         await deleteJob(id, wp.path).catch(() => {});
@@ -128,7 +240,7 @@ test.describe('Detail view - lane pager', () => {
     const wp = await getFirstWatchPath();
     const ids = [1, 2, 3, 4].map(i => uid(`reload-${i}`));
     for (const id of ids) {
-      await createJob({ id, title: id, watchPath: wp.path, targetState: '2-ready' });
+      await createJob({ id, title: id, watchPath: wp.path, targetState: '2-ready', fixture: false });
     }
 
     try {
@@ -151,7 +263,7 @@ test.describe('Detail view - lane pager', () => {
     const wp = await getFirstWatchPath();
     const ids = [1, 2, 3].map(i => uid(`bounds-${i}`));
     for (const id of ids) {
-      await createJob({ id, title: id, watchPath: wp.path, targetState: '2-ready' });
+      await createJob({ id, title: id, watchPath: wp.path, targetState: '2-ready', fixture: false });
     }
 
     try {

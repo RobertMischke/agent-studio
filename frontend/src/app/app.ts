@@ -522,8 +522,17 @@ export class App implements OnInit {
       }
 
       untracked(() => {
+        // Token-guard the re-fetch: if the user (or an auto-advance after a
+        // mutation) navigates to a different job while this request is in
+        // flight, dropping the late response prevents the panel from
+        // snapping back to the prior slug. Without this, a state-change
+        // from the detail dropdown races advanceAfterMutation - the shell
+        // re-fetches the just-moved job at the same time the pager wants
+        // to land on the next slug, and whichever response arrives last
+        // wins the `selectedJob` signal.
+        const token = this.jobSelection.bumpOpenDetailToken();
         this.jobService.getDetail(latest.id, latest.watchPath).subscribe({
-          next: (detail) => this.selectedJob.set(detail),
+          next: (detail) => this.jobSelection.setSelectedFromAdvance(detail, token),
         });
       });
     });

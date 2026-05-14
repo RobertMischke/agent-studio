@@ -138,6 +138,28 @@ export class DetailHeaderComponent {
   });
   private readonly menuStackTeardown = this.menuDestroyRef.onDestroy(() => this.menuStackDispose?.());
 
+  @ViewChild('stateSelect') private stateSelectEl?: ElementRef<HTMLSelectElement>;
+
+  /**
+   * Force the lane dropdown's DOM value to follow `info().jobKey` even when
+   * the bound state string did not change. Without this, an auto-advance
+   * from one job to another inside the SAME lane (e.g. triaging 2-ready)
+   * leaves the user's last `selectOption` choice on screen because
+   * Angular's [value] binding skips the DOM write when its previous value
+   * was identical. The effect runs only on job switch; same-job state
+   * updates already flow through the existing [value] binding.
+   */
+  private lastSyncedJobKey: string | null = null;
+  private syncStateSelectOnJobSwitch = effect(() => {
+    const info = this.info();
+    if (this.lastSyncedJobKey === info.jobKey) return;
+    this.lastSyncedJobKey = info.jobKey;
+    const el = this.stateSelectEl?.nativeElement;
+    if (el && el.value !== info.state) {
+      queueMicrotask(() => { if (el) el.value = info.state; });
+    }
+  });
+
   @ViewChild('titleInput') private titleInputEl?: ElementRef<HTMLInputElement>;
 
   /** Auto-focus the input when editing turns on (parity with prior behavior). */

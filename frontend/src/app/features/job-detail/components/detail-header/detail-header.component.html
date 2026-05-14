@@ -75,7 +75,8 @@
               (click)="pagerNext.emit()">›</button>
     </div>
   }
-  <select class="detail__state detail__state--select"
+  <select #stateSelect
+          class="detail__state detail__state--select"
           [class]="'detail__state detail__state--select state--' + info().state"
           [value]="info().state"
           [disabled]="changingState()"

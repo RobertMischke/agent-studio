@@ -57,6 +57,12 @@ export class TriageController {
     this.jobService.moveJob(info.id, ev.targetState, info.watchPath).subscribe({
       next: () => {
         this.jobService.endOptimisticPersist();
+        this.clearActing();
+        // Prefer the lane-pager snapshot when one is active: it removes the
+        // moved job from the iteration and lands the next slot's job in the
+        // panel without depending on the live `triageLanePeers` view (which
+        // can be empty while the optimistic move + refresh races settle).
+        if (this.jobSelection.advanceAfterMutation(info.jobKey)) return;
         this.advanceToNextInLane(lane, info.jobKey, peers);
       },
       error: (err) => {
@@ -117,6 +123,11 @@ export class TriageController {
     this.jobService.deleteJob(info.id, info.watchPath).subscribe({
       next: () => {
         this.jobService.refresh();
+        this.clearActing();
+        // Prefer the lane-pager snapshot when one is active so the
+        // iteration count and URL update consistently with the
+        // detail-header Delete and state-dropdown paths.
+        if (this.jobSelection.advanceAfterMutation(info.jobKey)) return;
         this.advanceToNextInLane(lane, info.jobKey, peers);
       },
       error: (err) => {

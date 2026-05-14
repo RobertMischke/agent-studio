@@ -72,7 +72,7 @@ test.describe('Delete task', () => {
     expect(after.find(j => j.id === job.id)).toBeUndefined();
   });
 
-  test('detail context menu Delete item prompts, deletes, and closes the detail view', async ({ page }) => {
+  test('detail context menu Delete item prompts, deletes, and either closes the detail view or auto-advances past the deleted job', async ({ page }) => {
     const wp = await getFirstWatchPath();
     const watchPath = wp.path;
     await cleanupTestJobs(watchPath);
@@ -109,8 +109,14 @@ test.describe('Delete task', () => {
     await page.getByTestId('confirm-dialog-confirm').click();
     await expect((await deleteResponse).ok()).toBeTruthy();
 
-    // Detail view closes; the kanban dashboard becomes visible again.
-    await expect(page.getByTestId('kanban-dashboard')).toBeVisible({ timeout: 10_000 });
+    // Acceptance: the user must never be left looking at the deleted job.
+    // When the captured lane had more entries the detail-view advances to
+    // the next captured slug; when the deleted job was the only one in the
+    // iteration the panel falls back to the kanban dashboard. Either way
+    // the deleted job's id must leave the URL.
+    await expect.poll(async () => page.url().includes(`job=${encodeURIComponent(job.id)}`), {
+      timeout: 10_000,
+    }).toBe(false);
 
     await expect.poll(async () => {
       const after = await listJobs();
