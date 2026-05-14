@@ -1,8 +1,8 @@
-import { Component, OnInit, computed, signal } from '@angular/core';
+import { Component, OnInit, computed, output, signal } from '@angular/core';
 import { JobService } from '../../../services/job.service';
 import { CliConsoleComponent } from './cli-console';
 import type { CliOutputLine, CliType } from '../../../models/job.model';
-import type { CliSessionInfo, CliUsageProjectGroup, CliUsageReport, CliUsageSection } from '../../../features/cli';
+import type { CliSessionInfo, CliUsageProjectGroup, CliUsageReport, CliUsageSection, LinkedJobRef } from '../../../features/cli';
 
 interface SelectedSession {
   cliType: CliType;
@@ -18,6 +18,15 @@ interface SelectedSession {
   styleUrl: './cli-sessions-panel.scss',
 })
 export class CliSessionsPanelComponent implements OnInit {
+  /**
+   * Emitted when the user clicks a session row's task-link chip. The shell
+   * (via `orchestrator-side-sheet`) routes this through the existing
+   * `JobSelectionService.openDetail` flow so the kanban detail panel
+   * opens for the owning task. Mirrors the screenshot-strip `openTask`
+   * pattern.
+   */
+  readonly openJobDetail = output<{ jobId: string; watchPath: string }>();
+
   readonly report = signal<CliUsageReport | null>(null);
   readonly loading = signal(false);
   readonly loaded = signal(false);
@@ -132,5 +141,32 @@ export class CliSessionsPanelComponent implements OnInit {
 
   private projectKey(cliType: string, project: CliUsageProjectGroup): string {
     return `${cliType}:${project.rootPath || project.projectName}`;
+  }
+
+  /**
+   * Chip state for the task-link chip rendered next to a session row.
+   * `'active'` and `'linked'` mirror the backend's two visible states;
+   * `'none'` means no chip is rendered (orphan session).
+   */
+  chipState(linkedJob: LinkedJobRef | null | undefined): 'active' | 'linked' | 'none' {
+    if (!linkedJob) return 'none';
+    return linkedJob.isActive ? 'active' : 'linked';
+  }
+
+  /**
+   * Plain-text tooltip body. Per the project tooltip rule (no HTML,
+   * delayed open), this is a one-line string that the browser's native
+   * title attribute renders.
+   */
+  chipTooltip(linkedJob: LinkedJobRef): string {
+    const state = linkedJob.isActive ? 'active' : `linked (${linkedJob.lane})`;
+    return `Open task: ${linkedJob.title} - ${state}`;
+  }
+
+  onOpenLinkedJob(event: MouseEvent, linkedJob: LinkedJobRef): void {
+    // Stop the row's own click handler so the chip click does not also
+    // select the session in the detail aside.
+    event.stopPropagation();
+    this.openJobDetail.emit({ jobId: linkedJob.jobId, watchPath: linkedJob.watchPath });
   }
 }

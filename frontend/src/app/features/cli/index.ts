@@ -12,4 +12,5 @@ export type {
   CliUsageProjectGroup,
   CliUsageSection,
   CliUsageReport,
+  LinkedJobRef,
 } from './models/cli.model';

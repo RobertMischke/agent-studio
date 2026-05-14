@@ -106,7 +106,7 @@
   padding: 0 8px 8px 34px;
 }
 .session {
-  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
   border-radius: 6px;
   padding: 6px 8px;
   font-size: 12px;
@@ -120,6 +120,32 @@
 }
 .session__usage { color: #fde68a; }
 .session__muted { color: #64748b; }
+// Task-link chip: small pill anchored on each session row pointing back at
+// the kanban task whose SessionChain contains this session id. Two visible
+// colour rules driven by data-state: `active` (green) when the runner is
+// live on the linked task; `linked` (neutral) for any other lane.
+.session__chip {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 8px;
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: .02em;
+  border-radius: 999px;
+  border: 1px solid rgba(148,163,184,.32);
+  background: rgba(148,163,184,.10);
+  color: #cbd5e1;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.session__chip:hover { filter: brightness(1.15); }
+.session__chip[data-state="active"] {
+  border-color: rgba(74,222,128,.45);
+  background: rgba(74,222,128,.16);
+  color: #bbf7d0;
+}
 
 @media (max-width: 880px) {
   .sessions__layout { grid-template-columns: 1fr; }

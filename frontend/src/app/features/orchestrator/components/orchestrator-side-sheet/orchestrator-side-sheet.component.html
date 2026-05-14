@@ -185,7 +185,7 @@
         }
         @case ('sessions') {
           @defer {
-            <app-cli-sessions-panel />
+            <app-cli-sessions-panel (openJobDetail)="openJobDetail.emit($event)" />
           }
         }
         @case ('supervisor') {

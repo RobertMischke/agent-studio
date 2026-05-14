@@ -58,6 +58,16 @@
                                   [class.session--active]="isSelected(section.cliType, project, s)"
                                   (click)="select(section.cliType, project, s)">
                             <span class="session__id" [title]="s.id">{{ s.label || shortId(s.id) }}</span>
+                            @if (s.linkedJob; as link) {
+                              <button class="session__chip"
+                                      type="button"
+                                      data-testid="session-task-link"
+                                      [attr.data-state]="chipState(link)"
+                                      [title]="chipTooltip(link)"
+                                      (click)="onOpenLinkedJob($event, link)">
+                                {{ link.isActive ? 'task: active' : 'task: linked' }}
+                              </button>
+                            }
                             @if (s.updatedAt) { <span>{{ formatTime(s.updatedAt) }}</span> }
                             @if (s.lastUsage?.tokens) {
                               <span class="session__usage">{{ s.lastUsage?.tokens }}</span>

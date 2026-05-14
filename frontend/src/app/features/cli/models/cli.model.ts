@@ -35,6 +35,28 @@ export interface CliSessionInfo {
   cwd: string | null;
   lastUsage: SessionUsage | null;
   isProjectDefault: boolean;
+  /**
+   * Back-reference to the kanban task that owns this session, when the
+   * session id appears in any job's `sessionChain`. Null for orphan
+   * sessions (ad-hoc CLI use, sessions from another checkout). Drives
+   * the small chip rendered next to the session row.
+   */
+  linkedJob: LinkedJobRef | null;
+}
+
+/**
+ * Mirror of the backend `LinkedJobRef` record (see backend/Models/CliTypes.cs).
+ * `lane` is the on-disk state slug; `isActive` is true when the owning job is
+ * in `3-progress` AND the runner reports it as the project's currently-running
+ * task. The frontend reads both to choose the chip colour rule.
+ */
+export interface LinkedJobRef {
+  jobId: string;
+  title: string;
+  watchPath: string;
+  projectName: string;
+  lane: string;
+  isActive: boolean;
 }
 
 export interface CliUsageProjectGroup {
