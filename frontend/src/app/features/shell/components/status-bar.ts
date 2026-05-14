@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   EventEmitter,
   HostListener,
   Input,
@@ -8,10 +9,12 @@ import {
   Output,
   ViewEncapsulation,
   computed,
+  effect,
   inject,
   signal,
 } from '@angular/core';
 import { JobService } from '../../../services/job.service';
+import { ModalStackService } from '../../../services/modal-stack.service';
 import type { CliType } from '../../../models/job.model';
 import { CLI_TYPES } from '../../../models/job.model';
 import type { CliModelInfo } from '../../../features/cli';
@@ -91,6 +94,38 @@ export class StatusBarComponent implements OnInit {
     this.loadModels(this.defaultCli());
   }
 
+  // Status-bar dropdowns register on the modal stack while open so they
+  // win Escape over the detail view below, and so a real modal above
+  // (Add Task, confirm-dialog) wins Escape over them.
+  private readonly modalStack = inject(ModalStackService);
+  private readonly destroyRef = inject(DestroyRef);
+  private cliMenuDispose: (() => void) | null = null;
+  private modelMenuDispose: (() => void) | null = null;
+  private readonly cliMenuEffect = effect(() => {
+    const open = this.cliMenuOpen();
+    if (open && !this.cliMenuDispose) {
+      this.cliMenuDispose = this.modalStack.push('status-bar-cli-menu', () => this.cliMenuOpen.set(false));
+    } else if (!open && this.cliMenuDispose) {
+      this.cliMenuDispose();
+      this.cliMenuDispose = null;
+    }
+  });
+  private readonly modelMenuEffect = effect(() => {
+    const open = this.modelMenuOpen();
+    if (open && !this.modelMenuDispose) {
+      this.modelMenuDispose = this.modalStack.push('status-bar-model-menu', () => this.modelMenuOpen.set(false));
+    } else if (!open && this.modelMenuDispose) {
+      this.modelMenuDispose();
+      this.modelMenuDispose = null;
+    }
+  });
+  // Destroy hook is set up via DestroyRef so we drop the entry even if the
+  // host node is torn down with the dropdown still open (e.g. router nav).
+  private readonly statusBarTeardown = this.destroyRef.onDestroy(() => {
+    this.cliMenuDispose?.();
+    this.modelMenuDispose?.();
+  });
+
   cliIcon(t: CliType): string { return cliTypeIcon(t); }
   cliLabel(t: CliType): string { return cliTypeLabel(t); }
 
@@ -143,11 +178,8 @@ export class StatusBarComponent implements OnInit {
     this.modelMenuOpen.set(false);
   }
 
-  @HostListener('document:keydown.escape')
-  onEscape() {
-    this.cliMenuOpen.set(false);
-    this.modelMenuOpen.set(false);
-  }
+  // Escape handling is delegated to ModalStackService (effects above register
+  // an entry per open dropdown). The previous local @HostListener was removed.
 
   private loadModels(cliType: CliType) {
     this.jobService.getCliModelCatalog(cliType).subscribe({

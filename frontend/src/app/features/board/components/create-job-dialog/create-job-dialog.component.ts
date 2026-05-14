@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, ElementRef, HostListener, ViewChild, computed, inject, input, model, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, ViewChild, computed, inject, input, model, output, signal } from '@angular/core';
+import { ModalStackService } from '../../../../services/modal-stack.service';
 import { forkJoin, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
 import { FormsModule } from '@angular/forms';
@@ -145,6 +146,20 @@ export class CreateJobDialogComponent {
   @ViewChild('promptArea') private promptArea?: ElementRef<HTMLTextAreaElement>;
   @ViewChild('fileInput') private fileInput?: ElementRef<HTMLInputElement>;
 
+  private readonly modalStack = inject(ModalStackService);
+  private readonly destroyRef = inject(DestroyRef);
+
+  constructor() {
+    // The dialog is mounted only while open (parent renders it under
+    // @if (showCreate())), so a one-shot push-on-construct keeps the
+    // stack ordering honest without touching the parent.
+    this.modalStack.pushUntilDestroyed(
+      'create-job-dialog',
+      () => this.cancel.emit(),
+      this.destroyRef,
+    );
+  }
+
   triggerFilePicker(): void {
     this.fileInput?.nativeElement.click();
   }
@@ -286,13 +301,10 @@ export class CreateJobDialogComponent {
     this.enhanceError.set(null);
   }
 
-  @HostListener('document:keydown', ['$event'])
-  onDocumentKeydown(event: KeyboardEvent): void {
-    if (event.key !== 'Escape') return;
-    event.preventDefault();
-    event.stopPropagation();
-    this.cancel.emit();
-  }
+  // Escape handling is delegated to ModalStackService (constructor below);
+  // the dialog is mounted only while open so a simple push-on-construct /
+  // dispose-on-destroy keeps the stack honest. See
+  // services/modal-stack.service.ts.
 
   onFileInputChange(event: Event): void {
     const input = event.target as HTMLInputElement;

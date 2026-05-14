@@ -1,16 +1,17 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   ElementRef,
-  HostListener,
-  computed,
   effect,
+  inject,
   input,
   output,
   signal,
   viewChild,
 } from '@angular/core';
 import { ClientSummary, TagRegistryEntry } from '../../../../models/job.model';
+import { ModalStackService } from '../../../../services/modal-stack.service';
 import { TypeFilterOption } from '../filters-dropdown/filters-dropdown.component';
 
 /**
@@ -65,6 +66,10 @@ export class KanbanFilterSidesheetComponent {
    *  the effect that focuses on open is still pure. */
   private readonly localQuery = signal<string>('');
 
+  private readonly modalStack = inject(ModalStackService);
+  private readonly destroyRef = inject(DestroyRef);
+  private modalStackDispose: (() => void) | null = null;
+
   constructor() {
     effect(() => {
       if (this.open()) {
@@ -72,6 +77,18 @@ export class KanbanFilterSidesheetComponent {
         // started; focusing inside a zero-width host steals focus
         // without scrolling it into view.
         queueMicrotask(() => this.searchInputEl()?.nativeElement.focus());
+        if (!this.modalStackDispose) {
+          this.modalStackDispose = this.modalStack.push('kanban-filter-sidesheet', () => this.close());
+        }
+      } else if (this.modalStackDispose) {
+        this.modalStackDispose();
+        this.modalStackDispose = null;
+      }
+    });
+    this.destroyRef.onDestroy(() => {
+      if (this.modalStackDispose) {
+        this.modalStackDispose();
+        this.modalStackDispose = null;
       }
     });
   }
@@ -118,16 +135,5 @@ export class KanbanFilterSidesheetComponent {
 
   close(): void {
     this.closed.emit();
-  }
-
-  @HostListener('document:keydown.escape', ['$event'])
-  onDocumentEscape(event: Event): void {
-    if (!this.open()) return;
-    // If the user is typing in our search field, the field handles Esc;
-    // anything else (a stray focus) closes the sidesheet outright.
-    const target = event.target as HTMLElement | null;
-    if (target?.getAttribute('data-testid') === 'kanban-filter-sidesheet-search') return;
-    event.preventDefault();
-    this.close();
   }
 }

@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   ElementRef,
   ViewChild,
   computed,
@@ -13,6 +14,7 @@ import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { renderResultsHtml, type SentinelBanner } from './beautiful-results.renderer';
 import { applyHighlighting } from './beautiful-results.highlight';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
+import { ModalStackService } from '../../../../services/modal-stack.service';
 
 export type BeautifulResultsViewMode = 'rendered' | 'raw';
 
@@ -130,9 +132,23 @@ export class BeautifulResultsComponent {
     this.lightbox.set(null);
   }
 
-  onLightboxKey(event: KeyboardEvent): void {
-    if (event.key === 'Escape') this.closeLightbox();
-  }
+  // Lightbox Escape routes through ModalStack (effect below) so a
+  // confirm-dialog above it always wins. The previous local handler is
+  // gone; template references to `onLightboxKey` were dropped along with it.
+  private readonly lightboxModalStack = inject(ModalStackService);
+  private readonly lightboxDestroyRef = inject(DestroyRef);
+  private lightboxStackDispose: (() => void) | null = null;
+  private readonly lightboxStackEffect = effect(() => {
+    const open = this.lightbox() !== null;
+    if (open) {
+      if (!this.lightboxStackDispose) {
+        this.lightboxStackDispose = this.lightboxModalStack.push('beautiful-results-lightbox', () => this.closeLightbox());
+      }
+    } else if (this.lightboxStackDispose) {
+      this.lightboxStackDispose();
+      this.lightboxStackDispose = null;
+    }
+  });
 
   private async copyCodeFor(button: HTMLElement): Promise<void> {
     const pre = button.closest('.results-code')?.querySelector<HTMLElement>('[data-results-code]');

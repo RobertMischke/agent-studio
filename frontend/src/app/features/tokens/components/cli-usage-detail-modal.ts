@@ -2,14 +2,16 @@ import {
   AfterViewInit,
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   ElementRef,
   EventEmitter,
-  HostListener,
   Input,
   Output,
   ViewChild,
+  inject,
 } from '@angular/core';
 import type { CliType } from '../../../models/job.model';
+import { ModalStackService } from '../../../services/modal-stack.service';
 import type { QuotaWindow } from '../../../features/quota';
 import type {
   AdHocUsageAggregate,
@@ -75,13 +77,16 @@ export class CliUsageDetailModalComponent implements AfterViewInit {
 
   @ViewChild('dialog') private dialog?: ElementRef<HTMLElement>;
 
-  ngAfterViewInit(): void {
-    queueMicrotask(() => this.dialog?.nativeElement.focus());
+  constructor() {
+    inject(ModalStackService).pushUntilDestroyed(
+      'cli-usage-detail-modal',
+      () => this.closed.emit(),
+      inject(DestroyRef),
+    );
   }
 
-  @HostListener('document:keydown.escape')
-  onEscape(): void {
-    this.closed.emit();
+  ngAfterViewInit(): void {
+    queueMicrotask(() => this.dialog?.nativeElement.focus());
   }
 
   onDialogKeydown(event: KeyboardEvent): void {

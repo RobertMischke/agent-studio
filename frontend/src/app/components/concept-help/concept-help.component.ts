@@ -1,15 +1,18 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   ElementRef,
   HostListener,
   computed,
+  effect,
   inject,
   input,
   signal,
   viewChild,
 } from '@angular/core';
 import { ConceptKey, getConceptEntry } from '../../concept-docs/concept-doc-registry';
+import { ModalStackService } from '../../services/modal-stack.service';
 
 const REPO_BLOB_BASE = 'https://github.com/RobertMischke/agent-taskboard/blob/main/';
 
@@ -60,8 +63,18 @@ export class ConceptHelpComponent {
     this.close();
   }
 
-  @HostListener('document:keydown.escape')
-  onEscape(): void {
-    if (this.open()) this.close();
-  }
+  // Escape routes through ModalStack so a real modal above wins first.
+  private readonly modalStack = inject(ModalStackService);
+  private readonly destroyRef = inject(DestroyRef);
+  private modalStackDispose: (() => void) | null = null;
+  private readonly stackEffect = effect(() => {
+    const isOpen = this.open();
+    if (isOpen && !this.modalStackDispose) {
+      this.modalStackDispose = this.modalStack.push('concept-help', () => this.close());
+    } else if (!isOpen && this.modalStackDispose) {
+      this.modalStackDispose();
+      this.modalStackDispose = null;
+    }
+  });
+  private readonly stackTeardown = this.destroyRef.onDestroy(() => this.modalStackDispose?.());
 }

@@ -1,5 +1,6 @@
-import { ChangeDetectionStrategy, Component, ElementRef, HostListener, ViewChild, computed, effect, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, HostListener, ViewChild, computed, effect, inject, input, output, signal } from '@angular/core';
 import { JobInfo } from '../../../../models/job.model';
+import { ModalStackService } from '../../../../services/modal-stack.service';
 import {
   formatDateTime as fmtDateTime,
   formatRelativeShort as fmtRelativeShort,
@@ -121,10 +122,21 @@ export class DetailHeaderComponent {
     if (this.menuOpen()) this.menuOpen.set(false);
   }
 
-  @HostListener('document:keydown.escape')
-  onEscape() {
-    if (this.menuOpen()) this.menuOpen.set(false);
-  }
+  // Escape routes through ModalStack so the dropdown closes only when
+  // nothing modal sits above it.
+  private readonly modalStack = inject(ModalStackService);
+  private readonly menuDestroyRef = inject(DestroyRef);
+  private menuStackDispose: (() => void) | null = null;
+  private readonly menuStackEffect = effect(() => {
+    const open = this.menuOpen();
+    if (open && !this.menuStackDispose) {
+      this.menuStackDispose = this.modalStack.push('detail-header-menu', () => this.menuOpen.set(false));
+    } else if (!open && this.menuStackDispose) {
+      this.menuStackDispose();
+      this.menuStackDispose = null;
+    }
+  });
+  private readonly menuStackTeardown = this.menuDestroyRef.onDestroy(() => this.menuStackDispose?.());
 
   @ViewChild('titleInput') private titleInputEl?: ElementRef<HTMLInputElement>;
 

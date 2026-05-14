@@ -1,8 +1,8 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   ElementRef,
-  HostListener,
   ViewChild,
   computed,
   effect,
@@ -10,6 +10,7 @@ import {
   signal,
 } from '@angular/core';
 import { ConfirmDialogService } from '../../services/confirm-dialog.service';
+import { ModalStackService } from '../../services/modal-stack.service';
 
 /**
  * App-wide confirm dialog. Mounted once at the shell; visibility driven by
@@ -35,6 +36,8 @@ import { ConfirmDialogService } from '../../services/confirm-dialog.service';
 })
 export class ConfirmDialogComponent {
   private readonly service = inject(ConfirmDialogService);
+  private readonly modalStack = inject(ModalStackService);
+  private readonly destroyRef = inject(DestroyRef);
 
   readonly state = this.service.active;
   readonly hasOpen = computed(() => this.state() !== null);
@@ -43,6 +46,7 @@ export class ConfirmDialogComponent {
 
   /** Tracks the previously-focused element so we can restore focus on close. */
   private previousFocus = signal<HTMLElement | null>(null);
+  private modalStackDispose: (() => void) | null = null;
 
   constructor() {
     effect(() => {
@@ -51,12 +55,25 @@ export class ConfirmDialogComponent {
         const active = (document.activeElement as HTMLElement | null) ?? null;
         this.previousFocus.set(active);
         queueMicrotask(() => this.confirmBtnRef?.nativeElement.focus());
+        if (!this.modalStackDispose) {
+          this.modalStackDispose = this.modalStack.push('confirm-dialog', () => this.service.cancel());
+        }
       } else {
         const prev = this.previousFocus();
         this.previousFocus.set(null);
         if (prev && typeof prev.focus === 'function') {
           try { prev.focus(); } catch { /* element gone */ }
         }
+        if (this.modalStackDispose) {
+          this.modalStackDispose();
+          this.modalStackDispose = null;
+        }
+      }
+    });
+    this.destroyRef.onDestroy(() => {
+      if (this.modalStackDispose) {
+        this.modalStackDispose();
+        this.modalStackDispose = null;
       }
     });
   }
@@ -70,14 +87,6 @@ export class ConfirmDialogComponent {
   }
 
   onBackdropClick(): void {
-    this.service.cancel();
-  }
-
-  @HostListener('document:keydown.escape', ['$event'])
-  onEscape(event: Event): void {
-    if (!this.hasOpen()) return;
-    event.preventDefault();
-    event.stopPropagation();
     this.service.cancel();
   }
 

@@ -1,13 +1,15 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  HostListener,
+  DestroyRef,
   OnDestroy,
   OnInit,
   computed,
+  effect,
   inject,
   signal,
 } from '@angular/core';
+import { ModalStackService } from '../../../services/modal-stack.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../utils/visible-interval';
 import type { CliType } from '../../../models/job.model';
 import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../../features/quota';
@@ -154,8 +156,21 @@ export class UsageHoverPanelComponent implements OnInit, OnDestroy {
   onPopEnter(): void { this.cancelClose(); }
   onPopLeave(): void { this.scheduleClose(); }
 
-  @HostListener('document:keydown.escape')
-  onEscape(): void { this.closePanel(); }
+  // Escape routes through ModalStack so a confirm/error dialog above
+  // wins first. The panel registers itself only while it is open.
+  private readonly modalStack = inject(ModalStackService);
+  private readonly hoverDestroyRef = inject(DestroyRef);
+  private hoverStackDispose: (() => void) | null = null;
+  private readonly hoverStackEffect = effect(() => {
+    const isOpen = this.open();
+    if (isOpen && !this.hoverStackDispose) {
+      this.hoverStackDispose = this.modalStack.push('usage-hover-panel', () => this.closePanel());
+    } else if (!isOpen && this.hoverStackDispose) {
+      this.hoverStackDispose();
+      this.hoverStackDispose = null;
+    }
+  });
+  private readonly hoverStackTeardown = this.hoverDestroyRef.onDestroy(() => this.hoverStackDispose?.());
 
   private scheduleOpen(): void {
     this.cancelClose();

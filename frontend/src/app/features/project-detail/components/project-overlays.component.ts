@@ -1,5 +1,6 @@
-import { ChangeDetectionStrategy, Component, inject, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, output } from '@angular/core';
 import { ProjectOverlaysService } from '../state/project-overlays.service';
+import { ModalStackService } from '../../../services/modal-stack.service';
 import { OrchestratorFeedComponent } from '../../orchestrator/components/orchestrator-feed';
 import { ProjectDetailComponent } from './project-detail';
 import { ProjectShellComponent } from './project-shell/project-shell.component';
@@ -79,5 +80,36 @@ export class ProjectOverlaysComponent {
 
   setProjectShellRail(key: ProjectRailKey): void {
     this.overlays.setProjectShellRail(key);
+  }
+
+  private readonly modalStack = inject(ModalStackService);
+  private readonly destroyRef = inject(DestroyRef);
+  private disposers = new Map<string, () => void>();
+
+  constructor() {
+    // Each overlay layer registers itself when open. They sit above any
+    // task detail / Add Task that is already on the stack, so Escape
+    // closes them first. Analysis-report stacks above the project-shell
+    // when both are visible because it pushes later.
+    this.bindBool('project-shell-overlay', () => this.overlays.projectShellName() !== null, () => this.overlays.closeProjectShell());
+    this.bindBool('orch-feed-overlay', () => this.overlays.orchFeedProject() !== null, () => this.overlays.closeOrchFeed());
+    this.bindBool('analysis-report-overlay', () => this.overlays.analysisReportFocus() !== null, () => this.overlays.closeAnalysisReport());
+    this.destroyRef.onDestroy(() => {
+      for (const d of this.disposers.values()) d();
+      this.disposers.clear();
+    });
+  }
+
+  private bindBool(id: string, open: () => boolean, close: () => void): void {
+    effect(() => {
+      const isOpen = open();
+      const existing = this.disposers.get(id);
+      if (isOpen && !existing) {
+        this.disposers.set(id, this.modalStack.push(id, close));
+      } else if (!isOpen && existing) {
+        existing();
+        this.disposers.delete(id);
+      }
+    });
   }
 }

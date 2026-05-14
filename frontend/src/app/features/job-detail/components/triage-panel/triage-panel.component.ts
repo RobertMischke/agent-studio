@@ -2,7 +2,6 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
-  HostListener,
   input,
   output,
   signal
@@ -199,7 +198,9 @@ export class TriagePanelComponent {
     }
   }
 
-  // Reset the confirm chip if the lane changes underneath us (auto-advance).
-  @HostListener('document:keydown.escape')
-  onEscape(): void { this.clearConfirm(); }
+  // The confirm chip used to also clear on Escape via a document-level
+  // listener; that was redundant with the parent detail view emitting
+  // `back` on Escape (which destroys this panel anyway) and conflicted
+  // with the central ModalStackService arbitration. Removed in favour
+  // of the 4 s confirm-timeout above.
 }

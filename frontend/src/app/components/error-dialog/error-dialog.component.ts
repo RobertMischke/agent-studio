@@ -1,5 +1,6 @@
-import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, inject, input, output } from '@angular/core';
 import { ErrorDialogState } from '../../models/error-dialog.model';
+import { ModalStackService } from '../../services/modal-stack.service';
 
 /**
  * Error overlay used by the global ErrorDialogService. The parent
@@ -20,4 +21,16 @@ export class ErrorDialogComponent {
   readonly close = output<void>();
   readonly copy = output<void>();
   readonly openCliConfig = output<void>();
+
+  constructor() {
+    // The error dialog is rendered only while open (`@if (errorDialog.activeError())`),
+    // so a push-on-construct / dispose-on-destroy keeps the stack honest.
+    // The previous implementation had no Escape handling at all - now Escape
+    // routes through the central stack like every other modal.
+    inject(ModalStackService).pushUntilDestroyed(
+      'error-dialog',
+      () => this.close.emit(),
+      inject(DestroyRef),
+    );
+  }
 }

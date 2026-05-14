@@ -1,8 +1,9 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  HostListener,
+  DestroyRef,
   computed,
+  effect,
   inject,
   input,
   signal,
@@ -12,6 +13,7 @@ import { firstValueFrom } from 'rxjs';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { InstantTooltipDirective } from '../../directives/instant-tooltip.directive';
 import { markdownToHtml } from '../markdown-utils';
+import { ModalStackService } from '../../services/modal-stack.service';
 
 interface ConceptDocPayload {
   readonly topic: string;
@@ -72,10 +74,20 @@ export class InfoButtonComponent {
     this.open.set(false);
   }
 
-  @HostListener('document:keydown.escape')
-  onEscape(): void {
-    if (this.open()) this.close();
-  }
+  // Escape routes through ModalStack so a real modal above wins first.
+  private readonly modalStack = inject(ModalStackService);
+  private readonly destroyRef = inject(DestroyRef);
+  private modalStackDispose: (() => void) | null = null;
+  private readonly stackEffect = effect(() => {
+    const isOpen = this.open();
+    if (isOpen && !this.modalStackDispose) {
+      this.modalStackDispose = this.modalStack.push('info-button', () => this.close());
+    } else if (!isOpen && this.modalStackDispose) {
+      this.modalStackDispose();
+      this.modalStackDispose = null;
+    }
+  });
+  private readonly stackTeardown = this.destroyRef.onDestroy(() => this.modalStackDispose?.());
 
   private async load(): Promise<void> {
     this.loading.set(true);

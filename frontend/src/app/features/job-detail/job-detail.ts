@@ -1,4 +1,5 @@
-import { ChangeDetectionStrategy, Component, computed, HostListener, inject, input, output, signal, effect, OnDestroy, ViewChild, ViewEncapsulation } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, HostListener, inject, input, output, signal, effect, OnDestroy, ViewChild, ViewEncapsulation } from '@angular/core';
+import { ModalStackService } from '../../services/modal-stack.service';
 import { FormsModule } from '@angular/forms';
 import type { JobDetail, JobInfo, WatchPathEntry, CliSettings, CliType, ContinueMode } from '../../models/job.model';
 import { CLI_TYPES } from '../../models/job.model';
@@ -216,6 +217,35 @@ export class JobDetailComponent implements OnDestroy {
     // Load the initial catalog for whatever CLI the current job uses; the effect below
     // will re-trigger this when the user switches CLIs.
     this.loadModelCatalog('copilot');
+    // Register the detail view as the bottom of the modal stack while it is
+    // mounted. Any modal opened on top of it (Add Task, error dialog, verbose
+    // debug, confirm-dialog) registers later and therefore wins Escape first.
+    // When no modal is on top, Escape closes the detail view itself — except
+    // while an inline title/prompt edit or one of the local sub-overlays
+    // (log overlay, CLI config) is active; those have their own Escape
+    // affordances (template `(keydown.escape)` on the input) and would feel
+    // broken if a single Escape jumped past them and closed the panel.
+    inject(ModalStackService).pushUntilDestroyed(
+      'job-detail',
+      () => {
+        // Decline (return false) while an inline title/prompt edit or a
+        // local sub-overlay is active. The original template binding
+        // `(keydown.escape)` on the title input then runs and cancels
+        // the edit; closing the whole panel would feel broken.
+        if (this.editingTitle() || this.editingPrompt()) return false;
+        if (this.showLogOverlay()) {
+          this.showLogOverlay.set(false);
+          return true;
+        }
+        if (this.showCliConfig()) {
+          this.showCliConfig.set(false);
+          return true;
+        }
+        this.back.emit();
+        return true;
+      },
+      inject(DestroyRef),
+    );
   }
 
   private loadModelCatalog(cliType: CliType) {
@@ -751,9 +781,15 @@ export class JobDetailComponent implements OnDestroy {
 
   /**
    * Keyboard navigation for triage mode: `j` / ↓ for next, `k` / ↑ for prev,
-   * `Enter` for the lane's primary action, `Esc` for close. Suppressed while
-   * the user is typing in an input/textarea/contenteditable so chat compose
-   * and prompt edit keep working.
+   * `Enter` for the lane's primary action. Suppressed while the user is typing
+   * in an input/textarea/contenteditable so chat compose and prompt edit keep
+   * working.
+   *
+   * Escape is handled separately via `ModalStackService`: the detail view
+   * registers itself on the stack when it mounts and any modal opened on top
+   * (Add Task, error dialog, verbose-debug overlay, confirm-dialog, ...)
+   * sits above it, so Escape closes the modal first and leaves the detail
+   * open. The previous local `case 'Escape'` here is gone.
    */
   @HostListener('document:keydown', ['$event'])
   onTriageKey(event: KeyboardEvent): void {
@@ -785,10 +821,6 @@ export class JobDetailComponent implements OnDestroy {
         if (this.mutationsBlocked() || this.triageActingId() !== null) return;
         this.triagePanelRef?.triggerPrimary();
         event.preventDefault();
-        return;
-      case 'Escape':
-        event.preventDefault();
-        this.back.emit();
         return;
     }
   }

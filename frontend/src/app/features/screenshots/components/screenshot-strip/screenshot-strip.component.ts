@@ -1,8 +1,10 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   HostListener,
   computed,
+  effect,
   inject,
   input,
   output,
@@ -11,6 +13,7 @@ import {
 import { CommonModule } from '@angular/common';
 import type { JobScreenshot } from '../../../../features/screenshots';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
+import { ModalStackService } from '../../../../services/modal-stack.service';
 
 /**
  * Visual-evidence strip + lightbox. Two surfaces share this component:
@@ -133,12 +136,39 @@ export class ScreenshotStripComponent {
     this.openTask.emit(s);
   }
 
+  // Arrow keys for the lightbox stay local; Escape routes through ModalStack
+  // so a confirm-dialog above the lightbox wins. See constructor below.
   @HostListener('window:keydown', ['$event'])
   onKey(e: KeyboardEvent): void {
     if (this.activeIndex() < 0) return;
-    if (e.key === 'Escape') { this.close(); e.preventDefault(); }
-    else if (e.key === 'ArrowLeft') { this.prev(); e.preventDefault(); }
+    if (e.key === 'ArrowLeft') { this.prev(); e.preventDefault(); }
     else if (e.key === 'ArrowRight') { this.next(); e.preventDefault(); }
+  }
+
+  private readonly modalStack = inject(ModalStackService);
+  private readonly destroyRef = inject(DestroyRef);
+  private lightboxStackDispose: (() => void) | null = null;
+
+  constructor() {
+    // Lightbox open/close drives the modal-stack registration. The strip
+    // itself is never the top of the stack - only its lightbox is.
+    effect(() => {
+      const open = this.activeIndex() >= 0;
+      if (open) {
+        if (!this.lightboxStackDispose) {
+          this.lightboxStackDispose = this.modalStack.push('screenshot-lightbox', () => this.close());
+        }
+      } else if (this.lightboxStackDispose) {
+        this.lightboxStackDispose();
+        this.lightboxStackDispose = null;
+      }
+    });
+    this.destroyRef.onDestroy(() => {
+      if (this.lightboxStackDispose) {
+        this.lightboxStackDispose();
+        this.lightboxStackDispose = null;
+      }
+    });
   }
 }
 

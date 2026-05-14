@@ -1,12 +1,15 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  DestroyRef,
   computed,
+  inject,
   input,
   output,
   signal
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { ModalStackService } from '../../../services/modal-stack.service';
 import type { CliOutputLine, JobInfo } from '../../../models/job.model';
 import type { RunRecord, RunTimeline } from '../../../features/run-timeline';
 import type { JobScreenshot } from '../../../features/screenshots';
@@ -132,6 +135,13 @@ export class VerboseDebugOverlayComponent {
       this.activeTab.set(known ? (requested as VerboseDebugTab) : 'overview');
       this.theme.set(this.initialTheme());
     });
+    // Register with the modal stack so Escape closes this overlay first
+    // when it sits above the task detail or another lower overlay.
+    inject(ModalStackService).pushUntilDestroyed(
+      'verbose-debug-overlay',
+      () => this.close.emit(),
+      inject(DestroyRef),
+    );
   }
 
   toggleTheme(): void {
