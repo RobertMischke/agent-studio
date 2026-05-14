@@ -274,10 +274,17 @@ test('follow-up task creation: clicking a finding follow-up queues a 1-preparati
   // Confirmation message rendered.
   await expect(page.getByTestId('project-drift-overview-action-msg')).toContainText('Queued', { timeout: 5_000 });
 
-  // The new job exists in 1-preparation.
-  await page.waitForTimeout(500);
-  const after = await listPreparationSlugs();
-  const created = [...after].filter(s => !before.has(s));
+  // The new job exists in 1-preparation. The grouped projection lags the
+  // POST briefly (the runner indexes the new folder on its next scan), so
+  // poll for up to 10 s rather than wait for a fixed delay.
+  let created: string[] = [];
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    const after = await listPreparationSlugs();
+    created = [...after].filter(s => !before.has(s));
+    if (created.some(s => s.startsWith('followup-drift-schema-'))) break;
+    await page.waitForTimeout(250);
+  }
   expect(created.length, `expected exactly one new preparation job after click; got ${created.length}`).toBeGreaterThanOrEqual(1);
   expect(created.some(s => s.startsWith('followup-drift-schema-'))).toBeTruthy();
 
@@ -305,7 +312,11 @@ async function openProjectDetail(page: Page): Promise<void> {
   } catch { /* best-effort */ }
   await page.goto('/');
   await page.getByTestId(`project-shell-open-${projectName}`).click();
-  await expect(page.getByTestId('project-detail')).toBeVisible({ timeout: 10_000 });
+  // Navigate the project shell rail to the dedicated Drift entry. The
+  // overlay defers each rail panel until selected; without this click the
+  // section would not be in the DOM at all.
+  await expect(page.getByTestId('project-shell-rail-drift')).toBeVisible({ timeout: 10_000 });
+  await page.getByTestId('project-shell-rail-drift').click();
 }
 
 /**

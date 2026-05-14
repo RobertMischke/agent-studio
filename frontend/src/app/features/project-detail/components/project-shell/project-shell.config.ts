@@ -13,6 +13,7 @@ export type ProjectRailKey =
   | 'visual-evidence'
   | 'security'
   | 'architecture'
+  | 'drift'
   | 'uxui'
   | 'test-quality'
   | 'token-usage'
@@ -76,6 +77,15 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Architectural decisions and drift status',
     empty: 'Architecture placeholder. ADR list and high-level map land in the architecture slice.',
     icon: '📐',
+  },
+  {
+    key: 'drift',
+    group: 'project',
+    label: 'Drift',
+    panelTitle: 'Drift',
+    description: 'Overall drift score, per-dimension state, findings, and follow-ups',
+    empty: 'No drift reports yet. Run a comparison to produce the first one.',
+    icon: '📊',
   },
   {
     key: 'uxui',

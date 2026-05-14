@@ -68,6 +68,7 @@ export class ProjectOverlaysComponent {
       || rail === 'security'
       || rail === 'visual-evidence'
       || rail === 'architecture'
+      || rail === 'drift'
       || rail === 'uxui'
       || rail === 'token-usage'
       || rail === 'observability'

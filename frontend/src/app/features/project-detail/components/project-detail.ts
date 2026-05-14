@@ -32,6 +32,7 @@ export type ProjectDetailView =
   | 'orchestrator'
   | 'activity'
   | 'architecture'
+  | 'drift'
   | 'observability';
 
 /**

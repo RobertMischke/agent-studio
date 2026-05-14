@@ -60,6 +60,15 @@
               (openReport)="overlays.openAnalysisReport(projShell, $event.reportId)" />
           }
         }
+        @defer (when overlays.projectShellRail() === 'drift') {
+          @if (overlays.projectShellRail() === 'drift') {
+            <app-project-detail
+              [projectName]="projShell"
+              view="drift"
+              (openFeed)="overlays.openFeedFromDetail($event)"
+              (openReport)="overlays.openAnalysisReport(projShell, $event.reportId)" />
+          }
+        }
         @defer (when overlays.projectShellRail() === 'uxui') {
           @if (overlays.projectShellRail() === 'uxui') {
             <app-uxui-panel

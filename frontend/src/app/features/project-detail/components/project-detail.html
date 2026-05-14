@@ -339,8 +339,11 @@
 
   @if (view() === 'architecture') {
     <app-project-architecture-section [projectName]="projectName()" />
-    <app-project-drift-overview-section [projectName]="projectName()" />
     <app-project-drift-section [projectName]="projectName()" />
+  }
+
+  @if (view() === 'drift') {
+    <app-project-drift-overview-section [projectName]="projectName()" />
   }
 
   @if (view() === 'observability') {
