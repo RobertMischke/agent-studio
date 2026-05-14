@@ -91,10 +91,12 @@
                         data-testid="orchestrator-override-input"
                         rows="4"></textarea>
               <div class="orch-feed__override-actions">
-                <button class="orch-feed__override-cancel"
+                <button type="button"
+                        class="orch-feed__override-cancel"
                         (click)="cancelOverride()"
                         [disabled]="submittingOverride()">Cancel</button>
-                <button class="orch-feed__override-submit"
+                <button type="button"
+                        class="orch-feed__override-submit"
                         (click)="submitOverride(entry)"
                         [disabled]="submittingOverride() || !overrideDraft.trim()"
                         data-testid="orchestrator-override-submit">
@@ -103,7 +105,8 @@
               </div>
             </div>
           } @else {
-            <button class="orch-feed__override"
+            <button type="button"
+                    class="orch-feed__override"
                     (click)="startOverride(entry)"
                     data-testid="orchestrator-override-start"
                     title="Disagree with this decision? Send a Steer follow-up to the agent.">

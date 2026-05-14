@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
-import { provideHttpClientTesting } from '@angular/common/http/testing';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { OrchestratorFeedComponent } from './orchestrator-feed';
+import type { OrchestratorLogEntry } from '../../orchestrator';
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.
@@ -40,5 +41,78 @@ describe('OrchestratorFeedComponent (smoke)', () => {
       console.warn('[smoke] OrchestratorFeedComponent initial render skipped:', (e as Error).message);
     }
     expect(fixture.componentInstance).toBeTruthy();
+  });
+});
+
+/**
+ * Regression for the override controls on an orchestrator-decision entry.
+ *
+ * The override buttons act on an Orchestrator Decision and live inside
+ * components hosted by overlays / side sheets. A button without an
+ * explicit `type` attribute defaults to `type="submit"`, so if any host
+ * ever wraps the feed in a `<form>`, clicking one would submit the form
+ * and close the surrounding Task / Frontend overlay. Pinning the
+ * attribute keeps that side-effect off the table.
+ */
+describe('OrchestratorFeedComponent · decision override buttons', () => {
+  const decisionEntry: OrchestratorLogEntry = {
+    ts: '2026-05-14T11:00:00Z',
+    kind: 'decision',
+    topic: 'reissue',
+    summary: 'Reissued the task with stronger framing.',
+    reasoning: 'The agent reported a fast Done on a UserContinue follow-up.',
+    jobId: 'demo-job',
+    tokenUsage: null,
+  };
+
+  async function setup() {
+    await TestBed.configureTestingModule({
+      imports: [OrchestratorFeedComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(OrchestratorFeedComponent);
+    fixture.componentRef.setInput('projectName', 'demo-project');
+    fixture.detectChanges();
+
+    const httpCtrl = TestBed.inject(HttpTestingController);
+    const req = httpCtrl.expectOne((r) =>
+      r.url.includes('/api/runner/demo-project/orchestrator-log')
+    );
+    req.flush({ project: 'demo-project', entries: [decisionEntry] });
+    fixture.detectChanges();
+    return { fixture, httpCtrl };
+  }
+
+  it('renders the "Override this decision" trigger as type="button"', async () => {
+    const { fixture } = await setup();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const trigger = root.querySelector<HTMLButtonElement>(
+      '[data-testid="orchestrator-override-start"]'
+    );
+    expect(trigger).toBeTruthy();
+    expect(trigger?.getAttribute('type')).toBe('button');
+  });
+
+  it('renders Cancel and Send override as type="button" while the override form is open', async () => {
+    const { fixture } = await setup();
+
+    fixture.componentInstance.startOverride(decisionEntry);
+    fixture.detectChanges();
+
+    const root = fixture.nativeElement as HTMLElement;
+    const submit = root.querySelector<HTMLButtonElement>(
+      '[data-testid="orchestrator-override-submit"]'
+    );
+    const cancel = root.querySelector<HTMLButtonElement>('.orch-feed__override-cancel');
+    expect(submit).toBeTruthy();
+    expect(cancel).toBeTruthy();
+    expect(submit?.getAttribute('type')).toBe('button');
+    expect(cancel?.getAttribute('type')).toBe('button');
   });
 });
