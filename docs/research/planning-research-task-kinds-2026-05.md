@@ -1,8 +1,10 @@
 # Planning and Research task kinds — design exploration (2026-05)
 
-Status: exploratory. No code change. Captures user intent from the
-`planning-task-task-differenzierung` brainstorm and proposes a path that
-reconciles it with the existing hard non-goals.
+Status: design decisions pinned (2026-05-14). No code change. Captures
+user intent from the `planning-task-task-differenzierung` brainstorm,
+proposes a path that reconciles it with the existing hard non-goals,
+and locks in the previously-open design choices as documented defaults.
+Follow-up tasks for the actual implementation are listed at the end.
 
 ## What the user asked for
 
@@ -190,43 +192,79 @@ content and the protocol pane just renders it.
   projects still run independently. This change is scoped to "what
   happens inside one project."
 
-## Open questions for the user
+## Decisions (2026-05-14)
 
-1. **Soft parallelism cap default.** Is 4 the right ceiling for read-only
-   parallelism per project, or should it default to "no cap" and rely on
-   quota / OS pressure to backpressure naturally?
-2. **Web search opt-in for Planning?** The brainstorm says web search is
-   the Research differentiator, but planning a UI feature might benefit
-   from looking up library docs. Default off; per-task toggle in the
-   create modal?
-3. **Promotion target state.** Should "Promote to coding task" land the
-   new task in `1-preparation` (user wants to edit it first) or `2-ready`
-   (user trusts it and wants pickup)? Lean toward `1-preparation` because
-   the planning-result text usually needs at least a once-over.
-4. **Image lifecycle.** Copy attachments on promote, or hard-link? Copy
-   is simpler and survives archival; hard-links are not portable across
-   filesystems. Default copy.
-5. **Quota gating priority.** When quota is tight, should a queued
-   coding task win the next slot over an in-flight planning task, or
-   does the in-flight task always finish? Lean: never preempt an
-   in-flight task; just refuse new read-only pickups when a coding task
-   is queued and quota is below threshold.
+The five open questions from the initial draft are resolved below. These
+are documented defaults, not consensus from a separate review round; any
+of them can be revisited by the implementation task that lands the
+runner change.
+
+1. **Soft parallelism cap default: 4, configurable per project.**
+   The setting key is `ReadOnlyParallelism` on the project config.
+   Default 4 protects against an accidental fork bomb when the user
+   queues many planning runs in a hurry, while staying well above the
+   normal working set of "a couple of parallel investigations." Users
+   who want "no cap" set a high value (e.g. 32); we do not introduce a
+   separate unlimited mode because the OS/quota backpressure is a fuzzy
+   signal and a soft cap is easier to reason about.
+2. **Web search: per-task toggle, defaults differ by kind.** The create
+   modal exposes a single "Allow web access" checkbox. Default *off*
+   for Planning, default *on* for Research. The toggle is also present
+   on Coding so library-docs lookups during implementation are
+   available when needed (still off by default there). One control,
+   three defaults, no special-case UI per kind.
+3. **Promotion target state: `1-preparation`.** The promote-to-coding
+   modal lands the new task in `1-preparation` so the user gets one
+   review pass on the auto-filled prompt before the runner picks it up.
+   The state field is editable in the modal; a user who trusts the
+   plan can switch to `2-ready` before saving. Rationale: the
+   brainstorm explicitly described "modal opens pre-filled, user hits
+   Save" but did not promise pickup-on-save, and a `1-preparation`
+   default is the conservative choice that costs at most one click.
+4. **Image lifecycle: copy on promote.** Attachments are copied byte-
+   for-byte from the planning job's `attachments/` and `results/` (image
+   files only) into the new task's `attachments/`. No hard-links, no
+   symlinks. Reasons: hard-links are not portable across filesystems
+   and break when the planning folder archives; Windows symlinks need
+   privilege the dev box does not always have; copying makes the new
+   task self-contained for archival, export, and future rehydration.
+5. **Quota gating: never preempt, refuse new read-only pickups instead.**
+   An in-flight planning or research run always runs to completion.
+   When the CLI quota probe is below the warn threshold *and* at least
+   one coding task is queued, the read-only picker pauses new pickups
+   until the coding slot frees. This is a one-way valve: read-only
+   yields to coding under pressure, coding never yields. The quota
+   threshold reuses the existing supervisor probe; no new probe path.
 
 ## Suggested next steps
 
-Before any implementation:
+Now that the decisions above are pinned, implementation can phase as:
 
-1. Write the ADR that documents the carve-out to the intra-project
-   parallelism non-goal. Without it, the next agent will revert this on
-   sight.
-2. Land a tiny `kind` field on `JobInfo` and `CreateJobRequest` with no
-   behavioural change yet (default `coding`, ignored by the runner).
-   This is the cheap, reversible step that unblocks UI experiments.
-3. Sketch the create-task modal with a kind selector and the per-kind
-   default prompt scaffolds. Mockup under `docs/mockups/` first.
-4. Decide the open questions above with the user. Then phase the runner
-   work behind a config flag.
+1. **ADR for the carve-out.** Documents that the intra-project
+   parallelism non-goal applies to mutating work only, and that
+   read-only kinds (Planning, Research) are exempt because the cause
+   the non-goal protects against (working-tree collisions) does not
+   apply to them. Without this ADR, the next agent will revert the
+   carve-out on sight. AGENTS.md gets the wording change in the same
+   commit.
+2. **`kind` field landing, no behavioural change.** Add `kind` to
+   `JobInfo` and `CreateJobRequest`, default `"coding"`, ignored by the
+   runner for now. Boot-time migration tags legacy folders. UI shows
+   the kind icon on the kanban tile. Reversible if we change our mind.
+3. **Create-task modal: kind selector + web-access toggle.** Mockup
+   first under `docs/mockups/`. Per-kind default prompt scaffolds live
+   in `prompts/runtime/`. Sentinel-driven unit tests cover the new
+   templates.
+4. **Runner change behind a config flag.** Replace `_activeJobId` with
+   `_activeCodingJobId` and a read-only execution lane gated by
+   `ReadOnlyParallelism`. Quota-gating logic per decision 5. Ship
+   behind a `enableReadOnlyParallelism` flag, default off, until shake-
+   out is done. Promote-to-coding endpoint lands in the same phase.
 
-Coding work is intentionally out of scope of *this* task; it is itself a
-planning task by the user's own framing, and the deliverable is this
-note.
+Each of those is a separate task. They are not blocked on further
+input from the user; they are blocked only on the user's go-ahead to
+start implementation.
+
+Coding work is intentionally out of scope of *this* task; the planning
+deliverable is this note. The follow-up tasks above are the concrete
+units that should be created when implementation starts.
