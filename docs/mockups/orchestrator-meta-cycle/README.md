@@ -45,7 +45,7 @@ The meta-cycle must respect the same product boundaries as the supervisor:
 - **Never restarts the backend itself.** `update-stable.sh` is invoked as an external sh process and only ever runs against `stable`, never against the dev process that hosts the meta-cycle. The dev backend owns its own lifecycle.
 - **Never moves job state lanes.** Lane transitions stay with `JobStateMachine`.
 - **Never bypasses the user.** Escalations land in `1-preparation` for human review, never in `2-ready` automatically. A `2-ready` queueing is reserved for fixes the meta-cycle is *certain* are well-scoped (e.g. a templated "rescue orphan changes" task whose contract is fixed).
-- **Off by default.** `Supervisor:MetaCycleEnabled = false` ships in `appsettings.json`. Per-project enable lives in `project-settings.json`.
+- **Off by default.** The flag is `Supervisor:MetaCycleEnabled`, default `false` (declared in [`OrchestratorConfigService.KnownOptions`](../../../backend/Services/Configuration/OrchestratorConfigService.cs) and surfaced in the orchestrator config UI panel under **Supervisor → Layer-2.5 meta-cycle**). Flip it via the panel or by adding `"Supervisor": { "MetaCycleEnabled": true }` to `appsettings.json` (or a per-environment override file). Per-project enable lives in `project-settings.json`. "Off by default" is the deliberate end state, not an open item: the loop pauses, pushes, and queues fix-tasks, so it ships dormant and is opted into per project.
 
 If a future request would relax any of those, surface the conflict before implementing.
 
