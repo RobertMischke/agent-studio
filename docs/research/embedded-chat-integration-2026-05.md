@@ -21,25 +21,26 @@ The `chat-layout-integration-bridge` work is in. The renderer wiring is not.
 | `ConversationEvent` data contract under `frontend/src/app/components/chat/conversation-event.ts` | Landed |
 | Pure `projectConversation()` projection over `parseActivityLog`, with run-aware tool-burst collapsing, watchdog and capture-fail classification, schema-drift dedupe, screenshot/commit/token aggregates, and workbench-summary/debug aggregates | Landed |
 | Projection unit tests + fixtures (`conversation-projection.spec.ts`, `conversation-projection.fixtures.ts`) | Landed |
-| `app-tool-burst-chip` presentational component | Landed (not yet hosted) |
+| `app-tool-burst-chip` presentational component | Landed (hosted in `app-conversation-view`) |
 | `app-verbose-debug-overlay` consumes the projection from the Protocol pane Activity tab | Landed |
 | Standalone clickware prototype (`npm run mockup:chat`, `:4022`) | Landed; do not import its arrays into production |
+| `app-conversation-view` production renderer in the task Activity tab (slice 1 host adapter) | Landed behind `Frontend:NextGenChat`; Trace fallback keeps the legacy view one click away |
 
 What is **not** landed yet:
 
-1. A host adapter that swaps the Activity tab body to render `ConversationEvent[]` when the flag is on.
-2. Any production `app-conversation-view` renderer (only the Verbose Debug overlay reads the projection today).
-3. A side-sheet adapter that reuses the same message components.
-4. Composer toolbar consolidation (model, mode, permission, start/stop, attachments, context chips).
-5. Workbench split presets in the Activity tab (Chat only / Result / Git / Preview / Debug).
-6. Continuous-chat task markers in the project side sheet.
-7. Playwright regression suite covering both flags off, NextGenChat on, VsCodeLayout on, both on, light/dark, mobile narrow, side-sheet wide, scenario-18 Verbose Debug, scenario-19 chat-first reading, scenario-20 embedding (no global chat window), scenario-21 light/dark parity.
+1. A side-sheet adapter that reuses the same message components (slice 4).
+2. Composer toolbar consolidation (model, mode, permission, start/stop, attachments, context chips) (slice 5).
+3. Workbench split presets in the Activity tab (Chat only / Result / Git / Preview / Debug) (slice 6).
+4. Continuous-chat task markers in the project side sheet (slice 4).
+5. Playwright regression suite covering both flags off, NextGenChat on, VsCodeLayout on, both on, light/dark, mobile narrow, side-sheet wide, scenario-18 Verbose Debug, scenario-19 chat-first reading, scenario-20 embedding (no global chat window), scenario-21 light/dark parity (slice 7).
 
 ## Slice order (queued tasks)
 
 The remaining work splits into independent task-folder slices. Each slice stays small enough to ship behind the flag without regressing the off-state.
 
-### Slice 1: `chat-conversation-event-projection` host adapter
+### Slice 1: `chat-conversation-event-projection` host adapter (LANDED 2026-05-14)
+
+**Status.** Implemented. `app-conversation-view` (`frontend/src/app/components/chat/conversation-view.component.ts`) renders the projection inside the task Activity tab when `Frontend:NextGenChat` is on; the off-state still renders `app-activity-log-view` unchanged. Slice-1 evidence: `frontend/e2e/next-gen-chat-task-host.spec.ts` covers flag off vs on, Trace fallback, and the Verbose Debug routing path. Screenshots live under the running job's `results/` folder.
 
 **Goal.** With the flag on, the Activity tab renders `ConversationEvent[]` through a new `app-conversation-view` component instead of the legacy `app-activity-log-view`. Off-state unchanged.
 

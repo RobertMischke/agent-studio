@@ -291,12 +291,31 @@
                 (close)="closeGitViewer()" />
 
               @if (cliOutput().length > 0 || isRunning()) {
-                <app-activity-log-view [lines]="filteredCliOutput()"
-                                       [bodyMaxHeight]="'none'"
-                                       [isRunning]="isRunning()"
-                                       variant="embedded"
-                                       (applyComposeSuggestion)="onSteerOptionApply($event)"
-                                       (requestUploadScreenshot)="onSteerUploadRequest()" />
+                @if (showConversationView()) {
+                  <app-conversation-view [events]="nextGenChatEvents()"
+                                         [isRunning]="isRunning()"
+                                         variant="embedded"
+                                         (openTrace)="onConversationOpenTrace($event)"
+                                         (openVerboseDebug)="onConversationOpenVerboseDebug()" />
+                } @else {
+                  @if (featureFlags.nextGenChat() && nextGenChatTraceFallback()) {
+                    <div class="next-gen-chat-trace-banner"
+                         data-testid="next-gen-chat-trace-banner">
+                      <span aria-hidden="true">≣</span>
+                      Showing raw Trace.
+                      <button type="button"
+                              class="next-gen-chat-trace-banner__back"
+                              data-testid="next-gen-chat-trace-back"
+                              (click)="exitConversationTraceFallback()">Back to chat</button>
+                    </div>
+                  }
+                  <app-activity-log-view [lines]="filteredCliOutput()"
+                                         [bodyMaxHeight]="'none'"
+                                         [isRunning]="isRunning()"
+                                         variant="embedded"
+                                         (applyComposeSuggestion)="onSteerOptionApply($event)"
+                                         (requestUploadScreenshot)="onSteerUploadRequest()" />
+                }
                 <input type="file"
                        #steerUpload
                        accept="image/*"

@@ -27,7 +27,9 @@ import { HygieneStripComponent } from '../hygiene-strip/hygiene-strip.component'
 import { ReviewEvidencePanelComponent } from './review-evidence-panel.component';
 import { CodeReviewPanelComponent } from './code-review-panel.component';
 import { JobService } from '../../../../services/job.service';
-import type { RawLineRange } from '../../../../components/chat/conversation-event';
+import type { ConversationEvent, RawLineRange } from '../../../../components/chat/conversation-event';
+import { ConversationViewComponent } from '../../../../components/chat/conversation-view.component';
+import { projectConversation } from '../../../../components/chat/conversation-projection';
 import { BeautifulResultsComponent } from '../beautiful-results/beautiful-results.component';
 
 export type InspectorTab = 'protocol' | 'activity';
@@ -42,7 +44,7 @@ export type InspectorTab = 'protocol' | 'activity';
   selector: 'app-protocol-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, ActivityLogViewComponent, RunTimelineComponent, RunGitViewerComponent, ScreenshotStripComponent, VerboseDebugOverlayComponent, HygieneStripComponent, ReviewEvidencePanelComponent, BeautifulResultsComponent, CodeReviewPanelComponent],
+  imports: [CommonModule, ActivityLogViewComponent, ConversationViewComponent, RunTimelineComponent, RunGitViewerComponent, ScreenshotStripComponent, VerboseDebugOverlayComponent, HygieneStripComponent, ReviewEvidencePanelComponent, BeautifulResultsComponent, CodeReviewPanelComponent],
   templateUrl: './protocol-pane.component.html',
   styleUrls: ['./protocol-pane.component.scss']
 })
@@ -384,6 +386,72 @@ export class ProtocolPaneComponent implements OnDestroy {
    * the existing log overlay so the raw activity log remains one click away.
    */
   readonly verboseDebugOpen = signal(false);
+
+  /**
+   * Slice-1 host adapter for `Frontend:NextGenChat`. When the flag is on the
+   * Activity tab renders the new `app-conversation-view` against the
+   * `ConversationEvent[]` projection; the user can flip into `traceFallback`
+   * mode to fall back to the legacy `app-activity-log-view` for the same
+   * lines. Flag off keeps the off-state byte-stable.
+   */
+  readonly nextGenChatTraceFallback = signal(false);
+
+  /**
+   * Projected conversation events for the next-gen chat renderer. Pure
+   * derivation over the existing polled signals (cliOutput, runTimeline,
+   * screenshots, tokenSummary). The projection itself stays pure TypeScript;
+   * the host only feeds it the evidence it already has in scope. Workbench
+   * preview events are off until slice 6 wires the split presets.
+   */
+  readonly nextGenChatEvents = computed<ConversationEvent[]>(() => {
+    if (!this.featureFlags.nextGenChat()) return [];
+    const filtered = this.filteredCliOutput();
+    if (filtered.length === 0 && !this.runTimeline() && !this.screenshots().length) {
+      return [];
+    }
+    const info = this.detail().info;
+    const screenshots = this.screenshots().map((s) => ({
+      caption: s.caption || s.fileName,
+      sourcePath: s.localPath || s.relativePath,
+      durablePath: s.relativePath,
+      sourceTool: 'screenshot',
+      timestamp: s.timestampUtc,
+    }));
+    return projectConversation({
+      source: info.id,
+      lines: filtered,
+      job: info,
+      runTimeline: this.runTimeline(),
+      tokenSummary: info.tokenSummary ?? null,
+      screenshots,
+      emitRunMarkers: true,
+      emitWorkbenchSummary: false,
+      emitWorkbenchPreviews: false,
+      emitTraceLink: false,
+      emitDebugAggregate: false,
+    });
+  });
+
+  /**
+   * Predicate the template uses to decide which Activity tab body to render.
+   * Conversation view shows when the flag is on AND the user has not
+   * explicitly toggled the Trace fallback for the current view.
+   */
+  readonly showConversationView = computed(
+    () => this.featureFlags.nextGenChat() && !this.nextGenChatTraceFallback()
+  );
+
+  onConversationOpenTrace(_range: RawLineRange | null): void {
+    this.nextGenChatTraceFallback.set(true);
+  }
+
+  onConversationOpenVerboseDebug(): void {
+    this.verboseDebugOpen.set(true);
+  }
+
+  exitConversationTraceFallback(): void {
+    this.nextGenChatTraceFallback.set(false);
+  }
 
   onVerboseDebugOpenTrace(_range: RawLineRange): void {
     // Route trace links to the existing activity-log maximized view so the

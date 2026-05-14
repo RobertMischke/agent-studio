@@ -1,0 +1,217 @@
+<section class="conv"
+         [attr.data-variant]="variant()"
+         [attr.data-running]="isRunning() ? 'true' : 'false'"
+         data-testid="conversation-view">
+  <header class="conv__head">
+    <div class="conv__head-titles">
+      <strong class="conv__title">Conversation</strong>
+      <span class="conv__subtitle">Next-gen chat preview</span>
+    </div>
+    <div class="conv__head-actions">
+      <button type="button"
+              class="conv__head-btn"
+              data-testid="conversation-open-trace"
+              title="Open the raw activity log in Trace mode"
+              (click)="emitOpenTrace(null)">
+        <span aria-hidden="true">≣</span>
+        <span>Trace</span>
+      </button>
+      <button type="button"
+              class="conv__head-btn"
+              data-testid="conversation-open-verbose-debug"
+              title="Open the read-only Verbose Debug view"
+              (click)="emitOpenVerboseDebug()">
+        <span aria-hidden="true">🐞</span>
+        <span>Debug</span>
+      </button>
+    </div>
+  </header>
+
+  @if (!hasContent()) {
+    <div class="conv__empty" data-testid="conversation-empty">
+      @if (isRunning()) {
+        Waiting for the agent to produce activity…
+      } @else {
+        No conversation yet. Start the task to follow agent output here.
+      }
+    </div>
+  } @else {
+    <ol class="conv__feed" data-testid="conversation-feed">
+      @for (row of rows(); track trackByEvent($index, row)) {
+        @switch (row.kind) {
+
+        @case ('message') {
+          <li class="conv__row conv__row--message"
+              [attr.data-actor]="row.event.kind"
+              [attr.data-testid]="'conversation-message-' + row.event.kind">
+            <div class="msg">
+              <header class="msg__head">
+                <span class="msg__avatar" aria-hidden="true">{{ actorGlyph(row.event.kind) }}</span>
+                <span class="msg__actor">{{ actorLabel(row.event.kind) }}</span>
+                @if (row.event.target) {
+                  <span class="msg__target">→ {{ row.event.target }}</span>
+                }
+                <time class="msg__time">{{ formatTime(row.event.timestamp) }}</time>
+              </header>
+              <div class="msg__body" [innerHTML]="row.bodyHtml"></div>
+              @if (row.event.attachments?.length) {
+                <ul class="msg__attachments" aria-label="Attachments">
+                  @for (a of row.event.attachments ?? []; track a) {
+                    <li><code>{{ a }}</code></li>
+                  }
+                </ul>
+              }
+            </div>
+          </li>
+        }
+
+        @case ('toolBurst') {
+          <li class="conv__row conv__row--burst" data-testid="conversation-tool-burst">
+            <app-tool-burst-chip [event]="row.event" />
+          </li>
+        }
+
+        @case ('runMarker') {
+          <li class="conv__row conv__row--marker conv__row--run"
+              data-testid="conversation-run-marker"
+              [attr.data-marker]="row.event.marker">
+            <span class="marker__dot" aria-hidden="true">●</span>
+            <span class="marker__label">Run {{ row.event.runId ?? '?' }} · {{ row.event.marker }}</span>
+            @if (row.event.cli || row.event.model) {
+              <span class="marker__meta">{{ row.event.cli }}{{ row.event.cli && row.event.model ? ' · ' : '' }}{{ row.event.model }}</span>
+            }
+            <time class="marker__time">{{ formatTime(row.event.timestamp) }}</time>
+          </li>
+        }
+
+        @case ('taskMarker') {
+          <li class="conv__row conv__row--marker conv__row--task"
+              data-testid="conversation-task-marker"
+              [attr.data-marker]="row.event.marker">
+            <span class="marker__dot" aria-hidden="true">◆</span>
+            <span class="marker__label">{{ row.event.title }}</span>
+            <span class="marker__meta">{{ row.event.marker }}@if (row.event.lane) {<span> · {{ row.event.lane }}</span>}</span>
+            <time class="marker__time">{{ formatTime(row.event.timestamp) }}</time>
+          </li>
+        }
+
+        @case ('decision') {
+          <li class="conv__row conv__row--decision"
+              data-testid="conversation-decision-orchestrator"
+              [attr.data-decision-type]="row.event.decisionType"
+              [attr.data-severity]="row.event.severity ?? 'info'">
+            <div class="decision">
+              <span class="decision__actor"><span aria-hidden="true">🛰</span> Orchestrator</span>
+              <span class="decision__type">{{ row.event.decisionType }}</span>
+              <span class="decision__reason">{{ row.event.reason }}</span>
+              @if (row.event.action) {
+                <span class="decision__action">→ {{ row.event.action }}</span>
+              }
+              @if (row.event.retryBudget) {
+                <span class="decision__budget">retry {{ row.event.retryBudget.used }}/{{ row.event.retryBudget.max }}</span>
+              }
+              <button type="button"
+                      class="decision__trace"
+                      data-testid="conversation-decision-open-trace"
+                      title="Open the source range in Trace mode"
+                      (click)="emitOpenTrace(row.event.rawRange)">trace</button>
+            </div>
+          </li>
+        }
+
+        @case ('supervisorWait') {
+          <li class="conv__row conv__row--supervisor"
+              data-testid="conversation-supervisor-wait"
+              [attr.data-state]="row.event.state">
+            <span class="supervisor__actor"><span aria-hidden="true">🛡</span> Supervisor</span>
+            <span class="supervisor__state">{{ row.event.state }}</span>
+            <span class="supervisor__detail">quiet {{ row.event.quietSeconds }}s</span>
+            @if (row.event.reason) {
+              <span class="supervisor__reason">— {{ row.event.reason }}</span>
+            }
+          </li>
+        }
+
+        @case ('needsInput') {
+          <li class="conv__row conv__row--needs-input"
+              data-testid="conversation-needs-input">
+            <span class="needs__actor"><span aria-hidden="true">❓</span> Agent</span>
+            <span class="needs__loop">loop {{ row.event.loopIndex }}/{{ row.event.loopLimit }}</span>
+            <span class="needs__question">{{ row.event.question }}</span>
+            @if (row.event.answerSource) {
+              <span class="needs__source">answer: {{ row.event.answerSource }}</span>
+            }
+          </li>
+        }
+
+        @case ('captureFail') {
+          <li class="conv__row conv__row--system conv__row--warn"
+              data-testid="conversation-capture-fail">
+            <span class="sys__actor"><span aria-hidden="true">⚠</span> System</span>
+            <span class="sys__message">Session capture failed for {{ row.event.cliType }}</span>
+            @if (row.event.fallback) {
+              <span class="sys__fallback">→ {{ row.event.fallback }}</span>
+            }
+          </li>
+        }
+
+        @case ('parserWarning') {
+          <li class="conv__row conv__row--system conv__row--warn"
+              data-testid="conversation-parser-warning">
+            <span class="sys__actor"><span aria-hidden="true">⚠</span> Parser</span>
+            <span class="sys__message">{{ row.event.message }}</span>
+            <code class="sys__expected">expected: {{ row.event.expectedKind }}</code>
+          </li>
+        }
+
+        @case ('schemaDrift') {
+          <li class="conv__row conv__row--system conv__row--warn"
+              data-testid="conversation-schema-drift">
+            <span class="sys__actor"><span aria-hidden="true">⚠</span> Schema</span>
+            <span class="sys__message">{{ row.event.message }}</span>
+            <code class="sys__expected">expected: {{ row.event.expectedSchema }}</code>
+            @if (row.event.recovery) {
+              <span class="sys__fallback">→ {{ row.event.recovery }}</span>
+            }
+          </li>
+        }
+
+        @case ('image') {
+          <li class="conv__row conv__row--image"
+              data-testid="conversation-artifact-image">
+            <figure class="image">
+              <span class="image__icon" aria-hidden="true">🖼</span>
+              <figcaption class="image__caption">{{ row.event.caption }}</figcaption>
+              <code class="image__path">{{ row.event.durablePath || row.event.sourcePath }}</code>
+            </figure>
+          </li>
+        }
+
+        @case ('tokenMetric') {
+          <li class="conv__row conv__row--metric"
+              data-testid="conversation-metric-token">
+            <span class="metric__chip">
+              <span aria-hidden="true">🪙</span>
+              <span class="metric__label">{{ row.event.scope }}</span>
+              <span class="metric__value">{{ formatTokens(row.event.inputTokens + row.event.outputTokens) }} tok</span>
+            </span>
+          </li>
+        }
+
+        @case ('traceLink') {
+          <li class="conv__row conv__row--trace-link"
+              data-testid="conversation-trace-link">
+            <button type="button"
+                    class="trace-link"
+                    [title]="row.event.label"
+                    (click)="emitOpenTrace(row.event.link.range)">
+              <span aria-hidden="true">≣</span>
+              <span>{{ row.event.label }}</span>
+            </button>
+          </li>
+        }
+        }
+      }
+    </ol>
+  }
+</section>
