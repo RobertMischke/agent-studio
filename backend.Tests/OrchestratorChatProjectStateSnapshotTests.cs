@@ -40,7 +40,7 @@ public class OrchestratorChatProjectStateSnapshotTests
         };
 
         var sb = new StringBuilder();
-        OrchestratorChat.AppendProjectStateSnapshot(sb, "Runbook", tasks);
+        OrchestratorChatService.AppendProjectStateSnapshot(sb, "Runbook", tasks);
         var rendered = sb.ToString();
 
         Assert.Contains("AUTHORITATIVE current state of \"Runbook\" (3 tasks total):", rendered);
@@ -50,7 +50,7 @@ public class OrchestratorChatProjectStateSnapshotTests
     public void Snapshot_EmptyProject_RendersNoTasksMarker()
     {
         var sb = new StringBuilder();
-        OrchestratorChat.AppendProjectStateSnapshot(sb, "Runbook", System.Array.Empty<JobInfo>());
+        OrchestratorChatService.AppendProjectStateSnapshot(sb, "Runbook", System.Array.Empty<JobInfo>());
         var rendered = sb.ToString();
 
         Assert.Contains("AUTHORITATIVE current state of \"Runbook\" (0 tasks total):", rendered);
@@ -71,7 +71,7 @@ public class OrchestratorChatProjectStateSnapshotTests
         };
 
         var sb = new StringBuilder();
-        OrchestratorChat.AppendProjectStateSnapshot(sb, "Runbook", tasks);
+        OrchestratorChatService.AppendProjectStateSnapshot(sb, "Runbook", tasks);
         var rendered = sb.ToString();
 
         Assert.Contains("1-preparation: 1", rendered);
@@ -91,7 +91,7 @@ public class OrchestratorChatProjectStateSnapshotTests
     public void Snapshot_InstructsAgentToUseTheseExactNumbers()
     {
         var sb = new StringBuilder();
-        OrchestratorChat.AppendProjectStateSnapshot(sb, "Runbook", new[] { Task("Runbook", "2-ready") });
+        OrchestratorChatService.AppendProjectStateSnapshot(sb, "Runbook", new[] { Task("Runbook", "2-ready") });
 
         Assert.Contains("Use these exact numbers", sb.ToString());
         Assert.Contains("stale", sb.ToString());
@@ -101,7 +101,7 @@ public class OrchestratorChatProjectStateSnapshotTests
     public void Snapshot_InstructsAgentToUseTasksVocabulary()
     {
         var sb = new StringBuilder();
-        OrchestratorChat.AppendProjectStateSnapshot(sb, "Runbook", new[] { Task("Runbook", "2-ready") });
+        OrchestratorChatService.AppendProjectStateSnapshot(sb, "Runbook", new[] { Task("Runbook", "2-ready") });
         var rendered = sb.ToString();
 
         Assert.Contains("\"tasks\"", rendered);
@@ -116,7 +116,7 @@ public class OrchestratorChatProjectStateSnapshotTests
         // prevent. A regression that hardcoded the name would be silent
         // without this assertion.
         var sb = new StringBuilder();
-        OrchestratorChat.AppendProjectStateSnapshot(sb, "Agent Task Processor", new[] { Task("Agent Task Processor", "3-progress") });
+        OrchestratorChatService.AppendProjectStateSnapshot(sb, "Agent Task Processor", new[] { Task("Agent Task Processor", "3-progress") });
         var rendered = sb.ToString();
 
         Assert.Contains("\"Agent Task Processor\"", rendered);

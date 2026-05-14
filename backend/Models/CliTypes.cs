@@ -58,6 +58,37 @@ public record CliSessionInfo
     public SessionUsage? LastUsage { get; init; }
     /// <summary>True when this is the project's persistent reuse session.</summary>
     public bool IsProjectDefault { get; init; }
+    /// <summary>
+    /// Owning task when this session id appears in a job's
+    /// <c>SessionChain</c>. Null for orphan sessions (ad-hoc CLI use,
+    /// pre-orchestrator sessions, or sessions from a different checkout).
+    /// Surfaced as a chip on the row that jumps to the task detail.
+    /// </summary>
+    public LinkedJobRef? LinkedJob { get; init; }
+}
+
+/// <summary>
+/// Back-reference from a CLI session row to the kanban task that owns it.
+/// Embedded on <see cref="CliSessionInfo.LinkedJob"/>. Lean by design: the
+/// frontend only needs the id, the title for the tooltip, the lane for the
+/// chip colour rule, the watch path to route the click, and a boolean
+/// "currently active" flag so the chip can render green when the runner is
+/// live on this exact session.
+/// </summary>
+public record LinkedJobRef
+{
+    public string JobId { get; init; } = "";
+    public string Title { get; init; } = "";
+    public string WatchPath { get; init; } = "";
+    public string ProjectName { get; init; } = "";
+    /// <summary>One of <see cref="JobStates"/>. Drives the chip colour rule.</summary>
+    public string Lane { get; init; } = "";
+    /// <summary>
+    /// True when the owning job is in <see cref="JobStates.Progress"/> AND
+    /// the project's runner reports it as the active job. The chip renders
+    /// green in this state and neutral in every other state.
+    /// </summary>
+    public bool IsActive { get; init; }
 }
 
 /// <summary>Per-CLI section of the global usage report shown in the right side-sheet.</summary>

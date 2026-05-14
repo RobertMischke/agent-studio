@@ -85,9 +85,18 @@ public static class CliEndpoints
             }
         });
 
-        cliGroup.MapGet("/usage", (CliRouter router, SessionRegistry sessions) =>
+        cliGroup.MapGet("/usage", (CliRouter router, SessionRegistry sessions, TaskRunnerService runners) =>
         {
-            return Results.Ok(sessions.BuildReport(router));
+            // Snapshot the runner's per-project active job so the
+            // LinkedJob chip can render `active` (green) when the linked
+            // session belongs to the project's currently-running task.
+            var status = runners.GetStatus();
+            var activeJobByProject = new Dictionary<string, string?>(StringComparer.Ordinal);
+            foreach (var (name, projectStatus) in status.Projects)
+            {
+                activeJobByProject[name] = projectStatus.ActiveJobId;
+            }
+            return Results.Ok(sessions.BuildReport(router, activeJobByProject));
         });
 
         // ── Quota: per-CLI subscription quota for the right-hand sidesheet ──

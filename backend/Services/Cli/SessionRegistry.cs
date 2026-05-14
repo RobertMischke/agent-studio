@@ -21,22 +21,105 @@ public sealed class SessionRegistry
 {
     private readonly ILogger<SessionRegistry> _logger;
     private readonly JobScannerService _scanner;
+    private readonly SessionToJobIndex? _sessionIndex;
 
     public SessionRegistry(ILogger<SessionRegistry> logger, JobScannerService scanner)
+        : this(logger, scanner, sessionIndex: null) { }
+
+    /// <summary>
+    /// Production constructor: <paramref name="sessionIndex"/> is the
+    /// inverse <c>sessionId -&gt; owning task</c> map used to attach the
+    /// <see cref="CliSessionInfo.LinkedJob"/> chip. The parameterless
+    /// overload above stays so existing tests that build a registry
+    /// without the index keep working (the chip is just empty in that
+    /// case, which matches today's behaviour).
+    /// </summary>
+    public SessionRegistry(ILogger<SessionRegistry> logger, JobScannerService scanner, SessionToJobIndex? sessionIndex)
     {
         _logger = logger;
         _scanner = scanner;
+        _sessionIndex = sessionIndex;
     }
 
     public CliUsageReport BuildReport(CliRouter router)
+        => BuildReport(router, activeJobByProject: null);
+
+    /// <summary>
+    /// Overload used by the HTTP endpoint: pass a snapshot of the runner's
+    /// per-project active job so the chip can render <c>active</c> (green)
+    /// when the linked session belongs to the project's currently-running
+    /// task. <paramref name="activeJobByProject"/> is keyed by project name
+    /// and contains the job id the runner reports as active, or null when
+    /// nothing is running. A null map disables the active flag entirely
+    /// (chip falls back to <c>linked</c>).
+    /// </summary>
+    public CliUsageReport BuildReport(CliRouter router, IReadOnlyDictionary<string, string?>? activeJobByProject)
     {
+        // Rebuild the session->job index lazily on every report build. The
+        // cost is bounded by ScanAllJobs + chain walk and is dominated by
+        // the disk-cache-warm scan that already happens on this endpoint;
+        // the perf test in SessionToJobIndexTests pins the rebuild itself
+        // at well under 50 ms for 200 jobs.
+        if (_sessionIndex != null)
+        {
+            try { _sessionIndex.Rebuild(_scanner.ScanAllJobs()); }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "SessionToJobIndex rebuild failed; LinkedJob chips will be absent this tick");
+            }
+        }
+
         var sections = new List<CliUsageSection>();
         foreach (var cli in router.All)
         {
             var section = BuildSection(cli);
+            section = section with { Projects = AttachLinkedJobs(section.Projects, activeJobByProject) };
             sections.Add(section);
         }
         return new CliUsageReport { Sections = sections };
+    }
+
+    private List<CliUsageProjectGroup> AttachLinkedJobs(
+        List<CliUsageProjectGroup> projects,
+        IReadOnlyDictionary<string, string?>? activeJobByProject)
+    {
+        if (_sessionIndex == null || projects.Count == 0) return projects;
+        var result = new List<CliUsageProjectGroup>(projects.Count);
+        foreach (var group in projects)
+        {
+            var sessions = new List<CliSessionInfo>(group.Sessions.Count);
+            foreach (var s in group.Sessions)
+            {
+                var link = _sessionIndex.Lookup(s.Id, s.Cwd);
+                if (link == null)
+                {
+                    sessions.Add(s);
+                    continue;
+                }
+                var isActive = false;
+                if (string.Equals(link.Lane, JobStates.Progress, StringComparison.Ordinal)
+                    && activeJobByProject != null
+                    && activeJobByProject.TryGetValue(link.ProjectName, out var activeId)
+                    && string.Equals(activeId, link.JobId, StringComparison.Ordinal))
+                {
+                    isActive = true;
+                }
+                sessions.Add(s with
+                {
+                    LinkedJob = new LinkedJobRef
+                    {
+                        JobId       = link.JobId,
+                        Title       = link.Title,
+                        WatchPath   = link.WatchPath,
+                        ProjectName = link.ProjectName,
+                        Lane        = link.Lane,
+                        IsActive    = isActive
+                    }
+                });
+            }
+            result.Add(group with { Sessions = sessions });
+        }
+        return result;
     }
 
     private CliUsageSection BuildSection(ICliExecutionService cli)
