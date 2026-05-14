@@ -10,7 +10,10 @@
            (keydown)="onDialogKeydown($event)">
     <header class="cli-usage-modal__head">
       <div>
-        <h2 id="cli-usage-modal-title">CLI usage detail</h2>
+        <h2 id="cli-usage-modal-title">
+          CLI usage detail
+          <app-concept-help concept="probes" />
+        </h2>
         <p>Quota, token trend, model spend, and routing headroom.</p>
       </div>
       <div class="cli-usage-modal__actions">
