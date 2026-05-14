@@ -422,6 +422,129 @@ public static class DriftReportEndpoints
         });
 
         // -----------------------------------------------------------------
+        // Software / Architecture Drift action.
+        // Compares the documented high-level architecture model against the
+        // current source tree, schemas, tests, runtime signals, and recent
+        // task evidence. The action is the first in-process consumer of the
+        // architecture-model frontmatter contract; a missing or rejected
+        // model surfaces as a High Architecture finding rather than a
+        // crash.
+        // -----------------------------------------------------------------
+
+        group.MapGet("/{project}/actions/software-architecture-drift/prompt", (
+            string project,
+            IConfiguration config,
+            DriftReportStore driftStore,
+            AnalysisReportStore analysisStore,
+            RuntimePromptService prompts,
+            SoftwareArchitectureDriftAnalysisService action) =>
+        {
+            if (string.IsNullOrWhiteSpace(project))
+                return Results.BadRequest(new { error = "project required" });
+            var workspace = config["TaskRepository"];
+            if (string.IsNullOrWhiteSpace(workspace))
+                return Results.BadRequest(new { error = "TaskRepository not configured" });
+
+            var projectRoot = Path.Combine(workspace!, "projects", project);
+            if (!Directory.Exists(projectRoot))
+                return Results.NotFound(new { error = $"project root not found: {projectRoot}" });
+
+            var repoRoot = ResolveRepoRoot();
+            var watchedProjectRoot = config[$"Drift:WatchedProjectRoots:{project}"];
+            var scope = action.SelectScope(
+                project, projectRoot, repoRoot, watchedProjectRoot, workspace, driftStore, analysisStore);
+            var template = prompts.Render(
+                "software-architecture-drift.md",
+                new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase));
+            var renderedPrompt = action.BuildPrompt(scope, template);
+            return Results.Ok(new SoftwareArchitectureDriftPromptResponse(
+                Project: project,
+                CapturedAt: scope.CapturedAt,
+                ArchitectureModelFound: scope.ArchitectureModel is not null,
+                ArchitectureModelSourcePath: scope.ArchitectureModel?.SourcePath,
+                ArchitectureModelRejectionReason: scope.ArchitectureModelLookup.RejectionReason,
+                Docs: scope.Docs.Select(d => d.Path).ToArray(),
+                SourceTree: scope.SourceTree.Select(d => d.Path).ToArray(),
+                ModuleBoundaries: scope.ModuleBoundaries.Select(d => d.Path).ToArray(),
+                Schemas: scope.Schemas.Select(d => d.Path).ToArray(),
+                TestDirs: scope.TestDirs.Select(d => d.Path).ToArray(),
+                RecentTasks: scope.RecentTasks.Select(t => $"{t.Lane}/{t.JobId}").ToArray(),
+                RecentDriftReports: scope.RecentDriftReports.Select(r => r.ReportId).ToArray(),
+                RecentAnalysisReports: scope.RecentAnalysisReports.Select(r => r.ReportId).ToArray(),
+                Prompt: renderedPrompt));
+        });
+
+        group.MapPost("/{project}/actions/software-architecture-drift", async (
+            string project,
+            SoftwareArchitectureDriftRunRequest? body,
+            IConfiguration config,
+            DriftReportStore driftStore,
+            AnalysisReportStore analysisStore,
+            RuntimePromptService prompts,
+            SoftwareArchitectureDriftAnalysisService action,
+            CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(project))
+                return Results.BadRequest(new { error = "project required" });
+            var workspace = config["TaskRepository"];
+            if (string.IsNullOrWhiteSpace(workspace))
+                return Results.BadRequest(new { error = "TaskRepository not configured" });
+
+            var projectRoot = Path.Combine(workspace!, "projects", project);
+            if (!Directory.Exists(projectRoot))
+                return Results.NotFound(new { error = $"project root not found: {projectRoot}" });
+
+            var repoRoot = ResolveRepoRoot();
+            var watchedProjectRoot = config[$"Drift:WatchedProjectRoots:{project}"];
+            var scope = action.SelectScope(
+                project, projectRoot, repoRoot, watchedProjectRoot, workspace, driftStore, analysisStore);
+            var template = prompts.Render(
+                "software-architecture-drift.md",
+                new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase));
+            var renderedPrompt = action.BuildPrompt(scope, template);
+
+            var agentResponse = body?.AgentResponse;
+            string markdown;
+            SoftwareArchitectureDriftParseResult parse;
+            if (string.IsNullOrWhiteSpace(agentResponse))
+            {
+                parse = new SoftwareArchitectureDriftParseResult(
+                    Status: SoftwareArchitectureDriftParseStatus.Unstructured,
+                    ScoreBand: DriftScoreBand.Unknown,
+                    OverallScore: 0,
+                    Summary: "Evidence assembled; no agent narrative supplied. Run the embedded prompt against a CLI agent to produce the verdict.",
+                    Dimensions: null,
+                    ArchitectureElements: null,
+                    FollowUps: new[]
+                    {
+                        new DriftFollowUpSuggestion(
+                            Title: "Run Software / Architecture Drift against a CLI agent",
+                            Summary: "Hand the embedded prompt to Claude / Codex / Copilot / Gemini and POST the reply back to /api/drift/{project}/actions/software-architecture-drift to produce the structured per-element verdict.",
+                            Priority: DriftFollowUpPriority.Normal,
+                            RelatedDimension: DriftDimensionType.Architecture),
+                    },
+                    ParseError: null);
+                markdown = BuildSoftwareArchitectureEvidenceOnlyMarkdown(scope, renderedPrompt);
+            }
+            else
+            {
+                parse = action.TryParseAgentResponse(agentResponse);
+                markdown = agentResponse;
+            }
+
+            var reportId = "01" + DateTime.UtcNow.ToString("yyyyMMddHHmmssfff") + Guid.NewGuid().ToString("N").Substring(0, 8);
+            var report = action.BuildReport(
+                scope: scope,
+                parse: parse,
+                reportId: reportId,
+                createdAt: DateTime.UtcNow,
+                trigger: DriftReportTrigger.Manual);
+
+            await driftStore.AppendAsync(workspace!, project, report, markdown, ct).ConfigureAwait(false);
+            return Results.Ok(new DriftReportDetailResponse(report, markdown));
+        });
+
+        // -----------------------------------------------------------------
         // Architecture marble surface.
         //
         // The Drift project view renders an architecture map (max ten
@@ -643,6 +766,51 @@ public static class DriftReportEndpoints
         return sb.ToString();
     }
 
+    private static string BuildSoftwareArchitectureEvidenceOnlyMarkdown(
+        SoftwareArchitectureDriftScope scope,
+        string renderedPrompt)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("# Software / Architecture Drift - evidence only");
+        sb.AppendLine();
+        sb.Append("**Verdict:** evidence assembled at ")
+            .Append(scope.CapturedAt.ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ"))
+            .AppendLine("; no agent narrative supplied. Run the embedded prompt against a CLI agent and POST the reply back to produce the structured verdict.");
+        sb.AppendLine();
+        sb.Append("**Project:** `").Append(scope.Project).AppendLine("`");
+        sb.AppendLine();
+        sb.AppendLine("## Snapshot");
+        sb.AppendLine();
+        if (scope.ArchitectureModel is { } model)
+        {
+            sb.Append("- Architecture model: `").Append(model.ModelId).Append("` - ").Append(model.Title)
+              .Append(" (").Append(model.Elements.Count).AppendLine(" elements)");
+            if (!string.IsNullOrWhiteSpace(model.SourcePath))
+                sb.Append("- Model source: `").Append(model.SourcePath).AppendLine("`");
+        }
+        else
+        {
+            sb.AppendLine("- Architecture model: not yet defined for this project (High Architecture finding).");
+            if (scope.ArchitectureModelLookup.RejectionReason is { Length: > 0 } rj)
+                sb.Append("- Rejection reason: ").AppendLine(rj);
+        }
+        sb.Append("- ADR / arch docs found: ").Append(scope.Docs.Count).AppendLine();
+        sb.Append("- Top-level source folders: ").Append(scope.SourceTree.Count).AppendLine();
+        sb.Append("- Backend module boundaries: ").Append(scope.ModuleBoundaries.Count).AppendLine();
+        sb.Append("- Schemas in `docs/schemas/`: ").Append(scope.Schemas.Count).AppendLine();
+        sb.Append("- Test directories: ").Append(scope.TestDirs.Count).AppendLine();
+        sb.Append("- Recent task evidence entries: ").Append(scope.RecentTasks.Count).AppendLine();
+        sb.AppendLine();
+        sb.AppendLine("## Embedded prompt");
+        sb.AppendLine();
+        sb.AppendLine("Copy the block below into a Claude / Codex / Copilot / Gemini session, then POST the reply back to `/api/drift/{project}/actions/software-architecture-drift` with `agentResponse` set to produce the structured verdict.");
+        sb.AppendLine();
+        sb.AppendLine("```markdown");
+        sb.AppendLine(renderedPrompt);
+        sb.AppendLine("```");
+        return sb.ToString();
+    }
+
     private static string BuildEvidenceOnlyMarkdown(
         AdrCodeDriftScope scope,
         string renderedPrompt)
@@ -755,6 +923,34 @@ public sealed record AdrCodeDriftPromptResponse(
 /// and emits the typed verdict.
 /// </summary>
 public sealed record SpecTaskJobDriftRunRequest(string? AgentResponse);
+
+/// <summary>
+/// Body for <c>POST /api/drift/{project}/actions/software-architecture-drift</c>.
+/// Same envelope as the other Drift actions: an empty
+/// <see cref="AgentResponse"/> emits an Unstructured "evidence only" report
+/// carrying the rendered prompt; a populated value parses the agent's reply
+/// and emits the typed verdict (with per-element architecture-model scores
+/// when the agent populated them).
+/// </summary>
+public sealed record SoftwareArchitectureDriftRunRequest(string? AgentResponse);
+
+/// <summary>Response for
+/// <c>GET /api/drift/{project}/actions/software-architecture-drift/prompt</c>.</summary>
+public sealed record SoftwareArchitectureDriftPromptResponse(
+    string Project,
+    DateTime CapturedAt,
+    bool ArchitectureModelFound,
+    string? ArchitectureModelSourcePath,
+    string? ArchitectureModelRejectionReason,
+    IReadOnlyList<string> Docs,
+    IReadOnlyList<string> SourceTree,
+    IReadOnlyList<string> ModuleBoundaries,
+    IReadOnlyList<string> Schemas,
+    IReadOnlyList<string> TestDirs,
+    IReadOnlyList<string> RecentTasks,
+    IReadOnlyList<string> RecentDriftReports,
+    IReadOnlyList<string> RecentAnalysisReports,
+    string Prompt);
 
 /// <summary>Response for
 /// <c>GET /api/drift/{project}/actions/spec-task-job-drift/prompt</c>.</summary>
