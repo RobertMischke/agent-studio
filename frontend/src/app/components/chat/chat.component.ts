@@ -15,6 +15,7 @@ import {
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { markdownToHtml } from '../markdown-utils';
+import { MarkdownImageLightboxDirective } from '../../directives/markdown-image-lightbox.directive';
 import { mergeByTimestamp } from './merge-by-timestamp';
 import {
   ChatDraftAttachment,
@@ -82,7 +83,7 @@ const COLLAPSE_LINE_THRESHOLD = 24;
 @Component({
   selector: 'app-chat',
   standalone: true,
-  imports: [FormsModule, RoleBadgeComponent, PhaseSummaryListComponent],
+  imports: [FormsModule, RoleBadgeComponent, PhaseSummaryListComponent, MarkdownImageLightboxDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './chat.component.html',
   styleUrl: './chat.component.scss'

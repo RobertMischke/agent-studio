@@ -2,6 +2,8 @@ import { ChangeDetectionStrategy, Component, input, output } from '@angular/core
 import { MarkdownRichEditorComponent } from '../../../../components/markdown-rich-editor';
 import { JobPromptHistoryEntry } from '../../../../models/job.model';
 import { markdownToHtml } from '../../../../components/markdown-utils';
+import { MarkdownImageLightboxDirective } from '../../../../directives/markdown-image-lightbox.directive';
+import { resolveProtocolImageSrc } from '../protocol-pane/protocol-image-resolver';
 
 /**
  * Prompt pane of the job-detail view: renders prompt.md inside the
@@ -12,7 +14,7 @@ import { markdownToHtml } from '../../../../components/markdown-utils';
   selector: 'app-prompt-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MarkdownRichEditorComponent],
+  imports: [MarkdownRichEditorComponent, MarkdownImageLightboxDirective],
   templateUrl: './prompt-pane.component.html',
   styleUrls: ['./prompt-pane.component.scss']
 })
@@ -30,7 +32,11 @@ export class PromptPaneComponent {
   readonly save = output<string>();
 
   renderMarkdown(md: string): string {
-    return markdownToHtml(md ?? '');
+    const jobId = this.jobId();
+    const watchPath = this.watchPath();
+    return markdownToHtml(md ?? '', {
+      resolveImageSrc: (src) => resolveProtocolImageSrc(src, jobId, watchPath),
+    });
   }
 
   formatTime(iso: string): string {

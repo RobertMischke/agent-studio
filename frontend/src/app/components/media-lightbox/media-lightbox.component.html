@@ -1,0 +1,26 @@
+@if (lightbox.active(); as media) {
+  <div class="media-lightbox"
+       role="dialog"
+       aria-modal="true"
+       aria-label="Image preview"
+       data-testid="media-lightbox"
+       tabindex="-1"
+       (click)="close()">
+    <button type="button"
+            class="media-lightbox__close"
+            data-testid="media-lightbox-close"
+            aria-label="Close"
+            (click)="close(); $event.stopPropagation()">×</button>
+    <figure class="media-lightbox__figure"
+            (click)="$event.stopPropagation()">
+      <img class="media-lightbox__img"
+           data-testid="media-lightbox-image"
+           [src]="media.src"
+           [alt]="media.alt" />
+      @if (media.alt) {
+        <figcaption class="media-lightbox__caption"
+                    data-testid="media-lightbox-caption">{{ media.alt }}</figcaption>
+      }
+    </figure>
+  </div>
+}

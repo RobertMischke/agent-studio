@@ -285,6 +285,21 @@
   border: 1px solid var(--md-border-soft);
 }
 
+/* Images decorated by `appMarkdownLightbox` become clickable to open
+ * the shared media lightbox. The directive adds `tabindex="0"` and
+ * `role="button"`; these rules make the affordance visible. */
+.markdown-body img.md-image-zoomable {
+  cursor: zoom-in;
+  transition: outline-color 0.15s ease, transform 0.15s ease;
+}
+.markdown-body img.md-image-zoomable:hover {
+  transform: translateY(-1px);
+}
+.markdown-body img.md-image-zoomable:focus-visible {
+  outline: 2px solid var(--md-fg-link);
+  outline-offset: 2px;
+}
+
 /* -- Dense variant (chat width, activity-log, prompt-history) ---- *
  * Smaller default size and tighter heading rhythm; no heading
  * underlines so the layout doesn't fragment in a narrow column. */

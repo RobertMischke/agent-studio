@@ -20,6 +20,7 @@ import {
   parseOrchestratorSteer
 } from './activity-log.parser';
 import { markdownToHtml } from '../../../components/markdown-utils';
+import { MarkdownImageLightboxDirective } from '../../../directives/markdown-image-lightbox.directive';
 
 type ViewMode = 'conversation' | 'trace';
 
@@ -73,7 +74,7 @@ interface RenderedTurn {
 @Component({
   selector: 'app-activity-log-view',
   standalone: true,
-  imports: [ScrollingModule],
+  imports: [ScrollingModule, MarkdownImageLightboxDirective],
   // Cycle 7b: OnPush. The activity log re-derives conversation turns
   // from a capped lines() signal whenever new CLI output arrives. With
   // default CD, every parent change-detection pass also walked through

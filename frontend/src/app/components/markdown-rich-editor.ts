@@ -1,9 +1,10 @@
-import { AfterViewInit, Component, ElementRef, HostListener, OnDestroy, ViewChild, computed, effect, input, output, signal, untracked } from '@angular/core';
+import { AfterViewInit, Component, ElementRef, HostListener, OnDestroy, ViewChild, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import type { Editor } from '@tiptap/core';
 import { htmlToMarkdown, markdownToHtml, MarkdownImageOptions } from './markdown-utils';
 import { shouldEmitEditorSave } from './markdown-rich-editor.guard';
 import { CLIENT_ID } from '../services/client-id.interceptor';
+import { MediaLightboxService } from '../services/media-lightbox.service';
 
 type EditorState = 'idle' | 'dirty' | 'saved';
 
@@ -48,6 +49,7 @@ export class MarkdownRichEditorComponent implements AfterViewInit, OnDestroy {
   private savedTimer: ReturnType<typeof setTimeout> | null = null;
   private autosaveTimer: ReturnType<typeof setTimeout> | null = null;
   private dragCounter = 0;
+  private readonly mediaLightbox = inject(MediaLightboxService);
   /**
    * True only after a real user edit has touched the editor. Tiptap's
    * onUpdate fires for both user input and (in some configurations) the
@@ -125,6 +127,34 @@ export class MarkdownRichEditorComponent implements AfterViewInit, OnDestroy {
             return true;
           }
           return false;
+        },
+        // When the editor is read-only (e.g. CLI is running for this
+        // task), a click on an inline image opens the shared lightbox
+        // instead of acting as a TipTap selection. Single-click in
+        // editable mode still selects the image for normal editing -
+        // double-click opens the lightbox there.
+        handleClick: (_view, _pos, event) => {
+          if (!this.readOnly()) return false;
+          const target = event.target as HTMLElement | null;
+          if (!target || target.tagName !== 'IMG') return false;
+          const img = target as HTMLImageElement;
+          event.preventDefault();
+          this.mediaLightbox.open({
+            src: img.currentSrc || img.src,
+            alt: img.getAttribute('alt') ?? '',
+          });
+          return true;
+        },
+        handleDoubleClick: (_view, _pos, event) => {
+          const target = event.target as HTMLElement | null;
+          if (!target || target.tagName !== 'IMG') return false;
+          const img = target as HTMLImageElement;
+          event.preventDefault();
+          this.mediaLightbox.open({
+            src: img.currentSrc || img.src,
+            alt: img.getAttribute('alt') ?? '',
+          });
+          return true;
         },
         handlePaste: (_view, event) => {
           const file = this.imageFromClipboard(event.clipboardData);

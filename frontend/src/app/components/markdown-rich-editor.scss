@@ -208,4 +208,16 @@
   display: block;
   margin: 6px 0;
 }
+/* In read-only mode (CLI running), a click anywhere on an inline image
+ * opens the shared media lightbox. Mirror that affordance in the cursor. */
+.md-editor--readonly :host ::ng-deep .ProseMirror img,
+:host ::ng-deep .md-editor--readonly .ProseMirror img {
+  cursor: zoom-in;
+}
+/* Editable mode keeps single-click for TipTap selection; double-click
+ * opens the lightbox - hint that with a softer cursor on hover. */
+:host ::ng-deep .ProseMirror img:hover {
+  outline: 1px dashed rgba(137, 220, 235, 0.5);
+  outline-offset: 2px;
+}
   

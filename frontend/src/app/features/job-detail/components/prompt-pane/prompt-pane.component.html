@@ -30,6 +30,7 @@
               <span class="prompt-history__time">{{ formatTime(entry.writtenAt) }}</span>
             </header>
             <div class="prompt-history__body markdown markdown-body markdown-body--dense"
+                 appMarkdownLightbox
                  [innerHTML]="renderMarkdown(entry.markdown)"></div>
           </article>
         }

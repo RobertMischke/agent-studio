@@ -43,6 +43,7 @@
                 <span class="chat__msg-time">{{ formatTime(item.message.timestamp) }}</span>
               </header>
               <div class="chat__msg-body"
+                   appMarkdownLightbox
                    [class.chat__msg-body--markdown]="item.message.role !== 'user'"
                    [class.markdown-body]="item.message.role !== 'user'"
                    [class.markdown-body--dense]="item.message.role !== 'user'"
@@ -104,6 +105,7 @@
               }
               @if (item.expanded && item.detailHtml) {
                 <div class="chat__event-detail"
+                     appMarkdownLightbox
                      data-testid="chat-event-detail"
                      [innerHTML]="item.detailHtml"></div>
               }

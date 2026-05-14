@@ -1,0 +1,69 @@
+/* Catppuccin Mocha palette tokens used inline; the component is global
+ * so a self-contained palette avoids importing the SCSS variables file.
+ */
+.media-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1100; /* above modal dialogs (z=1000) but below confirm (z=1200) */
+  background: rgba(17, 17, 27, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  cursor: zoom-out;
+
+  &__figure {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    align-items: center;
+    max-width: 96vw;
+    max-height: 92vh;
+    cursor: default;
+  }
+
+  &__img {
+    max-width: 96vw;
+    max-height: 86vh;
+    object-fit: contain;
+    border: 1px solid rgba(127, 132, 156, 0.4);
+    border-radius: 4px;
+    background: #181825;
+    /* Keep small images crisp; do not upscale beyond intrinsic. */
+    image-rendering: auto;
+  }
+
+  &__caption {
+    font-size: 12.5px;
+    color: #a6adc8;
+    font-style: italic;
+    text-align: center;
+    max-width: 96vw;
+    overflow-wrap: anywhere;
+  }
+
+  &__close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    width: 36px;
+    height: 36px;
+    border: 1px solid rgba(127, 132, 156, 0.5);
+    background: rgba(24, 24, 37, 0.85);
+    color: #cdd6f4;
+    font-size: 18px;
+    line-height: 1;
+    border-radius: 3px;
+    cursor: pointer;
+
+    &:hover {
+      background: #313244;
+    }
+
+    &:focus-visible {
+      outline: 2px solid #89dceb;
+      outline-offset: 2px;
+    }
+  }
+}

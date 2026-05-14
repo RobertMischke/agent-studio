@@ -29,7 +29,7 @@
       } @else if (errorMessage(); as msg) {
         <p class="info-btn__error">{{ msg }}</p>
       } @else if (bodyHtml(); as html) {
-        <div class="info-btn__rendered" [innerHTML]="html"></div>
+        <div class="info-btn__rendered" appMarkdownLightbox [innerHTML]="html"></div>
       }
     </div>
   </aside>

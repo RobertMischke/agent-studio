@@ -200,41 +200,9 @@ $ctp-crust:     #11111b;
   font-style: italic;
 }
 
-.results-lightbox {
-  position: fixed;
-  inset: 0;
-  z-index: 999;
-  background: rgba(0, 0, 0, 0.86);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 32px;
-  cursor: zoom-out;
-
-  &__img {
-    max-width: 96vw;
-    max-height: 92vh;
-    object-fit: contain;
-    border: 1px solid rgba($ctp-overlay0, 0.4);
-    border-radius: 4px;
-    background: $ctp-mantle;
-  }
-
-  &__close {
-    position: absolute;
-    top: 16px;
-    right: 16px;
-    width: 36px;
-    height: 36px;
-    border: 1px solid rgba($ctp-overlay0, 0.5);
-    background: rgba($ctp-mantle, 0.85);
-    color: $ctp-text;
-    font-size: 18px;
-    border-radius: 3px;
-    cursor: pointer;
-    &:hover { background: $ctp-surface1; }
-  }
-}
+/* The lightbox UI moved to the shared `app-media-lightbox` mounted at
+ * the app shell. Figures still emit `data-results-lightbox`; the
+ * `appMarkdownLightbox` directive on the body forwards clicks. */
 
 /* ---------- Code blocks ---------------------------------------------- */
 .results-code {

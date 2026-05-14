@@ -1,7 +1,6 @@
 import {
   ChangeDetectionStrategy,
   Component,
-  DestroyRef,
   ElementRef,
   ViewChild,
   computed,
@@ -14,14 +13,9 @@ import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { renderResultsHtml, type SentinelBanner } from './beautiful-results.renderer';
 import { applyHighlighting } from './beautiful-results.highlight';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
-import { ModalStackService } from '../../../../services/modal-stack.service';
+import { MarkdownImageLightboxDirective } from '../../../../directives/markdown-image-lightbox.directive';
 
 export type BeautifulResultsViewMode = 'rendered' | 'raw';
-
-interface Lightbox {
-  src: string;
-  alt: string;
-}
 
 interface SentinelMeta {
   kind: SentinelBanner['kind'];
@@ -45,13 +39,16 @@ const SENTINEL_META: Record<SentinelBanner['kind'], SentinelMeta> = {
  *                       and `results/foo.png` into job-folder API URLs
  *
  * The component owns: sentinel banner extraction, the Rendered/Raw toggle,
- * lazy syntax highlighting (stage 2 of the renderer pipeline), image
- * lightbox, and the code-copy buttons emitted by the renderer.
+ * lazy syntax highlighting (stage 2 of the renderer pipeline), and the
+ * code-copy buttons emitted by the renderer. Image-click-to-enlarge is
+ * delegated to the shared `appMarkdownLightbox` directive on the body
+ * container, which forwards to `MediaLightboxService`.
  */
 @Component({
   selector: 'app-beautiful-results',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [MarkdownImageLightboxDirective],
   templateUrl: './beautiful-results.component.html',
   styleUrls: ['./beautiful-results.component.scss']
 })
@@ -61,7 +58,6 @@ export class BeautifulResultsComponent {
   readonly watchPath = input<string | null>(null);
 
   readonly viewMode = signal<BeautifulResultsViewMode>('rendered');
-  readonly lightbox = signal<Lightbox | null>(null);
   readonly copyState = signal<'idle' | 'copied' | 'failed'>('idle');
   private copyTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -104,51 +100,24 @@ export class BeautifulResultsComponent {
   }
 
   /**
-   * The renderer emits decorated `<button data-results-lightbox>` wrappers
-   * around `<figure>` images and `<button data-results-copy>` headers above
-   * `<pre>` code blocks. We use event delegation on the body container so we
+   * The renderer emits `<button data-results-copy>` headers above `<pre>`
+   * code blocks. We use event delegation on the body container so we
    * don't have to thread Angular bindings into the sanitized HTML.
+   *
+   * The image lightbox path is owned by `appMarkdownLightbox` on the body
+   * container - it recognises the `data-results-lightbox` markers the
+   * renderer still emits and forwards them to the shared
+   * `MediaLightboxService`.
    */
   onBodyClick(event: MouseEvent): void {
     const target = event.target as HTMLElement | null;
     if (!target) return;
-    const lightboxBtn = target.closest<HTMLElement>('[data-results-lightbox]');
-    if (lightboxBtn) {
-      event.preventDefault();
-      this.lightbox.set({
-        src: lightboxBtn.getAttribute('data-results-lightbox') || '',
-        alt: lightboxBtn.getAttribute('data-results-alt') || ''
-      });
-      return;
-    }
     const copyBtn = target.closest<HTMLElement>('[data-results-copy]');
     if (copyBtn) {
       event.preventDefault();
       this.copyCodeFor(copyBtn);
     }
   }
-
-  closeLightbox(): void {
-    this.lightbox.set(null);
-  }
-
-  // Lightbox Escape routes through ModalStack (effect below) so a
-  // confirm-dialog above it always wins. The previous local handler is
-  // gone; template references to `onLightboxKey` were dropped along with it.
-  private readonly lightboxModalStack = inject(ModalStackService);
-  private readonly lightboxDestroyRef = inject(DestroyRef);
-  private lightboxStackDispose: (() => void) | null = null;
-  private readonly lightboxStackEffect = effect(() => {
-    const open = this.lightbox() !== null;
-    if (open) {
-      if (!this.lightboxStackDispose) {
-        this.lightboxStackDispose = this.lightboxModalStack.push('beautiful-results-lightbox', () => this.closeLightbox());
-      }
-    } else if (this.lightboxStackDispose) {
-      this.lightboxStackDispose();
-      this.lightboxStackDispose = null;
-    }
-  });
 
   private async copyCodeFor(button: HTMLElement): Promise<void> {
     const pre = button.closest('.results-code')?.querySelector<HTMLElement>('[data-results-code]');

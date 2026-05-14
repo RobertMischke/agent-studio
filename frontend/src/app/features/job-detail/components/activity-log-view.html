@@ -89,6 +89,7 @@
                       <span class="convo-turn__time">{{ formatTime(item.turn.timestamp) }}</span>
                     </header>
                     <div class="convo-turn__body convo-turn__body--agent markdown markdown-body markdown-body--dense"
+                         appMarkdownLightbox
                          [innerHTML]="item.bodyHtml"></div>
                   }
                   @case ('system') {
@@ -149,6 +150,7 @@
                         <span class="convo-turn__time">{{ formatTime(item.turn.timestamp) }}</span>
                       </header>
                       <div class="convo-turn__body convo-turn__body--orchestrator"
+                           appMarkdownLightbox
                            [innerHTML]="item.bodyHtml"></div>
                     }
                   }
