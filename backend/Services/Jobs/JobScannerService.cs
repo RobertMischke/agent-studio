@@ -291,6 +291,7 @@ public class JobScannerService
             Info = info,
             PromptMarkdown = ReadFileOrNull(Path.Combine(dir, "prompt.md")),
             PromptHistory = ReadPromptHistory(dir),
+            TitleHistory = TitleHistoryLog.Read(dir),
             StatusMarkdown = statusMd,
             ContextUsage = ReadContextUsage(dir),
             Log = BuildLog(dir),

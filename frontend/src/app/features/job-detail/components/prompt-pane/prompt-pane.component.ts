@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { MarkdownRichEditorComponent } from '../../../../components/markdown-rich-editor';
-import { JobPromptHistoryEntry } from '../../../../models/job.model';
+import { JobPromptHistoryEntry, JobTitleHistoryEntry } from '../../../../models/job.model';
 import { markdownToHtml } from '../../../../components/markdown-utils';
 import { MarkdownImageLightboxDirective } from '../../../../directives/markdown-image-lightbox.directive';
 import { resolveProtocolImageSrc } from '../protocol-pane/protocol-image-resolver';
@@ -21,6 +21,7 @@ import { resolveProtocolImageSrc } from '../protocol-pane/protocol-image-resolve
 export class PromptPaneComponent {
   readonly markdown = input<string>('');
   readonly history = input<JobPromptHistoryEntry[]>([]);
+  readonly titleHistory = input<JobTitleHistoryEntry[]>([]);
   readonly maximized = input(false);
   readonly weight = input<number>(1);
   readonly isRunning = input(false);

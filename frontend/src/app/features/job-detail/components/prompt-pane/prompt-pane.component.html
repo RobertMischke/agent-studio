@@ -10,6 +10,25 @@
     <button class="pane__hide" (click)="hide.emit()" title="Hide panel">×</button>
   </header>
   <div class="pane__body">
+    @if (titleHistory().length > 0) {
+      <section class="title-history" data-testid="title-history">
+        <header class="title-history__head">
+          <span class="title-history__title">Title history</span>
+          <span class="title-history__hint">Renames recorded against this task. Current title is shown above.</span>
+        </header>
+        <ol class="title-history__list">
+          @for (entry of titleHistory(); track entry.at) {
+            <li class="title-history__entry" data-testid="title-history-entry">
+              <time class="title-history__time">{{ formatTime(entry.at) }}</time>
+              <span class="title-history__from">{{ entry.oldTitle || '(empty)' }}</span>
+              <span class="title-history__arrow" aria-hidden="true">→</span>
+              <span class="title-history__to">{{ entry.newTitle }}</span>
+            </li>
+          }
+        </ol>
+      </section>
+    }
+
     <app-markdown-rich-editor [value]="markdown()"
                               [readOnly]="isRunning()"
                               [readOnlyReason]="isRunning() ? 'Editing disabled — the CLI is running for this task. Stop it first.' : null"

@@ -71,6 +71,7 @@
       <app-prompt-pane
         [markdown]="detail().promptMarkdown || ''"
         [history]="detail().promptHistory || []"
+        [titleHistory]="detail().titleHistory || []"
         [maximized]="maximizedPane() === 'prompt'"
         [weight]="paneWeights().prompt"
         [isRunning]="isRunning()"

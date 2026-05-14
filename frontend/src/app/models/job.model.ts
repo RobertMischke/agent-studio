@@ -320,10 +320,23 @@ export interface JobPromptHistoryEntry {
   writtenAt: string;
 }
 
+/**
+ * One entry in the task's title-revision timeline, stored in
+ * `title-history.json` in the job folder. Appended by the rename
+ * endpoint whenever the title actually changes. Oldest first.
+ */
+export interface JobTitleHistoryEntry {
+  at: string;
+  oldTitle: string;
+  newTitle: string;
+  source: string;
+}
+
 export interface JobDetail {
   info: JobInfo;
   promptMarkdown: string | null;
   promptHistory: JobPromptHistoryEntry[];
+  titleHistory: JobTitleHistoryEntry[];
   statusMarkdown: string | null;
   contextUsage: ContextUsageSnapshot | null;
   log: JobLogEntry[];

@@ -461,6 +461,15 @@ public record JobDetail
     /// written; the original task body is in <see cref="PromptMarkdown"/>.
     /// </summary>
     public List<JobPromptHistoryEntry> PromptHistory { get; init; } = [];
+    /// <summary>
+    /// Append-only timeline of title changes recorded for this task in
+    /// <c>title-history.json</c>. Each rename through
+    /// <c>PUT /api/jobs/{id}/title</c> appends one entry; the current
+    /// title stays on <see cref="JobInfo.Title"/>. Empty when the title
+    /// was never edited, including for legacy job folders that predate
+    /// the file. Oldest first.
+    /// </summary>
+    public List<JobTitleHistoryEntry> TitleHistory { get; init; } = [];
     public string? StatusMarkdown { get; init; }
     public ContextUsageSnapshot? ContextUsage { get; init; }
     public List<JobLogEntry> Log { get; init; } = [];
@@ -586,6 +595,28 @@ public record JobPromptHistoryEntry
     public string FileName { get; init; } = "";
     public string Markdown { get; init; } = "";
     public DateTime WrittenAt { get; init; }
+}
+
+/// <summary>
+/// One entry in the task's title-revision timeline. Written by
+/// <see cref="OrchestratorApi.Services.Jobs.JobMutationService.SetJobTitle"/>
+/// to <c>title-history.json</c> in the job folder whenever the title
+/// actually changes (no-op renames are not recorded). The current title
+/// stays on <see cref="JobInfo.Title"/>; this is the audit trail of what
+/// it used to be.
+/// </summary>
+public record JobTitleHistoryEntry
+{
+    public DateTime At { get; init; }
+    public string OldTitle { get; init; } = "";
+    public string NewTitle { get; init; } = "";
+    /// <summary>
+    /// Free-form provenance label. Today the only writer is the rename
+    /// endpoint and emits <c>"api"</c>; future producers (intake
+    /// refinement, orchestrator) may use distinct sources so the UI can
+    /// disambiguate.
+    /// </summary>
+    public string Source { get; init; } = "api";
 }
 
 public enum JobSummaryStatus

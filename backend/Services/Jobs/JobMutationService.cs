@@ -227,7 +227,25 @@ public class JobMutationService
         if (string.IsNullOrWhiteSpace(title)) return false;
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return false;
-        JobJsonFile.UpdateField(info.FolderPath, "title", title.Trim(), _logger);
+        var trimmed = title.Trim();
+        // Only record a history entry when the value actually changes.
+        // A no-op rename (re-submitting the same string from a stale UI)
+        // would otherwise bloat the audit trail with identical rows.
+        var previous = info.Title ?? "";
+        if (!string.Equals(previous, trimmed, StringComparison.Ordinal))
+        {
+            TitleHistoryLog.Append(info.FolderPath, new JobTitleHistoryEntry
+            {
+                At = DateTime.UtcNow,
+                OldTitle = previous,
+                NewTitle = trimmed,
+                Source = "api"
+            }, _logger);
+            _logger.LogInformation(
+                "title-changed jobId={JobId} old={Old} new={New}",
+                jobId, previous, trimmed);
+        }
+        JobJsonFile.UpdateField(info.FolderPath, "title", trimmed, _logger);
         return Updated();
     }
 

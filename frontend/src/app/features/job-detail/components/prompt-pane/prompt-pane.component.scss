@@ -72,3 +72,77 @@
 
 /* Typography for the history entry body comes from the global
  * `.markdown-body` / `.markdown-body--dense` class. */
+
+/*
+ * Compact title-revision timeline rendered above the editable prompt.
+ * One row per recorded rename ("old → new" + UTC timestamp). The
+ * current title lives on the kanban card / detail header; this list
+ * only shows what it used to be.
+ */
+.title-history {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px dashed rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.title-history__head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.title-history__title {
+  color: #cdd6f4;
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.title-history__hint {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 0.7rem;
+}
+
+.title-history__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.title-history__entry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.title-history__time {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+  min-width: 11ch;
+}
+
+.title-history__from {
+  color: rgba(255, 255, 255, 0.55);
+  text-decoration: line-through;
+}
+
+.title-history__arrow {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.title-history__to {
+  color: #cdd6f4;
+}
