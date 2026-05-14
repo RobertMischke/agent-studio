@@ -1543,12 +1543,16 @@
        *
        * No min-width: 0 here. Default min-width: auto on a flex item
        * resolves to its min-content size, which is the sum of the
-       * inner .column min-widths plus gaps. Forcing min-width: 0
-       * lets the inner columns visually leak past the group's box
-       * into the next group's space (the lane-overlap symptom);
-       * preserving the auto value keeps each group at least as wide
-       * as its lanes need and pushes the overflow into the
-       * dashboard's horizontal scroll, where it belongs.
+       * inner .column min-widths plus gaps. With contain: inline-size
+       * on .column the column's intrinsic min-content is its
+       * min-width (220 px), not whatever its content would otherwise
+       * naturally measure - so the group's min-content is a stable
+       * 4*220 + gaps etc., not a per-group value that varies with
+       * card/status-line content. Equal-width lanes across groups
+       * fall out of that. Forcing min-width: 0 here would still let
+       * the inner columns visually leak past the group's box into
+       * the next group's space at very narrow viewports (the
+       * lane-overlap symptom), so the auto value stays.
        *
        * min-height: 0 IS required, however: the per-lane internal
        * scroll model needs every parent in the chain to allow the

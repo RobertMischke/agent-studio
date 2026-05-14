@@ -22,15 +22,30 @@
        * trigger layout/paint work in sibling lanes. The "layout" scope
        * keeps descendants' size/position changes from invalidating
        * ancestors; the "paint" scope clips the column's painting to
-       * its own border box. The default style/size scopes are
-       * intentionally left untouched so descendant counters and
-       * viewport units still resolve.
+       * its own border box. The "inline-size" scope is the fix for the
+       * ready-lane-width regression: without it, the column's
+       * intrinsic min-content (driven by white-space:nowrap content
+       * like the 4-auto-review status line or a running execution
+       * card's badges) propagated up through the lane-group's
+       * min-content and pushed lanes in heavier groups visibly wider
+       * than lanes in lighter groups, breaking the equal-width
+       * contract and surfacing a phantom horizontal scrollbar. With
+       * inline-size containment the column's width is determined by
+       * flex layout alone (min-width + flex-basis + container-share),
+       * and inner content lays out within that width instead of
+       * widening the column. Overflow inside the column is handled by
+       * per-element overflow:hidden + ellipsis already in the header,
+       * status-line, and card chips.
        *
-       * This is the perf intervention that brings the long-task
+       * The default style/size scopes are intentionally left
+       * untouched so descendant counters and viewport units still
+       * resolve.
+       *
+       * This is also the perf intervention that brings the long-task
        * budget during a dense-board 5 s scroll below the 50 ms
        * acceptance criterion in the lane-overlap regression spec.
        */
-      contain: layout paint;
+      contain: inline-size layout paint;
     }
     /* Drag-over signal: outline ring only. We deliberately do NOT tint the
        column background because a transient overlay that snaps off on drop
