@@ -164,6 +164,44 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         => null;
 
     /// <summary>
+    /// Pre-spawn self-heal for the npm-shim install. Probe first; if it
+    /// works (the common case) we return immediately so the hook adds no
+    /// measurable latency. Only when <c>--version</c> fails do we invoke
+    /// <see cref="NpmShimHealer.TryHealClaudeAsync"/>, which restores
+    /// atomic-rename orphans, re-runs the wrapper postinstall, and
+    /// re-verifies with a fresh <c>--version</c> call. Failure here lets
+    /// the spawn abort with a real error message instead of producing yet
+    /// another silent 3a-failed-pickup entry.
+    /// </summary>
+    protected override async Task<(bool Ok, string? Error)> EnsureCliHealthyAsync(CancellationToken ct)
+    {
+        var probe = TestCliPath();
+        if (probe.Available) return (true, null);
+
+        _logger.LogWarning(
+            "claude --version failed pre-spawn at '{Path}'; running NpmShimHealer", probe.Path);
+
+        var outcome = await NpmShimHealer.TryHealClaudeAsync(_logger, ct);
+        if (outcome.Actions.Count > 0)
+        {
+            _logger.LogInformation(
+                "NpmShimHealer actions for claude: {Actions}", string.Join("; ", outcome.Actions));
+        }
+        if (!outcome.Available)
+        {
+            return (false,
+                outcome.Error ?? "NpmShimHealer reported claude as unavailable after repair pass");
+        }
+
+        // Heal reported success; re-probe via the same code path the spawn will
+        // use, so a stale resolver cache or PATH quirk surfaces here, not later.
+        var verify = TestCliPath();
+        return verify.Available
+            ? (true, null)
+            : (false, $"claude --version still failing after heal at '{verify.Path}'");
+    }
+
+    /// <summary>
     /// Bridge to <see cref="ClaudeEventAdapter"/>. Each raw stdout line is
     /// passed through and emitted on <see cref="CliExecutionServiceBase.OnRunEvent"/>
     /// alongside the legacy marker stream. Stderr passes through unchanged

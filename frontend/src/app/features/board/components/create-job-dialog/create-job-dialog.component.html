@@ -12,14 +12,15 @@
             aria-label="Close"
             title="Close"
             (click)="cancel.emit()">×</button>
-    <h2 class="create-dialog__title">{{ title() }}</h2>
+    <h2 class="create-dialog__title" data-testid="create-dialog-header">{{ header() }}</h2>
+
     <div class="field">
       <span class="field__label">Title</span>
       <div class="create-dialog__title-row">
         <input class="field__input create-dialog__title-input"
                data-testid="create-title"
                [(ngModel)]="newTitle"
-               placeholder="Task title" />
+               placeholder="Task title, or leave blank and click Enhance to auto-fill" />
         <button type="button"
                 class="create-dialog__generate-btn"
                 data-testid="create-generate-title"
@@ -39,34 +40,80 @@
         <div class="create-dialog__generate-error" data-testid="create-generate-title-error">⚠ {{ titleGenerateError() }}</div>
       }
     </div>
+
+    <div class="create-dialog__grid">
+      <label class="field">
+        <span class="field__label">Project</span>
+        <select class="field__input" data-testid="create-project-select" [(ngModel)]="newWatchPath">
+          @for (wp of watchPaths(); track wp.path) {
+            <option [value]="wp.path">{{ wp.name }}</option>
+          }
+        </select>
+      </label>
+      <div class="field">
+        <span class="field__label">Lane</span>
+        <div class="create-lane-picker" data-testid="create-lane-picker">
+          @for (lane of laneOptions; track lane.state) {
+            <button type="button"
+                    class="create-lane-picker__btn"
+                    [class.create-lane-picker__btn--active]="newTargetState() === lane.state"
+                    [attr.data-testid]="'create-lane-' + lane.state"
+                    (click)="setTargetState(lane.state)">
+              <span class="create-lane-picker__icon" aria-hidden="true">{{ lane.icon }}</span>
+              {{ lane.label }}
+            </button>
+          }
+        </div>
+      </div>
+    </div>
+
+    <div class="create-dialog__grid">
+      <div class="field">
+        <span class="field__label">Type</span>
+        <div class="create-type-picker" data-testid="create-task-type">
+          <button type="button"
+                  class="create-type-picker__btn"
+                  [class.create-type-picker__btn--active]="newTaskType() === 'bug'"
+                  data-testid="create-task-type-bug"
+                  (click)="newTaskType.set('bug')">🐞 Bug</button>
+          <button type="button"
+                  class="create-type-picker__btn"
+                  [class.create-type-picker__btn--active]="newTaskType() === 'feature'"
+                  data-testid="create-task-type-feature"
+                  (click)="newTaskType.set('feature')">✨ Feature</button>
+          <button type="button"
+                  class="create-type-picker__btn"
+                  [class.create-type-picker__btn--active]="newTaskType() === 'chore'"
+                  data-testid="create-task-type-chore"
+                  (click)="newTaskType.set('chore')">· Chore</button>
+        </div>
+      </div>
+      <div class="field">
+        <span class="field__label">Agent</span>
+        <div class="create-cli-picker">
+          @for (t of cliTypes; track t) {
+            <button type="button"
+                    class="create-cli-picker__btn"
+                    [class.create-cli-picker__btn--active]="cliTypeDraft() === t"
+                    (click)="cliTypeChange.emit(t)">
+              <span class="create-cli-picker__icon" aria-hidden="true">{{ cliTypeIcon(t) }}</span>
+              {{ cliTypeLabel(t) }}
+            </button>
+          }
+        </div>
+      </div>
+    </div>
+
     <label class="field">
-      <span class="field__label">Project</span>
-      <select class="field__input" data-testid="create-project-select" [(ngModel)]="newWatchPath">
-        @for (wp of watchPaths(); track wp.path) {
-          <option [value]="wp.path">{{ wp.name }}</option>
+      <span class="field__label">Model</span>
+      <select class="field__input" [(ngModel)]="newModel">
+        <option value="">(default — CLI chooses)</option>
+        @for (m of availableModels(); track m.id) {
+          <option [value]="m.id">{{ m.label }}{{ m.multiplier !== null && m.multiplier !== undefined ? ' — ' + formatMultiplier(m.multiplier) : '' }}{{ m.isDefault ? ' ✓' : '' }}</option>
         }
       </select>
     </label>
-    <div class="field">
-      <span class="field__label">Type</span>
-      <div class="create-type-picker" data-testid="create-task-type">
-        <button type="button"
-                class="create-type-picker__btn"
-                [class.create-type-picker__btn--active]="newTaskType() === 'bug'"
-                data-testid="create-task-type-bug"
-                (click)="newTaskType.set('bug')">🐞 Bug</button>
-        <button type="button"
-                class="create-type-picker__btn"
-                [class.create-type-picker__btn--active]="newTaskType() === 'feature'"
-                data-testid="create-task-type-feature"
-                (click)="newTaskType.set('feature')">✨ Feature</button>
-        <button type="button"
-                class="create-type-picker__btn"
-                [class.create-type-picker__btn--active]="newTaskType() === 'chore'"
-                data-testid="create-task-type-chore"
-                (click)="newTaskType.set('chore')">· Chore</button>
-      </div>
-    </div>
+
     @if (availableTags().length > 0) {
       <div class="field">
         <span class="field__label">Tags</span>
@@ -83,39 +130,17 @@
         </div>
       </div>
     }
-    <div class="field">
-      <span class="field__label">Agent</span>
-      <div class="create-cli-picker">
-        @for (t of cliTypes; track t) {
-          <button type="button"
-                  class="create-cli-picker__btn"
-                  [class.create-cli-picker__btn--active]="cliTypeDraft() === t"
-                  (click)="cliTypeChange.emit(t)">
-            <span class="create-cli-picker__icon" aria-hidden="true">{{ cliTypeIcon(t) }}</span>
-            {{ cliTypeLabel(t) }}
-          </button>
-        }
-      </div>
-    </div>
-    <div class="field">
-      <span class="field__label">Model</span>
-      <select class="field__input" [(ngModel)]="newModel">
-        <option value="">(default — CLI chooses)</option>
-        @for (m of availableModels(); track m.id) {
-          <option [value]="m.id">{{ m.label }}{{ m.multiplier !== null && m.multiplier !== undefined ? ' — ' + formatMultiplier(m.multiplier) : '' }}{{ m.isDefault ? ' ✓' : '' }}</option>
-        }
-      </select>
-    </div>
-    <div class="field">
+
+    <div class="field create-dialog__prompt-field">
       <div class="create-dialog__prompt-label">
-        <span class="field__label">Prompt (optional)</span>
+        <span class="field__label">Prompt</span>
         <div class="create-dialog__prompt-actions">
           <button type="button"
-                  class="create-dialog__generate-btn"
+                  class="create-dialog__enhance-btn"
                   data-testid="create-enhance-prompt"
                   [disabled]="!canEnhance()"
                   (click)="enhancePrompt()"
-                  title="Refine the prompt and extract intent + tags (Haiku)">
+                  title="Refine the prompt, auto-generate the title, and pre-fill tags + lane (Haiku)">
             @if (enhancing()) {
               <span class="create-dialog__generate-spinner" aria-hidden="true"></span>
               <span>Enhancing…</span>
@@ -136,43 +161,43 @@
                 data-testid="create-prompt"
                 [(ngModel)]="newPrompt"
                 (paste)="onPromptPaste($event)"
-                rows="10"
-                placeholder="Task description..."></textarea>
+                rows="7"
+                placeholder="Type a free-text description here, then click Enhance to auto-fill the title, tags, and refined prompt."></textarea>
       @if (enhanceError()) {
         <div class="create-dialog__generate-error" data-testid="create-enhance-error">⚠ {{ enhanceError() }}</div>
       }
-      @if (enhancement(); as e) {
-        <div class="create-dialog__enhance-preview" data-testid="create-enhance-preview">
-          <div class="create-dialog__enhance-row">
-            <span class="create-dialog__enhance-label">Refined</span>
-            <pre class="create-dialog__enhance-refined" data-testid="create-enhance-refined">{{ e.refinedPrompt }}</pre>
+      @if (enhanceSummary(); as s) {
+        <div class="create-dialog__enhance-summary" data-testid="create-enhance-summary">
+          <span class="create-dialog__enhance-summary-icon" aria-hidden="true">✨</span>
+          <div class="create-dialog__enhance-summary-body">
+            @if (s.intent) {
+              <div class="create-dialog__enhance-summary-row">
+                <span class="create-dialog__enhance-summary-label">Intent</span>
+                <span data-testid="create-enhance-intent">{{ s.intent }}</span>
+              </div>
+            }
+            @if (s.appliedTagIds.length > 0) {
+              <div class="create-dialog__enhance-summary-row">
+                <span class="create-dialog__enhance-summary-label">Tags applied</span>
+                <span class="create-dialog__enhance-applied-tags" data-testid="create-enhance-applied-tags">
+                  @for (id of s.appliedTagIds; track id) {
+                    <span class="create-dialog__enhance-tag">{{ tagLabelFor(id) }}</span>
+                  }
+                </span>
+              </div>
+            }
+            @if (s.unknownTags.length > 0) {
+              <div class="create-dialog__enhance-summary-row create-dialog__enhance-summary-row--muted">
+                <span class="create-dialog__enhance-summary-label">Also suggested</span>
+                <span data-testid="create-enhance-unknown-tags">{{ s.unknownTags.join(', ') }}</span>
+              </div>
+            }
           </div>
-          @if (e.intent) {
-            <div class="create-dialog__enhance-row">
-              <span class="create-dialog__enhance-label">Intent</span>
-              <span class="create-dialog__enhance-intent" data-testid="create-enhance-intent">{{ e.intent }}</span>
-            </div>
-          }
-          @if (e.tags.length > 0) {
-            <div class="create-dialog__enhance-row">
-              <span class="create-dialog__enhance-label">Tags</span>
-              <span class="create-dialog__enhance-tags" data-testid="create-enhance-tags">
-                @for (t of e.tags; track t) {
-                  <span class="create-dialog__enhance-tag">{{ t }}</span>
-                }
-              </span>
-            </div>
-          }
-          <div class="create-dialog__enhance-actions">
-            <button type="button"
-                    class="btn"
-                    data-testid="create-enhance-discard"
-                    (click)="discardEnhancement()">Discard</button>
-            <button type="button"
-                    class="btn btn--primary"
-                    data-testid="create-enhance-apply"
-                    (click)="applyEnhancement()">Apply</button>
-          </div>
+          <button type="button"
+                  class="create-dialog__enhance-summary-dismiss"
+                  data-testid="create-enhance-summary-dismiss"
+                  aria-label="Dismiss enhancement summary"
+                  (click)="clearEnhanceSummary()">×</button>
         </div>
       }
       @if (hasAttachments()) {
@@ -193,6 +218,7 @@
         <div class="create-dialog__attachment-error" data-testid="create-attach-error">⚠ {{ attachmentError() }}</div>
       }
     </div>
+
     <div class="create-dialog__actions">
       <button class="btn" (click)="cancel.emit()">Cancel</button>
       <button class="btn btn--primary" (click)="submit.emit()" [disabled]="!newTitle().trim()">Create</button>

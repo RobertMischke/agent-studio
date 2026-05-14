@@ -1,4 +1,4 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import { Observable, Subject } from 'rxjs';
 import { CliType, CLI_TYPES, WatchPathEntry } from '../../../models/job.model';
 import type { CliModelInfo } from '../../../features/cli';
@@ -38,21 +38,21 @@ export class CreateJobFormService {
   newWatchPath = '';
   newAgent: CliType = 'copilot';
   newPrompt = '';
-  newTargetState: string = '0-backlog';
+  newTargetState = '1-preparation';
   newTaskType = 'chore';
   newTags: string[] = [];
   newCliType: CliType = readDefaultCliPref();
   newModel: string = readDefaultModelPref(readDefaultCliPref());
   newAttachments: PendingAttachment[] = [];
 
+  /** Allowed manual-create lanes (everything before 3-progress). */
+  static readonly ALLOWED_TARGET_STATES = ['0-backlog', '1-preparation', '2-ready'] as const;
+
   readonly availableModels = signal<CliModelInfo[]>([]);
 
   /** Fired after a successful createJob; shell listens to refresh the board. */
   private readonly submittedSubject = new Subject<{ jobId: string }>();
   readonly submitted$: Observable<{ jobId: string }> = this.submittedSubject.asObservable();
-
-  /** Window title for the dialog header. Computed from newTargetState. */
-  readonly title = computed<string>(() => this.dialogTitleFor(this.newTargetState));
 
   /**
    * Whether a "+ Add task" button is allowed in the named lane. Lanes
@@ -68,15 +68,19 @@ export class CreateJobFormService {
   /**
    * Default open from the toolbar `+ New` button or a lane "Add task"
    * affordance. Picks the watch path from the user's last-used + active
-   * projects. `targetState` is rounded to either `2-ready` (when the
-   * Ready lane's `+` was clicked) or `1-preparation` for everything else.
+   * projects. `targetState` is honoured when it names one of the manual
+   * create lanes (`0-backlog` / `1-preparation` / `2-ready`); anything
+   * else falls back to `1-preparation`.
    */
   open(opts: {
     watchPaths: ReadonlyArray<WatchPathEntry>;
     activeProjects: ReadonlySet<string>;
     targetState?: string;
   }): void {
-    this.newTargetState = opts.targetState === '2-ready' ? '2-ready' : '1-preparation';
+    const requested = opts.targetState ?? '';
+    this.newTargetState = (CreateJobFormService.ALLOWED_TARGET_STATES as readonly string[]).includes(requested)
+      ? requested
+      : '1-preparation';
     this.newWatchPath = pickCreateWatchPath(opts.watchPaths, opts.activeProjects);
     this.loadCreateModels(this.newCliType);
     this.visible.set(true);
@@ -169,7 +173,7 @@ export class CreateJobFormService {
     this.newAgent = 'copilot';
     this.newTaskType = 'chore';
     this.newTags = [];
-    this.newTargetState = '0-backlog';
+    this.newTargetState = '1-preparation';
     this.newCliType = readDefaultCliPref();
     this.newModel = readDefaultModelPref(this.newCliType);
     this.availableModels.set([]);
@@ -224,15 +228,6 @@ export class CreateJobFormService {
   }
 
   // ---------- internal ----------
-
-  private dialogTitleFor(targetState: string): string {
-    switch (targetState) {
-      case '0-backlog':              return 'Add to backlog';
-      case '1-preparation':          return 'New preparation task';
-      case '2-ready':                return 'New ready task';
-      default:                       return 'New task';
-    }
-  }
 
   private loadCreateModels(cliType: CliType): void {
     this.jobService.getCliModelCatalog(cliType).subscribe({

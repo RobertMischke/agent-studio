@@ -1,4 +1,6 @@
 import { ChangeDetectionStrategy, Component, ElementRef, HostListener, ViewChild, computed, inject, input, model, output, signal } from '@angular/core';
+import { forkJoin, of } from 'rxjs';
+import { catchError, map } from 'rxjs/operators';
 import { FormsModule } from '@angular/forms';
 import type { CliType, TagRegistryEntry, WatchPathEntry } from '../../../../models/job.model';
 import { CLI_TYPES } from '../../../../models/job.model';
@@ -14,11 +16,22 @@ export interface PendingAttachment {
   previewUrl: string;
 }
 
-export interface PromptEnhancement {
-  refinedPrompt: string;
-  intent: string;
-  tags: string[];
+export interface LaneOption {
+  state: string;
+  label: string;
+  icon: string;
 }
+
+/**
+ * Lanes a user is allowed to land a freshly created task in. Everything
+ * past Ready (3-progress and later) is orchestrator-owned and not a valid
+ * manual create target.
+ */
+export const CREATE_LANE_OPTIONS: readonly LaneOption[] = [
+  { state: '0-backlog',     label: 'Backlog',     icon: '🗒️' },
+  { state: '1-preparation', label: 'Preparation', icon: '📋' },
+  { state: '2-ready',       label: 'Ready',       icon: '📦' },
+];
 
 const PENDING_PREFIX = 'pending-attachment-';
 
@@ -28,8 +41,15 @@ const PENDING_PREFIX = 'pending-attachment-';
  * dropped images as `PendingAttachment`s (the actual upload happens
  * after the job folder is created), and emits intent (cancel /
  * submit / cliType change). Two-way bindings via `model()` keep
- * title / watchPath / model / prompt / attachments in sync with the
- * parent.
+ * title / watchPath / model / prompt / attachments / target lane /
+ * tags / type in sync with the parent.
+ *
+ * The "Enhance" button is the primary entry path: it calls
+ * /api/prompt/enhance and /api/title/generate in parallel, then writes
+ * the refined prompt, generated title, and any tags that resolve in the
+ * workspace registry directly into the bound fields. There is no
+ * preview / Apply / Discard step - the fields are the preview. The
+ * user can still edit anything before submitting.
  */
 @Component({
   selector: 'app-create-job-dialog',
@@ -39,7 +59,6 @@ const PENDING_PREFIX = 'pending-attachment-';
   templateUrl: './create-job-dialog.component.html'
 })
 export class CreateJobDialogComponent {
-  readonly title = input<string>('');
   readonly watchPaths = input<WatchPathEntry[]>([]);
   readonly availableModels = input<CliModelInfo[]>([]);
   readonly cliTypeDraft = input.required<CliType>();
@@ -53,14 +72,32 @@ export class CreateJobDialogComponent {
   readonly newTaskType = model<string>('chore');
   /** Backlog-lane spec: tag ids attached on create. */
   readonly newTags = model<string[]>([]);
+  /** Lane the new task lands in. One of the entries in CREATE_LANE_OPTIONS. */
+  readonly newTargetState = model<string>('1-preparation');
 
   readonly tagRegistryStore = inject(TagRegistryStore);
   readonly availableTags = computed(() => this.tagRegistryStore.tags());
+
+  readonly laneOptions = CREATE_LANE_OPTIONS;
+
+  /** Reactive dialog header derived from the chosen target lane. */
+  readonly header = computed<string>(() => {
+    switch (this.newTargetState()) {
+      case '0-backlog':     return 'Add to Backlog';
+      case '1-preparation': return 'New Preparation Task';
+      case '2-ready':       return 'New Ready Task';
+      default:              return 'New Task';
+    }
+  });
 
   toggleTag(id: string): void {
     const current = this.newTags();
     const next = current.includes(id) ? current.filter(t => t !== id) : [...current, id];
     this.newTags.set(next);
+  }
+
+  setTargetState(state: string): void {
+    this.newTargetState.set(state);
   }
 
   readonly cliTypeChange = output<CliType>();
@@ -79,9 +116,19 @@ export class CreateJobDialogComponent {
     return prompt.length > 0 && !this.titleGenerating();
   });
 
+  /**
+   * In-flight state for the unified Enhance action. Drives the
+   * "Enhancing..." spinner and disables the button to prevent
+   * double-submits.
+   */
   readonly enhancing = signal(false);
   readonly enhanceError = signal<string | null>(null);
-  readonly enhancement = signal<PromptEnhancement | null>(null);
+  /**
+   * Short status line shown after a successful Enhance summarising what
+   * the user got applied (intent + matched/unmatched tag breakdown).
+   * Cleared as soon as the user starts editing again.
+   */
+  readonly enhanceSummary = signal<{ intent: string; appliedTagIds: string[]; unknownTags: string[] } | null>(null);
 
   readonly canEnhance = computed(() => {
     const prompt = (this.newPrompt() ?? '').trim();
@@ -127,9 +174,12 @@ export class CreateJobDialogComponent {
   }
 
   /**
-   * Run the prompt through the Haiku enhancer and stash the result as a
-   * preview the user can Apply or Discard. Pure preview - the textarea
-   * is NOT mutated until Apply is clicked.
+   * One-click "fill every field from the prompt". Runs the prompt
+   * enhancer and the title generator in parallel via Haiku, then writes
+   * the refined prompt, the generated title, any tags that resolve to
+   * known registry entries, and a sensible target lane back into the
+   * bound fields. No preview - the fields are the preview. The user can
+   * still edit before submitting.
    */
   enhancePrompt(): void {
     if (!this.canEnhance()) return;
@@ -138,48 +188,101 @@ export class CreateJobDialogComponent {
 
     this.enhancing.set(true);
     this.enhanceError.set(null);
-    this.jobs.enhancePrompt(prompt).subscribe({
-      next: (resp) => {
-        const refined = (resp?.refinedPrompt ?? '').trim();
-        const intent = (resp?.intent ?? '').trim();
-        const tags = Array.isArray(resp?.tags) ? resp.tags.filter(t => !!t) : [];
-        if (refined.length === 0 && intent.length === 0 && tags.length === 0) {
-          this.enhanceError.set('Enhancer returned an empty result. Try again.');
-        } else {
-          this.enhancement.set({ refinedPrompt: refined, intent, tags });
-        }
-        this.enhancing.set(false);
-      },
-      error: (err) => {
+    this.enhanceSummary.set(null);
+
+    const enhance$ = this.jobs.enhancePrompt(prompt).pipe(
+      map((r) => ({ ok: true as const, value: r })),
+      catchError((err: unknown) => of({ ok: false as const, error: err }))
+    );
+    const title$ = this.jobs.generateTaskTitle(prompt).pipe(
+      map((r) => ({ ok: true as const, value: r })),
+      catchError((err: unknown) => of({ ok: false as const, error: err }))
+    );
+
+    forkJoin({ enhance: enhance$, title: title$ }).subscribe(({ enhance, title }) => {
+      this.enhancing.set(false);
+
+      if (!enhance.ok) {
+        const err = enhance.error as { error?: { error?: string; detail?: string }; message?: string } | undefined;
         const msg = err?.error?.error
           || err?.error?.detail
           || err?.message
           || 'Could not enhance the prompt. Try again.';
         this.enhanceError.set(msg);
-        this.enhancing.set(false);
+        return;
       }
+
+      const refined = (enhance.value?.refinedPrompt ?? '').trim();
+      const intent = (enhance.value?.intent ?? '').trim();
+      const suggestedTags = Array.isArray(enhance.value?.tags)
+        ? enhance.value.tags.filter((t) => !!t)
+        : [];
+
+      if (refined.length === 0 && intent.length === 0 && suggestedTags.length === 0) {
+        this.enhanceError.set('Enhancer returned an empty result. Try again.');
+        return;
+      }
+
+      if (refined.length > 0) this.newPrompt.set(refined);
+      if (title.ok) {
+        const t = (title.value?.title ?? '').trim();
+        if (t.length > 0) this.newTitle.set(t);
+      }
+
+      const { appliedTagIds, unknownTags } = this.resolveTagSuggestions(suggestedTags);
+      if (appliedTagIds.length > 0) {
+        const current = new Set(this.newTags());
+        for (const id of appliedTagIds) current.add(id);
+        this.newTags.set([...current]);
+      }
+
+      // Enhanced + titled tasks tend to be actionable - default the lane
+      // to Ready unless the user already moved it past Backlog. Don't
+      // overwrite an explicit Backlog choice (the user wanted triage).
+      const lane = this.newTargetState();
+      if (lane === '1-preparation') {
+        this.newTargetState.set('2-ready');
+      }
+
+      this.enhanceSummary.set({ intent, appliedTagIds, unknownTags });
     });
   }
 
   /**
-   * Replace the current prompt with the refined version and append the
-   * intent + tag list as a trailing comment block (since the data model
-   * does not yet have first-class tag fields). Discards the preview.
+   * Match Haiku-suggested kebab-case tag tokens against the workspace
+   * registry (id first, then case-insensitive label). Returns the
+   * registry ids that resolved + the suggestion strings that didn't,
+   * so the dialog can show a "suggested but not in registry" hint.
    */
-  applyEnhancement(): void {
-    const e = this.enhancement();
-    if (!e) return;
-    const parts: string[] = [];
-    if (e.refinedPrompt) parts.push(e.refinedPrompt.trim());
-    if (e.intent) parts.push(`Intent: ${e.intent.trim()}`);
-    if (e.tags.length > 0) parts.push(`Tags: ${e.tags.join(', ')}`);
-    this.newPrompt.set(parts.join('\n\n'));
-    this.enhancement.set(null);
-    this.enhanceError.set(null);
+  private resolveTagSuggestions(suggestions: readonly string[]): { appliedTagIds: string[]; unknownTags: string[] } {
+    const registry = this.availableTags();
+    const byId = new Map<string, TagRegistryEntry>();
+    const byLabel = new Map<string, TagRegistryEntry>();
+    for (const t of registry) {
+      byId.set(t.id.toLowerCase(), t);
+      byLabel.set(t.label.toLowerCase(), t);
+    }
+    const applied: string[] = [];
+    const unknown: string[] = [];
+    const seen = new Set<string>();
+    for (const raw of suggestions) {
+      const slug = (raw ?? '').trim().toLowerCase();
+      if (slug.length === 0) continue;
+      const hit = byId.get(slug) ?? byLabel.get(slug);
+      if (hit) {
+        if (!seen.has(hit.id)) {
+          applied.push(hit.id);
+          seen.add(hit.id);
+        }
+      } else {
+        unknown.push(raw);
+      }
+    }
+    return { appliedTagIds: applied, unknownTags: unknown };
   }
 
-  discardEnhancement(): void {
-    this.enhancement.set(null);
+  clearEnhanceSummary(): void {
+    this.enhanceSummary.set(null);
     this.enhanceError.set(null);
   }
 
@@ -308,5 +411,11 @@ export class CreateJobDialogComponent {
       return crypto.randomUUID().replace(/-/g, '').slice(0, 12);
     }
     return Math.random().toString(36).slice(2, 14);
+  }
+
+  /** Resolve a tag id to its registry entry for the "applied tags" hint. */
+  tagLabelFor(id: string): string {
+    const tag = this.availableTags().find((t) => t.id === id);
+    return tag?.label ?? id;
   }
 }

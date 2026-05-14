@@ -437,7 +437,6 @@ export class App implements OnInit {
   // template `[(ngModel)]` and helper-method bindings working unchanged.
   readonly cliTypes = CLI_TYPES;
 
-  createDialogTitle(): string { return this.createJobForm.title(); }
   cliTypeLabel(t: CliType): string { return fmtCliTypeLabel(t); }
   formatMultiplier(mult: number | null): string { return fmtMultiplier(mult); }
   onCreateCliTypeChange(t: CliType): void { this.createJobForm.onCreateCliTypeChange(t); }

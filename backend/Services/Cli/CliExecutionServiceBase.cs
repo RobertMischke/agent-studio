@@ -139,6 +139,31 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
         return nameOrPath;
     }
 
+    /// <summary>
+    /// Subclass hook: pre-spawn CLI health verification. Called once per
+    /// <see cref="StartAsync"/> invocation immediately before the process is
+    /// started. Default: a fast <c>--version</c> probe via
+    /// <see cref="TestCliPath"/> with no repair attempt.
+    ///
+    /// <para>
+    /// Subclasses that ship through a fragile installer (npm-shim CLIs on
+    /// Windows) override this to repair half-installed state in-process
+    /// before the spawn. Returning <c>(false, ...)</c> aborts the spawn and
+    /// surfaces the error to the runner, which records it as a pickup
+    /// failure exactly as a process-start exception would. The cross-slug
+    /// breaker
+    /// (<see cref="OrchestratorApi.Services.Runner.CrossSlugInfraCircuitBreaker"/>)
+    /// remains the safety net if heal itself is failing repeatedly.
+    /// </para>
+    /// </summary>
+    protected virtual Task<(bool Ok, string? Error)> EnsureCliHealthyAsync(CancellationToken ct)
+    {
+        var probe = TestCliPath();
+        return Task.FromResult(probe.Available
+            ? (true, (string?)null)
+            : (false, $"--version probe failed at '{probe.Path}'"));
+    }
+
     /// <summary>Subclass hook: build the actual command-line for this CLI.</summary>
     protected abstract ProcessStartInfo BuildStartInfo(
         string prompt,
@@ -232,6 +257,22 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             if (!existing.Process.HasExited)
                 return (null, $"{CliType} CLI process already running for job '{jobId}'");
             _processes.TryRemove(jobKey, out _);
+        }
+
+        // Pre-spawn self-heal (infra-cli-broken category in
+        // docs/agent-contract-pattern.md). A racing auto-updater can put the
+        // npm install into a half-rebuilt state minutes after the boot-time
+        // check-cli-shims.sh pre-flight passed. Without this hook the next
+        // pickup spawns into a 500-byte stub, gets 3 silent runs, lands the
+        // slug in 3a-failed-pickup, and (after 2 such slugs) trips the
+        // cross-slug breaker. EnsureCliHealthyAsync probes the binary and
+        // repairs whatever the racing installer broke before we spawn.
+        var (healthy, healError) = await EnsureCliHealthyAsync(ct);
+        if (!healthy)
+        {
+            _logger.LogError("Pre-spawn CLI health check failed for {Cli} (job {JobId}): {Error}",
+                CliType, jobId, healError);
+            return (null, $"{CliType} CLI not available: {healError}");
         }
 
         var invocationModel = NormalizeModelForInvocation(model);

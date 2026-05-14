@@ -666,14 +666,27 @@
       position: relative;
       background: #1e1e2e;
       border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 16px;
-      padding: 32px;
-      width: min(820px, 92vw);
-      max-height: 90vh;
+      border-radius: 14px;
+      padding: 20px 24px 22px;
+      width: min(860px, 94vw);
+      max-height: 92vh;
       overflow-y: auto;
       display: flex;
       flex-direction: column;
-      gap: 6px;
+      gap: 10px;
+    }
+    /* Two-column meta-row grid. Lets us put Project + Lane and Type +
+       Agent on a single visual line so the dialog stays short. Stacks on
+       narrow viewports so each field keeps a usable hit target. */
+    .create-dialog__grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px 16px;
+      align-items: stretch;
+    }
+    .create-dialog__grid > .field { margin-bottom: 0; }
+    @media (max-width: 640px) {
+      .create-dialog__grid { grid-template-columns: 1fr; }
     }
     .create-dialog__close {
       position: absolute;
@@ -694,12 +707,18 @@
     }
     .create-dialog__close:hover { background: rgba(255,255,255,0.12); }
     .create-dialog__title {
-      margin: 0 0 12px;
-      font-size: 22px;
+      margin: 0 0 6px;
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: 0.01em;
       color: #f8fafc;
+      padding-right: 36px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
     .create-dialog .field__textarea {
-      min-height: 220px;
+      min-height: 140px;
       resize: vertical;
     }
     .create-dialog--drag {
@@ -850,63 +869,108 @@
       align-items: center;
       gap: 8px;
     }
-    .create-dialog__enhance-preview {
-      margin-top: 10px;
-      padding: 12px;
+    /* "Enhance" — the headline action in the Prompt section. Promoted to
+       a primary-looking button so the user sees it as the default path
+       even when the field still says "Prompt". Slightly larger hit area
+       than the title-row Generate button. */
+    .create-dialog__enhance-btn {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: linear-gradient(135deg, rgba(129,140,248,0.85) 0%, rgba(167,139,250,0.85) 100%);
+      border: 1px solid rgba(167,139,250,0.75);
+      color: #ffffff;
+      padding: 5px 14px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 0 0 1px rgba(167,139,250,0.18), 0 6px 18px rgba(99,102,241,0.22);
+      transition: filter 0.15s, transform 0.05s, opacity 0.15s;
+      white-space: nowrap;
+    }
+    .create-dialog__enhance-btn:hover:not(:disabled) {
+      filter: brightness(1.08);
+    }
+    .create-dialog__enhance-btn:active:not(:disabled) {
+      transform: translateY(1px);
+    }
+    .create-dialog__enhance-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+    /* Inline "what just happened" summary after Enhance succeeds. Intent
+       line + applied tag chips + the kebab-suggestions that didn't map to
+       a workspace tag. Dismissible. */
+    .create-dialog__enhance-summary {
+      margin-top: 8px;
+      padding: 8px 12px;
       border-radius: 8px;
       background: rgba(99,102,241,0.08);
       border: 1px solid rgba(167,139,250,0.30);
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      align-items: start;
+      gap: 8px 10px;
+      font-size: 12px;
+      color: #e2e8f0;
     }
-    .create-dialog__enhance-row {
+    .create-dialog__enhance-summary-icon {
+      font-size: 14px;
+      line-height: 1.2;
+      color: #c7d2fe;
+    }
+    .create-dialog__enhance-summary-body {
       display: flex;
       flex-direction: column;
       gap: 4px;
+      min-width: 0;
     }
-    .create-dialog__enhance-label {
-      font-size: 11px;
+    .create-dialog__enhance-summary-row {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .create-dialog__enhance-summary-row--muted { color: #94a3b8; }
+    .create-dialog__enhance-summary-label {
+      font-size: 10px;
       font-weight: 600;
       letter-spacing: 0.06em;
       text-transform: uppercase;
       color: #a5b4fc;
+      flex: 0 0 auto;
     }
-    .create-dialog__enhance-refined {
-      margin: 0;
-      font-family: inherit;
-      font-size: 13px;
-      line-height: 1.5;
-      color: #e2e8f0;
-      white-space: pre-wrap;
-      word-break: break-word;
-      max-height: 200px;
-      overflow-y: auto;
-    }
-    .create-dialog__enhance-intent {
-      font-size: 13px;
-      color: #e2e8f0;
-    }
-    .create-dialog__enhance-tags {
-      display: flex;
+    .create-dialog__enhance-applied-tags {
+      display: inline-flex;
       flex-wrap: wrap;
-      gap: 6px;
+      gap: 4px;
     }
     .create-dialog__enhance-tag {
       display: inline-block;
-      padding: 2px 8px;
+      padding: 1px 7px;
       border-radius: 999px;
-      font-size: 11px;
+      font-size: 10px;
       font-weight: 600;
       background: rgba(167,139,250,0.18);
       color: #ddd6fe;
       border: 1px solid rgba(167,139,250,0.40);
     }
-    .create-dialog__enhance-actions {
-      display: flex;
-      justify-content: flex-end;
-      gap: 8px;
-      margin-top: 4px;
+    .create-dialog__enhance-summary-dismiss {
+      background: transparent;
+      border: 0;
+      color: #94a3b8;
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .create-dialog__enhance-summary-dismiss:hover {
+      background: rgba(255,255,255,0.06);
+      color: #f8fafc;
     }
     .overlay--error {
       z-index: 120;
@@ -1015,8 +1079,7 @@
       color: #94a3b8;
       font-size: 13px;
     }
-    .create-dialog__title { margin: 0 0 20px; font-size: 18px; }
-    .create-dialog__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+    .create-dialog__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
 
     /* ─────────────────────────────────────────────────────────────────
        Unified confirm dialog + notification stack
@@ -1271,6 +1334,34 @@
     }
     .create-type-picker__btn:hover { color: #e2e8f0; background: rgba(255,255,255,0.06); }
     .create-type-picker__btn--active { background: rgba(139,92,246,0.22); color: #ddd6fe; }
+    /* Lane (target-state) picker. Shares the same chrome as the type
+       picker so the dialog reads as one consistent toolbar of inline
+       choices, distinguished only by the lane icons. */
+    .create-lane-picker {
+      display: inline-flex;
+      gap: 2px;
+      padding: 2px;
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 8px;
+      background: rgba(0,0,0,0.3);
+      flex-wrap: wrap;
+    }
+    .create-lane-picker__btn {
+      border: 0;
+      background: transparent;
+      color: #94a3b8;
+      padding: 5px 10px;
+      font-size: 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+    .create-lane-picker__icon { font-size: 13px; line-height: 1; }
+    .create-lane-picker__btn:hover { color: #e2e8f0; background: rgba(255,255,255,0.06); }
+    .create-lane-picker__btn--active { background: rgba(56,189,248,0.22); color: #bae6fd; }
     .create-tag-picker { display: flex; flex-wrap: wrap; gap: 6px; }
     .create-tag-picker__chip {
       background: rgba(255,255,255,0.04);
@@ -1288,6 +1379,10 @@
       color: #f1f5f9;
     }
     .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+    /* Inside the create-task dialog, the flex container already supplies
+       inter-row spacing via gap; the legacy field margin would double the
+       visual rhythm. Drop it to keep the dialog compact. */
+    .create-dialog .field { margin-bottom: 0; }
     .field__label { font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
     .field__input {
       background: rgba(0,0,0,0.3);

@@ -374,7 +374,6 @@
 
       @if (showCreate()) {
         <app-create-job-dialog
-          [title]="createDialogTitle()"
           [watchPaths]="watchPaths()"
           [availableModels]="availableModels()"
           [cliTypeDraft]="createJobForm.newCliType"
@@ -385,6 +384,7 @@
           [(attachments)]="createJobForm.newAttachments"
           [(newTaskType)]="createJobForm.newTaskType"
           [(newTags)]="createJobForm.newTags"
+          [(newTargetState)]="createJobForm.newTargetState"
           (cliTypeChange)="onCreateCliTypeChange($event)"
           (cancel)="cancelCreate()"
           (submit)="submitCreate()" />
