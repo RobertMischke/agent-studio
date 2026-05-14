@@ -1016,7 +1016,7 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
                         }
                     }
 
-                    proc.Kill(entireProcessTree: true);
+                    SafeKillReap(proc, entry);
                     _logger.LogWarning("Reaped orphan {Cli} CLI for job {Job} (PID {Pid}) left over from a previous backend run",
                         CliType, entry.JobId, entry.ProcessId);
                 }
@@ -1035,6 +1035,53 @@ public abstract class CliExecutionServiceBase : ICliExecutionService
             // will repopulate via UpsertActiveJob.
             WriteActiveJobs([]);
         }
+    }
+
+    /// <summary>
+    /// Reap an orphan CLI process, falling back to a single-process kill
+    /// when the whole-tree kill is refused by the OS.
+    ///
+    /// <para>
+    /// Background. <see cref="Process.Kill(bool)"/> with
+    /// <c>entireProcessTree: true</c> can throw
+    /// <see cref="InvalidOperationException"/> with the message
+    /// "Cannot be used to terminate a process tree containing the calling
+    /// process." This happens on Windows when the child CLI ended up in
+    /// the same Win32 job object as the backend host (most often: the
+    /// backend was launched from a developer-tool console whose job
+    /// object also captures grandchildren of the child CLI, so the tree
+    /// the kernel computes loops back through us). The whole-tree kill
+    /// is then refused atomically — no descendants are killed either.
+    /// Without a fallback the orphan keeps running and, after the
+    /// backend restarts and respawns the same job, two CLI processes
+    /// race for the same <c>logs/cli-output.log</c> handle.
+    /// </para>
+    ///
+    /// <para>
+    /// The fallback kills only the direct child. Any grandchildren that
+    /// existed are left to the operating system to reap when their root
+    /// exits (npm-shim launchers terminate cleanly when their parent
+    /// stream closes; the worst case is a brief grand-orphan window
+    /// that has the same lifetime as the direct kill anyway). Other
+    /// failure modes (<see cref="UnauthorizedAccessException"/>,
+    /// process already exited) propagate to the outer catch so the
+    /// reaper logs them once and moves on.
+    /// </para>
+    /// </summary>
+    private void SafeKillReap(Process proc, ActiveJob entry)
+    {
+        try
+        {
+            proc.Kill(entireProcessTree: true);
+            return;
+        }
+        catch (InvalidOperationException ex) when (ex.Message.Contains("calling process", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning(
+                "Whole-tree kill refused for PID {Pid} ({Cli}): backend is inside the tree. Falling back to single-process kill.",
+                entry.ProcessId, CliType);
+        }
+        proc.Kill();
     }
 
     /// <summary>Per-process bookkeeping shared with subclasses.</summary>
