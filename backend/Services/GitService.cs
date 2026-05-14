@@ -623,6 +623,16 @@ public class GitService
     /// Sends the working-tree diff to Claude Haiku and asks for a Conventional
     /// Commit message. Only the subject + short body are returned; we strip
     /// leading code-fence noise.
+    /// <para>
+    /// Beyond the diff, the prompt is anchored on the task's stated intent so
+    /// the resulting subject line reflects *why* the change is being recorded,
+    /// not just *what* the diff touches: we pass the task title, the first
+    /// paragraph of <c>prompt.md</c>, and the most recent extension prompt
+    /// (<c>prompt-N.md</c>, written by Extend mode). When any of those are
+    /// unavailable we pass an empty string and let the template fall through
+    /// to a diff-only summary so legacy jobs without titles or extensions
+    /// still produce a useful message.
+    /// </para>
     /// </summary>
     public async Task<GenerateMessageResult> GenerateCommitMessageAsync(
         string jobId, string? watchPath, CancellationToken ct = default)
@@ -640,8 +650,15 @@ public class GitService
         // just waste latency for a commit message.
         if (diff.Length > 60_000) diff = diff[..60_000] + "\n[truncated]";
 
+        var intent = ReadTaskIntent(jobId, watchPath);
         var prompt = _prompts.Render(RuntimePromptService.CommitMessage,
-            new Dictionary<string, string?> { ["diff"] = diff });
+            new Dictionary<string, string?>
+            {
+                ["diff"] = diff,
+                ["task_title"] = intent.Title,
+                ["task_prompt_first_paragraph"] = intent.PromptFirstParagraph,
+                ["last_user_continue"] = intent.LastUserContinue
+            });
 
         var claudePath = _config["ClaudeCli:Path"] ?? "claude";
         var model = _config["ClaudeCli:CommitMsgModel"] ?? "claude-haiku-4-5";
@@ -1180,6 +1197,68 @@ public class GitService
             .SkipWhile(l => l.StartsWith("```"))
             .Reverse().SkipWhile(l => l.StartsWith("```") || string.IsNullOrWhiteSpace(l)).Reverse();
         return string.Join("\n", lines).Trim();
+    }
+
+    private readonly record struct TaskIntent(string Title, string PromptFirstParagraph, string LastUserContinue);
+
+    private TaskIntent ReadTaskIntent(string jobId, string? watchPath)
+    {
+        var info = _scanner.FindJob(jobId, watchPath);
+        if (info == null) return new TaskIntent("", "", "");
+
+        var title = info.Title ?? "";
+        var firstParagraph = ReadFirstParagraph(Path.Combine(info.FolderPath, "prompt.md"));
+        var lastContinue = ReadLastExtensionPrompt(info.FolderPath);
+        return new TaskIntent(title, firstParagraph, lastContinue);
+    }
+
+    private static string ReadFirstParagraph(string path)
+    {
+        if (!File.Exists(path)) return "";
+        string body;
+        try { body = File.ReadAllText(path); }
+        catch { return ""; }
+        return ExtractFirstParagraph(body);
+    }
+
+    internal static string ExtractFirstParagraph(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body)) return "";
+        var normalized = body.Replace("\r\n", "\n").TrimStart('﻿', ' ', '\t', '\n');
+        var blank = normalized.IndexOf("\n\n", StringComparison.Ordinal);
+        var paragraph = blank >= 0 ? normalized[..blank] : normalized;
+        paragraph = paragraph.Trim();
+        // Bound length so a wall-of-text prompt does not dominate the LLM call.
+        const int max = 1500;
+        if (paragraph.Length > max) paragraph = paragraph[..max].TrimEnd() + "...";
+        return paragraph;
+    }
+
+    private static string ReadLastExtensionPrompt(string jobFolder)
+    {
+        if (!Directory.Exists(jobFolder)) return "";
+        int bestIndex = -1;
+        string? bestPath = null;
+        foreach (var path in Directory.EnumerateFiles(jobFolder, "prompt-*.md"))
+        {
+            var name = Path.GetFileNameWithoutExtension(path);
+            var dash = name.IndexOf('-');
+            if (dash < 0 || dash >= name.Length - 1) continue;
+            if (!int.TryParse(name[(dash + 1)..], out var index)) continue;
+            if (index > bestIndex)
+            {
+                bestIndex = index;
+                bestPath = path;
+            }
+        }
+        if (bestPath == null) return "";
+        string body;
+        try { body = File.ReadAllText(bestPath); }
+        catch { return ""; }
+        var trimmed = body.Replace("\r\n", "\n").Trim();
+        const int max = 1500;
+        if (trimmed.Length > max) trimmed = trimmed[..max].TrimEnd() + "...";
+        return trimmed;
     }
 
     /// <summary>

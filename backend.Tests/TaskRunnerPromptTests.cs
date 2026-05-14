@@ -242,11 +242,102 @@ public class TaskRunnerPromptTests
                 ["repository_path"] = "repo",
                 ["user_followup"] = "follow up",
                 ["log"] = "log",
-                ["diff"] = "diff"
+                ["diff"] = "diff",
+                ["task_title"] = "title",
+                ["task_prompt_first_paragraph"] = "first paragraph",
+                ["last_user_continue"] = "follow up"
             });
 
             Assert.DoesNotContain("\u2014", rendered);
         }
+    }
+
+    /// <summary>
+    /// Slice B of the git-problem task: the commit-message template must anchor
+    /// on the task's stated intent (title, first prompt paragraph, last user
+    /// follow-up) so the generated subject reflects *why* the change is being
+    /// recorded, not just *what* the diff touches. Pinning this here so a
+    /// future template refactor cannot silently drop the intent placeholders
+    /// and fall back to a diff-only summary.
+    /// </summary>
+    [Fact]
+    public void CommitMessageTemplate_AnchorsOnTaskIntent()
+    {
+        var rendered = Prompts().Render(RuntimePromptService.CommitMessage, new Dictionary<string, string?>
+        {
+            ["diff"] = "diff --git a/x b/x",
+            ["task_title"] = "Git-Problem",
+            ["task_prompt_first_paragraph"] = "Orchestrator should commit and push when a task finishes.",
+            ["last_user_continue"] = "Please also enrich the commit message."
+        });
+
+        // Intent anchors must reach the LLM, not just the diff.
+        Assert.Contains("Git-Problem", rendered);
+        Assert.Contains("Orchestrator should commit and push", rendered);
+        Assert.Contains("Please also enrich the commit message.", rendered);
+        Assert.Contains("diff --git a/x b/x", rendered);
+
+        // Structural guard: the template must instruct the model to prefer
+        // intent over a literal diff summary, otherwise enriching the prompt
+        // is pointless.
+        Assert.Contains("intent", rendered, StringComparison.OrdinalIgnoreCase);
+
+        // The Conventional Commit shape must survive the prompt rewrite.
+        Assert.Contains("Conventional Commit", rendered);
+        Assert.Contains("72 characters", rendered);
+    }
+
+    /// <summary>
+    /// Empty intent fields (legacy jobs without a title, or no Extend prompt)
+    /// must render without leaking the literal placeholder back into the LLM
+    /// input. The renderer substitutes the empty string, so the headings stay
+    /// but the bodies collapse to a blank line.
+    /// </summary>
+    [Fact]
+    public void CommitMessageTemplate_TolerantToMissingIntentFields()
+    {
+        var rendered = Prompts().Render(RuntimePromptService.CommitMessage, new Dictionary<string, string?>
+        {
+            ["diff"] = "diff --git a/x b/x",
+            ["task_title"] = "",
+            ["task_prompt_first_paragraph"] = "",
+            ["last_user_continue"] = ""
+        });
+
+        Assert.DoesNotContain("{{task_title}}", rendered);
+        Assert.DoesNotContain("{{task_prompt_first_paragraph}}", rendered);
+        Assert.DoesNotContain("{{last_user_continue}}", rendered);
+        Assert.Contains("diff --git a/x b/x", rendered);
+    }
+
+    /// <summary>
+    /// First-paragraph extraction must trim leading whitespace, stop at the
+    /// first blank line, and bound the result so a wall-of-text prompt does
+    /// not dominate the LLM input. Pinned here so a future helper rewrite
+    /// cannot silently regress to "send the whole prompt body".
+    /// </summary>
+    [Theory]
+    [InlineData("", "")]
+    [InlineData("   \n  \n", "")]
+    [InlineData("Hello world.", "Hello world.")]
+    [InlineData("Hello world.\n\nSecond paragraph.", "Hello world.")]
+    [InlineData("\n\nLeading blank lines.\n\nThen more.", "Leading blank lines.")]
+    [InlineData("Line one.\nLine two of the same paragraph.\n\nNext block.",
+                "Line one.\nLine two of the same paragraph.")]
+    public void ExtractFirstParagraph_TrimsAndStopsAtBlankLine(string input, string expected)
+    {
+        Assert.Equal(expected, OrchestratorApi.Services.GitService.ExtractFirstParagraph(input));
+    }
+
+    [Fact]
+    public void ExtractFirstParagraph_BoundsLongParagraphs()
+    {
+        var body = new string('a', 2000);
+        var result = OrchestratorApi.Services.GitService.ExtractFirstParagraph(body);
+
+        // Bounded to 1500 chars + ellipsis suffix, so the LLM call stays cheap.
+        Assert.True(result.Length <= 1503, $"unexpected length: {result.Length}");
+        Assert.EndsWith("...", result);
     }
 
     /// <summary>
