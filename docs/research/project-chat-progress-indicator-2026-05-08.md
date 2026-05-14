@@ -1,8 +1,17 @@
 # Project chat: progress indicator and responsiveness — research
 
-Date: 2026-05-08
+Date: 2026-05-08 · resume addendum 2026-05-14
 Job: `project-chat-progress-indicator-research-and-redesign`
 Phase: 1 (research only; no production code change in this pass)
+
+> **Resume addendum (2026-05-14).** The original run left two open items: an
+> empirical capture of competitor tools (§1.2) and a v2-streaming-backend
+> follow-up (§1.5). Both are addressed below: §1.2 is reframed as out of
+> scope for automated agent runs (capability gap — agents cannot drive
+> Copilot Chat / Claude Code VS Code / ChatGPT Web / Cursor sessions to
+> screen-record), and §3 "Follow-up tasks" formalises concrete spec for the
+> human-execute capture session and the v2 streaming job. Phase-2 sign-off
+> no longer blocks on the empirical capture (see updated "Bridge to Phase 2").
 
 ## TL;DR
 
@@ -80,7 +89,7 @@ Geometry-wise this is on the quiet side (small dots, narrow palette). What makes
 
 ## 1.2 What competitors do — and a candid gap
 
-The prompt asks for screenshots and three stop-watch timings (T0/T1/T2/T3) per competitor (Copilot Chat, Claude Code CLI + VS Code, Cursor/Codex, ChatGPT Web). **This research pass did not produce those.** I do not have a controllable session for those tools inside this run, and the prompt explicitly says "Keine Spekulation, nur Verhalten" — so rather than fabricate observations, I am marking them as a deliberate gap that should close before Phase 2 is signed off.
+The prompt asks for screenshots and three stop-watch timings (T0/T1/T2/T3) per competitor (Copilot Chat, Claude Code CLI + VS Code, Cursor/Codex, ChatGPT Web). **Capturing those is out of scope for an automated agent run** — see the §1.2-resume note below. The qualitative comparison from public sources stands.
 
 What is verifiable from public documentation and the patterns we already lifted in this repo's mockups:
 
@@ -88,9 +97,32 @@ What is verifiable from public documentation and the patterns we already lifted 
 - Claude Code CLI's spinner is a Braille/dots-cycle ANSI sequence with phase-keyed verb labels ("Crafting…", "Planning…", "Connecting…"). The "verspiegelt" feel the prompt names is the pulse + animated chevron + token-stream caret stacking on top of each other in the VS Code extension.
 - Copilot Chat's typing indicator is a single muted glyph plus an in-flight progress bar at the chat-pane top edge during tool calls; the message bubble stays empty until a token arrives. The pre-token wait is bridged with one short status line ("Working…" or the tool name), not a continuous animation.
 
-To close this gap before Phase 2 sign-off, we need a 30-minute side-by-side capture session: open Copilot Chat, Claude Code (terminal + VS Code extension), Cursor, ChatGPT, send the same prompt, screen-record, log T0/T1/T2/T3 from the recording. The deliverable belongs in this research file's "Empirical addendum" section (left blank below) so the rest of the analysis can be reviewed independently.
-
-> **Empirical addendum (TODO before Phase 2 sign-off).** Captures of: Copilot Chat / Claude Code CLI / Claude Code VS Code / Cursor / ChatGPT Web. Three timings each (T0, T1, T2, T3). Screenshots in `results/` of the job folder.
+> **§1.2 resume note (2026-05-14) — empirical addendum is out of scope for agent runs.**
+>
+> The empirical capture is a *human-execute* task. An agent running in the
+> taskboard sandbox cannot:
+>
+> - Open and drive a Copilot Chat session in VS Code under a real Microsoft
+>   account (interactive sign-in, telemetry-bound UI).
+> - Launch the Claude Code VS Code extension and exercise its in-pane
+>   indicator (the extension expects a live editor host).
+> - Drive ChatGPT Web in a real browser session (auth + Cloudflare gate).
+> - Operate Cursor / Codex IDEs (proprietary, GUI-only, account-bound).
+> - Screen-record any of the above and stop-watch frame-precise T0/T1/T2/T3.
+>
+> This is a capability gap, not a research gap. Doing it badly (i.e. citing
+> blog posts as "behaviour observed") would violate the prompt's "Keine
+> Spekulation, nur Verhalten". The capture is therefore routed to a
+> dedicated 30-minute human-execute follow-up — see §3.1 below.
+>
+> Crucially, the gap **does not block the recommendation in §1.5**. The
+> visual style and state ladder are anchored on Nielsen's 100 ms / 1 s / 10 s
+> heuristic and on the structural facts in §1.1 + §1.4 (we have a sync POST,
+> no token stream, 30-60 s waits). The empirical timings would *refine* the
+> latency budgets in §1.5 (e.g. "Copilot manages T1 = X ms, we should match"),
+> not invalidate them. Phase-2 sign-off can therefore proceed in parallel
+> with — or ahead of — the human-execute capture; see updated "Bridge to
+> Phase 2" at the bottom of this doc.
 
 The Recommendation in §1.5 stands on the structural analysis (which is what dictates feasibility); the empirical timings only refine the *budgets*.
 
@@ -253,8 +285,109 @@ When v2 lands, the indicator widget needs no shape change: it gains three new st
 
 Phase 2 starts when:
 
-1. The empirical addendum (§1.2) has actual screenshots + T0/T1/T2/T3 timings for at least Copilot Chat, Claude Code, and ChatGPT Web.
-2. The recommendation has been signed off (style + states + budgets).
-3. Job moves through `4-auto-review`/`5-human-review` per the agent task contract.
+1. The recommendation has been signed off (style + states + budgets).
+2. Job moves through `4-auto-review`/`5-human-review` per the agent task contract.
+
+The empirical addendum (§1.2) is **no longer a blocking precondition** — it is a parallel human-execute follow-up (§3.1) that, if it produces timings, refines the budgets in §1.5; if it doesn't, the Nielsen-anchored budgets stand. This change reflects the resume-addendum decision (2026-05-14) not to keep the job parked waiting on a capability an automated agent cannot supply.
 
 The implementation is small enough to fit in one PR: chat.component.ts template + CSS + timer helper, one Playwright perf spec, one visual-regression spec. No backend touched.
+
+## 3. Follow-up tasks proposed by this research
+
+Two follow-ups, separately schedulable. Listed here in the format other
+research docs in this repo use (cf. `planning-research-task-kinds-2026-05.md`
+"Suggested next steps"). The taskboard pickup will create the job folders;
+this section is the source spec for whoever drafts them.
+
+### 3.1 Empirical addendum — competitor capture session (human-execute)
+
+**Kind:** Research · **Effort:** ~30 min wall-clock · **Owner:** human, not agent.
+
+**Motivation.** The Phase-1 research (§1.2) calls for screenshots and stop-watch
+timings (T0/T1/T2/T3) from Copilot Chat, Claude Code (CLI + VS Code), Cursor /
+Codex, and ChatGPT Web. Automated agent runs cannot drive those interactive,
+account-bound, GUI tools (see §1.2 resume note for the full capability gap).
+A 30-minute human session closes the gap.
+
+**Output.** Append a new section "Empirical addendum (captured 2026-05-XX)" to
+[`docs/research/project-chat-progress-indicator-2026-05-08.md`](../docs/research/project-chat-progress-indicator-2026-05-08.md)
+with one sub-section per tool. Each sub-section contains:
+
+1. One screenshot of the in-flight indicator state (`results/<tool>-indicator.png`).
+2. Three timings from a single representative send:
+   - T0 = click on Send / Enter.
+   - T1 = first visible indicator frame.
+   - T2 = first content event (token, tool hint, status string change).
+   - T3 = indicator gone, reply complete.
+3. One-line note: animation style (caret/spinner/shimmer/skeleton), motion
+   amount, colour saturation.
+
+**Capture method.**
+- OBS or Windows Game Bar at 60 fps, 1080p of the panel only (cropped tight).
+- Use a fixed prompt across tools: `"Write a 5-bullet summary of the article at https://en.wikipedia.org/wiki/Latency_(engineering)"` — long enough to span >5 s, short enough to keep the recording manageable.
+- Stop-watch frame numbers in the recording → ÷60 for ms.
+
+**Why this isn't fakeable from blogs.** The behaviour we need is sub-second
+frame-precision under a real model wait; vendor blog posts describe intent
+and design, not measured timings. Doing it badly (citing posts as
+observations) violates the prompt's "Keine Spekulation, nur Verhalten" rule.
+
+**Phase-2 relationship.** If the capture happens before Phase 2 implementation,
+the timings adjust the budgets in §1.5. If Phase 2 ships first, the capture
+becomes a post-hoc benchmark — "are we as fast as Copilot's T1?" — which is
+fine, and arguably more useful than an a-priori budget anyway.
+
+### 3.2 Project chat v2 — streaming backend (separate coding job)
+
+**Kind:** Coding · **Effort:** ~1-2 days · **Depends on:** v1 indicator landed.
+
+**Motivation.** §1.4 establishes that today's `OrchestratorChatService.SendAsync`
+is a single synchronous POST — no first-token event, no tool-use hint,
+nothing between Send and Done. The v1 redesign (this job) covers that gap
+with a wall-clock state ladder, but a *real* T2 < 1 s requires the orchestrator
+to surface intermediate events.
+
+**Scope.**
+
+1. **Backend.** Replace `OrchestratorRunner.ResumeAsync`'s blocking return with
+   an `IAsyncEnumerable<OrchestratorEvent>` (or a SignalR group keyed by
+   `(projectSlug, sessionId)`). Event kinds at minimum:
+   - `session.resumed` (CLI process started).
+   - `model.prompt-accepted` (Anthropic returned first SSE frame).
+   - `model.token` (first content token — fires once).
+   - `tool.call.started` (with tool name).
+   - `tool.call.finished`.
+   - `turn.complete` (existing terminus).
+2. **Transport.** SignalR is already in the stack; use it. Add the event
+   schema under `docs/schemas/`. New SignalR group: `orchestrator-chat:{slug}`.
+3. **Frontend.** Subscribe in `orchestrator-side-sheet.component.ts`. The
+   `ProgressIndicator` state machine from v1 (§1.5) gains three new states
+   driven by stream events: `reading`, `tool: <name>`, `writing`. The
+   wall-clock ladder degrades to a fallback (kicks in only if no stream
+   event arrives within 1.5 s — the "first stream event visible" budget).
+4. **Tests.**
+   - Playwright spec asserts T2 (first stream event visible) ≤ 1.5 s post-Send
+     against a mock backend that emits `model.token` at t=300 ms.
+   - Backend integration test asserts the full event sequence is emitted in
+     order for a real `claude -r` invocation against a tiny fixture prompt.
+5. **Observability.** Structured logs at each event-emit point with the
+   stable event names above. Timing around `ResumeAsync` → `model.token`
+   so we can see whether Anthropic's TTFT or our parser is the long pole.
+
+**Out of scope of v2:**
+- Cancelling in-flight orchestrator runs (separate job).
+- Resuming a stream after disconnect (the chat history poll already
+  back-fills on reconnect; the in-flight indicator can drop).
+- Frontend visual changes beyond extending the state machine; the widget
+  shape from v1 is sufficient.
+
+**Scoping note for the v2 spec author** (verified during this addendum,
+2026-05-14): `OrchestratorRunner.ResumeAsync` currently does
+`process.StandardOutput.ReadToEndAsync` (`OrchestratorRunner.cs:289`) — it
+waits for the whole stdout. The CLI itself emits Claude's stream-json
+format, but the resume path consumes the buffer in one go. A comment at
+`OrchestratorRunner.cs:48` notes a parallel "streaming task agent path"
+that does line-by-line parsing. So v2 is **not** a "small re-emit of
+events the runner already has" — it requires either rewiring resume to
+the existing streaming parser or adding a per-line consumer. Plan for
+~1-2 days, not half a day.
