@@ -656,12 +656,12 @@ public record CreateJobRequest
     public string Id { get; init; } = "";
     public string Title { get; init; } = "";
     public int Order { get; init; } = 999;
-    public string Agent { get; init; } = "copilot";
+    public string Agent { get; init; } = "claude";
     public string WatchPath { get; init; } = "";
     public string? PromptMarkdown { get; init; }
     public string? Model { get; init; }
     public string? TargetState { get; init; }
-    /// <summary>Optional CLI backend (copilot|claude|codex). Defaults to copilot when omitted.</summary>
+    /// <summary>Optional CLI backend (claude|codex|copilot|gemini). Defaults to claude when omitted.</summary>
     public string? CliType { get; init; }
     /// <summary>
     /// Optional client identity that owns the new job. When omitted, the

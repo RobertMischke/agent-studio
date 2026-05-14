@@ -296,7 +296,7 @@ export class CreateJobFormService {
 function readDefaultCliPref(): CliType {
   const stored = localStorage.getItem('defaultCliType') as CliType | null;
   if (stored && (CLI_TYPES as string[]).includes(stored)) return stored;
-  return 'copilot';
+  return 'claude';
 }
 
 function readDefaultModelPref(cliType: CliType): string {
