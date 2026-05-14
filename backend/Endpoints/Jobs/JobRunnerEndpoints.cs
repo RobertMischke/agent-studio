@@ -224,6 +224,25 @@ public static class JobRunnerEndpoints
             return Results.Accepted();
         });
 
+        // Synchronous "interim status" peek while a run is in flight. Runs a
+        // one-shot Haiku call against the live cli-output.log and returns the
+        // markdown directly; status.md on disk is NOT touched, so the
+        // post-run summary still owns it. Surfaced by the "Interim status"
+        // button in the protocol pane so the user can check on a long-running
+        // task without stopping it.
+        group.MapPost("/{jobId}/summary/interim", async (string jobId, string? watchPath, JobScannerService scanner, SummaryGenerationService summaries, CancellationToken ct) =>
+        {
+            var info = scanner.FindJob(jobId, watchPath);
+            if (info == null)
+                return Results.NotFound(new { error = "Job not found" });
+
+            var result = await summaries.GenerateInterimAsync(info, ct);
+            if (!result.Ok)
+                return Results.BadRequest(new { error = result.Error ?? "Interim summary failed" });
+
+            return Results.Ok(new { markdown = result.Markdown, durationMs = result.DurationMs });
+        });
+
         group.MapPost("/{jobId}/context-usage/refresh", async (string jobId, string? watchPath, TaskRunnerService runner, CancellationToken ct) =>
         {
             var (snapshot, error) = await runner.RefreshContextUsageAsync(jobId, watchPath, ct);

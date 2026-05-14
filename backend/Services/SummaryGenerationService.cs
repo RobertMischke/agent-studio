@@ -140,6 +140,63 @@ public sealed class SummaryGenerationService
         }
     }
 
+    /// <summary>
+    /// One-shot interim summary against the current cli-output.log. Unlike
+    /// <see cref="GenerateAsync"/>, this method:
+    ///   - returns the Haiku markdown to the caller instead of writing it to
+    ///     <c>status.md</c> (the post-run summary still owns that file),
+    ///   - does not update <see cref="_states"/>, so the protocol-pane's
+    ///     "Ready / Generating / Failed" state stays anchored to the real run
+    ///     summary,
+    ///   - does not apply the deterministic <c>Result:</c> rewrite, because
+    ///     the run is still in flight and there is no terminal outcome yet.
+    /// Used by the "Interim status" button surfaced in the protocol pane
+    /// while a run is alive so the user can peek at progress without
+    /// stopping the agent.
+    /// </summary>
+    public async Task<InterimSummaryResult> GenerateInterimAsync(JobInfo info, CancellationToken ct = default)
+    {
+        var logPath = JobPaths.CliOutputLog(info.FolderPath);
+        if (!File.Exists(logPath))
+        {
+            return InterimSummaryResult.Failure("No CLI output to summarise yet. Start the task once, then try again.");
+        }
+
+        string rawLog;
+        try
+        {
+            rawLog = await File.ReadAllTextAsync(logPath, ct);
+        }
+        catch (Exception ex)
+        {
+            return InterimSummaryResult.Failure($"Could not read cli-output.log: {ex.Message}");
+        }
+
+        if (string.IsNullOrWhiteSpace(rawLog))
+        {
+            return InterimSummaryResult.Failure("cli-output.log is empty - the agent hasn't streamed any output yet.");
+        }
+
+        var truncated = TruncateTail(rawLog, MaxLogChars);
+        var prompt = _prompts.Render(RuntimePromptService.SummaryProtocol,
+            new Dictionary<string, string?> { ["log"] = truncated });
+
+        var sw = Stopwatch.StartNew();
+        var (ok, summary, error) = await RunHaikuAsync(prompt, info.FolderPath, ct);
+        sw.Stop();
+
+        if (!ok || string.IsNullOrWhiteSpace(summary))
+        {
+            _logger.LogInformation("Interim summary failed for {JobId} after {ElapsedMs}ms: {Error}",
+                info.Id, sw.ElapsedMilliseconds, error);
+            return InterimSummaryResult.Failure(error ?? "Empty Haiku response");
+        }
+
+        _logger.LogInformation("Interim summary produced for {JobId} ({Bytes} bytes, {ElapsedMs}ms)",
+            info.Id, summary.Length, sw.ElapsedMilliseconds);
+        return InterimSummaryResult.Success(summary, sw.ElapsedMilliseconds);
+    }
+
     private void Fail(string key, string error)
     {
         var prev = _states.TryGetValue(key, out var s) ? s : new JobSummaryState();
@@ -306,4 +363,19 @@ public sealed class SummaryGenerationService
         }
         if (last != null) throw last;
     }
+}
+
+/// <summary>
+/// Result of <see cref="SummaryGenerationService.GenerateInterimAsync"/>.
+/// On success carries the Haiku markdown and the call duration so the UI
+/// can show how long the peek took; on failure carries a user-facing error
+/// string that the frontend renders in the interim-summary banner.
+/// </summary>
+public sealed record InterimSummaryResult(bool Ok, string? Markdown, string? Error, long DurationMs)
+{
+    public static InterimSummaryResult Success(string markdown, long durationMs)
+        => new(true, markdown, null, durationMs);
+
+    public static InterimSummaryResult Failure(string error)
+        => new(false, null, error, 0);
 }

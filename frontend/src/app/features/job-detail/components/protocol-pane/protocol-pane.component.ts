@@ -31,8 +31,22 @@ import type { ConversationEvent, RawLineRange } from '../../../../components/cha
 import { ConversationViewComponent } from '../../../../components/chat/conversation-view.component';
 import { projectConversation } from '../../../../components/chat/conversation-projection';
 import { BeautifulResultsComponent } from '../beautiful-results/beautiful-results.component';
+import { deriveProtocolVerdict, type ProtocolVerdict } from './protocol-verdict';
 
 export type InspectorTab = 'protocol' | 'activity';
+
+/**
+ * Transient interim-summary result shown while a job is running. Generated
+ * on demand from a single Haiku call against the in-flight cli-output.log;
+ * never written to status.md (the final summary owns that file).
+ */
+interface InterimSummaryState {
+  status: 'idle' | 'pending' | 'ready' | 'failed';
+  markdown: string | null;
+  error: string | null;
+  startedAt: number | null;
+  finishedAt: number | null;
+}
 
 /**
  * Protocol pane: shows the Haiku-generated status.md (read-only), the
@@ -210,6 +224,20 @@ export class ProtocolPaneComponent implements OnDestroy {
   );
 
   /**
+   * Three-state simplified verdict shown at the very top of the protocol
+   * pane (above hygiene strip, evidence panels, tabs). Pure derivation
+   * from the existing signals - see protocol-verdict.ts for the priority
+   * table. Recomputes on any input change.
+   */
+  readonly protocolVerdict = computed<ProtocolVerdict>(() => deriveProtocolVerdict({
+    isRunning: this.isRunning(),
+    summaryStatus: this.summaryStatus(),
+    statusMarkdown: this.detail().statusMarkdown,
+    outcomeIssue: this.detail().info.outcomeIssue,
+    hasActivity: this.hasActivity()
+  }));
+
+  /**
    * Progressive spinner label so a slow Haiku call doesn't look frozen.
    * The backend caps the call at HaikuTimeoutSeconds = 90 s; we
    * intentionally mirror that constant here. Tiers:
@@ -379,6 +407,84 @@ export class ProtocolPaneComponent implements OnDestroy {
 
   readonly copyState = signal<'idle' | 'copied' | 'failed'>('idle');
   private copyResetTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * Live "interim status" banner state. Populated when the user clicks the
+   * `📊 Interim status` button while a run is in flight. The button calls
+   * `POST /api/jobs/{id}/summary/interim`, which fires a one-shot Haiku
+   * against the current cli-output.log but does NOT touch status.md. The
+   * banner is transient: dismissing it clears the markdown back to null.
+   */
+  readonly interimSummary = signal<InterimSummaryState>({
+    status: 'idle',
+    markdown: null,
+    error: null,
+    startedAt: null,
+    finishedAt: null
+  });
+
+  /** Elapsed seconds since the interim call started; for the pending label. */
+  readonly interimElapsedSeconds = computed<number>(() => {
+    const s = this.interimSummary();
+    if (s.status !== 'pending' || s.startedAt === null) return 0;
+    return Math.max(0, Math.floor((this.nowTick() - s.startedAt) / 1000));
+  });
+
+  /** True while a `📊 Interim status` request is in flight. Drives the button disabled state. */
+  readonly interimInFlight = computed<boolean>(() => this.interimSummary().status === 'pending');
+
+  /**
+   * Whether to show the "📊 Interim status" button in the protocol-pane
+   * header. We surface it whenever the agent is running so the user can
+   * peek at progress without stopping the run. Hidden otherwise to keep
+   * the header from looking like a control panel when the task is idle.
+   */
+  readonly canRequestInterim = computed<boolean>(
+    () => this.isRunning() && !this.interimInFlight()
+  );
+
+  requestInterimSummary(): void {
+    if (this.interimInFlight()) return;
+    const job = this.detail().info;
+    this.interimSummary.set({
+      status: 'pending',
+      markdown: null,
+      error: null,
+      startedAt: Date.now(),
+      finishedAt: null
+    });
+    this.jobs.requestInterimSummary(job.id, job.watchPath).subscribe({
+      next: (resp) => {
+        this.interimSummary.set({
+          status: 'ready',
+          markdown: resp.markdown ?? '',
+          error: null,
+          startedAt: this.interimSummary().startedAt,
+          finishedAt: Date.now()
+        });
+      },
+      error: (err) => {
+        const message = err?.error?.error ?? err?.message ?? 'Interim summary failed';
+        this.interimSummary.set({
+          status: 'failed',
+          markdown: null,
+          error: message,
+          startedAt: this.interimSummary().startedAt,
+          finishedAt: Date.now()
+        });
+      }
+    });
+  }
+
+  dismissInterimSummary(): void {
+    this.interimSummary.set({
+      status: 'idle',
+      markdown: null,
+      error: null,
+      startedAt: null,
+      finishedAt: null
+    });
+  }
 
   /**
    * Drives the read-only Verbose Debug overlay. Opened from the activity-log

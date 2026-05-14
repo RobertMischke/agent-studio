@@ -82,6 +82,25 @@
         }
       </span>
     }
+    @if (isRunning()) {
+      <button type="button"
+              class="pane__interim-btn"
+              data-testid="protocol-interim-summary"
+              [disabled]="!canRequestInterim()"
+              [title]="interimInFlight()
+                ? ('Asking Haiku for an interim status... ' + interimElapsedSeconds() + 's')
+                : 'Generate an interim status summary from the current run output. Does not touch status.md.'"
+              (click)="requestInterimSummary()"
+              aria-label="Interim status">
+        @if (interimInFlight()) {
+          <span class="spinner-ring" aria-hidden="true"></span>
+          <span>Interim ({{ interimElapsedSeconds() }}s)</span>
+        } @else {
+          <span aria-hidden="true">📊</span>
+          <span>Interim status</span>
+        }
+      </button>
+    }
     @if (featureFlags.vsCodeLayout()) {
       <button class="pane__maximize"
               data-testid="pane-meta-toggle"
@@ -101,6 +120,57 @@
     <button class="pane__hide" (click)="hide.emit()" title="Hide panel">×</button>
   </header>
   <div class="pane__body">
+    @if (protocolVerdict(); as v) {
+      <div class="protocol-verdict"
+           [attr.data-kind]="v.kind"
+           [attr.data-testid]="'protocol-verdict-' + v.kind"
+           role="status">
+        <span class="protocol-verdict__emoji" aria-hidden="true">{{ v.emoji }}</span>
+        <span class="protocol-verdict__label">{{ v.label }}</span>
+        <span class="protocol-verdict__detail">{{ v.detail }}</span>
+      </div>
+    }
+    @if (interimSummary(); as s) {
+      @if (s.status === 'pending' || s.status === 'ready' || s.status === 'failed') {
+        <div class="interim-summary"
+             [attr.data-status]="s.status"
+             data-testid="protocol-interim-banner"
+             role="status">
+          <div class="interim-summary__head">
+            <span class="interim-summary__title">
+              <span aria-hidden="true">📊</span>
+              @if (s.status === 'pending') {
+                Interim status — running ({{ interimElapsedSeconds() }}s)
+              } @else if (s.status === 'ready') {
+                Interim status
+              } @else {
+                Interim status failed
+              }
+            </span>
+            <button type="button"
+                    class="interim-summary__close"
+                    data-testid="protocol-interim-dismiss"
+                    aria-label="Dismiss interim status"
+                    (click)="dismissInterimSummary()">×</button>
+          </div>
+          @if (s.status === 'pending') {
+            <div class="interim-summary__body interim-summary__body--pending">
+              <span class="spinner-ring" aria-hidden="true"></span>
+              <span>Haiku is reading the current cli-output.log…</span>
+            </div>
+          } @else if (s.status === 'ready' && s.markdown) {
+            <app-beautiful-results class="interim-summary__body"
+                                   data-testid="protocol-interim-markdown"
+                                   [markdown]="s.markdown"
+                                   [jobId]="detail().info.id"
+                                   [watchPath]="detail().info.watchPath" />
+          } @else if (s.status === 'failed') {
+            <pre class="interim-summary__body interim-summary__body--error"
+                 data-testid="protocol-interim-error">{{ s.error || 'Unknown error.' }}</pre>
+          }
+        </div>
+      }
+    }
     <app-hygiene-strip [job]="detail().info" [isActiveJob]="isActiveJob()" />
     @if (outcomeIssueModalOpen()) {
       @if (outcomeIssue(); as issue) {
