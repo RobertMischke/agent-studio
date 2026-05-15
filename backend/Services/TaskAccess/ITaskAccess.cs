@@ -81,6 +81,15 @@ public interface ITaskAccess
     IReadOnlyList<string> ListLaneFolderNames(string watchPath, string lane);
 
     /// <summary>
+    /// Like <see cref="ListLaneFolderNames"/> but returns absolute
+    /// folder paths instead of slug names. Orphan-rescue paths need
+    /// to read files inside each folder (logs, job.json mtime); having
+    /// the layer hand back the resolved path lets callers skip the
+    /// lane-folder construction they would otherwise do.
+    /// </summary>
+    IReadOnlyList<LaneFolderRef> ListLaneFolders(string watchPath, string lane);
+
+    /// <summary>
     /// Snapshot of every lane folder across every lane in
     /// <paramref name="watchPath"/>, including folders without
     /// <c>job.json</c>. Drives the queue-health endpoint without

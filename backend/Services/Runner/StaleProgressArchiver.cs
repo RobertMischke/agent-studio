@@ -7,6 +7,7 @@ using Microsoft.Extensions.Configuration;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.Jobs;
 using OrchestratorApi.Services.Persistence;
+using OrchestratorApi.Services.TaskAccess;
 
 namespace OrchestratorApi.Services.Runner;
 
@@ -75,6 +76,7 @@ public sealed class StaleProgressArchiver
     private readonly IConfiguration _configuration;
     private readonly ILogger<StaleProgressArchiver> _logger;
     private readonly IJsonlAppender _appender;
+    private readonly ITaskAccess _taskAccess;
 
     public const int DefaultStuckResumeWindowMinutes = 60;
     private const int SentinelTailLineWindow = 50;
@@ -90,6 +92,7 @@ public sealed class StaleProgressArchiver
         OrchestratorChatLog chatLog,
         IServiceProvider services,
         IConfiguration configuration,
+        ITaskAccess taskAccess,
         ILogger<StaleProgressArchiver> logger,
         IJsonlAppender? appender = null)
     {
@@ -99,6 +102,7 @@ public sealed class StaleProgressArchiver
         _chatLog = chatLog;
         _services = services;
         _configuration = configuration;
+        _taskAccess = taskAccess;
         _logger = logger;
         _appender = appender ?? new JsonlAppender();
     }
@@ -131,15 +135,16 @@ public sealed class StaleProgressArchiver
             ct.ThrowIfCancellationRequested();
             if (string.IsNullOrWhiteSpace(entry.Path) || !Directory.Exists(entry.Path)) continue;
 
-            var progressDir = Path.Combine(entry.Path, JobStates.Progress);
-            if (!Directory.Exists(progressDir)) continue;
-
             activeByProject.TryGetValue(entry.Name, out var activeJobId);
 
-            foreach (var jobFolder in Directory.EnumerateDirectories(progressDir))
+            // ADR-0024: enumerate 3-progress through the typed layer.
+            // ListLaneFolders includes orphan folders (no job.json),
+            // which is the case this sweep was designed to catch.
+            foreach (var laneFolder in _taskAccess.ListLaneFolders(entry.Path, JobStates.Progress))
             {
                 ct.ThrowIfCancellationRequested();
-                var slug = Path.GetFileName(jobFolder);
+                var slug = laneFolder.Slug;
+                var jobFolder = laneFolder.FolderPath;
 
                 if (!string.IsNullOrEmpty(activeJobId)
                     && string.Equals(slug, activeJobId, StringComparison.OrdinalIgnoreCase))
@@ -403,13 +408,21 @@ public sealed class StaleProgressArchiver
         var datePart = now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         var newSlug = $"{slug}-{suffix}-{datePart}";
         var attempt = newSlug;
-        for (int i = 2; Directory.Exists(Path.Combine(entry.Path, JobStates.FailedPickup, attempt)) && i < 1000; i++)
+        // ADR-0024: collision avoidance via the typed layer instead of
+        // Path.Combine(..., JobStates.FailedPickup, ...).
+        for (int i = 2; _taskAccess.SlugExistsInLane(entry.Path, JobStates.FailedPickup, attempt) && i < 1000; i++)
         {
             attempt = $"{newSlug}-{i}";
         }
 
-        var outcome = _states.MoveFolderToFailedPickup(jobFolder, attempt);
-        if (outcome.Status != MoveJobStatus.Success)
+        var placard = BuildReasonPlacard(kind, lastActivity, now);
+        var moveResult = _taskAccess.MoveOrphanToFailedPickup(
+            entry.Path,
+            JobStates.Progress,
+            slug,
+            attempt,
+            placard);
+        if (moveResult.Status != TaskMutationStatus.Applied)
         {
             return new StaleProgressDecision
             {
@@ -418,12 +431,9 @@ public sealed class StaleProgressArchiver
                 ProjectName = entry.Name,
                 Slug = slug,
                 FailedPickupSlug = attempt,
-                Reason = $"move to {JobStates.FailedPickup} refused: {outcome.Status} {outcome.Message}"
+                Reason = $"move to {JobStates.FailedPickup} refused: {moveResult.Status} {moveResult.Message}"
             };
         }
-
-        var movedFolder = Path.Combine(entry.Path, JobStates.FailedPickup, attempt);
-        TryWriteReasonPlacard(movedFolder, kind, lastActivity, now);
 
         return new StaleProgressDecision
         {
@@ -438,20 +448,6 @@ public sealed class StaleProgressArchiver
                 ? "stale folder with no job.json or cli-output.log; surfaced in 3a-failed-pickup"
                 : "stale folder past resume window with no completion sentinel; surfaced in 3a-failed-pickup"
         };
-    }
-
-    private void TryWriteReasonPlacard(string folder, FailureKind kind, DateTime lastActivity, DateTime sweepAt)
-    {
-        try
-        {
-            var placard = BuildReasonPlacard(kind, lastActivity, sweepAt);
-            File.WriteAllText(Path.Combine(folder, "failed-pickup-reason.md"), placard);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex,
-                "StaleProgressArchiver: could not write failed-pickup-reason.md in {Folder}", folder);
-        }
     }
 
     private static string BuildReasonPlacard(FailureKind kind, DateTime lastActivity, DateTime sweepAt)

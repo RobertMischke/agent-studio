@@ -324,13 +324,18 @@ public sealed class StaleProgressArchiverTests : IDisposable
         var git = new GitService(NullLogger<GitService>.Instance, scanner, config, prompts);
         var transitions = new JobTransitionService(scanner, states, mutations, git, settings, NullLogger<JobTransitionService>.Instance);
         var chatLog = new OrchestratorChatLog(NullLogger<OrchestratorChatLog>.Instance);
+        var indexCache = new JobIndexCache(scanner, NullLogger<JobIndexCache>.Instance, config);
+        scanner.SetIndexCache(indexCache);
+        var taskAccess = new OrchestratorApi.Services.TaskAccess.TaskAccessService(
+            scanner, mutations, states, transitions, indexCache,
+            NullLogger<OrchestratorApi.Services.TaskAccess.TaskAccessService>.Instance);
 
         // Empty service provider: tests use StatusProviderOverride to drive the
         // active-job guard, so the runner doesn't need to be instantiated.
         var sp = new ServiceCollection().BuildServiceProvider();
 
         var archiver = new StaleProgressArchiver(
-            scanner, states, transitions, chatLog, sp, config,
+            scanner, states, transitions, chatLog, sp, config, taskAccess,
             NullLogger<StaleProgressArchiver>.Instance);
         return (archiver, scanner);
     }

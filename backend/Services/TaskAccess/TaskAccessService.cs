@@ -483,6 +483,32 @@ public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
         }
     }
 
+    public IReadOnlyList<LaneFolderRef> ListLaneFolders(string watchPath, string lane)
+    {
+        if (string.IsNullOrWhiteSpace(watchPath) || string.IsNullOrWhiteSpace(lane)) return [];
+        if (!JobStates.All.Contains(lane)) return [];
+        var laneDir = Path.Combine(watchPath, lane);
+        if (!Directory.Exists(laneDir)) return [];
+        try
+        {
+            return Directory.EnumerateDirectories(laneDir)
+                .Select(folder => new LaneFolderRef
+                {
+                    WatchPath = watchPath,
+                    Lane = lane,
+                    Slug = Path.GetFileName(folder) ?? "",
+                    FolderPath = folder,
+                })
+                .Where(r => !string.IsNullOrEmpty(r.Slug))
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "TaskAccess.ListLaneFolders failed for {Path}/{Lane}", watchPath, lane);
+            return [];
+        }
+    }
+
     public IReadOnlyList<LaneFolderEntry> ListAllLaneFolders(string watchPath)
     {
         if (string.IsNullOrWhiteSpace(watchPath)) return [];

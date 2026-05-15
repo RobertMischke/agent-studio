@@ -107,8 +107,6 @@ public class JobFolderAccessIsolationTest
             // remove the entry when the consumer is migrated.
             ["backend/Services/Runner/ProjectRunner.cs"] =
                 "MIGRATION TARGET: pickup loop reads 3-progress and creates 3a-failed-pickup directly; should call ITaskAccess.ListByLane and TransitionLaneAsync after phase 4.",
-            ["backend/Services/Runner/StaleProgressArchiver.cs"] =
-                "MIGRATION TARGET: walks 3-progress for stale folders; should subscribe to ITaskAccess changes instead.",
         };
 
     /// <summary>

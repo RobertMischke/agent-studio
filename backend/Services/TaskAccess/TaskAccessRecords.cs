@@ -110,6 +110,21 @@ public enum TaskChangeKind
 }
 
 /// <summary>
+/// Lightweight (watchPath, lane, slug, folderPath) tuple returned by
+/// <see cref="ITaskAccess.ListLaneFolders"/>. Used by orphan-rescue
+/// paths that need an absolute folder path to read its contents
+/// (logs, job.json mtime) without constructing the lane folder
+/// themselves.
+/// </summary>
+public record LaneFolderRef
+{
+    public string WatchPath { get; init; } = "";
+    public string Lane { get; init; } = "";
+    public string Slug { get; init; } = "";
+    public string FolderPath { get; init; } = "";
+}
+
+/// <summary>
 /// One folder entry observed by
 /// <see cref="ITaskAccess.ListAllLaneFolders"/>. Includes folders
 /// without a <c>job.json</c> so the queue-health endpoint can flag
