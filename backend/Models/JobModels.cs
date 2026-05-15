@@ -692,6 +692,47 @@ public enum MoveJobStatus
 
 public record MoveJobOutcome(MoveJobStatus Status, string? Message = null);
 
+/// <summary>Result of <c>POST /api/jobs/{id}/restore-from-failed-pickup</c>.</summary>
+public enum RestoreFromFailedPickupStatus
+{
+    /// <summary>Folder was restored into the target lane under the resolved slug.</summary>
+    Success,
+    /// <summary>Slug is not in <c>3a-failed-pickup</c>: either it does not exist
+    /// or it has already been restored. Distinguished from <see cref="NotFound"/>
+    /// by the caller (the endpoint maps <c>NotFound</c> to 404 and <c>NoOp</c>
+    /// to 200 with a status payload so the call is idempotent).</summary>
+    NoOp,
+    /// <summary>No folder with this slug exists in <c>3a-failed-pickup</c>.</summary>
+    NotFound,
+    /// <summary>A folder with the resolved slug already exists in the target lane.</summary>
+    TargetFolderExists,
+    /// <summary>The slug did not match the dead-letter shape <c>&lt;original&gt;-pickup-failed-&lt;yyyy-mm-dd&gt;</c>.</summary>
+    InvalidSlug,
+    /// <summary>Filesystem operation failed unexpectedly.</summary>
+    Failure
+}
+
+/// <summary>Outcome of a <c>POST /api/jobs/{id}/restore-from-failed-pickup</c> call.
+/// On <see cref="RestoreFromFailedPickupStatus.Success"/> the caller can read
+/// <see cref="RestoredSlug"/> (the slug the folder now lives under) and
+/// <see cref="OriginalSlug"/> (the slug parsed back from the dead-letter name).</summary>
+public record RestoreFromFailedPickupOutcome(
+    RestoreFromFailedPickupStatus Status,
+    string? RestoredSlug = null,
+    string? OriginalSlug = null,
+    string? SourceSlug = null,
+    string? Message = null);
+
+/// <summary>Body for <c>POST /api/jobs/{id}/restore-from-failed-pickup</c>.
+/// Body is optional; defaults to restoring the original slug.</summary>
+public record RestoreFromFailedPickupRequest
+{
+    /// <summary>When <c>true</c>, keep the <c>-pickup-failed-&lt;utc&gt;</c>
+    /// suffix on the restored folder. Default <c>false</c>: strip the suffix
+    /// so the slug matches the pre-dead-letter name.</summary>
+    public bool KeepDeadLetterSlug { get; init; }
+}
+
 /// <summary>
 /// Per-item entry for <c>POST /api/jobs/batch-move</c>. Each item names
 /// the job, the watch path that disambiguates a slug that lives in two

@@ -110,6 +110,21 @@ must be on the same lane.
 
 Delete a job and its folder. Returns `200` on success.
 
+### `POST /api/jobs/{jobId}/restore-from-failed-pickup?watchPath=...`
+
+Lift a folder out of `3a-failed-pickup` back into `2-ready` and drop the
+`-pickup-failed-<utc>` suffix in one server-side step. Pass the dead-letter
+slug as `{jobId}` (e.g. `foo-pickup-failed-2026-05-08`). Body is optional:
+
+```json
+{ "keepDeadLetterSlug": true }
+```
+
+retains the suffix; omit the body (or `false`) to recover the original slug.
+Idempotent (`200 { "status": "no-op" }` when already restored). Appends a
+`pickup-restored` row to `<workspace>/logs/pickup-failures.jsonl`. Use this
+instead of a manual `mv` + rename.
+
 ### `PUT /api/jobs/{jobId}/title`, `.../task-type`, `.../agent`
 
 Single-field edits. Body: `{ "title": "new" }` etc. Same auth headers.

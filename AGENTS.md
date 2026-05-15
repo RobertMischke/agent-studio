@@ -240,6 +240,7 @@ First worked example: the `3a-failed-pickup` dead-letter (ADR-0028) gets a diagn
 | GET | `/api/jobs/{jobId}?watchPath=...` | One `JobDetail` (info + prompt + status + log). |
 | POST | `/api/jobs` | Create job (`CreateJobRequest`). |
 | POST | `/api/jobs/batch-move` | Move many jobs in one call (per-item atomic; `BatchMoveRequest`). |
+| POST | `/api/jobs/{jobId}/restore-from-failed-pickup?watchPath=...` | Lift a folder out of `3a-failed-pickup` back into `2-ready`, dropping the `-pickup-failed-<utc>` suffix; optional body `{"keepDeadLetterSlug": true}` retains it. |
 | POST | `/api/jobs/{jobId}/start?watchPath=...` | Start CLI execution. |
 | POST | `/api/jobs/{jobId}/stop?watchPath=...` | Cancel running execution. |
 | POST | `/api/jobs/{jobId}/continue?watchPath=...` | Resume with new prompt (same session). |
@@ -351,6 +352,7 @@ Use:
 - `POST /api/jobs` with `CreateJobRequest` to create jobs.
 - `POST /api/jobs/{jobId}/move?watchPath=...` to move jobs.
 - `POST /api/jobs/batch-move` to move many jobs in one call (per-item atomic; failed items report `conflict` / `not-found` / `rejected` without rolling back items that already moved). This is the supported path for bulk restore / triage; do not fall back to shell loops over the single-item endpoint.
+- `POST /api/jobs/{jobId}/restore-from-failed-pickup?watchPath=...` to lift a folder out of `3a-failed-pickup` back into `2-ready` and rename it to drop the `-pickup-failed-<utc>` suffix in one server-side step. Optional body `{"keepDeadLetterSlug": true}` retains the suffix. Idempotent (already-restored slugs return a 200 `no-op`); appends a `pickup-restored` row to `<workspace>/logs/pickup-failures.jsonl` for forensics. Use this instead of a manual `mv` + rename.
 - `POST /api/jobs/reorder` to reorder jobs.
 - `POST /api/jobs/{jobId}/move-to-top?watchPath=...` to promote a queued job.
 - `POST /api/jobs/{jobId}/change-project?watchPath=...` to relocate a job between watched workspaces.

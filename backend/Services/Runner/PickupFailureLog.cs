@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Configuration;
 using OrchestratorApi.Services.Persistence;
 
@@ -34,12 +35,30 @@ public sealed class PickupFailureLog
 
     public void Append(PickupFailureRecord record)
     {
+        AppendInternal(record, record.Slug);
+    }
+
+    /// <summary>
+    /// Append one <see cref="PickupRestoreRecord"/> row to
+    /// <c>&lt;workspace&gt;/logs/pickup-failures.jsonl</c>. Same file as the
+    /// dead-letter rows so the operator has a single forensics stream per
+    /// workspace for the failed-pickup lifecycle (dead-letter on one line,
+    /// restore on a later line, same slug); the <c>kind</c> field
+    /// disambiguates which is which.
+    /// </summary>
+    public void AppendRestore(PickupRestoreRecord record)
+    {
+        AppendInternal(record, record.Slug);
+    }
+
+    private void AppendInternal(object record, string slugForDiagnostics)
+    {
         var workspaceRoot = _configuration["TaskRepository"];
         if (string.IsNullOrWhiteSpace(workspaceRoot))
         {
             _logger.LogDebug(
                 "PickupFailureLog: TaskRepository not configured; skipping pickup-failures.jsonl entry for {Slug}.",
-                record.Slug);
+                slugForDiagnostics);
             return;
         }
 
@@ -50,9 +69,36 @@ public sealed class PickupFailureLog
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "PickupFailureLog: failed to append pickup-failures.jsonl for {Slug}", record.Slug);
+            _logger.LogWarning(ex, "PickupFailureLog: failed to append pickup-failures.jsonl for {Slug}", slugForDiagnostics);
         }
     }
+
+    /// <summary>
+    /// Inverse of <see cref="BuildArchiveSlug"/>. Strips the
+    /// <c>-pickup-failed-&lt;yyyy-mm-dd&gt;</c> tail (and an optional
+    /// numeric collision suffix) from a dead-letter slug and returns the
+    /// original slug. Returns <c>false</c> when the input does not match
+    /// the dead-letter shape, so the caller can decide whether to treat
+    /// that as a 404 or fall back to the dead-letter slug itself.
+    /// </summary>
+    public static bool TryParseFailedPickupSlug(string slug, out string originalSlug)
+    {
+        originalSlug = "";
+        if (string.IsNullOrWhiteSpace(slug)) return false;
+        var match = FailedPickupSlugRegex.Match(slug);
+        if (!match.Success) return false;
+        originalSlug = match.Groups["original"].Value;
+        return originalSlug.Length > 0;
+    }
+
+    /// <summary>
+    /// Matches the slug shape produced by <see cref="BuildArchiveSlug"/>:
+    /// <c>&lt;original&gt;-pickup-failed-&lt;yyyy-mm-dd&gt;</c> with an
+    /// optional <c>-&lt;N&gt;</c> collision suffix.
+    /// </summary>
+    private static readonly Regex FailedPickupSlugRegex = new(
+        @"^(?<original>.+?)-pickup-failed-\d{4}-\d{2}-\d{2}(?:-\d+)?$",
+        RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     /// <summary>
     /// Disambiguating destination slug for the dead-letter move. Format:
@@ -107,10 +153,36 @@ public sealed record PickupAttemptDiagnostic
     [JsonPropertyName("executionStatus")] public string? ExecutionStatus { get; init; }
 }
 
-/// <summary>String constants for <see cref="PickupFailureRecord.Kind"/>.</summary>
+/// <summary>
+/// One row in <c>&lt;workspace&gt;/logs/pickup-failures.jsonl</c> that
+/// records the inverse of a dead-letter: an operator restored a folder
+/// from <c>3a-failed-pickup</c> back into a live lane (usually
+/// <c>2-ready</c>) via <c>POST /api/jobs/{id}/restore-from-failed-pickup</c>.
+/// The two row shapes share the file and are disambiguated by
+/// <c>kind</c>; see <c>docs/schemas/pickup-failure.schema.json</c>.
+/// </summary>
+public sealed record PickupRestoreRecord
+{
+    [JsonPropertyName("at")] public DateTime At { get; init; }
+    [JsonPropertyName("kind")] public string Kind { get; init; } = PickupFailureKinds.PickupRestored;
+    [JsonPropertyName("projectName")] public string ProjectName { get; init; } = "";
+    /// <summary>The original (restored) slug, e.g. <c>foo</c>.</summary>
+    [JsonPropertyName("slug")] public string Slug { get; init; } = "";
+    /// <summary>The dead-letter slug the folder was restored from, e.g. <c>foo-pickup-failed-2026-05-08</c>.</summary>
+    [JsonPropertyName("sourceSlug")] public string SourceSlug { get; init; } = "";
+    /// <summary>The slug the folder ended up under after the restore (equal to <c>slug</c> unless <c>keepDeadLetterSlug</c> was set).</summary>
+    [JsonPropertyName("restoredAs")] public string RestoredAs { get; init; } = "";
+    /// <summary>Target lane the folder was restored into (usually <c>2-ready</c>).</summary>
+    [JsonPropertyName("targetState")] public string TargetState { get; init; } = "";
+    [JsonPropertyName("reason")] public string Reason { get; init; } = "";
+}
+
+/// <summary>String constants for <see cref="PickupFailureRecord.Kind"/>
+/// and <see cref="PickupRestoreRecord.Kind"/>.</summary>
 public static class PickupFailureKinds
 {
     public const string PickupFailed = "pickup-failed";
+    public const string PickupRestored = "pickup-restored";
 }
 
 /// <summary>

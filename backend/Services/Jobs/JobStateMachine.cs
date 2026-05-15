@@ -1,5 +1,6 @@
 using System.Text.Json;
 using OrchestratorApi.Models;
+using OrchestratorApi.Services.Runner;
 
 namespace OrchestratorApi.Services.Jobs;
 
@@ -156,6 +157,134 @@ public class JobStateMachine
     /// </remarks>
     public MoveJobOutcome MoveFolderToFailedPickup(string sourceFolder, string newSlug)
         => MoveFolderToState(sourceFolder, newSlug, JobStates.FailedPickup, writePlaceholderJobJson: true);
+
+    /// <summary>
+    /// Inverse of <see cref="MoveFolderToFailedPickup"/>: lift a folder
+    /// out of <c>3a-failed-pickup</c> back into a live lane (default
+    /// <c>2-ready</c>) and rename it back to its pre-dead-letter slug.
+    /// Surfaced as <c>POST /api/jobs/{id}/restore-from-failed-pickup</c>
+    /// to close the gap that previously forced an operator to fall back
+    /// to <c>mv</c> + manual rename - exactly the bypass the
+    /// <see cref="OrchestratorApi.Tests.Architecture.JobFolderAccessIsolationTest"/>
+    /// and the AGENTS.md "API first" rule are meant to stop.
+    ///
+    /// <para>Single-state-machine principle: the move + the slug rewrite
+    /// both flow through <see cref="MoveFolderToState"/>, the same helper
+    /// the dead-letter path uses. No new <see cref="Directory.Move"/>
+    /// call site, so the architecture test stays green.</para>
+    ///
+    /// <para>Idempotency: if the slug is not in
+    /// <see cref="JobStates.FailedPickup"/> the call returns
+    /// <see cref="RestoreFromFailedPickupStatus.NoOp"/> when the original
+    /// slug already exists in <paramref name="targetState"/> (the
+    /// expected "already restored" case) and
+    /// <see cref="RestoreFromFailedPickupStatus.NotFound"/> when the
+    /// slug is genuinely unknown.</para>
+    ///
+    /// <para>The pickup-attempt counter is held in
+    /// <c>ProjectRunner._pickupAttempts</c> and was already cleared at
+    /// dead-letter time (see <c>DeadLetterUnrecoverableFolder</c>), so
+    /// the next pickup attempt on the restored slug starts at 0 without
+    /// any extra reset here. If a future schema adds a persisted counter
+    /// to <c>job.json</c>, reset it inside this method.</para>
+    /// </summary>
+    /// <param name="jobId">The dead-letter slug under
+    /// <c>3a-failed-pickup</c>, e.g. <c>foo-pickup-failed-2026-05-08</c>.</param>
+    /// <param name="watchPath">Workspace root that disambiguates the slug
+    /// when the same id appears in two projects.</param>
+    /// <param name="keepDeadLetterSlug">When <c>true</c>, keep the
+    /// <c>-pickup-failed-&lt;utc&gt;</c> suffix on the restored folder.
+    /// Useful when the operator wants the trail visible in the slug
+    /// itself.</param>
+    /// <param name="targetState">Target lane. Defaults to
+    /// <see cref="JobStates.Ready"/>.</param>
+    public RestoreFromFailedPickupOutcome RestoreFromFailedPickup(
+        string jobId,
+        string? watchPath,
+        bool keepDeadLetterSlug,
+        string? targetState = null)
+    {
+        var resolvedTargetState = string.IsNullOrWhiteSpace(targetState) ? JobStates.Ready : targetState!;
+        if (!JobStates.All.Contains(resolvedTargetState))
+        {
+            return new RestoreFromFailedPickupOutcome(
+                RestoreFromFailedPickupStatus.Failure,
+                Message: $"Invalid target state: {resolvedTargetState}");
+        }
+
+        // Parse the original slug back out of the dead-letter name. When
+        // the input does not match the dead-letter shape the call may
+        // still be a legitimate restore (operator renamed manually before
+        // calling this); fall back to the input slug as both source and
+        // original so the move can still proceed.
+        var hasDeadLetterShape = PickupFailureLog.TryParseFailedPickupSlug(jobId, out var parsedOriginal);
+        var originalSlug = hasDeadLetterShape ? parsedOriginal : jobId;
+        var restoredSlug = keepDeadLetterSlug ? jobId : originalSlug;
+
+        var info = _scanner.FindJob(jobId, watchPath);
+
+        // Idempotency: nothing to restore in 3a-failed-pickup; check
+        // whether the original slug is already in the target lane.
+        if (info == null || info.State != JobStates.FailedPickup)
+        {
+            var existing = _scanner.FindJob(restoredSlug, watchPath);
+            if (existing != null && existing.State == resolvedTargetState)
+            {
+                return new RestoreFromFailedPickupOutcome(
+                    RestoreFromFailedPickupStatus.NoOp,
+                    RestoredSlug: restoredSlug,
+                    OriginalSlug: originalSlug,
+                    SourceSlug: jobId,
+                    Message: $"Folder is already in {resolvedTargetState} under '{restoredSlug}'.");
+            }
+
+            return new RestoreFromFailedPickupOutcome(
+                RestoreFromFailedPickupStatus.NotFound,
+                OriginalSlug: originalSlug,
+                SourceSlug: jobId,
+                Message: $"No folder found in {JobStates.FailedPickup} with slug '{jobId}'.");
+        }
+
+        if (!hasDeadLetterShape && !keepDeadLetterSlug)
+        {
+            // The folder is in 3a-failed-pickup but its slug does not
+            // match the auto-generated dead-letter pattern. Refuse to
+            // guess at a rename; surface the slug-shape problem to the
+            // caller, who can retry with keepDeadLetterSlug=true.
+            return new RestoreFromFailedPickupOutcome(
+                RestoreFromFailedPickupStatus.InvalidSlug,
+                OriginalSlug: originalSlug,
+                SourceSlug: jobId,
+                Message: $"Slug '{jobId}' does not match the dead-letter shape '<slug>-pickup-failed-<yyyy-mm-dd>'. " +
+                         "Retry with keepDeadLetterSlug=true to restore without a rename.");
+        }
+
+        var outcome = MoveFolderToState(info.FolderPath, restoredSlug, resolvedTargetState);
+        return outcome.Status switch
+        {
+            MoveJobStatus.Success => new RestoreFromFailedPickupOutcome(
+                RestoreFromFailedPickupStatus.Success,
+                RestoredSlug: restoredSlug,
+                OriginalSlug: originalSlug,
+                SourceSlug: jobId),
+            MoveJobStatus.NotFound => new RestoreFromFailedPickupOutcome(
+                RestoreFromFailedPickupStatus.NotFound,
+                OriginalSlug: originalSlug,
+                SourceSlug: jobId,
+                Message: outcome.Message),
+            MoveJobStatus.TargetFolderExists => new RestoreFromFailedPickupOutcome(
+                RestoreFromFailedPickupStatus.TargetFolderExists,
+                RestoredSlug: restoredSlug,
+                OriginalSlug: originalSlug,
+                SourceSlug: jobId,
+                Message: outcome.Message),
+            _ => new RestoreFromFailedPickupOutcome(
+                RestoreFromFailedPickupStatus.Failure,
+                OriginalSlug: originalSlug,
+                SourceSlug: jobId,
+                Message: outcome.Message)
+        };
+    }
 
     private MoveJobOutcome MoveFolderToState(string sourceFolder, string newSlug, string targetState, bool writePlaceholderJobJson = false)
     {

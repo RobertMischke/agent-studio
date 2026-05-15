@@ -2,6 +2,7 @@ using OrchestratorApi.Models;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.Cli;
 using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.Runner;
 using OrchestratorApi.Services.Tokens;
 using static OrchestratorApi.Endpoints.Jobs.JobEndpointHelpers;
 
@@ -111,6 +112,74 @@ public static class JobCrudEndpoints
 
             var results = await transitions.BatchMoveAsync(req.Items, ct);
             return Results.Ok(new BatchMoveResponse { Results = results.ToList() });
+        });
+
+        // Lift a folder out of 3a-failed-pickup back into 2-ready and
+        // rename it to drop the -pickup-failed-<utc> suffix. Closes the
+        // gap that previously forced operators to fall back to `mv` +
+        // manual rename - exactly the bypass the architecture test +
+        // AGENTS.md "API first" rule are meant to stop. The state-machine
+        // owns the move + slug rewrite atomically; the endpoint logs a
+        // forensics row to <workspace>/logs/pickup-failures.jsonl so the
+        // dead-letter -> restore lifecycle is reviewable per-slug.
+        group.MapPost("/{jobId}/restore-from-failed-pickup",
+            (string jobId, string? watchPath, RestoreFromFailedPickupRequest? req,
+                JobScannerService scanner,
+                JobStateMachine states,
+                PickupFailureLog pickupFailures) =>
+        {
+            var keepDeadLetterSlug = req?.KeepDeadLetterSlug ?? false;
+
+            // Capture the project name before the move so the forensics row
+            // can attribute the restore even if a post-move FindJob race
+            // returns null between the move and the scanner cache refresh.
+            var preMove = scanner.FindJob(jobId, watchPath);
+            var projectName = preMove?.ProjectName ?? "";
+
+            var outcome = states.RestoreFromFailedPickup(jobId, watchPath, keepDeadLetterSlug);
+
+            switch (outcome.Status)
+            {
+                case RestoreFromFailedPickupStatus.Success:
+                    pickupFailures.AppendRestore(new PickupRestoreRecord
+                    {
+                        At = DateTime.UtcNow,
+                        Kind = PickupFailureKinds.PickupRestored,
+                        ProjectName = projectName,
+                        Slug = outcome.OriginalSlug ?? "",
+                        SourceSlug = outcome.SourceSlug ?? jobId,
+                        RestoredAs = outcome.RestoredSlug ?? "",
+                        TargetState = JobStates.Ready,
+                        Reason = keepDeadLetterSlug
+                            ? "Operator restore via API; dead-letter slug suffix preserved."
+                            : "Operator restore via API; original slug recovered."
+                    });
+                    return Results.Ok(new
+                    {
+                        status = "restored",
+                        restoredSlug = outcome.RestoredSlug,
+                        originalSlug = outcome.OriginalSlug,
+                        sourceSlug = outcome.SourceSlug,
+                        targetState = JobStates.Ready
+                    });
+                case RestoreFromFailedPickupStatus.NoOp:
+                    return Results.Ok(new
+                    {
+                        status = "no-op",
+                        restoredSlug = outcome.RestoredSlug,
+                        originalSlug = outcome.OriginalSlug,
+                        sourceSlug = outcome.SourceSlug,
+                        message = outcome.Message
+                    });
+                case RestoreFromFailedPickupStatus.NotFound:
+                    return Results.NotFound(new { error = outcome.Message ?? "Folder not found in 3a-failed-pickup." });
+                case RestoreFromFailedPickupStatus.TargetFolderExists:
+                    return Results.Conflict(new { error = outcome.Message });
+                case RestoreFromFailedPickupStatus.InvalidSlug:
+                    return Results.BadRequest(new { error = outcome.Message });
+                default:
+                    return Results.Problem(outcome.Message ?? "Restore failed");
+            }
         });
 
         group.MapDelete("/{jobId}", (string jobId, string? watchPath, JobStateMachine states) =>
