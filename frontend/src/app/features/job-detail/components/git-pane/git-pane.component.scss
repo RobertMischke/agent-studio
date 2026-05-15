@@ -123,6 +123,14 @@
   padding: 0;
   color: #cbd5e1;
   font-size: 12px;
+  // diff2html renders `.d2h-code-linenumber` (and `.d2h-code-side-linenumber`
+  // in side-by-side mode) as `position: absolute`. Without a positioned
+  // ancestor those gutter cells get pinned to the viewport's initial
+  // containing block, escape this container's `overflow: auto` clip, and
+  // paint on top of whatever follows in the page layout (commit textarea,
+  // buttons). Establish a containing block here so the gutter is scoped
+  // to - and scrolls / clips with - the diff content.
+  position: relative;
 }
 .git-view__diff--placeholder {
   padding: 10px 12px;
