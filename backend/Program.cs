@@ -138,6 +138,15 @@ builder.Services.AddSingleton<JobWatcherService>();
 // events and by mutation services. Wired into JobScannerService below via
 // SetIndexCache so existing ScanAllJobs callers transparently benefit.
 builder.Services.AddSingleton<JobIndexCache>();
+// TaskAccess layer (ADR-0024 phase 2-4): the typed façade in front of
+// JobScannerService / JobMutationService / JobStateMachine /
+// JobTransitionService. Outside callers (endpoints, runner, supervisor)
+// resolve ITaskAccess so the lane-folder shape stays inside this layer.
+builder.Services.AddSingleton<OrchestratorApi.Services.TaskAccess.TaskAccessService>();
+builder.Services.AddSingleton<OrchestratorApi.Services.TaskAccess.ITaskAccess>(sp =>
+    sp.GetRequiredService<OrchestratorApi.Services.TaskAccess.TaskAccessService>());
+builder.Services.AddSingleton<OrchestratorApi.Services.TaskAccess.ITaskAccessHost>(sp =>
+    sp.GetRequiredService<OrchestratorApi.Services.TaskAccess.TaskAccessService>());
 builder.Services.AddSingleton<CopilotCliEnvironment>();
 builder.Services.AddSingleton<CopilotModelDiscovery>();
 builder.Services.AddSingleton<CodexModelDiscovery>();
@@ -398,6 +407,14 @@ watcher.OnJobChanged += _ => hubContext.Clients.All.SendAsync("jobsChanged");
 var jobIndexCache = app.Services.GetRequiredService<JobIndexCache>();
 app.Services.GetRequiredService<JobScannerService>().SetIndexCache(jobIndexCache);
 watcher.OnJobChanged += _ => jobIndexCache.Invalidate(JobIndexCache.InvalidationSource.External);
+
+// TaskAccess layer (ADR-0024): force a synchronous first index read so
+// boot-time disk problems surface here rather than on the first HTTP
+// request. The host's other lifecycle calls (ReloadProjectAsync,
+// ShutdownAsync) are wired through the typed interface and used by
+// callers, not at startup.
+_ = app.Services.GetRequiredService<OrchestratorApi.Services.TaskAccess.ITaskAccessHost>()
+    .BootAsync();
 
 // Wire JobTransitionService move events to atomically clear the per-project
 // runner's _activeJobId when the active job is moved out of 3-progress.

@@ -39,6 +39,13 @@ public record TaskMutationRequest
     public string? PromptMarkdown { get; init; }
     public string? LogLine { get; init; }
     public TaskAccessVersion? ExpectedVersion { get; init; }
+
+    /// <summary>
+    /// Carrier for the <see cref="TaskMutationKind.Create"/> path so the
+    /// layer can mint a new job folder without a bespoke method. Ignored
+    /// for other kinds.
+    /// </summary>
+    public CreateJobRequest? CreateRequest { get; init; }
 }
 
 public enum TaskMutationKind
@@ -100,4 +107,26 @@ public enum TaskChangeKind
     Updated,
     Transitioned,
     Deleted,
+}
+
+/// <summary>
+/// One folder entry observed by
+/// <see cref="ITaskAccess.ListAllLaneFolders"/>. Includes folders
+/// without a <c>job.json</c> so the queue-health endpoint can flag
+/// orphans without reaching into the filesystem from outside the
+/// layer.
+/// </summary>
+public record LaneFolderEntry
+{
+    public string WatchPath { get; init; } = "";
+    public string Lane { get; init; } = "";
+    public string Slug { get; init; } = "";
+    public string FolderPath { get; init; } = "";
+    public bool HasJobJson { get; init; }
+    /// <summary>
+    /// <c>state</c> field read from <c>job.json</c> when present, used by
+    /// the queue-health endpoint to detect lane / state-field drift.
+    /// Null when <c>job.json</c> is missing or unreadable.
+    /// </summary>
+    public string? StateInJobJson { get; init; }
 }
