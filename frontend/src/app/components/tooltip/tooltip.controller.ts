@@ -286,15 +286,23 @@ const TOOLTIP_CSS = `
   font-size: 12.5px;
   color: #e2e8f0;
   white-space: pre-line;
+  overflow: hidden;
+  overflow-wrap: anywhere;
 }
 .app-tooltip__body > * + * { margin-top: 6px; }
 .app-tooltip__body ul,
 .app-tooltip__body ol {
   margin: 0;
   padding-left: 18px;
+  overflow: hidden;
 }
 .app-tooltip__body ul li,
-.app-tooltip__body ol li { margin-top: 2px; }
+.app-tooltip__body ol li {
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .app-tooltip__body code {
   background: rgba(148, 163, 184, 0.18);
   border-radius: 3px;

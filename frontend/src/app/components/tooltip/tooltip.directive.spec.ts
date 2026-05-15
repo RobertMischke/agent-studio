@@ -171,4 +171,17 @@ describe('TooltipDirective', () => {
     const computed = window.getComputedStyle(tip).position;
     expect(computed === 'fixed' || tip.classList.contains('app-tooltip')).toBe(true);
   });
+
+  it('clips long list-row content inside the box (overflow + ellipsis on <li>)', () => {
+    // Regression: commit-pill tooltip rendered <li><code>path</code></li>
+    // with no wrap rule, so long file paths visibly spilled past the
+    // tooltip box. The fix installs overflow/ellipsis on list items.
+    fireHover(anchor, 'mouseenter');
+    const sheet = document.getElementById('app-tooltip-styles');
+    expect(sheet).not.toBeNull();
+    const css = sheet!.textContent ?? '';
+    expect(css).toMatch(/\.app-tooltip__body\s+ul\s+li[\s\S]*?overflow:\s*hidden/);
+    expect(css).toMatch(/\.app-tooltip__body\s+ul\s+li[\s\S]*?text-overflow:\s*ellipsis/);
+    expect(css).toMatch(/\.app-tooltip__body\s+ul\s+li[\s\S]*?white-space:\s*nowrap/);
+  });
 });
