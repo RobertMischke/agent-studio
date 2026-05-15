@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.Jobs;
+using OrchestratorApi.Services.TaskAccess;
 
 namespace OrchestratorApi.Services.Runner;
 
@@ -88,6 +89,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
     private readonly JobScannerService _scanner;
     private readonly JobStateMachine _stateMachine;
+    private readonly ITaskAccess _taskAccess;
     private readonly OrchestratorChatLog _chatLog;
     private readonly RuntimePromptService _prompts;
     private readonly AspectRunnerService _aspectRunner;
@@ -125,6 +127,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     public ReviewDecisionOrchestrator(
         JobScannerService scanner,
         JobStateMachine stateMachine,
+        ITaskAccess taskAccess,
         OrchestratorChatLog chatLog,
         RuntimePromptService prompts,
         AspectRunnerService aspectRunner,
@@ -138,6 +141,7 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     {
         _scanner = scanner;
         _stateMachine = stateMachine;
+        _taskAccess = taskAccess;
         _chatLog = chatLog;
         _prompts = prompts;
         _aspectRunner = aspectRunner;
@@ -1143,36 +1147,46 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
     {
         var slug = Slugify(pending.Job.Id);
         var folderName = $"human-decision-needed-{slug}";
-        var preparationDir = Path.Combine(entry.Path, JobStates.Preparation, folderName);
 
-        if (Directory.Exists(preparationDir))
+        // ADR-0024: idempotency check + create both go through the
+        // typed TaskAccess layer instead of building the lane path
+        // locally. Same job already has an open intake -> don't
+        // multiply.
+        if (_taskAccess.SlugExistsInLane(entry.Path, JobStates.Preparation, folderName))
         {
-            // Same job already has an open intake. Don't multiply.
             return;
         }
 
+        var promptBody = $"# Human decision needed for `{pending.Job.Id}`\n\n" +
+                         $"The orchestrator could not decide on this 4-review task unattended.\n\n" +
+                         $"**Reason from orchestrator:** {verdict.Reason}\n\n" +
+                         $"**Original signal:** {OriginalSignalLabel(pending.Kind)}\n\n" +
+                         $"**Original reason:** {pending.Reason ?? "(none provided)"}\n\n" +
+                         $"Please review the task in 4-review (`{pending.Job.FolderPath}`) and either answer the agent or change scope.\n";
+
         try
         {
-            Directory.CreateDirectory(preparationDir);
-            var jobJson = $$"""
+            var result = await _taskAccess.MutateAsync(new TaskMutationRequest
             {
-              "id": "{{folderName}}",
-              "title": "Human decision needed: {{pending.Job.Title}}",
-              "state": "{{JobStates.Preparation}}",
-              "order": 1,
-              "agent": "human",
-              "createdAt": "{{DateTime.UtcNow:O}}",
-              "priority": "high"
+                Kind = TaskMutationKind.Create,
+                CreateRequest = new CreateJobRequest
+                {
+                    Id = folderName,
+                    Title = $"Human decision needed: {pending.Job.Title}",
+                    Agent = "human",
+                    Order = 1,
+                    TargetState = JobStates.Preparation,
+                    WatchPath = entry.Path,
+                    PromptMarkdown = promptBody,
+                },
+            }, ct);
+
+            if (result.Status != TaskMutationStatus.Applied)
+            {
+                _logger.LogWarning(
+                    "ReviewDecisionOrchestrator: human-decision intake refused for {JobId}: {Status} {Message}",
+                    pending.Job.Id, result.Status, result.Message);
             }
-            """;
-            await File.WriteAllTextAsync(Path.Combine(preparationDir, "job.json"), jobJson, ct);
-            var promptBody = $"# Human decision needed for `{pending.Job.Id}`\n\n" +
-                             $"The orchestrator could not decide on this 4-review task unattended.\n\n" +
-                             $"**Reason from orchestrator:** {verdict.Reason}\n\n" +
-                             $"**Original signal:** {OriginalSignalLabel(pending.Kind)}\n\n" +
-                             $"**Original reason:** {pending.Reason ?? "(none provided)"}\n\n" +
-                             $"Please review the task in 4-review (`{pending.Job.FolderPath}`) and either answer the agent or change scope.\n";
-            await File.WriteAllTextAsync(Path.Combine(preparationDir, "prompt.md"), promptBody, ct);
         }
         catch (Exception ex)
         {
@@ -1273,26 +1287,12 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
     private IEnumerable<PendingDecision> EnumeratePending(WatchPathEntry entry)
     {
-        var reviewDir = Path.Combine(entry.Path, JobStates.AutoReview);
-        if (!Directory.Exists(reviewDir)) yield break;
-
-        foreach (var jobDir in Directory.GetDirectories(reviewDir))
+        // ADR-0024: list 4-auto-review through the typed layer
+        // instead of walking the lane directory by hand. The cache
+        // dominates the cost, so iterating typed records is also
+        // faster than the original folder-walk + ScanAllJobs FirstOrDefault.
+        foreach (var info in _taskAccess.ListByLaneInWorkspace(entry.Path, JobStates.AutoReview))
         {
-            JobInfo? info;
-            try
-            {
-                info = _scanner.ScanAllJobs().FirstOrDefault(j =>
-                    string.Equals(j.WatchPath, entry.Path, StringComparison.OrdinalIgnoreCase) &&
-                    string.Equals(j.FolderPath, jobDir, StringComparison.OrdinalIgnoreCase));
-                if (info == null)
-                {
-                    // The scanner might not have caught a brand-new folder yet. Skip
-                    // this tick; the next one will pick it up.
-                    continue;
-                }
-            }
-            catch { continue; }
-
             var logPath = JobPaths.CliOutputLog(info.FolderPath);
             if (!File.Exists(logPath)) continue;
 

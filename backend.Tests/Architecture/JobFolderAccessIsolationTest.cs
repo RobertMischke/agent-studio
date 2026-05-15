@@ -109,8 +109,6 @@ public class JobFolderAccessIsolationTest
                 "MIGRATION TARGET: pickup loop reads 3-progress and creates 3a-failed-pickup directly; should call ITaskAccess.ListByLane and TransitionLaneAsync after phase 4.",
             ["backend/Services/Runner/StaleProgressArchiver.cs"] =
                 "MIGRATION TARGET: walks 3-progress for stale folders; should subscribe to ITaskAccess changes instead.",
-            ["backend/Services/Runner/ReviewDecisionOrchestrator.cs"] =
-                "MIGRATION TARGET: writes review docs and creates 1-preparation followups; should route folder creates through JobMutationService.CreateJob (phase 3) then ITaskAccess (phase 4).",
         };
 
     /// <summary>

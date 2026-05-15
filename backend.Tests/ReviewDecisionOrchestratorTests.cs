@@ -810,10 +810,27 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         var aspectRunner = new AspectRunnerService(prompts, NullLogger<AspectRunnerService>.Instance);
         aspectRunner.CliRunner = (aspectId, _, _, _, _, _) => Task.FromResult(aspectStub(aspectId));
+        var taskAccess = BuildTaskAccess(scanner, stateMachine, config);
         var orchestrator = new ReviewDecisionOrchestrator(
-            scanner, stateMachine, chatLog, prompts, aspectRunner, statusSnapshot ?? new AutoReviewStatusSnapshot(), config,
+            scanner, stateMachine, taskAccess, chatLog, prompts, aspectRunner, statusSnapshot ?? new AutoReviewStatusSnapshot(), config,
             NullLogger<ReviewDecisionOrchestrator>.Instance);
         return orchestrator;
+    }
+
+    private static OrchestratorApi.Services.TaskAccess.TaskAccessService BuildTaskAccess(
+        JobScannerService scanner,
+        JobStateMachine stateMachine,
+        IConfiguration config)
+    {
+        var indexCache = new JobIndexCache(scanner, NullLogger<JobIndexCache>.Instance, config);
+        scanner.SetIndexCache(indexCache);
+        var mutations = new JobMutationService(scanner, NullLogger<JobMutationService>.Instance);
+        var git = new GitService(NullLogger<GitService>.Instance, scanner, config);
+        var settings = new ProjectSettingsService(NullLogger<ProjectSettingsService>.Instance, config);
+        var transitions = new JobTransitionService(scanner, stateMachine, mutations, git, settings, NullLogger<JobTransitionService>.Instance);
+        return new OrchestratorApi.Services.TaskAccess.TaskAccessService(
+            scanner, mutations, stateMachine, transitions, indexCache,
+            NullLogger<OrchestratorApi.Services.TaskAccess.TaskAccessService>.Instance);
     }
 
     private void SeedProgressJob(string slug)
@@ -912,8 +929,9 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         var aspectRunner = new AspectRunnerService(prompts, NullLogger<AspectRunnerService>.Instance);
         var statusSnapshot = new AutoReviewStatusSnapshot();
+        var taskAccess = BuildTaskAccess(scanner, stateMachine, config);
         var orchestrator = new ReviewDecisionOrchestrator(
-            scanner, stateMachine, chatLog, prompts, aspectRunner, statusSnapshot, config,
+            scanner, stateMachine, taskAccess, chatLog, prompts, aspectRunner, statusSnapshot, config,
             NullLogger<ReviewDecisionOrchestrator>.Instance);
         orchestrator.CliRunner = (cli, model, prompt, timeout, ct) =>
         {
