@@ -654,7 +654,7 @@ export class App implements OnInit {
   onCompleteAndNextReview() { this.triage.completeAndNextReview(); }
 
   // Cycle 10b: board-mutation handlers delegate to BoardMutationsService.
-  onJobDrop(event: { jobId: string; watchPath: string; targetState: string }) { this.boardMutations.moveJob(event); }
+  onJobDrop(event: { jobId: string; watchPath: string; targetState: string; targetIndex: number }) { this.boardMutations.moveJob(event); }
   onJobReorder(event: { state: string; jobs: { jobId: string; watchPath: string }[] }) { this.boardMutations.reorderJobs(event); }
   onDeleteFromBoard(job: JobInfo) { this.boardMutations.deleteFromBoard(job); }
   onDeleteFromDetail(info: JobInfo) { this.boardMutations.deleteFromDetail(info); }

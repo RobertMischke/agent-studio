@@ -83,7 +83,7 @@ public static class JobCrudEndpoints
             var validation = ValidateTargetState(req.TargetState);
             if (validation != null) return validation;
 
-            return MoveResult(await transitions.MoveAsync(jobId, req.TargetState, watchPath, ct));
+            return MoveResult(await transitions.MoveAsync(jobId, req.TargetState, watchPath, ct, req.TargetIndex));
         });
 
         group.MapPost("/{jobId}/move", async (string jobId, string? watchPath, MoveJobRequest req,
@@ -93,7 +93,7 @@ public static class JobCrudEndpoints
             var validation = ValidateTargetState(req.TargetState);
             if (validation != null) return validation;
 
-            return MoveResult(await transitions.MoveAsync(jobId, req.TargetState, watchPath, ct));
+            return MoveResult(await transitions.MoveAsync(jobId, req.TargetState, watchPath, ct, req.TargetIndex));
         });
 
         group.MapDelete("/{jobId}", (string jobId, string? watchPath, JobStateMachine states) =>

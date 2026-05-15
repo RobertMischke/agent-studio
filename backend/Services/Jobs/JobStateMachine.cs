@@ -417,6 +417,46 @@ public class JobStateMachine
         }
     }
 
+    /// <summary>
+    /// Place <paramref name="jobId"/> at slot <paramref name="targetIndex"/>
+    /// in its current lane (within the same project / watch path) and
+    /// rewrite every job's <c>order</c> field to a dense 1..N sequence so
+    /// the resulting order is stable. Used by the move endpoint when a
+    /// drag-and-drop cross-lane drop carries a desired insertion slot:
+    /// without this the moved folder keeps its source-lane <c>order</c>
+    /// value and snaps to a position the user did not choose.
+    /// </summary>
+    /// <returns><c>true</c> when the job was found and the lane was
+    /// rewritten; <c>false</c> when the job cannot be located.</returns>
+    public bool SetOrderInLane(string jobId, string? watchPath, int targetIndex)
+    {
+        var info = _scanner.FindJob(jobId, watchPath);
+        if (info == null) return false;
+
+        var laneJobs = _scanner.ScanAllJobs()
+            .Where(j => j.WatchPath == info.WatchPath && j.State == info.State)
+            .OrderBy(j => j.Order)
+            .ThenBy(j => j.Id, StringComparer.Ordinal)
+            .ToList();
+
+        var moved = laneJobs.FirstOrDefault(j => j.Id == jobId);
+        if (moved == null) return false;
+
+        var others = laneJobs.Where(j => j.Id != jobId).ToList();
+        var slot = Math.Clamp(targetIndex, 0, others.Count);
+        var ordered = new List<JobInfo>(others.Count + 1);
+        ordered.AddRange(others.Take(slot));
+        ordered.Add(moved);
+        ordered.AddRange(others.Skip(slot));
+
+        for (int i = 0; i < ordered.Count; i++)
+        {
+            JobJsonFile.UpdateOrder(ordered[i].FolderPath, i + 1, _logger);
+        }
+        _scanner.InvalidateCache();
+        return true;
+    }
+
     public bool ReorderJobs(List<JobOrderItem> jobs)
     {
         if (jobs.Count == 0) return true;

@@ -197,10 +197,13 @@ export class JobService {
 
   /**
    * Apply a cross-lane move to the local `grouped` signal immediately.
-   * The card lands at the bottom of the target lane (matches the backend
-   * convention that newly assigned `order` values are appended).
+   * When `insertAt` is provided, the card lands at that 0-based slot in
+   * the target lane; otherwise it appends at the bottom. The slot path
+   * matches the drag-and-drop drop-position contract: the backend
+   * rewrites every sibling's `order` field so the resulting position is
+   * stable across silent polls.
    */
-  applyOptimisticMove(jobId: string, watchPath: string, targetState: string): { fromLane: LaneKey; before: JobInfo[]; toLane: LaneKey; toBefore: JobInfo[] } | null {
+  applyOptimisticMove(jobId: string, watchPath: string, targetState: string, insertAt?: number): { fromLane: LaneKey; before: JobInfo[]; toLane: LaneKey; toBefore: JobInfo[] } | null {
     const toLane = STATE_TO_LANE[targetState];
     if (!toLane) return null;
     const current = this.grouped();
@@ -224,7 +227,13 @@ export class JobService {
     const toBefore = current[toLane] ?? [];
     const next: GroupedJobs = { ...current };
     next[fromLane] = fromBefore.filter(j => `${j.watchPath}::${j.id}` !== key);
-    next[toLane] = [...toBefore, { ...moving, state: targetState }];
+    const movedCard = { ...moving, state: targetState };
+    if (typeof insertAt === 'number') {
+      const slot = Math.max(0, Math.min(insertAt, toBefore.length));
+      next[toLane] = [...toBefore.slice(0, slot), movedCard, ...toBefore.slice(slot)];
+    } else {
+      next[toLane] = [...toBefore, movedCard];
+    }
     this.grouped.set(next);
     this.mutationVersion++;
     this.pendingGroupedSuppressUntil = Date.now() + JobService.OPTIMISTIC_GRACE_MS;
@@ -266,8 +275,10 @@ export class JobService {
     return this.http.put(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/state`, { targetState: state }, this.withWatchPath(watchPath));
   }
 
-  moveJob(jobId: string, targetState: string, watchPath?: string) {
-    return this.http.post(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/move`, { targetState }, this.withWatchPath(watchPath));
+  moveJob(jobId: string, targetState: string, watchPath?: string, targetIndex?: number) {
+    const body: { targetState: string; targetIndex?: number } = { targetState };
+    if (typeof targetIndex === 'number') body.targetIndex = targetIndex;
+    return this.http.post(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/move`, body, this.withWatchPath(watchPath));
   }
 
   getWatchPaths() {

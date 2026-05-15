@@ -37,7 +37,7 @@ export class BoardMutationsService {
    * so a stale `/api/jobs/grouped` response can't repaint the old lane.
    * On failure, revert the local snapshot and surface the error.
    */
-  moveJob(event: { jobId: string; watchPath: string; targetState: string }): void {
+  moveJob(event: { jobId: string; watchPath: string; targetState: string; targetIndex?: number }): void {
     // Virtual lanes inside the same filesystem state (e.g. the intake
     // sub-lane that splits 2-ready into "Human Ready" and "Orch Intake")
     // map back to the real state for the backend move; the orchestrator
@@ -50,9 +50,9 @@ export class BoardMutationsService {
     // backend round-trip or a vanish-and-recover repaint.
     const moving = this.jobService.jobs().find((j) => j.id === event.jobId && j.watchPath === event.watchPath);
     if (moving && moving.state === event.targetState) return;
-    const snapshot = this.jobService.applyOptimisticMove(event.jobId, event.watchPath, event.targetState);
+    const snapshot = this.jobService.applyOptimisticMove(event.jobId, event.watchPath, event.targetState, event.targetIndex);
     this.jobService.beginOptimisticPersist();
-    this.jobService.moveJob(event.jobId, event.targetState, event.watchPath).subscribe({
+    this.jobService.moveJob(event.jobId, event.targetState, event.watchPath, event.targetIndex).subscribe({
       next: () => this.jobService.endOptimisticPersist(),
       error: (err) => {
         this.jobService.endOptimisticPersist();

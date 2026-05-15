@@ -56,7 +56,8 @@ public sealed class JobTransitionService
         string jobId,
         string targetState,
         string? watchPath,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        int? targetIndex = null)
     {
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return new MoveJobOutcome(MoveJobStatus.NotFound);
@@ -90,6 +91,17 @@ public sealed class JobTransitionService
             {
                 _mutations.SetJobCommitOnFolder(moved.FolderPath, commitToStamp);
             }
+        }
+
+        // Drag-and-drop carries a desired slot in the target lane. Without
+        // it the moved folder keeps its source-lane order value, so the
+        // card snaps to whatever position that value sorts to in the new
+        // lane - not where the user dropped it. Apply the slot after the
+        // folder is on disk so the lane scan sees the moved job in its
+        // new state when it rewrites every sibling's order field.
+        if (outcome.Status == MoveJobStatus.Success && targetIndex.HasValue && fromState != targetState)
+        {
+            _states.SetOrderInLane(jobId, watchPath, targetIndex.Value);
         }
 
         if (outcome.Status == MoveJobStatus.Success && fromState != targetState)

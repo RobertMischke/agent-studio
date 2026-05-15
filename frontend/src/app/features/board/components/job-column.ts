@@ -37,7 +37,12 @@ export class JobColumnComponent implements OnInit, OnDestroy {
   readonly archiving = input<boolean>(false);
 
   readonly jobClick = output<JobInfo>();
-  readonly jobDrop = output<{ jobId: string; watchPath: string; targetState: string }>();
+  // `targetIndex` is the 0-based insertion slot in this column the user
+  // dropped the card on. Stable across silent polls because the backend
+  // rewrites every sibling's `order` field when the move applies the
+  // slot (see JobTransitionService.MoveAsync). Without it the card
+  // keeps its source-lane order value and snaps to a stale position.
+  readonly jobDrop = output<{ jobId: string; watchPath: string; targetState: string; targetIndex: number }>();
   readonly jobReorder = output<{ state: string; jobs: JobOrderItem[] }>();
   readonly jobDeleteRequest = output<JobInfo>();
   readonly addTask = output<string>();
@@ -412,7 +417,12 @@ export class JobColumnComponent implements OnInit, OnDestroy {
     if (sourceState === this.state()) {
       this.performSameLaneReorder(payload.jobKey, index);
     } else {
-      this.jobDrop.emit({ jobId: payload.jobId, watchPath: payload.watchPath, targetState: this.state() });
+      this.jobDrop.emit({
+        jobId: payload.jobId,
+        watchPath: payload.watchPath,
+        targetState: this.state(),
+        targetIndex: index
+      });
     }
   }
 
@@ -447,7 +457,21 @@ export class JobColumnComponent implements OnInit, OnDestroy {
       this.performSameLaneReorder(payload.jobKey, slot);
       return;
     }
-    this.jobDrop.emit({ jobId: payload.jobId, watchPath: payload.watchPath, targetState: this.state() });
+    // Cross-lane drop on the column body (missed the per-strip drop zones,
+    // or the column has none because it renders a subdivided lane). Use
+    // the same cursor-vs-card-midpoint slot the same-lane path uses so the
+    // moved card lands where the user released, not at a position derived
+    // from its stale source-lane order. Lanes that disable reorder (review
+    // subdivision) still get a deterministic slot via the trailing index.
+    const targetIndex = (this.reorderDisabled() || this.isReview())
+      ? this.jobs().length
+      : this.computeDropSlotFromCursor(event);
+    this.jobDrop.emit({
+      jobId: payload.jobId,
+      watchPath: payload.watchPath,
+      targetState: this.state(),
+      targetIndex
+    });
   }
 
   /**

@@ -670,6 +670,16 @@ public record JobLogEntry
 public record MoveJobRequest
 {
     public string TargetState { get; init; } = "";
+
+    /// <summary>
+    /// Optional 0-based insertion slot in the target lane. When supplied,
+    /// the move pins the dropped job to that position and rewrites every
+    /// other job's <c>order</c> in the same lane + project so the
+    /// resulting sequence is stable. <c>null</c> preserves the legacy
+    /// behaviour: the folder moves and the job keeps whatever <c>order</c>
+    /// value it had in the source lane.
+    /// </summary>
+    public int? TargetIndex { get; init; }
 }
 
 public enum MoveJobStatus
