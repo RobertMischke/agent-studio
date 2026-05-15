@@ -5,7 +5,8 @@
        [class.create-dialog--drag]="isDragging()"
        (dragover)="onDragOver($event)"
        (dragleave)="onDragLeave($event)"
-       (drop)="onDrop($event)">
+       (drop)="onDrop($event)"
+       (paste)="onPromptPaste($event)">
     <button type="button"
             class="create-dialog__close"
             data-testid="create-dialog-close"
@@ -160,9 +161,18 @@
                 class="field__input field__textarea"
                 data-testid="create-prompt"
                 [(ngModel)]="newPrompt"
-                (paste)="onPromptPaste($event)"
                 rows="7"
                 placeholder="Type a free-text description here, then click Enhance to auto-fill the title, tags, and refined prompt."></textarea>
+      <div class="create-dialog__dropzone"
+           data-testid="create-dropzone"
+           [class.create-dialog__dropzone--drag]="isDragging()"
+           (click)="triggerFilePicker()">
+        <span class="create-dialog__dropzone-icon" aria-hidden="true">🖼️</span>
+        <span class="create-dialog__dropzone-text">
+          Drag &amp; drop a screenshot, paste with <kbd>Ctrl</kbd>+<kbd>V</kbd>, or
+          <span class="create-dialog__dropzone-link">click to browse</span>
+        </span>
+      </div>
       @if (enhanceError()) {
         <div class="create-dialog__generate-error" data-testid="create-enhance-error">⚠ {{ enhanceError() }}</div>
       }

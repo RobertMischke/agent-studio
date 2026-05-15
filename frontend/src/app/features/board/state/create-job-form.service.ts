@@ -256,7 +256,19 @@ export class CreateJobFormService {
         form.append('file', att.file, att.file.name || `${att.alt}.png`);
         const url = `/api/jobs/${encodeURIComponent(jobId)}/attachments`
           + (watchPath ? `?watchPath=${encodeURIComponent(watchPath)}` : '');
-        const res = await fetch(url, { method: 'POST', body: form, headers: { 'X-Client-Id': CLIENT_ID } });
+        // The job folder was created milliseconds ago. Backend caches can
+        // race against that creation under concurrent polling, returning a
+        // transient 400/404 "Job not found" before the cache observes the
+        // mutation. Retry once with a short backoff so a brief cache miss
+        // never surfaces as a user-visible upload failure.
+        let res = await fetch(url, { method: 'POST', body: form, headers: { 'X-Client-Id': CLIENT_ID } });
+        if (!res.ok && (res.status === 400 || res.status === 404)) {
+          await new Promise(r => setTimeout(r, 250));
+          // FormData stream is consumed - rebuild it for the retry.
+          const retry = new FormData();
+          retry.append('file', att.file, att.file.name || `${att.alt}.png`);
+          res = await fetch(url, { method: 'POST', body: retry, headers: { 'X-Client-Id': CLIENT_ID } });
+        }
         if (!res.ok) {
           this.errorDialog.show(new Error(`Upload failed (${res.status}) for ${att.file.name || att.alt}`), {
             title: 'Attachment upload failed',

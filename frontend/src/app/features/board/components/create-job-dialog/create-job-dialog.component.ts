@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, ViewChild, computed, inject, input, model, output, signal } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, Component, DestroyRef, ElementRef, ViewChild, computed, inject, input, model, output, signal } from '@angular/core';
 import { ModalStackService } from '../../../../services/modal-stack.service';
 import { forkJoin, of } from 'rxjs';
 import { catchError, map } from 'rxjs/operators';
@@ -60,7 +60,7 @@ const PENDING_PREFIX = 'pending-attachment-';
   imports: [FormsModule, TooltipDirective],
   templateUrl: './create-job-dialog.component.html'
 })
-export class CreateJobDialogComponent {
+export class CreateJobDialogComponent implements AfterViewInit {
   readonly watchPaths = input<WatchPathEntry[]>([]);
   readonly availableModels = input<CliModelInfo[]>([]);
   readonly cliTypeDraft = input.required<CliType>();
@@ -159,6 +159,15 @@ export class CreateJobDialogComponent {
       () => this.cancel.emit(),
       this.destroyRef,
     );
+  }
+
+  ngAfterViewInit(): void {
+    // Focus lands in the prompt textarea so Ctrl+V immediately captures
+    // a clipboard screenshot via the wrapper's (paste) handler. Without
+    // this, the user has to click into the dialog first - the dialog
+    // hint says "paste with Ctrl+V" so silent paste failure is the
+    // reported bug.
+    queueMicrotask(() => this.promptArea?.nativeElement?.focus());
   }
 
   triggerFilePicker(): void {
