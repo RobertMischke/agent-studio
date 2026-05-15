@@ -65,6 +65,8 @@ export class StatusBarComponent implements OnInit {
   readonly defaultCli = signal<CliType>(this.readDefaultCli());
   readonly defaultModel = signal<string>(this.readDefaultModel(this.readDefaultCli()));
   readonly models = signal<CliModelInfo[]>([]);
+  readonly modelsLoading = signal(false);
+  readonly modelsError = signal(false);
 
   readonly cliMenuOpen = signal(false);
   readonly modelMenuOpen = signal(false);
@@ -89,6 +91,13 @@ export class StatusBarComponent implements OnInit {
     const m = this.models().find(x => x.id === id);
     if (m) return m.label || m.id;
     return id;
+  });
+
+  readonly modelPickerTooltip = computed(() => {
+    const cli = this.cliLabel(this.defaultCli());
+    if (this.modelsLoading()) return `Default model for ${cli} (loading catalog…)`;
+    if (this.modelsError()) return `Default model for ${cli} (catalog unavailable — click to refresh)`;
+    return `Default model for ${cli}`;
   });
 
   ngOnInit(): void {
@@ -173,6 +182,11 @@ export class StatusBarComponent implements OnInit {
     this.defaultModelChange.emit({ cliType: cli, model: modelId });
   }
 
+  refreshModels(ev: MouseEvent) {
+    ev.stopPropagation();
+    this.loadModels(this.defaultCli(), true);
+  }
+
   @HostListener('document:click')
   onDocumentClick() {
     this.cliMenuOpen.set(false);
@@ -182,10 +196,19 @@ export class StatusBarComponent implements OnInit {
   // Escape handling is delegated to ModalStackService (effects above register
   // an entry per open dropdown). The previous local @HostListener was removed.
 
-  private loadModels(cliType: CliType) {
-    this.jobService.getCliModelCatalog(cliType).subscribe({
-      next: (catalog) => this.models.set(catalog.models ?? []),
-      error: () => this.models.set([]),
+  private loadModels(cliType: CliType, refresh = false) {
+    this.modelsLoading.set(true);
+    this.modelsError.set(false);
+    this.jobService.getCliModelCatalog(cliType, refresh).subscribe({
+      next: (catalog) => {
+        this.models.set(catalog.models ?? []);
+        this.modelsLoading.set(false);
+      },
+      error: () => {
+        this.models.set([]);
+        this.modelsError.set(true);
+        this.modelsLoading.set(false);
+      },
     });
   }
 

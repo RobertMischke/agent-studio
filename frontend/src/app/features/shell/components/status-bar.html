@@ -78,8 +78,7 @@
     <div class="statusbar__pickers">
       <button class="statusbar__item statusbar__item--btn"
               data-testid="status-bar-model-picker"
-              [disabled]="models().length === 0"
-              [appTooltip]="'Default model for ' + cliLabel(defaultCli())"
+              [appTooltip]="modelPickerTooltip()"
               (click)="toggleModelMenu($event)">
         <span class="statusbar__icon">⚙</span>
         <span>{{ defaultModelLabel() }}</span>
@@ -91,15 +90,24 @@
           <div class="statusbar__menu-title">
             Default model · {{ cliLabel(defaultCli()) }}
           </div>
-          @if (models().length === 0) {
-            <div class="statusbar__menu-empty">No models reported</div>
+          <button class="statusbar__menu-item"
+                  data-testid="status-bar-model-default"
+                  [class.statusbar__menu-item--active]="!defaultModel()"
+                  (click)="setDefaultModel('')">
+            <span class="statusbar__icon">·</span>
+            <span>CLI default</span>
+          </button>
+          @if (modelsLoading()) {
+            <div class="statusbar__menu-empty">Loading catalog…</div>
+          } @else if (models().length === 0) {
+            <div class="statusbar__menu-empty">
+              @if (modelsError()) {
+                Catalog unavailable for {{ cliLabel(defaultCli()) }}.
+              } @else {
+                No models reported for {{ cliLabel(defaultCli()) }}.
+              }
+            </div>
           } @else {
-            <button class="statusbar__menu-item"
-                    [class.statusbar__menu-item--active]="!defaultModel()"
-                    (click)="setDefaultModel('')">
-              <span class="statusbar__icon">·</span>
-              <span>CLI default</span>
-            </button>
             @for (m of models(); track m.id) {
               <button class="statusbar__menu-item"
                       [class.statusbar__menu-item--active]="m.id === defaultModel()"
@@ -110,6 +118,13 @@
               </button>
             }
           }
+          <button class="statusbar__menu-item statusbar__menu-item--meta"
+                  data-testid="status-bar-model-refresh"
+                  [disabled]="modelsLoading()"
+                  (click)="refreshModels($event)">
+            <span class="statusbar__icon">↻</span>
+            <span>Refresh catalog</span>
+          </button>
         </div>
       }
     </div>

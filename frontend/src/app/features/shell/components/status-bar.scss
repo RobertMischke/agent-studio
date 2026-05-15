@@ -132,4 +132,14 @@
   background: rgba(99,102,241,0.22);
   color: #ffffff;
 }
+.statusbar__menu-item--meta {
+  margin-top: 4px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.65);
+  font-size: 11px;
+}
+.statusbar__menu-item--meta:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
   
