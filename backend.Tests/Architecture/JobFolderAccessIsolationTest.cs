@@ -69,15 +69,18 @@ public class JobFolderAccessIsolationTest
     private static readonly IReadOnlyDictionary<string, string> Whitelist =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            // Tier 1: the future single owner. Phase 1 ships only the
-            // contract; phases 2-3 land the in-memory store and the
-            // mutation API; phase 4 migrates every other consumer here.
+            // Tier 1: the single owner of every read / write against the
+            // job-folder tree. The phase 2-4 implementation lives in
+            // TaskAccessService.cs; the contract surface stays in the
+            // four sibling files below.
             ["backend/Services/TaskAccess/ITaskAccess.cs"] =
                 "TaskAccess contract surface.",
             ["backend/Services/TaskAccess/ITaskAccessHost.cs"] =
                 "TaskAccess lifecycle surface.",
             ["backend/Services/TaskAccess/TaskAccessRecords.cs"] =
                 "TaskAccess typed request/result records.",
+            ["backend/Services/TaskAccess/TaskAccessService.cs"] =
+                "TaskAccess implementation: the one place that constructs lane folder paths.",
 
             // Tier 2: current storage authority. JobStateMachine is the
             // single owner of folder moves and deletes; JobMutationService
@@ -100,6 +103,14 @@ public class JobFolderAccessIsolationTest
             // the prompt for this task.
             ["backend/Services/Runner/CrashRecoveryService.cs"] =
                 "Boot-time recovery; runs before ITaskAccess could be available.",
+
+            // Tier 2 (unrelated to job folders): npm staging cleanup
+            // under the user's AppData / Roaming / npm tree, not the
+            // job-folder tree. The strict Directory.Delete rule catches
+            // every call site; this one is operating on its own folder
+            // space (Claude CLI shim staging orphans).
+            ["backend/Services/Cli/NpmShimHealer.cs"] =
+                "npm staging-orphan cleanup under %AppData%/Roaming/npm; not a job-folder operation.",
 
             // Tier 3 migration complete. All former MIGRATION TARGET
             // entries (ProjectRunner, StaleProgressArchiver,

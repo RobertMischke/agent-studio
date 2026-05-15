@@ -600,17 +600,30 @@ public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
             }
         }
 
-        // Look up the moved record so the result carries a JobInfo when
-        // the placeholder job.json synthesized by MoveFolderToFailedPickup
-        // makes it visible to the scanner.
-        var moved = _scanner.FindJob(destinationSlug, watchPath);
-        var version = BumpVersion(destinationSlug, moved);
-        if (moved != null)
+        // Intentionally skip a post-move scanner.FindJob lookup here.
+        // Forcing a fresh ScanAllJobsRaw on every orphan move has a
+        // load-bearing side effect: ScanJobFolder runs the lazy
+        // ownerClientId migration, which calls JobJsonFile.UpdateField
+        // on every legacy job.json it touches. That mtime bump on
+        // unrelated sibling folders (e.g. another 3-progress folder
+        // still queued for the same sweep) made them look freshly
+        // active to the next MeasureFolder call and broke the
+        // boot-time sweep's idempotency. The DispatchChange below
+        // raises a typed event with a synthetic Version - subscribers
+        // that need the JobInfo can call FindJob explicitly.
+        var version = BumpVersion(destinationSlug, info: null);
+        // Resolve a project name from the watch path so subscribers
+        // wired by project still see the change. Avoid scanner.FindJob
+        // (see above); the watch-path entry list is config, not a
+        // job-folder read.
+        var projectName = _scanner.GetWatchPaths()
+            .FirstOrDefault(w => string.Equals(w.Path, watchPath, StringComparison.OrdinalIgnoreCase))?.Name ?? string.Empty;
+        if (!string.IsNullOrEmpty(projectName))
         {
-            DispatchChange(moved.ProjectName, new TaskChange
+            DispatchChange(projectName, new TaskChange
             {
                 At = DateTime.UtcNow,
-                ProjectName = moved.ProjectName,
+                ProjectName = projectName,
                 JobId = destinationSlug,
                 Kind = TaskChangeKind.Transitioned,
                 FromLane = sourceLane,
@@ -621,7 +634,7 @@ public sealed class TaskAccessService : ITaskAccess, ITaskAccessHost
         return new TaskMutationResult
         {
             Status = TaskMutationStatus.Applied,
-            Job = moved,
+            Job = null,
             Version = version,
         };
     }
