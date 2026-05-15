@@ -2,6 +2,7 @@ using OrchestratorApi.Models;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.Jobs;
 using OrchestratorApi.Services.Runner;
+using OrchestratorApi.Services.TaskAccess;
 
 namespace OrchestratorApi.Endpoints;
 
@@ -46,7 +47,8 @@ public static class ProjectSnapshotEndpoints
             TaskRunnerService runner,
             ProjectSettingsService settingsSvc,
             OrchestratorLog log,
-            OrchestratorSessionStore sessionStore) =>
+            OrchestratorSessionStore sessionStore,
+            ITaskAccess taskAccess) =>
         {
             // Resolve the watch path once. Every per-project field below
             // either filters from cached state or reads a single
@@ -84,7 +86,7 @@ public static class ProjectSnapshotEndpoints
             //    the first pays the disk walk, and a fresh sentinel still
             //    surfaces within one poll cycle. Without the cache this
             //    one scan dominated the snapshot at ~225 ms p95.
-            var reviewDecisions = ReadReviewDecisionsCached(entry.Path);
+            var reviewDecisions = ReadReviewDecisionsCached(entry.Path, projectName, taskAccess);
 
             // 6) Live runner pending decisions (during an active run, the
             //    sentinel emitted by the in-flight job).
@@ -132,7 +134,7 @@ public static class ProjectSnapshotEndpoints
                 orchestratorSession = session,
                 reviewDecisionsPending = reviewDecisions,
                 runnerPendingDecisions = liveItems,
-                queueHealth = ReadQueueHealth(entry.Path),
+                queueHealth = ReadQueueHealth(entry.Path, taskAccess),
                 _diag = new { reviewHits = ReviewCacheHits, reviewMisses = ReviewCacheMisses }
             });
         });
@@ -140,7 +142,7 @@ public static class ProjectSnapshotEndpoints
         app.MapPost("/api/projects/{projectName}/queue-health/repair", (
             string projectName,
             JobScannerService scanner,
-            JobStateMachine states) =>
+            ITaskAccess taskAccess) =>
         {
             var entry = scanner.GetWatchPaths().FirstOrDefault(e =>
                 string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
@@ -148,20 +150,32 @@ public static class ProjectSnapshotEndpoints
 
             var moved = new List<object>();
             var failed = new List<object>();
-            foreach (var folder in FindFoldersWithoutJobJson(entry.Path))
+            // ADR-0024: enumerate orphan folders through the layer
+            // (which knows the lane shape) rather than constructing the
+            // lane paths here. Each repair routes through
+            // MoveOrphanToFailedPickup so the move and the reason file
+            // land in one typed call.
+            foreach (var entryFolder in taskAccess.ListAllLaneFolders(entry.Path).Where(e => !e.HasJobJson))
             {
-                var lane = Path.GetFileName(Path.GetDirectoryName(folder)) ?? "unknown";
-                var slug = Path.GetFileName(folder);
-                var destinationSlug = BuildRepairSlug(lane, slug, entry.Path);
-                var outcome = states.MoveFolderToFailedPickup(folder, destinationSlug);
-                if (outcome.Status == MoveJobStatus.Success)
+                var destinationSlug = BuildRepairSlug(entryFolder.Lane, entryFolder.Slug, entry.Path, taskAccess);
+                var reason =
+                    "# Queue health repair\n\n" +
+                    $"Original folder: `{entryFolder.Lane}/{entryFolder.Slug}`\n\n" +
+                    "This folder did not contain `job.json`, so it could not be governed by the normal job API. " +
+                    "The queue-health repair action moved it here through the application state machine and preserved its files.\n";
+                var outcome = taskAccess.MoveOrphanToFailedPickup(
+                    entry.Path,
+                    entryFolder.Lane,
+                    entryFolder.Slug,
+                    destinationSlug,
+                    reason);
+                if (outcome.Status == TaskMutationStatus.Applied)
                 {
-                    TryWriteRepairReason(entry.Path, destinationSlug, lane, slug);
-                    moved.Add(new { id = slug, fromLane = lane, destinationSlug });
+                    moved.Add(new { id = entryFolder.Slug, fromLane = entryFolder.Lane, destinationSlug });
                 }
                 else
                 {
-                    failed.Add(new { id = slug, fromLane = lane, status = outcome.Status.ToString(), outcome.Message });
+                    failed.Add(new { id = entryFolder.Slug, fromLane = entryFolder.Lane, status = outcome.Status.ToString(), outcome.Message });
                 }
             }
 
@@ -170,105 +184,61 @@ public static class ProjectSnapshotEndpoints
                 project = projectName,
                 moved,
                 failed,
-                queueHealth = ReadQueueHealth(entry.Path)
+                queueHealth = ReadQueueHealth(entry.Path, taskAccess)
             });
         });
     }
 
-    private static IEnumerable<string> FindFoldersWithoutJobJson(string watchPath)
-    {
-        foreach (var lane in JobStates.All)
-        {
-            var laneDir = Path.Combine(watchPath, lane);
-            if (!Directory.Exists(laneDir)) continue;
-            foreach (var folder in Directory.EnumerateDirectories(laneDir))
-            {
-                if (!File.Exists(Path.Combine(folder, "job.json"))) yield return folder;
-            }
-        }
-    }
-
-    private static string BuildRepairSlug(string lane, string slug, string watchPath)
+    private static string BuildRepairSlug(string lane, string slug, string watchPath, ITaskAccess taskAccess)
     {
         var safeLane = lane.Replace(Path.DirectorySeparatorChar, '-').Replace(Path.AltDirectorySeparatorChar, '-');
         var baseSlug = $"orphan-{safeLane}-{slug}-{DateTime.UtcNow:yyyy-MM-dd}";
         var candidate = baseSlug;
         var i = 2;
-        while (Directory.Exists(Path.Combine(watchPath, JobStates.FailedPickup, candidate)))
+        while (taskAccess.SlugExistsInLane(watchPath, JobStates.FailedPickup, candidate))
         {
             candidate = $"{baseSlug}-{i++}";
         }
         return candidate;
     }
 
-    private static void TryWriteRepairReason(string watchPath, string destinationSlug, string fromLane, string sourceSlug)
+    private static object ReadQueueHealth(string watchPath, ITaskAccess taskAccess)
     {
-        try
-        {
-            var reason = Path.Combine(watchPath, JobStates.FailedPickup, destinationSlug, "failed-pickup-reason.md");
-            File.WriteAllText(reason,
-                "# Queue health repair\n\n" +
-                $"Original folder: `{fromLane}/{sourceSlug}`\n\n" +
-                "This folder did not contain `job.json`, so it could not be governed by the normal job API. " +
-                "The queue-health repair action moved it here through the application state machine and preserved its files.\n");
-        }
-        catch { /* best-effort evidence note */ }
-    }
-
-    private static object ReadQueueHealth(string watchPath)
-    {
-        var lanes = JobStates.All;
         var missingJobJson = new List<object>();
         var stateMismatches = new List<object>();
         var bySlug = new Dictionary<string, List<object>>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var lane in lanes)
+        // ADR-0024: enumerate every lane folder through ITaskAccess
+        // instead of building each lane path locally. The entry shape
+        // already carries hasJobJson and the parsed state field, so the
+        // state-mismatch detection here drops a duplicate disk read.
+        foreach (var entry in taskAccess.ListAllLaneFolders(watchPath))
         {
-            var laneDir = Path.Combine(watchPath, lane);
-            if (!Directory.Exists(laneDir)) continue;
-
-            foreach (var folder in Directory.EnumerateDirectories(laneDir))
+            var record = new
             {
-                var slug = Path.GetFileName(folder);
-                var jobJson = Path.Combine(folder, "job.json");
-                var hasJobJson = File.Exists(jobJson);
-                var entry = new
-                {
-                    id = slug,
-                    lane,
-                    hasJobJson,
-                    path = folder
-                };
+                id = entry.Slug,
+                lane = entry.Lane,
+                hasJobJson = entry.HasJobJson,
+                path = entry.FolderPath
+            };
 
-                if (!bySlug.TryGetValue(slug, out var locations))
-                {
-                    locations = new List<object>();
-                    bySlug[slug] = locations;
-                }
-                locations.Add(entry);
+            if (!bySlug.TryGetValue(entry.Slug, out var locations))
+            {
+                locations = new List<object>();
+                bySlug[entry.Slug] = locations;
+            }
+            locations.Add(record);
 
-                if (!hasJobJson)
-                {
-                    missingJobJson.Add(entry);
-                    continue;
-                }
+            if (!entry.HasJobJson)
+            {
+                missingJobJson.Add(record);
+                continue;
+            }
 
-                try
-                {
-                    using var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(jobJson));
-                    if (doc.RootElement.TryGetProperty("state", out var stateEl))
-                    {
-                        var state = stateEl.GetString();
-                        if (!string.Equals(state, lane, StringComparison.OrdinalIgnoreCase))
-                        {
-                            stateMismatches.Add(new { id = slug, lane, state, path = folder });
-                        }
-                    }
-                }
-                catch
-                {
-                    stateMismatches.Add(new { id = slug, lane, state = "(unreadable)", path = folder });
-                }
+            if (!string.IsNullOrEmpty(entry.StateInJobJson)
+                && !string.Equals(entry.StateInJobJson, entry.Lane, StringComparison.OrdinalIgnoreCase))
+            {
+                stateMismatches.Add(new { id = entry.Slug, lane = entry.Lane, state = entry.StateInJobJson, path = entry.FolderPath });
             }
         }
 
@@ -295,18 +265,22 @@ public static class ProjectSnapshotEndpoints
         };
     }
 
-    private static List<object> ReadReviewDecisionsCached(string watchPath)
+    private static List<object> ReadReviewDecisionsCached(string watchPath, string projectName, ITaskAccess taskAccess)
     {
-        var reviewDir = Path.Combine(watchPath, JobStates.AutoReview);
-        if (!Directory.Exists(reviewDir)) return new List<object>();
-
-        long laneMtime;
-        try { laneMtime = Directory.GetLastWriteTimeUtc(reviewDir).Ticks; }
-        catch { laneMtime = 0; }
+        // Cache invalidation key was "lane mtime" against
+        // Path.Combine(watchPath, AutoReview). Replaced by a slug-count
+        // + max LastActivity proxy fetched via ITaskAccess; not as
+        // precise as the directory mtime but covers add / remove and
+        // log-write events because LastActivity is the max mtime across
+        // all files in the job folder.
+        var jobs = taskAccess.ListByLaneInWorkspace(watchPath, JobStates.AutoReview);
+        var laneSignature = jobs.Count == 0
+            ? 0L
+            : jobs.Aggregate(0L, (acc, j) => Math.Max(acc, j.LastActivity.Ticks));
 
         if (ReviewCache.TryGetValue(watchPath, out var cached))
         {
-            if (cached.LaneMtimeTicks == laneMtime
+            if (cached.LaneMtimeTicks == laneSignature
                 && DateTime.UtcNow - cached.CapturedAt < ReviewCacheTtl)
             {
                 Interlocked.Increment(ref ReviewCacheHits);
@@ -316,32 +290,18 @@ public static class ProjectSnapshotEndpoints
         Interlocked.Increment(ref ReviewCacheMisses);
 
         var items = new List<object>();
-        foreach (var jobDir in Directory.GetDirectories(reviewDir))
+        foreach (var info in jobs)
         {
-            var logPath = JobPaths.CliOutputLog(jobDir);
+            var logPath = JobPaths.CliOutputLog(info.FolderPath);
             if (!File.Exists(logPath)) continue;
             string body;
             try { body = File.ReadAllText(logPath); } catch { continue; }
             var needs = ReviewDecisionParsing.FindUnresolvedNeedsInput(body);
             if (needs == null) continue;
-
-            string id = Path.GetFileName(jobDir);
-            string title = id;
-            var jobJsonPath = Path.Combine(jobDir, "job.json");
-            if (File.Exists(jobJsonPath))
-            {
-                try
-                {
-                    var doc = System.Text.Json.JsonDocument.Parse(File.ReadAllText(jobJsonPath));
-                    if (doc.RootElement.TryGetProperty("id", out var idEl)) id = idEl.GetString() ?? id;
-                    if (doc.RootElement.TryGetProperty("title", out var tEl)) title = tEl.GetString() ?? id;
-                }
-                catch { /* best-effort metadata */ }
-            }
-            items.Add(new { jobId = id, title, reason = needs.Reason });
+            items.Add(new { jobId = info.Id, title = info.Title, reason = needs.Reason });
         }
 
-        ReviewCache[watchPath] = new ReviewCacheEntry(DateTime.UtcNow, laneMtime, items);
+        ReviewCache[watchPath] = new ReviewCacheEntry(DateTime.UtcNow, laneSignature, items);
         return items;
     }
 }
