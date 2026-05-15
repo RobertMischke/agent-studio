@@ -115,8 +115,6 @@ public class JobFolderAccessIsolationTest
                 "MIGRATION TARGET: writes 1-preparation tasks for meta-cycle follow-ups; should call ITaskAccess.MutateAsync(Create) once phase 3 lands.",
             ["backend/Endpoints/ProjectSnapshotEndpoints.cs"] =
                 "MIGRATION TARGET: reads 4-auto-review lane directly for project snapshots; should call ITaskAccess.ListByLane after phase 4.",
-            ["backend/Endpoints/ReviewDecisionsEndpoints.cs"] =
-                "MIGRATION TARGET: iterates 4-auto-review for review-decision listing; should call ITaskAccess.ListByLane after phase 4.",
         };
 
     /// <summary>

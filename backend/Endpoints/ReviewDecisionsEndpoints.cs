@@ -2,6 +2,7 @@ using OrchestratorApi.Models;
 using OrchestratorApi.Services;
 using OrchestratorApi.Services.Jobs;
 using OrchestratorApi.Services.Runner;
+using OrchestratorApi.Services.TaskAccess;
 
 namespace OrchestratorApi.Endpoints;
 
@@ -17,45 +18,32 @@ public static class ReviewDecisionsEndpoints
     public static void MapReviewDecisionsEndpoints(this WebApplication app)
     {
         app.MapGet("/api/projects/{projectName}/review-decisions-pending",
-            (string projectName, JobScannerService scanner) =>
+            (string projectName, ITaskAccess taskAccess, JobScannerService scanner) =>
         {
+            // ADR-0024: enumerate the 4-auto-review lane through the
+            // typed TaskAccess layer instead of building a raw lane path.
+            // The scanner is still injected for GetWatchPaths so an
+            // "unknown project" still produces 404 (config-level error)
+            // rather than a 200 + empty list (no-pending).
             var entries = scanner.GetWatchPaths();
             var entry = entries.FirstOrDefault(e =>
                 string.Equals(e.Name, projectName, StringComparison.OrdinalIgnoreCase));
             if (entry == null) return Results.NotFound(new { error = $"Unknown project '{projectName}'" });
 
             var pending = new List<PendingDecisionDto>();
-            var reviewDir = Path.Combine(entry.Path, JobStates.AutoReview);
-            if (Directory.Exists(reviewDir))
+            foreach (var info in taskAccess.ListByLane(projectName, JobStates.AutoReview))
             {
-                foreach (var jobDir in Directory.GetDirectories(reviewDir))
-                {
-                    var logPath = JobPaths.CliOutputLog(jobDir);
-                    if (!File.Exists(logPath)) continue;
+                var logPath = JobPaths.CliOutputLog(info.FolderPath);
+                if (!File.Exists(logPath)) continue;
 
-                    string log;
-                    try { log = File.ReadAllText(logPath); }
-                    catch { continue; }
+                string log;
+                try { log = File.ReadAllText(logPath); }
+                catch { continue; }
 
-                    var needs = ReviewDecisionParsing.FindUnresolvedNeedsInput(log);
-                    if (needs == null) continue;
+                var needs = ReviewDecisionParsing.FindUnresolvedNeedsInput(log);
+                if (needs == null) continue;
 
-                    var jobJsonPath = Path.Combine(jobDir, "job.json");
-                    string id = Path.GetFileName(jobDir);
-                    string title = id;
-                    if (File.Exists(jobJsonPath))
-                    {
-                        try
-                        {
-                            var json = System.Text.Json.JsonDocument.Parse(File.ReadAllText(jobJsonPath));
-                            if (json.RootElement.TryGetProperty("id", out var idEl)) id = idEl.GetString() ?? id;
-                            if (json.RootElement.TryGetProperty("title", out var tEl)) title = tEl.GetString() ?? id;
-                        }
-                        catch { /* best-effort metadata read */ }
-                    }
-
-                    pending.Add(new PendingDecisionDto(id, title, needs.Reason));
-                }
+                pending.Add(new PendingDecisionDto(info.Id, info.Title, needs.Reason));
             }
 
             return Results.Ok(new PendingDecisionsResponse(projectName, pending));
