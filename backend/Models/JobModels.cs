@@ -692,6 +692,49 @@ public enum MoveJobStatus
 
 public record MoveJobOutcome(MoveJobStatus Status, string? Message = null);
 
+/// <summary>
+/// Per-item entry for <c>POST /api/jobs/batch-move</c>. Each item names
+/// the job, the watch path that disambiguates a slug that lives in two
+/// workspaces, the target lane, and an optional 0-based insertion slot
+/// (<see cref="MoveJobRequest.TargetIndex"/>). Items are processed
+/// independently: a failure on one item does not roll back items that
+/// already moved.
+/// </summary>
+public record BatchMoveItem
+{
+    public string JobId { get; init; } = "";
+    public string? WatchPath { get; init; }
+    public string TargetState { get; init; } = "";
+    public int? TargetIndex { get; init; }
+}
+
+public record BatchMoveRequest
+{
+    public List<BatchMoveItem> Items { get; init; } = [];
+}
+
+/// <summary>
+/// Per-item outcome string for the batch-move response:
+/// <list type="bullet">
+/// <item><description><c>moved</c>: folder transitioned to the target lane.</description></item>
+/// <item><description><c>not-found</c>: no job folder matched the (jobId, watchPath) pair.</description></item>
+/// <item><description><c>conflict</c>: a folder with the same slug already exists in the target lane (stale duplicate).</description></item>
+/// <item><description><c>rejected</c>: invalid input (unknown lane name, empty jobId, etc.).</description></item>
+/// <item><description><c>failed</c>: an unexpected IO error blocked the move.</description></item>
+/// </list>
+/// </summary>
+public record BatchMoveItemResult
+{
+    public string JobId { get; init; } = "";
+    public string Status { get; init; } = "";
+    public string? Message { get; init; }
+}
+
+public record BatchMoveResponse
+{
+    public List<BatchMoveItemResult> Results { get; init; } = [];
+}
+
 public record CreateJobRequest
 {
     public string Id { get; init; } = "";

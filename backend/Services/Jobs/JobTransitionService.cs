@@ -128,6 +128,80 @@ public sealed class JobTransitionService
         return outcome;
     }
 
+    /// <summary>
+    /// Per-item-atomic batch move. Each item independently routes through
+    /// <see cref="MoveAsync"/>, so a failure on one item never rolls back
+    /// items that already moved. The result list mirrors the input order
+    /// one-for-one with a typed per-item status (<c>moved</c> / <c>not-found</c>
+    /// / <c>conflict</c> / <c>rejected</c> / <c>failed</c>). This is the
+    /// endpoint backing <c>POST /api/jobs/batch-move</c> and exists so the
+    /// LLM never has to fall back to shell <c>mv</c> for a multi-job
+    /// restore - the 2026-05-08 incident that motivated this method.
+    /// </summary>
+    public async Task<IReadOnlyList<BatchMoveItemResult>> BatchMoveAsync(
+        IEnumerable<BatchMoveItem> items,
+        CancellationToken ct = default)
+    {
+        var results = new List<BatchMoveItemResult>();
+        foreach (var item in items)
+        {
+            if (string.IsNullOrWhiteSpace(item.JobId))
+            {
+                results.Add(new BatchMoveItemResult
+                {
+                    JobId = item.JobId ?? "",
+                    Status = "rejected",
+                    Message = "jobId is required"
+                });
+                continue;
+            }
+
+            if (!JobStates.All.Contains(item.TargetState))
+            {
+                var msg = JobStates.NumberedLegacyMap.TryGetValue(item.TargetState, out var renamed)
+                    ? $"Lane '{item.TargetState}' was renamed in ADR-0025. Use '{renamed}' instead."
+                    : $"Invalid state. Allowed: {string.Join(", ", JobStates.All)}";
+                results.Add(new BatchMoveItemResult
+                {
+                    JobId = item.JobId,
+                    Status = "rejected",
+                    Message = msg
+                });
+                continue;
+            }
+
+            MoveJobOutcome outcome;
+            try
+            {
+                outcome = await MoveAsync(item.JobId, item.TargetState, item.WatchPath, ct, item.TargetIndex);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Batch move item failed for {JobId} -> {Target}", item.JobId, item.TargetState);
+                results.Add(new BatchMoveItemResult
+                {
+                    JobId = item.JobId,
+                    Status = "failed",
+                    Message = ex.Message
+                });
+                continue;
+            }
+
+            results.Add(outcome.Status switch
+            {
+                MoveJobStatus.Success =>
+                    new BatchMoveItemResult { JobId = item.JobId, Status = "moved" },
+                MoveJobStatus.NotFound =>
+                    new BatchMoveItemResult { JobId = item.JobId, Status = "not-found" },
+                MoveJobStatus.TargetFolderExists =>
+                    new BatchMoveItemResult { JobId = item.JobId, Status = "conflict", Message = outcome.Message },
+                _ =>
+                    new BatchMoveItemResult { JobId = item.JobId, Status = "failed", Message = outcome.Message }
+            });
+        }
+        return results;
+    }
+
     private async Task<JobCommitInfo?> TryAutoCommitAsync(string jobId, string? watchPath, CancellationToken ct)
     {
         try

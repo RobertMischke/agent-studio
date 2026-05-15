@@ -239,6 +239,7 @@ First worked example: the `3a-failed-pickup` dead-letter (ADR-0028) gets a diagn
 | GET | `/api/jobs/grouped` | Jobs grouped by state. |
 | GET | `/api/jobs/{jobId}?watchPath=...` | One `JobDetail` (info + prompt + status + log). |
 | POST | `/api/jobs` | Create job (`CreateJobRequest`). |
+| POST | `/api/jobs/batch-move` | Move many jobs in one call (per-item atomic; `BatchMoveRequest`). |
 | POST | `/api/jobs/{jobId}/start?watchPath=...` | Start CLI execution. |
 | POST | `/api/jobs/{jobId}/stop?watchPath=...` | Cancel running execution. |
 | POST | `/api/jobs/{jobId}/continue?watchPath=...` | Resume with new prompt (same session). |
@@ -349,6 +350,7 @@ Use:
 - `GET /api/watch-paths` to find the effective `watchPath`.
 - `POST /api/jobs` with `CreateJobRequest` to create jobs.
 - `POST /api/jobs/{jobId}/move?watchPath=...` to move jobs.
+- `POST /api/jobs/batch-move` to move many jobs in one call (per-item atomic; failed items report `conflict` / `not-found` / `rejected` without rolling back items that already moved). This is the supported path for bulk restore / triage; do not fall back to shell loops over the single-item endpoint.
 - `POST /api/jobs/reorder` to reorder jobs.
 - `POST /api/jobs/{jobId}/move-to-top?watchPath=...` to promote a queued job.
 - `POST /api/jobs/{jobId}/change-project?watchPath=...` to relocate a job between watched workspaces.
@@ -357,7 +359,7 @@ Use:
 
 **Forbidden, even as a one-shot convenience:** `mv`, `rm`, `cp`, `mkdir`, `Move-Item`, `Remove-Item`, `Rename-Item`, or any other shell / filesystem command against a slug folder under `agent-taskboard-workspace/projects/<projectKey>/<lane>/`. Editing `state` inside a `job.json` by hand to "fix" a lane mismatch is the same bypass and is also forbidden. Filesystem state and the in-memory index diverge silently when these run, which is exactly what produced the 2026-05-09 zombie folder + 409 conflict. The architecture test [`backend.Tests/Architecture/JobFolderAccessIsolationTest.cs`](backend.Tests/Architecture/JobFolderAccessIsolationTest.cs) catches code-side bypasses; the LLM behavioural side is this rule.
 
-If you need an operation the API does not expose (currently: batch restore / batch move; archived-folder content reads after archive sweep), surface the gap as a queued task rather than reaching past the API. Bulk operations are explicitly an open follow-up - see the API completeness audit at the top of [`task-access-api-layer-extraction`](docs/architecture-decisions.md) (ADR-0024) and queue a new task if you hit a missing surface.
+If you need an operation the API does not expose, surface the gap as a queued task rather than reaching past the API. The previous gap "batch move / batch restore" is now covered by `POST /api/jobs/batch-move`; if you hit another missing surface, queue a new task rather than improvising a filesystem shortcut. See the API completeness audit at the top of [`task-access-api-layer-extraction`](docs/architecture-decisions.md) (ADR-0024).
 
 Direct filesystem changes by application code itself are bounded by the same architecture test: only `backend/Services/Jobs/*`, `backend/Services/JobWatcherService.cs`, `backend/Services/Runner/CrashRecoveryService.cs`, and the `backend/Services/TaskAccess/` layer (today only the contract; phases 2-4 land the implementation) may construct lane folder paths or call `Directory.Move` / `Directory.Delete`. Everything else - endpoints, hosted services, analysis services - goes through the typed API. Backend migrations, recovery code paths, and tests that intentionally exercise the filesystem contract live behind that boundary; new direct-access call sites trip the architecture test on the way in.
 

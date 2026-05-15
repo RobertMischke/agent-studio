@@ -96,6 +96,23 @@ public static class JobCrudEndpoints
             return MoveResult(await transitions.MoveAsync(jobId, req.TargetState, watchPath, ct, req.TargetIndex));
         });
 
+        // Batch move / restore. Per-item atomic: a failure on item N must
+        // not roll back items already applied; each item is independently
+        // routed through JobTransitionService.MoveAsync, which is the same
+        // path the single-item endpoint above uses. The whole batch returns
+        // 200 OK with a per-item status array so the caller can retry just
+        // the failures. See AGENTS.md "Job organization rule: API first".
+        group.MapPost("/batch-move", async (BatchMoveRequest req,
+            JobTransitionService transitions,
+            CancellationToken ct) =>
+        {
+            if (req?.Items is null || req.Items.Count == 0)
+                return Results.BadRequest(new { error = "items is required and must contain at least one entry" });
+
+            var results = await transitions.BatchMoveAsync(req.Items, ct);
+            return Results.Ok(new BatchMoveResponse { Results = results.ToList() });
+        });
+
         group.MapDelete("/{jobId}", (string jobId, string? watchPath, JobStateMachine states) =>
         {
             var success = states.DeleteJob(jobId, watchPath);
