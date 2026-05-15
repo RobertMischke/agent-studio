@@ -144,6 +144,68 @@ public class ReviewDecisionOrchestratorTests : IDisposable
     }
 
     [Fact]
+    public async Task AcceptAsDone_OperatorBannerLine_FiresOnlyAfterLaneMoveSucceeds()
+    {
+        // Regression for 2026-05-15: the operator saw "Orchestrator decided
+        // accept" while the task was still in 3-progress (or 4-auto-review).
+        // The orchestrator chat-log line that drives the workspace banner
+        // (and the activity-log decision row) MUST land in the post-move
+        // folder, never in 4-auto-review. We assert that here by spying on
+        // the chat log and recording the JobInfo.FolderPath at write time.
+        SeedReviewJobWithNeedsInput("banner-timing", "anything?");
+        var spy = new RecordingChatLog();
+        var orchestrator = BuildOrchestrator(
+            cliResponse: "[[ORCHESTRATOR_DECISION: action=accept-as-done; reason=Work matches contract.]]",
+            chatLogOverride: spy);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        var decisionWrites = spy.Calls
+            .Where(c => c.Kind == OrchestratorMessageKind.Decision)
+            .ToList();
+        Assert.NotEmpty(decisionWrites);
+        foreach (var call in decisionWrites)
+        {
+            Assert.Contains(JobStates.HumanReview, call.FolderPath);
+            Assert.DoesNotContain(JobStates.AutoReview, call.FolderPath);
+        }
+    }
+
+    [Fact]
+    public async Task AcceptAsDone_LaneMoveFails_NoBannerLineWritten_NoJournalRecord()
+    {
+        // The complementary half: if the lane move fails (we simulate by
+        // pre-populating the destination slug so the move returns Conflict),
+        // no operator-facing decision line goes out and no journal entry
+        // records the accept. The banner must not claim "moved to human
+        // review" when the folder is still in 4-auto-review.
+        SeedReviewJobWithNeedsInput("blocked-move", "anything?");
+        // Pre-create the destination so MoveJob returns Conflict.
+        Directory.CreateDirectory(Path.Combine(_watchPath, JobStates.HumanReview, "blocked-move"));
+        File.WriteAllText(
+            Path.Combine(_watchPath, JobStates.HumanReview, "blocked-move", "job.json"),
+            $"{{\"id\":\"blocked-move\",\"title\":\"x\",\"state\":\"{JobStates.HumanReview}\",\"order\":1,\"agent\":\"claude\"}}");
+
+        var spy = new RecordingChatLog();
+        var orchestrator = BuildOrchestrator(
+            cliResponse: "[[ORCHESTRATOR_DECISION: action=accept-as-done; reason=Work matches contract.]]",
+            chatLogOverride: spy);
+
+        await orchestrator.TickOnceAsync(_workspace, CancellationToken.None);
+
+        // Source folder must still be in 4-auto-review (move was blocked).
+        Assert.True(Directory.Exists(Path.Combine(_watchPath, JobStates.AutoReview, "blocked-move")));
+
+        // No banner-worthy chat-log line went out.
+        Assert.DoesNotContain(spy.Calls, c => c.Kind == OrchestratorMessageKind.Decision);
+
+        // No accept recorded in the decision journal -> the next tick will
+        // retry the move instead of leaving the operator with a misleading
+        // "accepted" notification.
+        Assert.False(File.Exists(ReviewDecisionLog.DecisionsFile(_workspace, Project)));
+    }
+
+    [Fact]
     public async Task AcceptAsDone_PromotesToHumanReview_NotDirectlyToCompleted_AndJournalsRecord()
     {
         SeedReviewJobWithNeedsInput("doc-edit", "should I add screenshots?");
@@ -161,7 +223,11 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         var log = ReadCliLog(JobStates.HumanReview, "doc-edit");
         Assert.Contains("[orchestrator]", log);
         Assert.Contains("[decision]", log);
-        Assert.Contains("accept-as-done", log);
+        // Operator-friendly copy includes the task title and the destination
+        // lane in human terms (the slug-only form was the source of the
+        // "container-displayin Agent" rendering bug).
+        Assert.Contains("Auto-review accepted", log);
+        Assert.Contains("doc-edit title", log);
         Assert.Contains("5-human-review", log);
 
         var record = ReadOnlyDecisionRecord();
@@ -909,7 +975,10 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         return records[0];
     }
 
-    private ReviewDecisionOrchestrator BuildOrchestrator(string cliResponse, Action? onCall = null)
+    private ReviewDecisionOrchestrator BuildOrchestrator(
+        string cliResponse,
+        Action? onCall = null,
+        OrchestratorChatLog? chatLogOverride = null)
     {
         var config = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -925,7 +994,7 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         var summary = new SummaryGenerationService(NullLogger<SummaryGenerationService>.Instance, config);
         var scanner = new JobScannerService(config, NullLogger<JobScannerService>.Instance, summary);
         var stateMachine = new JobStateMachine(scanner, NullLogger<JobStateMachine>.Instance);
-        var chatLog = new OrchestratorChatLog(NullLogger<OrchestratorChatLog>.Instance);
+        var chatLog = chatLogOverride ?? new OrchestratorChatLog(NullLogger<OrchestratorChatLog>.Instance);
         var prompts = new RuntimePromptService(config, NullLogger<RuntimePromptService>.Instance);
         var aspectRunner = new AspectRunnerService(prompts, NullLogger<AspectRunnerService>.Instance);
         var statusSnapshot = new AutoReviewStatusSnapshot();
@@ -940,4 +1009,26 @@ public class ReviewDecisionOrchestratorTests : IDisposable
         };
         return orchestrator;
     }
+}
+
+/// <summary>
+/// Test double that records every <see cref="OrchestratorChatLog.Append"/>
+/// call and the <see cref="JobInfo.FolderPath"/> at write time. Used to
+/// assert the firing-order rule: operator-facing decision notifications
+/// must only fire after the lane move has succeeded, never while the job
+/// is still in the source lane.
+/// </summary>
+internal sealed class RecordingChatLog : OrchestratorChatLog
+{
+    public RecordingChatLog() : base(NullLogger<OrchestratorChatLog>.Instance) { }
+
+    public List<RecordedCall> Calls { get; } = new();
+
+    public override bool Append(JobInfo info, OrchestratorMessageKind kind, string text, ICollection<CliOutputLine>? liveBuffer = null)
+    {
+        Calls.Add(new RecordedCall(kind, info?.FolderPath ?? string.Empty, text));
+        return base.Append(info!, kind, text, liveBuffer);
+    }
+
+    internal record RecordedCall(OrchestratorMessageKind Kind, string FolderPath, string Text);
 }

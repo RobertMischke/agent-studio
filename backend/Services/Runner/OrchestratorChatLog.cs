@@ -44,7 +44,7 @@ public class OrchestratorChatLog
     /// (e.g. <c>[reissue]</c>) so future parsers can pick out structured
     /// classes without re-deriving them from the prose.
     /// </summary>
-    public bool Append(JobInfo info, OrchestratorMessageKind kind, string text, ICollection<CliOutputLine>? liveBuffer = null)
+    public virtual bool Append(JobInfo info, OrchestratorMessageKind kind, string text, ICollection<CliOutputLine>? liveBuffer = null)
     {
         var ok = AppendWithStream(info, "orchestrator", $"[{kind.ToTag()}] {text}", liveBuffer);
         if (ok)
@@ -131,6 +131,14 @@ public enum OrchestratorMessageKind
     PermissionBlocked,
     /// <summary>The watchdog killed the run after a silence timeout.</summary>
     WatchdogTimeout,
+    /// <summary>
+    /// The watchdog noticed a silence gap but has not killed the run yet
+    /// (Quiet or Suspicious states). Operator-facing copy is informational
+    /// ("no action needed unless this repeats"); the topic is distinct from
+    /// <see cref="Decision"/> so the workspace banner does not misread a
+    /// silence advisory as a review verdict.
+    /// </summary>
+    WatchdogWarning,
     /// <summary>The agent did not emit the required terminal sentinel after one prompt repair.</summary>
     MissingTerminalSentinel,
     /// <summary>The agent reported done without a structured sentinel; kept as visible legacy heuristic.</summary>
@@ -161,6 +169,7 @@ internal static class OrchestratorMessageKindExtensions
         OrchestratorMessageKind.SoftIntervention  => "intervention",
         OrchestratorMessageKind.PermissionBlocked => "permission-blocked",
         OrchestratorMessageKind.WatchdogTimeout   => "watchdog-timeout",
+        OrchestratorMessageKind.WatchdogWarning   => "watchdog",
         OrchestratorMessageKind.MissingTerminalSentinel => "missing-terminal-sentinel",
         OrchestratorMessageKind.HeuristicDone     => "heuristic-done",
         OrchestratorMessageKind.ClassifierUnknown => "classifier-unknown",
@@ -176,6 +185,7 @@ internal static class OrchestratorMessageKindExtensions
         OrchestratorMessageKind.SoftIntervention  => "soft-intervention",
         OrchestratorMessageKind.PermissionBlocked => "permission-blocked",
         OrchestratorMessageKind.WatchdogTimeout   => "watchdog-timeout",
+        OrchestratorMessageKind.WatchdogWarning   => "watchdog-warning",
         OrchestratorMessageKind.MissingTerminalSentinel => "missing-terminal-sentinel",
         OrchestratorMessageKind.HeuristicDone     => "heuristic-done",
         OrchestratorMessageKind.ClassifierUnknown => "classifier-unknown",

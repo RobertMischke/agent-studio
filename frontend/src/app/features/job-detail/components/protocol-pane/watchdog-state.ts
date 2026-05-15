@@ -17,10 +17,30 @@ export interface WatchdogPill {
   visible: boolean;
 }
 
-const KILL_PATTERNS = [/Killed after \d+/i, /\[watchdog\] Killed/i];
-const SUSPICIOUS_PATTERNS = [/Still silent at \d+/i, /Will kill at \d+/i];
-const QUIET_PATTERNS = [/Agent has been quiet \d+/i, /\bQuiet \d+s\b/i];
-const RESUMED_PATTERNS = [/resumed streaming/i, /Back to healthy/i];
+// Patterns recognise both the legacy `[watchdog]`-prefixed wording and
+// the operator-friendly form ("auto-cancelled", "no output for Ns",
+// "streaming output again") so old log lines on disk still classify
+// correctly.
+const KILL_PATTERNS = [
+  /Killed after \d+/i,
+  /\[watchdog\] Killed/i,
+  /auto-cancelled after \d+s? of silence/i,
+];
+const SUSPICIOUS_PATTERNS = [
+  /Still silent at \d+/i,
+  /Will kill at \d+/i,
+  /Run will be auto-cancelled at \d+/i,
+];
+const QUIET_PATTERNS = [
+  /Agent has been quiet \d+/i,
+  /\bQuiet \d+s\b/i,
+  /no output for \d+s? yet/i,
+];
+const RESUMED_PATTERNS = [
+  /resumed streaming/i,
+  /Back to healthy/i,
+  /streaming output again/i,
+];
 
 /**
  * Compute the watchdog pill state from the polled cli-output frames and
@@ -71,8 +91,10 @@ export function deriveWatchdogPill(input: {
     }
 
     // Watchdog meta line is on the orchestrator stream; we identify by
-    // the [watchdog] tag in the text body.
-    if (stream === 'orchestrator' && /\[watchdog\]/i.test(text)) {
+    // any [watchdog*] tag in the text body so both the legacy `[watchdog]`
+    // form and the new `[watchdog-warning]` / `[watchdog-timeout]` tags
+    // classify the same way.
+    if (stream === 'orchestrator' && /\[watchdog[^\]]*\]/i.test(text)) {
       latestWatchdogText = text;
       continue;
     }

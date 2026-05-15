@@ -38,6 +38,24 @@ interface DisplayDecision {
 const POLL_INTERVAL_MS = 5000;
 const MIN_DISPLAY_MS = 30000;
 
+/**
+ * Topics that are legitimate auto-review verdicts and belong on the
+ * banner. Bus messages with `kind=decision&tag=orchestrator-chat` also
+ * carry watchdog state notes (silence warnings) that share the
+ * orchestrator stream but are not a review verdict; gating by this list
+ * keeps "Still silent at 61s" from rendering as "Orchestrator decided
+ * accept". See `OrchestratorMessageKind.ToBusTopic()` for the source of
+ * truth.
+ */
+const BANNER_TOPICS: ReadonlySet<string> = new Set([
+  'decision',
+  'reissue',
+  'escalate',
+  'giveup',
+  'accept',
+  'accept-as-done',
+]);
+
 @Component({
   selector: 'app-workspace-banner',
   standalone: true,
@@ -96,15 +114,27 @@ export class WorkspaceBannerComponent implements OnInit, OnDestroy {
     }
   }
 
-  /** Topic-to-verb mapping for the banner copy ("Orchestrator decided X for Y"). */
-  verbFor(topic: string): string {
-    switch (topic) {
-      case 'reissue':   return 'reissue';
-      case 'escalate':  return 'escalate';
-      case 'decision':  return 'accept';
-      case 'giveup':    return 'give up';
-      case 'heuristic': return 'use heuristic';
-      default:          return topic;
+  /**
+   * Operator-facing headline for the banner. The backend now writes a
+   * single coherent sentence into the chat-log body (e.g.
+   * `Auto-review accepted "Title" as done. Moved to 5-human-review for
+   * your approval. Reason: ...`); the banner renders that summary
+   * verbatim instead of stitching verb + slug. Falls back to a short
+   * topic-based phrase when the message did not carry a summary (older
+   * messages, malformed bus records). Includes the task title or slug
+   * so the headline always names what the verdict applies to.
+   */
+  headlineFor(msg: DisplayDecision): string {
+    if (msg.summary && msg.summary.trim().length > 0) return msg.summary;
+    const target = msg.jobId || '(unknown task)';
+    switch (msg.topic) {
+      case 'reissue':        return `Auto-review sent "${target}" back to ready for another attempt.`;
+      case 'escalate':       return `Auto-review escalated "${target}" for human attention.`;
+      case 'decision':
+      case 'accept':
+      case 'accept-as-done': return `Auto-review accepted "${target}" as done. Waiting for your approval in human review.`;
+      case 'giveup':         return `Auto-review gave up on "${target}".`;
+      default:               return `Auto-review verdict for "${target}".`;
     }
   }
 
@@ -121,11 +151,16 @@ export class WorkspaceBannerComponent implements OnInit, OnDestroy {
             const created = Date.parse(m.createdAt);
             if (isNaN(created)) continue;
             if (Date.now() - created > MIN_DISPLAY_MS) continue;
+            const topic = (m.topic ?? '').toLowerCase() || 'decision';
+            // Skip watchdog state notes (silence warnings) that share the
+            // orchestrator-chat stream. Only auto-review verdicts belong
+            // on the workspace banner.
+            if (!BANNER_TOPICS.has(topic)) continue;
             if (!bestSoFar || created > bestSoFar.createdAt) {
               bestSoFar = {
                 id: m.id,
                 createdAt: created,
-                topic: (m.topic ?? '').toLowerCase() || 'decision',
+                topic,
                 jobId: m.jobId ?? '(unknown job)',
                 project: m.project ?? project,
                 summary: m.summary ?? ''

@@ -137,11 +137,8 @@ const SUBSECTION_MOCKUP_HTML = `<!doctype html>
 
     <div class="banner banner--reissue" role="status" data-testid="workspace-banner">
       <span class="banner__icon" aria-hidden="true">↺</span>
-      <span class="banner__text">
-        Orchestrator decided <strong>reissue</strong>
-        for <strong>bug-der-commit-haengt-am-end-to-end-test</strong>
-        <span class="banner__project">in agent-taskboard</span>
-      </span>
+      <span class="banner__text" data-testid="workspace-banner-text">Auto-review sent "Bug: commit hangs at end-to-end test" back to 2-ready for another attempt. Reason: roadmap names option A.</span>
+      <span class="banner__project" data-testid="workspace-banner-project">in agent-taskboard</span>
       <button type="button" class="banner__close" aria-label="Dismiss"
               data-testid="workspace-banner-close">&times;</button>
     </div>
@@ -197,9 +194,12 @@ plainTest('renders the 4-review swim-lane subdivision and orchestrator banner', 
 
   const banner = page.getByTestId('workspace-banner');
   await expect(banner).toBeVisible();
-  await expect(banner).toContainText('Orchestrator decided');
-  await expect(banner).toContainText('reissue');
-  await expect(banner).toContainText('bug-der-commit-haengt-am-end-to-end-test');
+  // Operator-friendly copy: one coherent sentence with the task title
+  // and destination lane (no "Orchestrator decided X for slug" stitching).
+  await expect(banner).toContainText('Auto-review sent');
+  await expect(banner).toContainText('back to 2-ready');
+  await expect(banner).toContainText('Bug: commit hangs at end-to-end test');
+  await expect(banner).toContainText('in agent-taskboard');
 
   const orchSection = page.getByTestId('review-subsection-orchestrator');
   const humanSection = page.getByTestId('review-subsection-human');

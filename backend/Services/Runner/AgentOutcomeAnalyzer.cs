@@ -338,9 +338,16 @@ public static class AgentOutcomeAnalyzer
                || text.Contains("could not request permission from user", StringComparison.OrdinalIgnoreCase));
 
     private static bool IsWatchdogTimeout(string text)
-        => !string.IsNullOrWhiteSpace(text)
-           && text.Contains("[watchdog]", StringComparison.OrdinalIgnoreCase)
-           && text.Contains("Killed after", StringComparison.OrdinalIgnoreCase);
+    {
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        // Operator-friendly form: `[watchdog-timeout] "..." (cli): auto-cancelled after Ns of silence.`
+        if (text.Contains("[watchdog-timeout]", StringComparison.OrdinalIgnoreCase)) return true;
+        // Legacy `[watchdog] Killed after Ns of silence.` shape still matches
+        // on archived logs so historical jobs classify the same way.
+        return text.Contains("[watchdog]", StringComparison.OrdinalIgnoreCase)
+            && (text.Contains("Killed after", StringComparison.OrdinalIgnoreCase)
+                || text.Contains("auto-cancelled after", StringComparison.OrdinalIgnoreCase));
+    }
 
     /// <summary>
     /// Joins the parts of the buffer that look like agent (assistant) text.

@@ -623,24 +623,6 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
 
         var report = await _aspectRunner.RunAsync(inputs, aspects, cliBinary, aspectModel, perAspectTimeout, ct);
 
-        // Append a single chat-log line that names the aggregate verdict.
-        // This also resolves the [[TASK_DONE]] sentinel for FindUnresolvedDone
-        // so the next tick does not re-pick the same job and re-bill aspects.
-        var verdictNote = report.Overall switch
-        {
-            AspectStatus.Block =>
-                $"Decision: reissue (multi-aspect block). Aspects: {AspectSummaryLine(report)}",
-            AspectStatus.Concerns =>
-                $"Decision: accept-as-done with concerns. Aspects: {AspectSummaryLine(report)}. Tags: {string.Join(", ", report.ConcernTagIds)}",
-            _ =>
-                $"Decision: accept-as-done. Aspects: {AspectSummaryLine(report)}"
-        };
-
-        var chatKind = report.Overall == AspectStatus.Block
-            ? OrchestratorMessageKind.Reissue
-            : OrchestratorMessageKind.Decision;
-        _chatLog.Append(current, chatKind, verdictNote);
-
         if (report.Overall == AspectStatus.Block)
         {
             await ReissueOnBlockAsync(workspace, entry, pending, current, report, ct);
@@ -657,9 +639,14 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var move = _stateMachine.MoveJob(current.Id, JobStates.HumanReview, entry.Path);
         if (move.Status != MoveJobStatus.Success)
         {
+            // Move failed -> do NOT fire the operator-facing "accepted as
+            // done" banner: it would claim the task moved while the folder
+            // is still in 4-auto-review. The aspect work is sunk; the next
+            // tick will re-attempt the move.
             _logger.LogWarning(
                 "ReviewDecisionOrchestrator: failed to move {JobId} to human-review after multi-aspect accept: {Status} {Message}",
                 current.Id, move.Status, move.Message);
+            return;
         }
 
         // Re-merge tags after the lane move so the tags array on disk
@@ -667,14 +654,22 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // folder atomically, so the tags written before the move travel
         // with it; this re-merge is a defensive idempotent reapplication
         // when the new folder lookup succeeds.
-        if (report.ConcernTagIds.Count > 0)
+        var movedInfo = _scanner.FindJob(current.Id, entry.Path) ?? current;
+        if (report.ConcernTagIds.Count > 0 &&
+            !string.Equals(movedInfo.FolderPath, current.FolderPath, StringComparison.OrdinalIgnoreCase))
         {
-            var moved = _scanner.FindJob(current.Id, entry.Path);
-            if (moved != null && !string.Equals(moved.FolderPath, current.FolderPath, StringComparison.OrdinalIgnoreCase))
-            {
-                ConcernTagWriter.MergeConcernTags(moved.FolderPath, report.ConcernTagIds, _logger);
-            }
+            ConcernTagWriter.MergeConcernTags(movedInfo.FolderPath, report.ConcernTagIds, _logger);
         }
+
+        // Append the operator-facing chat-log line ONLY after the lane move
+        // has succeeded, so the banner cannot fire while the task is still
+        // in 4-auto-review.
+        var aspectsSuffix = AspectSummaryLine(report);
+        var titleAccept = string.IsNullOrWhiteSpace(movedInfo.Title) ? movedInfo.Id : movedInfo.Title;
+        var verdictNote = report.Overall == AspectStatus.Concerns
+            ? $"Auto-review accepted \"{titleAccept}\" as done with concerns. Moved to 5-human-review for your approval. Aspects: {aspectsSuffix}. Tags: {string.Join(", ", report.ConcernTagIds)}"
+            : $"Auto-review accepted \"{titleAccept}\" as done. Moved to 5-human-review for your approval. Aspects: {aspectsSuffix}";
+        _chatLog.Append(movedInfo, OrchestratorMessageKind.Decision, verdictNote);
 
         if (report.Overall == AspectStatus.Concerns)
         {
@@ -712,10 +707,17 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             report.FollowUpSummary;
 
         var moved = MoveReissueToReadyTop(current, entry, "multi-aspect block");
-        if (moved != null)
+        if (moved == null)
         {
-            await WriteFollowUpFileAsync(moved, followUp, ct);
+            // Move failed -> no operator-facing "sent back to ready" banner.
+            // The aspect work is sunk; the next tick will retry.
+            return;
         }
+        await WriteFollowUpFileAsync(moved, followUp, ct);
+
+        var titleReissue = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
+        _chatLog.Append(moved, OrchestratorMessageKind.Reissue,
+            $"Auto-review sent \"{titleReissue}\" back to 2-ready for another attempt. Reason: multi-aspect block ({AspectSummaryLine(report)})");
 
         _statusSnapshot.RecordReissue();
 
@@ -1037,20 +1039,19 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         var followUp = BuildReissueFollowUp(verdict);
         var current = _scanner.FindJob(pending.Job.Id, entry.Path) ?? pending.Job;
 
-        // Append-only chat-log note BEFORE the lane move, so the resolved-marker
-        // (the [orchestrator] line) is in place even if the move races with
-        // another tick.
-        _chatLog.Append(current, OrchestratorMessageKind.Reissue,
-            $"Decision: reissue. Reason: {verdict.Reason}. Follow-up: {followUp}");
-
-        // Persist the orchestrator's answer next to the prompt so the next
-        // run picks it up. A small follow-up file is enough; the runner
-        // already knows how to compose continue-prompts from the chat log.
+        // Move first so the operator-visible "sent back to ready" notification
+        // only fires once the folder has actually left 4-auto-review. A failed
+        // move must not produce a banner that claims the task moved.
         var moved = MoveReissueToReadyTop(current, entry, "NEEDS_INPUT");
-        if (moved != null)
+        if (moved == null)
         {
-            await WriteFollowUpFileAsync(moved, followUp, ct);
+            return;
         }
+        await WriteFollowUpFileAsync(moved, followUp, ct);
+
+        var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
+        _chatLog.Append(moved, OrchestratorMessageKind.Reissue,
+            $"Auto-review sent \"{title}\" back to 2-ready for another attempt. Reason: {verdict.Reason}. Follow-up: {followUp}");
 
         ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
             CreatedAt: DateTime.UtcNow,
@@ -1079,16 +1080,19 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // sees one concise reason for the handover. The intake under
         // 1-preparation is kept for now as an extra surface, but the
         // primary signal is the lane move itself.
-        _chatLog.AppendSupervisor(current, "escalate",
-            $"Orchestrator could not decide unattended. Reason: {verdict.Reason}. Promoted to 5-human-review for human attention.");
-
         var move = _stateMachine.MoveJob(current.Id, JobStates.HumanReview, entry.Path);
         if (move.Status != MoveJobStatus.Success)
         {
             _logger.LogWarning(
                 "ReviewDecisionOrchestrator: failed to move {JobId} to human-review after escalate: {Status} {Message}",
                 current.Id, move.Status, move.Message);
+            return;
         }
+
+        var moved = _scanner.FindJob(current.Id, entry.Path) ?? current;
+        var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
+        _chatLog.AppendSupervisor(moved, "escalate",
+            $"Auto-review escalated \"{title}\" to 5-human-review for human attention. Reason: {verdict.Reason}.");
 
         await CreateHumanDecisionIntakeAsync(entry, pending, verdict, ct);
 
@@ -1117,16 +1121,24 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // to 6-completed. The user always gets the final say on whether a
         // task is done; the orchestrator's accept signal is "the agent's
         // answer looks complete to me, please confirm."
-        _chatLog.Append(current, OrchestratorMessageKind.Decision,
-            $"Decision: accept-as-done. Reason: {verdict.Reason}. Promoting to 5-human-review for confirmation.");
-
         var move = _stateMachine.MoveJob(current.Id, JobStates.HumanReview, entry.Path);
         if (move.Status != MoveJobStatus.Success)
         {
+            // Move failed -> do NOT write the operator-facing "accepted as
+            // done" line: the banner would then claim the task moved while
+            // it is still sitting in 4-auto-review.
             _logger.LogWarning(
                 "ReviewDecisionOrchestrator: failed to move {JobId} to human-review after accept: {Status} {Message}",
                 current.Id, move.Status, move.Message);
+            return;
         }
+
+        // Re-resolve so the chat-log line lands in the post-move folder and
+        // the bus message carries the destination lane truthfully.
+        var moved = _scanner.FindJob(current.Id, entry.Path) ?? current;
+        var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
+        _chatLog.Append(moved, OrchestratorMessageKind.Decision,
+            $"Auto-review accepted \"{title}\" as done. Moved to 5-human-review for your approval. Reason: {verdict.Reason}");
 
         ReviewDecisionLog.Append(workspace, new ReviewDecisionRecord(
             CreatedAt: DateTime.UtcNow,

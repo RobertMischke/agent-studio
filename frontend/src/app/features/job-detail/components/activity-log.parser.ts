@@ -302,16 +302,17 @@ function isTaskboardRuntimeMarker(group: ActivityLogGroup): boolean {
 }
 
 /**
- * Watchdog meta lines arrive as orchestrator messages tagged `[watchdog]`.
- * They drive the watchdog chip in the protocol-pane header; surfacing them
- * in the Conversation view as well would double-up the user feedback.
- * Filtered out here, kept in Trace.
+ * Watchdog meta lines arrive as orchestrator messages tagged
+ * `[watchdog]` (legacy) or `[watchdog-warning]` / `[watchdog-timeout]`
+ * (operator-friendly form). They drive the watchdog chip in the
+ * protocol-pane header; surfacing them in the Conversation view as well
+ * would double-up the user feedback. Filtered out here, kept in Trace.
  */
 function isWatchdogMetaLine(group: ActivityLogGroup): boolean {
   if (group.lines.length === 0) return false;
   const first = group.lines[0];
   if (first.stream !== 'orchestrator') return false;
-  return /\[watchdog\]/i.test(first.text ?? '');
+  return /\[watchdog[^\]]*\]/i.test(first.text ?? '');
 }
 
 /**

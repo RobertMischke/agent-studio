@@ -212,7 +212,7 @@ function projectGroup(
     // the chat row uses the correct family. The parser already filters them
     // out of conversation mode but the projection is the single source of
     // truth here, so it must classify on its own.
-    if (/\[watchdog\]/i.test(firstLine.text)) {
+    if (/\[watchdog[^\]]*\]/i.test(firstLine.text)) {
       const wait = parseWatchdogText(firstLine.text);
       if (wait) {
         return [
@@ -607,15 +607,15 @@ interface WatchdogParse {
 }
 
 function parseWatchdogText(text: string): WatchdogParse | null {
-  if (!/\[watchdog\]/i.test(text)) return null;
-  if (/killed after/i.test(text)) {
+  if (!/\[watchdog[^\]]*\]/i.test(text)) return null;
+  if (/killed after|auto-cancelled after/i.test(text)) {
     const sec = /([0-9]+(?:\.[0-9]+)?)\s*(?:s|sec|seconds)/i.exec(text);
     return { state: 'killed', quietSeconds: sec ? Number(sec[1]) : 0, reason: text.trim() };
   }
-  if (/resumed/i.test(text)) {
+  if (/resumed|streaming output again/i.test(text)) {
     return { state: 'resumed', quietSeconds: 0, reason: text.trim() };
   }
-  if (/quiet|silent/i.test(text)) {
+  if (/quiet|silent|no output for/i.test(text)) {
     const sec = /([0-9]+(?:\.[0-9]+)?)\s*(?:s|sec|seconds)/i.exec(text);
     return { state: 'quiet', quietSeconds: sec ? Number(sec[1]) : 0, reason: text.trim() };
   }

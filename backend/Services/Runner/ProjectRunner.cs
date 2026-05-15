@@ -593,28 +593,33 @@ public class ProjectRunner
         var info = _scanner.FindJob(jobId, Entry.Path);
         if (info == null) return;
 
+        var hungAtSeconds = phase is null
+            ? _watchdogConfig.HungSeconds
+            : PhaseBudget.For(phase.Value).HungSeconds;
         var phaseTag = phase is null ? "" : $" [{PhaseAwareWatchdog.FormatBudgetReason(phase.Value, silence)}]";
+        var title = string.IsNullOrWhiteSpace(info.Title) ? info.Id : info.Title;
+        var cliLabel = string.IsNullOrWhiteSpace(info.CliType) ? cliType : info.CliType;
         switch (next)
         {
             case WatchdogState.Quiet:
-                // Yellow, informational only. Single-line chat note so the
-                // user sees that the watchdog is paying attention.
-                _chatLog.Append(info, OrchestratorMessageKind.Decision,
-                    $"[watchdog] Agent has been quiet {silence:F0}s.{phaseTag}");
+                // Soft first warning. Operator-friendly copy with task title +
+                // CLI so the notification stands on its own without context.
+                _chatLog.Append(info, OrchestratorMessageKind.WatchdogWarning,
+                    $"\"{title}\" ({cliLabel}): no output for {silence:F0}s yet. No action needed unless this repeats.{phaseTag}");
                 break;
             case WatchdogState.Suspicious:
-                _chatLog.Append(info, OrchestratorMessageKind.Decision,
-                    $"[watchdog] Still silent at {silence:F0}s.{phaseTag} Will kill if the budget is exceeded.");
+                _chatLog.Append(info, OrchestratorMessageKind.WatchdogWarning,
+                    $"\"{title}\" ({cliLabel}): no output for {silence:F0}s. Run will be auto-cancelled at {hungAtSeconds:F0}s. No action needed unless this repeats.{phaseTag}");
                 break;
             case WatchdogState.Hung:
-                _chatLog.Append(info, OrchestratorMessageKind.GiveUp,
-                    $"[watchdog] Killed after {silence:F0}s of silence.{phaseTag} Process tree terminated; the run will finalize as failed.");
+                _chatLog.Append(info, OrchestratorMessageKind.WatchdogTimeout,
+                    $"\"{title}\" ({cliLabel}): auto-cancelled after {silence:F0}s of silence. The run will finalize as failed.{phaseTag}");
                 _orchestratorLog.Append(info.WatchPath, new OrchestratorLogEntry
                 {
                     Kind = OrchestratorLogKinds.Action,
                     Topic = OrchestratorLogTopics.Watchdog,
                     JobId = jobId,
-                    Summary = $"Watchdog killed \"{info.Title}\" after {silence:F0}s of silence.",
+                    Summary = $"Watchdog auto-cancelled \"{info.Title}\" after {silence:F0}s of silence.",
                     Reasoning = $"No streamed activity for {silence:F0}s (run age {age:F0}s){phaseTag}. Process tree terminated; the run finalizes as failed."
                 });
                 try { cli.Stop(jobKey, RunStopReason.Watchdog); }
@@ -623,8 +628,8 @@ public class ProjectRunner
             case WatchdogState.Healthy:
                 if (prev != WatchdogState.Healthy)
                 {
-                    _chatLog.Append(info, OrchestratorMessageKind.Decision,
-                        "[watchdog] Agent resumed streaming. Back to healthy.");
+                    _chatLog.Append(info, OrchestratorMessageKind.WatchdogWarning,
+                        $"\"{title}\" ({cliLabel}): streaming output again.");
                 }
                 break;
         }

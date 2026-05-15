@@ -159,6 +159,31 @@ public class AgentOutcomeAnalyzerTests
     }
 
     [Fact]
+    public void WatchdogAutoCancelled_OperatorFriendlyForm_IsClassifiedAsWatchdogTimeout()
+    {
+        // The Hung state now writes the operator-friendly form
+        // `[watchdog-timeout] "title" (cli): auto-cancelled after Ns ...`.
+        // The classifier must still mark the run as WatchdogTimeout so the
+        // outcome policy treats it the same as the legacy `[watchdog] Killed`
+        // shape; otherwise the new wording would silently demote watchdog
+        // kills to MissingTerminalSentinel.
+        var lines = new List<CliOutputLine>
+        {
+            new()
+            {
+                Timestamp = DateTime.UtcNow,
+                Stream = "orchestrator",
+                Text = "[watchdog-timeout] \"fix-git-diff-container-display\" (claude): auto-cancelled after 180s of silence. The run will finalize as failed."
+            }
+        };
+
+        var outcome = AgentOutcomeAnalyzer.Analyze(lines, "failed", 180.0);
+
+        Assert.Equal(RunIssueKind.WatchdogTimeout, outcome.IssueKind);
+        Assert.False(outcome.MatchedSentinel);
+    }
+
+    [Fact]
     public void CompletedTextWithoutSentinel_IsClassifiedAsMissingTerminalSentinel()
     {
         var lines = Lines("I checked the implementation and it looks ready for review.");
