@@ -17,10 +17,10 @@ namespace AgentTaskboard.UpdateService;
 /// </summary>
 public sealed class UpdateVerifier
 {
-    private readonly BackendProbe _backend;
+    private readonly IBackendProbe _backend;
     private readonly ILogger<UpdateVerifier> _logger;
 
-    public UpdateVerifier(BackendProbe backend, ILogger<UpdateVerifier> logger)
+    public UpdateVerifier(IBackendProbe backend, ILogger<UpdateVerifier> logger)
     {
         _backend = backend;
         _logger = logger;

@@ -9,15 +9,15 @@ namespace AgentTaskboard.UpdateService;
 public sealed class PeriodicProbeService : BackgroundService
 {
     private readonly UpdateStatusStore _store;
-    private readonly GitProbe _git;
-    private readonly BackendProbe _backend;
+    private readonly IGitProbe _git;
+    private readonly IBackendProbe _backend;
     private readonly UpdateServiceOptions _options;
     private readonly ILogger<PeriodicProbeService> _logger;
 
     public PeriodicProbeService(
         UpdateStatusStore store,
-        GitProbe git,
-        BackendProbe backend,
+        IGitProbe git,
+        IBackendProbe backend,
         UpdateServiceOptions options,
         ILogger<PeriodicProbeService> logger)
     {

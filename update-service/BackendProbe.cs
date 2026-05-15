@@ -8,7 +8,7 @@ namespace AgentTaskboard.UpdateService;
 /// and reports them as "false" / null — the update service must stay up
 /// even when the backend is mid-restart.
 /// </summary>
-public sealed class BackendProbe
+public sealed class BackendProbe : IBackendProbe
 {
     private readonly HttpClient _http;
     private readonly string _baseUrl;

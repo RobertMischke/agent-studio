@@ -20,24 +20,27 @@ options.TriggerToken    = Environment.GetEnvironmentVariable("ATP_UPDATE_TOKEN")
 options.BashPath        = Environment.GetEnvironmentVariable("ATP_BASH_PATH")           ?? options.BashPath;
 options.VersionFile     = Environment.GetEnvironmentVariable("ATP_VERSION_FILE")        ?? options.VersionFile;
 
-// ADR-0031: opt-in auto-rollback. Only the env flag set to "1" / "true" turns
-// it on; anything else (incl. unset) means failure stays loud and operator-
-// driven. Default is OFF on purpose.
-options.AutoRollback = string.Equals(
-    Environment.GetEnvironmentVariable("ATP_UPDATE_AUTO_ROLLBACK"), "1", StringComparison.Ordinal)
-    || string.Equals(
-        Environment.GetEnvironmentVariable("ATP_UPDATE_AUTO_ROLLBACK"), "true", StringComparison.OrdinalIgnoreCase);
+// ADR-0031: opt-in auto-rollback. Env flag (ATP_UPDATE_AUTO_ROLLBACK=1/true)
+// turns it on at runtime. The integration suite drives this through the
+// `UpdateService:AutoRollback` config key bound above (env var unset),
+// so an unset env var must not stomp the config-bound value.
+var autoRollbackEnv = Environment.GetEnvironmentVariable("ATP_UPDATE_AUTO_ROLLBACK");
+if (!string.IsNullOrEmpty(autoRollbackEnv))
+{
+    options.AutoRollback = string.Equals(autoRollbackEnv, "1", StringComparison.Ordinal)
+        || string.Equals(autoRollbackEnv, "true", StringComparison.OrdinalIgnoreCase);
+}
 
 builder.Services.AddSingleton(options);
 builder.Services.AddHttpClient();
 
-builder.Services.AddSingleton(sp =>
+builder.Services.AddSingleton<IGitProbe>(sp =>
 {
     var logger = sp.GetRequiredService<ILogger<GitProbe>>();
     return new GitProbe(options.StableCheckoutDir, logger);
 });
 
-builder.Services.AddSingleton(sp =>
+builder.Services.AddSingleton<IBackendProbe>(sp =>
 {
     var http = sp.GetRequiredService<IHttpClientFactory>().CreateClient();
     var logger = sp.GetRequiredService<ILogger<BackendProbe>>();
@@ -49,7 +52,7 @@ builder.Services.AddSingleton<UpdateVerifier>();
 builder.Services.AddSingleton(sp =>
 {
     var logger = sp.GetRequiredService<ILogger<UpdateStatusStore>>();
-    var git = sp.GetRequiredService<GitProbe>();
+    var git = sp.GetRequiredService<IGitProbe>();
     Func<string> readVersion = () =>
     {
         var path = options.VersionFile;
@@ -124,3 +127,9 @@ app.MapPost("/update/rollback", async (HttpContext ctx, UpdateOrchestrator orch,
 });
 
 app.Run();
+
+// Exposed as a public partial so the integration suite can target this
+// host via WebApplicationFactory<Program>. Minimal-API top-level
+// statements emit an internal Program by default; the partial below
+// promotes it to public without changing any runtime behaviour.
+public partial class Program { }

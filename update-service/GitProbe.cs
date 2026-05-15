@@ -6,7 +6,7 @@ namespace AgentTaskboard.UpdateService;
 /// Tiny git wrapper. We don't pull libgit2sharp for three commands.
 /// All operations target the stable checkout configured at startup.
 /// </summary>
-public sealed class GitProbe
+public sealed class GitProbe : IGitProbe
 {
     private readonly string _checkoutDir;
     private readonly ILogger<GitProbe> _logger;

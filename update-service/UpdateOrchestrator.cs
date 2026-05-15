@@ -23,8 +23,8 @@ namespace AgentTaskboard.UpdateService;
 public sealed class UpdateOrchestrator
 {
     private readonly UpdateStatusStore _store;
-    private readonly GitProbe _git;
-    private readonly BackendProbe _backend;
+    private readonly IGitProbe _git;
+    private readonly IBackendProbe _backend;
     private readonly UpdateVerifier _verifier;
     private readonly UpdateServiceOptions _options;
     private readonly ILogger<UpdateOrchestrator> _logger;
@@ -33,8 +33,8 @@ public sealed class UpdateOrchestrator
 
     public UpdateOrchestrator(
         UpdateStatusStore store,
-        GitProbe git,
-        BackendProbe backend,
+        IGitProbe git,
+        IBackendProbe backend,
         UpdateVerifier verifier,
         UpdateServiceOptions options,
         ILogger<UpdateOrchestrator> logger,
@@ -227,6 +227,8 @@ public sealed class UpdateOrchestrator
     {
         var folder = new RunFolder(_options.RunsDirectory, parentRunId, _loggerFactory.CreateLogger<RunFolder>());
         var headBefore = _git.HeadShort();
+        var rollbackStartedAt = DateTime.UtcNow;
+        var rollbackTrigger = manual ? "manual-rollback" : "auto-rollback";
 
         // Read the snapshot SHA + project modes from disk so manual rollback
         // works even after a process restart. Modes feed phase-6 (strict
@@ -237,14 +239,16 @@ public sealed class UpdateOrchestrator
         if (string.IsNullOrWhiteSpace(targetSha))
         {
             _logger.LogWarning("rollback: pre-snapshot SHA unknown, aborting");
-            folder.WriteRollbackResult(new RollbackResult(parentRunId, "failed",
-                headBefore, headBefore, DateTime.UtcNow, DateTime.UtcNow,
-                "pre-snapshot.json missing or unparsable", VerificationFailures: null));
+            var missing = new RollbackResult(parentRunId, "failed",
+                headBefore, headBefore, rollbackStartedAt, DateTime.UtcNow,
+                "pre-snapshot.json missing or unparsable", VerificationFailures: null);
+            folder.WriteRollbackResult(missing);
+            AppendRollbackHistory(parentRunId, rollbackTrigger, rollbackStartedAt, headBefore, headBefore, missing, folder.Root);
             return;
         }
 
         SetPhase("rolling-back", $"resetting to {targetSha}", parentRunId, DateTime.UtcNow);
-        var startedAt = DateTime.UtcNow;
+        var startedAt = rollbackStartedAt;
         try
         {
             // PHASE 5' — stop + git reset + start.
@@ -256,9 +260,11 @@ public sealed class UpdateOrchestrator
             folder.WriteOutput("rollback-reset-output.txt", rsOut);
             if (rsRc != 0)
             {
-                folder.WriteRollbackResult(new RollbackResult(parentRunId, "failed",
+                var failedReset = new RollbackResult(parentRunId, "failed",
                     headBefore, _git.HeadShort(), startedAt, DateTime.UtcNow,
-                    $"git reset --hard rc={rsRc}", VerificationFailures: null));
+                    $"git reset --hard rc={rsRc}", VerificationFailures: null);
+                folder.WriteRollbackResult(failedReset);
+                AppendRollbackHistory(parentRunId, rollbackTrigger, startedAt, headBefore, _git.HeadShort(), failedReset, folder.Root);
                 return;
             }
 
@@ -271,9 +277,18 @@ public sealed class UpdateOrchestrator
 
             if (startRc != 0 || !healthy)
             {
-                folder.WriteRollbackResult(new RollbackResult(parentRunId, "failed",
+                var failedStart = new RollbackResult(parentRunId, "failed",
                     headBefore, headAfterReset, startedAt, DateTime.UtcNow,
-                    $"start rc={startRc} healthy={healthy}", VerificationFailures: null));
+                    $"start rc={startRc} healthy={healthy}",
+                    VerificationFailures: new[]
+                    {
+                        new VerificationFailure(
+                            "healthz-stable",
+                            $"start rc={startRc} healthy={healthy} after {_options.HealthWaitSeconds}s wait",
+                            "/healthz=200 after rollback restart")
+                    });
+                folder.WriteRollbackResult(failedStart);
+                AppendRollbackHistory(parentRunId, rollbackTrigger, startedAt, headBefore, headAfterReset, failedStart, folder.Root);
                 return;
             }
 
@@ -287,10 +302,12 @@ public sealed class UpdateOrchestrator
             {
                 _logger.LogWarning("rollback verification failed: {Steps}",
                     string.Join(",", verification.Failures.Select(f => f.Step)));
-                folder.WriteRollbackResult(new RollbackResult(parentRunId, "failed",
+                var failedMatrix = new RollbackResult(parentRunId, "failed",
                     headBefore, headAfterReset, startedAt, DateTime.UtcNow,
                     "verification after rollback failed",
-                    VerificationFailures: verification.Failures));
+                    VerificationFailures: verification.Failures);
+                folder.WriteRollbackResult(failedMatrix);
+                AppendRollbackHistory(parentRunId, rollbackTrigger, startedAt, headBefore, headAfterReset, failedMatrix, folder.Root);
                 return;
             }
 
@@ -305,17 +322,45 @@ public sealed class UpdateOrchestrator
             }
             folder.WriteOutput("rollback-resume-output.txt", resumeOut.ToString());
 
-            folder.WriteRollbackResult(new RollbackResult(parentRunId, "ok",
+            var okResult = new RollbackResult(parentRunId, "ok",
                 headBefore, headAfterReset, startedAt, DateTime.UtcNow,
-                null, VerificationFailures: null));
+                null, VerificationFailures: null);
+            folder.WriteRollbackResult(okResult);
+            AppendRollbackHistory(parentRunId, rollbackTrigger, startedAt, headBefore, headAfterReset, okResult, folder.Root);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "rollback crashed");
-            folder.WriteRollbackResult(new RollbackResult(parentRunId, "failed",
+            var crashed = new RollbackResult(parentRunId, "failed",
                 headBefore, _git.HeadShort(), startedAt, DateTime.UtcNow,
-                ex.Message, VerificationFailures: null));
+                ex.Message, VerificationFailures: null);
+            folder.WriteRollbackResult(crashed);
+            AppendRollbackHistory(parentRunId, rollbackTrigger, startedAt, headBefore, _git.HeadShort(), crashed, folder.Root);
         }
+    }
+
+    private void AppendRollbackHistory(string parentRunId, string trigger, DateTime startedAt,
+        string headBefore, string headAfter, RollbackResult result, string runFolderRoot)
+    {
+        // ADR-0031 reissue-2026-05-11: emit a dedicated history row for the
+        // rollback so dashboards + the integration suite can observe the
+        // rollback outcome without parsing rollback-result.json. RunId
+        // matches the parent so the rollback row stays linked to its
+        // forward run; trigger distinguishes auto vs. manual.
+        var entry = new UpdateHistoryEntry(
+            RunId: parentRunId,
+            StartedAt: startedAt,
+            FinishedAt: result.FinishedAt,
+            Status: result.Status,
+            HeadBefore: headBefore,
+            HeadAfter: headAfter,
+            DurationSeconds: (int)(result.FinishedAt - startedAt).TotalSeconds,
+            Error: result.Error,
+            Trigger: trigger,
+            VerificationFailures: result.VerificationFailures,
+            RollbackStatus: result.Status,
+            RunFolder: runFolderRoot);
+        _store.AppendHistory(entry);
     }
 
     private async Task<(string? Sha, Dictionary<string, string> Modes)> ReadPreSnapshotAsync(string runFolderRoot, CancellationToken ct)
