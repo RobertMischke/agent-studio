@@ -147,12 +147,26 @@
  * our dark surface without competing with the Catppuccin palette.
  */
 .git-view__diff ::ng-deep .d2h-wrapper { background: transparent; }
-.git-view__diff ::ng-deep .d2h-file-header { display: none; }
 .git-view__diff ::ng-deep .d2h-file-wrapper {
   border: 0;
   border-radius: 0;
   margin: 0;
 }
+// When the backend returns a multi-file diff (e.g. a commit diff that
+// covers several files, or any future endpoint that does not filter to
+// one path), each file must carry its own header so the user gets a
+// visible filename + ADDED/DELETED/CHANGED tag separating the blocks.
+// We keep the in-header "Viewed" checkbox hidden - it does not match
+// the rest of the protocol pane and would only confuse the user.
+.git-view__diff ::ng-deep .d2h-file-header {
+  background: rgba(0, 0, 0, 0.35);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  color: #cbd5e1;
+  padding: 4px 10px;
+  height: auto;
+  min-height: 28px;
+}
+.git-view__diff ::ng-deep .d2h-file-collapse { display: none; }
 .git-view__diff ::ng-deep .d2h-code-line,
 .git-view__diff ::ng-deep .d2h-code-side-line {
   font-family: var(--font-mono, monospace);

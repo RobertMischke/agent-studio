@@ -49,6 +49,42 @@ function buildLargeDiff(): string {
   return out.join('\n') + '\n';
 }
 
+/**
+ * Builds the exact shape the operator hit: a modified file followed by a
+ * brand-new file, served as one unified diff. The frontend's
+ * per-path `/git/diff` endpoint is built to filter to a single file, but
+ * the underlying diff2html renderer must still handle multi-file output
+ * correctly because the same renderer also drives the commit-detail
+ * `/commit/diff` path, which can legitimately surface multi-file diffs
+ * for tasks that committed several files at once.
+ */
+function buildMultiFileDiff(): string {
+  const out: string[] = [];
+  out.push('diff --git a/backend.Tests/OrchestratorChatProjectStateSnapshotTests.cs b/backend.Tests/OrchestratorChatProjectStateSnapshotTests.cs');
+  out.push('index 1111111..2222222 100644');
+  out.push('--- a/backend.Tests/OrchestratorChatProjectStateSnapshotTests.cs');
+  out.push('+++ b/backend.Tests/OrchestratorChatProjectStateSnapshotTests.cs');
+  out.push('@@ -71,7 +71,7 @@ public class OrchestratorChatProjectStateSnapshotTests');
+  for (let i = 0; i < 3; i++) out.push('     // context line ' + i);
+  out.push('-    OrchestratorChat.AppendProjectStateSnapshot(sb, "Runbook", projects);');
+  out.push('+    OrchestratorChatService.AppendProjectStateSnapshot(sb, "Runbook", projects);');
+  for (let i = 0; i < 3; i++) out.push('     // context line tail ' + i);
+  // New file - whole body is added so every row is green.
+  out.push('diff --git a/backend/Services/OrchestratorChatService.cs b/backend/Services/OrchestratorChatService.cs');
+  out.push('new file mode 100644');
+  out.push('index 0000000..3333333');
+  out.push('--- /dev/null');
+  out.push('+++ b/backend/Services/OrchestratorChatService.cs');
+  out.push('@@ -0,0 +1,5 @@');
+  out.push('+namespace OrchestratorApi.Services;');
+  out.push('+');
+  out.push('+public static class OrchestratorChatService');
+  out.push('+{');
+  out.push('+    public static void AppendProjectStateSnapshot() { }');
+  out.push('+}');
+  return out.join('\n') + '\n';
+}
+
 const STATUS_PAYLOAD = {
   isRepo: true,
   branch: 'feature/diff-large',
@@ -209,6 +245,102 @@ test.describe('Git pane — large-diff gutter must not escape the scroll contain
           `side-by-side: ${sideEscaped.length}/${sideProbe.hits.length} gutter samples escaped. Hits: ${JSON.stringify(sideProbe.hits)}`
         ).toBe(0);
       }
+    } finally {
+      await api(`/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
+    }
+  });
+
+  test('multi-file diff: header + content renders for every file, not just the first', async ({ page }) => {
+    const watchPath = await pickWatchPath();
+    const job = await createJob({
+      title: `diff-multi-${Date.now()}`,
+      watchPath,
+      cliType: 'claude',
+      agent: 'claude',
+      promptMarkdown: '# Multi-file diff test',
+      targetState: '2-ready'
+    });
+
+    try {
+      await page.route('**/api/runner/status', async (route) => {
+        const upstream = await route.fetch();
+        const status = await upstream.json();
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            ...status,
+            projects: Object.fromEntries(
+              Object.entries(status.projects ?? {}).map(([name, p]: [string, unknown]) => [
+                name,
+                { ...(p as Record<string, unknown>), activeJobId: job.id }
+              ])
+            )
+          })
+        });
+      });
+      await page.route('**/api/jobs/*/git/status**', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify(STATUS_PAYLOAD)
+        });
+      });
+      // Per-path diff endpoint - returns a multi-file payload regardless of
+      // which file the user clicked, so the renderer is exercised on the
+      // exact shape the bug screenshot showed.
+      await page.route('**/api/jobs/*/git/diff**', async (route) => {
+        await route.fulfill({
+          status: 200,
+          contentType: 'text/plain',
+          body: buildMultiFileDiff()
+        });
+      });
+
+      await page.goto(`/?job=${encodeURIComponent(job.id)}&watchPath=${encodeURIComponent(watchPath)}`);
+      await expect(page.getByTestId('pane-protocol')).toBeVisible({ timeout: 10_000 });
+      await page.getByTestId('pane-toggle-git').click();
+      await expect(page.getByTestId('pane-git')).toBeVisible();
+
+      // Maximize the pane so the split layout gives the diff the full
+      // viewport - that is the shape where the bug screenshot was taken.
+      await page.getByTestId('pane-maximize-git').click();
+
+      await page.getByTestId('git-files')
+        .locator('[data-testid="git-tree-file"]')
+        .first()
+        .click();
+
+      const diff = page.getByTestId('git-diff');
+      // Both files must render with their own d2h-file-wrapper.
+      await expect(diff.locator('.d2h-file-wrapper')).toHaveCount(2, { timeout: 10_000 });
+
+      // Acceptance criterion 4: at least one matching code-line content
+      // span must be reachable per hunk via text. Pin separate matches so
+      // a missing second-file render fails distinctly from a missing
+      // first-file render.
+      await expect(
+        diff.locator('.d2h-code-line-ctn', { hasText: 'OrchestratorChatService.AppendProjectStateSnapshot(sb' })
+      ).toHaveCount(1);
+      await expect(
+        diff.locator('.d2h-code-line-ctn', { hasText: 'public static class OrchestratorChatService' })
+      ).toHaveCount(1);
+
+      // Acceptance criterion 2: the new file must render its own header
+      // (filename + ADDED tag) so the user has a separator. With our prior
+      // `display: none` rule the second block had no visible header,
+      // which is what the operator described as "GROSSE schwarze Fläche
+      // ohne Trennlinie / Filename-Header".
+      const newFileHeader = diff.locator(
+        '.d2h-file-wrapper:has-text("OrchestratorChatService.cs") .d2h-file-header'
+      );
+      await expect(newFileHeader).toBeVisible();
+      await expect(newFileHeader.locator('.d2h-tag.d2h-added')).toBeVisible();
+
+      // Scroll the diff so the second file is in the viewport for the
+      // evidence shot.
+      await newFileHeader.scrollIntoViewIfNeeded();
+      await page.screenshot({ path: 'test-results/git-diff-multi-file-evidence.png', fullPage: false });
     } finally {
       await api(`/api/jobs/${encodeURIComponent(job.id)}?watchPath=${encodeURIComponent(watchPath)}`, { method: 'DELETE' });
     }
