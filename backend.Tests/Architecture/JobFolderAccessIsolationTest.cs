@@ -111,8 +111,6 @@ public class JobFolderAccessIsolationTest
                 "MIGRATION TARGET: walks 3-progress for stale folders; should subscribe to ITaskAccess changes instead.",
             ["backend/Services/Runner/ReviewDecisionOrchestrator.cs"] =
                 "MIGRATION TARGET: writes review docs and creates 1-preparation followups; should route folder creates through JobMutationService.CreateJob (phase 3) then ITaskAccess (phase 4).",
-            ["backend/Services/Supervisor/MetaCycleHostedService.cs"] =
-                "MIGRATION TARGET: writes 1-preparation tasks for meta-cycle follow-ups; should call ITaskAccess.MutateAsync(Create) once phase 3 lands.",
         };
 
     /// <summary>

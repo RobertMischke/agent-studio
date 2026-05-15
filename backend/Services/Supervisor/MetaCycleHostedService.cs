@@ -5,6 +5,7 @@ using System.Text.Json.Serialization;
 using OrchestratorApi.Models;
 using OrchestratorApi.Services.Jobs;
 using OrchestratorApi.Services.Runner;
+using OrchestratorApi.Services.TaskAccess;
 
 namespace OrchestratorApi.Services.Supervisor;
 
@@ -42,6 +43,7 @@ public sealed class MetaCycleHostedService : BackgroundService
     private readonly IConfiguration _configuration;
     private readonly ILogger<MetaCycleHostedService> _logger;
     private readonly TimeProvider _time;
+    private readonly ITaskAccess _taskAccess;
 
     /// <summary>
     /// Per-project mutable cycle state: which jobs we have already counted
@@ -58,6 +60,7 @@ public sealed class MetaCycleHostedService : BackgroundService
         ProjectSettingsService projectSettings,
         OrchestratorChatLog chatLog,
         IConfiguration configuration,
+        ITaskAccess taskAccess,
         ILogger<MetaCycleHostedService> logger,
         TimeProvider? time = null)
     {
@@ -67,6 +70,7 @@ public sealed class MetaCycleHostedService : BackgroundService
         _projectSettings = projectSettings;
         _chatLog = chatLog;
         _configuration = configuration;
+        _taskAccess = taskAccess;
         _logger = logger;
         _time = time ?? TimeProvider.System;
     }
@@ -752,36 +756,54 @@ public sealed class MetaCycleHostedService : BackgroundService
 
     private string? QueueFollowUpTask(string workspace, string project, MetaCycleReport report)
     {
-        // Templated queueing lives off the hot path of the cycle; keep it
-        // minimal in this first cut. Drop a prompt.md + job.json under
-        // <workspace>/projects/<project>/1-preparation/auto-fix-<topic>-<ts>/
-        // so the existing scanner picks it up on the next pass.
+        // ADR-0024: route the new 1-preparation folder through the
+        // typed TaskAccess Create mutation. The watch-path lookup
+        // still goes through the scanner (config), but the folder
+        // mint flows through JobMutationService inside the layer.
         try
         {
             var topic = ExtractTopic(report.Action);
-            var slug = $"auto-fix-{topic}-{report.StartedAt:yyyyMMddHHmmss}";
-            var folder = Path.Combine(workspace, "projects", project, JobStates.Preparation, slug);
-            if (Directory.Exists(folder))
+            var baseSlug = $"auto-fix-{topic}-{report.StartedAt:yyyyMMddHHmmss}";
+            var entry = _scanner.GetWatchPaths().FirstOrDefault(e =>
+                string.Equals(e.Name, project, StringComparison.OrdinalIgnoreCase));
+            if (entry == null)
             {
-                folder += "-" + Guid.NewGuid().ToString("N")[..6];
+                _logger.LogWarning("MetaCycle queue-fix: no watch-path entry for {Project}", project);
+                return null;
             }
-            Directory.CreateDirectory(folder);
 
-            var jobJson = new
+            // Collision avoidance: a 1-preparation slug minted in the
+            // same wall-clock second would otherwise refuse to land.
+            // Append a short random suffix until the slug is free.
+            var slug = baseSlug;
+            if (_taskAccess.SlugExistsInLane(entry.Path, JobStates.Preparation, slug))
             {
-                id = Path.GetFileName(folder),
-                title = $"Meta-cycle: review {topic} ({report.CycleId})",
-                state = JobStates.Preparation,
-                order = 999,
-                agent = "claude",
-                createdAt = report.CompletedAt,
-            };
-            File.WriteAllText(Path.Combine(folder, "job.json"), JsonSerializer.Serialize(jobJson, Json));
+                slug = $"{baseSlug}-" + Guid.NewGuid().ToString("N")[..6];
+            }
 
             var prompt = BuildFollowUpPrompt(project, report);
-            File.WriteAllText(Path.Combine(folder, "prompt.md"), prompt);
+            var createResult = _taskAccess.MutateAsync(new TaskMutationRequest
+            {
+                Kind = TaskMutationKind.Create,
+                CreateRequest = new CreateJobRequest
+                {
+                    Id = slug,
+                    Title = $"Meta-cycle: review {topic} ({report.CycleId})",
+                    Agent = "claude",
+                    TargetState = JobStates.Preparation,
+                    Order = 999,
+                    WatchPath = entry.Path,
+                    PromptMarkdown = prompt,
+                },
+            }).GetAwaiter().GetResult();
 
-            return jobJson.id;
+            if (createResult.Status != TaskMutationStatus.Applied)
+            {
+                _logger.LogWarning("MetaCycle queue-fix create refused for {Project}: {Status} {Message}",
+                    project, createResult.Status, createResult.Message);
+                return null;
+            }
+            return slug;
         }
         catch (Exception ex)
         {
