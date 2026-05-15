@@ -41,4 +41,34 @@ describe('GitFileTreeComponent (smoke)', () => {
     }
     expect(fixture.componentInstance).toBeTruthy();
   });
+
+  it('reflects the [fill] input onto the host as data-fill', async () => {
+    // Regression: the SCSS `:host([data-fill="true"]) .git-tree` rule needs
+    // a host attribute to match. Without the host binding the file tree
+    // stayed capped at max-height: 30vh in the pane-maximized split layout
+    // and left a tall empty band under the file list.
+    await TestBed.configureTestingModule({
+      imports: [GitFileTreeComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(GitFileTreeComponent);
+    fixture.componentRef.setInput('files', []);
+    fixture.componentRef.setInput('fill', false);
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.getAttribute('data-fill')).toBeNull();
+
+    fixture.componentRef.setInput('fill', true);
+    fixture.detectChanges();
+    expect(host.getAttribute('data-fill')).toBe('true');
+
+    fixture.componentRef.setInput('fill', false);
+    fixture.detectChanges();
+    expect(host.getAttribute('data-fill')).toBeNull();
+  });
 });

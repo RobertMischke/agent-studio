@@ -39,7 +39,16 @@ interface TreeNode {
   imports: [TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './git-file-tree.component.html',
-  styleUrl: './git-file-tree.component.scss'
+  styleUrl: './git-file-tree.component.scss',
+  host: {
+    // Reflects the `fill` input onto the host so the SCSS selector
+    // `:host([data-fill="true"]) .git-tree` actually matches. Without this
+    // the tree stays capped at max-height: 30vh in the pane-maximized
+    // split layout and leaves a tall empty column under the file list,
+    // which also prevents the diff-col flex chain from resolving its full
+    // height — the diff container appears stunted at ~30vh.
+    '[attr.data-fill]': 'fill() ? "true" : null',
+  },
 })
 export class GitFileTreeComponent {
   readonly files = input.required<readonly GitFileChange[]>();
