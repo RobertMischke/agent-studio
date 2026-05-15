@@ -203,7 +203,25 @@ Answers the recurring user question "are we on track?". Compares the active queu
 
 When the agent narrative is supplied (POST with `agentResponse`), the endpoint records the report with `producer.kind = SupportingAgent`, `trigger = SupportingAgent`, and `participantId = support:roadmap-alignment`, then emits one Agent Message Bus message via `AgentMessageBusBridge.EmitSupportingAgentReportAsync`. The bus emit is best-effort: a failure never breaks the canonical report write. The evidence-only path (no `agentResponse`) stays a Manual report and does not produce a bus message, so the timeline does not falsely advertise a supporting-agent run that never happened. The full supporting-agent message contract lives in [docs/agent-message-bus.md](agent-message-bus.md#9b-supporting-agents).
 
-### 10.2 Runtime Log Analysis (`topic = "runtime-observability"`)
+### 10.2 Steering Docs Summary and Drift Check (`topic = "steering-docs-summary-and-drift"`)
+
+Answers "what are agents told today, and where has that drifted?". Inventories the canonical steering surface (`AGENTS.md`, project AGENTS, frontend AGENTS, README, ROADMAP, task contract, skills lookup, ADRs, runtime prompts), samples recent jobs per inspected lane as drift evidence, and surfaces typed findings plus proposed text changes.
+
+- Service: `OrchestratorApi.Services.Analysis.SteeringDocsSummaryDriftService` - pure scope selection, prompt rendering, and JSON parse fallback. No clock or id concerns. Topic slug: `steering-docs-summary-and-drift` (exposed as the `Topic` constant).
+- Prompt template: [`prompts/runtime/steering-docs-summary-and-drift.md`](../prompts/runtime/steering-docs-summary-and-drift.md). Editable Markdown so wording does not require a recompile.
+- Endpoints (under `/api/analysis/{project}/actions/steering-docs-drift`):
+  - `GET .../prompt` returns the assembled scope summary plus the rendered prompt.
+  - `POST ...` runs the action. Without `agentResponse` it produces an Unstructured "evidence + prompt" report. With `agentResponse` it parses the agent's reply (Markdown body plus an optional fenced JSON sidecar) and emits the typed verdict.
+- Constraints enforced by the service:
+  - Follow-up suggestions land in `1-preparation` only; agent-supplied `targetState = "2-ready"` is silently coerced.
+  - The action is analysis and proposal generation, not state mutation. It never rewrites a steering doc, never moves a job, and never relaxes the "one active coding task per project" boundary.
+- Tests: [`backend.Tests/SteeringDocsSummaryDriftServiceTests.cs`](../backend.Tests/SteeringDocsSummaryDriftServiceTests.cs) covers scope selection (inventory of canonical sources, missing-file warnings, critical-source severity), prompt construction, JSON parse fallback (Structured / Unstructured / MalformedJson, plus targetState coercion and kind/schemaVersion validation), and report assembly.
+
+#### 10.2.1 Bus mirror (supporting-agent)
+
+When the agent narrative is supplied (POST with `agentResponse`), the endpoint records the report with `producer.kind = SupportingAgent`, `trigger = SupportingAgent`, and `participantId = support:steering-docs-summary-and-drift`, then emits one Agent Message Bus message via `AgentMessageBusBridge.EmitSupportingAgentReportAsync`. Identical policy to roadmap-alignment: bus emit is best-effort, the evidence-only path stays Manual and does not emit, parse failure (`MalformedJson`) lands as `kind:observation` with the raw fallback warning on `payload.parseError`. The bus contract lives in [docs/agent-message-bus.md](agent-message-bus.md#9b-supporting-agents); the bridge tests at [`backend.Tests/AgentMessageBusBridgeTests.cs`](../backend.Tests/AgentMessageBusBridgeTests.cs) include `EmitSupportingAgentReportAsync_SteeringDocsDriftTopic_LandsAsCanonicalParticipantAndTags` which locks the topic mapping.
+
+### 10.3 Runtime Log Analysis (`topic = "runtime-observability"`)
 
 Answers "what did the built software actually do during this run?". Reads the structured product runtime event JSONL produced by the [Product Runtime Observability](product-runtime-observability.md) layer plus the raw `cli-output.log` fallback, optionally cross-checks Playwright/test artefacts, and surfaces typed findings (repeated errors, slow operations, noisy events, missing correlation ids, suspicious domain sequences, tests that passed while runtime errors fired).
 

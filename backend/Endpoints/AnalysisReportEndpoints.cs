@@ -366,6 +366,7 @@ public static class AnalysisReportEndpoints
             AnalysisReportStore store,
             RuntimePromptService prompts,
             SteeringDocsSummaryDriftService action,
+            AgentMessageBusBridge bus,
             CancellationToken ct) =>
         {
             if (string.IsNullOrWhiteSpace(project))
@@ -418,16 +419,63 @@ public static class AnalysisReportEndpoints
             }
 
             var reportId = "01" + DateTime.UtcNow.ToString("yyyyMMddHHmmssfff") + Guid.NewGuid().ToString("N").Substring(0, 8);
+            // Producer + participant follow the supporting-agent rules in
+            // docs/agent-message-bus.md once an agent narrative is supplied;
+            // the evidence-only path stays Manual/user so the timeline does
+            // not falsely advertise a supporting-agent run.
+            var hasAgentRun = !string.IsNullOrWhiteSpace(agentResponse);
+            var producerKind = hasAgentRun
+                ? AnalysisReportProducerKind.SupportingAgent
+                : AnalysisReportProducerKind.Manual;
+            var trigger = hasAgentRun
+                ? AnalysisReportTrigger.SupportingAgent
+                : AnalysisReportTrigger.Manual;
+            var participantId = hasAgentRun
+                ? AgentMessageBusBridge.ParticipantSupportingFor(SteeringDocsSummaryDriftService.Topic)
+                : "user";
             var report = action.BuildReport(
                 scope: scope,
                 parse: parse,
                 reportId: reportId,
                 createdAt: DateTime.UtcNow,
-                producerKind: AnalysisReportProducerKind.Manual,
-                trigger: AnalysisReportTrigger.Manual,
-                participantId: "user");
+                producerKind: producerKind,
+                trigger: trigger,
+                participantId: participantId);
 
             await store.AppendAsync(workspace!, project, report, markdown, ct).ConfigureAwait(false);
+
+            // Mirror the report onto the Agent Message Bus so the project
+            // timeline shows the supporting-agent run alongside coding-agent
+            // activity. Bus calls are best-effort: a failure here never
+            // breaks the canonical analysis-report write above. The evidence-
+            // only path stays Manual and does not emit, matching the
+            // roadmap-alignment policy.
+            if (hasAgentRun)
+            {
+                await bus.RegisterSupportingAgentAsync(
+                    topic: SteeringDocsSummaryDriftService.Topic,
+                    displayName: "Steering docs summary and drift check",
+                    skill: SteeringDocsSummaryDriftService.Topic,
+                    ct: ct).ConfigureAwait(false);
+                var markdownPath = AnalysisReportPaths.MarkdownFile(workspace!, project, reportId);
+                var jsonSidecarPath = report.ParseStatus == AnalysisReportParseStatus.Structured
+                    ? AnalysisReportPaths.JsonSidecarFile(workspace!, project, reportId)
+                    : null;
+                await bus.EmitSupportingAgentReportAsync(
+                    project: project,
+                    topic: SteeringDocsSummaryDriftService.Topic,
+                    reportId: reportId,
+                    summary: report.Summary,
+                    severity: report.Severity.ToString(),
+                    parseStatus: report.ParseStatus.ToString(),
+                    markdownPath: markdownPath,
+                    jsonSidecarPath: jsonSidecarPath,
+                    skill: SteeringDocsSummaryDriftService.Topic,
+                    parseError: report.ParseError,
+                    participantId: participantId,
+                    ct: ct).ConfigureAwait(false);
+            }
+
             return Results.Ok(new AnalysisReportDetailResponse(report, markdown));
         });
 

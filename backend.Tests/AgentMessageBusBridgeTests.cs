@@ -393,6 +393,38 @@ public sealed class AgentMessageBusBridgeTests : IDisposable
     }
 
     [Fact]
+    public async Task EmitSupportingAgentReportAsync_SteeringDocsDriftTopic_LandsAsCanonicalParticipantAndTags()
+    {
+        // Pins the second wired supporting-agent topic. The endpoint at
+        // POST /api/analysis/{project}/actions/steering-docs-drift calls
+        // EmitSupportingAgentReportAsync with
+        // SteeringDocsSummaryDriftService.Topic ("steering-docs-summary-and-drift")
+        // when an agent narrative is supplied; this test locks the
+        // resulting participant id and tag set so a future refactor of the
+        // service slug or the bridge's kebab logic surfaces immediately.
+        await _bridge.EmitSupportingAgentReportAsync(
+            project: "agent-taskboard",
+            topic: OrchestratorApi.Services.Analysis.SteeringDocsSummaryDriftService.Topic,
+            reportId: "01HXYZDOCSDRIFT",
+            summary: "Steering surface drifted on shim contract.",
+            severity: "Warn",
+            parseStatus: "Structured",
+            markdownPath: "/ws/logs/analysis/agent-taskboard/01HXYZDOCSDRIFT.md",
+            jsonSidecarPath: "/ws/logs/analysis/agent-taskboard/01HXYZDOCSDRIFT.json",
+            skill: OrchestratorApi.Services.Analysis.SteeringDocsSummaryDriftService.Topic);
+
+        var msg = Assert.Single(_store.Recent(_workspace, "agent-taskboard", 10));
+        Assert.Equal("support:steering-docs-summary-and-drift", msg.ParticipantId);
+        Assert.Equal("steering-docs-summary-and-drift", msg.Topic);
+        Assert.Equal("decision", msg.Kind);
+        Assert.Equal("Warn", msg.Severity);
+        Assert.Contains(msg.Tags!, t => t == "supporting-agent");
+        Assert.Contains(msg.Tags!, t => t == "steering-docs-summary-and-drift");
+        Assert.Contains(msg.Tags!, t => t == "skill-steering-docs-summary-and-drift");
+        Assert.Contains(msg.Tags!, t => t == "parse-structured");
+    }
+
+    [Fact]
     public async Task OrchestratorChatLog_Append_AlsoWritesBusMessage()
     {
         // End-to-end: the chat log keeps writing cli-output.log (the canonical
