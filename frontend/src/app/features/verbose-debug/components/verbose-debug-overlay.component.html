@@ -9,7 +9,7 @@
             <button class="vdbg__theme"
                     type="button"
                     data-testid="verbose-debug-theme-toggle"
-                    [title]="theme() === 'light' ? 'Switch to dark' : 'Switch to light'"
+                    [appTooltip]="theme() === 'light' ? 'Switch to dark' : 'Switch to light'"
                     (click)="toggleTheme()">{{ theme() === 'light' ? '🌙' : '☀' }}</button>
             <button class="vdbg__close"
                     type="button"
@@ -173,7 +173,7 @@
                       <i class="vdbg__row-bar"><em [style.width.%]="row.percent"></em></i>
                       <b class="vdbg__row-value">{{ row.count }}</b>
                       @if (row.failures > 0) {
-                        <span class="vdbg__row-failures" title="Failed tool invocations in this family">{{ row.failures }} ✗</span>
+                        <span class="vdbg__row-failures" [appTooltip]="'Failed tool invocations in this family'">{{ row.failures }} ✗</span>
                       }
                     </div>
                   }

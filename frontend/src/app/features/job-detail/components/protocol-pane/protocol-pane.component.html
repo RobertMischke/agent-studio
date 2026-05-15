@@ -6,25 +6,25 @@
       @if (hasActivity()) {
         <span class="pane__live-dot"
               [class.pane__live-dot--running]="isRunning()"
-              [title]="isRunning() ? 'Agent running' : 'Activity present'"
+              [appTooltip]="isRunning() ? 'Agent running' : 'Activity present'"
               data-testid="protocol-live-dot"></span>
       }
       @if (summaryStatus() === 'generating') {
         <span class="pane__spinner" data-testid="summary-generating"
-              title="The protocol is being summarized from the CLI output.">
+              [appTooltip]="'The protocol is being summarized from the CLI output.'">
           <span class="spinner-ring"></span>
           <span>{{ summarySpinnerLabel() }}</span>
         </span>
       }
       @if (summaryStatus() === 'failed') {
         <span class="pane__badge pane__badge--failed" data-testid="summary-failed"
-              [title]="detail().summaryState?.errorMessage ?? 'Protocol generation failed — see banner below'"
+              [appTooltip]="detail().summaryState?.errorMessage ?? 'Protocol generation failed — see banner below'"
               aria-label="Protocol generation failed">⚠</span>
       }
     </div>
     @if (sessionChip(); as chip) {
       <span class="pane__telemetry pane__session-chip pane__session-chip--{{ chip.kind }}"
-            [title]="chip.tooltip"
+            [appTooltip]="chip.tooltip"
             [attr.data-testid]="'session-chip-' + chip.kind">
         {{ chip.emoji }} {{ chip.label }}
       </span>
@@ -32,7 +32,7 @@
     @if (claudeSession(); as cs) {
       @if (cs.error && !cs.turnCount) {
         <span class="pane__telemetry pane__telemetry--err"
-              [title]="'Claude session telemetry: ' + cs.error"
+              [appTooltip]="'Claude session telemetry: ' + cs.error"
               data-testid="claude-telemetry-error">⚠ no session yet</span>
       } @else if (cs.turnCount > 0) {
         <!--
@@ -41,7 +41,7 @@
           the full breakdown (input / output / cache / turns / model) so
           no information is lost — the data is one hover away. -->
         <span class="pane__telemetry pane__telemetry--badge"
-              [title]="claudeSessionTooltip()"
+              [appTooltip]="claudeSessionTooltip()"
               data-testid="claude-telemetry"
               role="img"
               [attr.aria-label]="claudeSessionTooltip()">
@@ -53,7 +53,7 @@
       @if (wp.visible) {
         <span class="pane__watchdog"
               [attr.data-state]="wp.state"
-              [title]="wp.tooltip"
+              [appTooltip]="wp.tooltip"
               data-testid="watchdog-chip">{{ wp.label }}</span>
       }
     }
@@ -61,7 +61,7 @@
       <button type="button"
               class="pane__outcome-issue"
               [class]="'pane__outcome-issue--' + outcomeIssueTone()"
-              [title]="issue.summary || issue.kind"
+              [appTooltip]="issue.summary || issue.kind"
               data-testid="protocol-outcome-issue-chip"
               (click)="outcomeIssueModalOpen.set(true)">
         {{ issue.label || issue.kind }}
@@ -71,7 +71,7 @@
       <span class="pane__telemetry pane__telemetry-rate"
             [class.pane__telemetry-rate--ok]="rl.status === 'allowed'"
             [class.pane__telemetry-rate--warn]="rl.status && rl.status !== 'allowed'"
-            [title]="rateLimitTooltip()"
+            [appTooltip]="rateLimitTooltip()"
             data-testid="claude-rate-limit">
         <span class="pane__telemetry-chip">⏱ {{ formatRateWindow(rl.window) }} · {{ rl.status || '?' }}</span>
         @if (rl.resetsAt > 0) {
@@ -87,7 +87,7 @@
               class="pane__interim-btn"
               data-testid="protocol-interim-summary"
               [disabled]="!canRequestInterim()"
-              [title]="interimInFlight()
+              [appTooltip]="interimInFlight()
                 ? ('Asking Haiku for an interim status... ' + interimElapsedSeconds() + 's')
                 : 'Generate an interim status summary from the current run output. Does not touch status.md.'"
               (click)="requestInterimSummary()"
@@ -106,7 +106,7 @@
               data-testid="pane-meta-toggle"
               (click)="toggleVsCodeMeta()"
               [class.pane__maximize--active]="featureFlags.vsCodeMetaOpen()"
-              [title]="featureFlags.vsCodeMetaOpen() ? 'Hide meta panel' : 'Show meta panel'"
+              [appTooltip]="featureFlags.vsCodeMetaOpen() ? 'Hide meta panel' : 'Show meta panel'"
               aria-label="Toggle meta panel">
         i
       </button>
@@ -114,10 +114,10 @@
     <button class="pane__maximize"
             data-testid="pane-maximize-protocol"
             (click)="maximizeToggle.emit()"
-            [title]="maximized() ? 'Restore layout' : 'Maximize'">
+            [appTooltip]="maximized() ? 'Restore layout' : 'Maximize'">
       {{ maximized() ? '⤡' : '⤢' }}
     </button>
-    <button class="pane__hide" (click)="hide.emit()" title="Hide panel">×</button>
+    <button class="pane__hide" (click)="hide.emit()" [appTooltip]="'Hide panel'">×</button>
   </header>
   <div class="pane__body">
     @if (protocolVerdict(); as v) {
@@ -280,7 +280,7 @@
                   <button type="button"
                           class="btn-regen"
                           data-testid="protocol-regenerate-summary"
-                          title="Re-run the Haiku summary on the CLI output"
+                          [appTooltip]="'Re-run the Haiku summary on the CLI output'"
                           [disabled]="regenerating()"
                           (click)="regenerateSummary.emit()">
                     <span class="btn-regen__icon" aria-hidden="true">✨</span>
@@ -306,7 +306,7 @@
                   <button type="button"
                           class="btn-regen"
                           data-testid="protocol-regenerate-summary"
-                          title="Re-summarize the CLI output with Haiku"
+                          [appTooltip]="'Re-summarize the CLI output with Haiku'"
                           [disabled]="!canRegenerate()"
                           (click)="regenerateSummary.emit()">
                     <span class="btn-regen__icon" aria-hidden="true">✨</span>
@@ -316,7 +316,7 @@
                 <button type="button"
                         class="btn-sm"
                         data-testid="protocol-copy-markdown"
-                        title="Copy the protocol markdown to the clipboard"
+                        [appTooltip]="'Copy the protocol markdown to the clipboard'"
                         (click)="copyProtocolMarkdown()">{{ copyLabel() }}</button>
               </div>
               <app-beautiful-results class="notes-panel__body"
@@ -337,13 +337,13 @@
                             data-testid="protocol-maximize-log"
                             (click)="openLogOverlay.emit()"
                             aria-label="Maximize log"
-                            title="Maximize log">⤢</button>
+                            [appTooltip]="'Maximize log'">⤢</button>
                   }
                   <button type="button"
                           class="btn-icon"
                           data-testid="protocol-open-verbose-debug"
                           aria-label="Open Verbose Debug"
-                          title="Open the read-only Verbose Debug view for this run"
+                          [appTooltip]="'Open the read-only Verbose Debug view for this run'"
                           (click)="verboseDebugOpen.set(true)">🐞</button>
                 </div>
               </div>
@@ -421,7 +421,7 @@
                                   class="auto-eval__chip"
                                   [attr.data-testid]="'auto-eval-chip'"
                                   (click)="applyQuickReply(chip)"
-                                  [title]="chip.prompt">{{ chip.label }}</button>
+                                  [appTooltip]="chip.prompt">{{ chip.label }}</button>
                         }
                       </div>
                     }
@@ -438,7 +438,7 @@
                             [class.chat-mode__pill--active]="continueMode() === m.id"
                             [attr.data-mode]="m.id"
                             [attr.data-testid]="'activity-chat-mode-' + m.id"
-                            [title]="m.tooltip"
+                            [appTooltip]="m.tooltip"
                             (click)="continueModeChange.emit(m.id)">
                       <span class="chat-mode__icon" aria-hidden="true">{{ m.icon }}</span>
                       <span class="chat-mode__title">{{ m.title }}</span>

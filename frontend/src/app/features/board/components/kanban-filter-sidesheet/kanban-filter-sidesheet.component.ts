@@ -14,6 +14,7 @@ import { ClientSummary, TagRegistryEntry } from '../../../../models/job.model';
 import { ModalStackService } from '../../../../services/modal-stack.service';
 import { TypeFilterOption } from '../filters-dropdown/filters-dropdown.component';
 
+import { TooltipDirective } from '../../../../components/tooltip';
 /**
  * VS Code-style right-edge sidesheet that hosts the board's search box and
  * faceted filters in one place. The board reflows live as the user types
@@ -30,6 +31,7 @@ import { TypeFilterOption } from '../filters-dropdown/filters-dropdown.component
 @Component({
   selector: 'app-kanban-filter-sidesheet',
   standalone: true,
+  imports: [TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './kanban-filter-sidesheet.component.html',
   styleUrl: './kanban-filter-sidesheet.component.scss',

@@ -11,6 +11,7 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AgentBusService, AgentBusFixture } from '../../../../services/agent-bus.service';
+import { TooltipDirective } from '../../../../components/tooltip';
 import {
   AGENT_MESSAGE_KINDS,
   AGENT_MESSAGE_SEVERITIES,
@@ -116,7 +117,7 @@ const OUTCOME_ISSUE_TOPICS: ReadonlyArray<{ topic: string; label: string; tone: 
 @Component({
   selector: 'app-project-observability-panel',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-observability-panel.component.html',
   styleUrl: './project-observability-panel.component.scss',

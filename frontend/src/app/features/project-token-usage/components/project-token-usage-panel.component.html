@@ -57,7 +57,7 @@
           @for (b of timelineBuckets(); track b.day) {
             <div class="tup__timeline-bar" role="listitem"
                  [attr.data-day]="b.day"
-                 [title]="b.day + ': ' + formatTokens(b.total) + ' tokens (' + b.calls + ' call' + (b.calls === 1 ? '' : 's') + ')'"
+                 [appTooltip]="b.day + ': ' + formatTokens(b.total) + ' tokens (' + b.calls + ' call' + (b.calls === 1 ? '' : 's') + ')'"
                  [style.height.%]="b.heightPct">
               <span class="tup__timeline-bar-day">{{ b.shortDay }}</span>
             </div>
@@ -103,7 +103,7 @@
                         [attr.data-day]="cell.day"
                         [attr.data-total]="cell.total"
                         [class]="'tup__heatmap-cell--' + heatLevel(cell.total)"
-                        [title]="row.title + ' · ' + cell.day + ': ' + formatTokens(cell.total) + ' tokens'"
+                        [appTooltip]="row.title + ' · ' + cell.day + ': ' + formatTokens(cell.total) + ' tokens'"
                         (click)="onSelectJob(row.jobId)"></td>
                   }
                 </tr>

@@ -175,7 +175,7 @@
         @for (a of actions; track a.slug) {
           <button class="psd__btn"
                   [attr.data-testid]="'project-steering-docs-action-' + a.slug"
-                  [title]="a.description"
+                  [appTooltip]="a.description"
                   [disabled]="busyAction() === a.slug"
                   (click)="runAction(a)">
             {{ a.label }}

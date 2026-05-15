@@ -177,7 +177,7 @@
                               [class.obs__timeline-mark--high]="m.severity === 'High'"
                               [class.obs__timeline-mark--warn]="m.severity === 'Warn'"
                               [style.left.%]="m.offsetPct"
-                              [title]="m.title"
+                              [appTooltip]="m.title"
                               [attr.data-testid]="'observability-timeline-mark'"
                               [attr.data-msg-id]="m.id"
                               (click)="selectMessage(m.id)"></button>
@@ -263,7 +263,7 @@
                             [attr.data-participant]="cell.participantId"
                             [attr.data-bucket]="cell.bucket"
                             [attr.data-tokens]="cell.tokens"
-                            [title]="cell.tokens + ' tokens · ' + cell.msgIds.length + ' message(s)'"
+                            [appTooltip]="cell.tokens + ' tokens · ' + cell.msgIds.length + ' message(s)'"
                             (click)="selectFirst(cell.msgIds)"></td>
                       }
                       <td class="obs__heatmap-cell obs__heatmap-cell--total">{{ formatTokens(row.total) }}</td>

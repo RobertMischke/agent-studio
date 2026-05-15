@@ -4,6 +4,7 @@ import { Observable, map } from 'rxjs';
 import { DriftService } from '../../../services/drift.service';
 import { JobService } from '../../../services/job.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../utils/visible-interval';
+import { TooltipDirective } from '../../../components/tooltip';
 import {
   DriftArchitectureElement,
   DriftArchitectureModel,
@@ -38,7 +39,7 @@ interface MarbleRow {
 @Component({
   selector: 'app-project-drift-section',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-drift-section.html',
   styleUrl: './project-drift-section.scss'

@@ -6,15 +6,15 @@
   <header class="pane__header">
     <h3 class="pane__title">{{ paneTitle() }}</h3>
     @if (git.viewMode() === 'worktree' && isActiveJob()) {
-      <button class="btn-sm" (click)="git.refresh()" [disabled]="git.loading()" title="Refresh git status">↻</button>
+      <button class="btn-sm" (click)="git.refresh()" [disabled]="git.loading()" [appTooltip]="'Refresh git status'">↻</button>
     }
     <button class="pane__maximize"
             data-testid="pane-maximize-git"
             (click)="maximizeToggle.emit()"
-            [title]="maximized() ? 'Restore layout' : 'Maximize'">
+            [appTooltip]="maximized() ? 'Restore layout' : 'Maximize'">
       {{ maximized() ? '⤡' : '⤢' }}
     </button>
-    <button class="pane__hide" (click)="hide.emit()" title="Hide panel">×</button>
+    <button class="pane__hide" (click)="hide.emit()" [appTooltip]="'Hide panel'">×</button>
   </header>
   <div class="pane__body git-view"
        [class.git-view--split]="maximized()"
@@ -33,7 +33,7 @@
               <button type="button"
                       class="git-view__commit-chain-button"
                       [attr.aria-pressed]="git.selectedCommitSha() === entry.sha"
-                      [title]="(i + 1) + '/' + git.commitChain().length + ' · ' + entry.shortSha + ' · ' + entry.message"
+                      [appTooltip]="(i + 1) + '/' + git.commitChain().length + ' · ' + entry.shortSha + ' · ' + entry.message"
                       (click)="git.selectChainCommit(entry.sha)">
                 <span class="git-view__commit-chain-step">#{{ i + 1 }}</span>
                 <span class="git-view__commit-chain-sha">{{ entry.shortSha }}</span>
@@ -76,7 +76,7 @@
                       <button class="pane__maximize"
                               data-testid="git-diff-maximize"
                               (click)="toggleDiffMaximize()"
-                              [title]="diffMaximized() ? 'Restore diff' : 'Maximize diff'">
+                              [appTooltip]="diffMaximized() ? 'Restore diff' : 'Maximize diff'">
                         {{ diffMaximized() ? '⤡' : '⤢' }}
                       </button>
                     }
@@ -144,7 +144,7 @@
                       <button class="pane__maximize"
                               data-testid="git-diff-maximize"
                               (click)="toggleDiffMaximize()"
-                              [title]="diffMaximized() ? 'Restore diff' : 'Maximize diff'">
+                              [appTooltip]="diffMaximized() ? 'Restore diff' : 'Maximize diff'">
                         {{ diffMaximized() ? '⤡' : '⤢' }}
                       </button>
                     }
@@ -173,7 +173,7 @@
               <button class="btn-sm" (click)="git.generateCommitMessage()"
                       [disabled]="git.generatingMsg() || isRunning()"
                       data-testid="git-generate-msg"
-                      title="Use Claude Haiku to draft a commit message from the diff.">
+                      [appTooltip]="'Use Claude Haiku to draft a commit message from the diff.'">
                 {{ git.generatingMsg() ? '⏳' : '✨ Generate' }}
               </button>
               <button class="btn-sm btn-sm--primary"

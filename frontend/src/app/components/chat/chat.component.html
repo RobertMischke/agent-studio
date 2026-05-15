@@ -135,7 +135,7 @@
                 <span class="chat__draft-name">{{ att.alt }}</span>
                 <button type="button"
                         class="chat__draft-remove"
-                        title="Remove attachment"
+                        [appTooltip]="'Remove attachment'"
                         (click)="removeDraftAttachment(att.id)">×</button>
               </li>
             }
@@ -162,7 +162,7 @@
             @if (allowAttachments()) {
               <button type="button"
                       class="chat__icon-btn"
-                      title="Attach image"
+                      [appTooltip]="'Attach image'"
                       data-testid="chat-attach"
                       [disabled]="disabled()"
                       (click)="triggerFilePicker()">📎</button>

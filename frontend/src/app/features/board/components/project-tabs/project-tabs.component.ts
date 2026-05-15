@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { projectIdentity } from '../../../../services/project-identity.util';
 
+import { TooltipDirective } from '../../../../components/tooltip';
 export interface ProjectRunnerIndicator { icon: string; cls: string; }
 
 /**
@@ -41,6 +42,7 @@ export interface ProjectAutoInfo {
 @Component({
   selector: 'app-project-tabs',
   standalone: true,
+  imports: [TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-tabs.component.html'
 })

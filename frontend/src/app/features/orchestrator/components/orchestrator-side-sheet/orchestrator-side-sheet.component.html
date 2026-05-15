@@ -45,20 +45,20 @@
         <button class="sheet__btn"
                 type="button"
                 (click)="onOpenVerboseDebug()"
-                [title]="'Open the read-only Verbose Debug view for ' + (activeJobTitle() ?? 'the active task')"
+                [appTooltip]="'Open the read-only Verbose Debug view for ' + (activeJobTitle() ?? 'the active task')"
                 data-testid="orch-side-sheet-verbose-debug">Debug</button>
       }
       <button class="sheet__btn"
               (click)="refresh()"
               [disabled]="loading()"
-              title="Reload active project chat"
+              [appTooltip]="'Reload active project chat'"
               data-testid="orch-side-sheet-refresh">
         {{ loading() ? '...' : 'Refresh' }}
       </button>
       <button class="sheet__close"
               type="button"
               (click)="hide()"
-              title="Close panel"
+              [appTooltip]="'Close panel'"
               data-testid="orch-side-sheet-close">✕</button>
     </div>
   </header>
@@ -88,7 +88,7 @@
                 [class.sheet__rail-item--active]="mode() === 'task'"
                 data-testid="orch-side-sheet-tab-task"
                 (click)="selectWindowMode('task')"
-                [title]="activeJobTitle() ?? ''">
+                [appTooltip]="activeJobTitle() ?? ''">
           <span>🎯</span><span>Task</span>
         </button>
       }
@@ -240,7 +240,7 @@
                         type="button"
                         (click)="onCreateTaskFromYourMessage()"
                         [disabled]="!canCreateTaskFromUserMessage()"
-                        title="Open Add Task pre-filled with the text you typed"
+                        [appTooltip]="'Open Add Task pre-filled with the text you typed'"
                         data-testid="orch-side-sheet-make-task-from-yours">
                   Make a task from your message
                 </button>
@@ -248,7 +248,7 @@
                         type="button"
                         (click)="onCreateTaskFromLastReply()"
                         [disabled]="!canCreateTaskFromReply()"
-                        title="Open Add Task pre-filled with the last orchestrator reply"
+                        [appTooltip]="'Open Add Task pre-filled with the last orchestrator reply'"
                         data-testid="orch-side-sheet-make-task">
                   Make a task from this reply
                 </button>

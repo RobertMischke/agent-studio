@@ -84,7 +84,7 @@
 
     @if (!maximizedPane() && panesVisible().prompt && (panesVisible().protocol || panesVisible().git)) {
       <div class="pane__splitter" role="separator" aria-orientation="vertical"
-           title="Resize" (pointerdown)="startPaneResize($event, 'prompt', firstVisibleAfter('prompt'))"><span></span></div>
+           [appTooltip]="'Resize'" (pointerdown)="startPaneResize($event, 'prompt', firstVisibleAfter('prompt'))"><span></span></div>
     }
 
     @if (isPaneRendered('protocol')) {
@@ -115,7 +115,7 @@
 
     @if (!maximizedPane() && panesVisible().protocol && panesVisible().git) {
       <div class="pane__splitter" role="separator" aria-orientation="vertical"
-           title="Resize" (pointerdown)="startPaneResize($event, 'protocol', 'git')"><span></span></div>
+           [appTooltip]="'Resize'" (pointerdown)="startPaneResize($event, 'protocol', 'git')"><span></span></div>
     }
 
     @if (isPaneRendered('git')) {

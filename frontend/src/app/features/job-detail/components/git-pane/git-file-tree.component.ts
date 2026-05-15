@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import type { GitFileChange } from '../../../../features/git';
 
+import { TooltipDirective } from '../../../../components/tooltip';
 interface TreeNode {
   /** Full path from repo root for files; folder path with trailing names joined for directories. */
   path: string;
@@ -35,6 +36,7 @@ interface TreeNode {
 @Component({
   selector: 'app-git-file-tree',
   standalone: true,
+  imports: [TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './git-file-tree.component.html',
   styleUrl: './git-file-tree.component.scss'

@@ -16,6 +16,7 @@ import { ProjectRailKey } from './project-shell/project-shell.config';
 import { WorkspaceScreenshotsComponent } from '../../screenshots';
 import type { JobScreenshot } from '../../screenshots';
 
+import { TooltipDirective } from '../../../components/tooltip';
 /**
  * Cycle 9g project-detail-feature container: renders the project-level
  * overlays (orch-feed / project-shell / analysis-report). The former
@@ -43,6 +44,7 @@ import type { JobScreenshot } from '../../screenshots';
     ProjectSkillReadinessSectionComponent,
     AnalysisReportDrilldownComponent,
     WorkspaceScreenshotsComponent,
+    TooltipDirective
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-overlays.component.html',

@@ -7,7 +7,7 @@
               [ngModel]="selectedModel()"
               (ngModelChange)="selectedModel.set($event)"
               [disabled]="running()"
-              title="Model used for the next review">
+              [appTooltip]="'Model used for the next review'">
         <option *ngFor="let m of availableModels" [value]="m.id">{{ m.label }}</option>
       </select>
       <button class="cr-run"

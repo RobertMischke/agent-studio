@@ -3,6 +3,7 @@ import { CommonModule } from '@angular/common';
 import { RoleBadgeComponent } from '../role-badge/role-badge.component';
 import type { ChatPhase } from '../../models/chat-phase';
 
+import { TooltipDirective } from '../../../../components/tooltip';
 /**
  * Compressed summary layer rendered above the verbatim chat. Each row
  * is one phase (a contiguous block of messages anchored by a user
@@ -17,7 +18,7 @@ import type { ChatPhase } from '../../models/chat-phase';
 @Component({
   selector: 'app-phase-summary-list',
   standalone: true,
-  imports: [CommonModule, RoleBadgeComponent],
+  imports: [CommonModule, RoleBadgeComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './phase-summary-list.component.html',
   styleUrl: './phase-summary-list.component.scss',

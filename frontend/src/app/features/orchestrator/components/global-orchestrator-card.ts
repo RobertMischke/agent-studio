@@ -3,6 +3,7 @@ import type { OrchestratorSession } from '../../../features/orchestrator';
 import { JobService } from '../../../services/job.service';
 import { ConceptHelpComponent } from '../../../components/concept-help/concept-help.component';
 
+import { TooltipDirective } from '../../../components/tooltip';
 /**
  * Global orchestrator card. Sits above the per-project orchestrator panel
  * and surfaces the singleton session that lives across all projects:
@@ -17,7 +18,7 @@ import { ConceptHelpComponent } from '../../../components/concept-help/concept-h
 @Component({
   selector: 'app-global-orchestrator-card',
   standalone: true,
-  imports: [ConceptHelpComponent],
+  imports: [ConceptHelpComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './global-orchestrator-card.html',
   styleUrl: './global-orchestrator-card.scss'

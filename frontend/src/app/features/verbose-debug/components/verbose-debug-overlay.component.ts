@@ -23,6 +23,7 @@ import type {
 } from '../../../components/chat/conversation-event';
 import { formatTokens as fmtTokens } from '../../../services/format.util';
 
+import { TooltipDirective } from '../../../components/tooltip';
 export type VerboseDebugTab =
   | 'overview'
   | 'actors'
@@ -96,7 +97,7 @@ const TOOL_LABELS: Record<ToolFamily, string> = {
   selector: 'app-verbose-debug-overlay',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule],
+  imports: [CommonModule, TooltipDirective],
   templateUrl: './verbose-debug-overlay.component.html',
   styleUrl: './verbose-debug-overlay.component.scss'
 })

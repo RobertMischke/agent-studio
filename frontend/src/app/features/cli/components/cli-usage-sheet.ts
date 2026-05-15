@@ -4,6 +4,7 @@ import { QuotaStripComponent } from '../../quota/components/quota-strip';
 import type { CliOutputLine, CliType } from '../../../models/job.model';
 import type { CliSessionInfo, CliUsageProjectGroup, CliUsageReport, CliUsageSection } from '../../../features/cli';
 
+import { TooltipDirective } from '../../../components/tooltip';
 interface SelectedSession {
   cliType: CliType;
   projectName: string;
@@ -26,7 +27,7 @@ interface SelectedSession {
 @Component({
   selector: 'app-cli-usage-sheet',
   standalone: true,
-  imports: [QuotaStripComponent],
+  imports: [QuotaStripComponent, TooltipDirective],
   templateUrl: './cli-usage-sheet.html',
   styleUrl: './cli-usage-sheet.scss',
   host: {

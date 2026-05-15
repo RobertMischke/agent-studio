@@ -13,7 +13,7 @@
                 [disabled]="refreshInFlight()"
                 (click)="refreshStatus()"
                 aria-label="Refresh update status"
-                title="Refresh update status">
+                [appTooltip]="'Refresh update status'">
           {{ refreshInFlight() ? '...' : '↻' }}
         </button>
         <button type="button" class="upd-center__close" data-testid="update-center-close" (click)="close()" aria-label="Close">×</button>

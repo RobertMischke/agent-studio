@@ -11,7 +11,7 @@
     <button class="sheet__close"
             type="button"
             (click)="close()"
-            title="Close panel (Esc)"
+            [appTooltip]="'Close panel (Esc)'"
             aria-label="Close filter panel"
             data-testid="kanban-filter-sidesheet-close">✕</button>
   </header>
@@ -32,7 +32,7 @@
       @if (query().length > 0) {
         <button type="button"
                 class="sheet__search-clear"
-                title="Clear search"
+                [appTooltip]="'Clear search'"
                 aria-label="Clear search"
                 data-testid="kanban-filter-sidesheet-search-clear"
                 (click)="onClear()">×</button>
@@ -74,7 +74,7 @@
           <li>
             <label class="sheet__checkbox"
                    [attr.data-testid]="'kanban-filter-tag-' + tag.id"
-                   [attr.title]="tag.description || tag.label">
+                   [appTooltip]="tag.description || tag.label">
               <input type="checkbox"
                      [checked]="activeTagIds().has(tag.id)"
                      (change)="onToggleTag(tag.id)" />

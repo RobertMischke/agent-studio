@@ -10,6 +10,7 @@ import {
 } from '../../../models/steering-docs.model';
 import { markdownToHtml } from '../../../components/markdown-utils';
 
+import { TooltipDirective } from '../../../components/tooltip';
 /**
  * Project-level Steering Docs surface. Shows the agent-facing
  * instruction sources for a watched project (README, AGENTS, ROADMAP,
@@ -50,6 +51,7 @@ const ACTIONS: SteeringAction[] = [
 @Component({
   selector: 'app-project-steering-docs-section',
   standalone: true,
+  imports: [TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-steering-docs-section.html',
   styleUrl: './project-steering-docs-section.scss'

@@ -18,7 +18,7 @@
         class="phase-summary__toggle"
         [attr.data-testid]="'phase-summary-toggle-' + phase.id"
         [attr.aria-expanded]="isExpanded(phase.id)"
-        [title]="phase.summary"
+        [appTooltip]="phase.summary"
         (click)="togglePhase(phase.id)">
         <span class="phase-summary__caret" aria-hidden="true">{{ isExpanded(phase.id) ? '▾' : '▸' }}</span>
         <span class="phase-summary__participants">

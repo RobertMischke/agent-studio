@@ -22,7 +22,7 @@
                   [attr.data-status]="r.status"
                   [attr.data-testid]="'run-icon-' + r.index"
                   [attr.aria-label]="'Run #' + r.index + ' ' + statusLabel(r)"
-                  [title]="iconTooltip(r)"
+                  [appTooltip]="iconTooltip(r)"
                   (click)="toggle(r.index)">{{ iconChar(r) }}</button>
         }
       </div>
@@ -37,7 +37,7 @@
               class="run-timeline__listtoggle"
               data-testid="runs-toggle"
               [attr.aria-expanded]="listExpanded()"
-              [title]="listExpanded() ? 'Collapse run list' : 'Show full run list'"
+              [appTooltip]="listExpanded() ? 'Collapse run list' : 'Show full run list'"
               (click)="toggleListExpanded()">{{ listExpanded() ? '▾' : '▸' }}</button>
     </div>
 
@@ -70,7 +70,7 @@
                       class="run-card__close"
                       [attr.data-testid]="'run-popover-close-' + r.index"
                       aria-label="Close run details"
-                      title="Close"
+                      [appTooltip]="'Close'"
                       (click)="closePopover(); $event.stopPropagation()">×</button>
             </div>
             <div class="run-card__body">
@@ -124,7 +124,7 @@
                         class="run-card__filter run-card__filter--primary"
                         (click)="openGitViewer.emit(r); $event.stopPropagation()"
                         [disabled]="!r.headShaBefore || !r.headShaAfter || r.headShaBefore === r.headShaAfter"
-                        [attr.title]="(!r.headShaBefore || !r.headShaAfter)
+                        [appTooltip]="(!r.headShaBefore || !r.headShaAfter)
                           ? 'No HEAD SHAs captured for this run (older run or repo unavailable).'
                           : (r.headShaBefore === r.headShaAfter
                             ? 'No commits made during this run.'
@@ -217,7 +217,7 @@
                       class="run-card__filter run-card__filter--primary"
                       (click)="openGitViewer.emit(r); $event.stopPropagation()"
                       [disabled]="!r.headShaBefore || !r.headShaAfter || r.headShaBefore === r.headShaAfter"
-                      [attr.title]="(!r.headShaBefore || !r.headShaAfter)
+                      [appTooltip]="(!r.headShaBefore || !r.headShaAfter)
                         ? 'No HEAD SHAs captured for this run (older run or repo unavailable).'
                         : (r.headShaBefore === r.headShaAfter
                           ? 'No commits made during this run.'

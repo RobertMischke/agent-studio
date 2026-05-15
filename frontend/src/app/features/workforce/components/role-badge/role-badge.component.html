@@ -4,7 +4,7 @@
   [attr.data-testid]="'role-badge-' + role().id"
   [attr.data-role-id]="role().id"
   [style.--role-accent]="role().accent"
-  [title]="role().description">
+  [appTooltip]="role().description">
   <span class="role-badge__glyph" aria-hidden="true">{{ role().glyph }}</span>
   <span class="role-badge__label">{{ role().label }}</span>
 </span>

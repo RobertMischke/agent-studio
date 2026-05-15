@@ -6,6 +6,7 @@ import { shouldEmitEditorSave } from './markdown-rich-editor.guard';
 import { CLIENT_ID } from '../services/client-id.interceptor';
 import { MediaLightboxService } from '../services/media-lightbox.service';
 
+import { TooltipDirective } from './tooltip';
 type EditorState = 'idle' | 'dirty' | 'saved';
 
 const ATTACHMENTS_PREFIX = 'attachments/';
@@ -13,7 +14,7 @@ const ATTACHMENTS_PREFIX = 'attachments/';
 @Component({
   selector: 'app-markdown-rich-editor',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, TooltipDirective],
   templateUrl: './markdown-rich-editor.html',
   styleUrl: './markdown-rich-editor.scss'
 })

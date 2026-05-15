@@ -6,6 +6,7 @@ import { GitHygieneService } from '../../../../services/git-hygiene.service';
 import { ErrorDialogService } from '../../../../services/error-dialog.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
 
+import { TooltipDirective } from '../../../../components/tooltip';
 /**
  * Per-task hygiene strip rendered at the top of the protocol pane for
  * jobs in `4-auto-review`, `5-human-review`, `6-completed`, or `7-archive`.
@@ -22,7 +23,7 @@ import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from 
   selector: 'app-hygiene-strip',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule],
+  imports: [CommonModule, TooltipDirective],
   templateUrl: './hygiene-strip.component.html',
   styleUrls: ['./hygiene-strip.component.scss']
 })

@@ -3,7 +3,7 @@
   class="version-badge"
   [class.version-badge--behind]="behindBy() > 0"
   data-testid="version-badge"
-  [attr.title]="tooltip()"
+  [appTooltip]="tooltip()"
   (click)="open()">
   <span class="version-badge__v">v{{ productVersion() }}</span>
   <span class="version-badge__sha">{{ headLocal() }}</span>

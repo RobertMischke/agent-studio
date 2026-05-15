@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/c
 import { CommonModule } from '@angular/common';
 import { UpdateClientService } from '../../../../services/update.service';
 
+import { TooltipDirective } from '../../../../components/tooltip';
 /**
  * Tiny header chip:  v0.1.0  bd05f36   plus an orange dot when origin/main
  * has moved past stable. Click opens the Update Center drawer. Designed
@@ -10,7 +11,7 @@ import { UpdateClientService } from '../../../../services/update.service';
 @Component({
   selector: 'app-update-version-badge',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './update-version-badge.component.html',
   styleUrl: './update-version-badge.component.scss'

@@ -32,7 +32,7 @@
           }
           <button class="activity-log__btn"
                   data-testid="activity-log-copy"
-                  [title]="copyTooltip()"
+                  [appTooltip]="copyTooltip()"
                   [disabled]="copyDisabled()"
                   (click)="copyVisible()">{{ copyLabel() }}</button>
         </div>
@@ -175,7 +175,7 @@
                       @if (item.toolDuration) {
                         <span class="convo-tools__duration"
                               data-testid="convo-tools-duration"
-                              [title]="'Tool activity took ' + item.toolDuration">{{ item.toolDuration }}</span>
+                              [appTooltip]="'Tool activity took ' + item.toolDuration">{{ item.toolDuration }}</span>
                       }
                       <span class="convo-tools__time">{{ formatTime(item.turn.timestamp) }}</span>
                     </button>
@@ -263,7 +263,7 @@
             @if (formatSince(ls.sinceMs); as since) {
               <span class="live-status__since"
                     data-testid="activity-log-live-since"
-                    [title]="'Time since the last activity-log line'">{{ since }}</span>
+                    [appTooltip]="'Time since the last activity-log line'">{{ since }}</span>
             }
           </div>
         }

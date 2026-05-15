@@ -1,19 +1,20 @@
 import { ChangeDetectionStrategy, Component, computed, input } from '@angular/core';
 import { getRole, resolveRole, type WorkforceRole, type WorkforceRoleId } from '../../models/workforce-role';
 
+import { TooltipDirective } from '../../../../components/tooltip';
 /**
  * Small inline badge that identifies the workforce role for a chat row.
  *
  * Two input shapes are supported so callers can pass either a
  * pre-resolved role id or the raw author/kind/refs and let the
  * deterministic mapper pick. The badge renders a glyph + label and
- * exposes the role description via the native `title` attribute (plain
- * text, default browser delay - no custom tooltip widget per the
- * no-HTML-tooltip rule).
+ * exposes the role description via the canonical `[appTooltip]`
+ * directive.
  */
 @Component({
   selector: 'app-role-badge',
   standalone: true,
+  imports: [TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './role-badge.component.html',
   styleUrl: './role-badge.component.scss',

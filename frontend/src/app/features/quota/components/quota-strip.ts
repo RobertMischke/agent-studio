@@ -5,6 +5,7 @@ import { QuotaApiService } from '../../../features/quota';
 import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../../features/quota';
 import { cliTypeIcon } from '../../../services/format.util';
 
+import { TooltipDirective } from '../../../components/tooltip';
 /**
  * Compact strip surfacing each installed CLI's subscription quota / rate-limit
  * status — designed to live at the top of the CLI Sessions sidesheet so the
@@ -21,6 +22,7 @@ import { cliTypeIcon } from '../../../services/format.util';
 @Component({
   selector: 'app-quota-strip',
   standalone: true,
+  imports: [TooltipDirective],
   templateUrl: './quota-strip.html',
   styleUrl: './quota-strip.scss'
 })

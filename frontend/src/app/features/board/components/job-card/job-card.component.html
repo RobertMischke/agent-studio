@@ -22,7 +22,7 @@
             [style.background]="oc.background"
             [style.borderColor]="oc.border"
             [style.color]="oc.foreground"
-            [title]="oc.tooltip">
+            [appTooltip]="oc.tooltip">
         <span class="job-card__owner-emoji" aria-hidden="true">{{ oc.emoji }}</span>
         <span class="job-card__owner-name">{{ oc.label }}</span>
       </span>
@@ -31,7 +31,7 @@
     <button type="button"
             class="job-card__delete"
             data-testid="job-card-delete"
-            title="Delete task"
+            [appTooltip]="'Delete task'"
             aria-label="Delete task"
             (click)="onDeleteClick($event)">🗑</button>
   </div>
@@ -44,7 +44,7 @@
     }
     <span class="job-card__title-text">{{ job().title || job().id }}</span>
     @if (compact()) {
-      <span class="job-card__compact-time" [title]="'Last activity: ' + relativeActivity()">
+      <span class="job-card__compact-time" [appTooltip]="'Last activity: ' + relativeActivity()">
         {{ relativeActivity() }}
       </span>
     }
@@ -55,13 +55,13 @@
             [class]="'job-card__type-pill--' + tt.kind"
             data-testid="job-task-type"
             [attr.data-task-type]="tt.kind"
-            [title]="tt.tooltip">{{ tt.icon }} {{ tt.label }}</span>
+            [appTooltip]="tt.tooltip">{{ tt.icon }} {{ tt.label }}</span>
     }
     <span class="job-card__state-pill">{{ stateLabel() }}</span>
     @if (phaseBadge(); as pb) {
       <span class="job-card__phase-pill"
             [class]="'job-card__phase-pill--' + pb.tone"
-            [title]="pb.tooltip"
+            [appTooltip]="pb.tooltip"
             data-testid="job-card-phase">
         {{ pb.label }}
       </span>
@@ -74,7 +74,7 @@
     }
     @if (job().pendingIntent; as pi) {
       <span class="job-card__pending-pill"
-            [title]="pendingTooltip(pi)"
+            [appTooltip]="pendingTooltip(pi)"
             data-testid="job-card-pending">
         ⏳ {{ pi.mode }}
       </span>
@@ -82,7 +82,7 @@
     @if (job().autoLoop; as al) {
       <span class="job-card__loop-pill"
             [class.job-card__loop-pill--hot]="loopHot()"
-            [title]="loopTooltip(al)"
+            [appTooltip]="loopTooltip(al)"
             data-testid="job-card-autoloop">
         ↻ auto-loop {{ al.iteration }}/{{ al.maxIterations }}
       </span>
@@ -90,7 +90,7 @@
     @if (reviewBadge(); as rb) {
       <span class="job-card__review-pill"
             [class]="'job-card__review-pill--' + rb.tone"
-            [title]="rb.tooltip"
+            [appTooltip]="rb.tooltip"
             data-testid="job-card-review">
         <span class="job-card__review-dot"></span>
         {{ rb.label }}
@@ -99,7 +99,7 @@
     @if (autoReviewProcessBadge(); as arb) {
       <span class="job-card__auto-review-pill"
             [class]="'job-card__auto-review-pill--' + arb.tone"
-            [title]="arb.tooltip"
+            [appTooltip]="arb.tooltip"
             data-testid="job-card-auto-review-status">
         <span class="job-card__auto-review-dot"></span>
         {{ arb.label }}
@@ -108,7 +108,7 @@
     @if (outcomeIssueBadge(); as oib) {
       <span class="job-card__issue-pill"
             [class]="'job-card__issue-pill--' + oib.tone"
-            [title]="oib.tooltip"
+            [appTooltip]="oib.tooltip"
             data-testid="job-card-outcome-issue">
         {{ oib.label }}
       </span>
@@ -182,12 +182,12 @@
               [attr.data-tag-id]="tg.id"
               [attr.data-testid]="tg.concern ? 'job-card-concern-chip' : null"
               [style.--tag-color]="tg.color"
-              [title]="tg.tooltip">@if (tg.concern) { <span class="job-card__tag-chip-warn" aria-hidden="true">⚠</span> }{{ tg.label }}</span>
+              [appTooltip]="tg.tooltip">@if (tg.concern) { <span class="job-card__tag-chip-warn" aria-hidden="true">⚠</span> }{{ tg.label }}</span>
       }
     </div>
   }
   @if (gitPill(); as g) {
-    <div class="job-card__git" [title]="gitTooltip()" data-testid="job-card-git">
+    <div class="job-card__git" [appTooltip]="gitTooltip()" data-testid="job-card-git">
       <span class="job-card__git-branch">⎇ {{ g.branch || '?' }}</span>
       <span class="job-card__git-count" [class.job-card__git-count--clean]="g.filesChanged === 0">
         {{ g.filesChanged }} {{ g.filesChanged === 1 ? 'file' : 'files' }}
@@ -198,7 +198,7 @@
     </div>
   }
   @if (job().commit; as c) {
-    <div class="job-card__commit" [title]="commitTooltip()" data-testid="job-card-commit">
+    <div class="job-card__commit" [appTooltip]="commitTooltip()" data-testid="job-card-commit">
       <span class="job-card__commit-sha">⏺ {{ c.shortSha }}</span>
       <span class="job-card__commit-files">{{ c.filesChanged }} {{ c.filesChanged === 1 ? 'file' : 'files' }}</span>
     </div>

@@ -11,7 +11,7 @@
       <button type="button"
               class="conv__head-btn"
               data-testid="conversation-open-trace"
-              title="Open the raw activity log in Trace mode"
+              [appTooltip]="'Open the raw activity log in Trace mode'"
               (click)="emitOpenTrace(null)">
         <span aria-hidden="true">≣</span>
         <span>Trace</span>
@@ -19,7 +19,7 @@
       <button type="button"
               class="conv__head-btn"
               data-testid="conversation-open-verbose-debug"
-              title="Open the read-only Verbose Debug view"
+              [appTooltip]="'Open the read-only Verbose Debug view'"
               (click)="emitOpenVerboseDebug()">
         <span aria-hidden="true">🐞</span>
         <span>Debug</span>
@@ -113,7 +113,7 @@
               <button type="button"
                       class="decision__trace"
                       data-testid="conversation-decision-open-trace"
-                      title="Open the source range in Trace mode"
+                      [appTooltip]="'Open the source range in Trace mode'"
                       (click)="emitOpenTrace(row.event.rawRange)">trace</button>
             </div>
           </li>
@@ -203,7 +203,7 @@
               data-testid="conversation-trace-link">
             <button type="button"
                     class="trace-link"
-                    [title]="row.event.label"
+                    [appTooltip]="row.event.label"
                     (click)="emitOpenTrace(row.event.link.range)">
               <span aria-hidden="true">≣</span>
               <span>{{ row.event.label }}</span>

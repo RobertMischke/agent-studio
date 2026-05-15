@@ -62,6 +62,7 @@ import { TagRegistryStore } from './services/tag-registry.store';
 import type { CliOutputLine } from './models/job.model';
 import type { RunTimeline } from './features/run-timeline';
 import type { JobScreenshot } from './features/screenshots';
+import { TooltipDirective } from './components/tooltip';
 import type { JobTokenSummary } from './features/tokens'; // verbose-debug overlay context types
 
 interface VerboseDebugContext {
@@ -74,7 +75,7 @@ interface VerboseDebugContext {
 
 @Component({
   selector: 'app-root',
-  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorSideSheetComponent, ProjectOverlaysComponent, AutoReviewIndicatorComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ConfirmDialogComponent, NotificationStackComponent, MediaLightboxComponent, ProjectTabsComponent, E2ECleanupDialogComponent, WorkspaceOverlaysComponent, WorkspaceBannerComponent, UpdateBannerComponent, UpdateVersionBadgeComponent, UpdateCenterComponent, UpdateBlockModalComponent, VerboseDebugOverlayComponent, FiltersDropdownComponent, KanbanFilterSidesheetComponent],
+  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorSideSheetComponent, ProjectOverlaysComponent, AutoReviewIndicatorComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ConfirmDialogComponent, NotificationStackComponent, MediaLightboxComponent, ProjectTabsComponent, E2ECleanupDialogComponent, WorkspaceOverlaysComponent, WorkspaceBannerComponent, UpdateBannerComponent, UpdateVersionBadgeComponent, UpdateCenterComponent, UpdateBlockModalComponent, VerboseDebugOverlayComponent, FiltersDropdownComponent, KanbanFilterSidesheetComponent, TooltipDirective],
   // Cycle 7b: OnPush. The shell mounts kanban + detail panel + many
   // sheets; default (Default) change detection re-checked the whole
   // tree on every async event (every poll tick, every signal write).

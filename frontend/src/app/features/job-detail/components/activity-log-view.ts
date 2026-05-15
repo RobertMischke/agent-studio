@@ -22,6 +22,7 @@ import {
 import { markdownToHtml } from '../../../components/markdown-utils';
 import { MarkdownImageLightboxDirective } from '../../../directives/markdown-image-lightbox.directive';
 
+import { TooltipDirective } from '../../../components/tooltip';
 type ViewMode = 'conversation' | 'trace';
 
 interface ToolChip {
@@ -74,7 +75,7 @@ interface RenderedTurn {
 @Component({
   selector: 'app-activity-log-view',
   standalone: true,
-  imports: [ScrollingModule, MarkdownImageLightboxDirective],
+  imports: [ScrollingModule, MarkdownImageLightboxDirective, TooltipDirective],
   // Cycle 7b: OnPush. The activity log re-derives conversation turns
   // from a capped lines() signal whenever new CLI output arrives. With
   // default CD, every parent change-detection pass also walked through

@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 import { PaneName, PanesVisible } from '../../services/layout-panes.service';
 
+import { TooltipDirective } from '../../../../components/tooltip';
 /**
  * Strip of icon-only toggle buttons for the prompt / protocol / git
  * panes plus the "Open in VS Code" launch shortcut. The label sits on
@@ -10,6 +11,7 @@ import { PaneName, PanesVisible } from '../../services/layout-panes.service';
 @Component({
   selector: 'app-pane-toggle-bar',
   standalone: true,
+  imports: [TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './pane-toggle-bar.component.html',
   styleUrl: './pane-toggle-bar.component.scss'

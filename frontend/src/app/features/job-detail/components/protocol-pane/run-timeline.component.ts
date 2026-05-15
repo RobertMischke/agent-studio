@@ -3,6 +3,7 @@ import type { JobInfo } from '../../../../models/job.model';
 import type { RunCommitInfo, RunRecord } from '../../../../features/run-timeline';
 import { JobService } from '../../../../services/job.service';
 
+import { TooltipDirective } from '../../../../components/tooltip';
 /**
  * Run timeline panel rendered above the activity log in the protocol
  * pane. Each card represents one CLI invocation between user inputs
@@ -28,6 +29,7 @@ import { JobService } from '../../../../services/job.service';
 @Component({
   selector: 'app-run-timeline',
   standalone: true,
+  imports: [TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './run-timeline.component.html',
   styleUrl: './run-timeline.component.scss'

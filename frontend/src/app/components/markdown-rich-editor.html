@@ -23,12 +23,12 @@
               [class.md-editor__tab--active]="mode() === 'rich'"
               (click)="setMode('rich')"
               aria-label="Rich text editor"
-              title="Rich text editor">P</button>
+              [appTooltip]="'Rich text editor'">P</button>
       <button class="md-editor__tab md-editor__tab--icon"
               [class.md-editor__tab--active]="mode() === 'source'"
               (click)="setMode('source')"
               aria-label="Markdown source editor"
-              title="Markdown source editor">M</button>
+              [appTooltip]="'Markdown source editor'">M</button>
       @if (canAttach()) {
         <button class="md-editor__tab md-editor__tab--icon md-editor__tab--upload"
                 type="button"
@@ -36,7 +36,7 @@
                 (click)="triggerFilePicker()"
                 data-testid="prompt-editor-attach"
                 [attr.aria-label]="uploading() ? 'Uploading image' : 'Insert image'"
-                [title]="uploading() ? 'Uploading…' : 'Insert image (Ctrl+V also works)'">
+                [appTooltip]="uploading() ? 'Uploading…' : 'Insert image (Ctrl+V also works)'">
           {{ uploading() ? '⏳' : '📎' }}
         </button>
       }
@@ -44,13 +44,13 @@
     <div class="md-editor__status" data-testid="prompt-editor-status">
       @switch (state()) {
         @case ('dirty') {
-          <span class="md-editor__dot md-editor__dot--dirty" title="Unsaved changes" aria-label="Unsaved changes"></span>
+          <span class="md-editor__dot md-editor__dot--dirty" [appTooltip]="'Unsaved changes'" aria-label="Unsaved changes"></span>
         }
         @case ('saved') {
-          <span class="md-editor__dot md-editor__dot--saved" title="Saved" aria-label="Saved"></span>
+          <span class="md-editor__dot md-editor__dot--saved" [appTooltip]="'Saved'" aria-label="Saved"></span>
         }
         @default {
-          <span class="md-editor__dot" title="Saved" aria-label="Saved"></span>
+          <span class="md-editor__dot" [appTooltip]="'Saved'" aria-label="Saved"></span>
         }
       }
       <button class="md-editor__save md-editor__save--icon"
@@ -58,7 +58,7 @@
               [disabled]="readOnly()"
               data-testid="prompt-editor-save"
               aria-label="Save (Ctrl+S)"
-              title="Save (Ctrl+S)">💾</button>
+              [appTooltip]="'Save (Ctrl+S)'">💾</button>
     </div>
   </div>
 

@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input } from '@angular/core';
 import { GitHygieneService } from '../../../../services/git-hygiene.service';
 
+import { TooltipDirective } from '../../../../components/tooltip';
 /**
  * Compact dirty / unpushed badge rendered on the project header chip.
  * Subscribes to the shared GitHygieneService so multiple consumers share
@@ -11,6 +12,7 @@ import { GitHygieneService } from '../../../../services/git-hygiene.service';
 @Component({
   selector: 'app-project-hygiene-badge',
   standalone: true,
+  imports: [TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-hygiene-badge.component.html',
   styleUrl: './project-hygiene-badge.component.scss'

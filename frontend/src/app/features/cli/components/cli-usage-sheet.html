@@ -5,7 +5,7 @@
       <div class="sheet__subtitle">Quota windows only. Sessions live in the Orchestrator window.</div>
     </div>
     <div class="sheet__header-actions">
-      <button class="sheet__close" type="button" (click)="closed.emit()" title="Close panel">✕</button>
+      <button class="sheet__close" type="button" (click)="closed.emit()" [appTooltip]="'Close panel'">✕</button>
     </div>
   </header>
 

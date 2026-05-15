@@ -3,7 +3,7 @@ import { JobInfo, JobOrderItem } from '../../../models/job.model';
 import { JobCardComponent } from './job-card/job-card.component';
 import { projectIdentity } from '../../../services/project-identity.util';
 import { cliTypeIcon } from '../../../services/format.util';
-import { InstantTooltipDirective } from '../../../directives/instant-tooltip.directive';
+import { TooltipDirective } from '../../../components/tooltip';
 import { groupReviewJobs } from './review-grouping.util';
 import { AutoReviewStatusStore } from '../../../services/auto-review-status.store';
 import { InfoButtonComponent } from '../../../components/info-button/info-button.component';
@@ -13,7 +13,7 @@ const ARCHIVE_VISIBLE_LIMIT = 20;
 @Component({
   selector: 'app-job-column',
   standalone: true,
-  imports: [JobCardComponent, InstantTooltipDirective, InfoButtonComponent],
+  imports: [JobCardComponent, TooltipDirective, InfoButtonComponent],
   // Cycle 7b: OnPush. The board mounts ~10 columns and re-renders the
   // full @for of cards every CD pass under Default. JobCard is already
   // OnPush; promoting the column propagates that benefit upward so a

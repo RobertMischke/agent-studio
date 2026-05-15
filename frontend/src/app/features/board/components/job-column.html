@@ -4,7 +4,7 @@
               [class.column-rail--dragover]="isDragOver"
               [attr.data-testid]="'lane-rail-' + state()"
               [attr.data-state]="state()"
-              [appTip]="railTooltip()"
+              [appTooltip]="railTooltip()"
               (click)="collapseToggle.emit()"
               (dragover)="onDragOver($event)"
               (dragleave)="onDragLeave($event)"
@@ -66,7 +66,7 @@
                   [attr.data-archiving]="archiving() ? 'true' : null"
                   [attr.aria-busy]="archiving() ? 'true' : null"
                   [disabled]="archiving()"
-                  [appTip]="archiving() ? 'Archiving in progress…' : 'Move all completed tasks to Archive'"
+                  [appTooltip]="archiving() ? 'Archiving in progress…' : 'Move all completed tasks to Archive'"
                   (click)="archiveAll.emit()">
             @if (archiving()) {
               <span class="column__archive-all__spinner" aria-hidden="true"></span>
@@ -80,7 +80,7 @@
           <button type="button"
                   class="column__collapse"
                   [attr.data-testid]="'lane-collapse-' + state()"
-                  [appTip]="'Collapse ' + title() + ' lane'"
+                  [appTooltip]="'Collapse ' + title() + ' lane'"
                   (click)="collapseToggle.emit()">‹</button>
         }
       </div>
@@ -98,7 +98,7 @@
                     [attr.data-testid]="'archive-row'"
                     [style.--project-color]="identityFor(job.projectName).color"
                     [style.--project-on]="identityFor(job.projectName).onColor"
-                    [appTip]="archiveTooltip(job)"
+                    [appTooltip]="archiveTooltip(job)"
                     (click)="jobClick.emit(job)">
               <span class="archive-row__date">{{ formatShortDate(job.lastActivity) }}</span>
               <span class="archive-row__disk"

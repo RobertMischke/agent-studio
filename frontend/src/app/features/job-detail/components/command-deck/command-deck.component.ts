@@ -5,6 +5,7 @@ import { CLI_TYPES } from '../../../../models/job.model';
 import type { CliModelInfo } from '../../../../features/cli';
 import { cliTypeIcon as fmtCliTypeIcon, cliTypeLabel as fmtCliTypeLabel, formatMultiplier as fmtMultiplier } from '../../../../services/format.util';
 
+import { TooltipDirective } from '../../../../components/tooltip';
 /**
  * Top toolbar of the job-detail view: project picker, CLI tab strip,
  * model dropdown, and the live elapsed-time / start / stop controls.
@@ -17,7 +18,7 @@ import { cliTypeIcon as fmtCliTypeIcon, cliTypeLabel as fmtCliTypeLabel, formatM
   selector: 'app-command-deck',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule],
+  imports: [FormsModule, TooltipDirective],
   templateUrl: './command-deck.component.html',
   styleUrls: ['./command-deck.component.scss']
 })

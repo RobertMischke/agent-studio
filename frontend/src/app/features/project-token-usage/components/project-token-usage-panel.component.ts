@@ -11,6 +11,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { JobService } from '../../../services/job.service';
 import type { ProjectExpensiveJob, ProjectExpensiveJobsResponse, ProjectJobTokenDetail, ProjectTokenCategory, ProjectTokenHeatmap, ProjectTokenHeatmapJob, ProjectTokenUsageSummary } from '../../../features/project-token-usage';
 
+import { TooltipDirective } from '../../../components/tooltip';
 interface CardSpec {
   testid: string;
   label: string;
@@ -38,6 +39,7 @@ interface CardSpec {
 @Component({
   selector: 'app-project-token-usage-panel',
   standalone: true,
+  imports: [TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-token-usage-panel.component.html',
   styleUrl: './project-token-usage-panel.component.scss',

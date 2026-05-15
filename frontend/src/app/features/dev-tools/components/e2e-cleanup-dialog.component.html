@@ -6,7 +6,7 @@
         <h2 class="panel__title">Delete E2E Jobs</h2>
         <p class="panel__sub">Across every watched project. Matches "E2E" anywhere in id or title.</p>
       </div>
-      <button class="panel__close" (click)="closed.emit()" title="Close">×</button>
+      <button class="panel__close" (click)="closed.emit()" [appTooltip]="'Close'">×</button>
     </header>
 
     <div class="panel__body">

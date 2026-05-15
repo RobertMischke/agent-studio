@@ -5,6 +5,7 @@ import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../../features/
 import { cliTypeIcon } from '../../../services/format.util';
 import { QuotaApiService } from '../../../features/quota';
 
+import { TooltipDirective } from '../../../components/tooltip';
 interface QuotaCardModel {
   cliType: CliType;
   icon: string;
@@ -41,6 +42,7 @@ interface QuotaCardModel {
 @Component({
   selector: 'app-header-quota',
   standalone: true,
+  imports: [TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './header-quota.html',
   styleUrl: './header-quota.scss'

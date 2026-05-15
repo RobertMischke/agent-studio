@@ -33,6 +33,7 @@ import { projectConversation } from '../../../../components/chat/conversation-pr
 import { BeautifulResultsComponent } from '../beautiful-results/beautiful-results.component';
 import { deriveProtocolVerdict, type ProtocolVerdict } from './protocol-verdict';
 
+import { TooltipDirective } from '../../../../components/tooltip';
 export type InspectorTab = 'protocol' | 'activity';
 
 /**
@@ -58,7 +59,7 @@ interface InterimSummaryState {
   selector: 'app-protocol-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, ActivityLogViewComponent, ConversationViewComponent, RunTimelineComponent, RunGitViewerComponent, ScreenshotStripComponent, VerboseDebugOverlayComponent, HygieneStripComponent, ReviewEvidencePanelComponent, BeautifulResultsComponent, CodeReviewPanelComponent],
+  imports: [CommonModule, ActivityLogViewComponent, ConversationViewComponent, RunTimelineComponent, RunGitViewerComponent, ScreenshotStripComponent, VerboseDebugOverlayComponent, HygieneStripComponent, ReviewEvidencePanelComponent, BeautifulResultsComponent, CodeReviewPanelComponent, TooltipDirective],
   templateUrl: './protocol-pane.component.html',
   styleUrls: ['./protocol-pane.component.scss']
 })

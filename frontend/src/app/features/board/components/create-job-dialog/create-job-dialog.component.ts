@@ -10,6 +10,7 @@ import { cliTypeIcon as fmtCliTypeIcon, cliTypeLabel as fmtCliTypeLabel, formatM
 import { JobService } from '../../../../services/job.service';
 import { TagRegistryStore } from '../../../../services/tag-registry.store';
 
+import { TooltipDirective } from '../../../../components/tooltip';
 export interface PendingAttachment {
   id: string;
   file: File;
@@ -56,7 +57,7 @@ const PENDING_PREFIX = 'pending-attachment-';
   selector: 'app-create-job-dialog',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [FormsModule],
+  imports: [FormsModule, TooltipDirective],
   templateUrl: './create-job-dialog.component.html'
 })
 export class CreateJobDialogComponent {

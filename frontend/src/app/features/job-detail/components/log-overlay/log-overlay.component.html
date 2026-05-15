@@ -24,7 +24,7 @@
           @if (log().length > 0) {
             <button class="btn-sm"
                     data-testid="log-overlay-copy-protocol"
-                    [title]="'Copy the protocol entries to the clipboard'"
+                    [appTooltip]="'Copy the protocol entries to the clipboard'"
                     (click)="copyProtocol()">{{ copyLabel() }}</button>
           }
         </div>

@@ -38,10 +38,11 @@ import { PaneToggleBarComponent } from './components/pane-toggle-bar/pane-toggle
 import { TriagePanelComponent, TriageActionPayload } from './components/triage-panel/triage-panel.component';
 import { markdownToHtml } from '../../components/markdown-utils';
 
+import { TooltipDirective } from '../../components/tooltip';
 @Component({
   selector: 'app-job-detail',
   standalone: true,
-  imports: [FormsModule, GitPaneComponent, CommandDeckComponent, PromptPaneComponent, LogOverlayComponent, ProtocolPaneComponent, DetailHeaderComponent, CliConfigCardComponent, PaneToggleBarComponent, TriagePanelComponent],
+  imports: [FormsModule, GitPaneComponent, CommandDeckComponent, PromptPaneComponent, LogOverlayComponent, ProtocolPaneComponent, DetailHeaderComponent, CliConfigCardComponent, PaneToggleBarComponent, TriagePanelComponent, TooltipDirective],
   providers: [LayoutPanesService, ClaudeSessionPollService, SessionEventsPollService, RunTimelinePollService, ScreenshotsPollService, GitPaneService, CliOutputPollService],
   // Cycle 7b: OnPush. The detail panel mounts seven polling services
   // (claude session, session events, run timeline, screenshots,

@@ -30,7 +30,7 @@
                 [attr.data-testid]="'triage-action-' + b.id"
                 [attr.data-action-id]="b.id"
                 [disabled]="mutationsBlocked() || actingId() !== null"
-                [title]="buttonTooltip(b)"
+                [appTooltip]="buttonTooltip(b)"
                 (click)="onClick(b)">
           @if (confirmingId() === b.id) {
             Confirm: {{ b.label }}?

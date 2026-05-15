@@ -29,7 +29,7 @@
       <span class="commandbar__label commandbar__label--sr" aria-hidden="false">Project</span>
       <select class="commandbar__select commandbar__select--chip"
               aria-label="Project"
-              title="Project"
+              [appTooltip]="'Project'"
               data-testid="commandbar-project"
               [ngModel]="currentWatchPath()"
               (ngModelChange)="projectChange.emit($event)">
@@ -45,7 +45,7 @@
                 class="commandbar__cli-btn"
                 [class.commandbar__cli-btn--active]="cliTypeDraft() === t"
                 [disabled]="isRunning()"
-                [title]="cliTypeLabel(t)"
+                [appTooltip]="cliTypeLabel(t)"
                 [attr.aria-label]="cliTypeLabel(t)"
                 (click)="cliTypeChange.emit(t)">
           <span class="commandbar__cli-icon" aria-hidden="true">{{ cliTypeIcon(t) }}</span>
@@ -60,7 +60,7 @@
       <select id="job-model"
               class="commandbar__select commandbar__select--chip"
               aria-label="Model"
-              title="Model"
+              [appTooltip]="'Model'"
               data-testid="commandbar-model"
               [ngModel]="modelDraft()"
               [disabled]="isRunning()"
@@ -89,7 +89,7 @@
               data-testid="command-deck-start"
               (click)="start.emit()"
               [disabled]="starting() || !!startDisabledReason()"
-              [attr.title]="startDisabledReason()">
+              [appTooltip]="startDisabledReason()">
         {{ starting() ? '⏳' : '▶ Start' }}
       </button>
       @if (startDisabledReason()) {

@@ -13,7 +13,7 @@
         <span class="git-tree__label git-tree__label--folder">{{ node.label }}/</span>
         <span class="git-tree__count">{{ node.count }}</span>
       } @else {
-        <span class="git-tree__status" [title]="node.status">{{ (node.status || '').trim() || '·' }}</span>
+        <span class="git-tree__status" [appTooltip]="node.status">{{ (node.status || '').trim() || '·' }}</span>
         <span class="git-tree__label">{{ node.label }}</span>
       }
       @if (node.added || node.removed) {

@@ -5,6 +5,7 @@ import { JobService } from '../../../services/job.service';
 import { TokenSummaryBlockComponent } from '../../tokens/components/token-summary-block';
 import { GlobalOrchestratorCardComponent } from './global-orchestrator-card';
 
+import { TooltipDirective } from '../../../components/tooltip';
 /**
  * Per-project orchestrator log feed. Reads
  * `/api/runner/{projectName}/orchestrator-log` on init and every 10s
@@ -21,7 +22,7 @@ import { GlobalOrchestratorCardComponent } from './global-orchestrator-card';
 @Component({
   selector: 'app-orchestrator-feed',
   standalone: true,
-  imports: [FormsModule, TokenSummaryBlockComponent, GlobalOrchestratorCardComponent],
+  imports: [FormsModule, TokenSummaryBlockComponent, GlobalOrchestratorCardComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './orchestrator-feed.html',
   styleUrl: './orchestrator-feed.scss'

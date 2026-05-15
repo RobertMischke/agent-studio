@@ -20,7 +20,7 @@
         <a class="cli-usage-modal__button"
            data-testid="usage-hover-panel-open-timeline"
            href="#/workspace/tokens"
-           title="Open workspace token timeline">
+           [appTooltip]="'Open workspace token timeline'">
           Timeline
         </a>
         <button type="button"
@@ -28,7 +28,7 @@
                 data-testid="usage-hover-panel-refresh-all"
                 [disabled]="refreshingAll"
                 (click)="refreshAll.emit($event)"
-                title="Re-probe every CLI now">
+                [appTooltip]="'Re-probe every CLI now'">
           {{ refreshingAll ? 'Refreshing...' : 'Refresh all' }}
         </button>
         <button type="button"
@@ -73,7 +73,7 @@
           <div class="cli-usage-modal__spark-label">Last 24h</div>
           <div class="cli-usage-modal__bars" aria-label="Token trend for the last 24 hours">
             @for (p of spark24h(); track p.label) {
-              <span [style.height.%]="p.pct" [title]="p.label + ': ' + formatTokens(p.total)"></span>
+              <span [style.height.%]="p.pct" [appTooltip]="p.label + ': ' + formatTokens(p.total)"></span>
             }
           </div>
         </div>
@@ -81,7 +81,7 @@
           <div class="cli-usage-modal__spark-label">Last 7d</div>
           <div class="cli-usage-modal__bars" aria-label="Token trend for the last seven days">
             @for (p of spark7d(); track p.label) {
-              <span [style.height.%]="p.pct" [title]="p.label + ': ' + formatTokens(p.total)"></span>
+              <span [style.height.%]="p.pct" [appTooltip]="p.label + ': ' + formatTokens(p.total)"></span>
             }
           </div>
         </div>
@@ -105,7 +105,7 @@
                     [disabled]="refreshing[row.cliType]"
                     (click)="refreshOne.emit({ cliType: row.cliType, event: $event })"
                     [attr.data-testid]="'usage-hover-panel-refresh-' + row.cliType"
-                    [title]="'Re-probe ' + row.label">
+                    [appTooltip]="'Re-probe ' + row.label">
               {{ refreshing[row.cliType] ? '...' : '↻' }}
             </button>
           </header>

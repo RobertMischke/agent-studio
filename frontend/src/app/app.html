@@ -49,7 +49,7 @@
                     [class.header__filter-trigger--active]="kanbanFilterSidesheetOpen() || hasActiveFiltersOrSearch()"
                     [attr.aria-pressed]="kanbanFilterSidesheetOpen()"
                     [attr.aria-label]="'Open filter and view panel'"
-                    title="Filters &amp; view (press /)"
+                    [appTooltip]="'Filters &amp; view (press /)'"
                     (click)="toggleKanbanFilterSidesheet()">
               <span aria-hidden="true">🔍</span>
               @if (searchQuery().trim().length > 0) {
@@ -66,7 +66,7 @@
                   data-testid="compact-cards-toggle"
                   [class.btn--compact-toggle--active]="compactCards()"
                   [attr.aria-pressed]="compactCards()"
-                  [title]="compactCards() ? 'Show full cards' : 'Show compact cards (titles only)'"
+                  [appTooltip]="compactCards() ? 'Show full cards' : 'Show compact cards (titles only)'"
                   (click)="toggleCompactCards()">
             <span aria-hidden="true">{{ compactCards() ? '▤' : '▥' }}</span>
             <span class="btn--compact-toggle__label">{{ compactCards() ? 'Compact' : 'Full' }}</span>
@@ -77,7 +77,7 @@
           <div class="devtools-menu">
             <button class="devtools-menu__trigger"
                     data-testid="devtools-menu-trigger"
-                    title="Dev tools"
+                    [appTooltip]="'Dev tools'"
                     [class.devtools-menu__trigger--open]="devToolsMenuOpen()"
                     (click)="devToolsMenuOpen.set(!devToolsMenuOpen()); $event.stopPropagation()">⋮</button>
             @if (devToolsMenuOpen()) {
@@ -163,11 +163,11 @@
               <aside class="task-nav task-nav--collapsed" data-testid="task-nav-collapsed">
                 <button class="task-nav__expand"
                         data-testid="task-nav-expand"
-                        title="Expand task list"
+                        [appTooltip]="'Expand task list'"
                         (click)="setTaskNavCollapsed(false)">›</button>
                 <button class="task-nav__expand task-nav__expand--board"
                         data-testid="back-to-board"
-                        title="Back to board"
+                        [appTooltip]="'Back to board'"
                         (click)="closeDetail()">←</button>
               </aside>
             } @else {
@@ -177,7 +177,7 @@
                   <button class="btn btn--ghost" data-testid="back-to-board" (click)="closeDetail()">← Board</button>
                   <button class="task-nav__collapse"
                           data-testid="task-nav-collapse"
-                          title="Collapse task list"
+                          [appTooltip]="'Collapse task list'"
                           (click)="setTaskNavCollapsed(true)">‹</button>
                 </div>
                 <div>

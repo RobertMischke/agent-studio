@@ -14,6 +14,7 @@ import type { CliType } from '../../../models/job.model';
 import { ModalStackService } from '../../../services/modal-stack.service';
 import { ConceptHelpComponent } from '../../../components/concept-help/concept-help.component';
 import type { QuotaWindow } from '../../../features/quota';
+import { TooltipDirective } from '../../../components/tooltip';
 import type {
   AdHocUsageAggregate,
   TokenSummaryAggregate,
@@ -58,7 +59,7 @@ interface ModelUsageRow {
 @Component({
   selector: 'app-cli-usage-detail-modal',
   standalone: true,
-  imports: [ConceptHelpComponent],
+  imports: [ConceptHelpComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './cli-usage-detail-modal.html',
   styleUrl: './cli-usage-detail-modal.scss',

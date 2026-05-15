@@ -10,12 +10,12 @@
         <span class="hquota__icon" aria-hidden="true">{{ card.icon }}</span>
         <span class="hquota__label">{{ card.label }}</span>
         @if (card.stale) {
-          <span class="hquota__stale-dot" title="Stale: snapshot is older than the cache TTL.">●</span>
+          <span class="hquota__stale-dot" [appTooltip]="'Stale: snapshot is older than the cache TTL.'">●</span>
         }
       </div>
 
       <span class="hquota__value">{{ card.value }}</span>
-      <span class="hquota__trend" [title]="card.trendLabel">{{ card.trend }}</span>
+      <span class="hquota__trend" [appTooltip]="card.trendLabel">{{ card.trend }}</span>
       <span class="hquota__window">{{ card.windowLabel }}</span>
       <span class="hquota__bar" aria-hidden="true">
         <span class="hquota__bar-fill" [style.width.%]="card.barPct"></span>

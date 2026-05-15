@@ -16,6 +16,7 @@ import { ProjectAnalysisReportsSectionComponent } from './project-analysis-repor
 import { AutonomySliderComponent } from './autonomy-slider';
 import { AnalysisReport } from '../../../models/analysis-report.model';
 
+import { TooltipDirective } from '../../../components/tooltip';
 interface ProjectSettingsRow {
   autoCommit: boolean;
   autoPushStrategy: AutoPushStrategy;
@@ -58,8 +59,7 @@ export type ProjectDetailView =
     ProjectSupervisorSectionComponent,
     ProjectMetaCycleSectionComponent,
     ProjectAnalysisReportsSectionComponent,
-    AutonomySliderComponent
-  ],
+    AutonomySliderComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-detail.html',
   styleUrl: './project-detail.scss'

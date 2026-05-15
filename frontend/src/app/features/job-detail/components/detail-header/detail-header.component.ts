@@ -10,6 +10,7 @@ import { NowTickService } from '../../../../services/now-tick.service';
 import { projectIdentity } from '../../../../services/project-identity.util';
 import { ProjectHygieneBadgeComponent } from '../hygiene-strip/project-hygiene-badge.component';
 
+import { TooltipDirective } from '../../../../components/tooltip';
 /**
  * Top header of the job-detail view: back button, editable title,
  * state pill, and the "Complete & Next" review action. Title-edit
@@ -19,7 +20,7 @@ import { ProjectHygieneBadgeComponent } from '../hygiene-strip/project-hygiene-b
   selector: 'app-detail-header',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [ProjectHygieneBadgeComponent],
+  imports: [ProjectHygieneBadgeComponent, TooltipDirective],
   templateUrl: './detail-header.component.html',
   styleUrl: './detail-header.component.scss'
 })

@@ -1,3 +1,4 @@
+import { TooltipDirective } from '../../../../components/tooltip';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -135,6 +136,7 @@ const LANE_LABELS: Record<string, string> = {
 @Component({
   selector: 'app-triage-panel',
   standalone: true,
+  imports: [TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './triage-panel.component.html',
   styleUrl: './triage-panel.component.scss'

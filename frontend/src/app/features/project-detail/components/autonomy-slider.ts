@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, OnInit, computed, inject, input, si
 import { FormsModule } from '@angular/forms';
 import { JobService } from '../../../services/job.service';
 
+import { TooltipDirective } from '../../../components/tooltip';
 interface AutonomyStop {
   level: number;
   name: string;
@@ -25,7 +26,7 @@ const STOPS: AutonomyStop[] = [
 @Component({
   selector: 'app-autonomy-slider',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './autonomy-slider.html',
   styleUrl: './autonomy-slider.scss'

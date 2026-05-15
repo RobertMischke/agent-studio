@@ -10,7 +10,7 @@
             class="create-dialog__close"
             data-testid="create-dialog-close"
             aria-label="Close"
-            title="Close"
+            [appTooltip]="'Close'"
             (click)="cancel.emit()">×</button>
     <h2 class="create-dialog__title" data-testid="create-dialog-header">{{ header() }}</h2>
 
@@ -26,7 +26,7 @@
                 data-testid="create-generate-title"
                 [disabled]="!canGenerateTitle()"
                 (click)="generateTitle()"
-                title="Generate a title from the prompt below (Haiku)">
+                [appTooltip]="'Generate a title from the prompt below (Haiku)'">
           @if (titleGenerating()) {
             <span class="create-dialog__generate-spinner" aria-hidden="true"></span>
             <span>Generating…</span>
@@ -124,7 +124,7 @@
                     [class.create-tag-picker__chip--active]="newTags().includes(t.id)"
                     [attr.data-testid]="'create-tag-' + t.id"
                     [style.--tag-color]="t.color"
-                    [title]="t.description ? t.label + ': ' + t.description : t.label"
+                    [appTooltip]="t.description ? t.label + ': ' + t.description : t.label"
                     (click)="toggleTag(t.id)">{{ t.label }}</button>
           }
         </div>
@@ -140,7 +140,7 @@
                   data-testid="create-enhance-prompt"
                   [disabled]="!canEnhance()"
                   (click)="enhancePrompt()"
-                  title="Refine the prompt, auto-generate the title, and pre-fill tags + lane (Haiku)">
+                  [appTooltip]="'Refine the prompt, auto-generate the title, and pre-fill tags + lane (Haiku)'">
             @if (enhancing()) {
               <span class="create-dialog__generate-spinner" aria-hidden="true"></span>
               <span>Enhancing…</span>
@@ -153,7 +153,7 @@
                   class="create-dialog__attach-btn"
                   data-testid="create-attach-image"
                   (click)="triggerFilePicker()"
-                  title="Attach image (paste or drop also works)">📎 Image</button>
+                  [appTooltip]="'Attach image (paste or drop also works)'">📎 Image</button>
         </div>
       </div>
       <textarea #promptArea
@@ -209,7 +209,7 @@
               <button type="button"
                       class="create-dialog__attachment-remove"
                       (click)="removeAttachment(att.id)"
-                      title="Remove attachment">×</button>
+                      [appTooltip]="'Remove attachment'">×</button>
             </div>
           }
         </div>

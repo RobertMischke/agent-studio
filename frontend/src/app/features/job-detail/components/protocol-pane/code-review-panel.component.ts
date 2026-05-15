@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import { JobInfo } from '../../../../models/job.model';
 import { CodeReviewListEntry, JobService } from '../../../../services/job.service';
 
+import { TooltipDirective } from '../../../../components/tooltip';
 /**
  * User-triggered code-review panel that lives in the protocol pane.
  *
@@ -29,7 +30,7 @@ import { CodeReviewListEntry, JobService } from '../../../../services/job.servic
   selector: 'app-code-review-panel',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule, FormsModule, TooltipDirective],
   templateUrl: './code-review-panel.component.html',
   styleUrl: './code-review-panel.component.scss'
 })

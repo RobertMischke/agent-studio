@@ -4,6 +4,7 @@ import { CliConsoleComponent } from './cli-console';
 import type { CliOutputLine, CliType } from '../../../models/job.model';
 import type { CliSessionInfo, CliUsageProjectGroup, CliUsageReport, CliUsageSection, LinkedJobRef } from '../../../features/cli';
 
+import { TooltipDirective } from '../../../components/tooltip';
 interface SelectedSession {
   cliType: CliType;
   projectName: string;
@@ -13,7 +14,7 @@ interface SelectedSession {
 @Component({
   selector: 'app-cli-sessions-panel',
   standalone: true,
-  imports: [CliConsoleComponent],
+  imports: [CliConsoleComponent, TooltipDirective],
   templateUrl: './cli-sessions-panel.html',
   styleUrl: './cli-sessions-panel.scss',
 })

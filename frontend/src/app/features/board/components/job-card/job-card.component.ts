@@ -8,6 +8,7 @@ import { projectIdentity } from '../../../../services/project-identity.util';
 import { TagRegistryStore } from '../../../../services/tag-registry.store';
 import { shouldShowFailureToast } from '../../../job-detail/services/run-outcome.util';
 
+import { TooltipDirective } from '../../../../components/tooltip';
 // Shared 'now' signal that ticks every 30s so all relative timestamps update in lockstep
 // without re-reading Date.now() during change detection (which causes NG0100).
 const nowTick = signal(Date.now());
@@ -18,6 +19,7 @@ if (typeof window !== 'undefined') {
 @Component({
   selector: 'app-job-card',
   standalone: true,
+  imports: [TooltipDirective],
   // OnPush + signal-based reactivity. With ~30+ cards in a single
   // 4-auto-review lane, default Zone CD on every microtask was cumulating
   // into 80-100 ms long tasks during scroll/poll bursts. The component's

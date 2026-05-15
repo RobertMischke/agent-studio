@@ -5,6 +5,7 @@ import { markdownToHtml } from '../../../../components/markdown-utils';
 import { MarkdownImageLightboxDirective } from '../../../../directives/markdown-image-lightbox.directive';
 import { resolveProtocolImageSrc } from '../protocol-pane/protocol-image-resolver';
 
+import { TooltipDirective } from '../../../../components/tooltip';
 /**
  * Prompt pane of the job-detail view: renders prompt.md inside the
  * shared markdown-rich-editor. Edit lock is driven by the parent's
@@ -14,7 +15,7 @@ import { resolveProtocolImageSrc } from '../protocol-pane/protocol-image-resolve
   selector: 'app-prompt-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MarkdownRichEditorComponent, MarkdownImageLightboxDirective],
+  imports: [MarkdownRichEditorComponent, MarkdownImageLightboxDirective, TooltipDirective],
   templateUrl: './prompt-pane.component.html',
   styleUrls: ['./prompt-pane.component.scss']
 })

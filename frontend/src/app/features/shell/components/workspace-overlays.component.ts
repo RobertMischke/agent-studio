@@ -6,6 +6,7 @@ import { CliAdminPanelComponent } from '../../cli/components/cli-admin-panel';
 import type { JobScreenshot } from '../../../features/screenshots';
 import { ModalStackService } from '../../../services/modal-stack.service';
 
+import { TooltipDirective } from '../../../components/tooltip';
 /**
  * Cycle 9g shell-feature container: renders the three workspace-level
  * overlays (tokens / screenshots / cli-admin) above the kanban shell.
@@ -19,7 +20,7 @@ import { ModalStackService } from '../../../services/modal-stack.service';
 @Component({
   selector: 'app-workspace-overlays',
   standalone: true,
-  imports: [WorkspaceTokenTimelineComponent, WorkspaceScreenshotsComponent, CliAdminPanelComponent],
+  imports: [WorkspaceTokenTimelineComponent, WorkspaceScreenshotsComponent, CliAdminPanelComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './workspace-overlays.component.html',
 })

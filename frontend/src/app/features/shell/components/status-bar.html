@@ -1,10 +1,10 @@
 <div class="statusbar" data-testid="status-bar">
   <div class="statusbar__group statusbar__group--left">
-    <span class="statusbar__item statusbar__item--ro" [title]="runningTooltip()">
+    <span class="statusbar__item statusbar__item--ro" [appTooltip]="runningTooltip()">
       <span class="statusbar__icon" [class.statusbar__icon--pulse]="runningCount() > 0">●</span>
       <span>{{ runningCount() }} running</span>
     </span>
-    <span class="statusbar__item statusbar__item--ro" [title]="autoTooltip()">
+    <span class="statusbar__item statusbar__item--ro" [appTooltip]="autoTooltip()">
       <span class="statusbar__icon">🔁</span>
       <span>{{ autoCount() }}/{{ projectCount() }} auto</span>
     </span>
@@ -20,30 +20,30 @@
 
   <div class="statusbar__group statusbar__group--right">
     <button class="statusbar__item statusbar__item--btn"
-            title="CLI sessions"
+            [appTooltip]="'CLI sessions'"
             (click)="toggleUsage.emit()">
       <span class="statusbar__icon">🪙</span><span>Usage</span>
     </button>
     <button class="statusbar__item statusbar__item--btn"
             data-testid="orch-side-sheet-toggle"
-            title="Orchestrator chat"
+            [appTooltip]="'Orchestrator chat'"
             (click)="toggleOrchestrator.emit()">
       <span class="statusbar__icon">🤖</span><span>Orchestrator</span>
     </button>
     <button class="statusbar__item statusbar__item--btn"
-            title="Orchestrator feed"
+            [appTooltip]="'Orchestrator feed'"
             (click)="toggleFeed.emit()">
       <span class="statusbar__icon">📜</span><span>Feed</span>
     </button>
     <button class="statusbar__item statusbar__item--btn"
             data-testid="status-bar-visual-evidence"
-            title="Workspace visual evidence (screenshots across projects)"
+            [appTooltip]="'Workspace visual evidence (screenshots across projects)'"
             (click)="toggleVisualEvidence.emit()">
       <span class="statusbar__icon">📷</span><span>Visual evidence</span>
     </button>
     <button class="statusbar__item statusbar__item--btn"
             data-testid="status-bar-cli-admin"
-            title="Manage CLIs (usage caps, admin)"
+            [appTooltip]="'Manage CLIs (usage caps, admin)'"
             (click)="toggleCliAdmin.emit()">
       <span class="statusbar__icon">⚙</span><span>Manage CLIs</span>
     </button>
@@ -53,7 +53,7 @@
     <div class="statusbar__pickers">
       <button class="statusbar__item statusbar__item--btn"
               data-testid="status-bar-cli-picker"
-              [title]="'Default CLI for new tasks: ' + cliLabel(defaultCli())"
+              [appTooltip]="'Default CLI for new tasks: ' + cliLabel(defaultCli())"
               (click)="toggleCliMenu($event)">
         <span class="statusbar__icon">{{ cliIcon(defaultCli()) }}</span>
         <span>{{ cliLabel(defaultCli()) }}</span>
@@ -79,7 +79,7 @@
       <button class="statusbar__item statusbar__item--btn"
               data-testid="status-bar-model-picker"
               [disabled]="models().length === 0"
-              [title]="'Default model for ' + cliLabel(defaultCli())"
+              [appTooltip]="'Default model for ' + cliLabel(defaultCli())"
               (click)="toggleModelMenu($event)">
         <span class="statusbar__icon">⚙</span>
         <span>{{ defaultModelLabel() }}</span>
@@ -103,7 +103,7 @@
             @for (m of models(); track m.id) {
               <button class="statusbar__menu-item"
                       [class.statusbar__menu-item--active]="m.id === defaultModel()"
-                      [title]="m.id"
+                      [appTooltip]="m.id"
                       (click)="setDefaultModel(m.id)">
                 <span class="statusbar__icon">{{ m.isDefault ? '★' : '·' }}</span>
                 <span>{{ m.label || m.id }}</span>

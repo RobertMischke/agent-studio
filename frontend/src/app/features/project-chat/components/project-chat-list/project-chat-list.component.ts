@@ -20,6 +20,7 @@ import type { ProjectChatSearchHit, ProjectChatTurn } from '../../../../features
 import { markdownToHtml } from '../../../../components/markdown-utils';
 import { ProjectChatRailComponent } from '../project-chat-rail/project-chat-rail.component';
 import { decideLoadAction, formatLoadedSummary } from './load-strategy';
+import { TooltipDirective } from '../../../../components/tooltip';
 import {
   RoleBadgeComponent,
   PhaseSummaryListComponent,
@@ -50,7 +51,7 @@ import {
 @Component({
   selector: 'app-project-chat-list',
   standalone: true,
-  imports: [CommonModule, FormsModule, ProjectChatRailComponent, RoleBadgeComponent, PhaseSummaryListComponent],
+  imports: [CommonModule, FormsModule, ProjectChatRailComponent, RoleBadgeComponent, PhaseSummaryListComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-chat-list.component.html',
   styleUrl: './project-chat-list.component.scss',

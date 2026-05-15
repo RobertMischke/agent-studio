@@ -56,7 +56,7 @@
                 type="button"
                 class="pchat__step-btn"
                 data-testid="pchat-step-day"
-                title="Load one more day of history"
+                [appTooltip]="'Load one more day of history'"
                 (click)="stepBackByDays(1)">
                 Another day
               </button>
@@ -64,7 +64,7 @@
                 type="button"
                 class="pchat__step-btn"
                 data-testid="pchat-step-week"
-                title="Load one more week of history"
+                [appTooltip]="'Load one more week of history'"
                 (click)="stepBackByDays(7)">
                 Another week
               </button>
@@ -72,7 +72,7 @@
                 type="button"
                 class="pchat__step-btn"
                 data-testid="pchat-step-month"
-                title="Load one more month of history"
+                [appTooltip]="'Load one more month of history'"
                 (click)="stepBackByDays(30)">
                 Another month
               </button>
@@ -114,7 +114,7 @@
                 type="button"
                 class="pchat__step-btn pchat__step-btn--quiet"
                 data-testid="pchat-step-jump-start"
-                title="Load every message from the start of this chat"
+                [appTooltip]="'Load every message from the start of this chat'"
                 (click)="jumpToStart()">
                 Jump to start
               </button>

@@ -25,6 +25,7 @@ import { OrchestratorFeedComponent } from '../orchestrator-feed';
 import { OrchestratorLogicPanelComponent } from '../orchestrator-logic-panel/orchestrator-logic-panel.component';
 import { CliAdminPanelComponent, CliSessionsPanelComponent } from '../../../cli';
 
+import { TooltipDirective } from '../../../../components/tooltip';
 type OrchestratorWindowMode =
   | 'project'
   | 'task'
@@ -62,6 +63,7 @@ type OrchestratorWindowMode =
     OrchestratorLogicPanelComponent,
     CliAdminPanelComponent,
     CliSessionsPanelComponent,
+    TooltipDirective
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './orchestrator-side-sheet.component.html',

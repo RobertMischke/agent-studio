@@ -1,3 +1,4 @@
+import { TooltipDirective } from '../../../../components/tooltip';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -30,6 +31,7 @@ import {
 @Component({
   selector: 'app-board-search-icon',
   standalone: true,
+  imports: [TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './board-search-icon.component.html',
   styleUrls: ['./board-search-icon.component.scss'],

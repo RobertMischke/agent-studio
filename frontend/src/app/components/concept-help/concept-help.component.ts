@@ -14,6 +14,7 @@ import {
 import { ConceptKey, getConceptEntry } from '../../concept-docs/concept-doc-registry';
 import { ModalStackService } from '../../services/modal-stack.service';
 
+import { TooltipDirective } from '../tooltip';
 const REPO_BLOB_BASE = 'https://github.com/RobertMischke/agent-taskboard/blob/main/';
 
 /**
@@ -29,6 +30,7 @@ const REPO_BLOB_BASE = 'https://github.com/RobertMischke/agent-taskboard/blob/ma
 @Component({
   selector: 'app-concept-help',
   standalone: true,
+  imports: [TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './concept-help.component.html',
   styleUrl: './concept-help.component.scss'

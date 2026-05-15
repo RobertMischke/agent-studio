@@ -3,6 +3,7 @@ import type { TokenSummary } from '../../../features/tokens';
 import { JobService } from '../../../services/job.service';
 import { TokensApiService } from '../../../features/tokens';
 
+import { TooltipDirective } from '../../../components/tooltip';
 /**
  * Per-project token rollup block. Three rows:
  *
@@ -24,6 +25,7 @@ import { TokensApiService } from '../../../features/tokens';
 @Component({
   selector: 'app-token-summary-block',
   standalone: true,
+  imports: [TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './token-summary-block.html',
   styleUrl: './token-summary-block.scss'

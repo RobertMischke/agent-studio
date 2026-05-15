@@ -28,7 +28,7 @@
       [attr.data-kind]="cluster.glyphKind"
       [attr.data-count]="cluster.members.length"
       [attr.aria-label]="ariaFor(cluster)"
-      [attr.title]="titleFor(cluster)"
+      [appTooltip]="titleFor(cluster)"
       [style.top.px]="cluster.topPx"
       (click)="onClusterClick($event, cluster)"
       (keydown.enter)="onClusterClick($event, cluster)"

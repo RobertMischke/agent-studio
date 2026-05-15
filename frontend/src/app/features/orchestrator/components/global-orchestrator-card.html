@@ -6,7 +6,7 @@
   </header>
 
   @if (session(); as s) {
-    <p class="global-orch__voice" [title]="s.bootPromptPreview">
+    <p class="global-orch__voice" [appTooltip]="s.bootPromptPreview">
       “{{ s.bootReplyPreview || 'Booted, no reply captured.' }}”
     </p>
     <dl class="global-orch__meta">

@@ -10,6 +10,7 @@ import { CommonModule } from '@angular/common';
 import { DomSanitizer, type SafeHtml } from '@angular/platform-browser';
 import { markdownToHtml } from '../markdown-utils';
 import { ToolBurstChipComponent } from './tool-burst-chip.component';
+import { TooltipDirective } from '../tooltip';
 import type {
   AgentNeedsInputEvent,
   ArtifactImageEvent,
@@ -72,7 +73,7 @@ type RenderRow =
   selector: 'app-conversation-view',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, ToolBurstChipComponent],
+  imports: [CommonModule, ToolBurstChipComponent, TooltipDirective],
   templateUrl: './conversation-view.component.html',
   styleUrl: './conversation-view.component.scss',
 })

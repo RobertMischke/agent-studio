@@ -3,6 +3,7 @@ import { Observable, map } from 'rxjs';
 import { DriftService } from '../../../services/drift.service';
 import { JobService } from '../../../services/job.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../utils/visible-interval';
+import { TooltipDirective } from '../../../components/tooltip';
 import {
   DriftDimension,
   DriftDimensionType,
@@ -90,6 +91,7 @@ const ACTIONS: ActionButton[] = [
 @Component({
   selector: 'app-project-drift-overview-section',
   standalone: true,
+  imports: [TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-drift-overview-section.html',
   styleUrl: './project-drift-overview-section.scss'

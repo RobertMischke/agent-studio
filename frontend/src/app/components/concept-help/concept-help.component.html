@@ -6,7 +6,7 @@
     [attr.data-testid]="'concept-help-trigger-' + concept()"
     [attr.aria-expanded]="open()"
     [attr.aria-label]="'About ' + entry().title"
-    title="About this concept"
+    [appTooltip]="'About this concept'"
     (click)="toggle($event)">
     i
   </button>

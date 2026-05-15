@@ -11,7 +11,7 @@ import {
 import { HttpClient } from '@angular/common/http';
 import { firstValueFrom } from 'rxjs';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
-import { InstantTooltipDirective } from '../../directives/instant-tooltip.directive';
+import { TooltipDirective } from '../tooltip';
 import { MarkdownImageLightboxDirective } from '../../directives/markdown-image-lightbox.directive';
 import { markdownToHtml } from '../markdown-utils';
 import { ModalStackService } from '../../services/modal-stack.service';
@@ -36,7 +36,7 @@ interface ConceptDocPayload {
 @Component({
   selector: 'app-info-button',
   standalone: true,
-  imports: [InstantTooltipDirective, MarkdownImageLightboxDirective],
+  imports: [TooltipDirective, MarkdownImageLightboxDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './info-button.component.html',
   styleUrl: './info-button.component.scss'

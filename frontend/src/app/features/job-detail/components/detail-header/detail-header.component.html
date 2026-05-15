@@ -37,7 +37,7 @@
         </div>
         <h2 class="detail__title"
             (click)="startTitleEdit.emit()"
-            title="Click to rename">
+            [appTooltip]="'Click to rename'">
           {{ info().title || info().id }}
           <button type="button"
                   class="detail__title-edit-btn"
@@ -47,7 +47,7 @@
         <div class="detail__meta">
           <span class="detail__meta-item"
                 data-testid="detail-created-at"
-                [title]="createdAtTooltip()">⏱ erstellt {{ relativeCreated() }}</span>
+                [appTooltip]="createdAtTooltip()">⏱ erstellt {{ relativeCreated() }}</span>
         </div>
       }
     </div>
@@ -55,12 +55,12 @@
   @if (pagerTotal() > 0) {
     <div class="detail__pager"
          data-testid="lane-pager"
-         [title]="pagerTooltip()">
+         [appTooltip]="pagerTooltip()">
       <button type="button"
               class="detail__pager-btn"
               data-testid="lane-pager-prev"
               [disabled]="!pagerCanPrev()"
-              [title]="pagerCanPrev() ? 'Previous job in iteration (k or ←)' : 'Already at the first job in the iteration'"
+              [appTooltip]="pagerCanPrev() ? 'Previous job in iteration (k or ←)' : 'Already at the first job in the iteration'"
               aria-label="Previous job in iteration"
               (click)="pagerPrev.emit()">‹</button>
       <span class="detail__pager-count"
@@ -70,7 +70,7 @@
               class="detail__pager-btn"
               data-testid="lane-pager-next"
               [disabled]="!pagerCanNext()"
-              [title]="pagerCanNext() ? 'Next job in iteration (j or →)' : 'No more jobs in the captured iteration'"
+              [appTooltip]="pagerCanNext() ? 'Next job in iteration (j or →)' : 'No more jobs in the captured iteration'"
               aria-label="Next job in iteration"
               (click)="pagerNext.emit()">›</button>
     </div>
@@ -80,7 +80,7 @@
           [class]="'detail__state detail__state--select state--' + info().state"
           [value]="info().state"
           [disabled]="changingState()"
-          [title]="changingState() ? 'Moving…' : 'Change lane'"
+          [appTooltip]="changingState() ? 'Moving…' : 'Change lane'"
           data-testid="detail-state-select"
           aria-label="Change task lane"
           aria-haspopup="listbox"
@@ -97,7 +97,7 @@
             class="detail__do-next"
             data-testid="do-next-btn"
             [disabled]="movingToTop()"
-            [title]="movingToTop() ? 'Moving to top…' : 'Move this task to the top of the Ready queue so it is picked up next'"
+            [appTooltip]="movingToTop() ? 'Moving to top…' : 'Move this task to the top of the Ready queue so it is picked up next'"
             (click)="moveToTop.emit()">
       {{ movingToTop() ? '⏳' : '↑ Do Next' }}
     </button>

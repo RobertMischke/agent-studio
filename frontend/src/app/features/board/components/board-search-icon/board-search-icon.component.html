@@ -20,7 +20,7 @@
         <button type="button"
                 class="board-search-icon__clear"
                 data-testid="board-search-clear"
-                title="Clear search (Esc)"
+                [appTooltip]="'Clear search (Esc)'"
                 aria-label="Clear search"
                 (mousedown)="$event.preventDefault()"
                 (click)="clearAndCollapse($event)">×</button>
@@ -46,7 +46,7 @@
     <button type="button"
             class="board-search-icon__btn"
             data-testid="board-search-icon"
-            title="Search tasks (press /)"
+            [appTooltip]="'Search tasks (press /)'"
             aria-label="Search tasks"
             (click)="expand()">
       <span class="board-search-icon__btn-glyph" aria-hidden="true">🔍</span>

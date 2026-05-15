@@ -3,7 +3,7 @@
         [attr.data-testid]="'info-button-' + topic()"
         [attr.aria-expanded]="open()"
         [attr.aria-label]="'How does this lane work?'"
-        [appTip]="'How does this lane work?'"
+        [appTooltip]="'How does this lane work?'"
         (click)="toggle($event)">i</button>
 @if (open()) {
   <div class="info-btn__backdrop"

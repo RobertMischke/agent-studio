@@ -14,6 +14,7 @@ import {
 import { CommonModule } from '@angular/common';
 import type { ProjectChatTurn } from '../../../../features/project-chat';
 
+import { TooltipDirective } from '../../../../components/tooltip';
 /**
  * Slice C right-rail. A narrow column (~22 px) painted next to the
  * virtualised chat that mirrors the conversation as a minimap. Each
@@ -63,7 +64,7 @@ const CHIP_HEIGHT_PX = 12;
 @Component({
   selector: 'app-project-chat-rail',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-chat-rail.component.html',
   styleUrl: './project-chat-rail.component.scss',

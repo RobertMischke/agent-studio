@@ -15,6 +15,7 @@ import type { JobScreenshot } from '../../../../features/screenshots';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
 import { ModalStackService } from '../../../../services/modal-stack.service';
 
+import { TooltipDirective } from '../../../../components/tooltip';
 /**
  * Visual-evidence strip + lightbox. Two surfaces share this component:
  *
@@ -40,7 +41,7 @@ import { ModalStackService } from '../../../../services/modal-stack.service';
   selector: 'app-screenshot-strip',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule],
+  imports: [CommonModule, TooltipDirective],
   templateUrl: './screenshot-strip.component.html',
   styleUrl: './screenshot-strip.component.scss'
 })

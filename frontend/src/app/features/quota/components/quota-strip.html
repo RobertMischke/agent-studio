@@ -5,7 +5,7 @@
     }
     <button class="qstrip__refresh"
             type="button"
-            title="Re-probe all CLIs (slow, several seconds)"
+            [appTooltip]="'Re-probe all CLIs (slow, several seconds)'"
             [disabled]="refreshingAll()"
             (click)="refreshAll()">
       {{ refreshingAll() ? '⏳' : '↻' }}
@@ -27,7 +27,7 @@
           }
           <button class="qcard__refresh"
                   type="button"
-                  title="Re-probe {{ cliLabel(snap.cliType) }}"
+                  [appTooltip]="'Re-probe {{ cliLabel(snap.cliType) }}'"
                   [disabled]="refreshing()[snap.cliType]"
                   (click)="refreshOne(snap.cliType)">
             {{ refreshing()[snap.cliType] ? '⏳' : '↻' }}
@@ -35,7 +35,7 @@
         </div>
 
         @if (snap.error && snap.windows.length === 0) {
-          <div class="qcard__error" [title]="snap.error">No quota data available.</div>
+          <div class="qcard__error" [appTooltip]="snap.error">No quota data available.</div>
         } @else if (snap.windows.length === 0) {
           <div class="qcard__hint">Loading…</div>
         } @else {

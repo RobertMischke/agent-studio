@@ -4,6 +4,7 @@ import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { GitPaneService } from '../../services/git-pane.service';
 import { GitFileTreeComponent } from './git-file-tree.component';
 
+import { TooltipDirective } from '../../../../components/tooltip';
 // Cycle 7f: diff2html (~120 KB minified, includes its own theme CSS) is
 // loaded lazily the first time a non-empty diff arrives. The pre-Cycle-7f
 // import was static, which dragged the whole library into the initial
@@ -42,7 +43,7 @@ async function loadDiff2Html(): Promise<typeof diff2htmlModuleCache> {
   selector: 'app-git-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [DatePipe, GitFileTreeComponent],
+  imports: [DatePipe, GitFileTreeComponent, TooltipDirective],
   templateUrl: './git-pane.component.html',
   styleUrls: ['./git-pane.component.scss']
 })

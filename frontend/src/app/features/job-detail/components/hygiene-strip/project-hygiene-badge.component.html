@@ -2,7 +2,7 @@
   <span class="project-hygiene-badge"
         [class.project-hygiene-badge--dirty]="isDirty()"
         [class.project-hygiene-badge--unpushed]="!isDirty() && isAhead()"
-        [title]="tooltip()"
+        [appTooltip]="tooltip()"
         data-testid="project-hygiene-badge">
     @if (isDirty()) {
       ⚠ dirty

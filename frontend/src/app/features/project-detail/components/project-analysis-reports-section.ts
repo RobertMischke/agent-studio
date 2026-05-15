@@ -8,6 +8,7 @@ import {
 } from '../../../models/analysis-report.model';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../utils/visible-interval';
 
+import { TooltipDirective } from '../../../components/tooltip';
 /**
  * Project-level Analysis Reports surface (ROADMAP "Analysis Reports and
  * Meta-Actions"). Three things in one section:
@@ -28,7 +29,7 @@ import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from 
 @Component({
   selector: 'app-project-analysis-reports-section',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-analysis-reports-section.html',
   styleUrl: './project-analysis-reports-section.scss'

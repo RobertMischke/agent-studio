@@ -86,7 +86,7 @@
           <button class="proj-detail__mode"
                   [class.proj-detail__mode--active]="effectiveMode() === m.id"
                   [attr.data-testid]="'project-detail-mode-' + m.id"
-                  [title]="m.tooltip"
+                  [appTooltip]="m.tooltip"
                   (click)="setMode(m.id)">{{ m.label }}</button>
         }
       </div>
@@ -166,7 +166,7 @@
         @for (m of modes; track m.id) {
           <button class="proj-detail__mode"
                   [class.proj-detail__mode--active]="effectiveMode() === m.id"
-                  [title]="m.tooltip"
+                  [appTooltip]="m.tooltip"
                   (click)="setMode(m.id)">{{ m.label }}</button>
         }
       </div>
@@ -197,7 +197,7 @@
     <section class="proj-detail__group">
       <h3>Auto-commit</h3>
       <label class="proj-detail__toggle"
-             title="When enabled, the orchestrator commits after each 3-progress -> 4-auto-review transition and stamps the SHA on JobInfo.Commit. Changes apply to the next job transition immediately.">
+             [appTooltip]="'When enabled, the orchestrator commits after each 3-progress -> 4-auto-review transition and stamps the SHA on JobInfo.Commit. Changes apply to the next job transition immediately.'">
         <input type="checkbox"
                data-testid="project-detail-auto-commit"
                [(ngModel)]="autoCommitDraft"
@@ -216,7 +216,7 @@
           <button type="button"
                   class="proj-detail__push-option"
                   [class.proj-detail__push-option--active]="autoPushStrategyDraft === opt.id"
-                  [attr.title]="opt.tooltip"
+                  [appTooltip]="opt.tooltip"
                   [attr.aria-pressed]="autoPushStrategyDraft === opt.id"
                   [attr.data-testid]="'project-detail-auto-push-' + opt.id"
                   (click)="setAutoPushStrategy(opt.id)">

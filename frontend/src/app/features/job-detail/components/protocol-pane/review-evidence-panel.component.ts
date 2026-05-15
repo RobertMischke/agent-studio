@@ -2,6 +2,7 @@ import { ChangeDetectionStrategy, Component, computed, input, output, signal } f
 import { CommonModule } from '@angular/common';
 import { JobInfo, ReviewEvidenceEntry, ReviewEvidenceSeverity } from '../../../../models/job.model';
 
+import { TooltipDirective } from '../../../../components/tooltip';
 /**
  * Renders the per-task **review evidence** panel: findings from security
  * audits, code-review passes, task checks, or human notes that landed in
@@ -25,7 +26,7 @@ import { JobInfo, ReviewEvidenceEntry, ReviewEvidenceSeverity } from '../../../.
   selector: 'app-review-evidence-panel',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule],
+  imports: [CommonModule, TooltipDirective],
   templateUrl: './review-evidence-panel.component.html',
   styleUrl: './review-evidence-panel.component.scss'
 })
