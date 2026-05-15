@@ -108,5 +108,10 @@ public sealed record RollbackResult(
     string HeadAfter,
     DateTime StartedAt,
     DateTime FinishedAt,
-    string? Error
+    string? Error,
+    // ADR-0031 reissue-2026-05-11: the rollback path re-runs phases 5+6+7
+    // (stop+reset+start + 6-check matrix + resume). Verification failures
+    // are surfaced here so the run-folder artefacts and history rows make
+    // the strict-bar visible without re-parsing rollback-verification.jsonl.
+    IReadOnlyList<VerificationFailure>? VerificationFailures = null
 );

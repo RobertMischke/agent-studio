@@ -55,9 +55,18 @@ public sealed class RunFolder
         WriteJson(name, snap);
     }
 
-    public void AppendVerification(VerificationCheck row)
+    public void AppendVerification(VerificationCheck row) => AppendVerificationLine("verification.jsonl", row);
+
+    /// <summary>
+    /// Re-running the 6-check matrix on the rollback path (ADR-0031) writes
+    /// to a sibling file so the operator can tell the forward verification
+    /// rows apart from the rollback verification rows without parsing.
+    /// </summary>
+    public void AppendRollbackVerification(VerificationCheck row) => AppendVerificationLine("rollback-verification.jsonl", row);
+
+    private void AppendVerificationLine(string fileName, VerificationCheck row)
     {
-        var path = Path.Combine(_root, "verification.jsonl");
+        var path = Path.Combine(_root, fileName);
         try
         {
             var line = JsonSerializer.Serialize(row, JsonLineOpts);
@@ -65,7 +74,7 @@ public sealed class RunFolder
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "append verification.jsonl failed");
+            _logger.LogWarning(ex, "append {File} failed", fileName);
         }
     }
 

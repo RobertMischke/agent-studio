@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { UpdateClientService } from '../../../../services/update.service';
+import { UpdateHistoryEntry } from '../../../../models/update-service.model';
 
 /**
  * Always-mounted banner for finished-run notifications. The 'running'
@@ -97,6 +98,20 @@ export class UpdateBannerComponent {
 
   readonly verificationFailures = computed(() => this.status()?.verificationFailures ?? []);
 
+  /**
+   * Run-ID picker for delayed rollback (ADR-0031 reissue-2026-05-11). The
+   * default "Roll back" button uses the currently-loaded `currentRunId`,
+   * which is fine right after the failure. Once a new run kicks off (or
+   * the operator reloads the page after several runs), the failed runId
+   * is no longer the current one — the picker reads /update/history,
+   * surfaces the last few failed runs, and lets the operator pick one.
+   */
+  readonly pickerOpen = signal(false);
+  readonly pickerLoading = signal(false);
+  readonly pickerError = signal<string | null>(null);
+  readonly pickerEntries = signal<UpdateHistoryEntry[]>([]);
+  readonly pickerInFlight = signal<string | null>(null);
+
   dismiss(): void {
     const s = this.status();
     if (s?.currentRunId) this.dismissed.set(s.currentRunId);
@@ -120,6 +135,43 @@ export class UpdateBannerComponent {
       await this.client.rollback(s.currentRunId);
     } catch {
       /* the next status poll will reflect the failure */
+    }
+  }
+
+  /** Open the picker, lazy-loading recent failed runs from /update/history. */
+  async openPicker(): Promise<void> {
+    this.pickerOpen.set(true);
+    this.pickerError.set(null);
+    this.pickerLoading.set(true);
+    try {
+      const all = await this.client.readHistory(20);
+      const failedFirst = all.filter(e => e.status === 'failed').reverse();
+      this.pickerEntries.set(failedFirst);
+    } catch (e) {
+      this.pickerError.set((e as Error)?.message ?? 'history fetch failed');
+      this.pickerEntries.set([]);
+    } finally {
+      this.pickerLoading.set(false);
+    }
+  }
+
+  closePicker(): void {
+    this.pickerOpen.set(false);
+    this.pickerInFlight.set(null);
+  }
+
+  async rollbackHistory(entry: UpdateHistoryEntry): Promise<void> {
+    if (!entry.runId) return;
+    this.pickerInFlight.set(entry.runId);
+    try {
+      await this.client.rollback(entry.runId);
+    } catch {
+      /* status poll surfaces failure; keep picker open so user can retry */
+    } finally {
+      // The status response now reflects either a rolling-back phase
+      // (banner will switch off failed mode) or a still-failed state.
+      this.pickerInFlight.set(null);
+      this.pickerOpen.set(false);
     }
   }
 }

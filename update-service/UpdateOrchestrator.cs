@@ -228,30 +228,18 @@ public sealed class UpdateOrchestrator
         var folder = new RunFolder(_options.RunsDirectory, parentRunId, _loggerFactory.CreateLogger<RunFolder>());
         var headBefore = _git.HeadShort();
 
-        // Read the snapshot SHA from disk so manual rollback works even
-        // after a process restart.
-        string? targetSha = null;
-        try
-        {
-            var preSnapPath = Path.Combine(folder.Root, "pre-snapshot.json");
-            if (File.Exists(preSnapPath))
-            {
-                var json = await File.ReadAllTextAsync(preSnapPath, ct);
-                using var doc = System.Text.Json.JsonDocument.Parse(json);
-                if (doc.RootElement.TryGetProperty("head", out var h)) targetSha = h.GetString();
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "rollback: failed to read pre-snapshot for {RunId}", parentRunId);
-        }
+        // Read the snapshot SHA + project modes from disk so manual rollback
+        // works even after a process restart. Modes feed phase-6 (strict
+        // matrix needs the pre-snapshot project list) and phase-7 (resume
+        // restores each project's pre-update mode).
+        var (targetSha, preModes) = await ReadPreSnapshotAsync(folder.Root, ct);
 
         if (string.IsNullOrWhiteSpace(targetSha))
         {
             _logger.LogWarning("rollback: pre-snapshot SHA unknown, aborting");
             folder.WriteRollbackResult(new RollbackResult(parentRunId, "failed",
                 headBefore, headBefore, DateTime.UtcNow, DateTime.UtcNow,
-                "pre-snapshot.json missing or unparsable"));
+                "pre-snapshot.json missing or unparsable", VerificationFailures: null));
             return;
         }
 
@@ -259,7 +247,7 @@ public sealed class UpdateOrchestrator
         var startedAt = DateTime.UtcNow;
         try
         {
-            // Stop, reset, start.
+            // PHASE 5' — stop + git reset + start.
             var (stopRc, stopOut) = await RunBashAsync(_options.StopScript, "", _options.DevspaceDir, ct);
             folder.WriteOutput("rollback-stop-output.txt", stopOut);
             // Continue regardless: a stable that's already down is not an error.
@@ -270,7 +258,7 @@ public sealed class UpdateOrchestrator
             {
                 folder.WriteRollbackResult(new RollbackResult(parentRunId, "failed",
                     headBefore, _git.HeadShort(), startedAt, DateTime.UtcNow,
-                    $"git reset --hard rc={rsRc}"));
+                    $"git reset --hard rc={rsRc}", VerificationFailures: null));
                 return;
             }
 
@@ -281,18 +269,80 @@ public sealed class UpdateOrchestrator
             folder.WriteOutput("rollback-start-output.txt", startOut);
             var healthy = await _backend.WaitForHealthyAsync(TimeSpan.FromSeconds(_options.HealthWaitSeconds), ct);
 
-            var status = (startRc == 0 && healthy) ? "ok" : "failed";
-            var error = (startRc == 0 && healthy) ? null
-                       : $"start rc={startRc} healthy={healthy}";
+            if (startRc != 0 || !healthy)
+            {
+                folder.WriteRollbackResult(new RollbackResult(parentRunId, "failed",
+                    headBefore, headAfterReset, startedAt, DateTime.UtcNow,
+                    $"start rc={startRc} healthy={healthy}", VerificationFailures: null));
+                return;
+            }
 
-            folder.WriteRollbackResult(new RollbackResult(parentRunId, status,
-                headBefore, headAfterReset, startedAt, DateTime.UtcNow, error));
+            // PHASE 6' — re-run the strict 6-check matrix against the reverted
+            // backend. ADR-0031 reissue-2026-05-11: rollback must clear the
+            // same bar as a forward run; healthz alone is not enough.
+            SetPhase("rolling-back", "verifying after rollback", parentRunId, startedAt);
+            var verification = await _verifier.RunAsync(parentRunId, preModes, folder.AppendRollbackVerification, ct);
+
+            if (!verification.AllPassed)
+            {
+                _logger.LogWarning("rollback verification failed: {Steps}",
+                    string.Join(",", verification.Failures.Select(f => f.Step)));
+                folder.WriteRollbackResult(new RollbackResult(parentRunId, "failed",
+                    headBefore, headAfterReset, startedAt, DateTime.UtcNow,
+                    "verification after rollback failed",
+                    VerificationFailures: verification.Failures));
+                return;
+            }
+
+            // PHASE 7' — resume runners using the pre-snapshot modes.
+            SetPhase("rolling-back", "restoring runner modes", parentRunId, startedAt);
+            var resumeOut = new StringBuilder();
+            foreach (var (project, prev) in preModes)
+            {
+                if (prev == "manual") continue;
+                var ok = await _backend.SetModeAsync(project, prev, ct);
+                resumeOut.AppendLine($"{project} -> {prev}: {(ok ? "ok" : "FAIL")}");
+            }
+            folder.WriteOutput("rollback-resume-output.txt", resumeOut.ToString());
+
+            folder.WriteRollbackResult(new RollbackResult(parentRunId, "ok",
+                headBefore, headAfterReset, startedAt, DateTime.UtcNow,
+                null, VerificationFailures: null));
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "rollback crashed");
             folder.WriteRollbackResult(new RollbackResult(parentRunId, "failed",
-                headBefore, _git.HeadShort(), startedAt, DateTime.UtcNow, ex.Message));
+                headBefore, _git.HeadShort(), startedAt, DateTime.UtcNow,
+                ex.Message, VerificationFailures: null));
+        }
+    }
+
+    private async Task<(string? Sha, Dictionary<string, string> Modes)> ReadPreSnapshotAsync(string runFolderRoot, CancellationToken ct)
+    {
+        var preSnapPath = Path.Combine(runFolderRoot, "pre-snapshot.json");
+        if (!File.Exists(preSnapPath)) return (null, new Dictionary<string, string>());
+        try
+        {
+            var json = await File.ReadAllTextAsync(preSnapPath, ct);
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            string? sha = root.TryGetProperty("head", out var h) ? h.GetString() : null;
+            var modes = new Dictionary<string, string>();
+            if (root.TryGetProperty("projectModes", out var pm) && pm.ValueKind == System.Text.Json.JsonValueKind.Object)
+            {
+                foreach (var prop in pm.EnumerateObject())
+                {
+                    var v = prop.Value.ValueKind == System.Text.Json.JsonValueKind.String ? prop.Value.GetString() : null;
+                    if (!string.IsNullOrEmpty(v)) modes[prop.Name] = v;
+                }
+            }
+            return (sha, modes);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "rollback: failed to read pre-snapshot at {Path}", preSnapPath);
+            return (null, new Dictionary<string, string>());
         }
     }
 

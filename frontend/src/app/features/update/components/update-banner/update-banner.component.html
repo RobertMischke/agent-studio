@@ -39,12 +39,58 @@
             }
           </ul>
         }
+        @if (pickerOpen()) {
+          <div class="update-banner__picker" data-testid="update-banner-picker">
+            @if (pickerLoading()) {
+              <span data-testid="update-banner-picker-loading">Loading history…</span>
+            } @else if (pickerError()) {
+              <span class="update-banner__picker-error" data-testid="update-banner-picker-error">
+                Failed to read history: {{ pickerError() }}
+              </span>
+            } @else if (pickerEntries().length === 0) {
+              <span data-testid="update-banner-picker-empty">No prior failed runs.</span>
+            } @else {
+              <ul class="update-banner__picker-list" data-testid="update-banner-picker-list">
+                @for (entry of pickerEntries(); track entry.runId) {
+                  <li>
+                    <code class="update-banner__head">{{ entry.runId }}</code>
+                    <span class="update-banner__picker-meta">{{ entry.headBefore }} → {{ entry.headAfter }}</span>
+                    @if (entry.error) {
+                      <span class="update-banner__picker-error"> — {{ entry.error }}</span>
+                    }
+                    <button
+                      type="button"
+                      class="update-banner__btn"
+                      [attr.data-testid]="'update-banner-picker-rollback-' + entry.runId"
+                      [disabled]="pickerInFlight() !== null"
+                      (click)="rollbackHistory(entry)">
+                      {{ pickerInFlight() === entry.runId ? 'Rolling back…' : 'Roll back' }}
+                    </button>
+                  </li>
+                }
+              </ul>
+            }
+          </div>
+        }
       </div>
       <button
         type="button"
         class="update-banner__btn update-banner__btn--primary"
         data-testid="update-banner-rollback"
         (click)="rollback()">Roll back</button>
+      @if (!pickerOpen()) {
+        <button
+          type="button"
+          class="update-banner__btn"
+          data-testid="update-banner-picker-open"
+          (click)="openPicker()">Other runs…</button>
+      } @else {
+        <button
+          type="button"
+          class="update-banner__btn"
+          data-testid="update-banner-picker-close"
+          (click)="closePicker()">Close</button>
+      }
       <button type="button" class="update-banner__btn" (click)="dismiss()">Dismiss</button>
     </div>
   }
