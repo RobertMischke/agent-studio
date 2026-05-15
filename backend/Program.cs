@@ -69,6 +69,43 @@ AppDomain.CurrentDomain.UnhandledException += (_, e) =>
     Console.Error.WriteLine($"[UnhandledException] terminating={e.IsTerminating} {e.ExceptionObject}");
 };
 
+// ProcessExit fires for any normal CLR teardown - Ctrl+C, parent shell exit,
+// SIGTERM, OS-initiated polite shutdown. It does NOT fire for hard kills
+// (Process.Kill from outside, TerminateProcess, native crash, OOM-killer).
+// By writing a small "shutdown marker" here we close the diagnostic gap:
+//   - marker present + last-crash.json absent  -> graceful shutdown
+//   - marker absent + last-crash.json present  -> managed exception killed it
+//   - both absent                              -> native / external kill (the
+//                                                 silent-disappearance case
+//                                                 we hit three times on
+//                                                 2026-05-15; this is the
+//                                                 signal that points us at
+//                                                 OS-level or Process.Kill-
+//                                                 from-parent investigations
+//                                                 rather than wasted time
+//                                                 grepping for managed throws).
+// The marker file lives next to last-crash.json so a future operator finds
+// both in one glance. Failure to write is intentionally swallowed - we are
+// already in the host's last-gasp window.
+AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+{
+    try
+    {
+        var dir = Path.GetFullPath(fileLoggerOptions.LogDirectory);
+        Directory.CreateDirectory(dir);
+        var path = Path.Combine(dir, "last-shutdown.json");
+        File.WriteAllText(path, System.Text.Json.JsonSerializer.Serialize(new
+        {
+            capturedAt = DateTime.UtcNow.ToString("O"),
+            pid = Environment.ProcessId,
+            reason = "ProcessExit",
+        }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true }));
+    }
+    catch { /* last-gasp; nothing to do */ }
+    try { fileLogSink.WriteRaw($"{DateTime.UtcNow:O} INFO  Program ProcessExit fired (pid={Environment.ProcessId})"); }
+    catch { }
+};
+
 builder.Services.AddSingleton<ClientIdentityStore>();
 builder.Services.AddSingleton<OrchestratorConfigService>();
 builder.Services.AddSingleton<JobScannerService>();

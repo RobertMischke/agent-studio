@@ -67,6 +67,36 @@ public sealed class ClaudeOneShot : ICliOneShot
         var executable = CliExecutionServiceBase.ResolveExecutable(cliPath);
         var timeout = request.Timeout ?? DefaultTimeout;
 
+        // Pre-spawn self-heal symmetric to ClaudeCliService.EnsureCliHealthyAsync.
+        // The ClaudeOneShot path used to throw Win32Exception 216 (ERROR_EXE_MACHINE_TYPE_MISMATCH)
+        // every time the racing claude-code auto-updater swapped the wrapper
+        // binary for the 500-byte stub mid-pickup. The exception is caught by
+        // the outer try/catch below and surfaced as SpawnFailure, but every
+        // failed Haiku call (review-decision, summary-generation, aspect prompts)
+        // is a wasted backend tick, and there is evidence (2026-05-15 backend
+        // disappearances after Win32Exception 216 storms) that the native
+        // CreateProcess failure leaves CLR heap state in a fragile shape that
+        // a later allocation or finalizer can turn into a silent process exit.
+        // Heal the binary in-process before the spawn so the Haiku call goes
+        // through and we never throw the Win32 exception in the first place.
+        if (!QuickProbe(executable))
+        {
+            _logger.LogWarning(
+                "claude --version failed pre-OneShot at '{Path}'; running NpmShimHealer", executable);
+            var outcome = await NpmShimHealer.TryHealClaudeAsync(_logger, ct);
+            if (outcome.Actions.Count > 0)
+            {
+                _logger.LogInformation(
+                    "NpmShimHealer (one-shot) actions for claude: {Actions}",
+                    string.Join("; ", outcome.Actions));
+            }
+            // Best-effort: even if heal reports !Available the outer try/catch
+            // around Process.Start will still surface the Win32 exception
+            // exactly as today. We do not abort here because callers (aspects,
+            // review-decision) have their own fallback semantics for spawn
+            // failures and changing the return contract is out of scope.
+        }
+
         var psi = new ProcessStartInfo
         {
             FileName = executable,
@@ -229,5 +259,38 @@ public sealed class ClaudeOneShot : ICliOneShot
             ok: result.Ok,
             project: request.Project,
             jobId: request.JobId);
+    }
+
+    /// <summary>
+    /// Fast smoke-test of the resolved <c>claude</c> executable. Returns
+    /// <c>true</c> only if the binary spawns, exits 0, and finishes within
+    /// 5 seconds. Used as the gate for the pre-spawn heal hook so the heal
+    /// is paid for only when the install is actually broken.
+    /// </summary>
+    private static bool QuickProbe(string executable)
+    {
+        try
+        {
+            using var p = Process.Start(new ProcessStartInfo
+            {
+                FileName = executable,
+                Arguments = "--version",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+            });
+            if (p is null) return false;
+            if (!p.WaitForExit(5000))
+            {
+                try { p.Kill(entireProcessTree: true); } catch { /* best-effort */ }
+                return false;
+            }
+            return p.ExitCode == 0;
+        }
+        catch
+        {
+            return false;
+        }
     }
 }

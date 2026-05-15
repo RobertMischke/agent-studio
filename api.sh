@@ -172,6 +172,21 @@ cmd_start() {
   fi
 
   echo "Starting API on ${BASE_URL}..."
+  # Log rotation, not truncate. The truncate-on-start path lost three crash
+  # traces in a row when the backend died between restarts: by the time we
+  # ran tail on the log it was already empty. Move the previous run's logs
+  # to .api.log.out.<ts>.bak / .api.log.err.<ts>.bak so the final seconds
+  # of the dead process remain readable. Keep the last 5 rotations per
+  # stream; older ones drop off so the workspace does not grow unbounded.
+  if [[ -s "${LOG_OUT}" ]] || [[ -s "${LOG_ERR}" ]]; then
+    local rot_ts
+    rot_ts="$(date -u +%Y%m%dT%H%M%SZ)"
+    [[ -s "${LOG_OUT}" ]] && mv "${LOG_OUT}" "${LOG_OUT}.${rot_ts}.bak"
+    [[ -s "${LOG_ERR}" ]] && mv "${LOG_ERR}" "${LOG_ERR}.${rot_ts}.bak"
+    # Trim to the 5 most recent .bak files per stream.
+    ls -1t "${LOG_OUT}".*.bak 2>/dev/null | tail -n +6 | xargs -r rm -f --
+    ls -1t "${LOG_ERR}".*.bak 2>/dev/null | tail -n +6 | xargs -r rm -f --
+  fi
   : > "${LOG_OUT}"
   : > "${LOG_ERR}"
 
