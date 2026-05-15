@@ -198,7 +198,10 @@
     </div>
   }
   @if (job().commit; as c) {
-    <div class="job-card__commit" [appTooltip]="commitTooltip()" data-testid="job-card-commit">
+    <div class="job-card__commit"
+         [appTooltip]="commitTooltip()"
+         data-testid="job-card-commit"
+         [attr.data-has-files]="hasCommitFiles() ? 'true' : null">
       <span class="job-card__commit-sha">⏺ {{ c.shortSha }}</span>
       <span class="job-card__commit-files">{{ c.filesChanged }} {{ c.filesChanged === 1 ? 'file' : 'files' }}</span>
     </div>

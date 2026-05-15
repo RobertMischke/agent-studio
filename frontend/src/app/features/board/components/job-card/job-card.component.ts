@@ -9,11 +9,21 @@ import { TagRegistryStore } from '../../../../services/tag-registry.store';
 import { shouldShowFailureToast } from '../../../job-detail/services/run-outcome.util';
 
 import { TooltipDirective } from '../../../../components/tooltip';
+import type { StructuredTooltip } from '../../../../components/tooltip';
 // Shared 'now' signal that ticks every 30s so all relative timestamps update in lockstep
 // without re-reading Date.now() during change detection (which causes NG0100).
 const nowTick = signal(Date.now());
 if (typeof window !== 'undefined') {
   setInterval(() => nowTick.set(Date.now()), 30_000);
+}
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 @Component({
@@ -172,12 +182,45 @@ export class JobCardComponent implements OnInit, OnDestroy {
     return `Branch: ${g.branch ?? '(detached)'}\n${g.filesChanged} changed file(s) in ${g.rootPath}\n+${g.totalAdded} / −${g.totalRemoved}`;
   });
 
-  readonly commitTooltip = computed(() => {
+  /**
+   * Commit-pill tooltip. Lists the actual files touched by the commit so
+   * a card carrying auto-review concerns (`{ns}:concerns` tags) makes the
+   * affected file set visible at a glance — the count alone forced the
+   * user to open the job and read aspect-*.md to learn the scope. The
+   * file list is bounded so a sweeping diff (50+ files) does not blow
+   * the tooltip off-screen; we render the first FILE_LIST_MAX entries
+   * and append a "+N more" hint when needed. HTML escaping is handled
+   * by the tooltip controller's DOMPurify pass.
+   */
+  readonly commitTooltip = computed<StructuredTooltip | string>(() => {
     const c = this.job().commit;
     if (!c) return '';
     const subject = (c.message || '').split('\n')[0];
-    return `${c.shortSha} — ${subject}\n${c.filesChanged} file(s) changed`;
+    const files = c.files ?? [];
+    const title = `${c.shortSha} — ${c.filesChanged} file(s) changed`;
+    const parts: string[] = [];
+    if (subject) {
+      parts.push(`<div>${escapeHtml(subject)}</div>`);
+    }
+    if (files.length > 0) {
+      const max = JobCardComponent.FILE_LIST_MAX;
+      const shown = files.slice(0, max);
+      const overflow = files.length - shown.length;
+      const items = shown
+        .map(f => `<li><code>${escapeHtml(f)}</code></li>`)
+        .join('');
+      parts.push(`<ul>${items}</ul>`);
+      if (overflow > 0) {
+        parts.push(`<div><small>+${overflow} more file(s)</small></div>`);
+      }
+    }
+    if (parts.length === 0) {
+      return { title, body: `${c.filesChanged} file(s) changed` };
+    }
+    return { title, body: parts.join('') };
   });
+
+  private static readonly FILE_LIST_MAX = 12;
 
   ngOnInit(): void { this.stopPolling = this.gitSummary.ensurePolling(); }
   ngOnDestroy(): void { this.stopPolling?.(); }
@@ -440,6 +483,8 @@ export class JobCardComponent implements OnInit, OnDestroy {
   readonly identity = computed(() => projectIdentity(this.job().projectName));
 
   readonly isRunning = computed(() => this.job().execution?.status === 'running');
+
+  readonly hasCommitFiles = computed(() => (this.job().commit?.files?.length ?? 0) > 0);
 
   readonly relativeActivity = computed(() => {
     const dateStr = this.job().lastActivity;

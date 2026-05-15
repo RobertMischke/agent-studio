@@ -43,6 +43,152 @@ describe('JobCardComponent (smoke)', () => {
     expect(fixture.componentInstance).toBeTruthy();
   });
 
+  it('commit tooltip exposes the actual file list, not just the count', async () => {
+    await TestBed.configureTestingModule({
+      imports: [JobCardComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(JobCardComponent);
+    const files = [
+      'backend/Services/Analysis/AnalysisReportContract.cs',
+      'backend/Services/Analysis/AnalysisReportStore.cs',
+      'docs/analysis-reports.md',
+    ];
+    fixture.componentRef.setInput('job', makeJob({
+      state: '5-human-review',
+      tags: ['quality:concerns', 'docs:concerns'],
+      commit: {
+        sha: '5f969a6abc',
+        shortSha: '5f969a6',
+        message: 'test(analysis-report): add schema round-trip tests',
+        filesChanged: files.length,
+        files,
+        at: '2026-05-05T09:16:30Z',
+      },
+    }));
+    fixture.detectChanges();
+
+    const tooltip = fixture.componentInstance.commitTooltip();
+    expect(typeof tooltip === 'object' && tooltip !== null).toBe(true);
+    if (typeof tooltip !== 'object' || tooltip === null) return;
+    expect(tooltip.title).toContain('5f969a6');
+    expect(tooltip.title).toContain('3 file(s) changed');
+    expect(tooltip.body).toContain('AnalysisReportContract.cs');
+    expect(tooltip.body).toContain('analysis-reports.md');
+    expect(tooltip.body).toContain('<ul>');
+
+    const commit = fixture.nativeElement.querySelector('[data-testid="job-card-commit"]') as HTMLElement | null;
+    expect(commit?.getAttribute('data-has-files')).toBe('true');
+  });
+
+  it('commit tooltip caps the file list and reports overflow', async () => {
+    await TestBed.configureTestingModule({
+      imports: [JobCardComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(JobCardComponent);
+    const files = Array.from({ length: 20 }, (_, i) => `src/file-${i}.ts`);
+    fixture.componentRef.setInput('job', makeJob({
+      commit: {
+        sha: 'deadbeefcaf',
+        shortSha: 'deadbee',
+        message: 'refactor: rename utils',
+        filesChanged: files.length,
+        files,
+        at: '2026-05-05T09:16:30Z',
+      },
+    }));
+    fixture.detectChanges();
+
+    const tooltip = fixture.componentInstance.commitTooltip();
+    expect(typeof tooltip === 'object' && tooltip !== null).toBe(true);
+    if (typeof tooltip !== 'object' || tooltip === null) return;
+    expect(tooltip.body).toContain('src/file-0.ts');
+    expect(tooltip.body).toContain('src/file-11.ts');
+    expect(tooltip.body).not.toContain('src/file-12.ts');
+    expect(tooltip.body).toContain('+8 more file(s)');
+  });
+
+  it('commit tooltip falls back to count-only when files array is empty', async () => {
+    await TestBed.configureTestingModule({
+      imports: [JobCardComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(JobCardComponent);
+    fixture.componentRef.setInput('job', makeJob({
+      commit: {
+        sha: 'abc12345',
+        shortSha: 'abc1234',
+        message: 'chore: legacy commit pre-file-tracking',
+        filesChanged: 4,
+        files: [],
+        at: '2026-05-05T09:16:30Z',
+      },
+    }));
+    fixture.detectChanges();
+
+    const tooltip = fixture.componentInstance.commitTooltip();
+    expect(typeof tooltip === 'object' && tooltip !== null).toBe(true);
+    if (typeof tooltip !== 'object' || tooltip === null) return;
+    expect(tooltip.title).toContain('4 file(s) changed');
+    expect(tooltip.body).not.toContain('<ul>');
+    expect(tooltip.body).not.toContain('+');
+
+    const commit = fixture.nativeElement.querySelector('[data-testid="job-card-commit"]') as HTMLElement | null;
+    expect(commit?.getAttribute('data-has-files')).toBeNull();
+  });
+
+  it('commit tooltip escapes HTML in file paths to prevent injection', async () => {
+    await TestBed.configureTestingModule({
+      imports: [JobCardComponent],
+      providers: [
+        provideZonelessChangeDetection(),
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        provideRouter([]),
+      ],
+    }).compileComponents();
+
+    const fixture = TestBed.createComponent(JobCardComponent);
+    fixture.componentRef.setInput('job', makeJob({
+      commit: {
+        sha: 'beefcafe',
+        shortSha: 'beefcaf',
+        message: 'fix <script>alert(1)</script>',
+        filesChanged: 1,
+        files: ['src/<img src=x onerror=alert(2)>.ts'],
+        at: '2026-05-05T09:16:30Z',
+      },
+    }));
+    fixture.detectChanges();
+
+    const tooltip = fixture.componentInstance.commitTooltip();
+    expect(typeof tooltip === 'object' && tooltip !== null).toBe(true);
+    if (typeof tooltip !== 'object' || tooltip === null) return;
+    expect(tooltip.body).not.toContain('<script>');
+    expect(tooltip.body).not.toContain('<img src=x');
+    expect(tooltip.body).toContain('&lt;script&gt;');
+    expect(tooltip.body).toContain('&lt;img');
+  });
+
   it('renders a runner outcome issue pill', async () => {
     await TestBed.configureTestingModule({
       imports: [JobCardComponent],
