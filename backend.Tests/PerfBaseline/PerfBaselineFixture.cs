@@ -116,12 +116,17 @@ internal sealed class PerfBaselineFixture : IDisposable
         var pickupFailures = new PickupFailureLog(Config, NullLogger<PickupFailureLog>.Instance);
         var infraHaltLog = new InfraHaltLog(Config, NullLogger<InfraHaltLog>.Instance);
         var infraBreaker = new CrossSlugInfraCircuitBreaker(Config, NullLogger<CrossSlugInfraCircuitBreaker>.Instance, infraHaltLog);
+        var indexCache = new JobIndexCache(Scanner, NullLogger<JobIndexCache>.Instance, Config);
+        Scanner.SetIndexCache(indexCache);
+        var taskAccess = new OrchestratorApi.Services.TaskAccess.TaskAccessService(
+            Scanner, mutations, States, transitions, indexCache,
+            NullLogger<OrchestratorApi.Services.TaskAccess.TaskAccessService>.Instance);
 
         Runners = new TaskRunnerService(
             Config, NullLogger<TaskRunnerService>.Instance, Scanner, States, mutations, sessions,
             copilot, Router, contextUsageParser, Summary, prompts, transitions, projectSettings,
             quotaService, quotaCaps,
-            chatLog, orchestratorLog, orchestratorRunner, orchestratorSessions, globalBoot, git, pickupFailures, infraBreaker);
+            chatLog, orchestratorLog, orchestratorRunner, orchestratorSessions, globalBoot, git, pickupFailures, infraBreaker, taskAccess);
 
         TokenUsage = new ProjectTokenUsageService(orchestratorLog, Scanner);
     }

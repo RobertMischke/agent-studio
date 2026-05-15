@@ -36,6 +36,7 @@ public class ProjectRunner
     private readonly PickupFailureLog _pickupFailures;
     private readonly CrossSlugInfraCircuitBreaker _infraBreaker;
     private readonly AgentMessageBusBridge? _bus;
+    private readonly OrchestratorApi.Services.TaskAccess.ITaskAccess _taskAccess;
     private string _mode = "manual";
     private string? _activeJobId;
     private string? _activeCliType;
@@ -134,6 +135,7 @@ public class ProjectRunner
         GitService git,
         PickupFailureLog pickupFailures,
         CrossSlugInfraCircuitBreaker infraBreaker,
+        OrchestratorApi.Services.TaskAccess.ITaskAccess taskAccess,
         AgentMessageBusBridge? bus = null)
     {
         ProjectName = projectName;
@@ -157,6 +159,7 @@ public class ProjectRunner
         _git = git;
         _pickupFailures = pickupFailures;
         _infraBreaker = infraBreaker;
+        _taskAccess = taskAccess;
         _bus = bus;
 
         // Listen across all CLI backends for completion of the active job.
@@ -2290,24 +2293,27 @@ public class ProjectRunner
         // failed-pickup entry the operator can investigate.
         if (TryFindSlugInPostProgressLane(slug, out var locatedLane))
         {
-            try
+            // ADR-0024: skeleton delete routes through the typed layer.
+            // Conflict (file lock) lets the next tick retry; Rejected
+            // (access denied) is logged once for the operator.
+            var deleteResult = _taskAccess.DeleteLaneFolder(Entry.Path, JobStates.Progress, slug);
+            if (deleteResult.Status == OrchestratorApi.Services.TaskAccess.TaskMutationStatus.Applied)
             {
-                Directory.Delete(candidate.FolderPath, recursive: true);
                 _logger.LogInformation(
                     "[taskboard] cleaned up post-move skeleton for {Slug} on {Project} (real job lives in {Lane})",
                     slug, ProjectName, locatedLane);
             }
-            catch (IOException ioex)
+            else if (deleteResult.Status == OrchestratorApi.Services.TaskAccess.TaskMutationStatus.Conflict)
             {
-                _logger.LogDebug(ioex,
-                    "[taskboard] post-move skeleton {Folder} for {Slug} still locked; will retry next tick",
-                    candidate.FolderPath, slug);
+                _logger.LogDebug(
+                    "[taskboard] post-move skeleton {Folder} for {Slug} still locked; will retry next tick ({Msg})",
+                    candidate.FolderPath, slug, deleteResult.Message);
             }
-            catch (UnauthorizedAccessException uae)
+            else if (deleteResult.Status == OrchestratorApi.Services.TaskAccess.TaskMutationStatus.Rejected)
             {
-                _logger.LogWarning(uae,
-                    "[taskboard] post-move skeleton {Folder} for {Slug} cannot be deleted (access denied); manual cleanup required",
-                    candidate.FolderPath, slug);
+                _logger.LogWarning(
+                    "[taskboard] post-move skeleton {Folder} for {Slug} cannot be deleted (access denied); manual cleanup required ({Msg})",
+                    candidate.FolderPath, slug, deleteResult.Message);
             }
             _pickupAttempts.TryRemove(slug, out _);
             return;
@@ -2315,30 +2321,22 @@ public class ProjectRunner
 
         var now = DateTime.UtcNow;
         var destinationSlug = BuildProgressOrphanSlug(slug, now,
-            existsInDestination: name => Directory.Exists(Path.Combine(Entry.Path, JobStates.FailedPickup, name)));
+            existsInDestination: name => _taskAccess.SlugExistsInLane(Entry.Path, JobStates.FailedPickup, name));
 
-        var outcome = _states.MoveFolderToFailedPickup(candidate.FolderPath, destinationSlug);
-        if (outcome.Status != MoveJobStatus.Success)
+        var reason =
+            "# Stale progress orphan\n\n" +
+            $"Original folder slug: `{slug}`\n\n" +
+            "The auto-pickup loop found this folder under `3-progress`, but it did not contain `job.json`. " +
+            "A progress folder without application-owned metadata is not a runnable job. The folder was moved here " +
+            "without counting as a CLI spawn failure, so the runner can continue with the next real job.\n";
+        var moveResult = _taskAccess.MoveOrphanToFailedPickup(
+            Entry.Path, JobStates.Progress, slug, destinationSlug, reason);
+        if (moveResult.Status != OrchestratorApi.Services.TaskAccess.TaskMutationStatus.Applied)
         {
             _logger.LogWarning(
                 "Progress orphan move refused for {Slug} on {Project}: {Status} {Message}",
-                slug, ProjectName, outcome.Status, outcome.Message);
+                slug, ProjectName, moveResult.Status, moveResult.Message);
             return;
-        }
-
-        try
-        {
-            var reason = Path.Combine(Entry.Path, JobStates.FailedPickup, destinationSlug, "failed-pickup-reason.md");
-            File.WriteAllText(reason,
-                "# Stale progress orphan\n\n" +
-                $"Original folder slug: `{slug}`\n\n" +
-                "The auto-pickup loop found this folder under `3-progress`, but it did not contain `job.json`. " +
-                "A progress folder without application-owned metadata is not a runnable job. The folder was moved here " +
-                "without counting as a CLI spawn failure, so the runner can continue with the next real job.\n");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogDebug(ex, "Progress orphan reason write failed for {Slug}", slug);
         }
 
         _pickupAttempts.TryRemove(slug, out _);
@@ -2359,8 +2357,9 @@ public class ProjectRunner
     {
         foreach (var laneName in PostProgressLanes)
         {
-            var candidate = Path.Combine(Entry.Path, laneName, slug);
-            if (Directory.Exists(candidate))
+            // ADR-0024: slug existence check goes through the typed
+            // layer instead of building the lane path.
+            if (_taskAccess.SlugExistsInLane(Entry.Path, laneName, slug))
             {
                 lane = laneName;
                 return true;
@@ -2406,23 +2405,22 @@ public class ProjectRunner
     /// </summary>
     internal List<ProgressPickupCandidate> ListProgressFoldersOldestFirst()
     {
-        var progressDir = Path.Combine(Entry.Path, JobStates.Progress);
-        if (!Directory.Exists(progressDir)) return new();
-
+        // ADR-0024: enumerate 3-progress through the typed layer.
+        // ListLaneFolders returns orphan folders (no job.json) too,
+        // which is exactly the case the pickup loop is built around.
         var byId = _scanner.ScanAllJobs()
             .Where(j => j.ProjectName == ProjectName && j.State == JobStates.Progress)
             .ToDictionary(j => j.Id, StringComparer.OrdinalIgnoreCase);
 
         var candidates = new List<ProgressPickupCandidate>();
-        foreach (var folder in Directory.EnumerateDirectories(progressDir))
+        foreach (var laneFolder in _taskAccess.ListLaneFolders(Entry.Path, JobStates.Progress))
         {
-            var slug = Path.GetFileName(folder);
-            byId.TryGetValue(slug, out var info);
+            byId.TryGetValue(laneFolder.Slug, out var info);
             candidates.Add(new ProgressPickupCandidate(
-                FolderPath: folder,
-                Slug: slug,
+                FolderPath: laneFolder.FolderPath,
+                Slug: laneFolder.Slug,
                 Info: info,
-                Mtime: MeasureProgressFolderMtime(folder)));
+                Mtime: MeasureProgressFolderMtime(laneFolder.FolderPath)));
         }
 
         return OrderProgressByMtime(candidates);
@@ -2507,8 +2505,12 @@ public class ProjectRunner
     private bool DeadLetterUnrecoverableFolder(ProgressPickupCandidate candidate, string slug, int attempts)
     {
         var now = DateTime.UtcNow;
+        // ADR-0024: dead-letter slug collision check goes through the
+        // typed layer; the move itself uses MoveOrphanToFailedPickup so
+        // the architecture test doesn't see a Path.Combine + lane
+        // construction here.
         var destinationSlug = PickupFailureLog.BuildArchiveSlug(slug, now,
-            existsInDestination: name => Directory.Exists(Path.Combine(Entry.Path, JobStates.FailedPickup, name)));
+            existsInDestination: name => _taskAccess.SlugExistsInLane(Entry.Path, JobStates.FailedPickup, name));
 
         var jobIdBeforeMove = candidate.Info?.Id ?? slug;
         var cliTypeBeforeMove = candidate.Info?.CliType;
@@ -2516,12 +2518,13 @@ public class ProjectRunner
             ? state.History.ToList()
             : new List<PickupAttemptDiagnostic>();
 
-        var outcome = _states.MoveFolderToFailedPickup(candidate.FolderPath, destinationSlug);
-        if (outcome.Status != MoveJobStatus.Success)
+        var moveResult = _taskAccess.MoveOrphanToFailedPickup(
+            Entry.Path, JobStates.Progress, slug, destinationSlug, reasonMarkdown: null);
+        if (moveResult.Status != OrchestratorApi.Services.TaskAccess.TaskMutationStatus.Applied)
         {
             _logger.LogWarning(
                 "PickupFailureLog: failed-pickup move refused for {Slug} on {Project}: {Status} {Message}",
-                slug, ProjectName, outcome.Status, outcome.Message);
+                slug, ProjectName, moveResult.Status, moveResult.Message);
             // Reset the counter so we don't loop on the same failed move every
             // tick. The folder stays in 3-progress; the operator can intervene.
             _pickupAttempts.TryRemove(slug, out _);

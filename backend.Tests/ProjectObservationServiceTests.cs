@@ -82,10 +82,15 @@ public class ProjectObservationServiceTests : IDisposable
         var pickup = new PickupFailureLog(config, NullLogger<PickupFailureLog>.Instance);
         var infraHaltLog = new InfraHaltLog(config, NullLogger<InfraHaltLog>.Instance);
         var infraBreaker = new CrossSlugInfraCircuitBreaker(config, NullLogger<CrossSlugInfraCircuitBreaker>.Instance, infraHaltLog);
+        var indexCache = new JobIndexCache(scanner, NullLogger<JobIndexCache>.Instance, config);
+        scanner.SetIndexCache(indexCache);
+        var taskAccess = new OrchestratorApi.Services.TaskAccess.TaskAccessService(
+            scanner, mutations, states, transitions, indexCache,
+            NullLogger<OrchestratorApi.Services.TaskAccess.TaskAccessService>.Instance);
         _runners = new TaskRunnerService(
             config, NullLogger<TaskRunnerService>.Instance, scanner, states, mutations, sessions,
             copilot, router, new ContextUsageParser(), summary, prompts, transitions, projectSettings,
-            quota, quotaCaps, chatLog, orchestratorLog, orchestratorRunner, orchestratorSessions, globalBoot, git, pickup, infraBreaker);
+            quota, quotaCaps, chatLog, orchestratorLog, orchestratorRunner, orchestratorSessions, globalBoot, git, pickup, infraBreaker, taskAccess);
 
         // Manually construct a runner status with one active job so the
         // observation path runs (TaskRunnerService is a BackgroundService;

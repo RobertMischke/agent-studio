@@ -198,12 +198,17 @@ public class JobsEndpointPerfTests : IDisposable
         var pickupFailures = new PickupFailureLog(config, NullLogger<PickupFailureLog>.Instance);
         var infraHaltLog = new InfraHaltLog(config, NullLogger<InfraHaltLog>.Instance);
         var infraBreaker = new CrossSlugInfraCircuitBreaker(config, NullLogger<CrossSlugInfraCircuitBreaker>.Instance, infraHaltLog);
+        var indexCache = new JobIndexCache(scanner, NullLogger<JobIndexCache>.Instance, config);
+        scanner.SetIndexCache(indexCache);
+        var taskAccess = new OrchestratorApi.Services.TaskAccess.TaskAccessService(
+            scanner, mutations, states, transitions, indexCache,
+            NullLogger<OrchestratorApi.Services.TaskAccess.TaskAccessService>.Instance);
 
         var runners = new TaskRunnerService(
             config, NullLogger<TaskRunnerService>.Instance, scanner, states, mutations, sessions,
             copilot, router, contextUsageParser, summary, prompts, transitions, projectSettings,
             quotaService, quotaCaps,
-            chatLog, orchestratorLog, orchestratorRunner, orchestratorSessions, globalBoot, git, pickupFailures, infraBreaker);
+            chatLog, orchestratorLog, orchestratorRunner, orchestratorSessions, globalBoot, git, pickupFailures, infraBreaker, taskAccess);
         return (router, runners);
     }
 

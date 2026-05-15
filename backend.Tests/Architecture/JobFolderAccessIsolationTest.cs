@@ -101,12 +101,11 @@ public class JobFolderAccessIsolationTest
             ["backend/Services/Runner/CrashRecoveryService.cs"] =
                 "Boot-time recovery; runs before ITaskAccess could be available.",
 
-            // Tier 3: MIGRATION TARGET. These bypass the API today and
-            // need to be rewritten against ITaskAccess. The whitelist
-            // entry keeps the test green while the migration is queued;
-            // remove the entry when the consumer is migrated.
-            ["backend/Services/Runner/ProjectRunner.cs"] =
-                "MIGRATION TARGET: pickup loop reads 3-progress and creates 3a-failed-pickup directly; should call ITaskAccess.ListByLane and TransitionLaneAsync after phase 4.",
+            // Tier 3 migration complete. All former MIGRATION TARGET
+            // entries (ProjectRunner, StaleProgressArchiver,
+            // ReviewDecisionOrchestrator, MetaCycleHostedService,
+            // ProjectSnapshotEndpoints, ReviewDecisionsEndpoints) now
+            // route through ITaskAccess. Phase 4 of ADR-0024 is closed.
         };
 
     /// <summary>

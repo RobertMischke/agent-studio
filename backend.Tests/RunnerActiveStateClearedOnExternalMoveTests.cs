@@ -231,7 +231,8 @@ public sealed class RunnerActiveStateClearedOnExternalMoveTests : IDisposable
         OrchestratorLog OrchestratorLog,
         OrchestratorRunner OrchestratorRunner,
         OrchestratorSessionStore OrchestratorSessions,
-        CliRouter Router);
+        CliRouter Router,
+        OrchestratorApi.Services.TaskAccess.ITaskAccess TaskAccess);
 
     private Deps BuildDeps()
     {
@@ -257,6 +258,11 @@ public sealed class RunnerActiveStateClearedOnExternalMoveTests : IDisposable
         var transitions = new JobTransitionService(scanner, states, mutations, git, settings, NullLogger<JobTransitionService>.Instance);
         var chatLog = new OrchestratorChatLog(NullLogger<OrchestratorChatLog>.Instance);
         var orchestratorLog = new OrchestratorLog(NullLogger<OrchestratorLog>.Instance);
+        var indexCache = new JobIndexCache(scanner, NullLogger<JobIndexCache>.Instance, config);
+        scanner.SetIndexCache(indexCache);
+        var taskAccess = new OrchestratorApi.Services.TaskAccess.TaskAccessService(
+            scanner, mutations, states, transitions, indexCache,
+            NullLogger<OrchestratorApi.Services.TaskAccess.TaskAccessService>.Instance);
 
         var cliEnv = new CopilotCliEnvironment(NullLogger<CopilotCliEnvironment>.Instance);
         var copilot = new CopilotCliService(
@@ -275,7 +281,7 @@ public sealed class RunnerActiveStateClearedOnExternalMoveTests : IDisposable
         var orchestratorSessions = new OrchestratorSessionStore(NullLogger<OrchestratorSessionStore>.Instance);
 
         return new Deps(config, scanner, states, mutations, sessions, summary, prompts, settings, git,
-            transitions, chatLog, orchestratorLog, orchestratorRunner, orchestratorSessions, router);
+            transitions, chatLog, orchestratorLog, orchestratorRunner, orchestratorSessions, router, taskAccess);
     }
 
     private ProjectRunner BuildRunner(Deps d)
@@ -301,6 +307,6 @@ public sealed class RunnerActiveStateClearedOnExternalMoveTests : IDisposable
             d.Scanner, d.States, d.Sessions, d.Router,
             d.Summary, d.Prompts, d.Transitions, d.ChatLog, d.Mutations,
             d.OrchestratorLog, d.OrchestratorRunner, d.OrchestratorSessions,
-            d.Settings, quotaService, quotaCaps, d.Git, pickupFailures, infraBreaker, bus: null);
+            d.Settings, quotaService, quotaCaps, d.Git, pickupFailures, infraBreaker, d.TaskAccess, bus: null);
     }
 }

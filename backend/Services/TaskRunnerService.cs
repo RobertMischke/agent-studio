@@ -42,6 +42,7 @@ public class TaskRunnerService : BackgroundService
     private readonly PickupFailureLog _pickupFailures;
     private readonly CrossSlugInfraCircuitBreaker _infraBreaker;
     private readonly AgentMessageBusBridge? _bus;
+    private readonly OrchestratorApi.Services.TaskAccess.ITaskAccess _taskAccess;
     private readonly ConcurrentDictionary<string, ProjectRunner> _runners = new();
 
     public event Action<string, ProjectRunnerStatus>? OnRunnerStatusChanged;
@@ -70,6 +71,7 @@ public class TaskRunnerService : BackgroundService
         GitService git,
         PickupFailureLog pickupFailures,
         CrossSlugInfraCircuitBreaker infraBreaker,
+        OrchestratorApi.Services.TaskAccess.ITaskAccess taskAccess,
         AgentMessageBusBridge? bus = null)
     {
         _config = config;
@@ -95,6 +97,7 @@ public class TaskRunnerService : BackgroundService
         _git = git;
         _pickupFailures = pickupFailures;
         _infraBreaker = infraBreaker;
+        _taskAccess = taskAccess;
         _bus = bus;
     }
 
@@ -130,7 +133,7 @@ public class TaskRunnerService : BackgroundService
                 continue;
             }
 
-            var runner = new ProjectRunner(entry.Name, entry, _logger, _scanner, _states, _sessions, _router, _summaryService, _prompts, _transitions, _chatLog, _mutations, _orchestratorLog, _orchestratorRunner, _orchestratorSessions, _projectSettings, _quotaService, _quotaCaps, _git, _pickupFailures, _infraBreaker, _bus);
+            var runner = new ProjectRunner(entry.Name, entry, _logger, _scanner, _states, _sessions, _router, _summaryService, _prompts, _transitions, _chatLog, _mutations, _orchestratorLog, _orchestratorRunner, _orchestratorSessions, _projectSettings, _quotaService, _quotaCaps, _git, _pickupFailures, _infraBreaker, _taskAccess, _bus);
             runner.ConfigureWatchdog(LoadWatchdogConfig(_config));
             _stuckLoopBudget = LoadStuckLoopBudget(_config);
             runner.ConfigureStuckLoopBudget(_stuckLoopBudget);

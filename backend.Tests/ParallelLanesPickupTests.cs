@@ -217,6 +217,11 @@ public sealed class ParallelLanesPickupTests : IDisposable
         var transitions = new JobTransitionService(scanner, states, mutations, git, settings, NullLogger<JobTransitionService>.Instance);
         var chatLog = new OrchestratorChatLog(NullLogger<OrchestratorChatLog>.Instance);
         var orchestratorLog = new OrchestratorLog(NullLogger<OrchestratorLog>.Instance);
+        var indexCache = new JobIndexCache(scanner, NullLogger<JobIndexCache>.Instance, config);
+        scanner.SetIndexCache(indexCache);
+        var taskAccess = new OrchestratorApi.Services.TaskAccess.TaskAccessService(
+            scanner, mutations, states, transitions, indexCache,
+            NullLogger<OrchestratorApi.Services.TaskAccess.TaskAccessService>.Instance);
 
         var cliEnv = new CopilotCliEnvironment(NullLogger<CopilotCliEnvironment>.Instance);
         var copilot = new CopilotCliService(
@@ -248,6 +253,6 @@ public sealed class ParallelLanesPickupTests : IDisposable
             scanner, states, sessions, router,
             summary, prompts, transitions, chatLog, mutations,
             orchestratorLog, orchestratorRunner, orchestratorSessions,
-            settings, quotaService, quotaCaps, git, pickupFailures, infraBreaker, bus: null);
+            settings, quotaService, quotaCaps, git, pickupFailures, infraBreaker, taskAccess, bus: null);
     }
 }
