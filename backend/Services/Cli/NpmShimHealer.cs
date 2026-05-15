@@ -134,18 +134,70 @@ public static class NpmShimHealer
             }
         }
 
-        // 3. Re-run the wrapper-package postinstall when claude-code/bin/claude.exe
-        //    is the implausibly small stub (<4 KB) left by an interrupted install.
+        // 3. Repair the wrapper bin/claude.exe. Three observed failure shapes:
+        //    (a) present-but-stub (<4 KB) — interrupted postinstall mid-swap.
+        //    (b) missing canonical + sibling claude.exe.old.<ts> — half-completed rename.
+        //    (c) missing canonical + no sibling — installer ran preinstall delete before crash.
+        //    Shape (b) heals via a rename back (no network / no postinstall needed since
+        //    the .old payload is the previously-correct binary); shapes (a) and (c) need
+        //    the wrapper's node install.cjs postinstall to fetch / unpack the platform
+        //    binary again.
         var wrapDir = Path.Combine(npmBin, "node_modules", "@anthropic-ai", "claude-code");
         var wrapBin = Path.Combine(wrapDir, "bin", "claude.exe");
-        if (File.Exists(wrapBin))
+        var wrapBinDir = Path.Combine(wrapDir, "bin");
+        if (Directory.Exists(wrapDir))
         {
-            long size = -1;
-            try { size = new FileInfo(wrapBin).Length; } catch { /* fall through */ }
-
-            if (size >= 0 && size < 4096)
+            // Shape (b): try the .old.<ts> sibling first.
+            if (!File.Exists(wrapBin) && Directory.Exists(wrapBinDir))
             {
-                actions.Add($"detected stub binary at claude-code/bin/claude.exe ({size} bytes), running postinstall");
+                string[] wrapOlds;
+                try { wrapOlds = Directory.GetFiles(wrapBinDir, "claude.exe.old.*"); }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Failed to enumerate wrapper .old.* files in {Dir}", wrapBinDir);
+                    wrapOlds = Array.Empty<string>();
+                }
+                var newestWrapOld = wrapOlds
+                    .Select(f => (Path: f, MTime: SafeLastWriteTime(f)))
+                    .OrderByDescending(t => t.MTime)
+                    .Select(t => t.Path)
+                    .FirstOrDefault();
+                if (newestWrapOld is not null)
+                {
+                    try
+                    {
+                        File.Move(newestWrapOld, wrapBin);
+                        actions.Add($"restored wrapper binary {Path.GetFileName(newestWrapOld)} -> claude.exe");
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogWarning(ex, "Failed to restore wrapper binary {From} -> {To}", newestWrapOld, wrapBin);
+                    }
+                }
+            }
+
+            // Shapes (a) and (c): missing OR stub → postinstall.
+            var needsPostinstall = false;
+            string? reason = null;
+            if (!File.Exists(wrapBin))
+            {
+                needsPostinstall = true;
+                reason = "wrapper bin/claude.exe still missing after .old fallback";
+            }
+            else
+            {
+                long size = -1;
+                try { size = new FileInfo(wrapBin).Length; } catch { /* fall through */ }
+                if (size >= 0 && size < 4096)
+                {
+                    needsPostinstall = true;
+                    reason = $"stub binary at claude-code/bin/claude.exe ({size} bytes)";
+                }
+            }
+
+            if (needsPostinstall)
+            {
+                actions.Add($"{reason}, running postinstall");
                 var postOk = await TryRunPostInstallAsync(wrapDir, logger, ct);
                 actions.Add(postOk ? "postinstall completed" : "postinstall failed (smoke-test below is verdict)");
             }

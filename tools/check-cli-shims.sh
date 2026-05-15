@@ -76,13 +76,47 @@ if [[ -d "$PLAT_DIR" ]] && [[ ! -f "$PLAT_DIR/claude.exe" ]]; then
   fi
 fi
 
-# 3. Replace the 500-byte stub at claude-code/bin/claude.exe by re-running the
-#    package postinstall when the file is implausibly small.
+# 3. Repair the wrapper bin/claude.exe.
+#    Three failure shapes observed on Windows after an interrupted npm install:
+#      (a) the canonical claude.exe is present but truncated to a ~500-byte stub
+#          (the npm postinstall got mid-way through the platform-binary swap),
+#      (b) the canonical claude.exe is missing AND a sibling
+#          claude.exe.old.<timestamp> is left behind (rename half-completed),
+#      (c) the canonical claude.exe is missing and no .old.<ts> sibling either
+#          (full delete by the installer's preinstall step before crash).
+#    Shape (a) heals by re-running the wrapper postinstall.
+#    Shape (b) heals by renaming the .old.<ts> back to claude.exe; no postinstall
+#    required because the file content is the previously-correct binary.
+#    Shape (c) needs postinstall too.
 WRAP_DIR="$NPM_BIN/node_modules/@anthropic-ai/claude-code"
-if [[ -d "$WRAP_DIR" ]] && [[ -f "$WRAP_DIR/bin/claude.exe" ]]; then
-  size="$(wc -c < "$WRAP_DIR/bin/claude.exe" | tr -d ' ')"
-  if [[ "$size" -lt 4096 ]]; then
-    echo "[check-cli-shims] stub binary detected at claude-code/bin/claude.exe ($size bytes), running postinstall..."
+WRAP_BIN="$WRAP_DIR/bin/claude.exe"
+if [[ -d "$WRAP_DIR" ]]; then
+  # Shape (b): missing canonical, .old.<ts> sibling present → rename back.
+  if [[ ! -f "$WRAP_BIN" ]]; then
+    newest_wrap_old=""
+    while IFS= read -r f; do
+      newest_wrap_old="$f"
+      break
+    done < <(ls -t "$WRAP_DIR/bin/"claude.exe.old.* 2>/dev/null || true)
+    if [[ -n "$newest_wrap_old" ]] && [[ -f "$newest_wrap_old" ]]; then
+      mv -- "$newest_wrap_old" "$WRAP_BIN"
+      echo "[check-cli-shims] restored wrapper binary: $(basename "$newest_wrap_old") -> claude.exe"
+      healed=1
+    fi
+  fi
+  # Shape (a) and shape (c): present-but-stub OR still missing → postinstall.
+  needs_postinstall=0
+  if [[ ! -f "$WRAP_BIN" ]]; then
+    needs_postinstall=1
+    echo "[check-cli-shims] wrapper bin/claude.exe still missing after .old fallback; running postinstall..."
+  else
+    size="$(wc -c < "$WRAP_BIN" | tr -d ' ')"
+    if [[ "$size" -lt 4096 ]]; then
+      needs_postinstall=1
+      echo "[check-cli-shims] stub binary detected at claude-code/bin/claude.exe ($size bytes), running postinstall..."
+    fi
+  fi
+  if [[ "$needs_postinstall" -eq 1 ]]; then
     if (cd "$WRAP_DIR" && node install.cjs); then
       echo "[check-cli-shims] postinstall completed."
     else
