@@ -214,6 +214,20 @@
                 }
               }
             }
+            @case ('diff') {
+              @if (studioTabState.activeTab(); as tab) {
+                @if (tab.kind === 'diff') {
+                  <app-studio-diff-view [commitSha]="tab.commitSha" />
+                }
+              }
+            }
+            @case ('activity') {
+              @if (studioTabState.activeTab(); as tab) {
+                @if (tab.kind === 'activity') {
+                  <app-studio-activity-view [jobKey]="tab.jobKey" />
+                }
+              }
+            }
             @default {
               <!-- Welcome screen owned by the shell itself when no tab is active. -->
             }

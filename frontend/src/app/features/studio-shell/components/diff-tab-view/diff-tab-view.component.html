@@ -1,0 +1,37 @@
+<section class="diff" data-testid="studio-diff-view">
+  @if (owner(); as o) {
+    <header class="diff__head">
+      <span class="diff__eyebrow">Commit</span>
+      <span class="diff__sha mono">{{ o.commit.sha.slice(0, 12) }}</span>
+      @if (o.commit.at) {
+        <span class="diff__author">{{ o.commit.at }}</span>
+      }
+    </header>
+    <div class="diff__body">
+      @if (o.commit.message) {
+        <p class="diff__message">{{ o.commit.message }}</p>
+      }
+      <dl class="diff__facts">
+        <dt>Task</dt>
+        <dd>{{ o.job.title || o.job.id }}</dd>
+        <dt>Project</dt>
+        <dd>{{ o.job.projectName }}</dd>
+        @if (o.commit.filesChanged != null) {
+          <dt>Files</dt>
+          <dd>{{ o.commit.filesChanged }}</dd>
+        }
+      </dl>
+      <p class="diff__note">
+        The inline diff renderer is being migrated from the existing task
+        diff pane. Open the owning task to see the file list, +/- counts,
+        and per-file unified diff for this commit.
+      </p>
+    </div>
+  } @else {
+    <div class="diff__empty">
+      <h3>Diff: {{ commitSha().slice(0, 12) }}</h3>
+      <p>No job in the live index references this commit yet. The diff renderer
+        will land once the commits index endpoint is wired into the new shell.</p>
+    </div>
+  }
+</section>

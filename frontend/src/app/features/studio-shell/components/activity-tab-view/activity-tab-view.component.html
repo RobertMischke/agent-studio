@@ -1,0 +1,40 @@
+<section class="activity" data-testid="studio-activity-view">
+  @if (job(); as j) {
+    <header class="activity__head">
+      <span class="activity__eyebrow">Activity</span>
+      <span class="activity__title">{{ j.title || j.id }}</span>
+      <span class="activity__state">· {{ j.state }}</span>
+    </header>
+    <div class="activity__body">
+      <dl class="activity__facts">
+        <dt>Job key</dt>
+        <dd class="mono">{{ j.jobKey }}</dd>
+        <dt>Project</dt>
+        <dd>{{ j.projectName }}</dd>
+        <dt>Agent</dt>
+        <dd>{{ j.agent || '—' }}</dd>
+        <dt>CLI</dt>
+        <dd>{{ j.cliType || '—' }}</dd>
+        @if (j.execution) {
+          <dt>Execution</dt>
+          <dd>
+            {{ j.execution.status }} ·
+            @if (j.execution.runOutcome) { {{ j.execution.runOutcome }} · }
+            @if (j.execution.durationSeconds != null) { {{ j.execution.durationSeconds }}s }
+          </dd>
+        }
+      </dl>
+      <p class="activity__note">
+        The live activity stream (protocol pane + tool-call timeline) lives
+        inside the task workbench. Open the task to see the streaming output.
+      </p>
+    </div>
+  } @else {
+    <div class="activity__empty">
+      <h3>Activity log</h3>
+      <p>Job <code>{{ jobKey() }}</code> not found in the live index. The job may
+        have been archived or moved; reload the workspace or pick the task from
+        the Explorer to find it.</p>
+    </div>
+  }
+</section>
