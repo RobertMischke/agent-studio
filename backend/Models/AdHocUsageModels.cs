@@ -54,7 +54,6 @@ public static class AdHocUsageSources
     public const string TitleGeneration   = "title-generation";
     public const string SummaryGeneration = "summary-generation";
     public const string PromptEnhancement = "prompt-enhancement";
-    public const string RoadmapIntake     = "roadmap-intake";
     public const string CommitMessage     = "commit-message";
     public const string SoftReasoning     = "soft-reasoning";
     public const string ReviewDecision    = "review-decision";

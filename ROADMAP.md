@@ -543,12 +543,6 @@ Concepts (Orchestrator, Supervisor, Skills, Audits, Probes, Companion) are docum
 
 Queued at `agent-taskboard/2-ready/in-product-concept-docs/`.
 
-### Roadmap Intake from the Chat Window
-
-Long branching chat messages with many concerns at once should not require the user to leave the product. The chat window inside the project view gets a "Send to roadmap" mode: a fast-model splitter turns the text into candidate tasks, the user reviews the split, and confirmed candidates land in `1-preparation` (never auto-queued to `2-ready`).
-
-Queued at `agent-taskboard/2-ready/chat-intake-roadmap-from-app/`.
-
 ### Focused UX
 
 Keep the app dense, fast, and pleasant to use:

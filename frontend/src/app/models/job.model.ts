@@ -290,13 +290,6 @@ export interface ContinueJobQueuedInfo {
  */
 // (Project chat turn + responses now in features/project-chat/models; re-exported below)
 
-/**
- * One candidate task produced by the roadmap-intake splitter. The user
- * reviews and edits these in place before confirming; the confirm step
- * materialises them as job folders in <c>1-preparation</c>.
- */
-// (RoadmapIntake* now in features/roadmap/models; re-exported below)
-
 // (TokenSummaryByModel now in features/tokens/models/tokens.model.ts; re-exported below)
 
 export interface JobSummaryState {

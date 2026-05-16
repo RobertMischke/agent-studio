@@ -10,7 +10,7 @@ Imports via `from './features/orchestrator'`. See [`index.ts`](./index.ts).
 
 - `OrchestratorFeedComponent` — per-project log + token rollup + global card; renders inside an overlay opened from the project tab feed icon.
 - `GlobalOrchestratorCardComponent` — shows the singleton orchestrator session above the per-project log.
-- `OrchestratorSideSheetComponent` — right-hand sidesheet that hosts the orchestrator chat + roadmap-intake tab + project-list tab. The **Logic** tab inside the sheet (`OrchestratorLogicPanelComponent` under `components/orchestrator-logic-panel/`) renders the orchestrator + supervisor flag catalog (review-decision, prep, soft-reasoning, meta-cycle, auto-intervention) and is opened from the dev-tools menu's "Orchestrator config" item.
+- `OrchestratorSideSheetComponent` — right-hand sidesheet that hosts the orchestrator chat and project picker. Settings open in the dedicated Orchestrator Settings modal from the sheet header.
 
 **Types**:
 

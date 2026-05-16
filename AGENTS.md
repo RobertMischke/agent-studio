@@ -148,7 +148,6 @@ The roadmap is **future-only** (see [README.md](README.md) for what already exis
 - "First implementation order" lists stay numbered and small (5-10 items max). Longer sequences belong in a research doc under `docs/research/` referenced from the theme.
 
 Existing tooling for roadmap work:
-- [`prompts/runtime/roadmap-intake.md`](prompts/runtime/roadmap-intake.md) is the splitter that turns a free-text dump into candidate tasks (the Roadmap Intake feature in the orchestrator side sheet uses this).
 - [`prompts/runtime/roadmap-alignment-review.md`](prompts/runtime/roadmap-alignment-review.md) is the meta-action that reads the queue + the roadmap and reports drift between them.
 - The Test Run Service entry in the roadmap was added today; use it as a shape reference for new themes (intent statement, what it enables, hard rules, first implementation order).
 

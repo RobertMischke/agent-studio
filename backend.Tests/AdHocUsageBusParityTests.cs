@@ -49,7 +49,7 @@ public sealed class AdHocUsageBusParityTests : IDisposable
         var day2 = new DateTime(2026, 5, 2, 14, 0, 0, DateTimeKind.Utc);
         var day3 = new DateTime(2026, 5, 3, 9, 30, 0, DateTimeKind.Utc);
 
-        // Realistic mix: every named source, two days, a priced model + an
+        // Realistic mix: every active named source, two days, a priced model + an
         // unpriced one so AllModelsPriced=false on both sides, a project-scoped
         // entry and a workspace-only entry, a CommitMessage record with a
         // jobId (the GitService path) and a TitleGeneration record without.
@@ -59,7 +59,6 @@ public sealed class AdHocUsageBusParityTests : IDisposable
             Make(AdHocUsageSources.TitleGeneration,   "claude-haiku-4-5",            input: 2200, output: 110,  day1.AddMinutes(5)),
             Make(AdHocUsageSources.SummaryGeneration, "claude-haiku-4-5",            input: 48_000, output: 950, day1.AddHours(2)),
             Make(AdHocUsageSources.PromptEnhancement, "claude-haiku-4-5",            input: 900, output: 60,    day2),
-            Make(AdHocUsageSources.RoadmapIntake,     "claude-haiku-4-5",            input: 7_500, output: 1_200, day2.AddHours(1)),
             Make(AdHocUsageSources.CommitMessage,     "claude-haiku-4-5",            input: 6_000, output: 320, day2.AddHours(2), jobId: "some-job"),
             Make(AdHocUsageSources.SoftReasoning,     "claude-haiku-4-5",            input: 3_200, output: 180, day3),
             Make(AdHocUsageSources.ReviewDecision,    "claude-haiku-4-5",            input: 12_000, output: 420, day3.AddMinutes(15), project: "agent-taskboard"),

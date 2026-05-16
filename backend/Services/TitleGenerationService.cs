@@ -14,9 +14,8 @@ namespace OrchestratorApi.Services;
 /// no on-disk side effects.
 ///
 /// <para>The Haiku invocation reuses the stdin pattern from
-/// <see cref="SummaryGenerationService"/> and <see cref="RoadmapIntakeService"/>
-/// (long inputs would otherwise overrun Windows' CreateProcess
-/// command-line cap).</para>
+/// <see cref="SummaryGenerationService"/> so long inputs do not overrun
+/// Windows' CreateProcess command-line cap.</para>
 ///
 /// <para>The model call is exposed as a virtual hook
 /// (<see cref="InvokeAsync"/>) so tests can stub it out and exercise

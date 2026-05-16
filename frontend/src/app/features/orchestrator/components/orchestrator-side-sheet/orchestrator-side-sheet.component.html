@@ -5,8 +5,7 @@
       <h2 class="sheet__title" data-testid="orch-side-sheet-title">Chat</h2>
     </div>
 
-    <div class="sheet__project-picker"
-         [class.sheet__combo-wrap--active]="mode() === 'project' || mode() === 'intake'"
+    <div class="sheet__project-picker sheet__combo-wrap--active"
          [class.sheet__combo-wrap--open]="comboOpen()"
          data-testid="orch-side-sheet-project-combo-wrap">
       <span class="sheet__select-icon">💬</span>
@@ -77,93 +76,61 @@
     }
   </select>
 
-  <nav class="sheet__tabs" data-testid="orch-side-sheet-tabs" aria-label="Sidesheet sections">
-    <button class="sheet__tab"
-            type="button"
-            [class.sheet__tab--active]="mode() === 'project'"
-            data-testid="orch-side-sheet-tab-project"
-            (click)="selectWindowMode('project')">
-      <span aria-hidden="true">💬</span><span>Chat</span>
-    </button>
-    <button class="sheet__tab"
-            type="button"
-            [class.sheet__tab--active]="mode() === 'intake'"
-            data-testid="orch-side-sheet-tab-intake"
-            [disabled]="!activeProject()"
-            (click)="selectWindowMode('intake')">
-      <span aria-hidden="true">🗺</span><span>Roadmap Intake</span>
-    </button>
-  </nav>
-
-  <main class="sheet__content" [attr.data-mode]="mode()">
+  <main class="sheet__content">
     @if (errorMsg(); as err) {
       <div class="sheet__error">{{ err }}</div>
     }
 
-    @switch (mode()) {
-      @case ('intake') {
-        @if (activeProject()) {
-          <app-roadmap-intake-panel
-            [activeWatchPath]="activeWatchPathForIntake()"
-            [projectName]="activeProject()"
-            (created)="onIntakeCreated($event)" />
+    @if (activeProject()) {
+      <section class="sheet__chat">
+        @if (virtualChatEnabled()) {
+          <app-project-chat-list
+            #projectChatList
+            [project]="activeProject()" />
+          <app-chat
+            variant="embedded"
+            [messages]="[]"
+            [events]="[]"
+            [pending]="sending()"
+            [disabled]="sending()"
+            [placeholder]="'Ask the orchestrator about this project...'"
+            [emptyState]="''"
+            [bodyMaxHeight]="'0px'"
+            (submitMessage)="onSubmit($event)" />
         } @else {
-          <div class="sheet__no-project">No watched projects yet.</div>
+          <app-chat
+            variant="embedded"
+            [messages]="messages()"
+            [events]="events()"
+            [pending]="sending()"
+            [disabled]="sending()"
+            [placeholder]="'Ask the orchestrator... try /bug &lt;description&gt; to file a bug'"
+            [emptyState]="emptyStateText()"
+            (submitMessage)="onSubmit($event)"
+            (eventAction)="onChatEventAction($event)" />
         }
-      }
-      @default {
-        @if (activeProject()) {
-          <section class="sheet__chat">
-            @if (virtualChatEnabled()) {
-              <app-project-chat-list
-                #projectChatList
-                [project]="activeProject()" />
-              <app-chat
-                variant="embedded"
-                [messages]="[]"
-                [events]="[]"
-                [pending]="sending()"
-                [disabled]="sending()"
-                [placeholder]="'Ask the orchestrator about this project...'"
-                [emptyState]="''"
-                [bodyMaxHeight]="'0px'"
-                (submitMessage)="onSubmit($event)" />
-            } @else {
-              <app-chat
-                variant="embedded"
-                [messages]="messages()"
-                [events]="events()"
-                [pending]="sending()"
-                [disabled]="sending()"
-                [placeholder]="'Ask the orchestrator... try /bug &lt;description&gt; to file a bug'"
-                [emptyState]="emptyStateText()"
-                (submitMessage)="onSubmit($event)"
-                (eventAction)="onChatEventAction($event)" />
-            }
 
-            <div class="sheet__draft-actions" data-testid="orch-side-sheet-draft-actions">
-              <button class="sheet__draft-btn sheet__draft-btn--primary"
-                      type="button"
-                      (click)="onCreateTaskFromYourMessage()"
-                      [disabled]="!canCreateTaskFromUserMessage()"
-                      [appTooltip]="'Open Add Task pre-filled with the text you typed'"
-                      data-testid="orch-side-sheet-make-task-from-yours">
-                Make a task from your message
-              </button>
-              <button class="sheet__draft-btn"
-                      type="button"
-                      (click)="onCreateTaskFromLastReply()"
-                      [disabled]="!canCreateTaskFromReply()"
-                      [appTooltip]="'Open Add Task pre-filled with the last orchestrator reply'"
-                      data-testid="orch-side-sheet-make-task">
-                Make a task from this reply
-              </button>
-            </div>
-          </section>
-        } @else {
-          <div class="sheet__no-project">No watched projects yet.</div>
-        }
-      }
+        <div class="sheet__draft-actions" data-testid="orch-side-sheet-draft-actions">
+          <button class="sheet__draft-btn sheet__draft-btn--primary"
+                  type="button"
+                  (click)="onCreateTaskFromYourMessage()"
+                  [disabled]="!canCreateTaskFromUserMessage()"
+                  [appTooltip]="'Open Add Task pre-filled with the text you typed'"
+                  data-testid="orch-side-sheet-make-task-from-yours">
+            Make a task from your message
+          </button>
+          <button class="sheet__draft-btn"
+                  type="button"
+                  (click)="onCreateTaskFromLastReply()"
+                  [disabled]="!canCreateTaskFromReply()"
+                  [appTooltip]="'Open Add Task pre-filled with the last orchestrator reply'"
+                  data-testid="orch-side-sheet-make-task">
+            Make a task from this reply
+          </button>
+        </div>
+      </section>
+    } @else {
+      <div class="sheet__no-project">No watched projects yet.</div>
     }
   </main>
 </aside>

@@ -7,7 +7,6 @@ import type { GitFileChange, GitStatus, JobCommitDetail } from '../features/git'
 import type { OrchestratorLogResponse, OrchestratorSessionResponse, OrchestratorChatResponse, OrchestratorChatTurn } from '../features/orchestrator';
 import type { ProjectChatScrollResponse, ProjectChatSearchResponse, ProjectChatTurnResponse, ProjectChatStatsResponse } from '../features/project-chat';
 import type { ProjectTokenUsageSummary, ProjectTokenHeatmap, ProjectExpensiveJobsResponse, ProjectJobTokenDetail } from '../features/project-token-usage';
-import type { RoadmapIntakeCandidate, RoadmapIntakeResponse, RoadmapIntakeConfirmResponse } from '../features/roadmap';
 import type { RunTimeline, RunCommitsResponse, RunFilesResponse, RunDiffResponse } from '../features/run-timeline';
 import type { JobScreenshotsResponse, WorkspaceScreenshotsResponse } from '../features/screenshots';
 import type { SessionEventsResponse } from '../features/session-events';
@@ -895,29 +894,6 @@ export class JobService {
   getProjectChatTurn(projectName: string, turnId: string) {
     return this.http.get<ProjectChatTurnResponse>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/chat/turn/${encodeURIComponent(turnId)}`
-    );
-  }
-
-  /**
-   * Run the roadmap-intake splitter against a free-text dump. Returns a
-   * candidate list with no side effects; the user reviews them before
-   * confirming.
-   */
-  splitRoadmapIntake(text: string, watchPath: string) {
-    return this.http.post<RoadmapIntakeResponse>(
-      `${this.baseUrl}/roadmap/intake`,
-      { text, watchPath }
-    );
-  }
-
-  /**
-   * Materialise reviewed roadmap-intake candidates as job folders in
-   * <c>1-preparation</c>. Intake never lands jobs in <c>2-ready</c>.
-   */
-  confirmRoadmapIntake(watchPath: string, candidates: RoadmapIntakeCandidate[]) {
-    return this.http.post<RoadmapIntakeConfirmResponse>(
-      `${this.baseUrl}/roadmap/intake/confirm`,
-      { watchPath, candidates }
     );
   }
 

@@ -143,45 +143,13 @@
 .sheet__combo-option--active { background: rgba(124, 58, 237, 0.35); color: #fff; }
 .sheet__combo-option--current { color: #c4b5fd; font-weight: 650; }
 
-.sheet__tabs {
-  display: flex;
-  gap: 4px;
-  padding: 6px 12px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
-  background: #181825;
-  flex: 0 0 auto;
-}
-.sheet__tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: #bac2de;
-  padding: 5px 10px;
-  cursor: pointer;
-  font: inherit;
-  font-size: 12px;
-}
-.sheet__tab:hover:not(:disabled) { background: rgba(148, 163, 184, 0.10); color: #f8fafc; }
-.sheet__tab--active {
-  background: rgba(125, 211, 252, 0.13);
-  color: #f8fafc;
-  font-weight: 700;
-}
-.sheet__tab:disabled { opacity: 0.45; cursor: not-allowed; }
-
 .sheet__content {
   flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
   padding: 10px 12px 12px;
   background: #11111b;
-}
-.sheet__content[data-mode='project'] {
-  overflow: hidden;
 }
 .sheet__error {
   margin: 0 0 10px;
@@ -248,9 +216,5 @@
   .sheet__project-picker {
     grid-column: 1 / -1;
     order: 2;
-  }
-  .sheet__tabs {
-    overflow-x: auto;
-    overflow-y: hidden;
   }
 }

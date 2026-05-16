@@ -48,9 +48,8 @@ The first renderer slice may only replace the Activity tab body. Trace mode, raw
   - `frontend/src/app/components/workspace-screenshots.ts`, `workspace-token-timeline.ts`.
   - `frontend/src/app/components/token-summary-block.ts`.
   - `frontend/src/app/components/orchestrator-feed.ts`.
-  - `frontend/src/app/components/roadmap-intake/`.
 
-The side sheet keeps project picker, task tab, roadmap intake, attachments, and the make-task action. Reading the new flag must not remove or rewire any of these surfaces in slice one.
+The side sheet keeps project picker, attachments, and the make-task action. Reading the new flag must not remove or rewire any of these surfaces in slice one.
 
 ### 3. Mockups / prototype (do not touch in production)
 

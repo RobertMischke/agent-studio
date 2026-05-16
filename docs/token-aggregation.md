@@ -50,7 +50,7 @@ fields that the bus messages now carry.
   `support:*` vs `orchestrator:*`) — semantically equivalent but driven by a
   different field.
 - **`AdHocUsageService`** splits by `Source` (TitleGen, SummaryGen,
-  PromptEnhance, RoadmapIntake, ...) — these never reach the bus today.
+  PromptEnhance, CommitMessage, ...) — these never reach the bus today.
 - **`WorkspaceTokensTimelineService`** buckets by `(project, time-bucket)`
   with a configurable window/bucket size (1h/6h/24h/168h × 5/15/60min).
 - **`TokenSummaryService`** estimates dollars through `TokenPricing` for

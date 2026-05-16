@@ -19,19 +19,9 @@ import type { OrchestratorChatTurn } from '../../../../features/orchestrator';
 import { buildChatNavigationContext } from '../../../../features/orchestrator';
 import { ChatComponent } from '../../../../components/chat/chat.component';
 import { ChatEvent, ChatMessage, ChatSubmitEvent } from '../../../../components/chat/chat-types';
-import { RoadmapIntakePanelComponent } from '../../../roadmap/components/roadmap-intake/roadmap-intake-panel.component';
 import { ProjectChatListComponent } from '../../../project-chat/components/project-chat-list/project-chat-list.component';
 
 import { TooltipDirective } from '../../../../components/tooltip';
-/**
- * Sidesheet content surfaces. After the 2026-05-16 restructure the only
- * surfaces that live inside the sidesheet are the global orchestrator
- * Chat and the Roadmap Intake panel; feed, logic, CLI admin / sessions,
- * and supervisor moved out to dedicated overlays / modals so the
- * sidesheet stays Chat-centric and the global Chat appears here only.
- */
-type OrchestratorWindowMode = 'project' | 'intake';
-
 /**
  * Right-hand side sheet that hosts the orchestrator chat. Shell follows
  * the same flex-collapse pattern as `cli-usage-sheet` (host width animates
@@ -53,7 +43,6 @@ type OrchestratorWindowMode = 'project' | 'intake';
   standalone: true,
   imports: [
     ChatComponent,
-    RoadmapIntakePanelComponent,
     ProjectChatListComponent,
     TooltipDirective
   ],
@@ -67,10 +56,6 @@ type OrchestratorWindowMode = 'project' | 'intake';
 export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly projects = input<string[]>([]);
   readonly preferredProject = input<string | null>(null);
-  /**
-   * Full watch path entries so the roadmap-intake panel can resolve the
-   * active project name to the on-disk path the backend needs.
-   */
   readonly watchPaths = input<WatchPathEntry[]>([]);
 
   /**
@@ -143,26 +128,6 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       return false;
     }
   }
-
-  /**
-   * Which surface is in front: the project orchestrator thread (default)
-   * or the roadmap intake panel that splits a long dump into reviewable
-   * task drafts. The Settings modal opens as a separate overlay, not as a
-   * mode switch.
-   */
-  readonly mode = signal<OrchestratorWindowMode>('project');
-
-  /**
-   * Resolve the active project name to its on-disk watch path so the
-   * roadmap-intake panel can call the backend without re-fetching the
-   * watch-paths list on its own.
-   */
-  readonly activeWatchPathForIntake = computed<string | null>(() => {
-    const name = this.activeProject();
-    if (!name) return null;
-    const entry = this.watchPaths().find((wp) => wp.name === name);
-    return entry?.path ?? null;
-  });
 
   /**
    * Searchable project combobox state. The plain list-style picker did
@@ -414,7 +379,6 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   }
 
   selectProjectTab(proj: string): void {
-    this.mode.set('project');
     this.setActiveProject(proj);
   }
 
@@ -489,16 +453,6 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     this.comboQuery.set('');
   }
 
-  selectIntakeTab(): void {
-    if (!this.activeProject()) return;
-    this.mode.set('intake');
-  }
-
-  selectWindowMode(mode: OrchestratorWindowMode): void {
-    if (!this.activeProject()) return;
-    this.mode.set(mode);
-  }
-
   onOpenSettings(): void {
     this.openSettings.emit();
   }
@@ -508,15 +462,6 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     const watchPath = this.activeWatchPath();
     if (!jobId || !watchPath) return;
     this.openVerboseDebug.emit({ jobId, watchPath, jobTitle: this.activeJobTitle() });
-  }
-
-  /**
-   * Refresh the board so the newly-created drafts appear in
-   * `1-preparation`. We don't switch tabs - the intake panel surfaces
-   * its own "drafts created" confirmation.
-   */
-  onIntakeCreated(_event: { count: number }): void {
-    this.jobService.refresh(true);
   }
 
   refresh(silent = false): void {

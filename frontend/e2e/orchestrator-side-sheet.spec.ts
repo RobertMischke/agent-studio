@@ -128,11 +128,13 @@ test.describe('Orchestrator side sheet', () => {
     }
 
     // 2026-05-16 sidesheet restructure: the sidesheet is Chat-centric.
-    // Only Chat + Roadmap Intake tabs remain. The Task (pure chat),
-    // Feed, Logic, Manage CLI, Sessions, and Supervisor tabs were
-    // removed; Settings now opens as a dedicated modal triggered by
-    // the ⚙ button in the sidesheet header.
-    await expect(page.getByTestId('orch-side-sheet-tab-intake')).toBeVisible();
+    // Roadmap Intake / Send to roadmap was retired; the Task (pure chat),
+    // Feed, Logic, Manage CLI, Sessions, and Supervisor tabs are also out
+    // of the sheet. Settings opens as a dedicated modal triggered by the
+    // ⚙ button in the sidesheet header.
+    await expect(page.getByTestId('orch-side-sheet-tabs')).toHaveCount(0);
+    await expect(page.getByTestId('orch-side-sheet-tab-intake')).toHaveCount(0);
+    await expect(page.getByTestId('roadmap-intake-panel')).toHaveCount(0);
     await expect(page.getByTestId('orch-side-sheet-tab-task')).toHaveCount(0);
     await expect(page.getByTestId('orch-side-sheet-tab-feed')).toHaveCount(0);
     await expect(page.getByTestId('orch-side-sheet-tab-logic')).toHaveCount(0);
