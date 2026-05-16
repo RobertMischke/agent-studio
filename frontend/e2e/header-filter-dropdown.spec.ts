@@ -73,6 +73,19 @@ test.describe('Header filter dropdown', () => {
     await expect(strip.getByTestId('active-filter-pill-type-bug')).toBeVisible();
     await expect(strip.getByTestId(`active-filter-pill-tag-${firstTagId}`)).toBeVisible();
 
+    const stripGap = await strip.evaluate((el) => {
+      const pills = Array.from(el.querySelectorAll('[data-testid^="active-filter-pill-"]')) as HTMLElement[];
+      const clear = el.querySelector('[data-testid="filter-clear-all"]') as HTMLElement | null;
+      if (pills.length === 0 || !clear) return Number.POSITIVE_INFINITY;
+      const lastPill = pills[pills.length - 1].getBoundingClientRect();
+      const clearRect = clear.getBoundingClientRect();
+      return clearRect.left - lastPill.right;
+    });
+    expect(
+      stripGap,
+      `Clear all should stay visually attached to the active filter chips; got a ${stripGap.toFixed(0)}px gap.`,
+    ).toBeLessThanOrEqual(12);
+
     await strip.getByTestId('active-filter-remove-type-bug').click();
     await expect(strip.getByTestId('active-filter-pill-type-bug')).toHaveCount(0);
     await expect(strip.getByTestId(`active-filter-pill-tag-${firstTagId}`)).toBeVisible();
@@ -80,6 +93,31 @@ test.describe('Header filter dropdown', () => {
     await strip.getByTestId('filter-clear-all').click();
     await expect(page.getByTestId('active-filter-strip')).toHaveCount(0);
     expect(new URL(page.url()).hash).not.toContain('filters=');
+  });
+
+  test('project-only active filter keeps Clear all next to the project chip', async ({ page }) => {
+    await page.goto('/');
+    const firstProjectChip = page.locator('app-project-tabs .filter-chip').first();
+    test.skip(await firstProjectChip.count() === 0, 'No project tabs available on this board');
+
+    await firstProjectChip.click();
+    const strip = page.getByTestId('active-filter-strip');
+    await expect(strip).toBeVisible();
+    const projectPill = strip.locator('[data-testid^="active-filter-pill-project-"]').first();
+    await expect(projectPill).toBeVisible();
+
+    const stripGap = await strip.evaluate((el) => {
+      const pill = el.querySelector('[data-testid^="active-filter-pill-project-"]') as HTMLElement | null;
+      const clear = el.querySelector('[data-testid="filter-clear-all"]') as HTMLElement | null;
+      if (!pill || !clear) return Number.POSITIVE_INFINITY;
+      const pillRect = pill.getBoundingClientRect();
+      const clearRect = clear.getBoundingClientRect();
+      return clearRect.left - pillRect.right;
+    });
+    expect(
+      stripGap,
+      `Project-only Clear all should sit beside the project filter chip; got a ${stripGap.toFixed(0)}px gap.`,
+    ).toBeLessThanOrEqual(12);
   });
 
   test('any visible job card carries a Type chip with a tooltip', async ({ page }) => {
