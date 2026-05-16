@@ -151,33 +151,237 @@
                     <span class="studio-tree-row__count">{{ p.totalJobs }}</span>
                   </button>
                 }
-              </section>
-            }
-            @case ('tasks') {
-              <section class="studio-tasks">
-                <div class="studio-explorer__group-head">Open Tabs</div>
+                @if (projectRows().length === 0) {
+                  <div class="studio-empty">No projects loaded</div>
+                }
+                <div class="studio-explorer__group-head studio-explorer__group-head--mt">Open tabs</div>
                 @if (tabs().length === 0) {
                   <div class="studio-empty">No tabs open</div>
                 } @else {
                   @for (t of tabs(); track tabKey(t)) {
                     <button type="button"
-                            class="studio-tree-row"
+                            class="studio-tree-row studio-tree-row--child"
                             [class.studio-tree-row--active]="activeKey() === tabKey(t)"
                             (click)="selectTab(tabKey(t))">
                       <span class="studio-tree-row__name">{{ tabLabel(t) }}</span>
+                      <span class="studio-tree-row__close"
+                            (click)="closeTab(tabKey(t), $event)"
+                            aria-label="Close tab">×</span>
                     </button>
                   }
                 }
               </section>
             }
+            @case ('tasks') {
+              <section class="studio-tasks">
+                <div class="studio-explorer__group-head">Lanes</div>
+                <div class="studio-lane-summary">
+                  <button type="button" class="studio-lane-summary__row" (click)="openBoard(activeBoardProject() ?? '__all__')">
+                    <span class="studio-lane-summary__label">Backlog</span>
+                    <span class="studio-lane-summary__count">{{ laneSummary().backlog }}</span>
+                  </button>
+                  <button type="button" class="studio-lane-summary__row" (click)="openBoard(activeBoardProject() ?? '__all__')">
+                    <span class="studio-lane-summary__label">Ready</span>
+                    <span class="studio-lane-summary__count">{{ laneSummary().ready }}</span>
+                  </button>
+                  <button type="button" class="studio-lane-summary__row" (click)="openBoard(activeBoardProject() ?? '__all__')">
+                    <span class="studio-lane-summary__label">In progress</span>
+                    <span class="studio-lane-summary__count studio-lane-summary__count--alive">{{ laneSummary().progress }}</span>
+                  </button>
+                  <button type="button" class="studio-lane-summary__row" (click)="openBoard(activeBoardProject() ?? '__all__')">
+                    <span class="studio-lane-summary__label">Auto review</span>
+                    <span class="studio-lane-summary__count">{{ laneSummary().autoReview }}</span>
+                  </button>
+                  <button type="button" class="studio-lane-summary__row" (click)="openBoard(activeBoardProject() ?? '__all__')">
+                    <span class="studio-lane-summary__label">Human review</span>
+                    <span class="studio-lane-summary__count studio-lane-summary__count--review">{{ laneSummary().humanReview }}</span>
+                  </button>
+                  <button type="button" class="studio-lane-summary__row" (click)="openBoard(activeBoardProject() ?? '__all__')">
+                    <span class="studio-lane-summary__label">Completed</span>
+                    <span class="studio-lane-summary__count">{{ laneSummary().completed }}</span>
+                  </button>
+                  <button type="button" class="studio-lane-summary__row" (click)="openBoard(activeBoardProject() ?? '__all__')">
+                    <span class="studio-lane-summary__label">Archive</span>
+                    <span class="studio-lane-summary__count studio-lane-summary__count--dim">{{ laneSummary().archive }}</span>
+                  </button>
+                </div>
+                <div class="studio-explorer__group-head studio-explorer__group-head--mt">Open tasks</div>
+                @if (tabs().length === 0) {
+                  <div class="studio-empty">Open a task from the board.</div>
+                } @else {
+                  @for (t of tabs(); track tabKey(t)) {
+                    @if (t.kind === 'task') {
+                      <button type="button"
+                              class="studio-tree-row"
+                              [class.studio-tree-row--active]="activeKey() === tabKey(t)"
+                              (click)="selectTab(tabKey(t))">
+                        <span class="studio-tree-row__name">{{ tabLabel(t) }}</span>
+                      </button>
+                    }
+                  }
+                }
+              </section>
+            }
+            @case ('filters') {
+              <section class="studio-filters">
+                <div class="studio-explorer__group-head">Active filters</div>
+                @if (!boardFilters.hasActiveFiltersOrSearch()) {
+                  <div class="studio-empty">No filters applied.</div>
+                } @else {
+                  <div class="studio-filter-pills">
+                    @for (pill of boardFilters.activeFilterPills(); track pill.kind + ':' + pill.value) {
+                      <span class="studio-filter-pill"
+                            [class]="'studio-filter-pill--' + pill.kind"
+                            [attr.data-testid]="'studio-filter-pill-' + pill.kind + '-' + pill.value">
+                        <span class="studio-filter-pill__kind">{{ pill.kindLabel }}:</span>
+                        @if (pill.swatch) {
+                          <span class="studio-filter-pill__swatch" [style.background]="pill.swatch" aria-hidden="true"></span>
+                        }
+                        <span class="studio-filter-pill__label">{{ pill.label }}</span>
+                      </span>
+                    }
+                  </div>
+                  <button type="button" class="studio-button studio-button--ghost" (click)="clearAllFilters()">
+                    Clear all filters
+                  </button>
+                }
+                <div class="studio-explorer__group-head studio-explorer__group-head--mt">View &amp; filter sidesheet</div>
+                <button type="button"
+                        class="studio-button studio-button--primary"
+                        data-testid="studio-filters-open-sidesheet"
+                        (click)="openFilterSidesheet.emit()">
+                  Open faceted filter sheet
+                </button>
+                <p class="studio-empty studio-empty--note">All four facets (state, type, CLI, owner) plus
+                  the search box live in the full filter sidesheet for now. Inline filter chips land here
+                  in a follow-up slice.</p>
+              </section>
+            }
+            @case ('cli') {
+              <section class="studio-cli">
+                <div class="studio-explorer__group-head">Agents / CLI</div>
+                @if (cliRows().length === 0) {
+                  <div class="studio-empty">No jobs loaded yet.</div>
+                } @else {
+                  @for (row of cliRows(); track row.cli) {
+                    <div class="studio-cli__row">
+                      <span class="studio-cli__glyph" [style.background]="row.color" aria-hidden="true">
+                        {{ row.cli.charAt(0).toUpperCase() }}
+                      </span>
+                      <span class="studio-cli__name">{{ row.cli }}</span>
+                      <span class="studio-cli__count">{{ row.count }}</span>
+                    </div>
+                  }
+                }
+                <div class="studio-explorer__group-head studio-explorer__group-head--mt">Tools</div>
+                <button type="button" class="studio-button studio-button--ghost"
+                        data-testid="studio-cli-open-usage"
+                        (click)="openUsageSheet.emit()">
+                  Open CLI usage sheet
+                </button>
+                <button type="button" class="studio-button studio-button--ghost"
+                        (click)="openCliAdmin.emit()">
+                  Open CLI admin
+                </button>
+              </section>
+            }
+            @case ('activity') {
+              <section class="studio-activity">
+                <div class="studio-explorer__group-head">Orchestrator</div>
+                <button type="button" class="studio-button studio-button--primary"
+                        data-testid="studio-activity-open-orchestrator"
+                        (click)="openOrchFeed.emit()">
+                  Open project feed
+                </button>
+                <button type="button" class="studio-button studio-button--ghost"
+                        (click)="chatToggle.emit()">
+                  Open project chat
+                </button>
+                <button type="button" class="studio-button studio-button--ghost"
+                        (click)="openOrchSettings.emit()">
+                  Open orchestrator settings
+                </button>
+                <div class="studio-explorer__group-head studio-explorer__group-head--mt">Snapshots</div>
+                <button type="button" class="studio-button studio-button--ghost"
+                        (click)="openWorkspaceScreenshots.emit()">
+                  Workspace screenshots
+                </button>
+              </section>
+            }
+            @case ('runbook') {
+              <section class="studio-runbook">
+                <div class="studio-explorer__group-head">Runbook</div>
+                <p class="studio-empty studio-empty--note">
+                  The Runbook surface aggregates per-project ops content (auto-pickup config, project chat,
+                  deployments). Click below for the live equivalent in the workspace overlay.
+                </p>
+                <button type="button" class="studio-button studio-button--ghost"
+                        (click)="openOrchFeed.emit()">
+                  Open project orchestrator feed
+                </button>
+                <button type="button" class="studio-button studio-button--ghost"
+                        (click)="openWorkspaceScreenshots.emit()">
+                  Workspace screenshots
+                </button>
+                <button type="button" class="studio-button studio-button--ghost"
+                        (click)="openCliAdmin.emit()">
+                  CLI admin
+                </button>
+              </section>
+            }
+            @case ('settings') {
+              <section class="studio-settings">
+                <div class="studio-explorer__group-head">Appearance</div>
+                <div class="studio-setting">
+                  <span class="studio-setting__label">Theme</span>
+                  <div class="studio-setting__radio">
+                    <button type="button"
+                            class="studio-setting__radio-btn"
+                            [class.studio-setting__radio-btn--active]="theme() === 'dark'"
+                            (click)="setTheme('dark')">Dark</button>
+                    <button type="button"
+                            class="studio-setting__radio-btn"
+                            [class.studio-setting__radio-btn--active]="theme() === 'light'"
+                            (click)="setTheme('light')">Light</button>
+                  </div>
+                </div>
+                <div class="studio-explorer__group-head studio-explorer__group-head--mt">Layout</div>
+                <div class="studio-setting">
+                  <span class="studio-setting__label">Activity bar</span>
+                  <div class="studio-setting__radio">
+                    <button type="button"
+                            class="studio-setting__radio-btn"
+                            [class.studio-setting__radio-btn--active]="activityBarSide() === 'left'"
+                            (click)="setActivityBarSide('left')">Left</button>
+                    <button type="button"
+                            class="studio-setting__radio-btn"
+                            [class.studio-setting__radio-btn--active]="activityBarSide() === 'right'"
+                            (click)="setActivityBarSide('right')">Right</button>
+                  </div>
+                </div>
+                <div class="studio-setting">
+                  <span class="studio-setting__label">Project chat rail</span>
+                  <button type="button"
+                          class="studio-setting__toggle"
+                          [class.studio-setting__toggle--on]="chatRailOpen()"
+                          (click)="toggleChatRail()">
+                    {{ chatRailOpen() ? 'On' : 'Off' }}
+                  </button>
+                </div>
+                <div class="studio-explorer__group-head studio-explorer__group-head--mt">Cards</div>
+                <div class="studio-setting">
+                  <span class="studio-setting__label">Density</span>
+                  <button type="button"
+                          class="studio-setting__toggle"
+                          [class.studio-setting__toggle--on]="uiPrefs.compactCards()"
+                          (click)="toggleCompactCards()">
+                    {{ uiPrefs.compactCards() ? 'Compact' : 'Full' }}
+                  </button>
+                </div>
+              </section>
+            }
             @default {
-              <div class="studio-empty studio-empty--padded">
-                <strong>{{ activePanel() }}</strong>
-                <p>This sidebar panel is being migrated. The reference layout from
-                  <code>.reference-layout</code> shows the target design; existing
-                  functionality remains accessible via the legacy chrome (disable
-                  the <code>vsCodeLayout</code> flag) until the migration lands.</p>
-              </div>
+              <div class="studio-empty">Panel not implemented.</div>
             }
           }
         </div>

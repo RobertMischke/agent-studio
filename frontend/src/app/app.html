@@ -45,7 +45,13 @@
         (openSettings)="openOrchestratorSettings()" />
       <app-studio-shell data-testid="studio-shell-root"
                         (chatToggle)="orchSideSheet.toggle()"
-                        (addTaskRequested)="openCreate()">
+                        (addTaskRequested)="openCreate()"
+                        (openFilterSidesheet)="toggleKanbanFilterSidesheet()"
+                        (openUsageSheet)="usageSheet.toggle()"
+                        (openCliAdmin)="toggleCliAdmin()"
+                        (openWorkspaceScreenshots)="toggleWorkspaceScreenshots()"
+                        (openOrchFeed)="toggleOrchFeed()"
+                        (openOrchSettings)="openOrchestratorSettings()">
         <app-status-bar studioStatusbar
           [projectNames]="projectNames()"
           (toggleUsage)="usageSheet.toggle()"
