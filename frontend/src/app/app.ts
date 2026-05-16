@@ -500,6 +500,27 @@ export class App implements OnInit {
     // it doesn't dereference jobDetailRef until invoked.
     this.triage.setClearActingCallback(() => this.jobDetailRef?.clearTriageActing());
 
+    // Studio-shell mirror: when a job is selected through any path (URL
+    // restore, board click, triage advance) and the new shell is on,
+    // mirror it as a studio task tab so the editor area can project
+    // <app-job-detail> via the task case. Without this the URL-restore
+    // path would set selectedJob() but the new shell would show no tab.
+    effect(() => {
+      const selected = this.selectedJob();
+      if (!this.featureFlags.vsCodeLayout()) return;
+      if (!selected) return;
+      const key = `task:${selected.info.jobKey}`;
+      const tabs = untracked(() => this.studioTabState.tabs());
+      const present = tabs.some(t => t.kind === 'task' && t.jobKey === selected.info.jobKey);
+      untracked(() => {
+        if (!present) {
+          this.studioTabState.open({ kind: 'task', jobKey: selected.info.jobKey });
+        } else {
+          this.studioTabState.select(key);
+        }
+      });
+    });
+
     effect(() => {
       const selected = this.selectedJob();
       const jobs = this.jobService.jobs();
