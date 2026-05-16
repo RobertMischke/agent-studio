@@ -7,6 +7,28 @@
         into the shell's editor slot so the existing handlers
         (drag/drop, triage, dialogs) keep working unchanged.
       -->
+      <app-kanban-filter-sidesheet
+        #kanbanFilterSheet
+        class="app__sidesheet"
+        [open]="kanbanFilterSidesheetOpen()"
+        [query]="searchQuery()"
+        [typeOptions]="typeFilterOptions"
+        [activeType]="activeType()"
+        [tags]="tagRegistry()"
+        [activeTagIds]="activeTagFilter()"
+        [owners]="clientService.clients()"
+        [activeOwnerId]="activeClientFilter()"
+        [compactCards]="compactCards()"
+        [hitCount]="filteredJobCount()"
+        [totalCount]="totalJobCount()"
+        [hasAnyFilter]="hasActiveFiltersOrSearch()"
+        (queryChange)="setSearchQuery($event)"
+        (setType)="onSetType($event)"
+        (toggleTag)="toggleTagFilter($event)"
+        (setOwner)="setClientFilter($event)"
+        (toggleCompactCards)="toggleCompactCards()"
+        (clearAll)="onSidesheetClearAll()"
+        (closed)="closeKanbanFilterSidesheet()" />
       <app-cli-usage-sheet #usageSheet class="app__sidesheet" />
       <app-orchestrator-side-sheet
         #orchSideSheet
@@ -31,6 +53,40 @@
           (toggleCliAdmin)="toggleCliAdmin()"
           (defaultCliChange)="onDefaultCliChange($event)"
           (defaultModelChange)="onDefaultModelChange($event)" />
+        <!-- Per-tab actions land in the tab bar via this slot. The board
+             tab gets filter + compact + add-task; task tabs reuse the
+             existing detail-pane toggles via the JobDetail's own header. -->
+        <div studioTabActions class="studio-tab-actions">
+          @if (studioTabState.activeTab()?.kind === 'board') {
+            <button type="button"
+                    class="studio-tab-action"
+                    [class.studio-tab-action--active]="kanbanFilterSidesheetOpen() || hasActiveFiltersOrSearch()"
+                    [attr.aria-pressed]="kanbanFilterSidesheetOpen()"
+                    data-testid="studio-board-filter-trigger"
+                    [appTooltip]="'Filters &amp; view (press /)'"
+                    (click)="toggleKanbanFilterSidesheet()">
+              <span aria-hidden="true">⨍</span>
+              <span>Filter</span>
+              @if (activeFilterCount() > 0) {
+                <span class="studio-tab-action__count">{{ activeFilterCount() }}</span>
+              }
+            </button>
+            <button type="button"
+                    class="studio-tab-action"
+                    [class.studio-tab-action--active]="compactCards()"
+                    [attr.aria-pressed]="compactCards()"
+                    data-testid="studio-board-compact-toggle"
+                    [appTooltip]="compactCards() ? 'Show full cards' : 'Show compact cards (titles only)'"
+                    (click)="toggleCompactCards()">
+              <span aria-hidden="true">{{ compactCards() ? '▤' : '▥' }}</span>
+              <span>{{ compactCards() ? 'Compact' : 'Full' }}</span>
+            </button>
+            <button type="button"
+                    class="studio-tab-action studio-tab-action--primary"
+                    data-testid="studio-board-add-task"
+                    (click)="openCreate()">＋ Add task</button>
+          }
+        </div>
         <div studioContent class="studio-projected-content">
           @switch (studioTabState.activeTab()?.kind) {
             @case ('board') {
