@@ -180,6 +180,39 @@ export class StudioShellComponent {
     this.tabState.close(key);
   }
 
+  closeOthers(key: string): void { this.tabState.closeOthers(key); }
+  closeRight(key: string): void { this.tabState.closeRight(key); }
+  closeLeft(key: string): void { this.tabState.closeLeft(key); }
+  closeAll(): void { this.tabState.closeAll(); }
+
+  /** Right-click context menu state. Coordinates are viewport-relative; the
+   *  template positions an absolutely-placed menu at (x, y). One menu at a
+   *  time — opening a new one replaces the previous. */
+  readonly tabContextMenu = signal<{ key: string; x: number; y: number } | null>(null);
+
+  openTabContextMenu(event: MouseEvent, key: string): void {
+    event.preventDefault();
+    this.tabContextMenu.set({ key, x: event.clientX, y: event.clientY });
+  }
+
+  closeTabContextMenu(): void {
+    this.tabContextMenu.set(null);
+  }
+
+  /** Helpers the context menu uses to enable/disable Close-to-X items. */
+  tabIndexOf(key: string): number {
+    return this.tabs().findIndex(t => studioTabKey(t) === key);
+  }
+
+  hasTabsToRightOf(key: string): boolean {
+    const idx = this.tabIndexOf(key);
+    return idx >= 0 && idx < this.tabs().length - 1;
+  }
+
+  hasTabsToLeftOf(key: string): boolean {
+    return this.tabIndexOf(key) > 0;
+  }
+
   togglePanel(panel: typeof this.activityBarItems[number]['key'] | 'settings'): void {
     this.panelState.toggle(panel);
   }

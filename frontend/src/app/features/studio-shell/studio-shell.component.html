@@ -1,5 +1,6 @@
 <div class="studio app--vscode-layout"
      [class.studio--sidebar-hidden]="!sidebarVisible()"
+     [class.studio--activitybar-right]="activityBarSide() === 'right'"
      data-testid="app-root"
      data-studio="root">
   <!-- ============ Titlebar ============ -->
@@ -406,7 +407,8 @@
                  role="tab"
                  [class.studio-tab--active]="activeKey() === tabKey(t)"
                  [attr.data-tab-key]="tabKey(t)"
-                 (click)="selectTab(tabKey(t))">
+                 (click)="selectTab(tabKey(t))"
+                 (contextmenu)="openTabContextMenu($event, tabKey(t))">
               @if (tabNum(t); as n) {
                 <span class="studio-tab__num">{{ n }}</span>
               }
@@ -462,4 +464,45 @@
   <footer class="studio-statusbar" data-testid="studio-statusbar">
     <ng-content select="[studioStatusbar]"></ng-content>
   </footer>
+
+  @if (tabContextMenu(); as ctx) {
+    <div class="studio-tab-ctx-backdrop"
+         (click)="closeTabContextMenu()"
+         (contextmenu)="$event.preventDefault(); closeTabContextMenu()"></div>
+    <div class="studio-tab-ctx"
+         role="menu"
+         data-testid="studio-tab-context-menu"
+         [style.left.px]="ctx.x"
+         [style.top.px]="ctx.y">
+      <button type="button"
+              class="studio-tab-ctx__item"
+              (click)="closeTab(ctx.key); closeTabContextMenu()">
+        Close
+      </button>
+      <button type="button"
+              class="studio-tab-ctx__item"
+              [disabled]="tabs().length <= 1"
+              (click)="closeOthers(ctx.key); closeTabContextMenu()">
+        Close Others
+      </button>
+      <button type="button"
+              class="studio-tab-ctx__item"
+              [disabled]="!hasTabsToRightOf(ctx.key)"
+              (click)="closeRight(ctx.key); closeTabContextMenu()">
+        Close to the Right
+      </button>
+      <button type="button"
+              class="studio-tab-ctx__item"
+              [disabled]="!hasTabsToLeftOf(ctx.key)"
+              (click)="closeLeft(ctx.key); closeTabContextMenu()">
+        Close to the Left
+      </button>
+      <div class="studio-tab-ctx__sep"></div>
+      <button type="button"
+              class="studio-tab-ctx__item"
+              (click)="closeAll(); closeTabContextMenu()">
+        Close All
+      </button>
+    </div>
+  }
 </div>

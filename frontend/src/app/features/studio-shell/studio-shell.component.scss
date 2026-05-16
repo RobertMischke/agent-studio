@@ -283,6 +283,32 @@
   grid-template-columns: var(--studio-activitybar-w) 0 1fr !important;
 }
 
+// Mirror layout when the user puts the activity bar on the right.
+// Re-uses the same DOM order; CSS Grid `order` swaps the visual sides.
+.studio--activitybar-right {
+  .studio-activitybar {
+    order: 3;
+    border-right: 0;
+    border-left: 1px solid var(--studio-border);
+  }
+  .studio-sidebar {
+    order: 2;
+    border-right: 0;
+    border-left: 1px solid var(--studio-border);
+  }
+  .studio-editor {
+    order: 1;
+  }
+  .studio-ab__btn--active::before {
+    left: auto;
+    right: 0;
+  }
+  .studio-sidebar__resize {
+    right: auto;
+    left: -3px;
+  }
+}
+
 // -------------------------------------------------------------------------
 // Activity bar
 // -------------------------------------------------------------------------
@@ -656,6 +682,52 @@
   line-height: 1.5;
   padding: 4px 12px 8px;
   margin: 0;
+}
+
+.studio-tab-ctx-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: transparent;
+}
+
+.studio-tab-ctx {
+  position: fixed;
+  z-index: 91;
+  min-width: 180px;
+  padding: 4px 0;
+  background: var(--studio-bg-elevated);
+  border: 1px solid var(--studio-border-strong);
+  border-radius: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+
+  &__item {
+    display: block;
+    width: 100%;
+    padding: 6px 14px;
+    font-size: 12px;
+    color: var(--studio-fg);
+    text-align: left;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+
+    &:hover:not([disabled]) {
+      background: var(--studio-bg-selected);
+    }
+
+    &[disabled] {
+      color: var(--studio-fg-disabled, var(--studio-fg-muted));
+      cursor: default;
+      opacity: 0.5;
+    }
+  }
+
+  &__sep {
+    height: 1px;
+    background: var(--studio-border);
+    margin: 4px 0;
+  }
 }
 
 .studio-tree-row {
