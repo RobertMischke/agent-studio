@@ -394,7 +394,9 @@
     }
 
     <!-- Editor area with tabs -->
-    <section class="studio-editor" data-testid="studio-editor">
+    <section class="studio-editor"
+             [class.studio-editor--chat-open]="chatRailOpen()"
+             data-testid="studio-editor">
       <div class="studio-tabbar">
         <div class="studio-tabbar__list" role="tablist">
           @if (tabs().length === 0) {
@@ -426,6 +428,7 @@
       </div>
 
       <div class="studio-editor__body">
+        <div class="studio-editor__main">
         <!--
           Tab content is projected from the parent (app.html). The parent
           owns the dashboard/detail bindings and just picks the right markup
@@ -455,6 +458,36 @@
               }
             </div>
           </div>
+        }
+        </div>
+        @if (chatRailOpen()) {
+          <aside class="studio-chat-rail" data-testid="studio-chat-rail">
+            <div class="studio-chat-rail__head">
+              <span class="studio-chat-rail__title">Project Chat</span>
+              <button type="button"
+                      class="studio-chat-rail__close"
+                      aria-label="Hide chat rail"
+                      (click)="toggleChatRail()">×</button>
+            </div>
+            <div class="studio-chat-rail__body">
+              <p class="studio-empty studio-empty--note">
+                The collapsible right rail surfaces project chat at a glance. Until the inline
+                composer lands, the full chat surface lives in the orchestrator side sheet —
+                click below to open it.
+              </p>
+              <button type="button"
+                      class="studio-button studio-button--primary"
+                      data-testid="studio-chat-rail-open-side-sheet"
+                      (click)="chatToggle.emit()">
+                Open project chat
+              </button>
+              <button type="button"
+                      class="studio-button studio-button--ghost"
+                      (click)="openOrchFeed.emit()">
+                Open project feed
+              </button>
+            </div>
+          </aside>
         }
       </div>
     </section>
