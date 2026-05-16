@@ -1,0 +1,231 @@
+<div class="studio" [class.studio--sidebar-hidden]="!sidebarVisible()" data-testid="studio-shell">
+  <!-- ============ Titlebar ============ -->
+  <header class="studio-titlebar">
+    <div class="studio-titlebar__brand">
+      <span class="studio-titlebar__logo" aria-hidden="true">A</span>
+      <span class="studio-titlebar__appname">Agent Software Studio</span>
+    </div>
+
+    <span class="studio-titlebar__separator">/</span>
+
+    <nav class="studio-titlebar__pills" data-testid="studio-project-pills">
+      <button type="button"
+              class="studio-pill"
+              [class.studio-pill--active]="activeBoardProject() === null && activeTab()?.kind === 'board'"
+              (click)="openBoard('__all__')">
+        <span class="studio-pill__glyph studio-pill__glyph--all" aria-hidden="true">▦</span>
+        <span class="studio-pill__label">All projects</span>
+      </button>
+      @for (p of projectRows(); track p.name) {
+        <button type="button"
+                class="studio-pill"
+                [class.studio-pill--active]="p.isActive"
+                [style.--studio-pill-color]="p.color"
+                (click)="openBoard(p.name)"
+                (dblclick)="openHub(p.name)"
+                [title]="p.name + ' (double-click for Project Hub)'">
+          <span class="studio-pill__glyph" [style.background]="p.color" aria-hidden="true">{{ p.initial }}</span>
+          <span class="studio-pill__label">{{ p.name }}</span>
+          <span class="studio-pill__count" aria-label="open jobs">{{ p.totalJobs }}</span>
+        </button>
+      }
+    </nav>
+
+    <span class="studio-titlebar__spacer"></span>
+
+    <button type="button" class="studio-titlebar__search" disabled
+            title="Search tasks, commits, files (coming soon)">
+      <span aria-hidden="true">⌕</span>
+      <span class="studio-titlebar__search-label">Search tasks, commits, files…</span>
+      <span class="studio-titlebar__kbd">⌘P</span>
+    </button>
+
+    <div class="studio-titlebar__actions">
+      <button type="button"
+              class="studio-titlebar__iconbtn"
+              [title]="theme() === 'light' ? 'Switch to dark theme' : 'Switch to light theme'"
+              (click)="toggleTheme()">
+        <span aria-hidden="true">{{ theme() === 'light' ? '☾' : '☀' }}</span>
+      </button>
+      <button type="button" class="studio-titlebar__iconbtn" title="Notifications">
+        <span aria-hidden="true">⟁</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- ============ Body ============ -->
+  <div class="studio-body"
+       [style.grid-template-columns]="'var(--studio-activitybar-w) ' + (sidebarVisible() ? sidebarWidth() + 'px' : '0px') + ' 1fr'">
+    <!-- Activity bar -->
+    <aside class="studio-activitybar" data-testid="studio-activity-bar">
+      @for (item of activityBarItems; track item.key) {
+        <button type="button"
+                class="studio-ab__btn"
+                [class.studio-ab__btn--active]="activePanel() === item.key && sidebarVisible()"
+                [title]="item.label"
+                [attr.data-panel]="item.key"
+                (click)="togglePanel(item.key)">
+          <span class="studio-ab__icon" aria-hidden="true">{{ item.icon === 'folder' ? '▦' : item.icon === 'list' ? '☰' : item.icon === 'filter' ? '⨍' : item.icon === 'cli' ? '⌨' : item.icon === 'activity' ? '⌁' : '◐' }}</span>
+        </button>
+      }
+      <span class="studio-ab__spacer"></span>
+      <button type="button"
+              class="studio-ab__btn"
+              [class.studio-ab__btn--active]="activePanel() === 'settings' && sidebarVisible()"
+              title="Settings"
+              (click)="togglePanel('settings')">
+        <span class="studio-ab__icon" aria-hidden="true">⚙</span>
+      </button>
+    </aside>
+
+    <!-- Sidebar host -->
+    @if (sidebarVisible()) {
+      <aside class="studio-sidebar"
+             [style.width.px]="sidebarWidth()"
+             [attr.data-active-panel]="activePanel()"
+             data-testid="studio-sidebar">
+        <!-- Header per panel -->
+        <div class="studio-sidebar__header">
+          <span class="studio-sidebar__title">{{ activePanel() }}</span>
+        </div>
+        <div class="studio-sidebar__body">
+          @switch (activePanel()) {
+            @case ('explorer') {
+              <section class="studio-explorer">
+                <div class="studio-explorer__group-head">Workspace</div>
+                @for (p of projectRows(); track p.name) {
+                  <button type="button"
+                          class="studio-tree-row"
+                          [class.studio-tree-row--active]="p.isActive"
+                          (click)="openBoard(p.name)"
+                          (dblclick)="openHub(p.name)">
+                    <span class="studio-tree-row__glyph" [style.background]="p.color" aria-hidden="true">{{ p.initial }}</span>
+                    <span class="studio-tree-row__name">{{ p.name }}</span>
+                    <span class="studio-tree-row__count">{{ p.totalJobs }}</span>
+                  </button>
+                }
+              </section>
+            }
+            @case ('tasks') {
+              <section class="studio-tasks">
+                <div class="studio-explorer__group-head">Open Tabs</div>
+                @if (tabs().length === 0) {
+                  <div class="studio-empty">No tabs open</div>
+                } @else {
+                  @for (t of tabs(); track tabKey(t)) {
+                    <button type="button"
+                            class="studio-tree-row"
+                            [class.studio-tree-row--active]="activeKey() === tabKey(t)"
+                            (click)="selectTab(tabKey(t))">
+                      <span class="studio-tree-row__name">{{ tabLabel(t) }}</span>
+                    </button>
+                  }
+                }
+              </section>
+            }
+            @default {
+              <div class="studio-empty studio-empty--padded">
+                <strong>{{ activePanel() }}</strong>
+                <p>This sidebar panel is being migrated. The reference layout from
+                  <code>.reference-layout</code> shows the target design; existing
+                  functionality remains accessible via the legacy chrome (disable
+                  the <code>vsCodeLayout</code> flag) until the migration lands.</p>
+              </div>
+            }
+          }
+        </div>
+        <div class="studio-sidebar__resize"
+             role="separator"
+             aria-orientation="vertical"
+             (mousedown)="startSidebarResize($event)"></div>
+      </aside>
+    }
+
+    <!-- Editor area with tabs -->
+    <section class="studio-editor" data-testid="studio-editor">
+      <div class="studio-tabbar">
+        <div class="studio-tabbar__list" role="tablist">
+          @if (tabs().length === 0) {
+            <div class="studio-tab studio-tab--welcome studio-tab--active">
+              <span class="studio-tab__title">Welcome</span>
+            </div>
+          }
+          @for (t of tabs(); track tabKey(t)) {
+            <div class="studio-tab"
+                 role="tab"
+                 [class.studio-tab--active]="activeKey() === tabKey(t)"
+                 [attr.data-tab-key]="tabKey(t)"
+                 (click)="selectTab(tabKey(t))">
+              @if (tabNum(t); as n) {
+                <span class="studio-tab__num">{{ n }}</span>
+              }
+              <span class="studio-tab__title">{{ tabLabel(t) }}</span>
+              <button type="button"
+                      class="studio-tab__close"
+                      aria-label="Close tab"
+                      (click)="closeTab(tabKey(t), $event)">×</button>
+            </div>
+          }
+        </div>
+      </div>
+
+      <div class="studio-editor__body">
+        @switch (activeTab()?.kind) {
+          @case ('board') {
+            <ng-content select="[studioBoard]"></ng-content>
+          }
+          @case ('task') {
+            <ng-content select="[studioTask]"></ng-content>
+          }
+          @case ('hub') {
+            <div class="studio-coming-soon">
+              <h2>Project Hub</h2>
+              <p>The Project Hub view (overview, insight, repository, drift) is being migrated
+                from <code>.reference-layout/project-hub.jsx</code>. Until it lands, every
+                metric it shows is reachable from the existing project-shell rail in the
+                legacy layout.</p>
+            </div>
+          }
+          @case ('diff') {
+            <div class="studio-coming-soon">
+              <h2>Diff: {{ activeTab()?.kind === 'diff' ? '' : '' }}</h2>
+              <p>Full-screen diff view is being migrated. The per-task diff pane remains
+                available inside the Task tab.</p>
+            </div>
+          }
+          @case ('activity') {
+            <div class="studio-coming-soon">
+              <h2>Activity log</h2>
+              <p>Full-screen activity view is being migrated. The per-task activity pane
+                remains available inside the Task tab.</p>
+            </div>
+          }
+          @default {
+            <div class="studio-welcome">
+              <div class="studio-welcome__card">
+                <h2 class="studio-welcome__title">Agent Software Studio</h2>
+                <p class="studio-welcome__sub">No tab open. Pick a project to open its board:</p>
+                <div class="studio-welcome__projects">
+                  @for (p of projectRows(); track p.name) {
+                    <button type="button"
+                            class="studio-welcome__project"
+                            (click)="openBoard(p.name)">
+                      <span class="studio-tree-row__glyph" [style.background]="p.color" aria-hidden="true">{{ p.initial }}</span>
+                      <span>{{ p.name }}</span>
+                      <span class="studio-tree-row__count">{{ p.totalJobs }}</span>
+                    </button>
+                  }
+                </div>
+                @if (projectRows().length === 0) {
+                  <p class="studio-empty">No projects loaded yet. Check the backend connection or wait for the next poll tick.</p>
+                }
+              </div>
+            </div>
+          }
+        }
+      </div>
+    </section>
+  </div>
+
+  <!-- ============ Status bar (legacy <app-status-bar> is rendered by app.html, kept outside this component for parity) ============ -->
+</div>

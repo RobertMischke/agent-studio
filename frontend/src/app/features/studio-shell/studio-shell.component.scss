@@ -1,0 +1,625 @@
+// =========================================================================
+// Studio shell — Agent Software Studio (VS-Code-inspired)
+//
+// Design tokens follow .reference-layout/styles.css. Light theme overrides
+// live at the bottom under [data-studio-theme="light"] so flipping the
+// titlebar toggle re-skins the entire shell without re-rendering.
+// =========================================================================
+
+:root {
+  --studio-bg-titlebar: #1e1e1e;
+  --studio-bg-activitybar: #181818;
+  --studio-bg-sidebar: #1f1f1f;
+  --studio-bg-editor: #1e1e1e;
+  --studio-bg-elevated: #252526;
+  --studio-bg-tab-active: #1e1e1e;
+  --studio-bg-tab-inactive: #2d2d2d;
+  --studio-bg-hover: rgba(255, 255, 255, 0.04);
+  --studio-bg-selected: rgba(217, 119, 87, 0.12);
+  --studio-border: #2b2b2b;
+  --studio-border-strong: #3c3c3c;
+  --studio-fg: #cccccc;
+  --studio-fg-strong: #ffffff;
+  --studio-fg-dim: #9d9d9d;
+  --studio-fg-muted: #6e6e6e;
+  --studio-accent: #d97757;
+  --studio-accent-2: #4ec9b0;
+  --studio-accent-3: #569cd6;
+  --studio-activitybar-w: 48px;
+  --studio-titlebar-h: 36px;
+  --studio-tabbar-h: 36px;
+}
+
+[data-studio-theme='light'] {
+  --studio-bg-titlebar: #f3f3f3;
+  --studio-bg-activitybar: #ececec;
+  --studio-bg-sidebar: #f8f8f8;
+  --studio-bg-editor: #ffffff;
+  --studio-bg-elevated: #ececec;
+  --studio-bg-tab-active: #ffffff;
+  --studio-bg-tab-inactive: #ececec;
+  --studio-bg-hover: rgba(0, 0, 0, 0.05);
+  --studio-bg-selected: rgba(217, 119, 87, 0.15);
+  --studio-border: #d4d4d4;
+  --studio-border-strong: #b4b4b4;
+  --studio-fg: #333333;
+  --studio-fg-strong: #1a1a1a;
+  --studio-fg-dim: #555555;
+  --studio-fg-muted: #888888;
+}
+
+.studio {
+  display: grid;
+  grid-template-rows: var(--studio-titlebar-h) 1fr;
+  height: 100vh;
+  overflow: hidden;
+  font-family: 'Inter', -apple-system, 'Segoe UI', 'Helvetica Neue', sans-serif;
+  font-size: 13px;
+  color: var(--studio-fg);
+  background: var(--studio-bg-editor);
+
+  button {
+    font-family: inherit;
+    color: inherit;
+    background: none;
+    border: 0;
+    padding: 0;
+    cursor: pointer;
+  }
+}
+
+// -------------------------------------------------------------------------
+// Titlebar
+// -------------------------------------------------------------------------
+.studio-titlebar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  background: var(--studio-bg-titlebar);
+  border-bottom: 1px solid var(--studio-border);
+  user-select: none;
+  white-space: nowrap;
+  overflow: hidden;
+
+  &__brand {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  &__logo {
+    width: 22px;
+    height: 22px;
+    border-radius: 4px;
+    background: linear-gradient(135deg, #d97757, #8d5a3d);
+    display: grid;
+    place-items: center;
+    font-weight: 700;
+    font-size: 11px;
+    color: #1e1e1e;
+  }
+
+  &__appname {
+    font-size: 12px;
+    color: var(--studio-fg-dim);
+  }
+
+  &__separator {
+    color: var(--studio-fg-muted);
+    margin: 0 4px;
+  }
+
+  &__pills {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    overflow: hidden;
+    flex-shrink: 1;
+    min-width: 0;
+  }
+
+  &__spacer {
+    flex: 1;
+  }
+
+  &__search {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 10px;
+    height: 24px;
+    width: 360px;
+    max-width: 32vw;
+    background: var(--studio-bg-elevated);
+    border: 1px solid var(--studio-border);
+    border-radius: 4px;
+    font-size: 12px;
+    color: var(--studio-fg-dim);
+
+    &-label {
+      flex: 1;
+      text-align: left;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+  }
+
+  &__kbd {
+    color: var(--studio-fg-muted);
+    font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+    font-size: 10px;
+  }
+
+  &__actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+
+  &__iconbtn {
+    width: 28px;
+    height: 24px;
+    display: grid;
+    place-items: center;
+    color: var(--studio-fg-dim);
+    border-radius: 3px;
+    font-size: 14px;
+    line-height: 1;
+
+    &:hover {
+      background: var(--studio-bg-hover);
+      color: var(--studio-fg);
+    }
+  }
+}
+
+// -------------------------------------------------------------------------
+// Project pill (titlebar)
+// -------------------------------------------------------------------------
+.studio-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  height: 24px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  font-size: 11px;
+  color: var(--studio-fg-dim);
+  white-space: nowrap;
+
+  &:hover {
+    background: var(--studio-bg-hover);
+    color: var(--studio-fg);
+  }
+
+  &--active {
+    background: var(--studio-bg-elevated);
+    border-color: var(--studio-border-strong);
+    color: var(--studio-fg-strong);
+  }
+
+  &__glyph {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background: var(--studio-pill-color, var(--studio-fg-muted));
+    font-size: 10px;
+    font-weight: 700;
+    color: #1a1a1a;
+
+    &--all {
+      background: var(--studio-fg-dim);
+    }
+  }
+
+  &__label {
+    font-weight: 500;
+  }
+
+  &__count {
+    min-width: 18px;
+    height: 16px;
+    padding: 0 5px;
+    background: var(--studio-bg-elevated);
+    border-radius: 8px;
+    font-size: 9px;
+    font-weight: 600;
+    display: grid;
+    place-items: center;
+    color: var(--studio-fg-dim);
+  }
+
+  &--active &__count {
+    background: var(--studio-accent);
+    color: #1a1a1a;
+  }
+}
+
+// -------------------------------------------------------------------------
+// Body grid
+// -------------------------------------------------------------------------
+.studio-body {
+  display: grid;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.studio--sidebar-hidden .studio-body {
+  grid-template-columns: var(--studio-activitybar-w) 0 1fr !important;
+}
+
+// -------------------------------------------------------------------------
+// Activity bar
+// -------------------------------------------------------------------------
+.studio-activitybar {
+  background: var(--studio-bg-activitybar);
+  border-right: 1px solid var(--studio-border);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px 0;
+}
+
+.studio-ab {
+  &__btn {
+    width: 48px;
+    height: 44px;
+    display: grid;
+    place-items: center;
+    color: var(--studio-fg-muted);
+    position: relative;
+    font-size: 18px;
+
+    &:hover {
+      color: var(--studio-fg-strong);
+    }
+
+    &--active {
+      color: var(--studio-fg-strong);
+
+      &::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: var(--studio-accent);
+      }
+    }
+  }
+
+  &__icon {
+    font-size: 18px;
+    line-height: 1;
+  }
+
+  &__spacer {
+    flex: 1;
+  }
+}
+
+// -------------------------------------------------------------------------
+// Sidebar
+// -------------------------------------------------------------------------
+.studio-sidebar {
+  background: var(--studio-bg-sidebar);
+  border-right: 1px solid var(--studio-border);
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+  max-width: 600px;
+  position: relative;
+  overflow: hidden;
+
+  &__header {
+    padding: 8px 16px 6px 18px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--studio-fg-dim);
+    border-bottom: 1px solid var(--studio-border);
+  }
+
+  &__title {
+    font-weight: 600;
+  }
+
+  &__body {
+    flex: 1;
+    overflow: auto;
+    padding: 6px 0;
+  }
+
+  &__resize {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    right: -3px;
+    width: 6px;
+    cursor: ew-resize;
+    z-index: 5;
+
+    &:hover {
+      background: rgba(217, 119, 87, 0.3);
+    }
+  }
+}
+
+.studio-explorer__group-head {
+  padding: 4px 12px 4px 16px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--studio-fg);
+}
+
+.studio-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 24px;
+  padding: 0 12px 0 16px;
+  font-size: 13px;
+  color: var(--studio-fg);
+  text-align: left;
+
+  &:hover {
+    background: var(--studio-bg-hover);
+  }
+
+  &--active {
+    background: var(--studio-bg-selected);
+    color: var(--studio-fg-strong);
+  }
+
+  &__glyph {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    display: grid;
+    place-items: center;
+    font-size: 9px;
+    font-weight: 700;
+    color: #1a1a1a;
+    flex-shrink: 0;
+  }
+
+  &__name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__count {
+    min-width: 18px;
+    padding: 0 5px;
+    height: 14px;
+    background: var(--studio-bg-elevated);
+    color: var(--studio-fg-dim);
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    display: grid;
+    place-items: center;
+  }
+}
+
+.studio-empty {
+  padding: 8px 16px;
+  font-size: 11px;
+  color: var(--studio-fg-muted);
+
+  &--padded {
+    padding: 16px;
+    line-height: 1.5;
+
+    strong {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--studio-fg);
+      text-transform: capitalize;
+    }
+
+    p {
+      margin: 0;
+      font-size: 12px;
+    }
+
+    code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      padding: 1px 4px;
+      background: var(--studio-bg-elevated);
+      border-radius: 3px;
+    }
+  }
+}
+
+// -------------------------------------------------------------------------
+// Editor + tab bar
+// -------------------------------------------------------------------------
+.studio-editor {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  background: var(--studio-bg-editor);
+}
+
+.studio-tabbar {
+  height: var(--studio-tabbar-h);
+  background: var(--studio-bg-tab-inactive);
+  border-bottom: 1px solid var(--studio-border);
+  display: flex;
+  align-items: stretch;
+  overflow: hidden;
+
+  &__list {
+    display: flex;
+    align-items: stretch;
+    overflow-x: auto;
+    overflow-y: hidden;
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+.studio-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  height: 100%;
+  border-right: 1px solid var(--studio-border);
+  font-size: 12px;
+  color: var(--studio-fg-dim);
+  background: var(--studio-bg-tab-inactive);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  max-width: 280px;
+
+  &:hover {
+    color: var(--studio-fg);
+  }
+
+  &--active {
+    background: var(--studio-bg-tab-active);
+    color: var(--studio-fg-strong);
+    border-top: 1px solid var(--studio-accent);
+    border-bottom: 1px solid var(--studio-bg-tab-active);
+    margin-top: -1px;
+  }
+
+  &__num {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    color: var(--studio-fg-muted);
+  }
+
+  &__title {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  &__close {
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    display: grid;
+    place-items: center;
+    color: var(--studio-fg-muted);
+    font-size: 14px;
+    line-height: 1;
+
+    &:hover {
+      background: var(--studio-bg-hover);
+      color: var(--studio-fg-strong);
+    }
+  }
+
+  &--welcome {
+    border-right: 0;
+    cursor: default;
+  }
+}
+
+.studio-editor__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  position: relative;
+}
+
+// -------------------------------------------------------------------------
+// Tab content placeholders + welcome screen
+// -------------------------------------------------------------------------
+.studio-welcome {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: 24px;
+
+  &__card {
+    max-width: 560px;
+    width: 100%;
+    padding: 24px 28px;
+    background: var(--studio-bg-elevated);
+    border: 1px solid var(--studio-border);
+    border-radius: 6px;
+    text-align: left;
+  }
+
+  &__title {
+    margin: 0 0 8px;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--studio-fg-strong);
+  }
+
+  &__sub {
+    margin: 0 0 16px;
+    color: var(--studio-fg-dim);
+    font-size: 13px;
+  }
+
+  &__projects {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 8px;
+  }
+
+  &__project {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    background: var(--studio-bg-titlebar);
+    border: 1px solid var(--studio-border);
+    border-radius: 4px;
+    font-size: 12px;
+    color: var(--studio-fg);
+    text-align: left;
+
+    &:hover {
+      border-color: var(--studio-accent);
+      background: var(--studio-bg-hover);
+    }
+  }
+}
+
+.studio-coming-soon {
+  padding: 32px 36px;
+  max-width: 720px;
+  color: var(--studio-fg);
+
+  h2 {
+    margin: 0 0 12px;
+    font-size: 18px;
+    color: var(--studio-fg-strong);
+  }
+
+  p {
+    margin: 0;
+    color: var(--studio-fg-dim);
+    line-height: 1.55;
+    font-size: 13px;
+  }
+
+  code {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    padding: 1px 4px;
+    background: var(--studio-bg-elevated);
+    border-radius: 3px;
+  }
+}

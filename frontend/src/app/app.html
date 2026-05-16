@@ -1,3 +1,13 @@
+    @if (featureFlags.vsCodeLayout()) {
+      <!--
+        Agent Software Studio redesign — VS-Code-inspired shell.
+        Currently behind the `vsCodeLayout` flag; flip to default once
+        Project Hub, full diff view, and full activity view are
+        migrated. Legacy chrome stays available via flag-off so the
+        existing functionality remains reachable during the migration.
+      -->
+      <app-studio-shell data-testid="studio-shell-root" />
+    } @else {
     <div class="app"
          [class.app--vscode-layout]="featureFlags.vsCodeLayout()"
          [class.app--vscode-meta-open]="featureFlags.vsCodeLayout() && featureFlags.vsCodeMetaOpen()"
@@ -430,3 +440,4 @@
         }
       }
     </div>
+    }

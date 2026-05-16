@@ -42,6 +42,7 @@ import {
   UpdateVersionBadgeComponent,
 } from './features/update';
 import { VerboseDebugOverlayComponent } from './features/verbose-debug';
+import { StudioShellComponent } from './features/studio-shell';
 import { JobService } from './services/job.service';
 import { ClientService } from './services/client.service';
 import type { JobDetail, JobInfo, WatchPathEntry, CliType } from './models/job.model';
@@ -75,7 +76,7 @@ interface VerboseDebugContext {
 
 @Component({
   selector: 'app-root',
-  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorSideSheetComponent, OrchestratorSettingsModalComponent, ProjectOverlaysComponent, AutoReviewIndicatorComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ConfirmDialogComponent, NotificationStackComponent, MediaLightboxComponent, ProjectTabsComponent, E2ECleanupDialogComponent, WorkspaceOverlaysComponent, WorkspaceBannerComponent, UpdateBannerComponent, UpdateVersionBadgeComponent, UpdateCenterComponent, UpdateBlockModalComponent, VerboseDebugOverlayComponent, FiltersDropdownComponent, KanbanFilterSidesheetComponent, TooltipDirective],
+  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorSideSheetComponent, OrchestratorSettingsModalComponent, ProjectOverlaysComponent, AutoReviewIndicatorComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ConfirmDialogComponent, NotificationStackComponent, MediaLightboxComponent, ProjectTabsComponent, E2ECleanupDialogComponent, WorkspaceOverlaysComponent, WorkspaceBannerComponent, UpdateBannerComponent, UpdateVersionBadgeComponent, UpdateCenterComponent, UpdateBlockModalComponent, VerboseDebugOverlayComponent, FiltersDropdownComponent, KanbanFilterSidesheetComponent, TooltipDirective, StudioShellComponent],
   // Cycle 7b: OnPush. The shell mounts kanban + detail panel + many
   // sheets; default (Default) change detection re-checked the whole
   // tree on every async event (every poll tick, every signal write).
