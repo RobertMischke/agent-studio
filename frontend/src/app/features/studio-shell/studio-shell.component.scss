@@ -1030,9 +1030,9 @@
   padding: 24px;
 
   &__card {
-    max-width: 560px;
+    max-width: 640px;
     width: 100%;
-    padding: 24px 28px;
+    padding: 28px 32px;
     background: var(--studio-bg-elevated);
     border: 1px solid var(--studio-border);
     border-radius: 6px;
@@ -1041,7 +1041,7 @@
 
   &__title {
     margin: 0 0 8px;
-    font-size: 18px;
+    font-size: 20px;
     font-weight: 600;
     color: var(--studio-fg-strong);
   }
@@ -1056,6 +1056,7 @@
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     gap: 8px;
+    margin-bottom: 16px;
   }
 
   &__project {
@@ -1074,6 +1075,18 @@
       border-color: var(--studio-accent);
       background: var(--studio-bg-hover);
     }
+
+    &--all {
+      border-style: dashed;
+    }
+  }
+
+  &__cta {
+    display: flex;
+    gap: 8px;
+    padding-top: 4px;
+    border-top: 1px solid var(--studio-border);
+    margin-top: 4px;
   }
 }
 

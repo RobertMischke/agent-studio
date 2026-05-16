@@ -124,7 +124,9 @@ export class StudioShellComponent {
         projects.set(name, (projects.get(name) ?? 0) + 1);
       }
     }
-    const active = this.activeBoardProject();
+    // Light up the pill for whichever project the active tab is contextually
+    // "in" — board, hub, task, and activity tabs all map to a project.
+    const active = this.currentProjectName();
     return Array.from(projects.entries())
       .map(([name, count]) => {
         const id = projectIdentity(name);
@@ -143,6 +145,24 @@ export class StudioShellComponent {
   readonly activeBoardProject = computed<string | null>(() => {
     const tab = this.activeTab();
     if (tab?.kind === 'board') return tab.projectName === '__all__' ? null : tab.projectName;
+    return null;
+  });
+
+  /**
+   * The project the user is contextually "in" — drives the active titlebar
+   * pill and the default project for sidebar CTAs. Board/Hub tabs name a
+   * project directly; Task/Activity tabs resolve through the job index;
+   * Diff/Welcome fall back to the last-known board project.
+   */
+  readonly currentProjectName = computed<string | null>(() => {
+    const tab = this.activeTab();
+    if (!tab) return null;
+    if (tab.kind === 'board') return tab.projectName === '__all__' ? null : tab.projectName;
+    if (tab.kind === 'hub') return tab.projectName;
+    if (tab.kind === 'task' || tab.kind === 'activity') {
+      const job = this.findJob(tab.jobKey);
+      return job?.projectName ?? null;
+    }
     return null;
   });
 

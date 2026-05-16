@@ -177,31 +177,31 @@
               <section class="studio-tasks">
                 <div class="studio-explorer__group-head">Lanes</div>
                 <div class="studio-lane-summary">
-                  <button type="button" class="studio-lane-summary__row" (click)="openBoard(activeBoardProject() ?? '__all__')">
+                  <button type="button" class="studio-lane-summary__row" (click)="openBoard(currentProjectName() ?? '__all__')">
                     <span class="studio-lane-summary__label">Backlog</span>
                     <span class="studio-lane-summary__count">{{ laneSummary().backlog }}</span>
                   </button>
-                  <button type="button" class="studio-lane-summary__row" (click)="openBoard(activeBoardProject() ?? '__all__')">
+                  <button type="button" class="studio-lane-summary__row" (click)="openBoard(currentProjectName() ?? '__all__')">
                     <span class="studio-lane-summary__label">Ready</span>
                     <span class="studio-lane-summary__count">{{ laneSummary().ready }}</span>
                   </button>
-                  <button type="button" class="studio-lane-summary__row" (click)="openBoard(activeBoardProject() ?? '__all__')">
+                  <button type="button" class="studio-lane-summary__row" (click)="openBoard(currentProjectName() ?? '__all__')">
                     <span class="studio-lane-summary__label">In progress</span>
                     <span class="studio-lane-summary__count studio-lane-summary__count--alive">{{ laneSummary().progress }}</span>
                   </button>
-                  <button type="button" class="studio-lane-summary__row" (click)="openBoard(activeBoardProject() ?? '__all__')">
+                  <button type="button" class="studio-lane-summary__row" (click)="openBoard(currentProjectName() ?? '__all__')">
                     <span class="studio-lane-summary__label">Auto review</span>
                     <span class="studio-lane-summary__count">{{ laneSummary().autoReview }}</span>
                   </button>
-                  <button type="button" class="studio-lane-summary__row" (click)="openBoard(activeBoardProject() ?? '__all__')">
+                  <button type="button" class="studio-lane-summary__row" (click)="openBoard(currentProjectName() ?? '__all__')">
                     <span class="studio-lane-summary__label">Human review</span>
                     <span class="studio-lane-summary__count studio-lane-summary__count--review">{{ laneSummary().humanReview }}</span>
                   </button>
-                  <button type="button" class="studio-lane-summary__row" (click)="openBoard(activeBoardProject() ?? '__all__')">
+                  <button type="button" class="studio-lane-summary__row" (click)="openBoard(currentProjectName() ?? '__all__')">
                     <span class="studio-lane-summary__label">Completed</span>
                     <span class="studio-lane-summary__count">{{ laneSummary().completed }}</span>
                   </button>
-                  <button type="button" class="studio-lane-summary__row" (click)="openBoard(activeBoardProject() ?? '__all__')">
+                  <button type="button" class="studio-lane-summary__row" (click)="openBoard(currentProjectName() ?? '__all__')">
                     <span class="studio-lane-summary__label">Archive</span>
                     <span class="studio-lane-summary__count studio-lane-summary__count--dim">{{ laneSummary().archive }}</span>
                   </button>
@@ -438,10 +438,10 @@
         -->
         <ng-content select="[studioContent]"></ng-content>
         @if (activeTab() === null) {
-          <div class="studio-welcome">
+          <div class="studio-welcome" data-testid="studio-welcome">
             <div class="studio-welcome__card">
               <h2 class="studio-welcome__title">Agent Software Studio</h2>
-              <p class="studio-welcome__sub">No tab open. Pick a project to open its board:</p>
+              <p class="studio-welcome__sub">No tab open. Pick a project to open its board, or jump straight to a new task.</p>
               <div class="studio-welcome__projects">
                 @for (p of projectRows(); track p.name) {
                   <button type="button"
@@ -452,9 +452,27 @@
                     <span class="studio-tree-row__count">{{ p.totalJobs }}</span>
                   </button>
                 }
+                @if (projectRows().length > 0) {
+                  <button type="button"
+                          class="studio-welcome__project studio-welcome__project--all"
+                          (click)="openBoard('__all__')">
+                    <span class="studio-tree-row__glyph" aria-hidden="true">▦</span>
+                    <span>All projects</span>
+                  </button>
+                }
               </div>
               @if (projectRows().length === 0) {
                 <p class="studio-empty">No projects loaded yet. Check the backend connection or wait for the next poll tick.</p>
+              } @else {
+                <div class="studio-welcome__cta">
+                  <button type="button"
+                          class="studio-button studio-button--primary"
+                          data-testid="studio-welcome-add-task"
+                          (click)="addTaskRequested.emit()">＋ New task</button>
+                  <button type="button"
+                          class="studio-button studio-button--ghost"
+                          (click)="chatToggle.emit()">Open project chat</button>
+                </div>
               }
             </div>
           </div>
