@@ -5,6 +5,7 @@ import {
   computed,
   effect,
   inject,
+  output,
   signal,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -73,6 +74,11 @@ export class StudioShellComponent {
   readonly theme = signal<'dark' | 'light'>(
     (localStorage.getItem('atp.studio.theme') as 'dark' | 'light' | null) ?? 'dark',
   );
+
+  /** Bubbles to app.ts so the parent can flip the orchestrator side
+   *  sheet open without the shell needing a reference to it. */
+  readonly chatToggle = output<void>();
+  readonly addTaskRequested = output<void>();
 
   /** Reflects the theme onto the document root so the design tokens flip. */
   private readonly themeFx = effect(() => {

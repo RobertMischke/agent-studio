@@ -43,7 +43,9 @@
         (openVerboseDebug)="onOpenVerboseDebugFromSheet($event)"
         (openJobDetail)="onOpenJobDetailFromSheet($event)"
         (openSettings)="openOrchestratorSettings()" />
-      <app-studio-shell data-testid="studio-shell-root">
+      <app-studio-shell data-testid="studio-shell-root"
+                        (chatToggle)="orchSideSheet.toggle()"
+                        (addTaskRequested)="openCreate()">
         <app-status-bar studioStatusbar
           [projectNames]="projectNames()"
           (toggleUsage)="usageSheet.toggle()"

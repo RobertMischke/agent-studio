@@ -42,6 +42,14 @@
 
     <div class="studio-titlebar__actions">
       <button type="button"
+              class="studio-titlebar__chatbtn"
+              data-testid="studio-titlebar-chat"
+              title="Open project chat (orchestrator side sheet)"
+              (click)="chatToggle.emit()">
+        <span aria-hidden="true">💬</span>
+        <span>Project Chat</span>
+      </button>
+      <button type="button"
               class="studio-titlebar__iconbtn"
               [title]="theme() === 'light' ? 'Switch to dark theme' : 'Switch to light theme'"
               (click)="toggleTheme()">
