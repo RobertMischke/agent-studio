@@ -141,6 +141,15 @@
                 </div>
               }
             }
+            @case ('hub') {
+              @if (studioTabState.activeTab(); as tab) {
+                @if (tab.kind === 'hub') {
+                  <app-project-hub-view
+                    [projectName]="tab.projectName"
+                    [initialSection]="tab.section ?? 'overview'" />
+                }
+              }
+            }
             @default {
               <!-- Welcome screen owned by the shell itself when no tab is active. -->
             }
