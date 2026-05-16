@@ -60,10 +60,14 @@
                 </button>
               }
               @if (item.message.attachments?.length) {
-                <ul class="chat__msg-attachments">
+                <ul class="chat__msg-attachments"
+                    appMarkdownLightbox
+                    data-testid="chat-msg-attachments">
                   @for (att of item.message.attachments; track att.url) {
                     <li class="chat__msg-attachment" [class.chat__msg-attachment--pending]="att.pending">
-                      <img [src]="att.url" [alt]="att.alt" />
+                      <img [src]="att.url"
+                           [alt]="att.alt"
+                           data-testid="chat-msg-attachment-image" />
                       <span class="chat__msg-attachment-name">{{ att.alt }}</span>
                     </li>
                   }

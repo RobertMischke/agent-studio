@@ -201,10 +201,19 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
    * Convert chat turns into the chat-component's message shape. Failed
    * orchestrator turns surface the error in the bubble's footer instead
    * of dropping the (typically empty) reply silently.
+   *
+   * Local user turns carry `localAttachments` with `blob:` preview URLs
+   * so the bubble paints with the image in the same frame as the text
+   * (no "text now, image later" flash on send). The matching persisted
+   * server turn is suppressed for as long as the local turn is still in
+   * flight; once the persisted URL is preloaded the local turn is dropped
+   * and the server turn takes over with the byte-identical cached image.
    */
   readonly messages = computed<ChatMessage[]>(() => {
     const proj = this.activeProject();
-    const merged = [...this.turns(), ...this.localTurns()];
+    const local = this.localTurns();
+    const serverFiltered = suppressLocalDuplicates(this.turns(), local);
+    const merged = [...serverFiltered, ...local];
     return merged.map<ChatMessage>((t) => ({
       id: t.id,
       role: t.role,
@@ -212,14 +221,33 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       timestamp: t.ts,
       pending: !!(t as { pending?: boolean }).pending,
       error: t.errorMessage ?? undefined,
-      attachments: (t.attachments ?? []).map((a) => ({
-        alt: a.alt,
-        // Server returns "chat-attachments/<file>"; resolve through the
-        // GET endpoint so the <img> in the bubble actually loads.
-        url: this.resolveAttachmentUrl(proj, a.relativePath)
-      }))
+      attachments: this.composeMessageAttachments(proj, t)
     }));
   });
+
+  /**
+   * Pick the attachment source for one turn. Local turns carry blob URLs
+   * for immediate render; server turns carry the persisted `relativePath`
+   * that we resolve through the GET endpoint.
+   */
+  private composeMessageAttachments(
+    projectName: string | null,
+    turn: OrchestratorChatTurn & { localAttachments?: { alt: string; previewUrl: string }[] }
+  ): ChatMessage['attachments'] {
+    if (turn.localAttachments && turn.localAttachments.length > 0) {
+      return turn.localAttachments.map((a) => ({
+        alt: a.alt,
+        url: a.previewUrl,
+        pending: true
+      }));
+    }
+    return (turn.attachments ?? []).map((a) => ({
+      alt: a.alt,
+      // Server returns "chat-attachments/<file>"; resolve through the
+      // GET endpoint so the <img> in the bubble actually loads.
+      url: this.resolveAttachmentUrl(projectName, a.relativePath)
+    }));
+  }
 
   private resolveAttachmentUrl(projectName: string | null, relativePath: string): string {
     if (!projectName || !relativePath) return relativePath;
@@ -536,13 +564,25 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
 
     // Render the user's turn immediately so the chat doesn't sit silent
     // while the orchestrator thinks (Opus replies often take 30-60s).
+    // The attached image is carried on the local turn as a `blob:` URL
+    // so the bubble paints with text + image in the same frame; without
+    // this the bubble would appear with text only and the image would
+    // pop in moments later once the server turn arrived.
+    const localBlobs = event.attachments.map((a) => ({
+      alt: a.alt,
+      previewUrl: a.previewUrl
+    }));
     const localId = `local:${Date.now()}`;
-    const localTurn: OrchestratorChatTurn & { pending?: boolean } = {
+    const localTurn: OrchestratorChatTurn & {
+      pending?: boolean;
+      localAttachments?: { alt: string; previewUrl: string }[];
+    } = {
       id: localId,
       ts: new Date().toISOString(),
       role: 'user',
       text: text || (event.attachments.length > 0 ? '(attachments)' : ''),
-      pending: true
+      pending: true,
+      localAttachments: localBlobs.length > 0 ? localBlobs : undefined
     };
     this.localTurns.update((curr) => [...curr, localTurn]);
     this.sending.set(true);
@@ -576,14 +616,50 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     }).subscribe({
       next: () => {
         this.sending.set(false);
-        this.localTurns.set([]);
-        this.refresh(true);
+        // Pre-decode the persisted attachment URL(s) so the upcoming swap
+        // from the local blob bubble to the server turn uses byte-identical
+        // pixels from the browser image cache (no fetch on swap = no
+        // visible flicker). The fallback timeout caps the wait so a slow
+        // network can't strand the bubble in pending state forever.
+        const preloads = uploaded.map((u) =>
+          new Promise<void>((resolve) => {
+            const img = new Image();
+            img.onload = () => resolve();
+            img.onerror = () => resolve();
+            img.src = this.resolveAttachmentUrl(proj, u.relativePath);
+          })
+        );
+        // Fetch the server's view of the conversation. While the local
+        // turn is still in the list, `suppressLocalDuplicates` hides the
+        // matching server user turn so the bubble does not duplicate
+        // momentarily. Once preloads resolve we drop the local turn and
+        // revoke its blob URLs; the server turn takes over with the
+        // cached image and the user perceives no swap.
+        this.jobService.getOrchestratorChat(proj).subscribe({
+          next: async (resp) => {
+            this.turns.set(resp.turns ?? []);
+            this.errorMsg.set(null);
+            if (preloads.length > 0) {
+              await Promise.race([
+                Promise.all(preloads),
+                new Promise<void>((r) => setTimeout(r, 3000))
+              ]);
+            }
+            this.localTurns.set([]);
+            for (const att of event.attachments) URL.revokeObjectURL(att.previewUrl);
+          },
+          error: () => {
+            // Fallback: clear local turn anyway so the user is not stuck
+            // looking at a pending bubble forever.
+            this.localTurns.set([]);
+            for (const att of event.attachments) URL.revokeObjectURL(att.previewUrl);
+          }
+        });
         // Slice D virtualised list: pull the new turn(s) from disk via
         // /scroll. Cheap (one ranged query) and keeps the windowed
         // renderer in sync without us having to mirror the OrchestratorChat
         // append logic on the client side.
         this.projectChatList()?.resetAndLoad();
-        for (const att of event.attachments) URL.revokeObjectURL(att.previewUrl);
       },
       error: (err) => {
         this.sending.set(false);
@@ -750,6 +826,47 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     this.createTaskFromDraft.emit({ projectName: proj, promptText: last.text });
   }
 
+}
+
+/**
+ * Hide any server user turn that an in-flight local turn already represents.
+ *
+ * After the operator hits Send we render a local "optimistic" turn so the
+ * bubble shows up immediately (including the inline blob preview of any
+ * attached image). When the round-trip to the orchestrator finishes the
+ * server now reports the same user turn back, but the local turn is still
+ * on screen until the persisted attachment URL has been pre-decoded into
+ * the browser image cache. Without this dedup, the user would see the
+ * bubble briefly duplicate during that pre-decode window.
+ *
+ * Match strategy: walk local user turns newest-to-oldest and pair each
+ * with the newest unmatched server user turn that has the same text and
+ * the same number of attachments. Pairing is greedy and one-shot so
+ * sending the same message twice in a row only suppresses one copy per
+ * local turn.
+ */
+function suppressLocalDuplicates(
+  server: OrchestratorChatTurn[],
+  local: (OrchestratorChatTurn & { localAttachments?: { alt: string; previewUrl: string }[] })[]
+): OrchestratorChatTurn[] {
+  if (local.length === 0) return server;
+  const localUsers = local.filter((t) => t.role === 'user');
+  if (localUsers.length === 0) return server;
+  const suppress = new Set<string>();
+  for (const lt of localUsers) {
+    const ltAttCount = lt.localAttachments?.length ?? lt.attachments?.length ?? 0;
+    for (let i = server.length - 1; i >= 0; i--) {
+      const st = server[i];
+      if (suppress.has(st.id)) continue;
+      if (st.role !== 'user') continue;
+      if ((st.text ?? '') !== (lt.text ?? '')) continue;
+      const stAttCount = st.attachments?.length ?? 0;
+      if (stAttCount !== ltAttCount) continue;
+      suppress.add(st.id);
+      break;
+    }
+  }
+  return suppress.size === 0 ? server : server.filter((s) => !suppress.has(s.id));
 }
 
 /**
