@@ -1,4 +1,4 @@
-import { Injectable, computed, effect, signal } from '@angular/core';
+import { Injectable, computed, signal } from '@angular/core';
 import type { StudioTab } from '../studio-shell.types';
 import { studioTabKey } from '../studio-shell.types';
 
@@ -41,15 +41,6 @@ export class StudioTabStateService {
 
   constructor() {
     this.restore();
-    // Mirror every state change back to localStorage. The effect runs
-    // outside the constructor's injection context implicitly because
-    // it's wired via the field initialiser order; the explicit
-    // `allowSignalWrites: false` default is fine — we only read here.
-    effect(() => {
-      const tabs = this._tabs();
-      const activeKey = this._activeKey();
-      this.persist(tabs, activeKey);
-    });
   }
 
   /** Open the tab if it's not already there, then focus it. */
@@ -57,12 +48,14 @@ export class StudioTabStateService {
     const key = studioTabKey(tab);
     this._tabs.update(list => list.some(t => studioTabKey(t) === key) ? list : [...list, tab]);
     this._activeKey.set(key);
+    this.persist();
   }
 
   /** Focus an existing tab by key. No-op when the key is unknown. */
   select(key: string): void {
     if (this._tabs().some(t => studioTabKey(t) === key)) {
       this._activeKey.set(key);
+      this.persist();
     }
   }
 
@@ -74,6 +67,7 @@ export class StudioTabStateService {
     if (this._activeKey() === key) {
       this._activeKey.set(next.length ? studioTabKey(next[next.length - 1]) : null);
     }
+    this.persist();
   }
 
   /** Close every tab except the one given. */
@@ -81,6 +75,7 @@ export class StudioTabStateService {
     const keep = this._tabs().find(t => studioTabKey(t) === keepKey);
     this._tabs.set(keep ? [keep] : []);
     this._activeKey.set(keep ? keepKey : null);
+    this.persist();
   }
 
   /** Close every tab whose index is strictly greater than the anchor's. */
@@ -93,6 +88,7 @@ export class StudioTabStateService {
     if (!next.some(t => studioTabKey(t) === this._activeKey())) {
       this._activeKey.set(anchorKey);
     }
+    this.persist();
   }
 
   /** Close every tab whose index is strictly less than the anchor's. */
@@ -105,12 +101,14 @@ export class StudioTabStateService {
     if (!next.some(t => studioTabKey(t) === this._activeKey())) {
       this._activeKey.set(anchorKey);
     }
+    this.persist();
   }
 
   /** Close every tab. */
   closeAll(): void {
     this._tabs.set([]);
     this._activeKey.set(null);
+    this.persist();
   }
 
   /**
@@ -144,6 +142,7 @@ export class StudioTabStateService {
       next.splice(targetIdx, 0, moved);
     }
     this._tabs.set(next);
+    this.persist();
   }
 
   // ---- persistence ----------------------------------------------------
@@ -172,10 +171,14 @@ export class StudioTabStateService {
     }
   }
 
-  private persist(tabs: StudioTab[], activeKey: string | null): void {
+  private persist(): void {
     if (typeof window === 'undefined') return;
     try {
-      const payload: PersistedState = { v: STORAGE_VERSION, tabs, activeKey };
+      const payload: PersistedState = {
+        v: STORAGE_VERSION,
+        tabs: this._tabs(),
+        activeKey: this._activeKey(),
+      };
       window.localStorage?.setItem(STORAGE_KEY, JSON.stringify(payload));
     } catch {
       /* storage may be full / blocked; signals still reflect live state */

@@ -906,6 +906,7 @@
   user-select: none;
   white-space: nowrap;
   max-width: 280px;
+  position: relative;
 
   &:hover {
     color: var(--studio-fg);
@@ -917,6 +918,29 @@
     border-top: 1px solid var(--studio-accent);
     border-bottom: 1px solid var(--studio-bg-tab-active);
     margin-top: -1px;
+  }
+
+  // While being dragged, fade the source row so the user can read the
+  // insertion marker on the target side without the source visually
+  // jumping. Pointer-events stay enabled because dragover events must
+  // still fire on the source's neighbours when the cursor passes back.
+  &--dragging {
+    opacity: 0.4;
+  }
+
+  // 2-px vertical bar on the leading edge of the drop target. The
+  // before pseudo-element sits over the left border so it lines up
+  // with the existing tab divider rhythm.
+  &--drop-before::before {
+    content: '';
+    position: absolute;
+    left: -1px;
+    top: 4px;
+    bottom: 4px;
+    width: 2px;
+    background: var(--studio-accent);
+    border-radius: 1px;
+    pointer-events: none;
   }
 
   &__num {
@@ -950,6 +974,28 @@
   &--welcome {
     border-right: 0;
     cursor: default;
+  }
+}
+
+// Trailing drop zone: stretches across the empty space after the last
+// tab so a drag aimed at "the end" lands on something real. The visible
+// indicator only appears while a drag is in flight AND the target is
+// this zone.
+.studio-tab-end-drop {
+  flex: 1;
+  min-width: 24px;
+  position: relative;
+  align-self: stretch;
+
+  &--active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 4px;
+    bottom: 4px;
+    width: 2px;
+    background: var(--studio-accent);
+    border-radius: 1px;
   }
 }
 

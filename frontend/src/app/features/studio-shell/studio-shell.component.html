@@ -398,7 +398,10 @@
              [class.studio-editor--chat-open]="chatRailOpen()"
              data-testid="studio-editor">
       <div class="studio-tabbar">
-        <div class="studio-tabbar__list" role="tablist">
+        <div class="studio-tabbar__list"
+             role="tablist"
+             (dragover)="onTabListDragOver($event)"
+             (drop)="onTabListDrop($event)">
           @if (tabs().length === 0) {
             <div class="studio-tab studio-tab--welcome studio-tab--active">
               <span class="studio-tab__title">Welcome</span>
@@ -407,10 +410,18 @@
           @for (t of tabs(); track tabKey(t)) {
             <div class="studio-tab"
                  role="tab"
+                 draggable="true"
                  [class.studio-tab--active]="activeKey() === tabKey(t)"
+                 [class.studio-tab--dragging]="draggingTabKey() === tabKey(t)"
+                 [class.studio-tab--drop-before]="dragOverTabKey() === tabKey(t) && draggingTabKey() !== tabKey(t)"
                  [attr.data-tab-key]="tabKey(t)"
                  (click)="selectTab(tabKey(t))"
-                 (contextmenu)="openTabContextMenu($event, tabKey(t))">
+                 (contextmenu)="openTabContextMenu($event, tabKey(t))"
+                 (dragstart)="onTabDragStart($event, tabKey(t))"
+                 (dragover)="onTabDragOver($event, tabKey(t))"
+                 (dragleave)="onTabDragLeave($event, tabKey(t))"
+                 (drop)="onTabDrop($event, tabKey(t))"
+                 (dragend)="onTabDragEnd($event)">
               @if (tabNum(t); as n) {
                 <span class="studio-tab__num">{{ n }}</span>
               }
@@ -420,6 +431,13 @@
                       aria-label="Close tab"
                       (click)="closeTab(tabKey(t), $event)">×</button>
             </div>
+          }
+          <!-- Invisible spacer that catches drops past the last tab so users can
+               move a tab to the end without aiming for any specific neighbour. -->
+          @if (tabs().length > 0) {
+            <div class="studio-tab-end-drop"
+                 [class.studio-tab-end-drop--active]="dragOverTabKey() === '__end__' && draggingTabKey()"
+                 aria-hidden="true"></div>
           }
         </div>
         <div class="studio-tabbar__actions" data-testid="studio-tab-actions">
