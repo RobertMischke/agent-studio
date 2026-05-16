@@ -34,9 +34,10 @@ async function findJobWithOutput(): Promise<{ id: string; watchPath: string } | 
 }
 
 async function setFlag(page: Page, on: boolean): Promise<void> {
+  // The vsCodeLayout flag now defaults ON; off must be written explicitly
+  // as '0' instead of removing the key (a missing key reads as default).
   await page.addInitScript(([key, value]) => {
-    if (value) localStorage.setItem(key, '1');
-    else localStorage.removeItem(key);
+    localStorage.setItem(key, value ? '1' : '0');
   }, [FLAG_KEY, on] as const);
 }
 
