@@ -514,6 +514,13 @@
     }
     .job-card__commit-sha { font-family: var(--font-mono, monospace); font-weight: 600; }
     .job-card__commit-files { color: #94a3b8; }
+    // Review-lane variant: SHA is hidden, so the files count carries the
+    // pill on its own. Tighten the colour so it does not look like a
+    // muted secondary chip - this is the only indicator on the card.
+    .job-card__commit--review-only .job-card__commit-files {
+      color: #86efac;
+      font-weight: 600;
+    }
 
     /* Token bubble: a small status indicator that shows total tokens spent
        on this task. The popover opens on hover and on keyboard focus, so

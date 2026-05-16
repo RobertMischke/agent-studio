@@ -197,13 +197,17 @@
       }
     </div>
   }
-  @if (job().commit; as c) {
+  @if (commitPillView(); as cp) {
     <div class="job-card__commit"
+         [class.job-card__commit--review-only]="cp.variant === 'review'"
          [appTooltip]="commitTooltip()"
          data-testid="job-card-commit"
-         [attr.data-has-files]="hasCommitFiles() ? 'true' : null">
-      <span class="job-card__commit-sha">⏺ {{ c.shortSha }}</span>
-      <span class="job-card__commit-files">{{ c.filesChanged }} {{ c.filesChanged === 1 ? 'file' : 'files' }}</span>
+         [attr.data-variant]="cp.variant"
+         [attr.data-has-files]="cp.hasFiles ? 'true' : null">
+      @if (cp.variant === 'full') {
+        <span class="job-card__commit-sha">⏺ {{ cp.shortSha }}</span>
+      }
+      <span class="job-card__commit-files">{{ cp.filesChanged }} {{ cp.filesChanged === 1 ? 'file' : 'files' }}</span>
     </div>
   }
   <div class="job-card__activity">

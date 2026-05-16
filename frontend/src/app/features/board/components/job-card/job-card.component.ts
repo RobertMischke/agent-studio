@@ -160,13 +160,28 @@ export class JobCardComponent implements OnInit, OnDestroy {
     return `rgba(${r},${g},${b},${alpha})`;
   }
 
-  // Git status only matters for tasks the user is actively working on or
-  // about to review — pre-work lanes (preparation/ready) and post-review
-  // lanes (completed/archive) carry no useful per-task git context, so we
-  // skip the pill there to keep the board calm.
-  // ADR-0025: pill stays in both review lanes (auto + human).
+  // Live working-tree state (branch + uncommitted file count) only makes
+  // sense while the agent is actively touching the repo. In review lanes
+  // the task is "frozen" against a specific commit and live state would
+  // misrepresent it (the board's project status is shared across cards;
+  // a card sitting in 5-human-review must not advertise the dev branch
+  // someone else just switched to). Pre-work and post-review lanes carry
+  // no useful per-task git context either, so the pill is suppressed
+  // everywhere except 3-progress.
   private static readonly LANES_WITH_GIT = new Set([
+    '3-progress',
+  ]);
+
+  // Lanes where the per-task commit pill is shown. Review lanes render a
+  // simplified files-only variant (see commitPillView); 3-progress also
+  // shows the SHA so the working agent can correlate the pill with its
+  // own auto-commit. Other lanes hide the pill entirely.
+  private static readonly LANES_WITH_COMMIT_PILL = new Set([
     '3-progress', '4-auto-review', '5-human-review', '4-review',
+  ]);
+
+  private static readonly REVIEW_LANES = new Set([
+    '4-auto-review', '5-human-review', '4-review',
   ]);
 
   readonly gitPill = computed(() => {
@@ -174,6 +189,34 @@ export class JobCardComponent implements OnInit, OnDestroy {
     const projectName = this.job().projectName;
     const summary = this.gitSummary.value().find(s => s.projectName === projectName);
     return summary && summary.isRepo ? summary : null;
+  });
+
+  /**
+   * Commit-pill view model. Returns null when no pill should render -
+   * either because the lane is outside `LANES_WITH_COMMIT_PILL` or
+   * because the job has no commit yet. The `variant` field tells the
+   * template which layout to use: `full` includes the short SHA next
+   * to the files count (3-progress); `review` shows only "N files" so
+   * review-lane cards stop carrying live-state derivatives the user
+   * does not care about.
+   */
+  readonly commitPillView = computed<{
+    variant: 'full' | 'review';
+    shortSha: string;
+    filesChanged: number;
+    hasFiles: boolean;
+  } | null>(() => {
+    const c = this.job().commit;
+    if (!c) return null;
+    const state = this.job().state;
+    if (!JobCardComponent.LANES_WITH_COMMIT_PILL.has(state)) return null;
+    const variant = JobCardComponent.REVIEW_LANES.has(state) ? 'review' : 'full';
+    return {
+      variant,
+      shortSha: c.shortSha,
+      filesChanged: c.filesChanged,
+      hasFiles: (c.files?.length ?? 0) > 0,
+    };
   });
 
   readonly gitTooltip = computed(() => {
