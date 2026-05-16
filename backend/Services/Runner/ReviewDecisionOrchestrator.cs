@@ -653,12 +653,16 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
         // reflects the post-move folder. The state machine moves the
         // folder atomically, so the tags written before the move travel
         // with it; this re-merge is a defensive idempotent reapplication
-        // when the new folder lookup succeeds.
-        var movedInfo = _scanner.FindJob(current.Id, entry.Path) ?? current;
+        // on the authoritative post-move path returned by MoveJob.
+        // Using move.NewFolderPath rather than re-scanning avoids the
+        // stale-cache race that previously fell back to the source folder
+        // and left orphan logs/cli-output.log skeletons in 4-auto-review.
+        var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
+        var movedInfo = current with { FolderPath = movedFolderPath, State = JobStates.HumanReview };
         if (report.ConcernTagIds.Count > 0 &&
-            !string.Equals(movedInfo.FolderPath, current.FolderPath, StringComparison.OrdinalIgnoreCase))
+            !string.Equals(movedFolderPath, current.FolderPath, StringComparison.OrdinalIgnoreCase))
         {
-            ConcernTagWriter.MergeConcernTags(movedInfo.FolderPath, report.ConcernTagIds, _logger);
+            ConcernTagWriter.MergeConcernTags(movedFolderPath, report.ConcernTagIds, _logger);
         }
 
         // Append the operator-facing chat-log line ONLY after the lane move
@@ -1089,7 +1093,13 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             return;
         }
 
-        var moved = _scanner.FindJob(current.Id, entry.Path) ?? current;
+        // Pin the chat-log line to the post-move folder via MoveJob's
+        // authoritative path. FindJob can briefly return null or the
+        // pre-move snapshot when the cache has not refreshed yet, and
+        // the chat-log auto-creates its parent folder on write — so a
+        // stale path resurrects the source lane as a one-line skeleton.
+        var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
+        var moved = current with { FolderPath = movedFolderPath, State = JobStates.HumanReview };
         var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
         _chatLog.AppendSupervisor(moved, "escalate",
             $"Auto-review escalated \"{title}\" to 5-human-review for human attention. Reason: {verdict.Reason}.");
@@ -1133,9 +1143,12 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             return;
         }
 
-        // Re-resolve so the chat-log line lands in the post-move folder and
-        // the bus message carries the destination lane truthfully.
-        var moved = _scanner.FindJob(current.Id, entry.Path) ?? current;
+        // Pin the chat-log line to the post-move folder via MoveJob's
+        // authoritative path; see HandleEscalate for the rationale. The
+        // chat-log auto-creates its parent folder, so a stale path would
+        // resurrect the source lane as a one-line skeleton.
+        var movedFolderPath = move.NewFolderPath ?? current.FolderPath;
+        var moved = current with { FolderPath = movedFolderPath, State = JobStates.HumanReview };
         var title = string.IsNullOrWhiteSpace(moved.Title) ? moved.Id : moved.Title;
         _chatLog.Append(moved, OrchestratorMessageKind.Decision,
             $"Auto-review accepted \"{title}\" as done. Moved to 5-human-review for your approval. Reason: {verdict.Reason}");
@@ -1485,14 +1498,14 @@ public sealed class ReviewDecisionOrchestrator : BackgroundService
             return null;
         }
 
-        var moved = _scanner.FindJob(current.Id, entry.Path);
-        if (moved == null)
-        {
-            _logger.LogWarning(
-                "ReviewDecisionOrchestrator: re-scan after reissue move returned null for {JobId}",
-                current.Id);
-            return null;
-        }
+        // Use the authoritative post-move path from MoveJob rather than
+        // a re-scan: the cache may not yet reflect the move, and writes
+        // through OrchestratorChatLog auto-create their parent, so a
+        // stale path would resurrect 4-auto-review as a one-line skeleton
+        // (see HandleAcceptAsDone for the same fix).
+        var movedFolderPath = move.NewFolderPath
+            ?? Path.Combine(entry.Path, JobStates.Ready, Path.GetFileName(current.FolderPath));
+        var moved = current with { FolderPath = movedFolderPath, State = JobStates.Ready };
 
         // Order 0 lifts the reissue ahead of any fresh ready job (which
         // typically uses order >= 10) without rewriting their orders.

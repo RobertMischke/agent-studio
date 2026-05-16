@@ -80,6 +80,20 @@ public class OrchestratorChatLog
     private bool AppendWithStream(JobInfo info, string streamTag, string body, ICollection<CliOutputLine>? liveBuffer)
     {
         if (info == null) return false;
+        // If the job folder no longer exists, the job was moved (or deleted)
+        // between the caller's lookup and this append. Recreating the folder
+        // here would resurrect the source lane as a one-line skeleton —
+        // exactly the residue that was littering 4-auto-review after every
+        // accept-as-done. Refuse the write and let the caller treat it as
+        // best-effort; the canonical record (decision journal, bus event)
+        // still goes out.
+        if (!Directory.Exists(info.FolderPath))
+        {
+            _logger.LogWarning(
+                "OrchestratorChatLog: refusing to append {Stream} for {JobId}; folder gone at {Path}",
+                streamTag, info.Id, info.FolderPath);
+            return false;
+        }
         try
         {
             Directory.CreateDirectory(JobPaths.LogsDir(info.FolderPath));

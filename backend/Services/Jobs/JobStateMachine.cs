@@ -33,7 +33,7 @@ public class JobStateMachine
 
         var info = _scanner.FindJob(jobId, watchPath);
         if (info == null) return new MoveJobOutcome(MoveJobStatus.NotFound);
-        if (info.State == targetState) return new MoveJobOutcome(MoveJobStatus.Success);
+        if (info.State == targetState) return new MoveJobOutcome(MoveJobStatus.Success, NewFolderPath: info.FolderPath);
 
         var jobFolderName = Path.GetFileName(info.FolderPath);
         var targetDir = Path.Combine(info.WatchPath, targetState, jobFolderName);
@@ -62,7 +62,10 @@ public class JobStateMachine
             // pre-move snapshot. The 250 ms FileSystemWatcher debounce alone
             // is too slow for that round-trip.
             _scanner.InvalidateCache();
-            return new MoveJobOutcome(MoveJobStatus.Success);
+            // Hand the post-move path back to the caller so chat-log writes
+            // and follow-up files cannot land in the now-vanished source
+            // folder via a stale FindJob result (see MoveJobOutcome docs).
+            return new MoveJobOutcome(MoveJobStatus.Success, NewFolderPath: targetDir);
         }
         catch (Exception ex)
         {

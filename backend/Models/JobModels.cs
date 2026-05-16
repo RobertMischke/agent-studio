@@ -690,7 +690,16 @@ public enum MoveJobStatus
     Failure
 }
 
-public record MoveJobOutcome(MoveJobStatus Status, string? Message = null);
+/// <summary>
+/// Result of a <see cref="OrchestratorApi.Services.Jobs.JobStateMachine.MoveJob"/>
+/// call. <paramref name="NewFolderPath"/> is populated only on
+/// <see cref="MoveJobStatus.Success"/> and carries the absolute path of the
+/// post-move job folder. Callers that want to write into the moved folder
+/// (chat-log line, follow-up file) MUST use this rather than re-finding the
+/// job through the scanner — the cache may not yet reflect the move, and
+/// a stale path would silently recreate the source folder on first write.
+/// </summary>
+public record MoveJobOutcome(MoveJobStatus Status, string? Message = null, string? NewFolderPath = null);
 
 /// <summary>Result of <c>POST /api/jobs/{id}/restore-from-failed-pickup</c>.</summary>
 public enum RestoreFromFailedPickupStatus
