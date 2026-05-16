@@ -34,6 +34,50 @@
         <div studioContent class="studio-projected-content">
           @switch (studioTabState.activeTab()?.kind) {
             @case ('board') {
+              @if (activeFilterPills().length > 0) {
+                <div class="active-filter-strip"
+                     data-testid="active-filter-strip"
+                     role="region"
+                     aria-label="Active filters">
+                  @for (pill of activeFilterPills(); track pill.kind + ':' + pill.value) {
+                    <span class="active-filter-strip__pill"
+                          [class]="'active-filter-strip__pill--' + pill.kind"
+                          [attr.data-testid]="'active-filter-pill-' + pill.kind + '-' + pill.value">
+                      <span class="active-filter-strip__pill-kind">{{ pill.kindLabel }}:</span>
+                      @if (pill.swatch) {
+                        <span class="active-filter-strip__pill-swatch"
+                              aria-hidden="true"
+                              [style.background]="pill.swatch"></span>
+                      }
+                      <span class="active-filter-strip__pill-label">{{ pill.label }}</span>
+                      <button type="button"
+                              class="active-filter-strip__pill-remove"
+                              [attr.data-testid]="'active-filter-remove-' + pill.kind + '-' + pill.value"
+                              [attr.aria-label]="'Remove ' + pill.kindLabel + ' filter ' + pill.label"
+                              (click)="removeFilterPill(pill)">×</button>
+                    </span>
+                  }
+                  <button type="button"
+                          class="active-filter-strip__clear-all"
+                          data-testid="filter-clear-all"
+                          (click)="clearAllFilters()">Clear all</button>
+                </div>
+              }
+              @if (failedPickupCount() > 0) {
+                <button type="button"
+                        class="failed-pickup-banner"
+                        data-testid="failed-pickup-banner"
+                        [attr.aria-label]="'Open failed-pickup lane'"
+                        (click)="scrollToFailedPickupLane()">
+                  <span class="failed-pickup-banner__dot" aria-hidden="true"></span>
+                  <span class="failed-pickup-banner__text">
+                    <strong data-testid="failed-pickup-banner-count">{{ failedPickupCount() }}</strong>
+                    {{ failedPickupCount() === 1 ? 'job' : 'jobs' }} failed to pick up.
+                    Open the failed-pickup lane.
+                  </span>
+                  <span class="failed-pickup-banner__chev" aria-hidden="true">›</span>
+                </button>
+              }
               <main class="dashboard dashboard--studio" data-testid="studio-board"
                     [class.dashboard--has-focus]="focusedContainer() !== null">
                 @for (g of laneGroups(); track g.id) {
@@ -144,6 +188,28 @@
       @if (orchestratorSettingsOpen()) {
         <app-orchestrator-settings-modal
           (closed)="closeOrchestratorSettings()" />
+      }
+      <app-workspace-banner [projects]="bannerProjects()" />
+      <app-project-overlays
+        (securityFollowUp)="onSecurityFollowUp($event)"
+        (securityOpenEvidence)="onSecurityOpenEvidence($event)"
+        (securityAuditQueued)="onSecurityAuditQueued($event)"
+        (uxuiFollowUp)="onUxuiFollowUp($event)"
+        (uxuiActionQueued)="onUxuiActionQueued($event)"
+        (openTask)="onOpenTaskFromReel($event)" />
+      <app-workspace-overlays (openTask)="onOpenTaskFromReel($event)" />
+      @defer (when verboseDebugContext() !== null) {
+        @if (verboseDebugContext(); as ctx) {
+          <app-verbose-debug-overlay
+            data-testid="app-verbose-debug-overlay"
+            [lines]="ctx.lines"
+            [runTimeline]="ctx.runTimeline"
+            [screenshots]="ctx.screenshots"
+            [tokenSummary]="ctx.tokenSummary"
+            [job]="ctx.job"
+            [source]="ctx.job?.id ?? 'cli-output.log'"
+            (close)="closeVerboseDebug()" />
+        }
       }
     } @else {
     <div class="app"
