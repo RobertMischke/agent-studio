@@ -42,7 +42,7 @@ import {
   UpdateVersionBadgeComponent,
 } from './features/update';
 import { VerboseDebugOverlayComponent } from './features/verbose-debug';
-import { StudioShellComponent } from './features/studio-shell';
+import { StudioShellComponent, StudioTabStateService } from './features/studio-shell';
 import { JobService } from './services/job.service';
 import { ClientService } from './services/client.service';
 import type { JobDetail, JobInfo, WatchPathEntry, CliType } from './models/job.model';
@@ -487,6 +487,7 @@ export class App implements OnInit {
     readonly featureFlags: FeatureFlagsService,
     private readonly _completionSound: JobCompletionSoundService,
     readonly updateClient: UpdateClientService,
+    readonly studioTabState: StudioTabStateService,
   ) {
     // Cycle 10a: refresh the kanban after a successful create — the
     // CreateJobFormService doesn't call jobService.refresh itself

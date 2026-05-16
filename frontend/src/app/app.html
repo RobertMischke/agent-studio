@@ -3,10 +3,125 @@
         Agent Software Studio redesign — VS-Code-inspired shell.
         Currently behind the `vsCodeLayout` flag; flip to default once
         Project Hub, full diff view, and full activity view are
-        migrated. Legacy chrome stays available via flag-off so the
-        existing functionality remains reachable during the migration.
+        migrated. The legacy dashboard + detail markup is projected
+        into the shell's editor slot so the existing handlers
+        (drag/drop, triage, dialogs) keep working unchanged.
       -->
-      <app-studio-shell data-testid="studio-shell-root" />
+      <app-studio-shell data-testid="studio-shell-root">
+        <div studioContent class="studio-projected-content">
+          @switch (studioTabState.activeTab()?.kind) {
+            @case ('board') {
+              <main class="dashboard dashboard--studio" data-testid="studio-board"
+                    [class.dashboard--has-focus]="focusedContainer() !== null">
+                @for (g of laneGroups(); track g.id) {
+                  <section class="lane-group"
+                           [attr.data-testid]="'lane-group-' + g.id"
+                           [class.lane-group--focused]="isContainerFocused(g.id)"
+                           [class.lane-group--hidden-by-focus]="focusedContainer() !== null && !isContainerFocused(g.id)"
+                           [style.flex-grow]="expandedLaneCount(g)">
+                    <header class="lane-group__head">
+                      <span class="lane-group__label">{{ g.label }}</span>
+                    </header>
+                    <div class="lane-group__lanes">
+                      @for (lane of g.lanes; track lane.state) {
+                        <app-job-column
+                          [title]="lane.title"
+                          [icon]="lane.icon"
+                          [state]="lane.state"
+                          [jobs]="lane.jobs"
+                          [collapsed]="isLaneCollapsed(lane.state)"
+                          [compact]="compactCards()"
+                          [archiving]="archivingInProgress()"
+                          (collapseToggle)="toggleLaneCollapse(lane.state)"
+                          (jobClick)="openDetail($event)"
+                          (jobDrop)="onJobDrop($event)"
+                          (jobReorder)="onJobReorder($event)"
+                          (jobDeleteRequest)="onDeleteFromBoard($event)"
+                          (addTask)="openCreate($event)"
+                          (archiveAll)="onArchiveAll()" />
+                      }
+                    </div>
+                  </section>
+                }
+              </main>
+            }
+            @case ('task') {
+              @if (selectedJob(); as detail) {
+                <main class="workspace__main workspace__main--studio" data-testid="studio-task">
+                  <app-job-detail #jobDetail
+                                  [detail]="detail"
+                                  [watchPaths]="watchPaths()"
+                                  [lanePeers]="triageLanePeers()"
+                                  [mutationsBlocked]="updateClient.mutationsBlocked()"
+                                  (back)="closeDetail()"
+                                  (fileSaved)="onFileSaved()"
+                                  (projectChanged)="onProjectChanged($event)"
+                                  (completeAndNextReview)="onCompleteAndNextReview()"
+                                  (deleteRequested)="onDeleteFromDetail(detail.info)"
+                                  (stateChangeRequested)="onStateChangeFromDetail(detail.info, $event.targetState)"
+                                  (triageMoveRequested)="onTriageMove(detail.info, $event)"
+                                  (triageMoveToTopRequested)="onTriageMoveToTop(detail.info, $event)"
+                                  (triageDeleteRequested)="onTriageDelete(detail.info, $event)"
+                                  (triageStartRequested)="onTriageStart(detail.info, $event)"
+                                  (nextInLaneRequested)="onTriageNext(detail.info)"
+                                  (prevInLaneRequested)="onTriagePrev(detail.info)" />
+                </main>
+              } @else {
+                <div class="studio-coming-soon">
+                  <h2>No task selected</h2>
+                  <p>The task tab requires a selected job. Open one from the Explorer panel
+                    or from the board.</p>
+                </div>
+              }
+            }
+            @default {
+              <!-- Welcome screen owned by the shell itself when no tab is active. -->
+            }
+          }
+        </div>
+      </app-studio-shell>
+      <!-- Dialogs / overlays / banners follow regardless of the active shell. -->
+      <app-update-banner />
+      <app-update-center />
+      <app-update-block-modal />
+      <app-confirm-dialog />
+      <app-notification-stack />
+      <app-media-lightbox />
+      @if (errorDialog.activeError(); as error) {
+        <app-error-dialog
+          [error]="error"
+          [canOpenCliConfig]="error.canOpenCliConfig && selectedJobUsesCopilot()"
+          [copyButtonLabel]="copyErrorButtonLabel()"
+          (close)="closeErrorDialog()"
+          (copy)="copyErrorDetails()"
+          (openCliConfig)="openCliConfigFromError()" />
+      }
+      @if (showCreate()) {
+        <app-create-job-dialog
+          [watchPaths]="watchPaths()"
+          [availableModels]="availableModels()"
+          [cliTypeDraft]="createJobForm.newCliType"
+          [(newTitle)]="createJobForm.newTitle"
+          [(newWatchPath)]="createJobForm.newWatchPath"
+          [(newModel)]="createJobForm.newModel"
+          [(newPrompt)]="createJobForm.newPrompt"
+          [(attachments)]="createJobForm.newAttachments"
+          [(newTaskType)]="createJobForm.newTaskType"
+          [(newTags)]="createJobForm.newTags"
+          [(newTargetState)]="createJobForm.newTargetState"
+          (cliTypeChange)="onCreateCliTypeChange($event)"
+          (cancel)="cancelCreate()"
+          (submit)="submitCreate()" />
+      }
+      @if (showE2ECleanup()) {
+        <app-e2e-cleanup-dialog
+          (closed)="showE2ECleanup.set(false)"
+          (didDelete)="onE2EDidDelete()" />
+      }
+      @if (orchestratorSettingsOpen()) {
+        <app-orchestrator-settings-modal
+          (closed)="closeOrchestratorSettings()" />
+      }
     } @else {
     <div class="app"
          [class.app--vscode-layout]="featureFlags.vsCodeLayout()"
