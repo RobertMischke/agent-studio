@@ -389,10 +389,9 @@ test.describe('Verbose Debug overlay - project side sheet', () => {
       return;
     }
 
-    // Switch to the task tab so the bug button becomes available.
-    const taskTab = page.getByTestId('orch-side-sheet-tab-task');
-    if (await taskTab.count() > 0) await taskTab.click();
-
+    // The Debug button surfaces in the sidesheet header whenever a task
+    // detail is selected; the former task tab was removed in the
+    // 2026-05-16 sidesheet restructure.
     const bugBtn = page.getByTestId('orch-side-sheet-verbose-debug');
     if (await bugBtn.count() === 0) {
       test.skip(true, 'Bug button not rendered without an active task selection');

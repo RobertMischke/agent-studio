@@ -127,33 +127,40 @@ test.describe('Orchestrator side sheet', () => {
       await page.screenshot({ path: `${SHOTS}/04-side-sheet-other-project.png`, fullPage: false });
     }
 
-    // Phase 6: when a task detail is open, the side sheet shows a third
-    // tab "🎯 <task title>" that switches the chat to a Continue (Steer)
-    // surface for that specific task. Open a task and verify the tab
-    // appears + clicking it swaps the chat.
-    await page.getByTestId('orch-side-sheet-close').click();
+    // 2026-05-16 sidesheet restructure: the sidesheet is Chat-centric.
+    // Only Chat + Roadmap Intake tabs remain. The Task (pure chat),
+    // Feed, Logic, Manage CLI, Sessions, and Supervisor tabs were
+    // removed; Settings now opens as a dedicated modal triggered by
+    // the ⚙ button in the sidesheet header.
+    await expect(page.getByTestId('orch-side-sheet-tab-intake')).toBeVisible();
+    await expect(page.getByTestId('orch-side-sheet-tab-task')).toHaveCount(0);
+    await expect(page.getByTestId('orch-side-sheet-tab-feed')).toHaveCount(0);
+    await expect(page.getByTestId('orch-side-sheet-tab-logic')).toHaveCount(0);
+    await expect(page.getByTestId('orch-side-sheet-tab-cli')).toHaveCount(0);
+    await expect(page.getByTestId('orch-side-sheet-tab-sessions')).toHaveCount(0);
+    await expect(page.getByTestId('orch-side-sheet-tab-supervisor')).toHaveCount(0);
+
+    // The Settings (⚙) button opens the Orchestrator Settings modal.
+    const settingsBtn = page.getByTestId('orch-side-sheet-settings');
+    await expect(settingsBtn).toBeVisible();
+    await settingsBtn.click();
+    const modal = page.getByTestId('orchestrator-settings-modal');
+    await expect(modal).toBeVisible();
+    await page.mouse.move(0, 0);
     await page.waitForTimeout(300);
+    await page.screenshot({ path: `${SHOTS}/06-settings-modal-open.png`, fullPage: false });
 
-    const firstCard = page.locator('[data-testid="job-card"]').first();
-    if (await firstCard.isVisible()) {
-      await firstCard.click();
-      await page.waitForTimeout(600);
-      // Reopen the side sheet now that a task is active.
-      await toggle.click();
-      await page.waitForTimeout(800);
+    // The modal uses the project-window rail + panel pattern with two
+    // sections: Orchestrator (default) and General.
+    await expect(page.getByTestId('orchestrator-settings-rail-orchestrator')).toBeVisible();
+    await expect(page.getByTestId('orchestrator-settings-rail-general')).toBeVisible();
+    await page.getByTestId('orchestrator-settings-rail-general').click();
+    await expect(page.getByTestId('orchestrator-settings-general-empty')).toBeVisible();
+    await page.waitForTimeout(150);
+    await page.screenshot({ path: `${SHOTS}/07-settings-modal-general.png`, fullPage: false });
 
-      const taskTab = page.getByTestId('orch-side-sheet-tab-task');
-      if (await taskTab.isVisible()) {
-        await page.mouse.move(0, 0);
-        await page.screenshot({ path: `${SHOTS}/06-task-tab-visible.png`, fullPage: false });
-        await taskTab.click();
-        await page.waitForTimeout(400);
-        await page.screenshot({ path: `${SHOTS}/07-task-chat-active.png`, fullPage: false });
-        const composer2 = page.getByTestId('chat-input');
-        await expect(composer2).toBeEnabled();
-        await expect(composer2).toHaveAttribute('placeholder', /Steer/);
-      }
-    }
+    await page.getByTestId('orchestrator-settings-modal-close').click();
+    await expect(modal).toHaveCount(0);
 
     // Final close.
     const closeBtn = page.getByTestId('orch-side-sheet-close');

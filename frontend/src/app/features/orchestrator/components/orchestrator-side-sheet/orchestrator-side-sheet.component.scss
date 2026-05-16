@@ -143,64 +143,44 @@
 .sheet__combo-option--active { background: rgba(124, 58, 237, 0.35); color: #fff; }
 .sheet__combo-option--current { color: #c4b5fd; font-weight: 650; }
 
-.sheet__body {
-  display: grid;
-  grid-template-columns: 170px minmax(0, 1fr);
-  flex: 1 1 auto;
-  min-height: 0;
-}
-.sheet__rail {
+.sheet__tabs {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-height: 0;
-  overflow-y: auto;
-  padding: 8px 6px;
-  border-right: 1px solid rgba(148, 163, 184, 0.18);
+  gap: 4px;
+  padding: 6px 12px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
   background: #181825;
+  flex: 0 0 auto;
 }
-.sheet__rail-group {
-  color: #64748b;
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  margin: 8px 6px 4px;
-}
-.sheet__rail-group:first-child { margin-top: 2px; }
-.sheet__rail-item {
-  display: grid;
-  grid-template-columns: 20px minmax(0, 1fr);
+.sheet__tab {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  width: 100%;
+  gap: 6px;
   border: 0;
   border-radius: 6px;
   background: transparent;
   color: #bac2de;
-  padding: 6px 8px;
+  padding: 5px 10px;
   cursor: pointer;
-  text-align: left;
   font: inherit;
   font-size: 12px;
 }
-.sheet__rail-item:hover:not(:disabled) { background: rgba(148, 163, 184, 0.10); color: #f8fafc; }
-.sheet__rail-item--active {
+.sheet__tab:hover:not(:disabled) { background: rgba(148, 163, 184, 0.10); color: #f8fafc; }
+.sheet__tab--active {
   background: rgba(125, 211, 252, 0.13);
   color: #f8fafc;
   font-weight: 700;
 }
-.sheet__rail-item:disabled { opacity: 0.45; cursor: not-allowed; }
+.sheet__tab:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .sheet__content {
+  flex: 1 1 auto;
   min-width: 0;
   min-height: 0;
   overflow: auto;
   padding: 10px 12px 12px;
   background: #11111b;
 }
-.sheet__content[data-mode='project'],
-.sheet__content[data-mode='task'] {
+.sheet__content[data-mode='project'] {
   overflow: hidden;
 }
 .sheet__error {
@@ -256,8 +236,9 @@
   color: #bfdbfe;
 }
 
-/* Narrow-viewport collapse: stack rail above content as a horizontal
-   chip strip so the chat keeps full reading width. */
+/* Narrow-viewport collapse: keep the tab strip horizontal but let the
+   project picker reflow under the title so the chat keeps full reading
+   width on phones. */
 @media (max-width: 720px) {
   :host(.is-open) { width: min(100vw, 460px); }
   .sheet { width: min(100vw, 460px); }
@@ -268,17 +249,8 @@
     grid-column: 1 / -1;
     order: 2;
   }
-  .sheet__body { grid-template-columns: 1fr; }
-  .sheet__rail {
-    display: grid;
-    grid-auto-flow: column;
-    grid-auto-columns: max-content;
+  .sheet__tabs {
     overflow-x: auto;
     overflow-y: hidden;
-    border-right: 0;
-    border-bottom: 1px solid rgba(148, 163, 184, 0.18);
-    padding: 6px 8px;
   }
-  .sheet__rail-group { display: none; }
-  .sheet__rail-item { grid-template-columns: auto auto; }
 }

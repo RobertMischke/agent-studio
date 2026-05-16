@@ -21,20 +21,16 @@ import { ChatComponent } from '../../../../components/chat/chat.component';
 import { ChatEvent, ChatMessage, ChatSubmitEvent } from '../../../../components/chat/chat-types';
 import { RoadmapIntakePanelComponent } from '../../../roadmap/components/roadmap-intake/roadmap-intake-panel.component';
 import { ProjectChatListComponent } from '../../../project-chat/components/project-chat-list/project-chat-list.component';
-import { OrchestratorFeedComponent } from '../orchestrator-feed';
-import { OrchestratorLogicPanelComponent } from '../orchestrator-logic-panel/orchestrator-logic-panel.component';
-import { CliAdminPanelComponent, CliSessionsPanelComponent } from '../../../cli';
 
 import { TooltipDirective } from '../../../../components/tooltip';
-type OrchestratorWindowMode =
-  | 'project'
-  | 'task'
-  | 'intake'
-  | 'feed'
-  | 'logic'
-  | 'cli'
-  | 'sessions'
-  | 'supervisor';
+/**
+ * Sidesheet content surfaces. After the 2026-05-16 restructure the only
+ * surfaces that live inside the sidesheet are the global orchestrator
+ * Chat and the Roadmap Intake panel; feed, logic, CLI admin / sessions,
+ * and supervisor moved out to dedicated overlays / modals so the
+ * sidesheet stays Chat-centric and the global Chat appears here only.
+ */
+type OrchestratorWindowMode = 'project' | 'intake';
 
 /**
  * Right-hand side sheet that hosts the orchestrator chat. Shell follows
@@ -59,10 +55,6 @@ type OrchestratorWindowMode =
     ChatComponent,
     RoadmapIntakePanelComponent,
     ProjectChatListComponent,
-    OrchestratorFeedComponent,
-    OrchestratorLogicPanelComponent,
-    CliAdminPanelComponent,
-    CliSessionsPanelComponent,
     TooltipDirective
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -117,6 +109,14 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
    */
   readonly openJobDetail = output<{ jobId: string; watchPath: string }>();
 
+  /**
+   * Emitted when the user clicks the settings (⚙) button in the sidesheet
+   * header. The host opens the Orchestrator Settings modal (which uses the
+   * project-shell rail + panel layout). The modal replaces the former
+   * inline "Logic" tab so the sidesheet stays Chat-centric.
+   */
+  readonly openSettings = output<void>();
+
   readonly open = signal(false);
   readonly activeProject = signal<string | null>(null);
   readonly turns = signal<OrchestratorChatTurn[]>([]);
@@ -145,9 +145,10 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   }
 
   /**
-   * Which surface is in front: the project orchestrator thread, the
-   * active task's Continue-mode follow-up chat, or the roadmap intake
-   * panel that splits a long dump into reviewable task drafts.
+   * Which surface is in front: the project orchestrator thread (default)
+   * or the roadmap intake panel that splits a long dump into reviewable
+   * task drafts. The Settings modal opens as a separate overlay, not as a
+   * mode switch.
    */
   readonly mode = signal<OrchestratorWindowMode>('project');
 
@@ -162,16 +163,6 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     const entry = this.watchPaths().find((wp) => wp.name === name);
     return entry?.path ?? null;
   });
-
-  /**
-   * Per-task Continue-mode chat state. The history here is local-only
-   * (the activity-log-view in the protocol pane is the durable record
-   * of the run); this signal just holds the user's follow-ups and the
-   * acknowledgements so the side sheet stays a real chat surface even
-   * when the user is steering a task.
-   */
-  readonly taskMessages = signal<ChatMessage[]>([]);
-  readonly taskSending = signal(false);
 
   /**
    * Searchable project combobox state. The plain list-style picker did
@@ -305,20 +296,6 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
       });
     });
 
-    /**
-     * If the host closes the task detail, fall back to the project
-     * thread so the side sheet doesn't sit on a now-invalid task tab.
-     * Switching tasks also clears the per-task local chat — we don't
-     * want one task's follow-ups bleeding into the next.
-     */
-    effect(() => {
-      const id = this.activeJobId();
-      if (!id) {
-        if (this.mode() === 'task') this.mode.set('project');
-        if (this.taskMessages().length > 0) this.taskMessages.set([]);
-        return;
-      }
-    });
   }
 
   ngOnInit(): void {
@@ -484,20 +461,18 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     this.comboQuery.set('');
   }
 
-  selectTaskTab(): void {
-    if (!this.activeJobId()) return;
-    this.mode.set('task');
-  }
-
   selectIntakeTab(): void {
     if (!this.activeProject()) return;
     this.mode.set('intake');
   }
 
   selectWindowMode(mode: OrchestratorWindowMode): void {
-    if ((mode === 'project' || mode === 'intake' || mode === 'feed' || mode === 'supervisor') && !this.activeProject()) return;
-    if (mode === 'task' && !this.activeJobId()) return;
+    if (!this.activeProject()) return;
     this.mode.set(mode);
+  }
+
+  onOpenSettings(): void {
+    this.openSettings.emit();
   }
 
   onOpenVerboseDebug(): void {
@@ -514,62 +489,6 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
    */
   onIntakeCreated(_event: { count: number }): void {
     this.jobService.refresh(true);
-  }
-
-  /**
-   * Phase 6: send a follow-up to the currently open task via the
-   * existing Continue endpoint (Steer mode). The reply does not stream
-   * back here — it lands in the protocol pane's activity log — so we
-   * append a synthetic system acknowledgement that points the user to
-   * the right surface.
-   */
-  onTaskSubmit(event: ChatSubmitEvent): void {
-    const jobId = this.activeJobId();
-    const watchPath = this.activeWatchPath();
-    if (!jobId || !watchPath) return;
-    const text = event.text.trim();
-    if (!text) return;
-
-    const userId = `task-user:${Date.now()}`;
-    this.taskMessages.update((curr) => [
-      ...curr,
-      {
-        id: userId,
-        role: 'user',
-        text,
-        timestamp: new Date().toISOString(),
-        pending: true
-      }
-    ]);
-    this.taskSending.set(true);
-
-    this.jobService.continueJob(jobId, text, watchPath, undefined, undefined, 'steer').subscribe({
-      next: () => {
-        this.taskSending.set(false);
-        this.taskMessages.update((curr) =>
-          curr.map((m) => (m.id === userId ? { ...m, pending: false } : m))
-        );
-        this.taskMessages.update((curr) => [
-          ...curr,
-          {
-            id: `task-ack:${Date.now()}`,
-            role: 'system',
-            text: 'Follow-up queued in **Steer** mode. The agent\'s reply streams into the protocol pane\'s activity log.',
-            timestamp: new Date().toISOString()
-          }
-        ]);
-        for (const att of event.attachments) URL.revokeObjectURL(att.previewUrl);
-      },
-      error: (err) => {
-        this.taskSending.set(false);
-        const message = err?.error?.error || err?.message || 'Failed to send follow-up';
-        this.taskMessages.update((curr) =>
-          curr.map((m) =>
-            m.id === userId ? { ...m, pending: false, error: message } : m
-          )
-        );
-      }
-    });
   }
 
   refresh(silent = false): void {

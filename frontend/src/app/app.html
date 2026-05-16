@@ -347,7 +347,8 @@
           [activeWatchPath]="selectedJob()?.info?.watchPath ?? null"
           (createTaskFromDraft)="onCreateTaskFromOrchestratorDraft($event)"
           (openVerboseDebug)="onOpenVerboseDebugFromSheet($event)"
-          (openJobDetail)="onOpenJobDetailFromSheet($event)" />
+          (openJobDetail)="onOpenJobDetailFromSheet($event)"
+          (openSettings)="openOrchestratorSettings()" />
       </div>
 
       <app-status-bar
@@ -409,6 +410,11 @@
       <app-confirm-dialog />
       <app-notification-stack />
       <app-media-lightbox />
+
+      @if (orchestratorSettingsOpen()) {
+        <app-orchestrator-settings-modal
+          (closed)="closeOrchestratorSettings()" />
+      }
 
       @defer (when verboseDebugContext() !== null) {
         @if (verboseDebugContext(); as ctx) {

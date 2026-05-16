@@ -19,7 +19,7 @@ import {
 } from './features/board';
 import { JobDetailComponent, JobSelectionService, TriageController } from './features/job-detail';
 import { CliUsageSheetComponent } from './features/cli';
-import { OrchestratorSideSheetComponent } from './features/orchestrator';
+import { OrchestratorSettingsModalComponent, OrchestratorSideSheetComponent } from './features/orchestrator';
 import {
   DEFAULT_PROJECT_RAIL_KEY,
   ProjectOverlaysComponent,
@@ -75,7 +75,7 @@ interface VerboseDebugContext {
 
 @Component({
   selector: 'app-root',
-  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorSideSheetComponent, ProjectOverlaysComponent, AutoReviewIndicatorComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ConfirmDialogComponent, NotificationStackComponent, MediaLightboxComponent, ProjectTabsComponent, E2ECleanupDialogComponent, WorkspaceOverlaysComponent, WorkspaceBannerComponent, UpdateBannerComponent, UpdateVersionBadgeComponent, UpdateCenterComponent, UpdateBlockModalComponent, VerboseDebugOverlayComponent, FiltersDropdownComponent, KanbanFilterSidesheetComponent, TooltipDirective],
+  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorSideSheetComponent, OrchestratorSettingsModalComponent, ProjectOverlaysComponent, AutoReviewIndicatorComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ConfirmDialogComponent, NotificationStackComponent, MediaLightboxComponent, ProjectTabsComponent, E2ECleanupDialogComponent, WorkspaceOverlaysComponent, WorkspaceBannerComponent, UpdateBannerComponent, UpdateVersionBadgeComponent, UpdateCenterComponent, UpdateBlockModalComponent, VerboseDebugOverlayComponent, FiltersDropdownComponent, KanbanFilterSidesheetComponent, TooltipDirective],
   // Cycle 7b: OnPush. The shell mounts kanban + detail panel + many
   // sheets; default (Default) change detection re-checked the whole
   // tree on every async event (every poll tick, every signal write).
@@ -121,6 +121,12 @@ export class App implements OnInit {
    * task detail isn't currently displayed.
    */
   readonly verboseDebugContext = signal<VerboseDebugContext | null>(null);
+  /**
+   * Orchestrator Settings modal visibility. Replaces the former "Logic" tab
+   * inside the sidesheet; the modal uses the project-shell rail + panel
+   * layout so settings sit visually alongside the project window pattern.
+   */
+  readonly orchestratorSettingsOpen = signal(false);
   /**
    * Cycle 10a: create-job dialog state + open/cancel/submit logic
    * lives in CreateJobFormService. The shell re-exposes the visibility
@@ -461,19 +467,15 @@ export class App implements OnInit {
 
   onPickOrchestratorConfig(): void {
     this.devToolsMenuOpen.set(false);
-    this.orchSideSheetRef?.show();
-    this.orchSideSheetRef?.selectWindowMode('logic');
+    this.openOrchestratorSettings();
   }
 
-  private toggleOrchestratorMode(mode: 'feed' | 'cli'): void {
-    const sheet = this.orchSideSheetRef;
-    if (!sheet) return;
-    if (sheet.open() && sheet.mode() === mode) {
-      sheet.hide();
-      return;
-    }
-    sheet.show();
-    sheet.selectWindowMode(mode);
+  openOrchestratorSettings(): void {
+    this.orchestratorSettingsOpen.set(true);
+  }
+
+  closeOrchestratorSettings(): void {
+    this.orchestratorSettingsOpen.set(false);
   }
 
   constructor(
@@ -709,7 +711,13 @@ export class App implements OnInit {
    * overlay if it is already open.
    */
   toggleOrchFeed(): void {
-    this.toggleOrchestratorMode('feed');
+    if (this.orchFeedProject() !== null) {
+      this.projectOverlays.closeOrchFeed();
+      return;
+    }
+    const project = this.pickOrchFeedProject();
+    if (!project) return;
+    this.projectOverlays.openOrchFeed(project);
   }
 
   closeOrchFeed(): void {
@@ -906,7 +914,7 @@ export class App implements OnInit {
   openCliAdmin(): void { this.workspaceOverlays.openCliAdmin(); }
   closeCliAdmin(): void { this.workspaceOverlays.closeCliAdmin(); }
   toggleCliAdmin(): void {
-    this.toggleOrchestratorMode('cli');
+    this.workspaceOverlays.toggleCliAdmin();
   }
 
   /**
