@@ -1,6 +1,15 @@
-import { Injectable, computed, signal } from '@angular/core';
+import { Injectable, computed, effect, signal } from '@angular/core';
 import type { StudioTab } from '../studio-shell.types';
 import { studioTabKey } from '../studio-shell.types';
+
+const STORAGE_KEY = 'atp.studio.tabs.v1';
+const STORAGE_VERSION = 1;
+
+interface PersistedState {
+  v: number;
+  tabs: StudioTab[];
+  activeKey: string | null;
+}
 
 /**
  * Owns the open-editor-tab list and the active tab for the studio shell.
@@ -8,8 +17,13 @@ import { studioTabKey } from '../studio-shell.types';
  * Behaviour mirrors the VS-Code editor surface: opening a tab that is
  * already present focuses it instead of duplicating; closing the active
  * tab falls back to the last remaining tab (or the welcome screen when
- * the list goes empty). The state is in-memory only — persistence across
- * reloads is a follow-up slice and not required for the first cut.
+ * the list goes empty). Drag-reorder is supported through {@link move}.
+ *
+ * State is persisted to <code>localStorage</code> under the versioned
+ * key {@link STORAGE_KEY} so the editor surface looks the same after a
+ * reload. The version prefix lets us evolve the tab shape without
+ * silently breaking older snapshots; a payload with an unknown version
+ * is dropped rather than crashing the boot.
  */
 @Injectable({ providedIn: 'root' })
 export class StudioTabStateService {
@@ -24,6 +38,19 @@ export class StudioTabStateService {
     if (!key) return null;
     return this._tabs().find(t => studioTabKey(t) === key) ?? null;
   });
+
+  constructor() {
+    this.restore();
+    // Mirror every state change back to localStorage. The effect runs
+    // outside the constructor's injection context implicitly because
+    // it's wired via the field initialiser order; the explicit
+    // `allowSignalWrites: false` default is fine — we only read here.
+    effect(() => {
+      const tabs = this._tabs();
+      const activeKey = this._activeKey();
+      this.persist(tabs, activeKey);
+    });
+  }
 
   /** Open the tab if it's not already there, then focus it. */
   open(tab: StudioTab): void {
@@ -84,5 +111,74 @@ export class StudioTabStateService {
   closeAll(): void {
     this._tabs.set([]);
     this._activeKey.set(null);
+  }
+
+  /**
+   * Reorder: move the tab with <code>sourceKey</code> so it lands in the
+   * slot <em>before</em> the tab with <code>targetKey</code>. Drop on the
+   * source itself is a no-op. To move a tab to the very end, pass
+   * <code>targetKey = null</code>.
+   *
+   * The active tab key never changes — moving the active tab keeps it
+   * focused; moving a non-active tab leaves the focus where it was.
+   */
+  move(sourceKey: string, targetKey: string | null): void {
+    const list = this._tabs();
+    const fromIdx = list.findIndex(t => studioTabKey(t) === sourceKey);
+    if (fromIdx < 0) return;
+    if (sourceKey === targetKey) return;
+
+    const next = list.slice();
+    const [moved] = next.splice(fromIdx, 1);
+
+    if (targetKey === null) {
+      next.push(moved);
+    } else {
+      // After removal the target's index may have shifted left by 1.
+      const targetIdx = next.findIndex(t => studioTabKey(t) === targetKey);
+      if (targetIdx < 0) {
+        // Target vanished mid-flight (rare race). Put it back where it was.
+        next.splice(fromIdx, 0, moved);
+        return;
+      }
+      next.splice(targetIdx, 0, moved);
+    }
+    this._tabs.set(next);
+  }
+
+  // ---- persistence ----------------------------------------------------
+
+  private restore(): void {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = window.localStorage?.getItem(STORAGE_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as PersistedState;
+      if (!parsed || parsed.v !== STORAGE_VERSION) return;
+      if (!Array.isArray(parsed.tabs)) return;
+      // Drop any tab entries that don't round-trip through studioTabKey;
+      // a future StudioTabKind variant the running build doesn't recognise
+      // would otherwise live as a ghost row in the tab bar.
+      const safeTabs = parsed.tabs.filter(t => {
+        try { return typeof studioTabKey(t) === 'string'; }
+        catch { return false; }
+      });
+      this._tabs.set(safeTabs);
+      // Only restore the active key if it points at a surviving tab.
+      const validKey = safeTabs.some(t => studioTabKey(t) === parsed.activeKey);
+      this._activeKey.set(validKey ? parsed.activeKey : (safeTabs.length ? studioTabKey(safeTabs[safeTabs.length - 1]) : null));
+    } catch {
+      // Corrupt payload — drop it. The effect will overwrite next write.
+    }
+  }
+
+  private persist(tabs: StudioTab[], activeKey: string | null): void {
+    if (typeof window === 'undefined') return;
+    try {
+      const payload: PersistedState = { v: STORAGE_VERSION, tabs, activeKey };
+      window.localStorage?.setItem(STORAGE_KEY, JSON.stringify(payload));
+    } catch {
+      /* storage may be full / blocked; signals still reflect live state */
+    }
   }
 }

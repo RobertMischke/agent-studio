@@ -205,6 +205,72 @@ export class StudioShellComponent {
   closeLeft(key: string): void { this.tabState.closeLeft(key); }
   closeAll(): void { this.tabState.closeAll(); }
 
+  // ---- drag-reorder ---------------------------------------------------
+  // Tracks which tab is currently being dragged and which tab the
+  // pointer is hovering over so the template can render an insertion-
+  // marker line + a "ghosted" source row.
+
+  readonly draggingTabKey = signal<string | null>(null);
+  /** Key the drop-marker is rendered before. `__end__` = after the last tab. */
+  readonly dragOverTabKey = signal<string | null>(null);
+
+  onTabDragStart(event: DragEvent, key: string): void {
+    if (!event.dataTransfer) return;
+    event.dataTransfer.effectAllowed = 'move';
+    // The serialized payload isn't read back (we keep the source key in a
+    // signal), but Firefox refuses to start a drag without setData.
+    try { event.dataTransfer.setData('text/x-studio-tab', key); } catch { /* ignore */ }
+    this.draggingTabKey.set(key);
+  }
+
+  onTabDragOver(event: DragEvent, overKey: string): void {
+    if (!this.draggingTabKey()) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    if (this.dragOverTabKey() !== overKey) {
+      this.dragOverTabKey.set(overKey);
+    }
+  }
+
+  onTabDragLeave(_event: DragEvent, overKey: string): void {
+    if (this.dragOverTabKey() === overKey) {
+      this.dragOverTabKey.set(null);
+    }
+  }
+
+  onTabDrop(event: DragEvent, overKey: string): void {
+    event.preventDefault();
+    const source = this.draggingTabKey();
+    this.draggingTabKey.set(null);
+    this.dragOverTabKey.set(null);
+    if (!source || source === overKey) return;
+    this.tabState.move(source, overKey);
+  }
+
+  onTabDragEnd(_event: DragEvent): void {
+    this.draggingTabKey.set(null);
+    this.dragOverTabKey.set(null);
+  }
+
+  /** Drop into the empty trailing region of the tab strip → append. */
+  onTabListDragOver(event: DragEvent): void {
+    if (!this.draggingTabKey()) return;
+    event.preventDefault();
+    if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+    if (this.dragOverTabKey() !== '__end__') {
+      this.dragOverTabKey.set('__end__');
+    }
+  }
+
+  onTabListDrop(event: DragEvent): void {
+    event.preventDefault();
+    const source = this.draggingTabKey();
+    this.draggingTabKey.set(null);
+    this.dragOverTabKey.set(null);
+    if (!source) return;
+    this.tabState.move(source, null);
+  }
+
   /** Right-click context menu state. Coordinates are viewport-relative; the
    *  template positions an absolutely-placed menu at (x, y). One menu at a
    *  time — opening a new one replaces the previous. */
