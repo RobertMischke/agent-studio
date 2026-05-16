@@ -7,7 +7,30 @@
         into the shell's editor slot so the existing handlers
         (drag/drop, triage, dialogs) keep working unchanged.
       -->
+      <app-cli-usage-sheet #usageSheet class="app__sidesheet" />
+      <app-orchestrator-side-sheet
+        #orchSideSheet
+        class="app__sidesheet"
+        [projects]="projectNames()"
+        [preferredProject]="orchSideSheetPreferredProject()"
+        [watchPaths]="watchPaths()"
+        [activeJobId]="selectedJob()?.info?.id ?? null"
+        [activeJobTitle]="selectedJob()?.info?.title ?? null"
+        [activeWatchPath]="selectedJob()?.info?.watchPath ?? null"
+        (createTaskFromDraft)="onCreateTaskFromOrchestratorDraft($event)"
+        (openVerboseDebug)="onOpenVerboseDebugFromSheet($event)"
+        (openJobDetail)="onOpenJobDetailFromSheet($event)"
+        (openSettings)="openOrchestratorSettings()" />
       <app-studio-shell data-testid="studio-shell-root">
+        <app-status-bar studioStatusbar
+          [projectNames]="projectNames()"
+          (toggleUsage)="usageSheet.toggle()"
+          (toggleOrchestrator)="orchSideSheet.toggle()"
+          (toggleFeed)="toggleOrchFeed()"
+          (toggleVisualEvidence)="toggleWorkspaceScreenshots()"
+          (toggleCliAdmin)="toggleCliAdmin()"
+          (defaultCliChange)="onDefaultCliChange($event)"
+          (defaultModelChange)="onDefaultModelChange($event)" />
         <div studioContent class="studio-projected-content">
           @switch (studioTabState.activeTab()?.kind) {
             @case ('board') {

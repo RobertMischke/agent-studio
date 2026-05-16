@@ -50,7 +50,7 @@
 
 .studio {
   display: grid;
-  grid-template-rows: var(--studio-titlebar-h) 1fr;
+  grid-template-rows: var(--studio-titlebar-h) 1fr auto;
   height: 100vh;
   overflow: hidden;
   font-family: 'Inter', -apple-system, 'Segoe UI', 'Helvetica Neue', sans-serif;
@@ -65,6 +65,18 @@
     border: 0;
     padding: 0;
     cursor: pointer;
+  }
+}
+
+.studio-statusbar {
+  background: var(--studio-bg-activitybar);
+  border-top: 1px solid var(--studio-border);
+  min-height: 24px;
+  display: flex;
+  align-items: center;
+  // Let the projected <app-status-bar> drive its own layout.
+  &:empty {
+    display: none;
   }
 }
 
@@ -296,6 +308,11 @@
   &__icon {
     font-size: 18px;
     line-height: 1;
+  }
+
+  &__svg {
+    display: block;
+    color: inherit;
   }
 
   &__spacer {
