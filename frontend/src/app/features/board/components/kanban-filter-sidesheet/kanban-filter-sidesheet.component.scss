@@ -138,7 +138,7 @@
 .sheet__chip--active {
   background: linear-gradient(135deg, rgba(59,130,246,0.50), rgba(99,102,241,0.50));
   border-color: rgba(147,197,253,0.7);
-  color: #ffffff;
+  color: var(--studio-fg-strong);
   font-weight: 600;
 }
 .sheet__chip-icon { font-size: 12px; }
@@ -181,7 +181,7 @@
   align-items: center;
   justify-content: center;
   font-size: 9px;
-  color: #ffffff;
+  color: var(--studio-fg-strong);
   box-shadow: inset 0 0 0 1px rgba(255,255,255,0.10);
 }
 .sheet__swatch--blank {

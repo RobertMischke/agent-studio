@@ -62,7 +62,7 @@
   line-height: 1;
 }
 .statusbar__icon--pulse {
-  color: #4ade80;
+  color: var(--severity-pass);
   animation: statusbar-pulse 1.4s infinite;
 }
 @keyframes statusbar-pulse {
@@ -130,7 +130,7 @@
 }
 .statusbar__menu-item--active {
   background: rgba(99,102,241,0.22);
-  color: #ffffff;
+  color: var(--studio-fg-strong);
 }
 .statusbar__menu-item--meta {
   margin-top: 4px;

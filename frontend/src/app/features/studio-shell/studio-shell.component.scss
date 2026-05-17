@@ -50,6 +50,23 @@
    * accent colours are tuned to take dark text, so this is dark in
    * both themes. */
   --studio-on-accent: #1a1a1a;
+  // ---- Severity (passes / fails / warnings on cards + verdicts) ----
+  // Always read these via `var(--severity-*)`; never repeat the hex.
+  --severity-pass:      #4ade80;  /* green-400 — happy path */
+  --severity-warn:      #f9e2af;  /* yellow-200 — deferred / quiet */
+  --severity-high:      #f38ba8;  /* pink-300 — fail / blocking */
+  --severity-info:      #89b4fa;  /* blue-300 — neutral notice */
+  --severity-pending:   #c4b5fd;  /* violet-300 — running / pending */
+  // ---- Lane palette (kanban states) ----
+  --lane-backlog:       #9d9d9d;
+  --lane-prep:          #d1bfa5;
+  --lane-ready:         #4ec9b0;
+  --lane-progress:      #569cd6;
+  --lane-auto-review:   #f9e2af;
+  --lane-human-review:  #c586c0;
+  --lane-completed:     #5fbf80;
+  --lane-archive:       #6e6e6e;
+  --lane-failed:        #f38ba8;
   // layout
   --studio-activitybar-w: 48px;
   --studio-titlebar-h:    36px;
@@ -77,6 +94,23 @@
   --studio-accent-warn:    #a16207;  /* yellow-700 */
   --studio-accent-success: #15803d;  /* green-700 */
   --studio-accent-6:       #b91c1c;  /* red-700 */
+  // Severity palette darkens for light surfaces so tinted pills stay
+  // readable + the verdict-banner stripe gets a saturated edge.
+  --severity-pass:    #16a34a;  /* green-600 */
+  --severity-warn:    #b45309;  /* amber-700 */
+  --severity-high:    #be123c;  /* rose-700 */
+  --severity-info:    #1d4ed8;  /* blue-700 */
+  --severity-pending: #6d28d9;  /* violet-700 */
+  // Lane palette desaturates for the white shell.
+  --lane-backlog:       #6e6e6e;
+  --lane-prep:          #92745a;
+  --lane-ready:         #15803d;
+  --lane-progress:      #1d4ed8;
+  --lane-auto-review:   #a16207;
+  --lane-human-review:  #7c3aed;
+  --lane-completed:     #15803d;
+  --lane-archive:       #4a4a4a;
+  --lane-failed:        #b91c1c;
 }
 
 .studio {

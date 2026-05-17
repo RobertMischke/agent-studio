@@ -96,9 +96,9 @@
     .chat-mode__pill:hover { color: var(--studio-fg); border-color: rgba(255,255,255,0.28); }
     .chat-mode__icon { font-size: 0.85rem; line-height: 1; }
     .chat-mode__pill--active { color: #1e1e2e; }
-    .chat-mode__pill--active[data-mode="continue"] { background: #89b4fa; border-color: #89b4fa; }
-    .chat-mode__pill--active[data-mode="steer"]    { background: #f9e2af; border-color: #f9e2af; }
-    .chat-mode__pill--active[data-mode="extend"]   { background: #a6e3a1; border-color: #a6e3a1; }
+    .chat-mode__pill--active[data-mode="continue"] { background: var(--severity-info); border-color: var(--severity-info); }
+    .chat-mode__pill--active[data-mode="steer"]    { background: var(--severity-warn); border-color: var(--severity-warn); }
+    .chat-mode__pill--active[data-mode="extend"]   { background: var(--severity-pass); border-color: var(--severity-pass); }
     .chat-mode__pill--active[data-mode="newTask"]  { background: #f5c2e7; border-color: #f5c2e7; }
 
     .chat-compose:has(.chat-mode__pill--active[data-mode="steer"])    { border-color: rgba(249,226,175,0.35); }
@@ -194,7 +194,7 @@
     }
     .model-picker__multiplier--free {
       background: rgba(166, 227, 161, 0.18);
-      color: #a6e3a1;
+      color: var(--severity-pass);
     }
     .meta-multiplier {
       display: inline-block;
@@ -209,12 +209,12 @@
     }
     .meta-multiplier--free {
       background: rgba(166, 227, 161, 0.18);
-      color: #a6e3a1;
+      color: var(--severity-pass);
     }
     .execution-bar__model {
       margin-left: 10px;
       font-family: var(--font-mono, monospace);
-      color: #c4b5fd;
+      color: var(--severity-pending);
       font-size: 0.8rem;
     }
     /* Command-bar styles moved to ./job-detail/command-deck/command-deck.component.scss */
@@ -385,7 +385,7 @@
     }
     .state--1-preparation { background: rgba(139,92,246,0.15); color: #8b5cf6; }
     .state--2-ready { background: rgba(6,182,212,0.15); color: #06b6d4; }
-    .state--3-progress { background: rgba(59,130,246,0.15); color: #3b82f6; }
+    .state--3-progress { background: rgba(59,130,246,0.15); color: var(--severity-info); }
     /* ADR-0025 lanes (auto-review = amber, human-review = sky); legacy
        4-review and 5/6-completed selectors retained so older payloads
        keep matching during the transition. */
@@ -700,7 +700,7 @@
     .inspector__tab--active {
       background: rgba(99,102,241,0.2);
       border-color: rgba(99,102,241,0.4);
-      color: #c4b5fd;
+      color: var(--severity-pending);
     }
     .inspector__body {
       display: flex;
@@ -858,7 +858,7 @@
       padding-left: 18px;
     }
     .markdown-preview :where(code) {
-      color: #c4b5fd;
+      color: var(--severity-pending);
       background: rgba(124,58,237,0.16);
       border-radius: 4px;
       padding: 1px 4px;
@@ -964,7 +964,7 @@
     .execution-bar__pulse {
       width: 8px; height: 8px;
       border-radius: 50%;
-      background: #3b82f6;
+      background: var(--severity-info);
       animation: pulse 1.5s infinite;
     }
     @keyframes pulse {
@@ -1051,7 +1051,7 @@
     .cli-config__title {
       font-size: 13px;
       font-weight: 600;
-      color: #c4b5fd;
+      color: var(--severity-pending);
     }
     .cli-config__row {
       display: flex;
@@ -1080,7 +1080,7 @@
     }
     .cli-config__status--ok {
       background: rgba(34,197,94,0.1);
-      color: #4ade80;
+      color: var(--severity-pass);
     }
     .cli-config__status--err {
       background: rgba(239,68,68,0.1);

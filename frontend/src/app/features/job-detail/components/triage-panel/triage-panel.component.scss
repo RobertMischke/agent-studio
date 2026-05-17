@@ -34,7 +34,7 @@
 
   &:hover:not(:disabled) {
     background: var(--studio-bg-hover, rgba(255,255,255,0.04));
-    color: var(--studio-fg-strong, #ffffff);
+    color: var(--studio-fg-strong, var(--studio-fg-strong));
     border-color: var(--studio-border-strong, #3c3c3c);
   }
   &:disabled { opacity: 0.55; cursor: not-allowed; }
@@ -42,7 +42,7 @@
   &-icon {
     display: inline-grid;
     place-items: center;
-    color: var(--studio-fg-dim, #9d9d9d);
+    color: var(--studio-fg-dim, var(--lane-backlog));
   }
   &-label {
     flex: 1;
@@ -101,7 +101,7 @@
 
 .triage__menu-sub {
   font-size: 10px;
-  color: var(--studio-fg-muted, #9d9d9d);
+  color: var(--studio-fg-muted, var(--lane-backlog));
   margin-left: auto;
   font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
 }
@@ -119,7 +119,7 @@
 .triage__menu-empty {
   padding: 8px 10px;
   font-size: 12px;
-  color: var(--studio-fg-muted, #9d9d9d);
+  color: var(--studio-fg-muted, var(--lane-backlog));
   font-style: italic;
 }
 
@@ -139,7 +139,7 @@
 
   &:hover:not(:disabled) {
     background: var(--studio-bg-hover, rgba(255,255,255,0.05));
-    color: var(--studio-fg-strong, #ffffff);
+    color: var(--studio-fg-strong, var(--studio-fg-strong));
   }
   &:disabled { opacity: 0.45; cursor: not-allowed; }
 
@@ -154,7 +154,7 @@
   }
 
   &--danger {
-    color: #f38ba8;
+    color: var(--severity-high);
     &:hover:not(:disabled) {
       background: rgba(243, 139, 168, 0.14);
       color: #ffb1c4;
@@ -181,7 +181,7 @@
 /* ---- Light theme overrides --------------------------------------------- */
 html[data-studio-theme='light'] {
   .triage__trigger {
-    background: #ffffff;
+    background: var(--studio-fg-strong);
     border-color: #d4d4d4;
     color: #1a1a1a;
     &:hover:not(:disabled) {
@@ -193,7 +193,7 @@ html[data-studio-theme='light'] {
     &-caret { color: #888888; }
   }
   .triage__menu {
-    background: #ffffff;
+    background: var(--studio-fg-strong);
     border-color: #d4d4d4;
     box-shadow: 0 -12px 32px rgba(0, 0, 0, 0.14);
   }

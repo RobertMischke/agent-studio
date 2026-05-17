@@ -14,7 +14,7 @@
   padding: 10px 14px;
   background: rgba(243, 139, 168, 0.10);
   border: 1px solid rgba(243, 139, 168, 0.30);
-  color: #f38ba8;
+  color: var(--severity-high);
   border-radius: 6px;
   font-size: 0.85rem;
 }
@@ -45,7 +45,7 @@
   gap: 6px;
 }
 .tup__card--total { border-top: 3px solid #94e2d5; }
-.tup__card--job { border-top: 3px solid #89b4fa; }
+.tup__card--job { border-top: 3px solid var(--severity-info); }
 .tup__card--supporting { border-top: 3px solid #cba6f7; }
 .tup__card--orchestrator { border-top: 3px solid #fab387; }
 .tup__card-title {
@@ -82,7 +82,7 @@
 .tup__timeline-bar {
   flex: 1;
   min-width: 4px;
-  background: #89b4fa;
+  background: var(--severity-info);
   border-radius: 2px 2px 0 0;
   position: relative;
   min-height: 1px;
@@ -147,7 +147,7 @@
   width: 18px;
   text-align: center;
 }
-.tup__heatmap-row-cat--job { color: #89b4fa; }
+.tup__heatmap-row-cat--job { color: var(--severity-info); }
 .tup__heatmap-row-cat--supporting { color: #cba6f7; }
 .tup__heatmap-row-cat--orchestrator { color: #fab387; }
 .tup__heatmap-row-title {
@@ -207,7 +207,7 @@
   text-align: center;
   font-weight: 600;
 }
-.tup__expensive-cat--job { background: rgba(137, 180, 250, 0.16); color: #89b4fa; }
+.tup__expensive-cat--job { background: rgba(137, 180, 250, 0.16); color: var(--severity-info); }
 .tup__expensive-cat--supporting { background: rgba(203, 166, 247, 0.18); color: #cba6f7; }
 .tup__expensive-cat--orchestrator { background: rgba(250, 179, 135, 0.18); color: #fab387; }
 .tup__expensive-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -262,7 +262,7 @@
   border-radius: 999px;
   font-weight: 600;
 }
-.tup__drill-summary-cat--job { background: rgba(137, 180, 250, 0.16); color: #89b4fa; }
+.tup__drill-summary-cat--job { background: rgba(137, 180, 250, 0.16); color: var(--severity-info); }
 .tup__drill-summary-cat--supporting { background: rgba(203, 166, 247, 0.18); color: #cba6f7; }
 .tup__drill-summary-cat--orchestrator { background: rgba(250, 179, 135, 0.18); color: #fab387; }
 .tup__drill-summary-total { font-weight: 600; color: var(--studio-fg-strong); }
@@ -291,8 +291,8 @@
   font-size: 0.74rem;
   color: var(--studio-fg-muted);
 }
-.tup__drill-run-delta--up { color: #f38ba8; }
-.tup__drill-run-delta--down { color: #a6e3a1; }
+.tup__drill-run-delta--up { color: var(--severity-high); }
+.tup__drill-run-delta--down { color: var(--severity-pass); }
 .tup__drill-run-summary {
   color: var(--studio-fg-muted);
   font-size: 0.74rem;

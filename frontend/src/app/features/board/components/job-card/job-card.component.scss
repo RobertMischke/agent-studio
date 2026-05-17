@@ -33,7 +33,7 @@
     }
     .job-card--1-preparation { --state-color: #8b5cf6; }
     .job-card--2-ready { --state-color: #06b6d4; }
-    .job-card--3-progress { --state-color: #3b82f6; }
+    .job-card--3-progress { --state-color: var(--severity-info); }
     /* ADR-0025: distinct accents for the two review lanes - amber for the
        orchestrator's machine pass, sky for human-attention. The legacy
        4-review class is kept for any data still rendering the old name. */
@@ -207,7 +207,7 @@
       letter-spacing: 0.02em;
     }
     .job-card__pending-pill {
-      color: #f9e2af;
+      color: var(--severity-warn);
       background: rgba(249, 226, 175, 0.12);
       border: 1px solid rgba(249, 226, 175, 0.28);
       cursor: help;
@@ -441,7 +441,7 @@
       letter-spacing: 0.02em;
       padding: 1px 7px;
       border-radius: 999px;
-      color: #f1f5f9;
+      color: var(--studio-fg-strong);
       background: color-mix(in srgb, var(--tag-color, var(--studio-fg-dim)) 22%, rgba(0,0,0,0));
       border: 1px solid var(--tag-color, var(--studio-fg-dim));
     }
@@ -476,7 +476,7 @@
       margin-bottom: 4px;
     }
     .job-card__model {
-      color: #c4b5fd;
+      color: var(--severity-pending);
       font-family: var(--font-mono, monospace);
       font-size: 11px;
     }

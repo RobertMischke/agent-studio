@@ -16,7 +16,7 @@
   padding: 10px 14px;
   background: rgba(243, 139, 168, 0.10);
   border: 1px solid rgba(243, 139, 168, 0.30);
-  color: #f38ba8;
+  color: var(--severity-high);
   border-radius: 6px;
   font-size: 0.85rem;
 }
@@ -97,7 +97,7 @@
 .ux-panel__btn:disabled { opacity: 0.5; cursor: not-allowed; }
 .ux-panel__btn--primary {
   background: rgba(166, 227, 161, 0.18);
-  color: #a6e3a1;
+  color: var(--severity-pass);
   border-color: rgba(166, 227, 161, 0.40);
 }
 .ux-panel__btn--primary:hover:not(:disabled) { background: rgba(166, 227, 161, 0.28); }
@@ -111,9 +111,9 @@
   border: 1px solid transparent;
   font-weight: 600;
 }
-.ux-panel__chip--error { background: rgba(243, 139, 168, 0.16); color: #f38ba8; border-color: rgba(243, 139, 168, 0.36); }
-.ux-panel__chip--ok { background: rgba(166, 227, 161, 0.16); color: #a6e3a1; border-color: rgba(166, 227, 161, 0.36); }
-.ux-panel__chip--bad { background: rgba(243, 139, 168, 0.16); color: #f38ba8; border-color: rgba(243, 139, 168, 0.36); }
+.ux-panel__chip--error { background: rgba(243, 139, 168, 0.16); color: var(--severity-high); border-color: rgba(243, 139, 168, 0.36); }
+.ux-panel__chip--ok { background: rgba(166, 227, 161, 0.16); color: var(--severity-pass); border-color: rgba(166, 227, 161, 0.36); }
+.ux-panel__chip--bad { background: rgba(243, 139, 168, 0.16); color: var(--severity-high); border-color: rgba(243, 139, 168, 0.36); }
 
 .ux-panel__tag {
   font-size: 0.70rem;
@@ -124,10 +124,10 @@
   border: 1px solid rgba(255,255,255,0.10);
   text-transform: capitalize;
 }
-.ux-panel__tag--workflow { background: rgba(137,180,250,0.18); color: #89b4fa; border-color: rgba(137,180,250,0.40); }
+.ux-panel__tag--workflow { background: rgba(137,180,250,0.18); color: var(--severity-info); border-color: rgba(137,180,250,0.40); }
 .ux-panel__tag--polish { background: rgba(245,194,231,0.18); color: #f5c2e7; border-color: rgba(245,194,231,0.40); }
-.ux-panel__tag--a11y { background: rgba(249,226,175,0.18); color: #f9e2af; border-color: rgba(249,226,175,0.40); }
-.ux-panel__tag--product { background: rgba(166,227,161,0.18); color: #a6e3a1; border-color: rgba(166,227,161,0.40); }
+.ux-panel__tag--a11y { background: rgba(249,226,175,0.18); color: var(--severity-warn); border-color: rgba(249,226,175,0.40); }
+.ux-panel__tag--product { background: rgba(166,227,161,0.18); color: var(--severity-pass); border-color: rgba(166,227,161,0.40); }
 .ux-panel__tag--visual { background: rgba(203,166,247,0.18); color: #cba6f7; border-color: rgba(203,166,247,0.40); }
 .ux-panel__tag--interaction { background: rgba(148,226,213,0.18); color: #94e2d5; border-color: rgba(148,226,213,0.40); }
 .ux-panel__tag--neutral { background: rgba(255,255,255,0.06); color: var(--studio-fg); }
@@ -152,7 +152,7 @@
 
 .ux-panel__warning {
   margin: 0;
-  color: #f9e2af;
+  color: var(--severity-warn);
   font-size: 0.78rem;
   padding: 6px 10px;
   background: rgba(249, 226, 175, 0.08);

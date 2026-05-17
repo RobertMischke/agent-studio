@@ -110,7 +110,7 @@
       font-weight: 900;
       font-style: italic;
       letter-spacing: 0.02em;
-      background: linear-gradient(135deg, #a5b4fc 0%, #818cf8 40%, #c4b5fd 100%);
+      background: linear-gradient(135deg, #a5b4fc 0%, #818cf8 40%, var(--severity-pending) 100%);
       -webkit-background-clip: text;
       background-clip: text;
       color: transparent;
@@ -208,7 +208,7 @@
     .active-filter-strip__pill--tag {
       background: rgba(255, 255, 255, 0.04);
       border-color: rgba(255, 255, 255, 0.20);
-      color: #f1f5f9;
+      color: var(--studio-fg-strong);
     }
     .active-filter-strip__pill-kind {
       font-size: 10px;
@@ -300,12 +300,12 @@
     .filter-chip:hover {
       background: var(--project-soft, rgba(255,255,255,0.18));
       border-color: var(--project-border, rgba(255,255,255,0.30));
-      color: #ffffff;
+      color: var(--studio-fg-strong);
     }
     .filter-chip--active {
       background: var(--project-soft, rgba(139,92,246,0.45));
       border-color: var(--project-border, rgba(167,139,250,0.85));
-      color: #ffffff;
+      color: var(--studio-fg-strong);
       box-shadow: 0 0 0 1px var(--project-border, rgba(167,139,250,0.25)), 0 2px 6px rgba(0,0,0,0.30);
     }
     .filter-chip--active:hover {
@@ -337,7 +337,7 @@
     }
     .filter-chip--active .filter-chip__tokens {
       background: rgba(255, 255, 255, 0.18);
-      color: #ffffff;
+      color: var(--studio-fg-strong);
     }
     .filter-chip__tokens-icon {
       opacity: 0.7;
@@ -454,7 +454,7 @@
     .btn--create {
       background: rgba(139,92,246,0.45);
       border-color: rgba(167,139,250,0.85);
-      color: #ffffff;
+      color: var(--studio-fg-strong);
       box-shadow: 0 1px 4px rgba(139,92,246,0.30);
     }
     .btn--create:hover { background: rgba(139,92,246,0.6); border-color: rgba(196,181,253,0.95); }
@@ -514,7 +514,7 @@
       height: 18px;
       border-radius: 999px;
       background: rgba(99,102,241,0.55);
-      color: #ffffff;
+      color: var(--studio-fg-strong);
       font-size: 11px;
       font-weight: 700;
       display: inline-flex;
@@ -926,7 +926,7 @@
       gap: 6px;
       background: linear-gradient(135deg, rgba(129,140,248,0.85) 0%, rgba(167,139,250,0.85) 100%);
       border: 1px solid rgba(167,139,250,0.75);
-      color: #ffffff;
+      color: var(--studio-fg-strong);
       padding: 5px 14px;
       border-radius: 6px;
       font-size: 12px;
@@ -1231,7 +1231,7 @@
     .btn--danger {
       background: rgba(239,68,68,0.75);
       border-color: rgba(248,113,113,0.85);
-      color: #ffffff;
+      color: var(--studio-fg-strong);
     }
     .btn--danger:hover:not(:disabled) {
       background: rgba(239,68,68,0.92);
@@ -1422,7 +1422,7 @@
     .create-tag-picker__chip--active {
       background: color-mix(in srgb, var(--tag-color, var(--studio-fg-dim)) 22%, rgba(0,0,0,0));
       border-color: var(--tag-color, var(--studio-fg-dim));
-      color: #f1f5f9;
+      color: var(--studio-fg-strong);
     }
     .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
     /* Inside the create-task dialog, the flex container already supplies
@@ -1923,7 +1923,7 @@
     .task-nav__add:hover {
       background: rgba(139, 92, 246, 0.16);
       border-color: rgba(139, 92, 246, 0.5);
-      color: #c4b5fd;
+      color: var(--severity-pending);
     }
     .task-nav__resize-handle {
       position: absolute;
