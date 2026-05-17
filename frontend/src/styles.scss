@@ -76,28 +76,29 @@ html[data-studio-theme='light'] {
   .job-card__cli-name, .job-card__owner-name {
     color: #6e6e6e;
   }
-  // Pills and small chips on the card — flip to readable dark text on a
-  // soft light background so the "Local Default", state badge, branch
-  // tag etc. don't disappear on a white surface.
+  // Pills and small chips on the card. The component-side SCSS was
+  // migrated to var(--studio-*) tokens in Wave A.2 — these overrides
+  // now win on specificity alone (no !important needed) because the
+  // component values are now CSS variables that resolve to the light
+  // theme correctly. Kept the colours that diverge from token defaults
+  // (chip backgrounds are component-local, not in the studio palette).
   .job-card__owner-chip {
-    background: rgba(0, 0, 0, 0.05) !important;
-    border-color: rgba(0, 0, 0, 0.10) !important;
-    color: #3a3a3a !important;
+    background: rgba(0, 0, 0, 0.05);
+    border-color: rgba(0, 0, 0, 0.10);
+    color: #3a3a3a;
   }
   .job-card__order {
-    background: rgba(0, 0, 0, 0.06) !important;
-    color: #4a4a4a !important;
+    background: rgba(0, 0, 0, 0.06);
+    color: #4a4a4a;
   }
-  .job-card__delete {
-    color: #8a8f99 !important;
-  }
+  .job-card__delete { color: var(--studio-fg-muted); }
   .job-card__delete:hover {
-    background: rgba(220, 38, 38, 0.08) !important;
-    border-color: rgba(220, 38, 38, 0.30) !important;
-    color: #b91c1c !important;
+    background: rgba(220, 38, 38, 0.08);
+    border-color: rgba(220, 38, 38, 0.30);
+    color: #b91c1c;
   }
-  // Card title — dark on white instead of the dark-theme #e2e8f0.
-  .job-card__title { color: #1a1a1a !important; }
+  // Card title now reads var(--studio-fg) component-side which already
+  // resolves to dark in light theme — no bridge override needed.
   .dashboard,
   .dashboard--studio { background: #f3f3f3; }
   .lane-group { background: #ffffff; border-color: #e1e1e1; }
@@ -280,7 +281,7 @@ html[data-studio-theme='light'] {
   // orange. Re-tone the light variant to a muted greyscale baseline
   // with the brand orange highlighting the active mode.
   .chat-mode {
-    border-bottom-color: rgba(0, 0, 0, 0.08) !important;
+    border-bottom-color: rgba(0, 0, 0, 0.08);
   }
   .chat-mode__label {
     color: #4a4a4a;
@@ -349,14 +350,17 @@ html[data-studio-theme='light'] {
     border-top-color: #e1e1e1;
   }
   .status-bar__item, .status-bar__label { color: #1a1a1a; }
+  // The wrapping `html[data-studio-theme='light']` already gives these
+  // selectors specificity (0,2,0), beating the component-side
+  // (0,1,0) `.statusbar` declaration; no !important needed.
   .statusbar {
-    background: #ececec !important;
-    color: #1a1a1a !important;
-    border-top-color: #d4d4d4 !important;
+    background: #ececec;
+    color: #1a1a1a;
+    border-top-color: #d4d4d4;
     font-weight: 500;
   }
   // Default text inside any item — full dark, not greyish.
-  .statusbar__item { color: #1a1a1a !important; }
+  .statusbar__item { color: #1a1a1a; }
   .statusbar__item--ro { color: #1a1a1a; }
   // Active "running" pulse stays accent-green when actually running;
   // when count is 0 the bullet falls back to the muted fg so the eye
