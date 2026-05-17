@@ -5,7 +5,7 @@
       <span>{{ runningCount() }} running</span>
     </span>
     <span class="statusbar__item statusbar__item--ro" [appTooltip]="autoTooltip()">
-      <span class="statusbar__icon">🔁</span>
+      <span class="statusbar__icon">↻</span>
       <span>{{ autoCount() }}/{{ projectCount() }} auto</span>
     </span>
   </div>
@@ -22,24 +22,24 @@
     <button class="statusbar__item statusbar__item--btn"
             [appTooltip]="'CLI sessions'"
             (click)="toggleUsage.emit()">
-      <span class="statusbar__icon">🪙</span><span>Usage</span>
+      <span class="statusbar__icon">▦</span><span>Usage</span>
     </button>
     <button class="statusbar__item statusbar__item--btn"
             data-testid="orch-side-sheet-toggle"
             [appTooltip]="'Orchestrator chat'"
             (click)="toggleOrchestrator.emit()">
-      <span class="statusbar__icon">🤖</span><span>Orchestrator</span>
+      <span class="statusbar__icon">◈</span><span>Orchestrator</span>
     </button>
     <button class="statusbar__item statusbar__item--btn"
             [appTooltip]="'Orchestrator feed'"
             (click)="toggleFeed.emit()">
-      <span class="statusbar__icon">📜</span><span>Feed</span>
+      <span class="statusbar__icon">⌖</span><span>Feed</span>
     </button>
     <button class="statusbar__item statusbar__item--btn"
             data-testid="status-bar-visual-evidence"
             [appTooltip]="'Workspace visual evidence (screenshots across projects)'"
             (click)="toggleVisualEvidence.emit()">
-      <span class="statusbar__icon">📷</span><span>Visual evidence</span>
+      <span class="statusbar__icon">◉</span><span>Visual evidence</span>
     </button>
     <button class="statusbar__item statusbar__item--btn"
             data-testid="status-bar-cli-admin"

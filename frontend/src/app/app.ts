@@ -475,10 +475,6 @@ export class App implements OnInit {
     this.jobDetailRef?.togglePane(pane);
   }
 
-  onShellOpenInVsCode(): void {
-    this.jobDetailRef?.openInVsCode();
-  }
-
   onPickDeleteE2E(): void {
     this.devToolsMenuOpen.set(false);
     this.showE2ECleanup.set(true);

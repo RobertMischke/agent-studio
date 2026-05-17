@@ -132,6 +132,114 @@ html[data-studio-theme='light'] {
   }
   .pane__title, .pane__body { color: #1a1a1a; }
 
+  // ---- Job detail panes — deep override sweep ----
+  // The job-detail SCSS files use unscoped classes with hardcoded
+  // Catppuccin dark hexes (#cdd6f4 / #a6adc8 / #181825 / rgba(255,255,255,*))
+  // that bleed through under light mode. Scope these to the `.detail`
+  // container so we only re-skin task-detail descendants and don't
+  // accidentally affect the board.
+  .detail {
+    // Common Catppuccin text colors → readable dark on white.
+    .session-usage__value,
+    .activity-metrics__value,
+    .chat-compose__input,
+    .prompt-history__title,
+    .title-history__title,
+    .pane-tab,
+    .cr-title,
+    .cr-summary,
+    .cr-body,
+    .cr-row,
+    .evidence-row,
+    .evidence-panel,
+    .triage,
+    .commandbar,
+    .hygiene-strip,
+    .git-tree,
+    .run-card,
+    .results-view,
+    .results-banner,
+    .results-figure {
+      color: #1a1a1a;
+    }
+    .session-usage__label,
+    .activity-metrics__label,
+    .prompt-history__hint,
+    .title-history__hint,
+    .title-history__time,
+    .pane-tab,
+    .cr-meta {
+      color: #6e6e6e;
+    }
+    // Surfaces — light tints instead of rgba(255,255,255,*) which
+    // disappears entirely on a white background.
+    .session-usage,
+    .chat-compose,
+    .prompt-history__entry,
+    .title-history__entry,
+    .run-card,
+    .results-banner,
+    .results-figure,
+    .results-code,
+    .cr-row,
+    .evidence-panel,
+    .evidence-row,
+    .interim-summary,
+    .auto-eval,
+    .run-filter-banner,
+    .evidence-followup-banner,
+    .next-gen-chat-trace-banner {
+      background: #f8f8f8;
+      border-color: #e1e1e1;
+    }
+    .chat-compose__input {
+      background: #ffffff;
+      border-color: #d4d4d4;
+    }
+    .chat-compose__input::placeholder { color: #888; }
+    // Pane-tabs strip (Prompt / Title history) above the prompt-history list.
+    .pane-tabs { border-bottom-color: #e1e1e1; }
+    .pane-tab:hover { background: rgba(0,0,0,0.05); color: #1a1a1a; }
+    .pane-tab--active { color: #1a1a1a; border-bottom-color: var(--studio-accent, #d97757); }
+    // Code-review status / verdict pills keep their semantic accent
+    // but render on a softer light container.
+    .cr-verdict-pass { background: rgba(34,197,94,0.10); color: #166534; }
+    .cr-verdict-concerns { background: rgba(234,179,8,0.10); color: #854d0e; }
+    .cr-verdict-block { background: rgba(239,68,68,0.10); color: #991b1b; }
+    .cr-empty, .cr-running { color: #6e6e6e; }
+    .cr-error { background: rgba(239,68,68,0.10); color: #991b1b; border-color: rgba(239,68,68,0.30); }
+    // Evidence panel buttons + chevrons.
+    .evidence-btn {
+      background: rgba(0,0,0,0.04);
+      color: #1a1a1a;
+      border-color: #d4d4d4;
+    }
+    .evidence-btn:hover { background: rgba(0,0,0,0.08); }
+    .evidence-btn--primary {
+      background: var(--studio-accent, #d97757);
+      color: #ffffff;
+      border-color: var(--studio-accent, #d97757);
+    }
+    .evidence-empty { color: #6e6e6e; }
+    .evidence-empty code { background: rgba(0,0,0,0.05); color: #1a1a1a; }
+    // Spinners / status text.
+    .spinner-ring { border-color: rgba(0,0,0,0.10); border-top-color: var(--studio-accent, #d97757); }
+    .summary-error { background: rgba(239,68,68,0.10); color: #991b1b; }
+    .protocol-verdict { color: #1a1a1a; }
+    // Run timeline cards.
+    .run-card { background: #ffffff; border-color: #e1e1e1; color: #1a1a1a; }
+    .run-card--peek { opacity: 0.85; }
+    // Outcome dialog backdrop / dialog interior.
+    .outcome-dialog-backdrop { background: rgba(15,15,30,0.45); }
+    .outcome-dialog { background: #ffffff; color: #1a1a1a; border-color: #e1e1e1; }
+    // Triage panel internals.
+    .triage { background: #ffffff; border-color: #e1e1e1; }
+    // Hygiene strip badges.
+    .project-hygiene-badge { color: #1a1a1a; background: rgba(0,0,0,0.04); border-color: #d4d4d4; }
+    .project-hygiene-badge--dirty { background: rgba(234,179,8,0.10); color: #854d0e; }
+    .project-hygiene-badge--unpushed { background: rgba(59,130,246,0.10); color: #1d4ed8; }
+  }
+
   // ---- Status bar (bottom) ----
   // The shell ships two status bars — the legacy .status-bar wrapper and
   // the VS Code-flavored .statusbar (no dash) inside <app-status-bar>.

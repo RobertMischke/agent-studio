@@ -46,6 +46,15 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+  // Clamp the visible height so a long evidence list scrolls inside the
+  // panel instead of pushing the rest of the protocol pane (code-review,
+  // inspector, chat compose) off-screen. The panel header + count stay
+  // visible while the user scrolls through the rows.
+  max-height: 360px;
+  overflow-y: auto;
+  // Modest inset so the scrollbar doesn't sit flush against the row
+  // border-left severity stripes.
+  padding-right: 4px;
 }
 .evidence-row {
   border: 1px solid rgba(255,255,255,0.08);

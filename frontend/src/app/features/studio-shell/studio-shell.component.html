@@ -50,7 +50,7 @@
               data-testid="studio-titlebar-chat"
               title="Open project chat (orchestrator side sheet)"
               (click)="chatToggle.emit()">
-        <span aria-hidden="true">💬</span>
+        <span aria-hidden="true">◈</span>
         <span>Project Chat</span>
       </button>
       <button type="button"
@@ -135,6 +135,15 @@
         <!-- Header per panel -->
         <div class="studio-sidebar__header">
           <span class="studio-sidebar__title">{{ activePanel() }}</span>
+          <span class="studio-sidebar__spacer"></span>
+          @if (activePanel() === 'explorer') {
+            <button type="button"
+                    class="studio-sidebar__action"
+                    data-testid="studio-sidebar-add-workspace"
+                    title="Add a project to the workspace"
+                    aria-label="Add a project to the workspace"
+                    (click)="onAddWorkspace()">+</button>
+          }
         </div>
         <div class="studio-sidebar__body">
           @switch (activePanel()) {
