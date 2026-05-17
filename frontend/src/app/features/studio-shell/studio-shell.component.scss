@@ -860,11 +860,17 @@
     min-height: 36px;
   }
 
-  // Hide the standalone command-deck + pane-toggle-bar. The studio shell
-  // surfaces start/stop through the chat composer and pane toggles
-  // through tab actions, so these stay in the legacy chrome only.
+  // Hide the wide legacy chrome — the studio tab-bar slim header
+  // already surfaces pane toggles + pager + complete, and the
+  // start/stop control now lives inside the chat composer at the
+  // bottom of the protocol pane. The legacy detail header strip
+  // (back button + title + state badges + pager) is hidden too
+  // since the title sits in the tab and the same actions are in
+  // the slim tab-bar header.
+  app-detail-header,
   app-command-deck,
-  app-pane-toggle-bar {
+  app-pane-toggle-bar,
+  .detail__header {
     display: none;
   }
 
