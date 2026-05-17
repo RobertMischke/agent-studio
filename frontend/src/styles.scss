@@ -158,6 +158,45 @@ html[data-studio-theme='light'] {
   }
 }
 
+/* ============================================================
+ * Side-sheet positioning fix in studio mode.
+ *
+ * The three side sheets (orchestrator chat, CLI usage, kanban
+ * filter) were designed to participate in flex layout next to the
+ * legacy dashboard. In the studio shell they live as siblings of
+ * <app-studio-shell> with no flex parent, so when they opened they
+ * rendered at the top-left of the document body — pushing the
+ * studio shell down by ~360 px. (Reported: "Chatfensterchen ist
+ * oben, startet nicht zentriert".)
+ *
+ * Fix: when studio mode is active, pin each sheet to the right edge
+ * of the viewport between the titlebar and the status bar. Closed
+ * sheets keep their `width: 0` from the host CSS so they remain
+ * invisible; open sheets get their full width but as a fixed
+ * overlay instead of an inline flex item.
+ * ============================================================ */
+html[data-studio-theme] body app-orchestrator-side-sheet,
+html[data-studio-theme] body app-cli-usage-sheet,
+html[data-studio-theme] body app-kanban-filter-sidesheet {
+  position: fixed;
+  top: var(--studio-titlebar-h, 36px);
+  right: 0;
+  bottom: 24px;
+  z-index: 50;
+  pointer-events: auto;
+  // The host's own width transition still runs (width: 0 closed,
+  // min(...) open) and our fixed positioning keeps the panel pinned
+  // to the right edge regardless of layout siblings.
+  overflow: hidden;
+}
+html[data-studio-theme] body app-orchestrator-side-sheet:not(.is-open),
+html[data-studio-theme] body app-cli-usage-sheet:not(.is-open),
+html[data-studio-theme] body app-kanban-filter-sidesheet:not(.is-open) {
+  // Closed sheets must not catch pointer events even though they
+  // are fixed at zero width.
+  pointer-events: none;
+}
+
 /* Hide the text caret on every non-text-input surface. Clicking a card,
  * button, heading, etc. should never leave a blinking I-beam behind. Real
  * text-entry surfaces (form fields and rich-text contenteditable hosts)
