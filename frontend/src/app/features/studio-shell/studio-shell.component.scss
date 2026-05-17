@@ -6,46 +6,77 @@
 // titlebar toggle re-skins the entire shell without re-rendering.
 // =========================================================================
 
+/*
+ * Studio shell tokens — the canonical palette. Every other SCSS file
+ * should read these via `var(--studio-*)` instead of hardcoding a hex.
+ * See docs/frontend-scss-quality.md for the migration plan.
+ *
+ * Layer-by-layer:
+ *   bg-*        surfaces
+ *   border-*    separators
+ *   fg-*        foreground text
+ *   accent-*    brand + semantic accents (success/warn/error/info)
+ *   on-accent   text colour to use ON an accent-coloured fill
+ *   size tokens layout dimensions
+ */
 :root {
-  --studio-bg-titlebar: #1e1e1e;
+  // surfaces
+  --studio-bg-titlebar:    #1e1e1e;
   --studio-bg-activitybar: #181818;
-  --studio-bg-sidebar: #1f1f1f;
-  --studio-bg-editor: #1e1e1e;
-  --studio-bg-elevated: #252526;
-  --studio-bg-tab-active: #1e1e1e;
+  --studio-bg-sidebar:     #1f1f1f;
+  --studio-bg-editor:      #1e1e1e;
+  --studio-bg-elevated:    #252526;
+  --studio-bg-tab-active:   #1e1e1e;
   --studio-bg-tab-inactive: #2d2d2d;
-  --studio-bg-hover: rgba(255, 255, 255, 0.04);
+  --studio-bg-hover:    rgba(255, 255, 255, 0.04);
   --studio-bg-selected: rgba(217, 119, 87, 0.12);
-  --studio-border: #2b2b2b;
+  // separators
+  --studio-border:        #2b2b2b;
   --studio-border-strong: #3c3c3c;
-  --studio-fg: #cccccc;
+  // foreground
+  --studio-fg:        #cccccc;
   --studio-fg-strong: #ffffff;
-  --studio-fg-dim: #9d9d9d;
-  --studio-fg-muted: #6e6e6e;
-  --studio-accent: #d97757;
-  --studio-accent-2: #4ec9b0;
-  --studio-accent-3: #569cd6;
+  --studio-fg-dim:    #9d9d9d;
+  --studio-fg-muted:  #6e6e6e;
+  // accents — brand + semantic; alpha derivatives use color-mix()
+  --studio-accent:         #d97757;  /* brand orange */
+  --studio-accent-2:       #4ec9b0;  /* teal — also legacy 'success' alias */
+  --studio-accent-3:       #569cd6;  /* blue — info */
+  --studio-accent-4:       #c586c0;  /* purple */
+  --studio-accent-warn:    #cca700;  /* yellow */
+  --studio-accent-success: #16a34a;  /* green */
+  --studio-accent-6:       #ef4444;  /* red */
+  /* Text to use ON an accent fill (e.g. a brand-orange button). The
+   * accent colours are tuned to take dark text, so this is dark in
+   * both themes. */
+  --studio-on-accent: #1a1a1a;
+  // layout
   --studio-activitybar-w: 48px;
-  --studio-titlebar-h: 36px;
-  --studio-tabbar-h: 36px;
+  --studio-titlebar-h:    36px;
+  --studio-tabbar-h:      36px;
 }
 
 [data-studio-theme='light'] {
-  --studio-bg-titlebar: #f3f3f3;
-  --studio-bg-activitybar: #ececec;
-  --studio-bg-sidebar: #f8f8f8;
-  --studio-bg-editor: #ffffff;
-  --studio-bg-elevated: #ececec;
-  --studio-bg-tab-active: #ffffff;
+  --studio-bg-titlebar:     #f3f3f3;
+  --studio-bg-activitybar:  #ececec;
+  --studio-bg-sidebar:      #f8f8f8;
+  --studio-bg-editor:       #ffffff;
+  --studio-bg-elevated:     #ececec;
+  --studio-bg-tab-active:   #ffffff;
   --studio-bg-tab-inactive: #ececec;
-  --studio-bg-hover: rgba(0, 0, 0, 0.05);
+  --studio-bg-hover:    rgba(0, 0, 0, 0.05);
   --studio-bg-selected: rgba(217, 119, 87, 0.15);
-  --studio-border: #d4d4d4;
+  --studio-border:        #d4d4d4;
   --studio-border-strong: #b4b4b4;
-  --studio-fg: #333333;
+  --studio-fg:        #333333;
   --studio-fg-strong: #1a1a1a;
-  --studio-fg-dim: #555555;
-  --studio-fg-muted: #888888;
+  --studio-fg-dim:    #555555;
+  --studio-fg-muted:  #888888;
+  // Semantic accents land slightly darker on light surfaces so the
+  // text stays readable on a tinted-low-alpha pill.
+  --studio-accent-warn:    #a16207;  /* yellow-700 */
+  --studio-accent-success: #15803d;  /* green-700 */
+  --studio-accent-6:       #b91c1c;  /* red-700 */
 }
 
 .studio {
