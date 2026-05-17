@@ -459,6 +459,19 @@
 .studio-tree-children {
   display: flex;
   flex-direction: column;
+  position: relative;
+
+  // Subtle vertical hierarchy line so the sub-items read as children of
+  // the parent project row above them.
+  &::before {
+    content: '';
+    position: absolute;
+    left: 22px;
+    top: 0;
+    bottom: 4px;
+    width: 1px;
+    background: var(--studio-border);
+  }
 }
 
 .studio-tree-row {
@@ -828,15 +841,21 @@
 // when the dashboard is rendered inside the studio shell — the legacy
 // (flag-off) chrome keeps its 7-column side-by-side layout.
 .dashboard--studio {
-  // Three super-columns of equal width fill the editor body.
+  // Three super-columns of equal width fill the editor body. The
+  // minmax(0, 1fr) row template is what lets each super-column shrink
+  // below its content's intrinsic height — without it, the row sizes
+  // to fit the tallest column (sum of all stacked cards) and the
+  // lane-group__lanes never get a fixed height to scroll inside.
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-rows: minmax(0, 1fr);
   gap: 12px;
   padding: 12px;
   align-items: stretch;
   background: var(--studio-bg-editor);
   height: 100%;
-  overflow: auto;
+  min-height: 0;
+  overflow: hidden;
 
   .lane-group {
     display: flex;
@@ -883,6 +902,39 @@
     display: block;
     width: 100%;
     background: transparent;
+  }
+
+  // Pile-down collapse: when a lane is collapsed inside a super-column,
+  // render the rail as a horizontal strip (icon + count + title +
+  // indicators) instead of the legacy vertical rail. The vertical rail
+  // was designed for the 7-column horizontal layout — inside a super-
+  // column it would look like a tall thin button orphaned from its
+  // header.
+  app-job-column .column-rail {
+    width: 100%;
+    min-width: 0;
+    flex: 0 0 auto;
+    height: 32px;
+    flex-direction: row;
+    padding: 0 12px;
+    gap: 10px;
+    border-radius: 4px;
+    border-color: var(--studio-border);
+  }
+  app-job-column .column-rail__icon { font-size: 14px; }
+  app-job-column .column-rail__title {
+    writing-mode: horizontal-tb;
+    transform: none;
+    margin: 0;
+    flex: 1;
+    text-align: left;
+  }
+  app-job-column .column-rail__indicators {
+    flex-direction: row;
+  }
+  app-job-column .column-rail__expand {
+    transform: rotate(90deg);
+    margin-left: auto;
   }
 }
 
@@ -1023,6 +1075,13 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
+  // Grid-cell descendants must shrink below intrinsic min-content,
+  // otherwise the projected dashboard's intrinsic height (sum of all
+  // 1000+ stacked job cards in the 3-super-column layout) propagates
+  // upward and blows the editor past 70 000 px, killing scroll on the
+  // lanes themselves.
+  min-height: 0;
+  height: 100%;
   background: var(--studio-bg-editor);
 }
 
@@ -1208,6 +1267,11 @@
   position: relative;
   display: grid;
   grid-template-columns: 1fr;
+  // Explicit single-row template with minmax(0, 1fr) is the only way
+  // to constrain a grid cell to its parent's height; the default
+  // `auto` row sizes to content and lets the dashboard blow out
+  // vertically.
+  grid-template-rows: minmax(0, 1fr);
 }
 
 .studio-editor--chat-open .studio-editor__body {
@@ -1216,8 +1280,23 @@
 
 .studio-editor__main {
   min-width: 0;
+  min-height: 0;
+  height: 100%;
   overflow: auto;
   position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+// The projected content wrapper from app.html. Without an explicit
+// height + min-height: 0 the dashboard inside it never gets a height
+// to compute % against, so dashboard `height: 100%` resolves to
+// auto and the lanes can't scroll.
+.studio-projected-content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .studio-chat-rail {

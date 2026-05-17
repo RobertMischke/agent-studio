@@ -73,9 +73,31 @@ html[data-studio-theme='light'] {
     color: #1a1a1a;
   }
   .job-card__subtle, .job-card__age, .job-card__client,
-  .job-card__cli-name {
+  .job-card__cli-name, .job-card__owner-name {
     color: #6e6e6e;
   }
+  // Pills and small chips on the card — flip to readable dark text on a
+  // soft light background so the "Local Default", state badge, branch
+  // tag etc. don't disappear on a white surface.
+  .job-card__owner-chip {
+    background: rgba(0, 0, 0, 0.05) !important;
+    border-color: rgba(0, 0, 0, 0.10) !important;
+    color: #3a3a3a !important;
+  }
+  .job-card__order {
+    background: rgba(0, 0, 0, 0.06) !important;
+    color: #4a4a4a !important;
+  }
+  .job-card__delete {
+    color: #8a8f99 !important;
+  }
+  .job-card__delete:hover {
+    background: rgba(220, 38, 38, 0.08) !important;
+    border-color: rgba(220, 38, 38, 0.30) !important;
+    color: #b91c1c !important;
+  }
+  // Card title — dark on white instead of the dark-theme #e2e8f0.
+  .job-card__title { color: #1a1a1a !important; }
   .dashboard,
   .dashboard--studio { background: #f3f3f3; }
   .lane-group { background: #ffffff; border-color: #e1e1e1; }
@@ -119,11 +141,116 @@ html[data-studio-theme='light'] {
   .status-bar__item, .status-bar__label { color: #1a1a1a; }
 
   // ---- Side sheets / dialogs ----
+  // The host selectors don't reach the inner .sheet/.panel surfaces.
+  // The descendant selectors below flip the dark background actually
+  // rendered inside each sidesheet / dialog.
   .app__sidesheet,
   .filter-sidesheet,
   .cli-usage-sheet,
-  .orchestrator-side-sheet {
+  .orchestrator-side-sheet,
+  app-orchestrator-side-sheet,
+  app-cli-usage-sheet,
+  app-kanban-filter-sidesheet {
+    background: transparent;
+    color: #1a1a1a;
+    border-color: #e1e1e1;
+  }
+  // Inner card surfaces inside sidesheets/dialogs/overlays.
+  .sheet,
+  .panel,
+  .sidesheet,
+  .dialog,
+  .modal,
+  app-orchestrator-side-sheet .sheet,
+  app-cli-usage-sheet .sheet,
+  app-kanban-filter-sidesheet .sheet,
+  app-create-job-dialog .dialog,
+  app-create-job-dialog .panel,
+  app-orchestrator-settings-modal .panel,
+  app-e2e-cleanup-dialog .panel,
+  app-update-block-modal .panel,
+  app-update-center .panel,
+  app-confirm-dialog .panel,
+  app-error-dialog .panel,
+  app-media-lightbox .panel,
+  app-verbose-debug-overlay .panel {
+    background: #ffffff !important;
+    color: #1a1a1a !important;
+    border-color: #e1e1e1 !important;
+  }
+  // Headers / sub-sections / list rows inside sheets.
+  .sheet__header,
+  .sheet__title,
+  .sheet__eyebrow,
+  .sheet__body,
+  .sheet__footer,
+  .sheet__title-block,
+  .sheet__project-picker,
+  .sheet__combo-input,
+  .sheet__btn,
+  .sheet__close,
+  .panel__header,
+  .panel__body,
+  .panel__footer {
+    background: transparent;
+    color: #1a1a1a;
+  }
+  // Sheet's text-input fields (project picker combo, follow-up textarea).
+  .sheet__combo-input,
+  .sheet__combo-list,
+  .sheet textarea,
+  .sheet input,
+  .panel textarea,
+  .panel input {
     background: #ffffff;
+    color: #1a1a1a;
+    border-color: #d4d4d4;
+  }
+  .sheet__combo-input::placeholder,
+  .sheet textarea::placeholder,
+  .panel textarea::placeholder,
+  .panel input::placeholder { color: #6e6e6e; }
+  // Buttons inside sheets — restore readable contrast.
+  .sheet__btn,
+  .sheet__close,
+  .panel button {
+    color: #1a1a1a;
+    background: transparent;
+  }
+  .sheet__btn:hover:not(:disabled),
+  .sheet__close:hover,
+  .panel button:hover:not(:disabled) {
+    background: rgba(0, 0, 0, 0.05);
+    color: #1a1a1a;
+  }
+  // Project-token-usage panel + heatmap + drift cards: hard-coded
+  // dark surfaces. Flip the most visible ones.
+  .tup__panel,
+  .tup__panel-body,
+  .tup__group,
+  .tup__matrix,
+  .tup__heatmap,
+  .tup__legend,
+  .drift-card,
+  .observability-panel,
+  .security-panel,
+  .uxui-panel,
+  .runtime-panel,
+  .skill-readiness-section,
+  .project-shell,
+  .project-shell__rail,
+  .project-shell__panel {
+    background: #ffffff !important;
+    color: #1a1a1a !important;
+    border-color: #e1e1e1 !important;
+  }
+  // Header / title elements inside those panels.
+  .tup__panel-head,
+  .tup__group-head,
+  .drift-card__head,
+  .observability-panel__head,
+  .project-shell__rail-head {
+    background: #f8f8f8;
     color: #1a1a1a;
     border-color: #e1e1e1;
   }
