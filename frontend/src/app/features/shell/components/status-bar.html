@@ -1,9 +1,10 @@
 <div class="statusbar" data-testid="status-bar">
   <div class="statusbar__group statusbar__group--left">
     <span class="statusbar__item statusbar__item--ro" [appTooltip]="runningTooltip()">
-      <span class="statusbar__icon" [class.statusbar__icon--pulse]="runningCount() > 0">
-        <app-studio-icon name="play" [size]="9"></app-studio-icon>
-      </span>
+      <!-- Pulsing bullet for "running" — preserves the universally-recognized
+           live-indicator semantics. Keep this as a bare character (not SVG)
+           so the pulse animation stays glyph-clean. -->
+      <span class="statusbar__icon" [class.statusbar__icon--pulse]="runningCount() > 0">●</span>
       <span>{{ runningCount() }} running</span>
     </span>
     <span class="statusbar__item statusbar__item--ro" [appTooltip]="autoTooltip()">
