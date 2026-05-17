@@ -11,10 +11,14 @@
     </div>
 
     <nav class="studio-titlebar__crumbs" aria-label="Breadcrumb">
-      <span class="studio-titlebar__crumb studio-titlebar__crumb--ws"
-            data-testid="studio-titlebar-workspace">
+      <button type="button"
+              class="studio-titlebar__crumb studio-titlebar__crumb--ws studio-titlebar__crumb--btn"
+              data-testid="studio-titlebar-workspace"
+              title="Workspace — switch workspace flow lands in a follow-up slice"
+              (click)="onAddWorkspace()">
         <span>Workspace</span>
-      </span>
+        <span class="studio-titlebar__crumb-caret" aria-hidden="true">▾</span>
+      </button>
       @if (currentProjectName(); as proj) {
         <span class="studio-titlebar__crumb-sep" aria-hidden="true">›</span>
         <span class="studio-titlebar__crumb" data-testid="studio-titlebar-active-project">{{ proj }}</span>

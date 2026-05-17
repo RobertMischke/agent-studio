@@ -1,6 +1,8 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { MarkdownRichEditorComponent } from '../../../../components/markdown-rich-editor';
 import { JobPromptHistoryEntry, JobTitleHistoryEntry, ReviewEvidenceEntry, ReviewEvidenceSource } from '../../../../models/job.model';
+import type { JobScreenshotEntry } from '../../services/screenshots-poll.service';
+import { ScreenshotStripComponent } from '../../../screenshots/components/screenshot-strip/screenshot-strip.component';
 import { markdownToHtml } from '../../../../components/markdown-utils';
 import { MarkdownImageLightboxDirective } from '../../../../directives/markdown-image-lightbox.directive';
 import { resolveProtocolImageSrc } from '../protocol-pane/protocol-image-resolver';

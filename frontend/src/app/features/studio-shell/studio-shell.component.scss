@@ -151,6 +151,17 @@
 
     &--ws { color: var(--studio-fg); }
     &--leaf { color: var(--studio-fg); }
+
+    &--btn {
+      cursor: pointer;
+      &:hover { background: var(--studio-bg-hover); color: var(--studio-fg-strong); }
+    }
+  }
+
+  &__crumb-caret {
+    color: var(--studio-fg-muted);
+    font-size: 9px;
+    margin-left: -2px;
   }
 
   &__crumb-sep {
