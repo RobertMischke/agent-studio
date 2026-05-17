@@ -292,6 +292,41 @@ html[data-studio-theme='light'] {
     background: rgba(217, 119, 87, 0.15) !important;
     color: #1a1a1a !important;
   }
+  // Catch-all: anything inside the project-shell that didn't get a
+  // specific override should still render dark text on the light
+  // background. Without this catch-all the legacy dark-theme text
+  // colors (#a6adc8 / #6c7086 / #bac2de) bleed through and the
+  // numbers / labels in the embedded project-detail are barely
+  // readable on white.
+  .proj-shell,
+  .proj-shell *:not(button):not(input):not(textarea):not(select) {
+    // Use a softer accent so we don't lose hierarchy (titles still
+    // pop because of font weight + size).
+    color: inherit;
+  }
+  .proj-shell {
+    color: #1a1a1a !important;
+  }
+  // Numerical headings + group labels — typical project-detail spots.
+  .proj-shell h1,
+  .proj-shell h2,
+  .proj-shell h3,
+  .proj-shell h4,
+  .proj-shell strong,
+  .proj-shell dt,
+  .proj-shell dd,
+  .proj-shell label,
+  .proj-shell .pd-overview__metric,
+  .proj-shell .pd-overview__number,
+  .proj-shell .pd-overview__label {
+    color: #1a1a1a !important;
+  }
+  .proj-shell code,
+  .proj-shell .mono,
+  .proj-shell .pd-mono {
+    color: #1a1a1a !important;
+    background: rgba(0, 0, 0, 0.06) !important;
+  }
 
   // Project-detail content rendered inside the project-shell panel
   // (overview tabs, jobs list, drift cards, etc.) — flip the loudest
