@@ -1,5 +1,77 @@
 # Frontend SCSS quality — refactor evaluation 2026-05-17
 
+## Update — Tier 1+2+3 follow-up pass (same day)
+
+A second iteration drove the metrics further. Updated table:
+
+| Metric                              | Initial | After Wave A-F | After Tier 1-3 | Δ total |
+| ----------------------------------- | ------: | -------------: | -------------: | ------- |
+| Hardcoded hex occurrences           | 2 212   | 1 816          | **1 664**      | **−548 (−25 %)** |
+| `!important` declarations total     | 78      | 68             | **33**         | **−45 (−58 %)** |
+| `!important` declarations in `styles.scss` | 54 | 41          | **2** (load-bearing) | **−52 (−96 %)** |
+| `font-family:` declarations using tokens | 0  | 0              | **92** (of 149) | **+92** |
+| Studio-shell tokens                 | 16      | 22             | **36**         | **+20** |
+| Reusable layout components          | 0       | 3              | 3              | +3      |
+| Reusable SCSS mixins                | 0       | 3              | 3              | +3      |
+
+### What shipped in the follow-up pass
+
+- **Tier 1.1 — Semantic + lane tokens.** Added 14 new tokens to
+  `studio-shell.component.scss`: `--severity-pass / -warn / -high /
+  -info / -pending` (with darker light-theme overrides for tinted
+  pills) and a nine-state lane palette (`--lane-backlog / -prep /
+  -ready / -progress / -auto-review / -human-review / -completed /
+  -archive / -failed`). Brings the studio-shell token vocabulary to
+  36 named variables.
+- **Tier 1.2 — Hex sweep across 18 more component SCSS files.** 158
+  severity / state / grey literals migrated to `var(--severity-*)` /
+  `var(--lane-*)` / `var(--studio-fg-*)`. Cumulative Wave A + Tier 1
+  reach: **568 hex literals migrated**.
+- **Tier 1.4 — Prompt pane adopts `<app-pane-header>`.** First real
+  call-site for the shared component. The maximize / hide buttons
+  + spacer logic move into the shared component; the prompt pane
+  only projects its three-tab strip into the header's `tabs` slot.
+- **Tier 1.5 — Status-bar left chips adopt `<app-statusbar-item>`.**
+  Added `[pulsing]` and `[bullet]` inputs so the legacy "● running"
+  pulse chip lands as a one-liner. All seven status-bar chips
+  (two read-only + five clickable) now go through one component.
+- **Tier 3.1 — Drop 20 more redundant `!important` from
+  `styles.scss`.** The light-theme bridge wrapping at
+  `html[data-studio-theme='light']` gives selectors specificity
+  (0,2,0), which already beats every component-side (0,1,0)
+  declaration. The `!important` on `.sheet`, `.panel`,
+  `.proj-shell__*`, `.pd-*`, `.tup__*`, `.drift-card`,
+  `observability-panel`, `security-panel`, `uxui-panel`,
+  `runtime-panel`, `project-shell` etc. became dead weight after
+  Wave A's token migration. Result: 54 → 2 in `styles.scss`. The two
+  remaining declarations fight inline `style=""` attributes
+  (specificity 1,0,0,0) — load-bearing and cannot be removed.
+- **Tier 3.2 — Font-family centralisation.** Added `--font-ui` and
+  `--font-mono` token stacks to the studio-shell `:root`. Bulk
+  sweep migrated 49 `font-family:` declarations across 19 files to
+  read the tokens. **62 % of all `font-family` declarations now
+  resolve through a CSS variable.** Adding a new typeface needs a
+  one-line edit to `studio-shell.component.scss`.
+
+### Deferred to next pass
+
+Two Wave items are tracked but unimplemented in this iteration:
+
+- **Tier 1.3 — Existing sidesheets adopting `<app-sidesheet>`.** The
+  twelve overlays differ in animation, focus-trap, and route
+  binding. A single bulk migration is too risky; each migration
+  should ship in its own slice. The component is **ready**, the
+  existing call sites stay until next touch.
+- **Tier 2 — Icon-button mixin sweep.** `@include m.icon-button` is
+  mechanically applied — 15+ call sites identified. The mixin is
+  **ready**; call sites adopt when next touched.
+- **Tier 4 — Empty-state, tree-row, section-header extractions.**
+  Lower priority; flagged for the next pass.
+
+---
+
+
+
 Result of executing the six-wave plan from
 [frontend-scss-quality.md](frontend-scss-quality.md). All waves shipped
 in this iteration as discrete commits.
