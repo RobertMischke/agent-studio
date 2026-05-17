@@ -11,6 +11,7 @@ import {
 import { FormsModule } from '@angular/forms';
 import type { JobInfo } from '../../models/job.model';
 import { JobService } from '../../services/job.service';
+import { StudioIconComponent, StudioIconName } from '../../components/studio-icon/studio-icon.component';
 import { ClientService } from '../../services/client.service';
 import { FeatureFlagsService } from '../../services/feature-flags.service';
 import { projectIdentity } from '../../services/project-identity.util';
@@ -32,6 +33,13 @@ interface ProjectSidebarRow {
   color: string;
   totalJobs: number;
   isActive: boolean;
+}
+
+interface ProjectLaneCounts {
+  backlog: number;
+  active: number;
+  review: number;
+  archive: number;
 }
 
 /** Brand swatches per CLI — matches the status-bar glyph colours so the
@@ -61,7 +69,7 @@ function cliColorFor(cli: string): string {
 @Component({
   selector: 'app-studio-shell',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, StudioIconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   templateUrl: './studio-shell.component.html',
@@ -168,6 +176,57 @@ export class StudioShellComponent {
 
   /** All jobs, grouped under their project for the Explorer panel. */
   readonly grouped = this.jobService.grouped;
+
+  /** Per-project lane breakdown for the Explorer tree's child rows. */
+  readonly projectLanes = computed<Map<string, ProjectLaneCounts>>(() => {
+    const grouped = this.grouped();
+    const out = new Map<string, ProjectLaneCounts>();
+    const bump = (name: string, key: keyof ProjectLaneCounts) => {
+      const cur = out.get(name) ?? { backlog: 0, active: 0, review: 0, archive: 0 };
+      cur[key] += 1;
+      out.set(name, cur);
+    };
+    const visit = (lane: JobInfo[] | undefined, key: keyof ProjectLaneCounts) => {
+      if (!lane) return;
+      for (const job of lane) bump(job.projectName ?? '', key);
+    };
+    visit(grouped.backlog, 'backlog');
+    visit(grouped.preparation, 'backlog');
+    visit(grouped.orchestratorPrep, 'backlog');
+    visit(grouped.needsHumanReview, 'review');
+    visit(grouped.ready, 'backlog');
+    visit(grouped.progress, 'active');
+    visit(grouped.failedPickup, 'active');
+    visit(grouped.review, 'review');
+    visit(grouped.autoReview, 'review');
+    visit(grouped.humanReview, 'review');
+    visit(grouped.completed, 'archive');
+    visit(grouped.archive, 'archive');
+    return out;
+  });
+
+  laneCount(name: string, key: keyof ProjectLaneCounts): number {
+    return this.projectLanes().get(name)?.[key] ?? 0;
+  }
+
+  /**
+   * Short label for the active tab, used as the leaf of the titlebar
+   * breadcrumb (Workspace › Project › <leaf>). Returns `null` for the
+   * generic "All projects" board where the breadcrumb stops at the
+   * workspace.
+   */
+  tabBreadcrumb(tab: StudioTab | null | undefined): string {
+    if (!tab) return '';
+    switch (tab.kind) {
+      case 'board':    return 'Board';
+      case 'hub':      return 'Project Hub';
+      case 'task':     return `Task ${tab.jobKey.split('/').pop() ?? tab.jobKey}`;
+      case 'activity': return 'Activity';
+      case 'diff':     return 'Diff';
+      case 'welcome':  return 'Welcome';
+      default:         return '';
+    }
+  }
 
   /** Project rows displayed in the titlebar pills + sidebar Explorer. */
   readonly projectRows = computed<ProjectSidebarRow[]>(() => {
@@ -402,6 +461,17 @@ export class StudioShellComponent {
       cancelLabel: 'Close',
       kind: 'primary',
     });
+  }
+
+  /** Forces a fresh /api/jobs/grouped pull so the Explorer re-counts. */
+  onRefreshWorkspace(): void {
+    this.jobService.refresh();
+  }
+
+  /** Collapse every project row in the Explorer tree. */
+  onCollapseAllProjects(): void {
+    this._expandedProjects.set(new Set<string>());
+    this.writeExpandedProjects(new Set<string>());
   }
 
   /**

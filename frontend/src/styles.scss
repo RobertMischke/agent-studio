@@ -240,6 +240,20 @@ html[data-studio-theme='light'] {
     .project-hygiene-badge--unpushed { background: rgba(59,130,246,0.10); color: #1d4ed8; }
   }
 
+  // ---- Pane tabs (Description / Evidence in the prompt pane) ----
+  // The tabs are scoped to .pane__header--tabs to avoid bleeding into
+  // the protocol pane's inspector tabs.
+  .pane__header--tabs {
+    background: #f8f8f8;
+    border-bottom-color: #e1e1e1;
+  }
+  .pane-tab {
+    color: #4a4a4a;
+    &:hover { background: rgba(0, 0, 0, 0.05); color: #1a1a1a; }
+    &--active { color: #1a1a1a; background: #ffffff; border-bottom-color: var(--studio-accent, #d97757); }
+    &__badge { background: var(--studio-accent, #d97757); color: #1a1a1a; }
+  }
+
   // ---- Status bar (bottom) ----
   // The shell ships two status bars — the legacy .status-bar wrapper and
   // the VS Code-flavored .statusbar (no dash) inside <app-status-bar>.

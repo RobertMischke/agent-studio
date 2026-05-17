@@ -10,6 +10,25 @@
       <span class="studio-titlebar__appname">Agent Software Studio</span>
     </div>
 
+    <nav class="studio-titlebar__crumbs" aria-label="Breadcrumb">
+      <span class="studio-titlebar__crumb studio-titlebar__crumb--ws"
+            data-testid="studio-titlebar-workspace">
+        <app-studio-icon name="folder" [size]="12"></app-studio-icon>
+        <span>Workspace</span>
+      </span>
+      @if (currentProjectName(); as proj) {
+        <span class="studio-titlebar__crumb-sep" aria-hidden="true">›</span>
+        <span class="studio-titlebar__crumb" data-testid="studio-titlebar-active-project">{{ proj }}</span>
+      }
+      @if (activeTab(); as tab) {
+        @if (tab.kind !== 'board' || currentProjectName()) {
+          <span class="studio-titlebar__crumb-sep" aria-hidden="true">›</span>
+          <span class="studio-titlebar__crumb studio-titlebar__crumb--leaf"
+                data-testid="studio-titlebar-active-tab">{{ tabBreadcrumb(tab) }}</span>
+        }
+      }
+    </nav>
+
     <span class="studio-titlebar__separator">/</span>
 
     <nav class="studio-titlebar__pills" data-testid="studio-project-pills">
@@ -17,7 +36,9 @@
               class="studio-pill"
               [class.studio-pill--active]="activeBoardProject() === null && activeTab()?.kind === 'board'"
               (click)="openBoard('__all__')">
-        <span class="studio-pill__glyph studio-pill__glyph--all" aria-hidden="true">▦</span>
+        <span class="studio-pill__glyph studio-pill__glyph--all" aria-hidden="true">
+          <app-studio-icon name="grid" [size]="11"></app-studio-icon>
+        </span>
         <span class="studio-pill__label">All projects</span>
       </button>
       @for (p of projectRows(); track p.name) {
@@ -39,7 +60,7 @@
 
     <button type="button" class="studio-titlebar__search" disabled
             title="Search tasks, commits, files (coming soon)">
-      <span aria-hidden="true">⌕</span>
+      <app-studio-icon name="search" [size]="13"></app-studio-icon>
       <span class="studio-titlebar__search-label">Search tasks, commits, files…</span>
       <span class="studio-titlebar__kbd">⌘P</span>
     </button>
@@ -50,17 +71,17 @@
               data-testid="studio-titlebar-chat"
               title="Open project chat (orchestrator side sheet)"
               (click)="chatToggle.emit()">
-        <span aria-hidden="true">◈</span>
+        <app-studio-icon name="bot" [size]="14"></app-studio-icon>
         <span>Project Chat</span>
       </button>
       <button type="button"
               class="studio-titlebar__iconbtn"
               [title]="theme() === 'light' ? 'Switch to dark theme' : 'Switch to light theme'"
               (click)="toggleTheme()">
-        <span aria-hidden="true">{{ theme() === 'light' ? '☾' : '☀' }}</span>
+        <app-studio-icon [name]="theme() === 'light' ? 'moon' : 'sun'" [size]="14"></app-studio-icon>
       </button>
       <button type="button" class="studio-titlebar__iconbtn" title="Notifications">
-        <span aria-hidden="true">⟁</span>
+        <app-studio-icon name="bell" [size]="14"></app-studio-icon>
       </button>
     </div>
   </header>
@@ -142,7 +163,25 @@
                     data-testid="studio-sidebar-add-workspace"
                     title="Add a project to the workspace"
                     aria-label="Add a project to the workspace"
-                    (click)="onAddWorkspace()">+</button>
+                    (click)="onAddWorkspace()">
+              <app-studio-icon name="plus" [size]="14"></app-studio-icon>
+            </button>
+            <button type="button"
+                    class="studio-sidebar__action"
+                    data-testid="studio-sidebar-refresh"
+                    title="Refresh project list"
+                    aria-label="Refresh project list"
+                    (click)="onRefreshWorkspace()">
+              <app-studio-icon name="refresh" [size]="14"></app-studio-icon>
+            </button>
+            <button type="button"
+                    class="studio-sidebar__action"
+                    data-testid="studio-sidebar-collapse-all"
+                    title="Collapse all projects"
+                    aria-label="Collapse all projects"
+                    (click)="onCollapseAllProjects()">
+              <app-studio-icon name="collapse" [size]="14"></app-studio-icon>
+            </button>
           }
         </div>
         <div class="studio-sidebar__body">
@@ -165,33 +204,60 @@
                       <span class="studio-tree-row__chev"
                             [class.studio-tree-row__chev--open]="isProjectExpanded(p.name)"
                             [attr.aria-label]="isProjectExpanded(p.name) ? 'Collapse' : 'Expand'"
-                            (click)="toggleProjectExpanded(p.name, $event)">▶</span>
+                            (click)="toggleProjectExpanded(p.name, $event)">
+                        <app-studio-icon [name]="isProjectExpanded(p.name) ? 'chevronDown' : 'chevronRight'" [size]="10"></app-studio-icon>
+                      </span>
                       <span class="studio-tree-row__glyph" [style.background]="p.color" aria-hidden="true">{{ p.initial }}</span>
                       <span class="studio-tree-row__name">{{ p.name }}</span>
+                      <button type="button"
+                              class="studio-tree-row__hub-link"
+                              title="Open Project Hub"
+                              aria-label="Open Project Hub"
+                              (click)="openHub(p.name); $event.stopPropagation()">
+                        <app-studio-icon name="grid" [size]="10"></app-studio-icon>
+                      </button>
                       <span class="studio-tree-row__count">{{ p.totalJobs }}</span>
                     </button>
                     @if (isProjectExpanded(p.name)) {
                       <div class="studio-tree-children">
                         <button type="button"
                                 class="studio-tree-row studio-tree-row--child"
-                                [class.studio-tree-row--active]="activeTab()?.kind === 'board' && p.isActive"
+                                title="Backlog (preparation + ready + needs human review)"
                                 (click)="openBoard(p.name)">
-                          <span class="studio-tree-row__sub-icon" aria-hidden="true">▦</span>
-                          <span class="studio-tree-row__name">Board</span>
-                          <span class="studio-tree-row__count">{{ p.totalJobs }}</span>
+                          <span class="studio-tree-row__sub-icon"><app-studio-icon name="folder" [size]="12"></app-studio-icon></span>
+                          <span class="studio-tree-row__name">backlog</span>
+                          <span class="studio-tree-row__count">{{ laneCount(p.name, 'backlog') }}</span>
                         </button>
                         <button type="button"
                                 class="studio-tree-row studio-tree-row--child"
-                                [class.studio-tree-row--active]="activeTab()?.kind === 'hub' && p.isActive"
+                                title="Active (in progress / failed pickup)"
+                                (click)="openBoard(p.name)">
+                          <span class="studio-tree-row__sub-icon"><app-studio-icon name="play" [size]="12"></app-studio-icon></span>
+                          <span class="studio-tree-row__name">active</span>
+                          <span class="studio-tree-row__count">{{ laneCount(p.name, 'active') }}</span>
+                        </button>
+                        <button type="button"
+                                class="studio-tree-row studio-tree-row--child"
+                                title="Review (auto-review + human review)"
+                                (click)="openBoard(p.name)">
+                          <span class="studio-tree-row__sub-icon"><app-studio-icon name="eye" [size]="12"></app-studio-icon></span>
+                          <span class="studio-tree-row__name">human review</span>
+                          <span class="studio-tree-row__count">{{ laneCount(p.name, 'review') }}</span>
+                        </button>
+                        <button type="button"
+                                class="studio-tree-row studio-tree-row--child"
+                                title="Project Hub"
                                 (click)="openHub(p.name)">
-                          <span class="studio-tree-row__sub-icon" aria-hidden="true">▤</span>
+                          <span class="studio-tree-row__sub-icon"><app-studio-icon name="grid" [size]="12"></app-studio-icon></span>
                           <span class="studio-tree-row__name">Project Hub</span>
                         </button>
                         <button type="button"
                                 class="studio-tree-row studio-tree-row--child"
-                                (click)="openOrchFeed.emit()">
-                          <span class="studio-tree-row__sub-icon" aria-hidden="true">⌁</span>
-                          <span class="studio-tree-row__name">Activity</span>
+                                title="Archive / completed jobs"
+                                (click)="openBoard(p.name)">
+                          <span class="studio-tree-row__sub-icon"><app-studio-icon name="archive" [size]="12"></app-studio-icon></span>
+                          <span class="studio-tree-row__name">archive</span>
+                          <span class="studio-tree-row__count">{{ laneCount(p.name, 'archive') }}</span>
                         </button>
                       </div>
                     }

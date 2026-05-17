@@ -81,6 +81,157 @@
   }
 }
 
+/* Spacer so the tabs stay flush-left and the maximize/hide buttons
+ * float to the right inside the tabbed header. */
+.pane__spacer { flex: 1; }
+
+/* ---- Evidence tab content (mirrors .reference-layout evidence-view) ---- */
+.evidence-view {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  max-width: 820px;
+  margin: 0 auto;
+
+  &__empty {
+    padding: 24px 8px;
+    color: var(--text-muted, #6e6e6e);
+    font-size: 12px;
+    line-height: 1.55;
+  }
+}
+
+.ev-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ev-section-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-primary, #1a1a1a);
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border, #e1e1e1);
+  margin-bottom: 4px;
+}
+
+.ev-section-dot {
+  font-size: 10px;
+  line-height: 1;
+}
+
+.ev-section-title {
+  flex: 1;
+}
+
+.ev-section-count {
+  font-size: 10px;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-weight: 500;
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--text-muted, #6e6e6e);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.ev-card {
+  background: var(--surface-1, #fff);
+  border: 1px solid var(--border, #e1e1e1);
+  border-left: 2px solid var(--border, #e1e1e1);
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--text-primary, #1a1a1a);
+
+  &--high { border-left-color: #ef4444; }
+  &--warn { border-left-color: #cca700; }
+  &--info { border-left-color: var(--studio-accent-2, #4ec9b0); }
+  &--acked { opacity: 0.78; }
+}
+
+.ev-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ev-card-title {
+  flex: 1;
+  font-weight: 500;
+  color: var(--text-primary, #1a1a1a);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ev-card-meta {
+  font-size: 11px;
+  color: var(--text-muted, #6e6e6e);
+  font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+}
+
+.ev-card-ack {
+  font-size: 10px;
+  background: rgba(78, 201, 176, 0.15);
+  color: #166534;
+  padding: 1px 6px;
+  border-radius: 999px;
+  letter-spacing: 0.04em;
+}
+
+.ev-card-body {
+  margin-top: 6px;
+  color: var(--text-muted, #6e6e6e);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.ev-card-refs {
+  list-style: none;
+  padding: 0;
+  margin: 6px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.ev-card-ref code {
+  font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 10px;
+  background: rgba(0, 0, 0, 0.06);
+  padding: 1px 5px;
+  border-radius: 3px;
+  color: var(--text-primary, #1a1a1a);
+}
+
+/* Dark-theme overrides (the descendant theme bridge in styles.scss
+ * scopes light overrides to html[data-studio-theme="light"]; dark uses
+ * the studio token defaults via these :host fallbacks). */
+[data-studio-theme='dark'] {
+  .ev-section-head { color: #ffffff; border-bottom-color: var(--studio-border, #2b2b2b); }
+  .ev-section-count { background: var(--studio-bg-elevated, #252526); color: var(--studio-fg-muted, #9d9d9d); }
+  .ev-card {
+    background: var(--studio-bg-elevated, #252526);
+    border-color: var(--studio-border, #2b2b2b);
+    color: #ffffff;
+  }
+  .ev-card-title { color: #ffffff; }
+  .ev-card-meta { color: var(--studio-fg-muted, #9d9d9d); }
+  .ev-card-body { color: var(--studio-fg-dim, #9d9d9d); }
+  .ev-card-ref code { background: rgba(255, 255, 255, 0.06); color: #ffffff; }
+  .evidence-view__empty { color: rgba(255, 255, 255, 0.55); }
+}
+
 [data-studio-theme='dark'] .pane-tab,
 [data-studio-theme='dark'] .pane-tab:hover {
   color: rgba(255, 255, 255, 0.7);

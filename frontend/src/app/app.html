@@ -106,17 +106,23 @@
                       class="studio-tab-action studio-tab-action--icon"
                       data-testid="studio-pane-toggle-prompt"
                       [appTooltip]="'Description'"
-                      (click)="onShellTogglePane('prompt')">▤</button>
+                      (click)="onShellTogglePane('prompt')">
+                <app-studio-icon name="book" [size]="14"></app-studio-icon>
+              </button>
               <button type="button"
                       class="studio-tab-action studio-tab-action--icon"
                       data-testid="studio-pane-toggle-protocol"
                       [appTooltip]="'Protocol &amp; chat'"
-                      (click)="onShellTogglePane('protocol')">⌁</button>
+                      (click)="onShellTogglePane('protocol')">
+                <app-studio-icon name="bot" [size]="14"></app-studio-icon>
+              </button>
               <button type="button"
                       class="studio-tab-action studio-tab-action--icon"
                       data-testid="studio-pane-toggle-git"
                       [appTooltip]="'Git diff &amp; file tree'"
-                      (click)="onShellTogglePane('git')">⊞</button>
+                      (click)="onShellTogglePane('git')">
+                <app-studio-icon name="diff" [size]="14"></app-studio-icon>
+              </button>
             </div>
             <span class="studio-tab-actions-sep" aria-hidden="true"></span>
             <button type="button"

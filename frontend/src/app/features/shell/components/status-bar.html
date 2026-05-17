@@ -1,11 +1,15 @@
 <div class="statusbar" data-testid="status-bar">
   <div class="statusbar__group statusbar__group--left">
     <span class="statusbar__item statusbar__item--ro" [appTooltip]="runningTooltip()">
-      <span class="statusbar__icon" [class.statusbar__icon--pulse]="runningCount() > 0">●</span>
+      <span class="statusbar__icon" [class.statusbar__icon--pulse]="runningCount() > 0">
+        <app-studio-icon name="play" [size]="9"></app-studio-icon>
+      </span>
       <span>{{ runningCount() }} running</span>
     </span>
     <span class="statusbar__item statusbar__item--ro" [appTooltip]="autoTooltip()">
-      <span class="statusbar__icon">↻</span>
+      <span class="statusbar__icon">
+        <app-studio-icon name="refresh" [size]="11"></app-studio-icon>
+      </span>
       <span>{{ autoCount() }}/{{ projectCount() }} auto</span>
     </span>
   </div>
@@ -22,30 +26,30 @@
     <button class="statusbar__item statusbar__item--btn"
             [appTooltip]="'CLI sessions'"
             (click)="toggleUsage.emit()">
-      <span class="statusbar__icon">▦</span><span>Usage</span>
+      <span class="statusbar__icon"><app-studio-icon name="grid" [size]="12"></app-studio-icon></span><span>Usage</span>
     </button>
     <button class="statusbar__item statusbar__item--btn"
             data-testid="orch-side-sheet-toggle"
             [appTooltip]="'Orchestrator chat'"
             (click)="toggleOrchestrator.emit()">
-      <span class="statusbar__icon">◈</span><span>Orchestrator</span>
+      <span class="statusbar__icon"><app-studio-icon name="bot" [size]="12"></app-studio-icon></span><span>Orchestrator</span>
     </button>
     <button class="statusbar__item statusbar__item--btn"
             [appTooltip]="'Orchestrator feed'"
             (click)="toggleFeed.emit()">
-      <span class="statusbar__icon">⌖</span><span>Feed</span>
+      <span class="statusbar__icon"><app-studio-icon name="activity" [size]="12"></app-studio-icon></span><span>Feed</span>
     </button>
     <button class="statusbar__item statusbar__item--btn"
             data-testid="status-bar-visual-evidence"
             [appTooltip]="'Workspace visual evidence (screenshots across projects)'"
             (click)="toggleVisualEvidence.emit()">
-      <span class="statusbar__icon">◉</span><span>Visual evidence</span>
+      <span class="statusbar__icon"><app-studio-icon name="eye" [size]="12"></app-studio-icon></span><span>Visual evidence</span>
     </button>
     <button class="statusbar__item statusbar__item--btn"
             data-testid="status-bar-cli-admin"
             [appTooltip]="'Manage CLIs (usage caps, admin)'"
             (click)="toggleCliAdmin.emit()">
-      <span class="statusbar__icon">⚙</span><span>Manage CLIs</span>
+      <span class="statusbar__icon"><app-studio-icon name="settings" [size]="12"></app-studio-icon></span><span>Manage CLIs</span>
     </button>
 
     <span class="statusbar__sep" aria-hidden="true"></span>

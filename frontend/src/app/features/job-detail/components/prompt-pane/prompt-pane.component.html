@@ -1,59 +1,143 @@
 <section class="pane pane--prompt" [style.flex]="maximized() ? '1 1 100%' : weight()" data-testid="pane-prompt">
-  <header class="pane__header">
-    <h3 class="pane__title">📝 Task description</h3>
+  <header class="pane__header pane__header--tabs">
+    <div class="pane-tabs" role="tablist">
+      <button class="pane-tab"
+              role="tab"
+              [class.pane-tab--active]="activeTab() === 'description'"
+              [attr.aria-selected]="activeTab() === 'description'"
+              data-testid="prompt-tab-description"
+              (click)="setTab('description')">
+        <app-studio-icon name="book" [size]="12"></app-studio-icon>
+        <span>Description</span>
+      </button>
+      <button class="pane-tab"
+              role="tab"
+              [class.pane-tab--active]="activeTab() === 'evidence'"
+              [attr.aria-selected]="activeTab() === 'evidence'"
+              data-testid="prompt-tab-evidence"
+              (click)="setTab('evidence')">
+        <app-studio-icon name="check" [size]="12"></app-studio-icon>
+        <span>Evidence</span>
+        @if (evidenceCount() > 0) {
+          <span class="pane-tab__badge" data-testid="prompt-tab-evidence-badge">{{ evidenceCount() }}</span>
+        }
+      </button>
+    </div>
+    <span class="pane__spacer"></span>
     <button class="pane__maximize"
             data-testid="pane-maximize-prompt"
             (click)="maximizeToggle.emit()"
             [appTooltip]="maximized() ? 'Restore layout' : 'Maximize'">
-      {{ maximized() ? '⤡' : '⤢' }}
+      <app-studio-icon [name]="maximized() ? 'collapse' : 'expand'" [size]="12"></app-studio-icon>
     </button>
-    <button class="pane__hide" (click)="hide.emit()" [appTooltip]="'Hide panel'">×</button>
+    <button class="pane__hide" (click)="hide.emit()" [appTooltip]="'Hide panel'">
+      <app-studio-icon name="close" [size]="12"></app-studio-icon>
+    </button>
   </header>
   <div class="pane__body">
-    @if (titleHistory().length > 0) {
-        <section class="title-history" data-testid="title-history">
-          <header class="title-history__head">
-            <span class="title-history__title">Title history</span>
-            <span class="title-history__hint">Renames recorded against this task. Current title is shown above.</span>
-          </header>
-          <ol class="title-history__list">
-            @for (entry of titleHistory(); track entry.at) {
-              <li class="title-history__entry" data-testid="title-history-entry">
-                <time class="title-history__time">{{ formatTime(entry.at) }}</time>
-                <span class="title-history__from">{{ entry.oldTitle || '(empty)' }}</span>
-                <span class="title-history__arrow" aria-hidden="true">→</span>
-                <span class="title-history__to">{{ entry.newTitle }}</span>
-              </li>
+    @switch (activeTab()) {
+      @case ('description') {
+        @if (titleHistory().length > 0) {
+          <section class="title-history" data-testid="title-history">
+            <header class="title-history__head">
+              <span class="title-history__title">Title history</span>
+              <span class="title-history__hint">Renames recorded against this task. Current title is shown above.</span>
+            </header>
+            <ol class="title-history__list">
+              @for (entry of titleHistory(); track entry.at) {
+                <li class="title-history__entry" data-testid="title-history-entry">
+                  <time class="title-history__time">{{ formatTime(entry.at) }}</time>
+                  <span class="title-history__from">{{ entry.oldTitle || '(empty)' }}</span>
+                  <span class="title-history__arrow" aria-hidden="true">→</span>
+                  <span class="title-history__to">{{ entry.newTitle }}</span>
+                </li>
+              }
+            </ol>
+          </section>
+        }
+
+        <app-markdown-rich-editor [value]="markdown()"
+                                  [readOnly]="isRunning()"
+                                  [readOnlyReason]="isRunning() ? 'Editing disabled — the CLI is running for this task. Stop it first.' : null"
+                                  [jobId]="jobId()"
+                                  [watchPath]="watchPath()"
+                                  (save)="save.emit($event)" />
+
+        @if (history().length > 0) {
+          <section class="prompt-history" data-testid="prompt-history">
+            <header class="prompt-history__head">
+              <span class="prompt-history__title">Task extensions</span>
+              <span class="prompt-history__hint">Added via Extend mode in chat. Original task is above; entries below are read-only.</span>
+            </header>
+            @for (entry of history(); track entry.fileName) {
+              <article class="prompt-history__entry" [attr.data-testid]="'prompt-history-entry-' + entry.index">
+                <header class="prompt-history__entry-head">
+                  <span class="prompt-history__badge">{{ entry.fileName }}</span>
+                  <span class="prompt-history__time">{{ formatTime(entry.writtenAt) }}</span>
+                </header>
+                <div class="prompt-history__body markdown markdown-body markdown-body--dense"
+                     appMarkdownLightbox
+                     [innerHTML]="renderMarkdown(entry.markdown)"></div>
+              </article>
             }
-          </ol>
-        </section>
+          </section>
+        }
       }
 
-      <app-markdown-rich-editor [value]="markdown()"
-                                [readOnly]="isRunning()"
-                                [readOnlyReason]="isRunning() ? 'Editing disabled — the CLI is running for this task. Stop it first.' : null"
-                                [jobId]="jobId()"
-                                [watchPath]="watchPath()"
-                                (save)="save.emit($event)" />
-
-      @if (history().length > 0) {
-        <section class="prompt-history" data-testid="prompt-history">
-          <header class="prompt-history__head">
-            <span class="prompt-history__title">Task extensions</span>
-            <span class="prompt-history__hint">Added via Extend mode in chat. Original task is above; entries below are read-only.</span>
-          </header>
-          @for (entry of history(); track entry.fileName) {
-            <article class="prompt-history__entry" [attr.data-testid]="'prompt-history-entry-' + entry.index">
-              <header class="prompt-history__entry-head">
-                <span class="prompt-history__badge">{{ entry.fileName }}</span>
-                <span class="prompt-history__time">{{ formatTime(entry.writtenAt) }}</span>
-              </header>
-              <div class="prompt-history__body markdown markdown-body markdown-body--dense"
-                   appMarkdownLightbox
-                   [innerHTML]="renderMarkdown(entry.markdown)"></div>
-            </article>
+      @case ('evidence') {
+        <section class="evidence-view" data-testid="evidence-view">
+          @if (evidenceSections().length === 0) {
+            <div class="evidence-view__empty">
+              No review evidence captured for this task yet.
+              Security audits, code-review passes, and task checks
+              land here as they run.
+            </div>
+          } @else {
+            @for (sec of evidenceSections(); track sec.key) {
+              <div class="ev-section" [attr.data-testid]="'ev-section-' + sec.key">
+                <div class="ev-section-head">
+                  <span class="ev-section-dot" [style.color]="sec.accent">●</span>
+                  <span class="ev-section-title">{{ sec.label }}</span>
+                  <span class="ev-section-count">{{ sec.entries.length }}</span>
+                </div>
+                @for (e of sec.entries; track e.id) {
+                  <article class="ev-card"
+                           [class.ev-card--high]="e.severity === 'high'"
+                           [class.ev-card--warn]="e.severity === 'warn'"
+                           [class.ev-card--info]="e.severity === 'info'"
+                           [class.ev-card--acked]="e.acknowledged"
+                           [attr.data-testid]="'ev-card-' + e.id">
+                    <header class="ev-card-head">
+                      @switch (e.severity) {
+                        @case ('high') {<app-studio-icon name="warn" [size]="12"></app-studio-icon>}
+                        @case ('warn') {<app-studio-icon name="warn" [size]="12"></app-studio-icon>}
+                        @default {<app-studio-icon name="check" [size]="12"></app-studio-icon>}
+                      }
+                      <span class="ev-card-title">{{ e.title }}</span>
+                      @if (e.runIndex !== null) {
+                        <span class="ev-card-meta">run #{{ e.runIndex }}</span>
+                      }
+                      @if (e.acknowledged) {
+                        <span class="ev-card-ack" [appTooltip]="'Acknowledged'">✓ ack</span>
+                      }
+                    </header>
+                    @if (e.body) {
+                      <div class="ev-card-body">{{ e.body }}</div>
+                    }
+                    @if (e.fileRefs.length > 0) {
+                      <ul class="ev-card-refs">
+                        @for (ref of e.fileRefs; track ref) {
+                          <li class="ev-card-ref"><code>{{ ref }}</code></li>
+                        }
+                      </ul>
+                    }
+                  </article>
+                }
+              </div>
+            }
           }
         </section>
       }
+    }
   </div>
 </section>
