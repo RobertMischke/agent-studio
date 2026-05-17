@@ -133,12 +133,37 @@ html[data-studio-theme='light'] {
   .pane__title, .pane__body { color: #1a1a1a; }
 
   // ---- Status bar (bottom) ----
+  // The shell ships two status bars — the legacy .status-bar wrapper and
+  // the VS Code-flavored .statusbar (no dash) inside <app-status-bar>.
+  // Both flip to a light surface so the chips, quota cards, and pickers
+  // stay readable on the white shell.
   .status-bar, app-status-bar > * {
     background: #f8f8f8;
     color: #1a1a1a;
     border-top-color: #e1e1e1;
   }
   .status-bar__item, .status-bar__label { color: #1a1a1a; }
+  .statusbar {
+    background: #f8f8f8 !important;
+    color: #1a1a1a !important;
+    border-top-color: #e1e1e1 !important;
+  }
+  .statusbar__item, .statusbar__menu-title { color: #1a1a1a; }
+  .statusbar__item--ro { color: #4a4a4a; }
+  .statusbar__item--btn:hover { background: rgba(0,0,0,0.06); color: #1a1a1a; }
+  .statusbar__sep { background: rgba(0,0,0,0.10); }
+  .statusbar__caret, .statusbar__icon { color: #4a4a4a; }
+  // Dropdown menus popping up from the status bar picker buttons.
+  .statusbar__menu {
+    background: #ffffff;
+    border-color: #e1e1e1;
+    box-shadow: 0 -8px 24px rgba(0,0,0,0.12);
+  }
+  .statusbar__menu-item { color: #1a1a1a; }
+  .statusbar__menu-item:hover { background: rgba(0,0,0,0.05); }
+  .statusbar__menu-item--active { background: rgba(99,102,241,0.14); color: #1a1a1a; }
+  .statusbar__menu-item--meta { color: #4a4a4a; border-top-color: #e1e1e1; }
+  .statusbar__menu-empty { color: #4a4a4a; }
 
   // ---- Side sheets / dialogs ----
   // The host selectors don't reach the inner .sheet/.panel surfaces.

@@ -10,6 +10,7 @@ export type ProjectRailGroup = 'insight' | 'quality' | 'operations' | 'config';
 
 export type ProjectRailKey =
   | 'overview'
+  | 'design'
   | 'visual-evidence'
   | 'security'
   | 'architecture'
@@ -51,6 +52,15 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Snapshot of project health and quick actions',
     empty: 'Overview placeholder. Health snapshot and quick actions will land in a later slice.',
     icon: '▤',
+  },
+  {
+    key: 'design',
+    group: 'insight',
+    label: 'Design',
+    panelTitle: 'Design',
+    description: 'Design system tokens, components, patterns, and reference mockups for this project',
+    empty: 'No design surface yet. The Design panel will catalog the studio shell tokens (color / shape / type / motion) per the Material 3 Expressive vocabulary, link to component mockups, and surface the reference layout artefacts. Canonical spec: docs/design-system.md.',
+    icon: '◇',
   },
   {
     key: 'visual-evidence',
