@@ -73,6 +73,7 @@
         [history]="detail().promptHistory || []"
         [titleHistory]="detail().titleHistory || []"
         [reviewEvidence]="detail().reviewEvidence || []"
+        [screenshots]="screenshots()"
         [maximized]="maximizedPane() === 'prompt'"
         [weight]="paneWeights().prompt"
         [isRunning]="isRunning()"

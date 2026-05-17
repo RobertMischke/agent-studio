@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { MarkdownRichEditorComponent } from '../../../../components/markdown-rich-editor';
 import { JobPromptHistoryEntry, JobTitleHistoryEntry, ReviewEvidenceEntry, ReviewEvidenceSource } from '../../../../models/job.model';
-import type { JobScreenshotEntry } from '../../services/screenshots-poll.service';
+import type { JobScreenshot } from '../../../screenshots';
 import { ScreenshotStripComponent } from '../../../screenshots/components/screenshot-strip/screenshot-strip.component';
 import { markdownToHtml } from '../../../../components/markdown-utils';
 import { MarkdownImageLightboxDirective } from '../../../../directives/markdown-image-lightbox.directive';
@@ -34,7 +34,7 @@ interface EvidenceSection {
   selector: 'app-prompt-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MarkdownRichEditorComponent, MarkdownImageLightboxDirective, TooltipDirective, StudioIconComponent],
+  imports: [MarkdownRichEditorComponent, MarkdownImageLightboxDirective, TooltipDirective, StudioIconComponent, ScreenshotStripComponent],
   templateUrl: './prompt-pane.component.html',
   styleUrls: ['./prompt-pane.component.scss']
 })
@@ -43,6 +43,7 @@ export class PromptPaneComponent {
   readonly history = input<JobPromptHistoryEntry[]>([]);
   readonly titleHistory = input<JobTitleHistoryEntry[]>([]);
   readonly reviewEvidence = input<ReviewEvidenceEntry[]>([]);
+  readonly screenshots = input<JobScreenshot[]>([]);
   readonly maximized = input(false);
   readonly weight = input<number>(1);
   readonly isRunning = input(false);

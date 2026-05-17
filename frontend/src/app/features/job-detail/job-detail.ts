@@ -511,8 +511,11 @@ export class JobDetailComponent implements OnDestroy {
   });
 
   // ...and for the per-job screenshots poller (10 s cadence). The
-  // protocol pane reads its signal directly via inject().
+  // protocol pane reads its signal directly via inject(); the prompt
+  // pane (for the Visual Evidence section inside its Evidence tab)
+  // reads it via the `screenshots` getter below.
   private readonly screenshotsPoll = inject(ScreenshotsPollService);
+  readonly screenshots = this.screenshotsPoll.screenshots;
   private readonly screenshotsEffect = effect(() => {
     this.screenshotsPoll.syncTo(this.detail()?.info ?? null);
   });
