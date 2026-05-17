@@ -1179,11 +1179,38 @@
     gap: 4px;
     padding: 0 8px;
     border-left: 1px solid var(--studio-border);
+    flex-shrink: 0;
+    // Stop the action strip from being eaten by long tab titles —
+    // the tab list shrinks (overflow-x: auto), the actions don't.
+    white-space: nowrap;
 
     &:empty {
       display: none;
     }
   }
+}
+
+.studio-tab-actions-sep {
+  display: inline-block;
+  width: 1px;
+  height: 18px;
+  background: var(--studio-border);
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+.studio-tab-action__pane-toggles {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.studio-tab-action__pager {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--studio-fg-muted);
+  padding: 0 4px;
+  white-space: nowrap;
 }
 
 .studio-tab-action {
@@ -1199,6 +1226,19 @@
   color: var(--studio-fg-dim);
   cursor: pointer;
   white-space: nowrap;
+  flex-shrink: 0;
+  // Icon-only buttons (📝 🤖 🌿 🪟 ‹ ›): narrower padding so the
+  // slim header doesn't push the tab list around.
+  &--icon {
+    width: 26px;
+    padding: 0;
+    justify-content: center;
+    font-size: 13px;
+  }
+  &[disabled] {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
 
   &:hover {
     background: var(--studio-bg-hover);

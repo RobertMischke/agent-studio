@@ -40,9 +40,14 @@ export class ProjectShellComponent {
 
   /** Rail items grouped for the side nav (PROJECT / CONFIGURATION). */
   readonly railGroups = computed<readonly { id: ProjectRailGroup; label: string; items: readonly ProjectRailItem[] }[]>(() => {
+    // Group order follows the reference's Project Hub side-nav:
+    // Insight → Quality → Operations → Config. The names + ordering
+    // are the canonical taxonomy the user expects in the shell.
     const groups: { id: ProjectRailGroup; label: string; items: ProjectRailItem[] }[] = [
-      { id: 'project', label: 'Project', items: [] },
-      { id: 'configuration', label: 'Configuration', items: [] },
+      { id: 'insight',    label: 'Insight',    items: [] },
+      { id: 'quality',    label: 'Quality',    items: [] },
+      { id: 'operations', label: 'Operations', items: [] },
+      { id: 'config',     label: 'Config',     items: [] },
     ];
     for (const item of PROJECT_RAIL_ITEMS) {
       const bucket = groups.find(g => g.id === item.group);

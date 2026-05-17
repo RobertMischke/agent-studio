@@ -518,6 +518,29 @@ export class App implements OnInit {
     // it doesn't dereference jobDetailRef until invoked.
     this.triage.setClearActingCallback(() => this.jobDetailRef?.clearTriageActing());
 
+    // Studio-shell mirror: when a board tab is opened in the studio shell,
+    // sync the BoardFiltersService.activeProjects so the projected
+    // dashboard actually narrows to that project. Without this the
+    // titlebar pill (and explorer click) felt cosmetic — the lanes still
+    // showed all projects' jobs.
+    effect(() => {
+      if (!this.featureFlags.vsCodeLayout()) return;
+      const tab = this.studioTabState.activeTab();
+      if (!tab) return;
+      untracked(() => {
+        if (tab.kind === 'board') {
+          if (tab.projectName === '__all__') {
+            // Clear project filter for the "All projects" pill.
+            this.boardFilters.activeProjects.set(new Set<string>());
+            try { localStorage.setItem('activeProjects', JSON.stringify([])); } catch { /* storage may be blocked */ }
+          } else {
+            // Single-select: only this project's jobs render in the lanes.
+            this.boardFilters.selectProject(tab.projectName, false);
+          }
+        }
+      });
+    });
+
     // Studio-shell mirror: when a job is selected through any path (URL
     // restore, board click, triage advance) and the new shell is on,
     // mirror it as a studio task tab so the editor area can project

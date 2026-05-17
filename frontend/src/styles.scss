@@ -292,6 +292,20 @@ html[data-studio-theme='light'] {
     background: rgba(217, 119, 87, 0.15) !important;
     color: #1a1a1a !important;
   }
+  // Monochrome rail icons — the icon glyphs are intentionally plain
+  // Unicode geometry now (▤ ◉ ⊞ ↯ ◐ ⌁ ⊡ ✓ ⊟ ☰ ▦ ⊜ ⌖ ⊕ ◈ ⚙) so they
+  // read as a "grey icon column" instead of a colour-coded emoji
+  // jumble. Render them slightly muted so the label stays primary.
+  .proj-shell__rail-icon {
+    color: #6e6e6e !important;
+    font-size: 14px;
+    width: 16px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .proj-shell__rail-item--active .proj-shell__rail-icon {
+    color: #1a1a1a !important;
+  }
   // Catch-all: anything inside the project-shell that didn't get a
   // specific override should still render dark text on the light
   // background. Without this catch-all the legacy dark-theme text
