@@ -1,0 +1,95 @@
+/*
+ * Shared SCSS mixins for recurring small patterns.
+ *
+ * Use these when the same 5-15 lines repeat across 3+ components but
+ * don't warrant a full Angular component (icon-only buttons, status
+ * chips, empty-state text, etc.).
+ *
+ * Consume with `@use 'styles/mixins' as m;` then `@include m.icon-button;`
+ * inside the rule that needs it. The mixins read studio-shell tokens
+ * so theming flips for free.
+ *
+ * See docs/frontend-scss-quality.md "Wave E" for the rationale.
+ */
+
+/* ---------------------------------------------------------------------
+ * icon-button
+ *
+ * A square or near-square button used purely as an icon affordance.
+ * Used by: sidebar action buttons, statusbar pickers, pane-header
+ * maximize/hide, column collapse, sheet close, kebab menus, etc.
+ *
+ * Default size 22 px; pass a different size to widen/shrink.
+ * ------------------------------------------------------------------- */
+@mixin icon-button($size: 22px) {
+  display: inline-grid;
+  place-items: center;
+  width: $size;
+  height: $size;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--studio-fg-dim);
+  cursor: pointer;
+  line-height: 1;
+  flex-shrink: 0;
+  transition: background 0.12s ease, color 0.12s ease;
+
+  &:hover:not(:disabled) {
+    background: var(--studio-bg-hover);
+    color: var(--studio-fg-strong);
+  }
+
+  &:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--studio-accent);
+    outline-offset: 1px;
+  }
+}
+
+/* ---------------------------------------------------------------------
+ * chip
+ *
+ * Pill-shaped semantic badge: small, rounded, tinted background, slightly
+ * stronger text colour. The default accent is the brand orange; pass
+ * `var(--studio-accent-warn)` etc. for semantic variants.
+ *
+ * Used by: status badges (ev-status.pass, .triage__menu-blocked),
+ * mode pills (chat-mode__pill), CLI quota labels, etc.
+ * ------------------------------------------------------------------- */
+@mixin chip($accent: var(--studio-accent), $alpha-bg: 0.12, $alpha-border: 0.40) {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+  padding: 0 8px;
+  border-radius: 9px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: color-mix(in srgb, #{$accent} #{$alpha-bg * 100%}, transparent);
+  border: 1px solid color-mix(in srgb, #{$accent} #{$alpha-border * 100%}, transparent);
+  color: $accent;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------------
+ * empty-state
+ *
+ * Muted padded text used when a panel / list / section has nothing
+ * to show. Centralises the "italic, muted, padded" recipe so every
+ * empty state reads the same.
+ * ------------------------------------------------------------------- */
+@mixin empty-state {
+  padding: 12px 14px;
+  color: var(--studio-fg-muted);
+  font-size: 12px;
+  line-height: 1.5;
+  font-style: italic;
+}
