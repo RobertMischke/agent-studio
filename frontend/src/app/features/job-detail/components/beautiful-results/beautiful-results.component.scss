@@ -220,7 +220,7 @@ $ctp-crust:     #11111b;
   padding: 4px 10px;
   background: rgba($ctp-surface0, 0.7);
   border-bottom: 1px solid rgba($ctp-overlay0, 0.3);
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
 }
 
@@ -253,7 +253,7 @@ $ctp-crust:     #11111b;
   padding: 12px 14px;
   background: $ctp-mantle;
   overflow-x: auto;
-  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   line-height: 1.55;
 }
@@ -313,14 +313,14 @@ $ctp-crust:     #11111b;
     border-bottom: 1px solid rgba($ctp-overlay0, 0.3);
     color: $ctp-subtext1;
     padding: 4px 10px;
-    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-family: var(--font-mono);
     font-size: 12px;
   }
   .d2h-file-name { color: $ctp-blue; font-weight: 600; }
   .d2h-tag { background: rgba($ctp-surface1, 0.7); color: $ctp-subtext1; border-color: rgba($ctp-overlay0, 0.4); }
   .d2h-code-line,
   .d2h-code-line-ctn,
-  .d2h-code-side-line { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 12.5px; line-height: 1.55; }
+  .d2h-code-side-line { font-family: var(--font-mono); font-size: 12.5px; line-height: 1.55; }
   .d2h-code-linenumber,
   .d2h-code-side-linenumber {
     background: $ctp-base;
@@ -346,7 +346,7 @@ $ctp-crust:     #11111b;
   border: 1px solid rgba($ctp-overlay0, 0.4);
   border-radius: 4px;
   background: $ctp-mantle;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 12.5px;
   line-height: 1.6;
   color: $ctp-text;

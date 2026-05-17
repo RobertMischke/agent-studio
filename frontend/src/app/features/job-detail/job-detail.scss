@@ -935,7 +935,7 @@
       color: var(--studio-fg);
       padding: 16px;
       border-radius: 8px;
-      font-family: 'Consolas', monospace;
+      font-family: var(--font-mono);
       font-size: 13px;
       line-height: 1.6;
       resize: vertical;
@@ -1066,7 +1066,7 @@
       padding: 6px 10px;
       border-radius: 6px;
       font-size: 13px;
-      font-family: 'Cascadia Code', 'Fira Code', monospace;
+      font-family: var(--font-mono);
     }
     .cli-config__input:focus {
       outline: none;

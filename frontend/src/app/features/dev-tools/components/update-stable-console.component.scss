@@ -18,7 +18,7 @@
 .status { font-size: 12px; color: #94a3b8; margin-left: auto; }
 .status--ok { color: #4ade80; }
 .status--err { color: #f87171; }
-.console { flex: 1; min-height: 320px; max-height: 60vh; overflow: auto; margin: 0; padding: 12px 14px; background: #05050a; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; font-family: 'Consolas', 'SFMono-Regular', monospace; font-size: 12px; line-height: 1.5; color: #cbd5e1; white-space: pre-wrap; word-break: break-word; }
+.console { flex: 1; min-height: 320px; max-height: 60vh; overflow: auto; margin: 0; padding: 12px 14px; background: #05050a; border: 1px solid rgba(255,255,255,0.08); border-radius: 8px; font-family: var(--font-mono); font-size: 12px; line-height: 1.5; color: #cbd5e1; white-space: pre-wrap; word-break: break-word; }
 .line { display: block; }
 .line--log { color: #93c5fd; }
 .line--stderr { color: #fca5a5; }

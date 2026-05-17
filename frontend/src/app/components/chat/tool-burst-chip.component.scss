@@ -4,7 +4,7 @@
   border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
   border-radius: 8px;
   background: color-mix(in srgb, currentColor 4%, transparent);
-  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-family: var(--font-ui);
   font-size: 12.5px;
   line-height: 1.45;
   transition: border-color 120ms ease, background 120ms ease;
@@ -103,7 +103,7 @@
   opacity: 0.65;
 }
 .burst__details-head code {
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   opacity: 0.7;
 }
@@ -132,14 +132,14 @@
 }
 .burst__detail-time { font-variant-numeric: tabular-nums; opacity: 0.6; font-size: 11px; }
 .burst__detail-tool {
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   padding: 1px 6px;
   border-radius: 4px;
   background: color-mix(in srgb, currentColor 10%, transparent);
 }
 .burst__detail-target {
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: var(--font-mono);
   font-size: 11.5px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -172,7 +172,7 @@
   font-size: 11.5px;
 }
 .burst__sub li code {
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   overflow: hidden;
   text-overflow: ellipsis;

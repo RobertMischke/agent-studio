@@ -1111,7 +1111,7 @@
       color: var(--studio-fg);
       font-size: 12px;
       line-height: 1.55;
-      font-family: 'Consolas', 'SFMono-Regular', monospace;
+      font-family: var(--font-mono);
       overflow: auto;
       max-height: 280px;
       white-space: pre-wrap;
@@ -1217,7 +1217,7 @@
       border-radius: 10px;
       background: rgba(255,255,255,0.04);
       border: 1px solid rgba(255,255,255,0.06);
-      font-family: 'Consolas', 'SFMono-Regular', monospace;
+      font-family: var(--font-mono);
       white-space: pre-wrap;
       word-break: break-word;
     }
@@ -1439,7 +1439,7 @@
       font-size: 13px;
     }
     .field__input:focus { outline: none; border-color: #6366f1; }
-    .field__textarea { font-family: 'Consolas', monospace; resize: vertical; }
+    .field__textarea { font-family: var(--font-mono); resize: vertical; }
 
     /* Layout fills the scroll container; the app__body now provides
        the scrollbar so the header and status bar stay pinned. The

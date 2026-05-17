@@ -103,7 +103,7 @@
   font-size: 10px;
   color: var(--studio-fg-muted, var(--lane-backlog));
   margin-left: auto;
-  font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
 }
 
 .triage__menu-blocked {

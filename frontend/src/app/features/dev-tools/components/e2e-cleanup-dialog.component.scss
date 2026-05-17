@@ -20,7 +20,7 @@
 .row__meta { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 4px; font-size: 11px; color: #94a3b8; }
 .row__chip { background: rgba(255,255,255,0.06); padding: 1px 8px; border-radius: 999px; }
 .row__chip--state { background: rgba(99,102,241,0.18); color: #c7d2fe; }
-.row__id { font-family: 'Consolas', monospace; color: #94a3b8; }
+.row__id { font-family: var(--font-mono); color: #94a3b8; }
 .actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 6px; }
 .btn { background: rgba(255,255,255,0.10); border: 1px solid rgba(255,255,255,0.18); color: #f8fafc; padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 12px; font-weight: 600; }
 .btn:hover:not(:disabled) { background: rgba(255,255,255,0.18); }

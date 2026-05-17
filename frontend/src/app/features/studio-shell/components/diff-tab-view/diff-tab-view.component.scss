@@ -24,7 +24,7 @@
   }
 
   &__sha {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-mono);
     background: var(--studio-bg-elevated);
     padding: 2px 8px;
     border-radius: 3px;

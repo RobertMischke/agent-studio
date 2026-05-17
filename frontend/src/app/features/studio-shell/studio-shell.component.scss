@@ -67,6 +67,12 @@
   --lane-completed:     #5fbf80;
   --lane-archive:       #6e6e6e;
   --lane-failed:        #f38ba8;
+  // ---- Type families ----
+  // Two canonical stacks. Inline `font-family:` declarations across
+  // the codebase should resolve to one of these — see
+  // docs/frontend-scss-quality.md Tier 3.2.
+  --font-ui:   'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
   // layout
   --studio-activitybar-w: 48px;
   --studio-titlebar-h:    36px;
@@ -118,7 +124,7 @@
   grid-template-rows: var(--studio-titlebar-h) 1fr auto;
   height: 100vh;
   overflow: hidden;
-  font-family: 'Inter', -apple-system, 'Segoe UI', 'Helvetica Neue', sans-serif;
+  font-family: var(--font-ui);
   font-size: 13px;
   color: var(--studio-fg);
   background: var(--studio-bg-editor);
@@ -271,7 +277,7 @@
 
   &__kbd {
     color: var(--studio-fg-muted);
-    font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+    font-family: var(--font-mono);
     font-size: 10px;
   }
 
@@ -839,7 +845,7 @@
   }
 
   &__count {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 11px;
     color: var(--studio-fg-dim);
     min-width: 24px;
@@ -970,7 +976,7 @@
 }
 
 .studio-cli__count {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   color: var(--studio-fg-dim);
 }
@@ -1073,7 +1079,7 @@
     font-size: 11px;
 
     &.mono {
-      font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+      font-family: var(--font-mono);
     }
 
     &--phase {
@@ -1416,7 +1422,7 @@
     }
 
     code {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: var(--font-mono);
       font-size: 11px;
       padding: 1px 4px;
       background: var(--studio-bg-elevated);
@@ -1492,7 +1498,7 @@
 }
 
 .studio-tab-action__pager {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   color: var(--studio-fg-muted);
   padding: 0 4px;
@@ -1555,7 +1561,7 @@
     cursor: default;
     padding: 0 6px;
     color: var(--studio-fg);
-    font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+    font-family: var(--font-mono);
     font-size: 11px;
     font-weight: 600;
     pointer-events: none;
@@ -1615,7 +1621,7 @@
   }
 
   &__num {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 10px;
     color: var(--studio-fg-muted);
   }
@@ -1846,7 +1852,7 @@
   }
 
   code {
-    font-family: 'JetBrains Mono', monospace;
+    font-family: var(--font-mono);
     font-size: 11px;
     padding: 1px 4px;
     background: var(--studio-bg-elevated);

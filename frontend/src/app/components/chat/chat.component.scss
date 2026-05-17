@@ -28,7 +28,7 @@
       display: flex;
       flex-direction: column;
       gap: 8px;
-      font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+      font-family: var(--font-ui);
       font-size: 13px;
       line-height: 1.5;
       scroll-behavior: smooth;
@@ -276,7 +276,7 @@
       border: 1px solid rgba(148,163,184,0.16);
       border-radius: 3px;
       padding: 0 4px;
-      font-family: 'Consolas', 'Monaco', monospace;
+      font-family: var(--font-mono);
       font-size: 0.92em;
       color: #fef3c7;
     }

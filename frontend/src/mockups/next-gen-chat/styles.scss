@@ -14,7 +14,7 @@ app-next-gen-chat-workbench-prototype {
       inset: 0;
       z-index: 5000;
       display: block;
-      font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      font-family: var(--font-ui);
     }
 
 mockup-next-gen-chat-activity-bar,
