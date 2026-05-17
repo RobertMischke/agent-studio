@@ -1,0 +1,70 @@
+/*
+ * Pane header — shared chrome for the prompt / protocol / git panes.
+ * Reads only studio-shell tokens so it inherits theme flipping for
+ * free.
+ */
+.pane-header {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 6px 0 0;
+  background: var(--studio-bg-sidebar);
+  border-bottom: 1px solid var(--studio-border);
+  font-size: 12px;
+  color: var(--studio-fg-dim);
+}
+
+.pane-header__title-block {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.pane-header__icon {
+  color: var(--studio-fg-dim);
+  flex-shrink: 0;
+}
+
+.pane-header__title {
+  font-weight: 600;
+  font-size: 12px;
+  color: var(--studio-fg-strong);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pane-header__subtitle {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--studio-fg-muted);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.pane-header__spacer { flex: 1 1 auto; }
+
+.pane-header__btn {
+  display: inline-grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  align-self: center;
+  border: 0;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--studio-fg-dim);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+
+  &:hover {
+    background: var(--studio-bg-hover);
+    color: var(--studio-fg-strong);
+  }
+}

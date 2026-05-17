@@ -1,0 +1,42 @@
+<header class="pane-header"
+        [attr.data-testid]="testid">
+  <!-- Tab strip slot: when present, replaces the icon+title block. -->
+  <ng-content select="[tabs]"></ng-content>
+
+  @if (title) {
+    <div class="pane-header__title-block">
+      @if (icon) {
+        <app-studio-icon class="pane-header__icon" [name]="icon" [size]="13"></app-studio-icon>
+      }
+      <span class="pane-header__title">{{ title }}</span>
+      @if (subtitle) {
+        <span class="pane-header__subtitle">{{ subtitle }}</span>
+      }
+    </div>
+  }
+
+  <ng-content select="[actions]"></ng-content>
+
+  <span class="pane-header__spacer"></span>
+
+  <ng-content select="[trailing]"></ng-content>
+
+  @if (maximizable) {
+    <button type="button"
+            class="pane-header__btn"
+            data-testid="pane-header-maximize"
+            [attr.aria-label]="maximized ? 'Restore' : 'Maximize'"
+            (click)="maximize.emit()">
+      <app-studio-icon [name]="maximized ? 'collapse' : 'expand'" [size]="12"></app-studio-icon>
+    </button>
+  }
+  @if (hideable) {
+    <button type="button"
+            class="pane-header__btn"
+            data-testid="pane-header-hide"
+            aria-label="Hide panel"
+            (click)="hide.emit()">
+      <app-studio-icon name="close" [size]="12"></app-studio-icon>
+    </button>
+  }
+</header>
