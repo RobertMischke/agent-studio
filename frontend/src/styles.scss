@@ -240,6 +240,29 @@ html[data-studio-theme='light'] {
     .project-hygiene-badge--unpushed { background: rgba(59,130,246,0.10); color: #1d4ed8; }
   }
 
+  // ---- Filter sidesheet (kanban filter) light readability ----
+  // The component's own SCSS pins #cbd5e1 / #64748b for chips, checkbox
+  // rows, and the empty-state label — those read fine on the dark
+  // shell but turn pale-grey-on-white in light mode. Scope strong
+  // overrides under app-kanban-filter-sidesheet so the dark theme
+  // stays untouched.
+  app-kanban-filter-sidesheet {
+    .sheet__chip { color: #1a1a1a; background: rgba(0,0,0,0.04); border-color: #d4d4d4; }
+    .sheet__chip:hover { background: rgba(0,0,0,0.08); }
+    .sheet__chip--active {
+      background: linear-gradient(135deg, rgba(217,119,87,0.18), rgba(217,119,87,0.10));
+      border-color: rgba(217,119,87,0.55);
+      color: #1a1a1a;
+    }
+    .sheet__checkbox { color: #1a1a1a; }
+    .sheet__checkbox:hover { background: rgba(0,0,0,0.05); }
+    .sheet__empty { color: #4a4a4a; }
+    .sheet__search-input { color: #1a1a1a; }
+    .sheet__search-input::placeholder { color: #6e6e6e; }
+    .sheet__count { color: #4a4a4a; }
+    .sheet__section-title { color: #1a1a1a; }
+  }
+
   // ---- Pane tabs (Description / Evidence in the prompt pane) ----
   // The tabs are scoped to .pane__header--tabs to avoid bleeding into
   // the protocol pane's inspector tabs.
