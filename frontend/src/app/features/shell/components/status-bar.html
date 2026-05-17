@@ -24,34 +24,19 @@
   </div>
 
   <div class="statusbar__group statusbar__group--right">
-    <button class="statusbar__item statusbar__item--btn"
-            [appTooltip]="'CLI sessions'"
-            (click)="toggleUsage.emit()">
-      <span class="statusbar__icon"><app-studio-icon name="grid" [size]="12"></app-studio-icon></span><span>Usage</span>
-    </button>
-    <button class="statusbar__item statusbar__item--btn"
-            data-testid="orch-side-sheet-toggle"
-            [appTooltip]="'Orchestrator chat'"
-            (click)="toggleOrchestrator.emit()">
-      <span class="statusbar__icon"><app-studio-icon name="bot" [size]="12"></app-studio-icon></span><span>Orchestrator</span>
-    </button>
-    <button class="statusbar__item statusbar__item--btn"
-            [appTooltip]="'Orchestrator feed'"
-            (click)="toggleFeed.emit()">
-      <span class="statusbar__icon"><app-studio-icon name="activity" [size]="12"></app-studio-icon></span><span>Feed</span>
-    </button>
-    <button class="statusbar__item statusbar__item--btn"
-            data-testid="status-bar-visual-evidence"
-            [appTooltip]="'Workspace visual evidence (screenshots across projects)'"
-            (click)="toggleVisualEvidence.emit()">
-      <span class="statusbar__icon"><app-studio-icon name="eye" [size]="12"></app-studio-icon></span><span>Visual evidence</span>
-    </button>
-    <button class="statusbar__item statusbar__item--btn"
-            data-testid="status-bar-cli-admin"
-            [appTooltip]="'Manage CLIs (usage caps, admin)'"
-            (click)="toggleCliAdmin.emit()">
-      <span class="statusbar__icon"><app-studio-icon name="settings" [size]="12"></app-studio-icon></span><span>Manage CLIs</span>
-    </button>
+    <app-statusbar-item icon="grid"     label="Usage"             tooltip="CLI sessions"
+                        (click)="toggleUsage.emit()" />
+    <app-statusbar-item icon="bot"      label="Orchestrator"      tooltip="Orchestrator chat"
+                        testid="orch-side-sheet-toggle"
+                        (click)="toggleOrchestrator.emit()" />
+    <app-statusbar-item icon="activity" label="Feed"              tooltip="Orchestrator feed"
+                        (click)="toggleFeed.emit()" />
+    <app-statusbar-item icon="eye"      label="Visual evidence"   tooltip="Workspace visual evidence (screenshots across projects)"
+                        testid="status-bar-visual-evidence"
+                        (click)="toggleVisualEvidence.emit()" />
+    <app-statusbar-item icon="settings" label="Manage CLIs"       tooltip="Manage CLIs (usage caps, admin)"
+                        testid="status-bar-cli-admin"
+                        (click)="toggleCliAdmin.emit()" />
 
     <span class="statusbar__sep" aria-hidden="true"></span>
 
