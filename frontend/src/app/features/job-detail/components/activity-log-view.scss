@@ -44,7 +44,7 @@
     .activity-log__btn {
       background: rgba(255,255,255,0.04);
       border: 1px solid rgba(255,255,255,0.08);
-      color: #94a3b8;
+      color: var(--studio-fg-dim);
       border-radius: 6px;
       padding: 5px 12px;
       font-size: 12.5px;
@@ -53,7 +53,7 @@
     }
     .activity-log__tab:hover,
     .activity-log__btn:hover:not(:disabled) {
-      color: #e2e8f0;
+      color: var(--studio-fg);
       border-color: rgba(255,255,255,0.16);
     }
     .activity-log__tab--active {
@@ -69,7 +69,7 @@
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      color: #cbd5e1;
+      color: var(--studio-fg-dim);
       font-size: 12px;
       white-space: nowrap;
       user-select: none;
@@ -127,7 +127,7 @@
     }
     .activity-log__empty {
       padding: 28px 12px;
-      color: #64748b;
+      color: var(--studio-fg-muted);
       text-align: center;
     }
 
@@ -298,7 +298,7 @@
       letter-spacing: 0.04em;
       text-transform: uppercase;
       font-weight: 700;
-      color: #94a3b8;
+      color: var(--studio-fg-dim);
     }
     .convo-turn--agent .convo-turn__head { color: #ddd6fe; }
     .convo-turn--user .convo-turn__head { color: #99f6e4; }
@@ -307,14 +307,14 @@
     .convo-turn__time {
       margin-left: auto;
       font-weight: 500;
-      color: #64748b;
+      color: var(--studio-fg-muted);
       letter-spacing: 0;
       text-transform: none;
       font-size: 11px;
       font-variant-numeric: tabular-nums;
     }
     .convo-turn__body {
-      color: #e2e8f0;
+      color: var(--studio-fg);
       font-size: 13.5px;
       line-height: 1.6;
       word-break: break-word;
@@ -344,7 +344,7 @@
       border-top: 1px solid rgba(148,163,184,0.08);
       border-bottom: 1px solid rgba(148,163,184,0.08);
       border-radius: 0;
-      color: #64748b;
+      color: var(--studio-fg-muted);
       font: inherit;
       font-size: 11.5px;
       cursor: pointer;
@@ -355,7 +355,7 @@
     .convo-tools:hover,
     .convo-tools[aria-expanded='true'] {
       opacity: 1;
-      color: #cbd5e1;
+      color: var(--studio-fg-dim);
       background: rgba(30,41,59,0.35);
     }
     .convo-tools__chevron { color: #475569; font-size: 10px; flex: 0 0 auto; }
@@ -420,7 +420,7 @@
       border-radius: 8px;
       font-family: 'Consolas', 'Monaco', monospace;
       font-size: 11.5px;
-      color: #cbd5e1;
+      color: var(--studio-fg-dim);
     }
     .convo-tools__bin {
       display: flex;
@@ -436,7 +436,7 @@
       margin-bottom: 2px;
     }
     .convo-tools__bin-count {
-      color: #94a3b8;
+      color: var(--studio-fg-dim);
       font-size: 10px;
       font-variant-numeric: tabular-nums;
     }
@@ -455,13 +455,13 @@
       font-weight: 700;
     }
     .convo-tools__title {
-      color: #e2e8f0;
+      color: var(--studio-fg);
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
     }
     .convo-tools__sub {
-      color: #94a3b8;
+      color: var(--studio-fg-dim);
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -497,7 +497,7 @@
       gap: 8px;
       align-items: center;
       padding: 6px 10px;
-      color: #e2e8f0;
+      color: var(--studio-fg);
       background: transparent;
       border: 0;
       cursor: pointer;
@@ -505,7 +505,7 @@
       text-align: left;
     }
     .trace-group__chevron, .trace-group__count {
-      color: #94a3b8;
+      color: var(--studio-fg-dim);
       font-variant-numeric: tabular-nums;
     }
     .trace-group__kind {
@@ -522,7 +522,7 @@
     }
     .trace-group__subtitle {
       padding: 0 10px 6px 110px;
-      color: #94a3b8;
+      color: var(--studio-fg-dim);
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
@@ -540,7 +540,7 @@
     }
     .trace-line:hover { background: rgba(255,255,255,0.04); }
     .trace-line__time {
-      color: #64748b;
+      color: var(--studio-fg-muted);
       font-size: 10px;
       font-variant-numeric: tabular-nums;
     }
@@ -564,7 +564,7 @@
     }
     .trace-line--user .trace-line__text { color: #ccfbf1; }
     .trace-line__text {
-      color: #e2e8f0;
+      color: var(--studio-fg);
       white-space: pre-wrap;
       word-break: break-word;
     }
@@ -600,7 +600,7 @@
     .live-status[data-kind='user']        { border-color: rgba(94,234,212,0.32);  background: rgba(13,148,136,0.12);  color: #ccfbf1; }
     .live-status[data-kind='orchestrator'] { border-color: rgba(252,211,77,0.36); background: rgba(217,119,6,0.10);   color: #fde68a; }
     .live-status[data-kind='recovering']  { border-color: rgba(251,113,133,0.45); background: rgba(127,29,29,0.18);   color: #fecaca; }
-    .live-status[data-kind='starting']    { border-color: rgba(148,163,184,0.32); background: rgba(148,163,184,0.10); color: #cbd5e1; }
+    .live-status[data-kind='starting']    { border-color: rgba(148,163,184,0.32); background: rgba(148,163,184,0.10); color: var(--studio-fg-dim); }
 
     .live-status__pulse {
       display: inline-flex;

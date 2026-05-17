@@ -5,7 +5,7 @@
          box-sizing makes padding subtract from this. */
       height: 100%;
       background: #0f0f1a;
-      color: #e2e8f0;
+      color: var(--studio-fg);
       font-family: 'Segoe UI', system-ui, sans-serif;
       display: flex;
       flex-direction: column;
@@ -63,7 +63,7 @@
       border-radius: var(--header-btn-radius);
       border: 1px solid rgba(255,255,255,0.12);
       background: rgba(255,255,255,0.04);
-      color: #cbd5e1;
+      color: var(--studio-fg-dim);
       font-size: 12px;
       font-weight: 600;
       line-height: 1;
@@ -75,7 +75,7 @@
     .header-btn:hover {
       background: rgba(255,255,255,0.10);
       border-color: rgba(255,255,255,0.22);
-      color: #f8fafc;
+      color: var(--studio-fg-strong);
     }
     .header-btn--icon {
       width: var(--header-btn-height);
@@ -128,18 +128,18 @@
     .header__title-name {
       font-weight: 600;
       letter-spacing: 0.02em;
-      color: #e2e8f0;
+      color: var(--studio-fg);
       text-transform: uppercase;
       font-size: 11px;
     }
-    .header__subtitle { font-size: 11px; color: #64748b; }
+    .header__subtitle { font-size: 11px; color: var(--studio-fg-muted); }
     .header__actions { display: flex; gap: 6px; flex: 0 0 auto; align-items: center; }
     .client-filter {
       display: inline-flex;
       align-items: center;
       gap: 6px;
       font-size: 12px;
-      color: #cbd5e1;
+      color: var(--studio-fg-dim);
       padding: 0 6px;
     }
     .client-filter__label {
@@ -147,12 +147,12 @@
       text-transform: uppercase;
       font-weight: 600;
       font-size: 11px;
-      color: #94a3b8;
+      color: var(--studio-fg-dim);
     }
     .client-filter__select {
       background: rgba(255,255,255,0.06);
       border: 1px solid rgba(255,255,255,0.10);
-      color: #e2e8f0;
+      color: var(--studio-fg);
       border-radius: var(--header-btn-radius, 6px);
       height: var(--header-btn-height, 28px);
       padding: 0 8px;
@@ -185,7 +185,7 @@
       gap: 4px;
       background: rgba(255, 255, 255, 0.04);
       border: 1px solid rgba(255, 255, 255, 0.14);
-      color: #e2e8f0;
+      color: var(--studio-fg);
       border-radius: 999px;
       padding: 2px 4px 2px 8px;
       font-weight: 600;
@@ -214,7 +214,7 @@
       font-size: 10px;
       letter-spacing: 0.04em;
       text-transform: uppercase;
-      color: #94a3b8;
+      color: var(--studio-fg-dim);
       font-weight: 700;
     }
     .active-filter-strip__pill-swatch {
@@ -274,7 +274,7 @@
       gap: var(--header-btn-gap, 6px);
       background: rgba(255,255,255,0.06);
       border: 1px solid var(--project-border, rgba(255,255,255,0.20));
-      color: #e2e8f0;
+      color: var(--studio-fg);
       height: var(--header-btn-height, 28px);
       padding: 0 12px 0 4px;
       border-radius: calc(var(--header-btn-height, 28px) / 2);
@@ -328,7 +328,7 @@
       padding: 1px 6px 1px 5px;
       border-radius: 999px;
       background: rgba(148, 163, 184, 0.18);
-      color: #cbd5e1;
+      color: var(--studio-fg-dim);
       font-size: 10px;
       font-weight: 600;
       font-variant-numeric: tabular-nums;
@@ -361,7 +361,7 @@
       font-size: 14px;
     }
     .project-tab__shell:hover {
-      color: #cdd6f4;
+      color: var(--studio-fg);
     }
     .auto-toggle {
       display: inline-flex;
@@ -369,7 +369,7 @@
       gap: 4px;
       background: rgba(255,255,255,0.04);
       border: 1px solid rgba(255,255,255,0.12);
-      color: #94a3b8;
+      color: var(--studio-fg-dim);
       height: var(--header-btn-height, 28px);
       padding: 0 var(--header-btn-padding-x, 10px);
       border-radius: calc(var(--header-btn-height, 28px) / 2);
@@ -384,7 +384,7 @@
     .auto-toggle:hover {
       background: rgba(255,255,255,0.10);
       border-color: rgba(255,255,255,0.22);
-      color: #e2e8f0;
+      color: var(--studio-fg);
     }
     .auto-toggle__icon {
       font-size: 11px;
@@ -396,7 +396,7 @@
       padding: 1px 6px;
       font-size: 10px;
       font-weight: 700;
-      color: #f8fafc;
+      color: var(--studio-fg-strong);
       min-width: 16px;
       text-align: center;
     }
@@ -438,7 +438,7 @@
       gap: var(--header-btn-gap, 6px);
       background: rgba(255,255,255,0.10);
       border: 1px solid rgba(255,255,255,0.20);
-      color: #f8fafc;
+      color: var(--studio-fg-strong);
       height: var(--header-btn-height, 28px);
       padding: 0 14px;
       border-radius: var(--header-btn-radius, 6px);
@@ -480,7 +480,7 @@
       background: rgba(255,255,255,0.04);
       border: 1px solid rgba(255,255,255,0.10);
       border-radius: var(--header-btn-radius, 6px);
-      color: #cbd5e1;
+      color: var(--studio-fg-dim);
       cursor: pointer;
       font-size: 12px;
       line-height: 1;
@@ -489,7 +489,7 @@
     }
     .header__filter-trigger:hover {
       background: rgba(255,255,255,0.10);
-      color: #f8fafc;
+      color: var(--studio-fg-strong);
     }
     .header__filter-trigger--active {
       background: rgba(59,130,246,0.20);
@@ -525,7 +525,7 @@
     .devtools-menu__trigger {
       background: transparent;
       border: 1px solid rgba(255,255,255,0.10);
-      color: #94a3b8;
+      color: var(--studio-fg-dim);
       width: var(--header-btn-height, 28px);
       height: var(--header-btn-height, 28px);
       border-radius: var(--header-btn-radius, 6px);
@@ -541,12 +541,12 @@
     .devtools-menu__trigger:hover {
       background: rgba(255,255,255,0.08);
       border-color: rgba(255,255,255,0.18);
-      color: #e2e8f0;
+      color: var(--studio-fg);
     }
     .devtools-menu__trigger--open {
       background: rgba(255,255,255,0.10);
       border-color: rgba(255,255,255,0.22);
-      color: #f8fafc;
+      color: var(--studio-fg-strong);
     }
     .devtools-menu__backdrop {
       position: fixed;
@@ -574,7 +574,7 @@
       font-size: 10px;
       letter-spacing: 0.1em;
       text-transform: uppercase;
-      color: #64748b;
+      color: var(--studio-fg-muted);
     }
     .devtools-menu__item {
       display: grid;
@@ -584,7 +584,7 @@
       align-items: center;
       background: transparent;
       border: 0;
-      color: #e2e8f0;
+      color: var(--studio-fg);
       padding: 8px 10px;
       border-radius: 6px;
       cursor: pointer;
@@ -594,7 +594,7 @@
     .devtools-menu__item:hover { background: rgba(255,255,255,0.06); }
     .devtools-menu__icon { grid-row: 1 / span 2; font-size: 14px; }
     .devtools-menu__label { font-size: 13px; font-weight: 600; }
-    .devtools-menu__hint { font-size: 11px; color: #64748b; grid-column: 2; }
+    .devtools-menu__hint { font-size: 11px; color: var(--studio-fg-muted); grid-column: 2; }
     .devtools-menu__item--danger .devtools-menu__label { color: #fecaca; }
     .devtools-menu__item--danger:hover { background: rgba(244,63,94,0.14); }
     .btn--primary {
@@ -651,7 +651,7 @@
       top: 8px;
       right: 8px;
       background: rgba(255,255,255,0.06);
-      color: #cdd6f4;
+      color: var(--studio-fg);
       border: 1px solid rgba(255,255,255,0.12);
       border-radius: 6px;
       width: 28px;
@@ -693,7 +693,7 @@
       top: 12px;
       right: 12px;
       background: rgba(255,255,255,0.06);
-      color: #cdd6f4;
+      color: var(--studio-fg);
       border: 1px solid rgba(255,255,255,0.12);
       border-radius: 6px;
       width: 28px;
@@ -711,7 +711,7 @@
       font-size: 16px;
       font-weight: 600;
       letter-spacing: 0.01em;
-      color: #f8fafc;
+      color: var(--studio-fg-strong);
       padding-right: 36px;
       white-space: nowrap;
       overflow: hidden;
@@ -735,7 +735,7 @@
     .create-dialog__attach-btn {
       background: rgba(255,255,255,0.06);
       border: 1px solid rgba(255,255,255,0.12);
-      color: #cbd5e1;
+      color: var(--studio-fg-dim);
       padding: 4px 10px;
       border-radius: 6px;
       font-size: 12px;
@@ -775,7 +775,7 @@
     }
     .create-dialog__attachment-name {
       font-size: 11px;
-      color: #94a3b8;
+      color: var(--studio-fg-dim);
       max-width: 120px;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -790,7 +790,7 @@
       border-radius: 999px;
       border: 0;
       background: rgba(0,0,0,0.55);
-      color: #f8fafc;
+      color: var(--studio-fg-strong);
       font-size: 14px;
       line-height: 1;
       cursor: pointer;
@@ -819,7 +819,7 @@
       border-radius: 8px;
       border: 1px dashed rgba(148, 163, 184, 0.45);
       background: rgba(15, 23, 42, 0.35);
-      color: #cbd5e1;
+      color: var(--studio-fg-dim);
       font-size: 12px;
       line-height: 1.4;
       cursor: pointer;
@@ -846,7 +846,7 @@
       border-radius: 4px;
       border: 1px solid rgba(255, 255, 255, 0.18);
       background: rgba(255, 255, 255, 0.08);
-      color: #e2e8f0;
+      color: var(--studio-fg);
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       font-size: 11px;
       line-height: 1;
@@ -961,7 +961,7 @@
       align-items: start;
       gap: 8px 10px;
       font-size: 12px;
-      color: #e2e8f0;
+      color: var(--studio-fg);
     }
     .create-dialog__enhance-summary-icon {
       font-size: 14px;
@@ -980,7 +980,7 @@
       gap: 8px;
       flex-wrap: wrap;
     }
-    .create-dialog__enhance-summary-row--muted { color: #94a3b8; }
+    .create-dialog__enhance-summary-row--muted { color: var(--studio-fg-dim); }
     .create-dialog__enhance-summary-label {
       font-size: 10px;
       font-weight: 600;
@@ -1007,7 +1007,7 @@
     .create-dialog__enhance-summary-dismiss {
       background: transparent;
       border: 0;
-      color: #94a3b8;
+      color: var(--studio-fg-dim);
       cursor: pointer;
       font-size: 14px;
       line-height: 1;
@@ -1016,7 +1016,7 @@
     }
     .create-dialog__enhance-summary-dismiss:hover {
       background: rgba(255,255,255,0.06);
-      color: #f8fafc;
+      color: var(--studio-fg-strong);
     }
     .overlay--error {
       z-index: 120;
@@ -1056,7 +1056,7 @@
     .error-dialog__close {
       background: rgba(255,255,255,0.06);
       border: 1px solid rgba(255,255,255,0.08);
-      color: #f8fafc;
+      color: var(--studio-fg-strong);
       width: 36px;
       height: 36px;
       border-radius: 999px;
@@ -1097,7 +1097,7 @@
     }
     .error-dialog__section-title {
       font-size: 12px;
-      color: #94a3b8;
+      color: var(--studio-fg-dim);
       text-transform: uppercase;
       letter-spacing: 0.08em;
       font-weight: 700;
@@ -1108,7 +1108,7 @@
       border-radius: 14px;
       background: rgba(0,0,0,0.32);
       border: 1px solid rgba(255,255,255,0.08);
-      color: #e2e8f0;
+      color: var(--studio-fg);
       font-size: 12px;
       line-height: 1.55;
       font-family: 'Consolas', 'SFMono-Regular', monospace;
@@ -1122,7 +1122,7 @@
       border-radius: 14px;
       background: rgba(255,255,255,0.03);
       border: 1px solid rgba(255,255,255,0.06);
-      color: #94a3b8;
+      color: var(--studio-fg-dim);
       font-size: 13px;
     }
     .create-dialog__actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px; }
@@ -1168,7 +1168,7 @@
       font-size: 11px;
       letter-spacing: 0.08em;
       text-transform: uppercase;
-      color: #94a3b8;
+      color: var(--studio-fg-dim);
       margin-bottom: 6px;
       font-weight: 600;
     }
@@ -1181,13 +1181,13 @@
     .app-dialog__title {
       margin: 0;
       font-size: 18px;
-      color: #f8fafc;
+      color: var(--studio-fg-strong);
       line-height: 1.3;
     }
     .app-dialog__close {
       background: rgba(255,255,255,0.06);
       border: 1px solid rgba(255,255,255,0.1);
-      color: #f8fafc;
+      color: var(--studio-fg-strong);
       width: 30px;
       height: 30px;
       border-radius: 999px;
@@ -1206,13 +1206,13 @@
       margin: 0;
       font-size: 14px;
       line-height: 1.55;
-      color: #e2e8f0;
+      color: var(--studio-fg);
     }
     .app-dialog__detail {
       margin: 0;
       font-size: 13px;
       line-height: 1.45;
-      color: #cbd5e1;
+      color: var(--studio-fg-dim);
       padding: 10px 12px;
       border-radius: 10px;
       background: rgba(255,255,255,0.04);
@@ -1261,7 +1261,7 @@
       background: rgba(17,17,27,0.96);
       border: 1px solid rgba(255,255,255,0.08);
       box-shadow: 0 12px 32px rgba(0,0,0,0.45);
-      color: #e2e8f0;
+      color: var(--studio-fg);
       font-size: 13px;
       line-height: 1.45;
       animation: app-notify-in 0.18s ease-out;
@@ -1275,13 +1275,13 @@
       place-items: center;
       border-radius: 999px;
       background: rgba(255,255,255,0.06);
-      color: #cbd5e1;
+      color: var(--studio-fg-dim);
       flex-shrink: 0;
     }
     .app-notify__body { min-width: 0; }
     .app-notify__title {
       font-weight: 600;
-      color: #f8fafc;
+      color: var(--studio-fg-strong);
       margin-bottom: 2px;
     }
     .app-notify__message {
@@ -1290,7 +1290,7 @@
     .app-notify__close {
       background: transparent;
       border: none;
-      color: #94a3b8;
+      color: var(--studio-fg-dim);
       cursor: pointer;
       font-size: 13px;
       line-height: 1;
@@ -1299,7 +1299,7 @@
     }
     .app-notify__close:hover {
       background: rgba(255,255,255,0.08);
-      color: #f8fafc;
+      color: var(--studio-fg-strong);
     }
     .app-notify--success {
       border-color: rgba(74,222,128,0.32);
@@ -1344,7 +1344,7 @@
     .create-cli-picker__btn {
       border: 0;
       background: transparent;
-      color: #94a3b8;
+      color: var(--studio-fg-dim);
       padding: 5px 14px;
       font-size: 13px;
       border-radius: 6px;
@@ -1355,7 +1355,7 @@
       gap: 6px;
     }
     .create-cli-picker__icon { font-size: 14px; line-height: 1; }
-    .create-cli-picker__btn:hover { color: #e2e8f0; background: rgba(255,255,255,0.06); }
+    .create-cli-picker__btn:hover { color: var(--studio-fg); background: rgba(255,255,255,0.06); }
     .create-cli-picker__btn--active {
       background: rgba(99,102,241,0.22);
       color: #c7d2fe;
@@ -1371,14 +1371,14 @@
     .create-type-picker__btn {
       border: 0;
       background: transparent;
-      color: #94a3b8;
+      color: var(--studio-fg-dim);
       padding: 5px 12px;
       font-size: 12px;
       border-radius: 6px;
       cursor: pointer;
       transition: background 0.15s, color 0.15s;
     }
-    .create-type-picker__btn:hover { color: #e2e8f0; background: rgba(255,255,255,0.06); }
+    .create-type-picker__btn:hover { color: var(--studio-fg); background: rgba(255,255,255,0.06); }
     .create-type-picker__btn--active { background: rgba(139,92,246,0.22); color: #ddd6fe; }
     /* Lane (target-state) picker. Shares the same chrome as the type
        picker so the dialog reads as one consistent toolbar of inline
@@ -1395,7 +1395,7 @@
     .create-lane-picker__btn {
       border: 0;
       background: transparent;
-      color: #94a3b8;
+      color: var(--studio-fg-dim);
       padding: 5px 10px;
       font-size: 12px;
       border-radius: 6px;
@@ -1406,13 +1406,13 @@
       gap: 5px;
     }
     .create-lane-picker__icon { font-size: 13px; line-height: 1; }
-    .create-lane-picker__btn:hover { color: #e2e8f0; background: rgba(255,255,255,0.06); }
+    .create-lane-picker__btn:hover { color: var(--studio-fg); background: rgba(255,255,255,0.06); }
     .create-lane-picker__btn--active { background: rgba(56,189,248,0.22); color: #bae6fd; }
     .create-tag-picker { display: flex; flex-wrap: wrap; gap: 6px; }
     .create-tag-picker__chip {
       background: rgba(255,255,255,0.04);
       border: 1px solid rgba(255,255,255,0.10);
-      color: #cbd5e1;
+      color: var(--studio-fg-dim);
       border-radius: 999px;
       padding: 3px 9px;
       font-size: 11px;
@@ -1420,8 +1420,8 @@
       font-weight: 500;
     }
     .create-tag-picker__chip--active {
-      background: color-mix(in srgb, var(--tag-color, #94a3b8) 22%, rgba(0,0,0,0));
-      border-color: var(--tag-color, #94a3b8);
+      background: color-mix(in srgb, var(--tag-color, var(--studio-fg-dim)) 22%, rgba(0,0,0,0));
+      border-color: var(--tag-color, var(--studio-fg-dim));
       color: #f1f5f9;
     }
     .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
@@ -1429,11 +1429,11 @@
        inter-row spacing via gap; the legacy field margin would double the
        visual rhythm. Drop it to keep the dialog compact. */
     .create-dialog .field { margin-bottom: 0; }
-    .field__label { font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; }
+    .field__label { font-size: 12px; color: var(--studio-fg-dim); text-transform: uppercase; letter-spacing: 0.5px; }
     .field__input {
       background: rgba(0,0,0,0.3);
       border: 1px solid rgba(255,255,255,0.1);
-      color: #e2e8f0;
+      color: var(--studio-fg);
       padding: 8px 12px;
       border-radius: 8px;
       font-size: 13px;
@@ -1613,19 +1613,19 @@
       align-items: center;
       gap: 8px;
       padding: 4px 8px 0;
-      color: #94a3b8;
+      color: var(--studio-fg-dim);
       font-size: 11px;
       letter-spacing: 0.06em;
       text-transform: uppercase;
     }
     .lane-group__label {
       font-weight: 700;
-      color: #cbd5e1;
+      color: var(--studio-fg-dim);
     }
     .lane-group__focus {
       background: rgba(255,255,255,0.04);
       border: 1px solid rgba(255,255,255,0.06);
-      color: #94a3b8;
+      color: var(--studio-fg-dim);
       width: 20px;
       height: 20px;
       border-radius: 3px;
@@ -1640,11 +1640,11 @@
     .lane-group__focus { margin-left: auto; }
     .lane-group__focus:hover {
       background: rgba(255,255,255,0.10);
-      color: #f8fafc;
+      color: var(--studio-fg-strong);
     }
     .lane-group--focused .lane-group__focus {
       background: rgba(148,163,184,0.20);
-      color: #f8fafc;
+      color: var(--studio-fg-strong);
       border-color: rgba(148,163,184,0.35);
     }
     .lane-group--focused {
@@ -1706,7 +1706,7 @@
     .task-nav__expand {
       background: rgba(255,255,255,0.06);
       border: 1px solid rgba(255,255,255,0.08);
-      color: #cbd5e1;
+      color: var(--studio-fg-dim);
       width: 28px;
       height: 28px;
       border-radius: 8px;
@@ -1719,7 +1719,7 @@
     .task-nav__collapse:hover,
     .task-nav__expand:hover {
       background: rgba(255,255,255,0.12);
-      color: #f8fafc;
+      color: var(--studio-fg-strong);
     }
     .task-nav__expand--board {
       margin-top: 4px;
@@ -1749,7 +1749,7 @@
       border-radius: 999px;
       background: rgba(15, 23, 42, 0.92);
       border: 1px solid rgba(137, 180, 250, 0.45);
-      color: #cdd6f4;
+      color: var(--studio-fg);
       font-size: 0.82rem;
       font-weight: 600;
       letter-spacing: 0.02em;
@@ -1787,13 +1787,13 @@
       font-size: 11px;
       letter-spacing: 0.08em;
       text-transform: uppercase;
-      color: #64748b;
+      color: var(--studio-fg-muted);
       margin-bottom: 4px;
     }
     .task-nav__title {
       margin: 0;
       font-size: 20px;
-      color: #e2e8f0;
+      color: var(--studio-fg);
     }
     .task-nav__groups {
       display: flex;
@@ -1813,21 +1813,21 @@
       align-items: center;
       gap: 8px;
       font-size: 12px;
-      color: #94a3b8;
+      color: var(--studio-fg-dim);
       font-weight: 600;
       cursor: pointer;
       user-select: none;
       transition: color 0.15s ease;
     }
     .task-nav__group-header:hover {
-      color: #cbd5e1;
+      color: var(--studio-fg-dim);
     }
     .task-nav__count {
       background: rgba(255,255,255,0.08);
       border-radius: 999px;
       padding: 2px 8px;
       font-size: 11px;
-      color: #cbd5e1;
+      color: var(--studio-fg-dim);
     }
     .task-nav__items {
       display: flex;
@@ -1839,7 +1839,7 @@
       text-align: left;
       background: rgba(255,255,255,0.03);
       border: 1px solid rgba(255,255,255,0.06);
-      color: #cbd5e1;
+      color: var(--studio-fg-dim);
       border-radius: 14px;
       padding: 12px 14px;
       display: flex;
@@ -1861,7 +1861,7 @@
     .task-nav__item-title {
       font-size: 14px;
       font-weight: 600;
-      color: #f8fafc;
+      color: var(--studio-fg-strong);
       line-height: 1.4;
     }
     .task-nav__item-meta {
@@ -1869,7 +1869,7 @@
       justify-content: space-between;
       gap: 8px;
       font-size: 11px;
-      color: #94a3b8;
+      color: var(--studio-fg-dim);
       text-transform: uppercase;
       letter-spacing: 0.04em;
     }
@@ -1877,7 +1877,7 @@
       display: inline-flex;
       align-items: center;
       gap: 5px;
-      color: var(--project-color, #94a3b8);
+      color: var(--project-color, var(--studio-fg-dim));
     }
     .task-nav__item-disk {
       display: inline-grid;
@@ -1885,7 +1885,7 @@
       width: 14px;
       height: 14px;
       border-radius: 999px;
-      background: var(--project-color, #94a3b8);
+      background: var(--project-color, var(--studio-fg-dim));
       color: var(--project-on, #0b1020);
       font-size: 9px;
       font-weight: 800;
@@ -1945,7 +1945,7 @@
     .btn--ghost {
       justify-self: flex-start;
       width: fit-content;
-      color: #cbd5e1;
+      color: var(--studio-fg-dim);
     }
     @keyframes slideIn {
       from { transform: translateX(20px); opacity: 0; }
@@ -1991,7 +1991,7 @@
        --------------------------------------------------------------- */
     .app--vscode-layout {
       --vscode-density-pad: 6px 12px;
-      --vscode-chrome-fg: #cbd5e1;
+      --vscode-chrome-fg: var(--studio-fg-dim);
       --vscode-chrome-bg: #181825;
     }
     /* Slimmer top header. Brand stays; dev tools menu stays. The
