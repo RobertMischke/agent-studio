@@ -23,6 +23,7 @@ The repo's authoritative agent contract lives in [AGENTS.md](../AGENTS.md). This
 | [design-principles.md](design-principles.md) | UX contract: top-level summary, always-available drill-down, run-as-unit-of-conversation, calm classical style. |
 | [design-system.md](design-system.md) | Visual contract: studio-shell tokens, shape/type/motion scale, component inventory, Material 3 Expressive mapping, theme switching. |
 | [frontend-scss-quality.md](frontend-scss-quality.md) | SCSS authoring rules + measured audit + 6-wave refactor plan (token consolidation, sidesheet/pane-header extraction, mixins, drop `!important`). |
+| [frontend-scss-quality-eval-2026-05-17.md](frontend-scss-quality-eval-2026-05-17.md) | Result of executing the six-wave plan: −396 hex literals, −13 `!important`, three new layout components, three SCSS mixins. Remaining work tier-ordered. |
 | [perf-frontend.md](perf-frontend.md) | Frontend perf playbook: visibility-aware polling, cache-first reads, bounded buffers, measurement recipe, anti-patterns. |
 | [frontend-architecture-review-2026-05-09.md](frontend-architecture-review-2026-05-09.md) | Maintainability audit: target component size, mega-component split plan (Tier 1/2/3), service-extraction doctrine. Pairs with ADR-0034. |
 | [cli-startup-cost-analysis-2026-05-09.md](cli-startup-cost-analysis-2026-05-09.md) | Per-CLI spawn / probe / discovery costs (Claude / Codex / Copilot / Gemini), `/api/cli/usage` breakdown, ranked optimisation opportunities. Analysis-only. |
