@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, computed, HostListener, inject, input, output, signal, effect, OnDestroy, ViewChild, ViewEncapsulation } from '@angular/core';
 import { ModalStackService } from '../../services/modal-stack.service';
 import { FormsModule } from '@angular/forms';
-import type { JobDetail, JobInfo, WatchPathEntry, CliSettings, CliType, ContinueMode } from '../../models/job.model';
+import type { JobDetail, JobInfo, WatchPathEntry, CliSettings, CliType, ContinueMode, ReviewEvidenceEntry } from '../../models/job.model';
 import { CLI_TYPES } from '../../models/job.model';
 import type { CliModelInfo } from '../../features/cli';
 import { JobService } from '../../services/job.service';
@@ -69,6 +69,29 @@ export class JobDetailComponent implements OnDestroy {
   readonly mutationsBlocked = input(false);
   readonly back = output<void>();
   readonly fileSaved = output<void>();
+
+  /** Forwarded from the prompt-pane Evidence tab into the existing job
+   *  service mutation endpoint; the protocol pane no longer hosts the
+   *  panel after the user moved Evidence into the left-pane tab. */
+  onEvidenceAcknowledge(payload: { entry: ReviewEvidenceEntry; acknowledged: boolean }): void {
+    const job = this.detail().info;
+    this.jobService
+      .acknowledgeReviewEvidence(job.id, payload.entry.id, payload.acknowledged, job.watchPath)
+      .subscribe({
+        next: () => this.fileSaved.emit(),
+        error: () => { /* the panel's own busy state clears on next reviewEvidence emission */ }
+      });
+  }
+
+  onEvidenceCreateFollowup(entry: ReviewEvidenceEntry): void {
+    const job = this.detail().info;
+    this.jobService
+      .createReviewEvidenceFollowup(job.id, entry.id, {}, job.watchPath)
+      .subscribe({
+        next: () => this.fileSaved.emit(),
+        error: () => { /* surfaced by the panel's own error toast */ }
+      });
+  }
   readonly projectChanged = output<string>();
   readonly completeAndNextReview = output<void>();
   readonly deleteRequested = output<void>();

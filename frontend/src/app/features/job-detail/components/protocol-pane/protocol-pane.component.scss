@@ -107,37 +107,39 @@
   gap: 4px;
 }
 
+// Compact verdict banner ("Last run completed successfully" / "Unclear"
+// / "Last run failed"). Re-toned per user feedback: the dark-only
+// pastel text was unreadable on the light shell and over-loud overall.
+// Uses a thin left accent stripe (semantic colour) + neutral text on
+// a near-transparent surface so the banner stays calm.
 .protocol-verdict {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  margin: 8px 0 6px;
-  border-radius: 6px;
-  border: 1px solid transparent;
-  background: rgba(120, 120, 140, 0.10);
-  font-size: 0.95em;
+  gap: 8px;
+  padding: 6px 10px;
+  margin: 6px 0;
+  border-radius: 4px;
+  border: 1px solid var(--studio-border, rgba(255,255,255,0.08));
+  border-left: 3px solid var(--studio-fg-muted, #6e6e6e);
+  background: var(--studio-bg-elevated, rgba(120, 120, 140, 0.08));
+  color: var(--studio-fg, #cccccc);
+  font-size: 12px;
 
   &[data-kind="ok"] {
-    background: rgba(34, 197, 94, 0.10);
-    border-color: rgba(34, 197, 94, 0.40);
-    color: #bbf7d0;
+    border-left-color: #16a34a;
+    background: rgba(34, 197, 94, 0.08);
   }
-
   &[data-kind="problem"] {
-    background: rgba(239, 68, 68, 0.12);
-    border-color: rgba(239, 68, 68, 0.45);
-    color: #fecaca;
+    border-left-color: #dc2626;
+    background: rgba(239, 68, 68, 0.08);
   }
-
   &[data-kind="unclear"] {
-    background: rgba(234, 179, 8, 0.12);
-    border-color: rgba(234, 179, 8, 0.45);
-    color: #fde68a;
+    border-left-color: #ca8a04;
+    background: rgba(234, 179, 8, 0.08);
   }
 
   &__emoji {
-    font-size: 1.3em;
+    font-size: 14px;
     line-height: 1;
     flex: 0 0 auto;
   }
@@ -145,17 +147,31 @@
   &__label {
     font-weight: 600;
     flex: 0 0 auto;
+    color: var(--studio-fg-strong, #ffffff);
   }
 
   &__detail {
     flex: 1 1 auto;
     min-width: 0;
-    color: inherit;
-    opacity: 0.85;
+    color: var(--studio-fg-dim, #9d9d9d);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+}
+
+// Light-theme contrast for verdict text.
+html[data-studio-theme='light'] .protocol-verdict {
+  border-color: #e1e1e1;
+  background: #ffffff;
+  color: #1a1a1a;
+
+  &[data-kind="ok"]      { background: rgba(22, 163, 74, 0.06); }
+  &[data-kind="problem"] { background: rgba(220, 38, 38, 0.06); }
+  &[data-kind="unclear"] { background: rgba(202, 138, 4, 0.08); }
+
+  &__label  { color: #1a1a1a; }
+  &__detail { color: #4a4a4a; }
 }
 
 .pane__interim-btn {
@@ -468,6 +484,11 @@
 /* "Regenerate" — eye-catching gradient pill so the test button stands
  * out as something distinct from the unobtrusive Copy. The shimmering
  * highlight reinforces "AI re-runs and produces a new artifact". */
+// Re-toned from the original violet/pink gradient to the studio brand
+// orange so the protocol pane keeps a single accent vocabulary. The
+// shadow/glow uses the same accent at low alpha; the gradient stays
+// (subtle 2-stop) so the button reads as primary CTA without competing
+// with the active tab indicator.
 .btn-regen {
   position: relative;
   isolation: isolate;
@@ -476,41 +497,25 @@
   gap: 6px;
   padding: 5px 14px;
   border-radius: 999px;
-  border: 1px solid rgba(168, 132, 255, 0.55);
-  background: linear-gradient(135deg, #6d28d9 0%, #8b5cf6 45%, #ec4899 100%);
-  color: #fdf4ff;
+  border: 1px solid rgba(217, 119, 87, 0.55);
+  background: linear-gradient(135deg, var(--studio-accent, #d97757) 0%, #c1623f 100%);
+  color: #1a1a1a;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.02em;
   cursor: pointer;
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.12) inset,
-    0 6px 16px rgba(124, 58, 237, 0.28),
-    0 0 0 0 rgba(236, 72, 153, 0.0);
+    0 1px 0 rgba(255, 255, 255, 0.18) inset,
+    0 4px 12px rgba(217, 119, 87, 0.28);
   transition: transform 0.12s ease, box-shadow 0.18s ease, filter 0.18s ease;
-}
-
-.btn-regen::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: 1px;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0));
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-          mask-composite: exclude;
-  pointer-events: none;
-  z-index: -1;
 }
 
 .btn-regen:hover:not(:disabled) {
   transform: translateY(-1px);
-  filter: brightness(1.08);
+  filter: brightness(1.06);
   box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.18) inset,
-    0 10px 24px rgba(124, 58, 237, 0.40),
-    0 0 0 4px rgba(236, 72, 153, 0.18);
+    0 1px 0 rgba(255, 255, 255, 0.22) inset,
+    0 8px 18px rgba(217, 119, 87, 0.36);
 }
 
 .btn-regen:active:not(:disabled) {

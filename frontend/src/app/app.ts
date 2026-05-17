@@ -446,6 +446,19 @@ export class App implements OnInit {
   // Cycle 9j: triageLanePeers lives in JobSelectionService.
   readonly triageLanePeers = this.jobSelection.triageLanePeers;
 
+  /** Position (1-based) + total used by the slim-tab pager next to the
+   *  prev/next arrows. The user pointed out the pager had no number — now
+   *  it reads "2 / 26" when the user is on the second card in a 26-card
+   *  lane. Falls back to "0 / 0" when there's no selected job. */
+  readonly slimPagerPosition = computed<number>(() => {
+    const job = this.selectedJob();
+    const peers = this.triageLanePeers();
+    if (!job || peers.length === 0) return 0;
+    const idx = peers.findIndex(p => p.jobKey === job.info.jobKey);
+    return idx >= 0 ? idx + 1 : 0;
+  });
+  readonly slimPagerTotal = computed<number>(() => this.triageLanePeers().length);
+
   // Cycle 10a: form state (newTitle/newPrompt/newCliType/etc.) lives in
   // CreateJobFormService. Pass-through getters keep the existing
   // template `[(ngModel)]` and helper-method bindings working unchanged.

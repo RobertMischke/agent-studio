@@ -131,6 +131,11 @@
                     data-testid="studio-task-prev"
                     [appTooltip]="'Previous task in lane'"
                     (click)="onTriagePrev(detail.info)">‹</button>
+            @if (slimPagerTotal() > 0) {
+              <span class="studio-tab-action studio-tab-action--counter"
+                    data-testid="studio-task-pager-position"
+                    aria-live="polite">{{ slimPagerPosition() }} / {{ slimPagerTotal() }}</span>
+            }
             <button type="button"
                     class="studio-tab-action studio-tab-action--icon"
                     data-testid="studio-task-next"

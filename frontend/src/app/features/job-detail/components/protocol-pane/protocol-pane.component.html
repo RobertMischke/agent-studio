@@ -212,17 +212,10 @@
         [screenshots]="screenshots()"
         variant="task" />
     }
-    <app-review-evidence-panel
-      #evidencePanel
-      [entries]="detail().reviewEvidence"
-      [job]="detail().info"
-      (acknowledge)="onEvidenceAcknowledge($event, evidencePanel)"
-      (createFollowup)="onEvidenceCreateFollowup($event, evidencePanel)" />
-    <!-- app-code-review-panel was removed from the protocol pane in the
-         reference-alignment pass — Code Review entries now surface in
-         the left pane's Evidence tab (grouped under "Code Review" via
-         source-based grouping). The Run-Code-Review action remains
-         available from the orchestrator chat composer. -->
+    <!-- Review evidence + Code review panels were moved into the prompt
+         pane's Evidence and Code Review tabs (next to Description) per
+         the user's reference alignment. The protocol pane stays focused
+         on the live run timeline + chat composer. -->
 
     @if (followupCreated(); as fc) {
       <div class="evidence-followup-banner"

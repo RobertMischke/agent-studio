@@ -240,6 +240,39 @@ html[data-studio-theme='light'] {
     .project-hygiene-badge--unpushed { background: rgba(59,130,246,0.10); color: #1d4ed8; }
   }
 
+  // ---- Activity log / Chat (Protocol pane right side) light bridge ----
+  // The component pins rgba(15,23,42,*) (slate-950) for message
+  // bubbles, ddd6fe / 99f6e4 / fecaca / fbbf24 (pastels) for the
+  // agent / user / system / orchestrator heading colours. On the dark
+  // shell those land on a slate base and read fine; on the light shell
+  // the slate bg is opaque and the pastel headings dissolve.
+  .activity-log__body,
+  .convo,
+  .convo-turn { color: #1a1a1a; }
+  .convo-turn {
+    background: #ffffff;
+    border-color: #e1e1e1;
+  }
+  .convo-turn--agent .convo-turn__head        { color: #5b21b6; }
+  .convo-turn--user .convo-turn__head         { color: #0f766e; }
+  .convo-turn--system .convo-turn__head       { color: #b91c1c; }
+  .convo-turn--orchestrator .convo-turn__head { color: #a8472d; }
+  .convo-turn__time { color: #4a4a4a; }
+  .convo-turn__body { color: #1a1a1a; }
+  // The bubble backgrounds were rgba(15,23,42,0.45-0.72) → tint them
+  // to neutral white surfaces with a subtle border instead.
+  .activity-log [style*="background: rgba(15, 23, 42"],
+  .activity-log [style*="background: rgba(15,23,42"] {
+    background: rgba(0, 0, 0, 0.03) !important;
+    color: #1a1a1a !important;
+  }
+  // The text-block / code-block elements in turn bodies also hardcoded.
+  .convo-turn pre,
+  .convo-turn code {
+    background: rgba(0, 0, 0, 0.05);
+    color: #1a1a1a;
+  }
+
   // ---- Composer (chat-mode + chat-compose) light readability ----
   // The protocol-pane composer pills use Catppuccin pastels on dark
   // surfaces. In light mode the inactive pills become invisible and

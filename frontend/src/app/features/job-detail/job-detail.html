@@ -69,11 +69,13 @@
   <div class="detail__panes" [class.detail__panes--maximized]="!!maximizedPane()" data-testid="detail-panes">
     @if (isPaneRendered('prompt')) {
       <app-prompt-pane
+        #promptPaneRef
         [markdown]="detail().promptMarkdown || ''"
         [history]="detail().promptHistory || []"
         [titleHistory]="detail().titleHistory || []"
         [reviewEvidence]="detail().reviewEvidence || []"
         [screenshots]="screenshots()"
+        [job]="detail().info"
         [maximized]="maximizedPane() === 'prompt'"
         [weight]="paneWeights().prompt"
         [isRunning]="isRunning()"
@@ -81,7 +83,9 @@
         [watchPath]="detail().info.watchPath"
         (maximizeToggle)="toggleMaximize('prompt')"
         (hide)="togglePane('prompt')"
-        (save)="saveFileContent('prompt.md', $event)" />
+        (save)="saveFileContent('prompt.md', $event)"
+        (evidenceAcknowledge)="onEvidenceAcknowledge($event)"
+        (evidenceCreateFollowup)="onEvidenceCreateFollowup($event)" />
     }
 
     @if (!maximizedPane() && panesVisible().prompt && (panesVisible().protocol || panesVisible().git)) {

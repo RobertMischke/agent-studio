@@ -1,8 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { MarkdownRichEditorComponent } from '../../../../components/markdown-rich-editor';
-import { JobPromptHistoryEntry, JobTitleHistoryEntry, ReviewEvidenceEntry, ReviewEvidenceSource } from '../../../../models/job.model';
+import { JobInfo, JobPromptHistoryEntry, JobTitleHistoryEntry, ReviewEvidenceEntry, ReviewEvidenceSource } from '../../../../models/job.model';
 import type { JobScreenshot } from '../../../screenshots';
 import { ScreenshotStripComponent } from '../../../screenshots/components/screenshot-strip/screenshot-strip.component';
+import { ReviewEvidencePanelComponent } from '../protocol-pane/review-evidence-panel.component';
+import { CodeReviewPanelComponent } from '../protocol-pane/code-review-panel.component';
 import { markdownToHtml } from '../../../../components/markdown-utils';
 import { MarkdownImageLightboxDirective } from '../../../../directives/markdown-image-lightbox.directive';
 import { resolveProtocolImageSrc } from '../protocol-pane/protocol-image-resolver';
@@ -34,7 +36,7 @@ interface EvidenceSection {
   selector: 'app-prompt-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MarkdownRichEditorComponent, MarkdownImageLightboxDirective, TooltipDirective, StudioIconComponent, ScreenshotStripComponent],
+  imports: [MarkdownRichEditorComponent, MarkdownImageLightboxDirective, TooltipDirective, StudioIconComponent, ScreenshotStripComponent, ReviewEvidencePanelComponent, CodeReviewPanelComponent],
   templateUrl: './prompt-pane.component.html',
   styleUrls: ['./prompt-pane.component.scss']
 })
@@ -44,6 +46,7 @@ export class PromptPaneComponent {
   readonly titleHistory = input<JobTitleHistoryEntry[]>([]);
   readonly reviewEvidence = input<ReviewEvidenceEntry[]>([]);
   readonly screenshots = input<JobScreenshot[]>([]);
+  readonly job = input<JobInfo | null>(null);
   readonly maximized = input(false);
   readonly weight = input<number>(1);
   readonly isRunning = input(false);
@@ -53,14 +56,20 @@ export class PromptPaneComponent {
   readonly maximizeToggle = output<void>();
   readonly hide = output<void>();
   readonly save = output<string>();
+  readonly evidenceAcknowledge = output<{ entry: ReviewEvidenceEntry; acknowledged: boolean }>();
+  readonly evidenceCreateFollowup = output<ReviewEvidenceEntry>();
 
-  /** description | evidence. Persisted across sessions in localStorage. */
-  readonly activeTab = signal<'description' | 'evidence'>(
-    (typeof window !== 'undefined' && window.localStorage?.getItem('atp.detail.left-tab') === 'evidence')
-      ? 'evidence' : 'description',
+  /** description | evidence | code-review. Persisted across sessions in localStorage. */
+  readonly activeTab = signal<'description' | 'evidence' | 'code-review'>(
+    (() => {
+      if (typeof window === 'undefined') return 'description';
+      const v = window.localStorage?.getItem('atp.detail.left-tab');
+      if (v === 'evidence' || v === 'code-review') return v;
+      return 'description';
+    })(),
   );
 
-  setTab(tab: 'description' | 'evidence'): void {
+  setTab(tab: 'description' | 'evidence' | 'code-review'): void {
     this.activeTab.set(tab);
     try { window.localStorage?.setItem('atp.detail.left-tab', tab); } catch { /* ignore */ }
   }
