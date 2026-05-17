@@ -17,6 +17,7 @@ import { projectIdentity } from '../../services/project-identity.util';
 import { JobSelectionService } from '../job-detail';
 import { UiPreferencesService } from '../shell';
 import { BoardFiltersService } from '../board';
+import { UpdateClientService } from '../../services/update.service';
 import { StudioTabStateService } from './services/studio-tab-state.service';
 import { StudioPanelStateService } from './services/studio-panel-state.service';
 import {
@@ -74,6 +75,7 @@ export class StudioShellComponent {
   private readonly jobSelection = inject(JobSelectionService);
   readonly uiPrefs = inject(UiPreferencesService);
   readonly boardFilters = inject(BoardFiltersService);
+  readonly updateClient = inject(UpdateClientService);
 
   /** Tab list + active selection re-exposed for the template. */
   readonly tabs = this.tabState.tabs;
@@ -376,6 +378,21 @@ export class StudioShellComponent {
 
   clearAllFilters(): void {
     this.boardFilters.clearAllFilters();
+  }
+
+  /**
+   * Trigger a stable-checkout update through the standalone update
+   * service. Mirrors the legacy "Update Stable" devtool menu action;
+   * the Settings panel surfaces it as a primary control.
+   */
+  triggerUpdate(force = false): void {
+    this.updateClient.openCenter();
+    void this.updateClient.trigger(null, force);
+  }
+
+  openUpdateCenter(): void {
+    this.updateClient.openCenter();
+    void this.updateClient.refreshNow();
   }
 
   /** Visible CLI types observed across the loaded jobs (for the CLI sidebar panel). */

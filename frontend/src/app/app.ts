@@ -384,26 +384,30 @@ export class App implements OnInit {
     const grouped = this.displayGrouped();
     // ADR-0026: orchestrator-prep + needs-human-review join the backlog
     // bucket. The bounce lane only renders when at least one job lives there.
-    // Backlog-lane spec: 0-backlog is the leftmost lane, the default landing
-    // for new jobs and the active triage staging area.
-    const backlogLanes: Array<{ state: string; title: string; icon: string; jobs: JobInfo[] }> = [
-      { state: '0-backlog', title: 'Backlog', icon: '🗒️', jobs: grouped.backlog ?? [] },
-      { state: '1-preparation', title: 'In Preparation', icon: '📋', jobs: grouped.preparation },
-      { state: '1a-orchestrator-prep', title: 'Orch Prep', icon: '🤖', jobs: grouped.orchestratorPrep },
-    ];
-    if (grouped.needsHumanReview.length > 0) {
-      backlogLanes.push({ state: '1b-needs-human-review', title: 'Needs Clar', icon: '🚩', jobs: grouped.needsHumanReview });
-    }
-    // ready-orchestrator-intake-lane: split 2-ready into Human Ready and
-    // Orchestrator Intake. The Intake lane is hide-when-empty so projects
-    // that have not opted into intake see the same single Ready column as
-    // before. Both lanes carry the same `2-ready` filesystem state on
-    // their data-state attribute so drag-and-drop / pickup keep working.
+    //
+    // Order inside the Backlog super-column (top → bottom): the most
+    // actionable lanes come first so the user reading the column from the
+    // top reaches "what should I pick up next?" without scrolling. Earlier
+    // ordering (0-backlog → 2-ready) buried the Ready lane under hundreds
+    // of backlog items.
+    //
+    //   1. 2-ready      "Human Ready"        — pick-up candidates
+    //   2. 1b-needs-human-review (if any)    — needs clarification
+    //   3. 1a-orchestrator-prep              — agent is preparing
+    //   4. 1-preparation                     — in human preparation
+    //   5. 0-backlog                         — fresh inbox / triage
     const readySplit = splitReadyByPhase(grouped.ready);
+    const backlogLanes: Array<{ state: string; title: string; icon: string; jobs: JobInfo[] }> = [];
     backlogLanes.push({ state: '2-ready', title: 'Human Ready', icon: '📦', jobs: readySplit.humanReady });
     if (readySplit.intake.length > 0) {
       backlogLanes.push({ state: '2-ready-intake', title: 'Orch Intake', icon: '🛂', jobs: readySplit.intake });
     }
+    if (grouped.needsHumanReview.length > 0) {
+      backlogLanes.push({ state: '1b-needs-human-review', title: 'Needs Clar', icon: '🚩', jobs: grouped.needsHumanReview });
+    }
+    backlogLanes.push({ state: '1a-orchestrator-prep', title: 'Orch Prep', icon: '🤖', jobs: grouped.orchestratorPrep });
+    backlogLanes.push({ state: '1-preparation', title: 'In Preparation', icon: '📋', jobs: grouped.preparation });
+    backlogLanes.push({ state: '0-backlog', title: 'Backlog', icon: '🗒️', jobs: grouped.backlog ?? [] });
     const activeLanes: Array<{ state: string; title: string; icon: string; jobs: JobInfo[] }> = [
       { state: '3-progress', title: 'In Progress', icon: '🔵', jobs: grouped.progress },
     ];

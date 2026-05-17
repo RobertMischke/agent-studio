@@ -770,6 +770,71 @@
   margin: 0;
 }
 
+.studio-update {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 12px 8px;
+
+  &__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 11px;
+  }
+
+  &__label {
+    color: var(--studio-fg-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+  }
+
+  &__value {
+    color: var(--studio-fg);
+    font-size: 11px;
+
+    &.mono {
+      font-family: 'JetBrains Mono', 'SF Mono', Menlo, Consolas, monospace;
+    }
+
+    &--phase {
+      padding: 1px 6px;
+      border-radius: 10px;
+      background: var(--studio-bg-elevated);
+      font-weight: 600;
+      text-transform: capitalize;
+    }
+
+    &--running {
+      background: rgba(78, 201, 176, 0.15);
+      color: var(--studio-accent-2);
+    }
+
+    &--failed {
+      background: rgba(244, 63, 94, 0.15);
+      color: #f43f5e;
+    }
+
+    &--done {
+      background: rgba(78, 201, 176, 0.12);
+      color: var(--studio-accent-2);
+    }
+  }
+
+  &__msg {
+    margin-top: 4px;
+    padding: 6px 8px;
+    background: var(--studio-bg-elevated);
+    border-left: 2px solid var(--studio-accent);
+    font-size: 11px;
+    color: var(--studio-fg-dim);
+    border-radius: 2px;
+    line-height: 1.4;
+  }
+}
+
 // Detail view inside the studio editor body — bring the legacy
 // app-job-detail markup closer to the reference (.reference-layout/
 // detail.jsx). Goals: hide / compact the dense top toolbars (command-

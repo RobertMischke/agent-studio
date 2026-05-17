@@ -417,6 +417,50 @@
                     {{ uiPrefs.compactCards() ? 'Compact' : 'Full' }}
                   </button>
                 </div>
+
+                <div class="studio-explorer__group-head studio-explorer__group-head--mt">Updates</div>
+                @if (updateClient.status(); as st) {
+                  <div class="studio-update">
+                    <div class="studio-update__row">
+                      <span class="studio-update__label">Current</span>
+                      <span class="studio-update__value mono" data-testid="settings-update-head">{{ st.headLocal }}</span>
+                    </div>
+                    <div class="studio-update__row">
+                      <span class="studio-update__label">Phase</span>
+                      <span class="studio-update__value studio-update__value--phase"
+                            [class.studio-update__value--running]="st.isRunning"
+                            [class.studio-update__value--failed]="st.phase === 'failed'"
+                            [class.studio-update__value--done]="st.phase === 'done'"
+                            data-testid="settings-update-phase">{{ st.phase }}</span>
+                    </div>
+                    <div class="studio-update__row">
+                      <span class="studio-update__label">Behind</span>
+                      <span class="studio-update__value mono" data-testid="settings-update-behind">
+                        {{ updateClient.behindBy() }} {{ updateClient.behindBy() === 1 ? 'commit' : 'commits' }}
+                      </span>
+                    </div>
+                    @if (st.message) {
+                      <div class="studio-update__msg" data-testid="settings-update-msg">{{ st.message }}</div>
+                    }
+                  </div>
+                } @else {
+                  <div class="studio-empty studio-empty--note">
+                    Update service status not yet polled.
+                  </div>
+                }
+                <button type="button"
+                        class="studio-button studio-button--primary"
+                        data-testid="settings-update-trigger"
+                        [disabled]="updateClient.status()?.isRunning"
+                        (click)="triggerUpdate()">
+                  {{ updateClient.status()?.isRunning ? 'Update running…' : (updateClient.behindBy() > 0 ? 'Update stable now' : 'Check for updates') }}
+                </button>
+                <button type="button"
+                        class="studio-button studio-button--ghost"
+                        data-testid="settings-update-open-center"
+                        (click)="openUpdateCenter()">
+                  Open update history
+                </button>
               </section>
             }
             @default {
