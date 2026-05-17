@@ -1121,13 +1121,22 @@
   }
 }
 
+// Note: the BEM members below are nested under a second `.studio-tree-row`
+// declaration earlier in this file (around line 526). Keep that file's
+// `padding` rule out of here so the project (8px) and child (44px)
+// `padding-left` modifiers don't get clobbered by a shorthand reset.
 .studio-tree-row {
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
   height: 24px;
-  padding: 0 12px 0 16px;
+  padding-top: 0;
+  padding-right: 12px;
+  padding-bottom: 0;
+  // padding-left is owned by the &--project (8) and &--child (44)
+  // modifiers in the earlier block. Defaulting to 16 here was overriding
+  // those modifiers because shorthand `padding` resets all four sides.
   font-size: 13px;
   color: var(--studio-fg);
   text-align: left;
