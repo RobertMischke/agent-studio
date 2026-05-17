@@ -13,21 +13,149 @@ body {
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
 
-/* Studio shell light theme — when the titlebar Settings flip the studio
- * theme to "light", swap the document chrome to match. The legacy
- * components inside the projected board / detail still own their own
- * dark backgrounds (they ship their own CSS variables); this override
- * gives the body itself and the projected content frame a light shell
- * so the chrome reads consistently. Full light-theme support for the
- * legacy job-column / job-detail surfaces is a follow-up. */
+/* Studio shell light theme — flip the document chrome AND the legacy
+ * component surfaces when the user switches to light. This is a broad
+ * stroke on top of the existing dark stylesheets: we flip the shared
+ * CSS variables (so any component that reads them switches), and add
+ * targeted overrides for the loudest hardcoded hex backgrounds
+ * (`.job-card`, `.column`, `.dashboard`, `.pane`, `.header`, status-
+ * bar, detail panes, etc.) so the projected dashboard + task detail
+ * read as light surfaces instead of a dark-on-light mismatch.
+ *
+ * Individual components can still opt-in to a richer light palette by
+ * migrating their tokens; this is the safety-net layer that prevents
+ * a half-light look until each surface is rewritten. */
 html[data-studio-theme='light'] {
   color-scheme: light;
+
+  // Shared design tokens — every component that reads these flips
+  // automatically.
+  --column-bg: #f8f8f8;
+  --card-bg: #ffffff;
+  --surface: #ffffff;
+  --surface-1: #ffffff;
+  --surface-2: #f3f3f3;
+  --border: #e1e1e1;
+  --border-subtle: #e1e1e1;
+  --text-primary: #1a1a1a;
+  --text-muted: #6e6e6e;
+  --bg-page: #f3f3f3;
+  --header-bg: #ffffff;
+
   body {
     background: #f3f3f3;
     color: #1a1a1a;
   }
+  select, input, textarea { color-scheme: light; }
+  select option, select optgroup {
+    background-color: #ffffff;
+    color: #1a1a1a;
+  }
   ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.18); }
   ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.32); }
+
+  // ---- Board: job columns + cards ----
+  .column {
+    background: #f8f8f8;
+    color: #1a1a1a;
+  }
+  .column__title,
+  .column__header { color: #1a1a1a; }
+  .job-card {
+    background: #ffffff;
+    color: #1a1a1a;
+    border-color: #e1e1e1;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+  }
+  .job-card:hover { box-shadow: 0 4px 14px rgba(0,0,0,0.10); }
+  .job-card__title, .job-card__meta, .job-card__id, .job-card__heading,
+  .job-card__footer, .job-card__metric, .job-card__chip {
+    color: #1a1a1a;
+  }
+  .job-card__subtle, .job-card__age, .job-card__client,
+  .job-card__cli-name {
+    color: #6e6e6e;
+  }
+  .dashboard,
+  .dashboard--studio { background: #f3f3f3; }
+  .lane-group { background: #ffffff; border-color: #e1e1e1; }
+  .lane-group__head { color: #1a1a1a; border-bottom-color: #e1e1e1; }
+  .lane-group__label { color: #1a1a1a; }
+
+  // ---- Header (legacy chrome — kept for flag-off and any inline header) ----
+  .header {
+    background: #ffffff;
+    color: #1a1a1a;
+    border-bottom-color: #e1e1e1;
+  }
+  .header__title-name { color: #1a1a1a; }
+
+  // ---- Detail view: top-level container + panes ----
+  .detail { background: #f3f3f3; color: #1a1a1a; }
+  .detail__header {
+    background: #ffffff;
+    border-bottom-color: #e1e1e1;
+    color: #1a1a1a;
+  }
+  .detail__title, .detail__project, .detail__meta { color: #1a1a1a; }
+  .pane {
+    background: #ffffff;
+    border-color: #e1e1e1;
+    color: #1a1a1a;
+  }
+  .pane__header {
+    background: #f8f8f8;
+    border-bottom-color: #e1e1e1;
+    color: #1a1a1a;
+  }
+  .pane__title, .pane__body { color: #1a1a1a; }
+
+  // ---- Status bar (bottom) ----
+  .status-bar, app-status-bar > * {
+    background: #f8f8f8;
+    color: #1a1a1a;
+    border-top-color: #e1e1e1;
+  }
+  .status-bar__item, .status-bar__label { color: #1a1a1a; }
+
+  // ---- Side sheets / dialogs ----
+  .app__sidesheet,
+  .filter-sidesheet,
+  .cli-usage-sheet,
+  .orchestrator-side-sheet {
+    background: #ffffff;
+    color: #1a1a1a;
+    border-color: #e1e1e1;
+  }
+
+  // ---- Markdown body inside the detail (description/evidence) ----
+  .markdown-body {
+    background: transparent;
+    color: #1a1a1a;
+  }
+  .markdown-body code,
+  code {
+    background: #f3f3f3;
+    color: #1a1a1a;
+  }
+  pre, .markdown-body pre {
+    background: #f3f3f3;
+    color: #1a1a1a;
+    border-color: #e1e1e1;
+  }
+
+  // ---- Form controls inside the legacy chrome ----
+  input, textarea, select {
+    background: #ffffff;
+    color: #1a1a1a;
+    border-color: #d4d4d4;
+  }
+  input::placeholder, textarea::placeholder { color: #6e6e6e; }
+
+  // ---- Studio shell sidesheets that sit over the editor ----
+  .studio-projected-content {
+    background: transparent;
+  }
 }
 
 /* Hide the text caret on every non-text-input surface. Clicking a card,
