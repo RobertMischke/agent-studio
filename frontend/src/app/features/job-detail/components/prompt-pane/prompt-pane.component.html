@@ -1,6 +1,30 @@
 <section class="pane pane--prompt" [style.flex]="maximized() ? '1 1 100%' : weight()" data-testid="pane-prompt">
-  <header class="pane__header">
-    <h3 class="pane__title">📝 Task description</h3>
+  <header class="pane__header pane__header--tabs">
+    <div class="pane-tabs" role="tablist">
+      <button type="button"
+              class="pane-tab"
+              role="tab"
+              [class.pane-tab--active]="activeTab() === 'description'"
+              [attr.aria-selected]="activeTab() === 'description'"
+              data-testid="pane-tab-description"
+              (click)="selectTab('description')">
+        <span aria-hidden="true">📝</span>
+        <span>Description</span>
+      </button>
+      <button type="button"
+              class="pane-tab"
+              role="tab"
+              [class.pane-tab--active]="activeTab() === 'evidence'"
+              [attr.aria-selected]="activeTab() === 'evidence'"
+              data-testid="pane-tab-evidence"
+              (click)="selectTab('evidence')">
+        <span aria-hidden="true">✓</span>
+        <span>Evidence</span>
+        @if (evidenceBadge() > 0) {
+          <span class="pane-tab__badge" data-testid="pane-tab-evidence-badge">{{ evidenceBadge() }}</span>
+        }
+      </button>
+    </div>
     <button class="pane__maximize"
             data-testid="pane-maximize-prompt"
             (click)="maximizeToggle.emit()"
@@ -10,50 +34,73 @@
     <button class="pane__hide" (click)="hide.emit()" [appTooltip]="'Hide panel'">×</button>
   </header>
   <div class="pane__body">
-    @if (titleHistory().length > 0) {
-      <section class="title-history" data-testid="title-history">
-        <header class="title-history__head">
-          <span class="title-history__title">Title history</span>
-          <span class="title-history__hint">Renames recorded against this task. Current title is shown above.</span>
-        </header>
-        <ol class="title-history__list">
-          @for (entry of titleHistory(); track entry.at) {
-            <li class="title-history__entry" data-testid="title-history-entry">
-              <time class="title-history__time">{{ formatTime(entry.at) }}</time>
-              <span class="title-history__from">{{ entry.oldTitle || '(empty)' }}</span>
-              <span class="title-history__arrow" aria-hidden="true">→</span>
-              <span class="title-history__to">{{ entry.newTitle }}</span>
-            </li>
+    @if (activeTab() === 'description') {
+      @if (titleHistory().length > 0) {
+        <section class="title-history" data-testid="title-history">
+          <header class="title-history__head">
+            <span class="title-history__title">Title history</span>
+            <span class="title-history__hint">Renames recorded against this task. Current title is shown above.</span>
+          </header>
+          <ol class="title-history__list">
+            @for (entry of titleHistory(); track entry.at) {
+              <li class="title-history__entry" data-testid="title-history-entry">
+                <time class="title-history__time">{{ formatTime(entry.at) }}</time>
+                <span class="title-history__from">{{ entry.oldTitle || '(empty)' }}</span>
+                <span class="title-history__arrow" aria-hidden="true">→</span>
+                <span class="title-history__to">{{ entry.newTitle }}</span>
+              </li>
+            }
+          </ol>
+        </section>
+      }
+
+      <app-markdown-rich-editor [value]="markdown()"
+                                [readOnly]="isRunning()"
+                                [readOnlyReason]="isRunning() ? 'Editing disabled — the CLI is running for this task. Stop it first.' : null"
+                                [jobId]="jobId()"
+                                [watchPath]="watchPath()"
+                                (save)="save.emit($event)" />
+
+      @if (history().length > 0) {
+        <section class="prompt-history" data-testid="prompt-history">
+          <header class="prompt-history__head">
+            <span class="prompt-history__title">Task extensions</span>
+            <span class="prompt-history__hint">Added via Extend mode in chat. Original task is above; entries below are read-only.</span>
+          </header>
+          @for (entry of history(); track entry.fileName) {
+            <article class="prompt-history__entry" [attr.data-testid]="'prompt-history-entry-' + entry.index">
+              <header class="prompt-history__entry-head">
+                <span class="prompt-history__badge">{{ entry.fileName }}</span>
+                <span class="prompt-history__time">{{ formatTime(entry.writtenAt) }}</span>
+              </header>
+              <div class="prompt-history__body markdown markdown-body markdown-body--dense"
+                   appMarkdownLightbox
+                   [innerHTML]="renderMarkdown(entry.markdown)"></div>
+            </article>
           }
-        </ol>
-      </section>
-    }
-
-    <app-markdown-rich-editor [value]="markdown()"
-                              [readOnly]="isRunning()"
-                              [readOnlyReason]="isRunning() ? 'Editing disabled — the CLI is running for this task. Stop it first.' : null"
-                              [jobId]="jobId()"
-                              [watchPath]="watchPath()"
-                              (save)="save.emit($event)" />
-
-    @if (history().length > 0) {
-      <section class="prompt-history" data-testid="prompt-history">
-        <header class="prompt-history__head">
-          <span class="prompt-history__title">Task extensions</span>
-          <span class="prompt-history__hint">Added via Extend mode in chat. Original task is above; entries below are read-only.</span>
-        </header>
-        @for (entry of history(); track entry.fileName) {
-          <article class="prompt-history__entry" [attr.data-testid]="'prompt-history-entry-' + entry.index">
-            <header class="prompt-history__entry-head">
-              <span class="prompt-history__badge">{{ entry.fileName }}</span>
-              <span class="prompt-history__time">{{ formatTime(entry.writtenAt) }}</span>
-            </header>
-            <div class="prompt-history__body markdown markdown-body markdown-body--dense"
-                 appMarkdownLightbox
-                 [innerHTML]="renderMarkdown(entry.markdown)"></div>
-          </article>
+        </section>
+      }
+    } @else if (activeTab() === 'evidence') {
+      @if (job(); as j) {
+        @if (evidence().length > 0) {
+          <app-review-evidence-panel
+            #evidencePanel
+            [entries]="evidence()"
+            [job]="j"
+            (acknowledge)="onEvidenceAcknowledge($event)"
+            (createFollowup)="onEvidenceCreateFollowup($event)" />
+        } @else {
+          <div class="evidence-empty" data-testid="evidence-empty">
+            <p><strong>No evidence yet.</strong></p>
+            <p>Findings from security audits, code-review passes, task checks, or human notes
+              landing in <code>results/review-evidence.jsonl</code> will surface here.</p>
+          </div>
         }
-      </section>
+      } @else {
+        <div class="evidence-empty">
+          <p>Evidence requires a loaded job.</p>
+        </div>
+      }
     }
   </div>
 </section>

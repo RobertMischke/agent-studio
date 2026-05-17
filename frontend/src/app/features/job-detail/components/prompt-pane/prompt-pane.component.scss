@@ -6,6 +6,90 @@
  */
 :host { display: contents; }
 
+/* Description / Evidence tab strip — matches .reference-layout/detail.jsx
+ * pane-tabs. The strip replaces the legacy "📝 Task description" h3 in
+ * the pane header so the same pane can switch its body between the
+ * markdown editor (Description) and the embedded review-evidence panel
+ * (Evidence). The badge surfaces unacknowledged evidence count. */
+.pane__header--tabs {
+  gap: 0;
+  padding: 0 6px 0 0;
+}
+
+.pane-tabs {
+  display: flex;
+  align-items: stretch;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  gap: 0;
+}
+
+.pane-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 14px;
+  height: 100%;
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  font-size: 12px;
+  color: var(--text-muted, #8a8f99);
+  cursor: pointer;
+  white-space: nowrap;
+
+  &:hover {
+    color: var(--text-primary, #1a1a1a);
+    background: rgba(0, 0, 0, 0.03);
+  }
+
+  &--active {
+    color: var(--text-primary, #1a1a1a);
+    border-bottom-color: var(--studio-accent, #d97757);
+    font-weight: 600;
+  }
+
+  &__badge {
+    min-width: 16px;
+    height: 16px;
+    padding: 0 5px;
+    background: var(--studio-accent, #d97757);
+    color: #1a1a1a;
+    border-radius: 8px;
+    font-size: 10px;
+    font-weight: 700;
+    display: grid;
+    place-items: center;
+    line-height: 1;
+  }
+}
+
+.evidence-empty {
+  padding: 24px;
+  text-align: left;
+  color: var(--text-muted, #8a8f99);
+  font-size: 12px;
+  line-height: 1.55;
+
+  p { margin: 0 0 8px; }
+  code {
+    font-family: 'JetBrains Mono', monospace;
+    padding: 1px 5px;
+    background: rgba(0, 0, 0, 0.06);
+    border-radius: 3px;
+  }
+}
+
+[data-studio-theme='dark'] .pane-tab,
+[data-studio-theme='dark'] .pane-tab:hover {
+  color: rgba(255, 255, 255, 0.7);
+}
+[data-studio-theme='dark'] .pane-tab:hover { background: rgba(255, 255, 255, 0.04); color: #fff; }
+[data-studio-theme='dark'] .pane-tab--active { color: #fff; }
+[data-studio-theme='dark'] .evidence-empty { color: rgba(255, 255, 255, 0.55); }
+[data-studio-theme='dark'] .evidence-empty code { background: rgba(255, 255, 255, 0.08); }
+
 /*
  * Blog-style timeline of task extensions written by Extend mode. Each
  * entry sits under the editable prompt and is read-only: editing the
