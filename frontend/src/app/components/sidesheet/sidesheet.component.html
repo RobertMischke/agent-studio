@@ -1,0 +1,33 @@
+<div class="sidesheet"
+     [class.sidesheet--sheet]="variant === 'sheet'"
+     [class.sidesheet--dialog]="variant === 'dialog'"
+     [style.width.px]="width"
+     [attr.data-testid]="testid"
+     role="dialog"
+     aria-modal="true">
+  <header class="sidesheet__header">
+    <div class="sidesheet__title-block">
+      @if (eyebrow) {
+        <span class="sidesheet__eyebrow">{{ eyebrow }}</span>
+      }
+      <h2 class="sidesheet__title">{{ title }}</h2>
+    </div>
+    @if (closable) {
+      <button type="button"
+              class="sidesheet__close"
+              aria-label="Close"
+              data-testid="sidesheet-close"
+              (click)="close.emit()">
+        <app-studio-icon name="close" [size]="14"></app-studio-icon>
+      </button>
+    }
+  </header>
+  <div class="sidesheet__body">
+    <ng-content select="[body]"></ng-content>
+    <!-- Fallback content slot when callers don't tag their content -->
+    <ng-content></ng-content>
+  </div>
+  <footer class="sidesheet__footer">
+    <ng-content select="[footer]"></ng-content>
+  </footer>
+</div>
