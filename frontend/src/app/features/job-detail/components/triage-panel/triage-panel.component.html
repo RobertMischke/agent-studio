@@ -1,47 +1,73 @@
-<section class="triage" data-testid="triage-panel" aria-label="Triage actions">
-  <div class="triage__counter" data-testid="triage-counter">
-    @if (laneSize() > 0) {
-      Job {{ laneIndex() + 1 }} of {{ laneSize() }} in {{ laneLabel() }}
-    } @else {
-      {{ laneLabel() }}
-    }
-    <span class="triage__hint" aria-hidden="true">
-      j / k navigate · Enter primary · Esc close
+<!-- Triage actions are condensed into a single anchored popover. The
+     bottom-of-detail bar that used to render the full button row (plus
+     "Job 1 of 9 in <Lane>") competed with the chat composer for vertical
+     space and read as broken design under the reference layout. The
+     trigger now lives at the right edge of the pane row; the dropdown
+     opens upward over the detail content. -->
+<section class="triage triage--popover"
+         data-testid="triage-panel"
+         data-triage-root
+         aria-label="Triage actions">
+  <button type="button"
+          class="triage__trigger"
+          data-testid="triage-trigger"
+          [disabled]="buttons().length === 0 || mutationsBlocked()"
+          [class.triage__trigger--blocked]="mutationsBlocked()"
+          [appTooltip]="triggerTooltip()"
+          (click)="toggleMenu()">
+    <span class="triage__trigger-icon" aria-hidden="true">
+      <app-studio-icon name="more" [size]="14"></app-studio-icon>
     </span>
-  </div>
+    <span class="triage__trigger-label">{{ laneLabel() }}</span>
+    @if (mutationsBlocked()) {
+      <span class="triage__trigger-pause" aria-hidden="true">paused</span>
+    }
+    <span class="triage__trigger-caret" aria-hidden="true">▾</span>
+  </button>
 
-  @if (mutationsBlocked()) {
-    <div class="triage__blocked" role="status">
-      Update in progress — actions paused.
-    </div>
-  }
-
-  @if (buttons().length === 0) {
-    <div class="triage__empty">No triage actions for this lane.</div>
-  } @else {
-    <div class="triage__actions" role="group">
-      @for (b of buttons(); track b.id) {
-        <button type="button"
-                class="triage__btn"
-                [class.triage__btn--primary]="b.variant === 'primary'"
-                [class.triage__btn--secondary]="b.variant === 'secondary'"
-                [class.triage__btn--danger]="b.variant === 'danger'"
-                [class.triage__btn--confirming]="confirmingId() === b.id"
-                [attr.data-testid]="'triage-action-' + b.id"
-                [attr.data-action-id]="b.id"
-                [disabled]="mutationsBlocked() || actingId() !== null"
-                [appTooltip]="buttonTooltip(b)"
-                (click)="onClick(b)">
-          @if (confirmingId() === b.id) {
-            Confirm: {{ b.label }}?
-          } @else if (actingId() === b.id) {
-            ⏳ {{ b.label }}…
-          } @else {
-            {{ b.label }}
-          }
-        </button>
+  @if (menuOpen()) {
+    <div class="triage__menu"
+         role="menu"
+         data-testid="triage-menu"
+         (click)="$event.stopPropagation()">
+      <div class="triage__menu-head">
+        <span class="triage__menu-title">{{ laneLabel() }} actions</span>
+        @if (laneSize() > 0) {
+          <span class="triage__menu-sub" data-testid="triage-counter">Job {{ laneIndex() + 1 }} of {{ laneSize() }}</span>
+        }
+      </div>
+      @if (mutationsBlocked()) {
+        <div class="triage__menu-blocked" role="status">
+          Update in progress — actions paused.
+        </div>
       }
+      @if (buttons().length === 0) {
+        <div class="triage__menu-empty">No triage actions for this lane.</div>
+      } @else {
+        @for (b of buttons(); track b.id) {
+          <button type="button"
+                  class="triage__menu-item"
+                  role="menuitem"
+                  [class.triage__menu-item--primary]="b.variant === 'primary'"
+                  [class.triage__menu-item--danger]="b.variant === 'danger'"
+                  [class.triage__menu-item--confirming]="confirmingId() === b.id"
+                  [attr.data-testid]="'triage-action-' + b.id"
+                  [attr.data-action-id]="b.id"
+                  [disabled]="mutationsBlocked() || actingId() !== null"
+                  (click)="onClick(b)">
+            @if (confirmingId() === b.id) {
+              Confirm: {{ b.label }}?
+            } @else if (actingId() === b.id) {
+              ⏳ {{ b.label }}…
+            } @else {
+              {{ b.label }}
+            }
+          </button>
+        }
+      }
+      <div class="triage__menu-foot">
+        <span class="triage__menu-hint">Enter — primary &middot; Esc — close</span>
+      </div>
     </div>
   }
 </section>
-  

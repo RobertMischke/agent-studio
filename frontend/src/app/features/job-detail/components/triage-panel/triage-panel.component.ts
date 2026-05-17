@@ -2,11 +2,13 @@ import { TooltipDirective } from '../../../../components/tooltip';
 import {
   ChangeDetectionStrategy,
   Component,
+  HostListener,
   computed,
   input,
   output,
   signal
 } from '@angular/core';
+import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
 
 /**
  * Triage panel: lane-specific decision row at the bottom of the detail view.
@@ -136,7 +138,7 @@ const LANE_LABELS: Record<string, string> = {
 @Component({
   selector: 'app-triage-panel',
   standalone: true,
-  imports: [TooltipDirective],
+  imports: [TooltipDirective, StudioIconComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './triage-panel.component.html',
   styleUrl: './triage-panel.component.scss'
@@ -154,6 +156,39 @@ export class TriagePanelComponent {
   /** Tracks the destructive button awaiting confirm. Cleared on a 4 s timeout. */
   readonly confirmingId = signal<string | null>(null);
   private confirmTimer: ReturnType<typeof setTimeout> | null = null;
+
+  /**
+   * When true, the lane-actions menu is open. The panel is rendered as a
+   * single trigger button (the bottom-of-detail bar with N actions was
+   * stealing screen real estate and looked broken when a lane carried 4+
+   * buttons); clicking the trigger pops up the action list anchored to
+   * the bottom-right corner of the trigger.
+   */
+  readonly menuOpen = signal(false);
+
+  toggleMenu(): void {
+    if (this.mutationsBlocked() || this.buttons().length === 0) return;
+    this.menuOpen.update(v => !v);
+  }
+
+  closeMenu(): void {
+    this.menuOpen.set(false);
+    this.clearConfirm();
+  }
+
+  @HostListener('document:click', ['$event'])
+  onDocumentClick(ev: MouseEvent): void {
+    if (!this.menuOpen()) return;
+    const target = ev.target as HTMLElement | null;
+    if (!target) return;
+    // Keep the menu open as long as the click hits inside the trigger
+    // or the dropdown itself.
+    if (target.closest('[data-triage-root]')) return;
+    this.closeMenu();
+  }
+
+  @HostListener('document:keydown.escape')
+  onEscape(): void { this.closeMenu(); }
 
   readonly buttons = computed<TriageButton[]>(() => LANE_ACTIONS[this.laneState()] ?? []);
 
@@ -176,6 +211,13 @@ export class TriagePanelComponent {
     return b.label;
   }
 
+  triggerTooltip(): string {
+    if (this.mutationsBlocked()) return 'Update in progress — actions paused.';
+    const count = this.buttons().length;
+    if (count === 0) return `${this.laneLabel()} — no triage actions for this lane`;
+    return `${this.laneLabel()} actions (${count})`;
+  }
+
   onClick(b: TriageButton): void {
     if (this.mutationsBlocked() || this.actingId() !== null) return;
     if (b.confirmRequired && this.confirmingId() !== b.id) {
@@ -184,6 +226,7 @@ export class TriagePanelComponent {
       return;
     }
     this.clearConfirm();
+    this.menuOpen.set(false);
     this.action.emit({ id: b.id, label: b.label, intent: b.intent });
   }
 

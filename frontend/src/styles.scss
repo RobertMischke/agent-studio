@@ -266,15 +266,23 @@ html[data-studio-theme='light'] {
   }
   .status-bar__item, .status-bar__label { color: #1a1a1a; }
   .statusbar {
-    background: #f8f8f8 !important;
+    background: #ececec !important;
     color: #1a1a1a !important;
-    border-top-color: #e1e1e1 !important;
+    border-top-color: #d4d4d4 !important;
+    font-weight: 500;
   }
-  .statusbar__item, .statusbar__menu-title { color: #1a1a1a; }
-  .statusbar__item--ro { color: #4a4a4a; }
-  .statusbar__item--btn:hover { background: rgba(0,0,0,0.06); color: #1a1a1a; }
-  .statusbar__sep { background: rgba(0,0,0,0.10); }
-  .statusbar__caret, .statusbar__icon { color: #4a4a4a; }
+  // Default text inside any item — full dark, not greyish.
+  .statusbar__item { color: #1a1a1a !important; }
+  .statusbar__item--ro { color: #1a1a1a; }
+  // Active "running" pulse stays accent-green when actually running;
+  // when count is 0 the bullet falls back to the muted fg so the eye
+  // doesn't lock onto it.
+  .statusbar__icon { color: #4a4a4a; }
+  .statusbar__icon--pulse { color: #16a34a; }
+  .statusbar__item--btn:hover { background: rgba(0,0,0,0.08); color: #1a1a1a; }
+  .statusbar__sep { background: rgba(0,0,0,0.18); }
+  .statusbar__caret { color: #4a4a4a; }
+  .statusbar__menu-title { color: #1a1a1a; }
   // Dropdown menus popping up from the status bar picker buttons.
   .statusbar__menu {
     background: #ffffff;

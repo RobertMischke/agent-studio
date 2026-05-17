@@ -333,3 +333,28 @@
   outline: 2px solid #818cf8;
   outline-offset: 2px;
 }
+
+/* -- Light-theme palette override ---------------------------------- *
+ * The Catppuccin defaults above were tuned for dark surfaces. On the
+ * light shell they render h1/h2 (rosewater), h3 (lavender), h4 (blue),
+ * emphasis (flamingo), list markers (mauve), and code (peach) as
+ * pastels on white — barely legible. Swap them for a contrast-safe
+ * palette while keeping the studio brand orange visible. */
+html[data-studio-theme='light'] .markdown-body {
+  --md-fg:           #1a1a1a;
+  --md-fg-strong:    #1a1a1a;
+  --md-fg-em:        #1a1a1a;
+  --md-fg-muted:     #4a4a4a;
+  --md-fg-link:      #1d4ed8;
+  --md-fg-link-hov:  #1e40af;
+  --md-fg-code:      #a8472d;
+  --md-fg-h3:        #1a1a1a;
+  --md-fg-h4:        #1a1a1a;
+  --md-marker:       #d97757;
+  --md-border-soft:  rgba(0, 0, 0, 0.10);
+  --md-border:       rgba(0, 0, 0, 0.16);
+  --md-rule:         rgba(0, 0, 0, 0.12);
+  --md-surface-soft: rgba(0, 0, 0, 0.04);
+  --md-surface:      rgba(0, 0, 0, 0.06);
+  --md-code-bg:      rgba(0, 0, 0, 0.06);
+}
