@@ -414,7 +414,10 @@
 }
 
 .studio-explorer__group-head {
-  padding: 4px 12px 4px 16px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px 4px 8px;
   font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
@@ -425,6 +428,76 @@
     margin-top: 12px;
     border-top: 1px solid var(--studio-border);
     padding-top: 10px;
+  }
+}
+
+.studio-explorer__chev {
+  display: inline-block;
+  width: 12px;
+  text-align: center;
+  font-size: 9px;
+  color: var(--studio-fg-muted);
+}
+
+.studio-explorer__count {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--studio-fg-muted);
+  background: var(--studio-bg-elevated);
+  padding: 0 6px;
+  border-radius: 10px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.studio-tree-project {
+  display: flex;
+  flex-direction: column;
+}
+
+.studio-tree-children {
+  display: flex;
+  flex-direction: column;
+}
+
+.studio-tree-row {
+  &__chev {
+    display: inline-grid;
+    place-items: center;
+    width: 14px;
+    height: 14px;
+    color: var(--studio-fg-muted);
+    font-size: 8px;
+    transition: transform 120ms ease;
+    cursor: pointer;
+    flex-shrink: 0;
+
+    &:hover {
+      color: var(--studio-fg);
+    }
+
+    &--open {
+      transform: rotate(90deg);
+    }
+  }
+
+  &__sub-icon {
+    display: inline-grid;
+    place-items: center;
+    width: 14px;
+    color: var(--studio-fg-muted);
+    font-size: 11px;
+    flex-shrink: 0;
+  }
+
+  &--project {
+    padding-left: 8px;
+  }
+
+  &--child {
+    padding-left: 36px;
+    font-size: 12px;
   }
 }
 
@@ -682,6 +755,73 @@
   line-height: 1.5;
   padding: 4px 12px 8px;
   margin: 0;
+}
+
+// 3-super-column kanban (BACKLOG / ACTIVE / DONE & DECIDE).
+//
+// The reference packs every lane inside its parent super-column as a
+// stacked sub-section instead of a side-by-side column, so the user
+// reads top-to-bottom within each super-column. We achieve that by
+// overriding the inner `lane-group__lanes` flex direction to column
+// when the dashboard is rendered inside the studio shell — the legacy
+// (flag-off) chrome keeps its 7-column side-by-side layout.
+.dashboard--studio {
+  // Three super-columns of equal width fill the editor body.
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 12px;
+  align-items: stretch;
+  background: var(--studio-bg-editor);
+  height: 100%;
+  overflow: auto;
+
+  .lane-group {
+    display: flex;
+    flex-direction: column;
+    background: var(--studio-bg-elevated);
+    border: 1px solid var(--studio-border);
+    border-radius: 6px;
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  .lane-group__head {
+    padding: 10px 14px 8px;
+    border-bottom: 1px solid var(--studio-border);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--studio-fg);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .lane-group__label {
+    flex: 1;
+  }
+
+  // Stack the lanes vertically within the super-column.
+  .lane-group__lanes {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 4px;
+    gap: 4px;
+  }
+
+  // Each lane inside the super-column shrinks to its content height and
+  // sheds its standalone column chrome (it now lives as a sub-section).
+  app-job-column {
+    display: block;
+    width: 100%;
+    background: transparent;
+  }
 }
 
 .studio-tab-ctx-backdrop {

@@ -140,25 +140,63 @@
           @switch (activePanel()) {
             @case ('explorer') {
               <section class="studio-explorer">
-                <div class="studio-explorer__group-head">Workspace</div>
+                <div class="studio-explorer__group-head">
+                  <span class="studio-explorer__chev" aria-hidden="true">▼</span>
+                  <span>Workspace</span>
+                  <span class="studio-explorer__count">{{ projectRows().length }}</span>
+                </div>
                 @for (p of projectRows(); track p.name) {
-                  <button type="button"
-                          class="studio-tree-row"
-                          [class.studio-tree-row--active]="p.isActive"
-                          (click)="openBoard(p.name)"
-                          (dblclick)="openHub(p.name)">
-                    <span class="studio-tree-row__glyph" [style.background]="p.color" aria-hidden="true">{{ p.initial }}</span>
-                    <span class="studio-tree-row__name">{{ p.name }}</span>
-                    <span class="studio-tree-row__count">{{ p.totalJobs }}</span>
-                  </button>
+                  <div class="studio-tree-project">
+                    <button type="button"
+                            class="studio-tree-row studio-tree-row--project"
+                            [class.studio-tree-row--active]="p.isActive"
+                            [attr.data-testid]="'studio-explorer-project-' + p.name"
+                            (click)="openBoard(p.name)"
+                            (dblclick)="openHub(p.name)">
+                      <span class="studio-tree-row__chev"
+                            [class.studio-tree-row__chev--open]="isProjectExpanded(p.name)"
+                            [attr.aria-label]="isProjectExpanded(p.name) ? 'Collapse' : 'Expand'"
+                            (click)="toggleProjectExpanded(p.name, $event)">▶</span>
+                      <span class="studio-tree-row__glyph" [style.background]="p.color" aria-hidden="true">{{ p.initial }}</span>
+                      <span class="studio-tree-row__name">{{ p.name }}</span>
+                      <span class="studio-tree-row__count">{{ p.totalJobs }}</span>
+                    </button>
+                    @if (isProjectExpanded(p.name)) {
+                      <div class="studio-tree-children">
+                        <button type="button"
+                                class="studio-tree-row studio-tree-row--child"
+                                [class.studio-tree-row--active]="activeTab()?.kind === 'board' && p.isActive"
+                                (click)="openBoard(p.name)">
+                          <span class="studio-tree-row__sub-icon" aria-hidden="true">▦</span>
+                          <span class="studio-tree-row__name">Board</span>
+                          <span class="studio-tree-row__count">{{ p.totalJobs }}</span>
+                        </button>
+                        <button type="button"
+                                class="studio-tree-row studio-tree-row--child"
+                                [class.studio-tree-row--active]="activeTab()?.kind === 'hub' && p.isActive"
+                                (click)="openHub(p.name)">
+                          <span class="studio-tree-row__sub-icon" aria-hidden="true">▤</span>
+                          <span class="studio-tree-row__name">Project Hub</span>
+                        </button>
+                        <button type="button"
+                                class="studio-tree-row studio-tree-row--child"
+                                (click)="openOrchFeed.emit()">
+                          <span class="studio-tree-row__sub-icon" aria-hidden="true">⌁</span>
+                          <span class="studio-tree-row__name">Activity</span>
+                        </button>
+                      </div>
+                    }
+                  </div>
                 }
                 @if (projectRows().length === 0) {
                   <div class="studio-empty">No projects loaded</div>
                 }
-                <div class="studio-explorer__group-head studio-explorer__group-head--mt">Open tabs</div>
-                @if (tabs().length === 0) {
-                  <div class="studio-empty">No tabs open</div>
-                } @else {
+                @if (tabs().length > 0) {
+                  <div class="studio-explorer__group-head studio-explorer__group-head--mt">
+                    <span class="studio-explorer__chev" aria-hidden="true">▼</span>
+                    <span>Open tabs</span>
+                    <span class="studio-explorer__count">{{ tabs().length }}</span>
+                  </div>
                   @for (t of tabs(); track tabKey(t)) {
                     <button type="button"
                             class="studio-tree-row studio-tree-row--child"

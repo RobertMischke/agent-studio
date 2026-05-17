@@ -88,9 +88,60 @@ export class StudioShellComponent {
   readonly activityBarSide = this.panelState.activityBarSide;
   readonly chatRailOpen = this.panelState.chatRailOpen;
 
-  /** Drives the "moon / sun" icon in the titlebar. */
+  /**
+   * Which Explorer-tree project rows are expanded (showing Board / Project
+   * Hub / Activity sub-items). Persists across reloads so the user's
+   * preferred tree shape survives an F5.
+   */
+  private readonly _expandedProjects = signal<Set<string>>(
+    new Set(this.readExpandedProjects()),
+  );
+  readonly expandedProjects = this._expandedProjects.asReadonly();
+
+  isProjectExpanded(name: string): boolean {
+    return this._expandedProjects().has(name);
+  }
+
+  toggleProjectExpanded(name: string, event?: Event): void {
+    event?.stopPropagation();
+    this._expandedProjects.update(set => {
+      const next = new Set(set);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      this.writeExpandedProjects(next);
+      return next;
+    });
+  }
+
+  private readExpandedProjects(): string[] {
+    if (typeof window === 'undefined') return [];
+    try {
+      const raw = window.localStorage?.getItem('atp.studio.explorer.expanded');
+      if (!raw) return [];
+      const arr = JSON.parse(raw) as unknown;
+      if (Array.isArray(arr)) return arr.filter((s): s is string => typeof s === 'string');
+      return [];
+    } catch {
+      return [];
+    }
+  }
+
+  private writeExpandedProjects(set: Set<string>): void {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage?.setItem('atp.studio.explorer.expanded', JSON.stringify([...set]));
+    } catch {
+      /* storage may be full / blocked */
+    }
+  }
+
+  /**
+   * Drives the "moon / sun" icon in the titlebar. Default is Light per the
+   * reference design — a missing storage key counts as "use the default";
+   * explicit user choice persists.
+   */
   readonly theme = signal<'dark' | 'light'>(
-    (localStorage.getItem('atp.studio.theme') as 'dark' | 'light' | null) ?? 'dark',
+    (localStorage.getItem('atp.studio.theme') as 'dark' | 'light' | null) ?? 'light',
   );
 
   /** Bubbles to app.ts so the parent can flip the orchestrator side

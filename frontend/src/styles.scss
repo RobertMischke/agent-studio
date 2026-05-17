@@ -13,6 +13,23 @@ body {
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
 
+/* Studio shell light theme — when the titlebar Settings flip the studio
+ * theme to "light", swap the document chrome to match. The legacy
+ * components inside the projected board / detail still own their own
+ * dark backgrounds (they ship their own CSS variables); this override
+ * gives the body itself and the projected content frame a light shell
+ * so the chrome reads consistently. Full light-theme support for the
+ * legacy job-column / job-detail surfaces is a follow-up. */
+html[data-studio-theme='light'] {
+  color-scheme: light;
+  body {
+    background: #f3f3f3;
+    color: #1a1a1a;
+  }
+  ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.18); }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.32); }
+}
+
 /* Hide the text caret on every non-text-input surface. Clicking a card,
  * button, heading, etc. should never leave a blinking I-beam behind. Real
  * text-entry surfaces (form fields and rich-text contenteditable hosts)
