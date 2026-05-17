@@ -240,6 +240,34 @@ html[data-studio-theme='light'] {
     .project-hygiene-badge--unpushed { background: rgba(59,130,246,0.10); color: #1d4ed8; }
   }
 
+  // ---- Composer (chat-mode + chat-compose) light readability ----
+  // The protocol-pane composer pills use Catppuccin pastels on dark
+  // surfaces. In light mode the inactive pills become invisible and
+  // the active accents (blue/yellow/green/pink) clash with the brand
+  // orange. Re-tone the light variant to a muted greyscale baseline
+  // with the brand orange highlighting the active mode.
+  .chat-mode {
+    border-bottom-color: rgba(0, 0, 0, 0.08) !important;
+  }
+  .chat-mode__label {
+    color: #4a4a4a;
+  }
+  .chat-mode__pill {
+    color: #4a4a4a;
+    background: rgba(0, 0, 0, 0.04);
+    border-color: rgba(0, 0, 0, 0.12);
+  }
+  .chat-mode__pill:hover {
+    color: #1a1a1a;
+    border-color: rgba(0, 0, 0, 0.24);
+    background: rgba(0, 0, 0, 0.06);
+  }
+  .chat-mode__pill--active { color: #1a1a1a; }
+  .chat-mode__pill--active[data-mode="continue"] { background: var(--studio-accent, #d97757); border-color: var(--studio-accent, #d97757); color: #1a1a1a; }
+  .chat-mode__pill--active[data-mode="steer"]    { background: #fcd34d; border-color: #fcd34d; }
+  .chat-mode__pill--active[data-mode="extend"]   { background: #86efac; border-color: #86efac; }
+  .chat-mode__pill--active[data-mode="newTask"]  { background: #f9a8d4; border-color: #f9a8d4; }
+
   // ---- Filter sidesheet (kanban filter) light readability ----
   // The component's own SCSS pins #cbd5e1 / #64748b for chips, checkbox
   // rows, and the empty-state label — those read fine on the dark

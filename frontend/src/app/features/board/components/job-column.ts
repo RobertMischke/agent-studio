@@ -35,6 +35,15 @@ export class JobColumnComponent implements OnInit, OnDestroy {
   readonly collapsed = input<boolean>(false);
   readonly compact = input<boolean>(false);
   readonly archiving = input<boolean>(false);
+  /**
+   * Project for which the lane shows an auto-pickup toggle. `null` hides
+   * the chip — used when the board is scoped to "All projects" (no
+   * single project to attribute the toggle to). Only the In-Progress
+   * lane (state = '3-progress') reads these inputs today.
+   */
+  readonly autoProject = input<string | null>(null);
+  /** Current runner mode for the auto project, drives the chip's on/off look. */
+  readonly autoMode = input<string>('manual');
 
   readonly jobClick = output<JobInfo>();
   // `targetIndex` is the 0-based insertion slot in this column the user
@@ -48,6 +57,21 @@ export class JobColumnComponent implements OnInit, OnDestroy {
   readonly addTask = output<string>();
   readonly archiveAll = output<void>();
   readonly collapseToggle = output<void>();
+  /** Emits the project name when the user clicks the lane's auto chip. */
+  readonly autoToggleRequest = output<string>();
+
+  /** Helpers for the lane-side auto chip. */
+  readonly autoOn = computed(() => {
+    const m = this.autoMode();
+    return m === 'auto-continuous' || m === 'auto-single';
+  });
+  autoLabel(): string {
+    const m = this.autoMode();
+    if (m === 'auto-continuous') return 'Auto';
+    if (m === 'auto-single')     return 'Auto · 1';
+    if (m === 'paused')          return 'Paused';
+    return 'Manual';
+  }
 
   /**
    * Aggregated lane indicators rendered in collapsed-rail mode. The rail

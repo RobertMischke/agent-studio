@@ -218,8 +218,12 @@
       [job]="detail().info"
       (acknowledge)="onEvidenceAcknowledge($event, evidencePanel)"
       (createFollowup)="onEvidenceCreateFollowup($event, evidencePanel)" />
-    <app-code-review-panel
-      [job]="detail().info" />
+    <!-- app-code-review-panel was removed from the protocol pane in the
+         reference-alignment pass — Code Review entries now surface in
+         the left pane's Evidence tab (grouped under "Code Review" via
+         source-based grouping). The Run-Code-Review action remains
+         available from the orchestrator chat composer. -->
+
     @if (followupCreated(); as fc) {
       <div class="evidence-followup-banner"
            data-testid="review-evidence-followup-banner">

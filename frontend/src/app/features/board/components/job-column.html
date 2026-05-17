@@ -58,6 +58,20 @@
         @if (infoTopic(); as topic) {
           <app-info-button [topic]="topic" />
         }
+        <!-- Lane-side auto-pickup toggle. Mirrors the titlebar's auto chip
+             so the user can flip auto from either end. Only rendered for
+             the In Progress lane when a single project is in scope. -->
+        @if (state() === '3-progress' && autoProject(); as proj) {
+          <button type="button"
+                  class="column__auto-toggle"
+                  [class.column__auto-toggle--on]="autoOn()"
+                  [attr.data-testid]="'lane-auto-toggle-' + state()"
+                  [appTooltip]="autoOn() ? 'Auto-pickup is on for ' + proj + ' — click to pause.' : 'Auto-pickup is paused for ' + proj + ' — click to enable.'"
+                  (click)="autoToggleRequest.emit(proj); $event.stopPropagation()">
+            <span class="column__auto-toggle-dot" aria-hidden="true"></span>
+            <span class="column__auto-toggle-label">{{ autoLabel() }}</span>
+          </button>
+        }
         @if (canArchiveAll()) {
           <button type="button"
                   class="column__archive-all"

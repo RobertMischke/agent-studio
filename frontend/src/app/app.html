@@ -212,13 +212,16 @@
                           [collapsed]="isLaneCollapsed(lane.state)"
                           [compact]="compactCards()"
                           [archiving]="archivingInProgress()"
+                          [autoProject]="laneAutoProject(lane.state, lane.jobs)"
+                          [autoMode]="laneAutoMode(lane.state, lane.jobs)"
                           (collapseToggle)="toggleLaneCollapse(lane.state)"
                           (jobClick)="openDetail($event)"
                           (jobDrop)="onJobDrop($event)"
                           (jobReorder)="onJobReorder($event)"
                           (jobDeleteRequest)="onDeleteFromBoard($event)"
                           (addTask)="openCreate($event)"
-                          (archiveAll)="onArchiveAll()" />
+                          (archiveAll)="onArchiveAll()"
+                          (autoToggleRequest)="onToggleAuto($event)" />
                       }
                     </div>
                   </section>

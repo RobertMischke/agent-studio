@@ -1165,6 +1165,33 @@ export class App implements OnInit {
     });
   }
 
+  /**
+   * Project name to attribute the lane-side auto chip to. The chip is
+   * meaningful only when there's a single project in scope: either the
+   * board is scoped to one project, or every job in the lane belongs to
+   * the same project. Otherwise return null so the chip stays hidden.
+   */
+  laneAutoProject(state: string, jobs: JobInfo[]): string | null {
+    if (state !== '3-progress') return null;
+    // Prefer the board's scoped project (Picker selection); fall back to
+    // the only project actually in the lane.
+    const tab = this.studioTabState.activeTab();
+    if (tab?.kind === 'board' && tab.projectName !== '__all__') {
+      return tab.projectName;
+    }
+    if (jobs.length === 0) return null;
+    const first = jobs[0].projectName ?? null;
+    if (!first) return null;
+    return jobs.every(j => j.projectName === first) ? first : null;
+  }
+
+  /** Current runner mode (lookup mirrors the studio-shell header chip). */
+  laneAutoMode(state: string, jobs: JobInfo[]): string {
+    const proj = this.laneAutoProject(state, jobs);
+    if (!proj) return 'manual';
+    return this.jobService.runnerStatus().projects[proj]?.mode ?? 'manual';
+  }
+
   onFileSaved() { this.boardMutations.refreshAfterFileSave(); }
   onProjectChanged(targetWatchPath: string) { this.boardMutations.reopenAfterProjectChange(targetWatchPath); }
 
