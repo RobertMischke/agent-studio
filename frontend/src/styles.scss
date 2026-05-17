@@ -238,6 +238,86 @@ html[data-studio-theme='light'] {
     background: rgba(0, 0, 0, 0.05);
     color: #1a1a1a;
   }
+  // Project shell (Hub embed + legacy overlay) — all surfaces are
+  // hardcoded dark hex codes (#181825 / #1e1e2e / #313244). Flip
+  // them aggressively so the embedded Hub reads the same as the
+  // rest of the studio.
+  .proj-shell,
+  .proj-shell__head,
+  .proj-shell__title-row,
+  .proj-shell__body,
+  .proj-shell__rail,
+  .proj-shell__rail-group,
+  .proj-shell__panel,
+  .proj-shell__panel-head,
+  .proj-shell__empty {
+    background: #ffffff !important;
+    color: #1a1a1a !important;
+    border-color: #e1e1e1 !important;
+  }
+  .proj-shell__head { background: #f8f8f8 !important; border-bottom: 1px solid #e1e1e1; }
+  .proj-shell__rail { background: #f8f8f8 !important; border-right: 1px solid #e1e1e1; }
+  .proj-shell__title,
+  .proj-shell__rail-group,
+  .proj-shell__rail-label,
+  .proj-shell__panel-title,
+  .proj-shell__panel-desc {
+    color: #1a1a1a !important;
+  }
+  .proj-shell__chip {
+    background: rgba(0, 0, 0, 0.05) !important;
+    color: #4a4a4a !important;
+    border-color: #d4d4d4 !important;
+  }
+  .proj-shell__back,
+  .proj-shell__feed,
+  .proj-shell__rail-item {
+    background: transparent !important;
+    color: #1a1a1a !important;
+  }
+  .proj-shell__back:hover,
+  .proj-shell__rail-item:hover {
+    background: rgba(0, 0, 0, 0.05) !important;
+    color: #1a1a1a !important;
+  }
+  .proj-shell__feed {
+    background: rgba(217, 119, 87, 0.12) !important;
+    color: #a8472d !important;
+    border-color: rgba(217, 119, 87, 0.40) !important;
+  }
+  .proj-shell__feed:hover {
+    background: rgba(217, 119, 87, 0.22) !important;
+  }
+  .proj-shell__rail-item--active {
+    background: rgba(217, 119, 87, 0.15) !important;
+    color: #1a1a1a !important;
+  }
+
+  // Project-detail content rendered inside the project-shell panel
+  // (overview tabs, jobs list, drift cards, etc.) — flip the loudest
+  // dark surfaces.
+  .pd-overview,
+  .pd-overview__group,
+  .pd-overview__card,
+  .pd-overview__lane,
+  .pd-overview__health,
+  .pd-overview__queue,
+  .pd-overview__pipeline,
+  .pd-jobs,
+  .pd-jobs__row,
+  .pd-table,
+  .pd-table thead,
+  .pd-table tbody,
+  .pd-table th,
+  .pd-table td,
+  .pd-section,
+  .pd-section__head,
+  .pd-section__body {
+    background: #ffffff !important;
+    color: #1a1a1a !important;
+    border-color: #e1e1e1 !important;
+  }
+
   // Project-token-usage panel + heatmap + drift cards: hard-coded
   // dark surfaces. Flip the most visible ones.
   .tup__panel,
