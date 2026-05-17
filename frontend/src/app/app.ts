@@ -465,6 +465,20 @@ export class App implements OnInit {
     void this.updateClient.refreshNow();
   }
 
+  /**
+   * Slim detail-header proxies — the studio tab-bar surfaces a few
+   * task-tab actions that live on the embedded JobDetailComponent.
+   * Forward the click through the ViewChild so the action runs on the
+   * same component instance the user is looking at.
+   */
+  onShellTogglePane(pane: 'prompt' | 'protocol' | 'git'): void {
+    this.jobDetailRef?.togglePane(pane);
+  }
+
+  onShellOpenInVsCode(): void {
+    this.jobDetailRef?.openInVsCode();
+  }
+
   onPickDeleteE2E(): void {
     this.devToolsMenuOpen.set(false);
     this.showE2ECleanup.set(true);

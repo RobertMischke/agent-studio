@@ -94,6 +94,54 @@
                     data-testid="studio-board-add-task"
                     (click)="openCreate()">＋ Add task</button>
           }
+          @if (studioTabState.activeTab()?.kind === 'task' && selectedJob(); as detail) {
+            <!-- Slim detail header inside the tab bar — pane toggles +
+                 activity link + pager + complete. Replaces the wide
+                 detail-header row that the reference design folded into
+                 the tab bar. -->
+            <div class="studio-tab-action__pane-toggles"
+                 role="group"
+                 aria-label="Toggle detail panes">
+              <button type="button"
+                      class="studio-tab-action studio-tab-action--icon"
+                      data-testid="studio-pane-toggle-prompt"
+                      [appTooltip]="'Description'"
+                      (click)="onShellTogglePane('prompt')">📝</button>
+              <button type="button"
+                      class="studio-tab-action studio-tab-action--icon"
+                      data-testid="studio-pane-toggle-protocol"
+                      [appTooltip]="'Protocol &amp; chat'"
+                      (click)="onShellTogglePane('protocol')">🤖</button>
+              <button type="button"
+                      class="studio-tab-action studio-tab-action--icon"
+                      data-testid="studio-pane-toggle-git"
+                      [appTooltip]="'Git diff &amp; file tree'"
+                      (click)="onShellTogglePane('git')">🌿</button>
+            </div>
+            <span class="studio-tab-actions-sep" aria-hidden="true"></span>
+            <button type="button"
+                    class="studio-tab-action studio-tab-action--icon"
+                    data-testid="studio-task-open-vscode"
+                    [appTooltip]="'Open the project root in VS Code'"
+                    (click)="onShellOpenInVsCode()">🪟</button>
+            <span class="studio-tab-actions-sep" aria-hidden="true"></span>
+            <button type="button"
+                    class="studio-tab-action studio-tab-action--icon"
+                    data-testid="studio-task-prev"
+                    [appTooltip]="'Previous task in lane'"
+                    (click)="onTriagePrev(detail.info)">‹</button>
+            <button type="button"
+                    class="studio-tab-action studio-tab-action--icon"
+                    data-testid="studio-task-next"
+                    [appTooltip]="'Next task in lane'"
+                    (click)="onTriageNext(detail.info)">›</button>
+            <span class="studio-tab-actions-sep" aria-hidden="true"></span>
+            <button type="button"
+                    class="studio-tab-action studio-tab-action--primary"
+                    data-testid="studio-task-complete-next"
+                    [appTooltip]="'Complete this task and move to the next review item'"
+                    (click)="onCompleteAndNextReview()">✓ Complete</button>
+          }
         </div>
         <div studioContent class="studio-projected-content">
           @switch (studioTabState.activeTab()?.kind) {

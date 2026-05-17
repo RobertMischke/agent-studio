@@ -77,12 +77,9 @@
         [isRunning]="isRunning()"
         [jobId]="detail().info.id"
         [watchPath]="detail().info.watchPath"
-        [evidence]="detail().reviewEvidence"
-        [job]="detail().info"
         (maximizeToggle)="toggleMaximize('prompt')"
         (hide)="togglePane('prompt')"
-        (save)="saveFileContent('prompt.md', $event)"
-        (evidenceMutated)="fileSaved.emit()" />
+        (save)="saveFileContent('prompt.md', $event)" />
     }
 
     @if (!maximizedPane() && panesVisible().prompt && (panesVisible().protocol || panesVisible().git)) {
