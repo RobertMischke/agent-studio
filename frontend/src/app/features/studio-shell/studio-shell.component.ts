@@ -1,6 +1,7 @@
 import {
   ChangeDetectionStrategy,
   Component,
+  HostListener,
   ViewEncapsulation,
   computed,
   effect,
@@ -166,6 +167,95 @@ export class StudioShellComponent {
   readonly openWorkspaceScreenshots = output<void>();
   readonly openOrchFeed = output<void>();
   readonly openOrchSettings = output<void>();
+  /** Emits when the user toggles the auto-pickup mode for a project. */
+  readonly toggleAuto = output<string>();
+
+  /** Project picker dropdown open state. */
+  readonly pickerOpen = signal(false);
+
+  togglePickerMenu(ev: Event): void {
+    ev.stopPropagation();
+    this.pickerOpen.update(v => !v);
+  }
+  closePickerMenu(): void { this.pickerOpen.set(false); }
+
+  /**
+   * Centralised click handler for project-picker entries. `name === null`
+   * means "All projects" (clears the active project filter); otherwise the
+   * named project becomes the active board. `openHub` flag promotes the
+   * click to a Project Hub open (double-click affordance).
+   */
+  pickProject(name: string | null, openHub = false): void {
+    this.closePickerMenu();
+    if (name === null) { this.openBoard('__all__'); return; }
+    if (openHub) { this.openHub(name); return; }
+    this.openBoard(name);
+  }
+
+  /** Closes the picker when the user clicks anywhere else in the document. */
+  @HostListener('document:click')
+  onDocumentClick(): void { this.closePickerMenu(); }
+
+  /**
+   * Active project for the picker — derived from the active tab / board.
+   * `null` means the user is in "All projects" mode (workspace-wide).
+   */
+  readonly activeProjectName = computed<string | null>(() => {
+    const tab = this.activeTab();
+    if (!tab) return null;
+    if (tab.kind === 'board') return tab.projectName === '__all__' ? null : tab.projectName;
+    return this.currentProjectName();
+  });
+
+  readonly activeProjectInitial = computed<string>(() => {
+    const name = this.activeProjectName();
+    if (!name) return '';
+    return projectIdentity(name).initial;
+  });
+
+  readonly activeProjectColor = computed<string>(() => {
+    const name = this.activeProjectName();
+    if (!name) return 'var(--studio-fg-muted)';
+    return projectIdentity(name).color;
+  });
+
+  readonly activeProjectTotalJobs = computed<number>(() => {
+    const name = this.activeProjectName();
+    if (!name) return 0;
+    return this.projectRows().find(r => r.name === name)?.totalJobs ?? 0;
+  });
+
+  activeProjectPickerLabel(): string {
+    return this.activeProjectName() ?? 'All projects';
+  }
+
+  readonly totalProjectJobs = computed<number>(() =>
+    this.projectRows().reduce((sum, r) => sum + r.totalJobs, 0)
+  );
+
+  /** Reactive map of project name → current runner mode. */
+  autoModeFor(name: string): string {
+    return this.jobService.runnerStatus().projects[name]?.mode ?? 'manual';
+  }
+
+  /** Short label for the auto-mode chip ("auto", "single", "paused", "manual"). */
+  autoModeLabelFor(name: string): string {
+    const mode = this.autoModeFor(name);
+    switch (mode) {
+      case 'auto-continuous': return 'Auto';
+      case 'auto-single':     return 'Auto · 1';
+      case 'paused':          return 'Paused';
+      default:                return 'Manual';
+    }
+  }
+
+  autoToggleTooltip(name: string): string {
+    const mode = this.autoModeFor(name);
+    if (mode === 'auto-continuous' || mode === 'auto-single') {
+      return `Auto-pickup is on for ${name} — click to pause.`;
+    }
+    return `Auto-pickup is paused for ${name} — click to enable.`;
+  }
 
   /** Reflects the theme onto the document root so the design tokens flip. */
   private readonly themeFx = effect(() => {

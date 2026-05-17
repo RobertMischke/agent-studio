@@ -34,30 +34,82 @@
 
     <span class="studio-titlebar__separator">/</span>
 
-    <nav class="studio-titlebar__pills" data-testid="studio-project-pills">
+    <!-- Project picker: single combo carrying ONLY the active selection.
+         Click opens a dropdown with "All projects" + each project. This
+         replaces the legacy multi-pill row that suggested a multi-select
+         filter; the title bar now shows exactly what is in scope. -->
+    <div class="studio-titlebar__picker" data-testid="studio-project-picker">
       <button type="button"
-              class="studio-pill"
-              [class.studio-pill--active]="activeBoardProject() === null && activeTab()?.kind === 'board'"
-              (click)="openBoard('__all__')">
-        <span class="studio-pill__glyph studio-pill__glyph--all" aria-hidden="true">
-          <app-studio-icon name="grid" [size]="11"></app-studio-icon>
-        </span>
-        <span class="studio-pill__label">All projects</span>
+              class="studio-pill studio-pill--picker"
+              [class.studio-pill--active]="true"
+              [style.--studio-pill-color]="activeProjectColor()"
+              data-testid="studio-project-picker-trigger"
+              [title]="activeProjectPickerLabel() + ' — click to switch project'"
+              (click)="togglePickerMenu($event)">
+        @if (activeProjectName(); as name) {
+          <span class="studio-pill__glyph"
+                [style.background]="activeProjectColor()"
+                aria-hidden="true">{{ activeProjectInitial() }}</span>
+          <span class="studio-pill__label">{{ name }}</span>
+          <span class="studio-pill__count" aria-label="open jobs">{{ activeProjectTotalJobs() }}</span>
+        } @else {
+          <span class="studio-pill__glyph studio-pill__glyph--all" aria-hidden="true">
+            <app-studio-icon name="grid" [size]="11"></app-studio-icon>
+          </span>
+          <span class="studio-pill__label">All projects</span>
+        }
+        <span class="studio-pill__caret" aria-hidden="true">▾</span>
       </button>
-      @for (p of projectRows(); track p.name) {
+
+      <!-- Auto-pickup toggle for the active project. Shows the current
+           runner state and click cycles auto-continuous ⇄ paused. Hidden
+           in "All projects" mode (toggling per-workspace would require
+           a new API surface). -->
+      @if (activeProjectName(); as name) {
         <button type="button"
-                class="studio-pill"
-                [class.studio-pill--active]="p.isActive"
-                [style.--studio-pill-color]="p.color"
-                (click)="openBoard(p.name)"
-                (dblclick)="openHub(p.name)"
-                [title]="p.name + ' (double-click for Project Hub)'">
-          <span class="studio-pill__glyph" [style.background]="p.color" aria-hidden="true">{{ p.initial }}</span>
-          <span class="studio-pill__label">{{ p.name }}</span>
-          <span class="studio-pill__count" aria-label="open jobs">{{ p.totalJobs }}</span>
+                class="studio-auto-toggle"
+                [class.studio-auto-toggle--on]="autoModeFor(name) !== 'manual' && autoModeFor(name) !== 'paused'"
+                data-testid="studio-titlebar-auto-toggle"
+                [title]="autoToggleTooltip(name)"
+                (click)="toggleAuto.emit(name); $event.stopPropagation()">
+          <span class="studio-auto-toggle__dot" aria-hidden="true"></span>
+          <span class="studio-auto-toggle__label">{{ autoModeLabelFor(name) }}</span>
         </button>
       }
-    </nav>
+
+      @if (pickerOpen()) {
+        <div class="studio-titlebar__picker-menu"
+             role="menu"
+             data-testid="studio-project-picker-menu"
+             (click)="$event.stopPropagation()">
+          <button type="button"
+                  class="studio-titlebar__picker-item"
+                  [class.studio-titlebar__picker-item--active]="activeBoardProject() === null && activeTab()?.kind === 'board'"
+                  data-testid="studio-project-picker-all"
+                  (click)="pickProject(null)">
+            <span class="studio-pill__glyph studio-pill__glyph--all" aria-hidden="true">
+              <app-studio-icon name="grid" [size]="11"></app-studio-icon>
+            </span>
+            <span class="studio-pill__label">All projects</span>
+            <span class="studio-pill__count" aria-label="total open jobs">{{ totalProjectJobs() }}</span>
+          </button>
+          @for (p of projectRows(); track p.name) {
+            <button type="button"
+                    class="studio-titlebar__picker-item"
+                    [class.studio-titlebar__picker-item--active]="p.isActive && activeTab()?.kind !== 'welcome'"
+                    [style.--studio-pill-color]="p.color"
+                    [attr.data-testid]="'studio-project-picker-' + p.name"
+                    (click)="pickProject(p.name)"
+                    (dblclick)="pickProject(p.name, true)"
+                    [title]="p.name + ' (double-click for Project Hub)'">
+              <span class="studio-pill__glyph" [style.background]="p.color" aria-hidden="true">{{ p.initial }}</span>
+              <span class="studio-pill__label">{{ p.name }}</span>
+              <span class="studio-pill__count" aria-label="open jobs">{{ p.totalJobs }}</span>
+            </button>
+          }
+        </div>
+      }
+    </div>
 
     <span class="studio-titlebar__spacer"></span>
 
@@ -191,11 +243,18 @@
           @switch (activePanel()) {
             @case ('explorer') {
               <section class="studio-explorer">
-                <div class="studio-explorer__group-head">
+                <!-- Clicking the Workspace group head selects "All projects"
+                     (mirrors the picker in the title bar). The dedicated
+                     chevron only toggles expand/collapse via stopPropagation. -->
+                <button type="button"
+                        class="studio-explorer__group-head studio-explorer__group-head--btn"
+                        data-testid="studio-explorer-workspace-head"
+                        [class.studio-explorer__group-head--active]="activeProjectName() === null && activeTab()?.kind === 'board'"
+                        (click)="pickProject(null)">
                   <span class="studio-explorer__chev" aria-hidden="true">▼</span>
                   <span>Workspace</span>
                   <span class="studio-explorer__count">{{ projectRows().length }}</span>
-                </div>
+                </button>
                 @for (p of projectRows(); track p.name) {
                   <div class="studio-tree-project">
                     <button type="button"

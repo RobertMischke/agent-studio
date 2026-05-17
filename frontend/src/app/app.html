@@ -51,7 +51,8 @@
                         (openCliAdmin)="toggleCliAdmin()"
                         (openWorkspaceScreenshots)="toggleWorkspaceScreenshots()"
                         (openOrchFeed)="toggleOrchFeed()"
-                        (openOrchSettings)="openOrchestratorSettings()">
+                        (openOrchSettings)="openOrchestratorSettings()"
+                        (toggleAuto)="onToggleAuto($event)">
         <app-status-bar studioStatusbar
           [projectNames]="projectNames()"
           (toggleUsage)="usageSheet.toggle()"

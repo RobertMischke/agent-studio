@@ -315,6 +315,113 @@
     background: var(--studio-accent);
     color: #1a1a1a;
   }
+
+  &--picker {
+    cursor: pointer;
+    padding-right: 6px;
+  }
+
+  &__caret {
+    color: var(--studio-fg-muted);
+    font-size: 9px;
+    margin-left: 2px;
+  }
+}
+
+// Project picker dropdown anchored under the trigger pill in the
+// titlebar. Replaces the multi-pill row so only the active selection
+// is visible at rest; the dropdown carries the full project list.
+.studio-titlebar__picker {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.studio-titlebar__picker-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  min-width: 240px;
+  max-width: 360px;
+  background: var(--studio-bg-elevated);
+  border: 1px solid var(--studio-border);
+  border-radius: 6px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.32);
+  padding: 4px;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.studio-titlebar__picker-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--studio-fg);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+  white-space: nowrap;
+
+  &:hover {
+    background: var(--studio-bg-hover);
+    color: var(--studio-fg-strong);
+  }
+
+  &--active {
+    background: var(--studio-bg-selected);
+    color: var(--studio-fg-strong);
+  }
+}
+
+// Auto-pickup toggle next to the project picker. The dot lights up
+// (brand-orange) when auto is enabled. Click cycles auto ⇄ paused via
+// the parent's onToggleAuto handler.
+.studio-auto-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 11px;
+  border: 1px solid var(--studio-border);
+  background: transparent;
+  color: var(--studio-fg-dim);
+  font: inherit;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+
+  &:hover {
+    background: var(--studio-bg-hover);
+    color: var(--studio-fg);
+  }
+
+  &__dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--studio-fg-muted);
+    transition: background 0.12s ease, box-shadow 0.12s ease;
+  }
+
+  &--on {
+    border-color: rgba(217, 119, 87, 0.55);
+    background: rgba(217, 119, 87, 0.12);
+    color: var(--studio-accent);
+  }
+  &--on &__dot {
+    background: var(--studio-accent);
+    box-shadow: 0 0 0 3px rgba(217, 119, 87, 0.18);
+  }
 }
 
 // -------------------------------------------------------------------------
@@ -502,6 +609,24 @@
     margin-top: 12px;
     border-top: 1px solid var(--studio-border);
     padding-top: 10px;
+  }
+
+  // When the workspace group head is also the "All projects" trigger,
+  // it renders as a real button — flat outline, hover/active state.
+  &--btn {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+    transition: background 0.12s ease, color 0.12s ease;
+
+    &:hover { background: var(--studio-bg-hover); color: var(--studio-fg-strong); }
+  }
+
+  &--active {
+    background: var(--studio-bg-selected);
+    color: var(--studio-fg-strong);
   }
 }
 
