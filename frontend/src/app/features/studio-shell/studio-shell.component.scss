@@ -58,6 +58,13 @@
   color: var(--studio-fg);
   background: var(--studio-bg-editor);
 
+  // Reset native button chrome inside the studio shell so our class-based
+  // rules drive the look.
+  // NOTE on cascade: `.studio button` has specificity (0,1,1) which
+  // beats single-class modifiers like `.studio-tree-row--child` (0,1,0).
+  // If a button-class modifier wants a non-zero padding-left, it must
+  // bump specificity (e.g. `.studio .studio-tree-row--child`) or this
+  // reset will silently win.
   button {
     font-family: inherit;
     color: inherit;
@@ -571,16 +578,19 @@
     opacity: 1;
   }
 
-  &--project {
-    padding-left: 8px;
-  }
-
-  &--child {
-    // Reference paddingLeft is 44 — aligns the lane sub-icon under
-    // the project glyph so children visibly nest below their parent.
-    padding-left: 44px;
-    font-size: 12px;
-  }
+  // Specificity bump: `.studio button` (0,1,1) was beating bare
+  // single-class `.studio-tree-row--*` modifiers and clobbering their
+  // padding-left. Scoping the modifiers to `.studio` raises them to
+  // (0,2,0) so they outrank the universal button reset.
+}
+.studio .studio-tree-row--project {
+  padding-left: 8px;
+}
+.studio .studio-tree-row--child {
+  // Reference paddingLeft is 44 — aligns the lane sub-icon under
+  // the project glyph so children visibly nest below their parent.
+  padding-left: 44px;
+  font-size: 12px;
 }
 
 .studio-tree-row__close {
