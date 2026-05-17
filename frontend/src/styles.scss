@@ -157,8 +157,22 @@ html[data-studio-theme='light'] {
   }
   // Inner card surfaces inside sidesheets/dialogs/overlays.
   .sheet,
+  .sheet__header,
+  .sheet__content,
+  .sheet__body,
+  .sheet__footer,
+  .sheet__chat,
+  .sheet__messages,
+  .sheet__no-project,
+  .sheet__placeholder,
   .panel,
+  .panel__header,
+  .panel__body,
+  .panel__footer,
   .sidesheet,
+  .sidesheet__header,
+  .sidesheet__body,
+  .sidesheet__footer,
   .dialog,
   .modal,
   app-orchestrator-side-sheet .sheet,
@@ -178,20 +192,21 @@ html[data-studio-theme='light'] {
     color: #1a1a1a !important;
     border-color: #e1e1e1 !important;
   }
-  // Headers / sub-sections / list rows inside sheets.
+  // Headers / sub-sections / list rows inside sheets — visible chrome
+  // gets a tinted bg, body areas stay white.
   .sheet__header,
+  .panel__header {
+    background: #f8f8f8 !important;
+    color: #1a1a1a !important;
+    border-color: #e1e1e1 !important;
+  }
   .sheet__title,
   .sheet__eyebrow,
-  .sheet__body,
-  .sheet__footer,
   .sheet__title-block,
   .sheet__project-picker,
   .sheet__combo-input,
   .sheet__btn,
-  .sheet__close,
-  .panel__header,
-  .panel__body,
-  .panel__footer {
+  .sheet__close {
     background: transparent;
     color: #1a1a1a;
   }
