@@ -431,17 +431,21 @@ html[data-studio-theme='light'] {
   app-error-dialog .panel,
   app-media-lightbox .panel,
   app-verbose-debug-overlay .panel {
-    background: #ffffff !important;
-    color: #1a1a1a !important;
-    border-color: #e1e1e1 !important;
+    // Component-side `.sheet` is specificity (0,1,0); the
+    // selectors above are (0,2,0) which already wins. The
+    // `html[data-studio-theme='light']` wrapper adds another (0,1,0)
+    // layer. No !important needed.
+    background: var(--studio-bg-editor);
+    color: var(--studio-fg-strong);
+    border-color: var(--studio-border);
   }
   // Headers / sub-sections / list rows inside sheets — visible chrome
   // gets a tinted bg, body areas stay white.
   .sheet__header,
   .panel__header {
-    background: #f8f8f8 !important;
-    color: #1a1a1a !important;
-    border-color: #e1e1e1 !important;
+    background: var(--studio-bg-sidebar);
+    color: var(--studio-fg-strong);
+    border-color: var(--studio-border);
   }
   .sheet__title,
   .sheet__eyebrow,
@@ -485,6 +489,10 @@ html[data-studio-theme='light'] {
   // hardcoded dark hex codes (#181825 / #1e1e2e / #313244). Flip
   // them aggressively so the embedded Hub reads the same as the
   // rest of the studio.
+  // The bridge selectors below are wrapped in
+  // `html[data-studio-theme='light']` which gives them specificity
+  // (0,2,0), beating the component-side `.proj-shell` (0,1,0)
+  // declarations. No !important needed.
   .proj-shell,
   .proj-shell__head,
   .proj-shell__title-row,
@@ -494,60 +502,60 @@ html[data-studio-theme='light'] {
   .proj-shell__panel,
   .proj-shell__panel-head,
   .proj-shell__empty {
-    background: #ffffff !important;
-    color: #1a1a1a !important;
-    border-color: #e1e1e1 !important;
+    background: var(--studio-bg-editor);
+    color: var(--studio-fg-strong);
+    border-color: var(--studio-border);
   }
-  .proj-shell__head { background: #f8f8f8 !important; border-bottom: 1px solid #e1e1e1; }
-  .proj-shell__rail { background: #f8f8f8 !important; border-right: 1px solid #e1e1e1; }
+  .proj-shell__head { background: var(--studio-bg-sidebar); border-bottom: 1px solid var(--studio-border); }
+  .proj-shell__rail { background: var(--studio-bg-sidebar); border-right: 1px solid var(--studio-border); }
   .proj-shell__title,
   .proj-shell__rail-group,
   .proj-shell__rail-label,
   .proj-shell__panel-title,
   .proj-shell__panel-desc {
-    color: #1a1a1a !important;
+    color: var(--studio-fg-strong);
   }
   .proj-shell__chip {
-    background: rgba(0, 0, 0, 0.05) !important;
-    color: #4a4a4a !important;
-    border-color: #d4d4d4 !important;
+    background: rgba(0, 0, 0, 0.05);
+    color: var(--studio-fg-dim);
+    border-color: var(--studio-border);
   }
   .proj-shell__back,
   .proj-shell__feed,
   .proj-shell__rail-item {
-    background: transparent !important;
-    color: #1a1a1a !important;
+    background: transparent;
+    color: var(--studio-fg-strong);
   }
   .proj-shell__back:hover,
   .proj-shell__rail-item:hover {
-    background: rgba(0, 0, 0, 0.05) !important;
-    color: #1a1a1a !important;
+    background: rgba(0, 0, 0, 0.05);
+    color: var(--studio-fg-strong);
   }
   .proj-shell__feed {
-    background: rgba(217, 119, 87, 0.12) !important;
-    color: #a8472d !important;
-    border-color: rgba(217, 119, 87, 0.40) !important;
+    background: rgba(217, 119, 87, 0.12);
+    color: #a8472d;
+    border-color: rgba(217, 119, 87, 0.40);
   }
   .proj-shell__feed:hover {
-    background: rgba(217, 119, 87, 0.22) !important;
+    background: rgba(217, 119, 87, 0.22);
   }
   .proj-shell__rail-item--active {
-    background: rgba(217, 119, 87, 0.15) !important;
-    color: #1a1a1a !important;
+    background: rgba(217, 119, 87, 0.15);
+    color: var(--studio-fg-strong);
   }
   // Monochrome rail icons — the icon glyphs are intentionally plain
   // Unicode geometry now (▤ ◉ ⊞ ↯ ◐ ⌁ ⊡ ✓ ⊟ ☰ ▦ ⊜ ⌖ ⊕ ◈ ⚙) so they
   // read as a "grey icon column" instead of a colour-coded emoji
   // jumble. Render them slightly muted so the label stays primary.
   .proj-shell__rail-icon {
-    color: #6e6e6e !important;
+    color: var(--studio-fg-muted);
     font-size: 14px;
     width: 16px;
     text-align: center;
     flex-shrink: 0;
   }
   .proj-shell__rail-item--active .proj-shell__rail-icon {
-    color: #1a1a1a !important;
+    color: var(--studio-fg-strong);
   }
   // Catch-all: anything inside the project-shell that didn't get a
   // specific override should still render dark text on the light
@@ -562,7 +570,7 @@ html[data-studio-theme='light'] {
     color: inherit;
   }
   .proj-shell {
-    color: #1a1a1a !important;
+    color: var(--studio-fg-strong);
   }
   // Numerical headings + group labels — typical project-detail spots.
   .proj-shell h1,
@@ -576,13 +584,13 @@ html[data-studio-theme='light'] {
   .proj-shell .pd-overview__metric,
   .proj-shell .pd-overview__number,
   .proj-shell .pd-overview__label {
-    color: #1a1a1a !important;
+    color: var(--studio-fg-strong);
   }
   .proj-shell code,
   .proj-shell .mono,
   .proj-shell .pd-mono {
-    color: #1a1a1a !important;
-    background: rgba(0, 0, 0, 0.06) !important;
+    color: var(--studio-fg-strong);
+    background: rgba(0, 0, 0, 0.06);
   }
 
   // Project-detail content rendered inside the project-shell panel
@@ -605,9 +613,9 @@ html[data-studio-theme='light'] {
   .pd-section,
   .pd-section__head,
   .pd-section__body {
-    background: #ffffff !important;
-    color: #1a1a1a !important;
-    border-color: #e1e1e1 !important;
+    background: var(--studio-bg-editor);
+    color: var(--studio-fg-strong);
+    border-color: var(--studio-border);
   }
 
   // Project-token-usage panel + heatmap + drift cards: hard-coded
@@ -627,9 +635,9 @@ html[data-studio-theme='light'] {
   .project-shell,
   .project-shell__rail,
   .project-shell__panel {
-    background: #ffffff !important;
-    color: #1a1a1a !important;
-    border-color: #e1e1e1 !important;
+    background: var(--studio-bg-editor);
+    color: var(--studio-fg-strong);
+    border-color: var(--studio-border);
   }
   // Header / title elements inside those panels.
   .tup__panel-head,
