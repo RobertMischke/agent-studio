@@ -1,6 +1,10 @@
 <section class="pane pane--prompt" [style.flex]="maximized() ? '1 1 100%' : weight()" data-testid="pane-prompt">
-  <header class="pane__header pane__header--tabs">
-    <div class="pane-tabs" role="tablist">
+  <app-pane-header
+    [maximized]="maximized()"
+    testid="pane-prompt-header"
+    (maximize)="maximizeToggle.emit()"
+    (hide)="hide.emit()">
+    <div tabs class="pane-tabs" role="tablist">
       <button class="pane-tab"
               role="tab"
               [class.pane-tab--active]="activeTab() === 'description'"
@@ -32,17 +36,7 @@
         <span>Code Review</span>
       </button>
     </div>
-    <span class="pane__spacer"></span>
-    <button class="pane__maximize"
-            data-testid="pane-maximize-prompt"
-            (click)="maximizeToggle.emit()"
-            [appTooltip]="maximized() ? 'Restore layout' : 'Maximize'">
-      <app-studio-icon [name]="maximized() ? 'collapse' : 'expand'" [size]="12"></app-studio-icon>
-    </button>
-    <button class="pane__hide" (click)="hide.emit()" [appTooltip]="'Hide panel'">
-      <app-studio-icon name="close" [size]="12"></app-studio-icon>
-    </button>
-  </header>
+  </app-pane-header>
   <div class="pane__body">
     @switch (activeTab()) {
       @case ('description') {

@@ -30,6 +30,13 @@ export class StatusbarItemComponent {
   /** Renders as a button (default true) vs read-only text chip. */
   @Input() button: boolean = true;
   @Input() testid: string | null = null;
+  /** Animate the icon as a live indicator (e.g. the "● running" chip). */
+  @Input() pulsing: boolean = false;
+  /** Bullet character used for read-only chips that pre-date the SVG icon
+   *  set ("● running" / "↻ N/M auto"); takes precedence over `icon` so
+   *  callers can keep the legacy glyph without forcing every status-bar
+   *  chip to a flat SVG. */
+  @Input() bullet: string | null = null;
 
   @Output() readonly click = new EventEmitter<MouseEvent>();
 }

@@ -3,8 +3,12 @@
           [appTooltip]="tooltip"
           [attr.data-testid]="testid"
           (click)="click.emit($event)">
-    @if (icon) {
-      <span class="statusbar__icon"><app-studio-icon [name]="icon" [size]="iconSize"></app-studio-icon></span>
+    @if (bullet) {
+      <span class="statusbar__icon" [class.statusbar__icon--pulse]="pulsing">{{ bullet }}</span>
+    } @else if (icon) {
+      <span class="statusbar__icon" [class.statusbar__icon--pulse]="pulsing">
+        <app-studio-icon [name]="icon" [size]="iconSize"></app-studio-icon>
+      </span>
     }
     <span>{{ label }}</span>
   </button>
@@ -12,8 +16,12 @@
   <span class="statusbar__item statusbar__item--ro"
         [appTooltip]="tooltip"
         [attr.data-testid]="testid">
-    @if (icon) {
-      <span class="statusbar__icon"><app-studio-icon [name]="icon" [size]="iconSize"></app-studio-icon></span>
+    @if (bullet) {
+      <span class="statusbar__icon" [class.statusbar__icon--pulse]="pulsing">{{ bullet }}</span>
+    } @else if (icon) {
+      <span class="statusbar__icon" [class.statusbar__icon--pulse]="pulsing">
+        <app-studio-icon [name]="icon" [size]="iconSize"></app-studio-icon>
+      </span>
     }
     <span>{{ label }}</span>
   </span>

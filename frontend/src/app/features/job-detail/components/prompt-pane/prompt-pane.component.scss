@@ -6,16 +6,11 @@
  */
 :host { display: contents; }
 
-/* Description / Evidence tab strip — matches .reference-layout/detail.jsx
- * pane-tabs. The strip replaces the legacy "📝 Task description" h3 in
- * the pane header so the same pane can switch its body between the
- * markdown editor (Description) and the embedded review-evidence panel
- * (Evidence). The badge surfaces unacknowledged evidence count. */
-.pane__header--tabs {
-  gap: 0;
-  padding: 0 6px 0 0;
-}
-
+/*
+ * Tab strip projected into the <app-pane-header> `tabs` slot. The
+ * header itself owns the surrounding chrome (icon / title / maximize
+ * / hide) so this file only declares the tab-specific look.
+ */
 .pane-tabs {
   display: flex;
   align-items: stretch;

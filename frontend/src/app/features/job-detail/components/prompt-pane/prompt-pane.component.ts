@@ -9,6 +9,7 @@ import { markdownToHtml } from '../../../../components/markdown-utils';
 import { MarkdownImageLightboxDirective } from '../../../../directives/markdown-image-lightbox.directive';
 import { resolveProtocolImageSrc } from '../protocol-pane/protocol-image-resolver';
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
+import { PaneHeaderComponent } from '../../../../components/pane-header/pane-header.component';
 
 import { TooltipDirective } from '../../../../components/tooltip';
 
@@ -36,7 +37,7 @@ interface EvidenceSection {
   selector: 'app-prompt-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [MarkdownRichEditorComponent, MarkdownImageLightboxDirective, TooltipDirective, StudioIconComponent, ScreenshotStripComponent, ReviewEvidencePanelComponent, CodeReviewPanelComponent],
+  imports: [MarkdownRichEditorComponent, MarkdownImageLightboxDirective, StudioIconComponent, PaneHeaderComponent, ScreenshotStripComponent, ReviewEvidencePanelComponent, CodeReviewPanelComponent],
   templateUrl: './prompt-pane.component.html',
   styleUrls: ['./prompt-pane.component.scss']
 })
