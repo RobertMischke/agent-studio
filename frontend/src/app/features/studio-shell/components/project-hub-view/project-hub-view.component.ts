@@ -1,61 +1,91 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
 import { JobService } from '../../../../services/job.service';
-import { projectIdentity } from '../../../../services/project-identity.util';
 import type { JobInfo } from '../../../../models/job.model';
+import { ProjectShellComponent } from '../../../project-detail/components/project-shell/project-shell.component';
+import { ProjectDetailComponent } from '../../../project-detail/components/project-detail';
+import { SecurityPanelComponent } from '../../../project-detail/components/security-panel/security-panel.component';
+import { UxuiPanelComponent } from '../../../project-detail/components/uxui-panel/uxui-panel.component';
+import { ProjectTokenUsagePanelComponent } from '../../../project-token-usage/components/project-token-usage-panel.component';
+import { ProjectObservabilityPanelComponent } from '../../../project-detail/components/project-observability/project-observability-panel.component';
+import { ProjectProductRuntimePanelComponent } from '../../../project-detail/components/project-product-runtime/project-product-runtime-panel.component';
+import { ProjectSteeringDocsSectionComponent } from '../../../project-detail/components/project-steering-docs-section';
+import { ProjectSkillReadinessSectionComponent } from '../../../project-detail/components/project-skill-readiness-section';
+import { WorkspaceScreenshotsComponent } from '../../../screenshots';
+import {
+  DEFAULT_PROJECT_RAIL_KEY,
+  ProjectRailKey,
+  isProjectRailKey,
+} from '../../../project-detail/components/project-shell/project-shell.config';
+import { ProjectOverlaysService } from '../../../project-detail/state/project-overlays.service';
 
-interface HubSection {
-  key: string;
-  label: string;
-  icon: string;
-  hint: string;
-}
-
-interface HealthSnapshot {
-  open: number;
-  inAuto: number;
-  inHuman: number;
-  inProgress: number;
-  archive: number;
-}
+/** Rails whose content panel is real (not the project-shell placeholder). */
+const RAILS_WITH_CUSTOM_PANEL: ReadonlySet<ProjectRailKey> = new Set<ProjectRailKey>([
+  'overview',
+  'visual-evidence',
+  'security',
+  'architecture',
+  'drift',
+  'uxui',
+  'token-usage',
+  'observability',
+  'product-runtime',
+  'steering',
+  'jobs',
+  'settings',
+  'orchestrator',
+  'activity',
+]);
 
 /**
- * Project Hub — the per-project landing surface that the new shell
- * opens on double-click of a project pill. Renders project header,
- * an "INSIGHT" side-nav, and lightweight overview cards that mirror
- * the metric vocabulary from .reference-layout/project-hub.jsx
- * (HEALTH, REPOSITORY, ACTIVE CLIS, QUALITY).
- *
- * The deeper interactive sections (Visual Evidence, Architecture
- * drift, UX/UI overlay) reuse the existing project-detail overlays
- * via direct links until they are migrated as Hub-internal pages.
+ * Project Hub tab — the per-project landing surface inside the studio
+ * editor. Embeds the legacy <app-project-shell> directly so the full
+ * project navigation (Overview / Visual Evidence / Security /
+ * Architecture / Drift / UX-UI / Test Quality / Token Usage /
+ * Observability / Product Runtime / Steering / Audits / Jobs /
+ * Settings / Orchestrator / Activity) is reachable from the tab —
+ * no need to open a separate overlay, and every rail uses its real
+ * content panel where one exists.
  */
 @Component({
   selector: 'app-project-hub-view',
   standalone: true,
+  imports: [
+    ProjectShellComponent,
+    ProjectDetailComponent,
+    SecurityPanelComponent,
+    UxuiPanelComponent,
+    ProjectTokenUsagePanelComponent,
+    ProjectObservabilityPanelComponent,
+    ProjectProductRuntimePanelComponent,
+    ProjectSteeringDocsSectionComponent,
+    ProjectSkillReadinessSectionComponent,
+    WorkspaceScreenshotsComponent,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-hub-view.component.html',
   styleUrl: './project-hub-view.component.scss',
 })
 export class ProjectHubViewComponent {
   private readonly jobService = inject(JobService);
+  private readonly overlays = inject(ProjectOverlaysService);
 
   readonly projectName = input.required<string>();
+  /** Optional initial rail; defaults to "overview" if absent or unknown. */
   readonly initialSection = input<string>('overview');
 
-  readonly section = signal<string>('overview');
+  /** Bubbles to the parent so it can navigate when a row link is clicked. */
+  readonly openTask = output<{ jobId: string; watchPath: string }>();
 
-  readonly sections: HubSection[] = [
-    { key: 'overview', label: 'Overview', icon: '▤', hint: 'Health, repository, CLIs, quality' },
-    { key: 'visual', label: 'Visual Evidence', icon: '✓', hint: 'Screenshots, evidence trail' },
-    { key: 'architecture', label: 'Architecture', icon: '⧉', hint: 'Drift detector, dependencies' },
-    { key: 'drift', label: 'Drift', icon: '↯', hint: 'Spec / tests / docs drift' },
-    { key: 'uxui', label: 'UX / UI', icon: '◐', hint: 'UX critique queue + decisions' },
-    { key: 'observability', label: 'Observability', icon: '⌁', hint: 'Token usage, telemetry' },
-  ];
+  readonly activeRail = signal<ProjectRailKey>(DEFAULT_PROJECT_RAIL_KEY);
 
-  readonly identity = computed(() => projectIdentity(this.projectName()));
+  constructor() {
+    effect(() => {
+      const raw = this.initialSection();
+      this.activeRail.set(isProjectRailKey(raw) ? raw : DEFAULT_PROJECT_RAIL_KEY);
+    });
+  }
 
-  readonly jobs = computed<JobInfo[]>(() => {
+  readonly jobsForProject = computed<JobInfo[]>(() => {
     const grouped = this.jobService.grouped();
     const out: JobInfo[] = [];
     for (const lane of Object.values(grouped)) {
@@ -66,20 +96,38 @@ export class ProjectHubViewComponent {
     return out;
   });
 
-  readonly health = computed<HealthSnapshot>(() => {
-    const grouped = this.jobService.grouped();
-    const matchesProject = (j: JobInfo) => j.projectName === this.projectName();
-    const len = (key: keyof typeof grouped) => (grouped[key] ?? []).filter(matchesProject).length;
-    return {
-      open: this.jobs().filter(j => j.state !== '6-completed' && j.state !== '7-archive').length,
-      inAuto: len('autoReview'),
-      inHuman: len('humanReview'),
-      inProgress: len('progress'),
-      archive: len('archive'),
-    };
-  });
-
-  selectSection(key: string): void {
-    this.section.set(key);
+  hasCustomPanel(rail: ProjectRailKey): boolean {
+    return RAILS_WITH_CUSTOM_PANEL.has(rail);
   }
+
+  setRail(rail: ProjectRailKey): void {
+    this.activeRail.set(rail);
+  }
+
+  /**
+   * Open the orchestrator feed overlay (same target as the legacy
+   * project-shell's 📜 Open feed button).
+   */
+  openFeed(): void {
+    this.overlays.openOrchFeed(this.projectName());
+  }
+
+  openFeedFromDetail(_intent: string): void {
+    this.overlays.openOrchFeed(this.projectName());
+  }
+
+  openReport(report: { reportId: string }): void {
+    this.overlays.openAnalysisReport(this.projectName(), report.reportId);
+  }
+
+  /** Hub closes when the user closes the tab; no separate close action. */
+  closeShell(): void {
+    /* no-op — the tab close button handles this */
+  }
+
+  onSecurityFollowUp(_evt: unknown): void { /* parent ignores for now */ }
+  onSecurityOpenEvidence(_evt: unknown): void { /* parent ignores for now */ }
+  onSecurityAuditQueued(_evt: unknown): void { /* parent ignores for now */ }
+  onUxuiFollowUp(_evt: unknown): void { /* parent ignores for now */ }
+  onUxuiActionQueued(_evt: unknown): void { /* parent ignores for now */ }
 }

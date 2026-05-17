@@ -1,131 +1,120 @@
-<section class="hub" data-testid="studio-project-hub">
-  <header class="hub__head">
-    <div class="hub__avatar" [style.background]="identity().color" aria-hidden="true">
-      {{ identity().initial }}
-    </div>
-    <div class="hub__head-text">
-      <h1 class="hub__title">{{ projectName() }}</h1>
-      <div class="hub__meta">
-        <span class="hub__meta-pill">{{ jobs().length }} jobs total</span>
-        <span class="hub__meta-pill hub__meta-pill--accent">{{ health().open }} open</span>
-        @if (health().inProgress > 0) {
-          <span class="hub__meta-pill hub__meta-pill--alive">{{ health().inProgress }} in progress</span>
-        }
-        @if (health().inAuto > 0) {
-          <span class="hub__meta-pill">{{ health().inAuto }} auto-review</span>
-        }
-        @if (health().inHuman > 0) {
-          <span class="hub__meta-pill">{{ health().inHuman }} human review</span>
-        }
-      </div>
-    </div>
-  </header>
-
-  <div class="hub__body">
-    <nav class="hub__nav" aria-label="Project insight sections">
-      <div class="hub__nav-group">INSIGHT</div>
-      @for (s of sections; track s.key) {
-        <button type="button"
-                class="hub__nav-item"
-                [class.hub__nav-item--active]="section() === s.key"
-                (click)="selectSection(s.key)">
-          <span class="hub__nav-icon" aria-hidden="true">{{ s.icon }}</span>
-          <span class="hub__nav-label">{{ s.label }}</span>
-        </button>
-      }
-    </nav>
-
-    <div class="hub__pane">
-      @switch (section()) {
-        @case ('overview') {
-          <div class="hub__grid">
-            <article class="hub-card">
-              <header class="hub-card__head">
-                <span class="hub-card__eyebrow">Health</span>
-                <span class="hub-card__chip hub-card__chip--ok">{{ health().open === 0 ? 'idle' : 'active' }}</span>
-              </header>
-              <div class="hub-card__metrics">
-                <div class="hub-card__metric">
-                  <span class="hub-card__metric-value">{{ health().open }}</span>
-                  <span class="hub-card__metric-label">Open</span>
-                </div>
-                <div class="hub-card__metric">
-                  <span class="hub-card__metric-value">{{ health().inAuto + health().inHuman }}</span>
-                  <span class="hub-card__metric-label">Awaiting review</span>
-                </div>
-                <div class="hub-card__metric">
-                  <span class="hub-card__metric-value">{{ health().inProgress }}</span>
-                  <span class="hub-card__metric-label">In progress</span>
-                </div>
-              </div>
-              <p class="hub-card__note">Numbers come from the live job index. The dedicated auto-review acceptance %
-                and median cycle-time will fill in once the metrics endpoint is wired.</p>
-            </article>
-
-            <article class="hub-card">
-              <header class="hub-card__head">
-                <span class="hub-card__eyebrow">Repository</span>
-              </header>
-              <div class="hub-card__row">
-                <span class="hub-card__label">Project</span>
-                <span class="hub-card__value">{{ projectName() }}</span>
-              </div>
-              <p class="hub-card__note">Repository path and primary branch will be sourced from the watch-paths
-                endpoint in a follow-up; the Project Settings rail in the legacy chrome still owns the writer flow.</p>
-            </article>
-
-            <article class="hub-card">
-              <header class="hub-card__head">
-                <span class="hub-card__eyebrow">Archive</span>
-              </header>
-              <div class="hub-card__metrics">
-                <div class="hub-card__metric">
-                  <span class="hub-card__metric-value">{{ health().archive }}</span>
-                  <span class="hub-card__metric-label">Archived</span>
-                </div>
-              </div>
-            </article>
-          </div>
-        }
-        @case ('visual') {
-          <div class="hub-empty">
-            <h3>Visual Evidence</h3>
-            <p>Per-task screenshots and evidence runs surface here. Open the workspace screenshots overlay
-              from the status bar for the existing aggregate view; the in-Hub gallery is a follow-up.</p>
-          </div>
-        }
-        @case ('architecture') {
-          <div class="hub-empty">
-            <h3>Architecture</h3>
-            <p>Drift detector results and dependency map land here. The existing project-shell rail's
-              architecture-drift panel still owns the interactive flow.</p>
-          </div>
-        }
-        @case ('drift') {
-          <div class="hub-empty">
-            <h3>Drift</h3>
-            <p>Spec / tests / documentation drift dashboards. The legacy project-shell rail's drift
-              section still owns the interactive flow.</p>
-          </div>
-        }
-        @case ('uxui') {
-          <div class="hub-empty">
-            <h3>UX / UI</h3>
-            <p>Critique queue, decisions, and follow-up actions. Open the UX/UI overlay from the
-              workspace overlays surface for the existing flow.</p>
-          </div>
-        }
-        @case ('observability') {
-          <div class="hub-empty">
-            <h3>Observability</h3>
-            <p>Token usage, telemetry, and CLI quota snapshots. The status bar's CLI quota strip already
-              renders per-CLI window usage; the per-job heatmap is a follow-up.</p>
-          </div>
-        }
-        @default {
-          <div class="hub-empty"><h3>{{ section() }}</h3><p>Section not implemented yet.</p></div>
-        }
-      }
-    </div>
-  </div>
-</section>
+<app-project-shell class="hub-shell"
+  [projectName]="projectName()"
+  [activeRail]="activeRail()"
+  [hasCustomPanel]="hasCustomPanel(activeRail())"
+  (railChange)="setRail($event)"
+  (openFeed)="openFeed()"
+  (closeShell)="closeShell()">
+  @defer (when activeRail() === 'overview') {
+    @if (activeRail() === 'overview') {
+      <app-project-detail
+        [projectName]="projectName()"
+        view="overview"
+        (openFeed)="openFeedFromDetail($event)"
+        (openReport)="openReport($event)" />
+    }
+  }
+  @defer (when activeRail() === 'jobs') {
+    @if (activeRail() === 'jobs') {
+      <app-project-detail
+        [projectName]="projectName()"
+        view="jobs"
+        (openFeed)="openFeedFromDetail($event)"
+        (openReport)="openReport($event)" />
+    }
+  }
+  @defer (when activeRail() === 'security') {
+    @if (activeRail() === 'security') {
+      <app-security-panel
+        [projectName]="projectName()"
+        (createFollowUp)="onSecurityFollowUp($event)"
+        (openEvidence)="onSecurityOpenEvidence($event)"
+        (auditQueuedEvent)="onSecurityAuditQueued($event)" />
+    }
+  }
+  @defer (when activeRail() === 'visual-evidence') {
+    @if (activeRail() === 'visual-evidence') {
+      <app-workspace-screenshots
+        [projectName]="projectName()"
+        (openTask)="openTask.emit($event)" />
+    }
+  }
+  @defer (when activeRail() === 'architecture') {
+    @if (activeRail() === 'architecture') {
+      <app-project-detail
+        [projectName]="projectName()"
+        view="architecture"
+        (openFeed)="openFeedFromDetail($event)"
+        (openReport)="openReport($event)" />
+    }
+  }
+  @defer (when activeRail() === 'drift') {
+    @if (activeRail() === 'drift') {
+      <app-project-detail
+        [projectName]="projectName()"
+        view="drift"
+        (openFeed)="openFeedFromDetail($event)"
+        (openReport)="openReport($event)" />
+    }
+  }
+  @defer (when activeRail() === 'uxui') {
+    @if (activeRail() === 'uxui') {
+      <app-uxui-panel
+        [projectName]="projectName()"
+        (createFollowUp)="onUxuiFollowUp($event)"
+        (actionQueuedEvent)="onUxuiActionQueued($event)" />
+    }
+  }
+  @defer (when activeRail() === 'token-usage') {
+    @if (activeRail() === 'token-usage') {
+      <app-project-token-usage-panel [projectName]="projectName()" />
+    }
+  }
+  @defer (when activeRail() === 'observability') {
+    @if (activeRail() === 'observability') {
+      <app-project-observability-panel [projectName]="projectName()" />
+      <app-project-detail
+        [projectName]="projectName()"
+        view="observability"
+        (openReport)="openReport($event)" />
+    }
+  }
+  @defer (when activeRail() === 'product-runtime') {
+    @if (activeRail() === 'product-runtime') {
+      <app-project-product-runtime-panel [projectName]="projectName()" />
+    }
+  }
+  @defer (when activeRail() === 'steering') {
+    @if (activeRail() === 'steering') {
+      <app-project-steering-docs-section [projectName]="projectName()" />
+      <app-project-skill-readiness-section [projectName]="projectName()" />
+    }
+  }
+  @defer (when activeRail() === 'settings') {
+    @if (activeRail() === 'settings') {
+      <app-project-detail
+        [projectName]="projectName()"
+        view="settings"
+        (openFeed)="openFeedFromDetail($event)"
+        (openReport)="openReport($event)" />
+    }
+  }
+  @defer (when activeRail() === 'orchestrator') {
+    @if (activeRail() === 'orchestrator') {
+      <app-project-detail
+        [projectName]="projectName()"
+        view="orchestrator"
+        (openFeed)="openFeedFromDetail($event)"
+        (openReport)="openReport($event)" />
+    }
+  }
+  @defer (when activeRail() === 'activity') {
+    @if (activeRail() === 'activity') {
+      <app-project-detail
+        [projectName]="projectName()"
+        view="activity"
+        (openFeed)="openFeedFromDetail($event)"
+        (openReport)="openReport($event)" />
+    }
+  }
+</app-project-shell>
