@@ -834,8 +834,8 @@
 
     .section {
       margin: 0;
-      background: rgba(12,12,23,0.55);
-      border: 1px solid rgba(255,255,255,0.05);
+      background: var(--studio-bg-editor);
+      border: 1px solid var(--studio-border);
       border-radius: 4px;
       padding: 14px;
     }
@@ -875,10 +875,10 @@
     .markdown-source,
     .markdown-preview {
       margin: 0;
-      border: 1px solid rgba(255,255,255,0.05);
+      border: 1px solid var(--studio-border);
       border-radius: 4px;
-      background: rgba(0,0,0,0.16);
-      color: var(--studio-fg-dim);
+      background: var(--studio-bg-hover);
+      color: var(--studio-fg);
       padding: 12px 14px;
       font: 13px/1.65 var(--font-mono, 'Consolas', monospace);
       white-space: pre-wrap;
@@ -986,9 +986,9 @@
     .section__actions { display: flex; gap: 6px; }
     .section__editor {
       width: 100%;
-      background: rgba(0,0,0,0.3);
-      border: 1px solid rgba(99,102,241,0.4);
-      color: var(--studio-fg);
+      background: var(--studio-bg-editor);
+      border: 1px solid var(--studio-border);
+      color: var(--studio-fg-strong);
       padding: 16px;
       border-radius: 8px;
       font-family: var(--font-mono);
@@ -997,7 +997,7 @@
       resize: vertical;
       box-sizing: border-box;
     }
-    .section__editor:focus { outline: none; border-color: #6366f1; }
+    .section__editor:focus { outline: none; border-color: var(--studio-accent); }
     .section__editor--fill {
       flex: 1;
       min-height: 0;
@@ -1031,8 +1031,8 @@
     /* btn-exec styles moved to command-deck.component.scss */
 
     .sidebar-card {
-      background: rgba(12,12,23,0.55);
-      border: 1px solid rgba(255,255,255,0.05);
+      background: var(--studio-bg-editor);
+      border: 1px solid var(--studio-border);
       border-radius: 4px;
       padding: 12px;
       display: flex;
@@ -1078,7 +1078,7 @@
     .sidebar-card__empty {
       padding: 18px 16px;
       border-radius: 12px;
-      background: rgba(255,255,255,0.03);
+      background: var(--studio-bg-hover);
       color: var(--studio-fg-dim);
       font-size: 13px;
       line-height: 1.5;
@@ -1116,9 +1116,9 @@
     }
     .cli-config__input {
       flex: 1;
-      background: rgba(255,255,255,0.06);
-      border: 1px solid rgba(255,255,255,0.12);
-      color: var(--studio-fg);
+      background: var(--studio-bg-editor);
+      border: 1px solid var(--studio-border);
+      color: var(--studio-fg-strong);
       padding: 6px 10px;
       border-radius: 6px;
       font-size: 13px;
