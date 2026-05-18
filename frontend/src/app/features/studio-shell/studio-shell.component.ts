@@ -13,6 +13,8 @@ import { FormsModule } from '@angular/forms';
 import type { JobInfo } from '../../models/job.model';
 import { JobService } from '../../services/job.service';
 import { StudioIconComponent, StudioIconName } from '../../components/studio-icon/studio-icon.component';
+import { EmptyStateComponent } from '../../components/empty-state/empty-state.component';
+import { SectionHeaderComponent } from '../../components/section-header/section-header.component';
 import { ClientService } from '../../services/client.service';
 import { FeatureFlagsService } from '../../services/feature-flags.service';
 import { projectIdentity } from '../../services/project-identity.util';
@@ -70,7 +72,7 @@ function cliColorFor(cli: string): string {
 @Component({
   selector: 'app-studio-shell',
   standalone: true,
-  imports: [FormsModule, StudioIconComponent],
+  imports: [FormsModule, StudioIconComponent, EmptyStateComponent, SectionHeaderComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   templateUrl: './studio-shell.component.html',
