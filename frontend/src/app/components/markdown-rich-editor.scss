@@ -44,11 +44,17 @@
   height: 8px;
   display: inline-block;
   border-radius: 50%;
-  background: rgba(148,163,184,0.45);
+  background: var(--studio-fg-muted);
   cursor: help;
 }
-.md-editor__dot--dirty { background: #c4b5fd; box-shadow: 0 0 0 2px rgba(139,92,246,0.25); }
-.md-editor__dot--saved { background: #86efac; box-shadow: 0 0 0 2px rgba(34,197,94,0.25); }
+.md-editor__dot--dirty {
+  background: var(--studio-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--studio-accent) 25%, transparent);
+}
+.md-editor__dot--saved {
+  background: var(--severity-pass);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--severity-pass) 25%, transparent);
+}
 .md-editor__save--icon {
   width: 24px;
   height: 22px;
@@ -115,9 +121,18 @@
   cursor: not-allowed;
 }
 .md-editor__save {
-  border: 1px solid color-mix(in srgb, var(--severity-pass) 45%, transparent);
-  color: var(--severity-pass);
-  background: color-mix(in srgb, var(--severity-pass) 14%, transparent);
+  // Save button — neutral by default, brand-orange tint only when the
+  // file is dirty (handled by .md-editor--dirty parent variant below if
+  // present). The earlier green tint stood out too loudly against the
+  // white shell.
+  border: 1px solid var(--studio-border);
+  color: var(--studio-fg);
+  background: var(--studio-bg-hover);
+}
+.md-editor__save:hover:not(:disabled) {
+  border-color: var(--studio-border-strong);
+  background: var(--studio-bg-elevated);
+  color: var(--studio-fg-strong);
 }
 .md-editor__content {
   display: flex;

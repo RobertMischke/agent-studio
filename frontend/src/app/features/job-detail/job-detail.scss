@@ -230,8 +230,13 @@
        4 px so the page reads as IDE chrome, not a marketing card. The
        dark Catppuccin background palette is preserved unchanged. */
     .detail {
-      background: #181825;
-      border: 1px solid rgba(255,255,255,0.06);
+      // Detail surface flips per theme — was pinned to Catppuccin
+      // `#181825` (dark navy). On the light shell the bridge layer in
+      // styles.scss patched this to `#f3f3f3`, but reading the studio
+      // token directly removes the bridge dependency and keeps the
+      // dark-shell appearance.
+      background: var(--studio-bg-editor);
+      border: 1px solid var(--studio-border);
       border-radius: 4px;
       padding: 10px 12px;
       height: 100%;
@@ -260,7 +265,7 @@
       min-width: 0;
     }
     .detail__back {
-      background: rgba(255,255,255,0.06);
+      background: var(--studio-bg-hover);
       border: none;
       color: var(--studio-fg-dim);
       width: 28px; height: 28px;
@@ -270,7 +275,7 @@
       display: grid; place-items: center;
       flex-shrink: 0;
     }
-    .detail__back:hover { background: rgba(255,255,255,0.1); }
+    .detail__back:hover { background: var(--studio-bg-elevated); color: var(--studio-fg-strong); }
     .detail__title {
       margin: 0;
       font-size: 18px;
@@ -511,7 +516,7 @@
       align-items: center;
       gap: 6px;
       padding: 6px 4px 10px;
-      border-bottom: 1px solid rgba(255,255,255,0.04);
+      border-bottom: 1px solid var(--studio-border);
       margin-bottom: 8px;
     }
     .detail__panes-toolbar-label {
@@ -534,8 +539,12 @@
       flex-direction: column;
       min-width: 240px;
       min-height: 0;
-      background: rgba(12,12,23,0.55);
-      border: 1px solid rgba(255,255,255,0.05);
+      // Pane surfaces flip per theme: dark navy on the dark shell, near-
+      // white on the light shell. The previous `rgba(12,12,23,0.55)` was
+      // a fixed dark-navy overlay that washed the entire pane into a
+      // dark island on the light shell.
+      background: var(--studio-bg-editor);
+      border: 1px solid var(--studio-border);
       border-radius: 4px;
       overflow: hidden;
     }
@@ -544,8 +553,8 @@
       align-items: center;
       gap: 6px;
       padding: 6px 10px;
-      border-bottom: 1px solid rgba(255,255,255,0.06);
-      background: rgba(255,255,255,0.02);
+      border-bottom: 1px solid var(--studio-border);
+      background: var(--studio-bg-sidebar);
       min-height: 28px;
     }
     .pane__title {
@@ -564,25 +573,25 @@
       color: var(--studio-fg-dim);
       flex-wrap: wrap;
     }
-    .pane__telemetry--err { color: #fbbf24; }
+    .pane__telemetry--err { color: var(--severity-warn); }
     .pane__telemetry-chip {
       display: inline-flex;
       align-items: center;
       gap: 3px;
       padding: 1px 7px;
       border-radius: 999px;
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(255,255,255,0.06);
+      background: var(--studio-bg-hover);
+      border: 1px solid var(--studio-border);
       font-family: var(--font-mono, monospace);
     }
-    .pane__telemetry-chip--cache { color: #86efac; }
+    .pane__telemetry-chip--cache { color: var(--severity-pass); }
     .pane__telemetry-chip--overage {
-      color: #fda4af;
-      background: rgba(244,63,94,0.15);
-      border-color: rgba(244,63,94,0.35);
+      color: var(--severity-high);
+      background: color-mix(in srgb, var(--severity-high) 15%, transparent);
+      border-color: color-mix(in srgb, var(--severity-high) 35%, transparent);
     }
-    .pane__telemetry-rate--ok   .pane__telemetry-chip { border-color: rgba(34,197,94,0.35); }
-    .pane__telemetry-rate--warn .pane__telemetry-chip { border-color: rgba(251,191,36,0.45); color: #fbbf24; }
+    .pane__telemetry-rate--ok   .pane__telemetry-chip { border-color: color-mix(in srgb, var(--severity-pass) 35%, transparent); }
+    .pane__telemetry-rate--warn .pane__telemetry-chip { border-color: color-mix(in srgb, var(--severity-warn) 45%, transparent); color: var(--severity-warn); }
     .pane__hide,
     .pane__maximize {
       width: 22px;
@@ -598,8 +607,8 @@
     .pane__hide:hover,
     .pane__maximize:hover {
       color: var(--studio-fg-strong);
-      border-color: rgba(255,255,255,0.12);
-      background: rgba(255,255,255,0.04);
+      border-color: var(--studio-border);
+      background: var(--studio-bg-hover);
     }
     .detail__panes--maximized .pane { min-width: 0; }
     .pane__body {
@@ -668,8 +677,13 @@
       min-height: 0;
     }
     .inspector {
-      background: rgba(12,12,23,0.55);
-      border: 1px solid rgba(255,255,255,0.05);
+      // Was `rgba(12,12,23,0.55)` (dark-navy 55% overlay), which on the
+      // light shell painted the entire activity-log container as a
+      // dark-grey island inside the otherwise white pane. Flip to the
+      // studio editor token so the band reads transparent / near-white
+      // on light and dark-navy on dark.
+      background: var(--studio-bg-editor);
+      border: 1px solid var(--studio-border);
       border-radius: 4px;
       padding: 8px 10px;
       display: flex;
@@ -691,8 +705,8 @@
       justify-content: flex-end;
     }
     .inspector__tab {
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(255,255,255,0.08);
+      background: var(--studio-bg-hover);
+      border: 1px solid var(--studio-border);
       color: var(--studio-fg-dim);
       padding: 4px 10px;
       border-radius: 3px;
@@ -702,13 +716,16 @@
       transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
     }
     .inspector__tab:hover {
-      background: rgba(255,255,255,0.08);
-      color: var(--studio-fg);
+      background: var(--studio-bg-elevated);
+      color: var(--studio-fg-strong);
     }
     .inspector__tab--active {
-      background: rgba(99,102,241,0.2);
-      border-color: rgba(99,102,241,0.4);
-      color: var(--severity-pending);
+      // Brand-orange accent on the active inspector tab, matching the
+      // rest of the studio. Old indigo/lavender clashed with the orange
+      // active states elsewhere on the detail page.
+      background: var(--studio-bg-selected);
+      border-color: var(--studio-accent);
+      color: var(--studio-fg-strong);
     }
     .inspector__body {
       display: flex;
@@ -744,9 +761,9 @@
       display: inline-flex;
       gap: 4px;
       padding: 2px;
-      border: 1px solid rgba(255,255,255,0.08);
+      border: 1px solid var(--studio-border);
       border-radius: 6px;
-      background: rgba(255,255,255,0.03);
+      background: var(--studio-bg-hover);
     }
     .notes-panel__tab {
       border: 0;
@@ -758,8 +775,8 @@
       padding: 4px 8px;
     }
     .notes-panel__tab--active {
-      color: #ddd6fe;
-      background: rgba(99,102,241,0.25);
+      color: var(--studio-fg-strong);
+      background: var(--studio-bg-selected);
     }
     .notes-panel__body {
       flex: 1;
