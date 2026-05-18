@@ -1,5 +1,92 @@
 # Frontend SCSS quality — refactor evaluation 2026-05-17
 
+## Update — Tier 2 + 4 follow-up pass (2026-05-18)
+
+Third iteration: the remaining structural extractions and the
+icon-button mixin sweep.
+
+| Metric                            | Initial | After Wave A-F | After Tier 1-3 | After Tier 2+4 | Δ total |
+| --------------------------------- | ------: | -------------: | -------------: | -------------: | ------- |
+| Hardcoded hex occurrences         | 2 212   | 1 816          | 1 664          | **1 664**      | **−548 (−25 %)** |
+| `!important` declarations total   | 78      | 68             | 33             | **33**         | **−45 (−58 %)** |
+| `!important` in `styles.scss`     | 54      | 41             | 2              | **2**          | **−52 (−96 %)** |
+| Reusable layout components        | 0       | 3              | 3              | **6**          | +6      |
+| Reusable SCSS mixins              | 0       | 3              | 3              | **3**          | +3      |
+| Studio-shell tokens               | 16      | 22             | 36             | **36**         | +20     |
+
+### What shipped in this pass
+
+- **Tier 2 — Icon-button mixin adopted in 3 components.**
+  `.pane-header__btn` (24 px), `.sidesheet__close` (26 px), and
+  `.studio-sidebar__action` (22 px) all swapped 17–18 lines of
+  hand-rolled chrome for one `@include m.icon-button(<size>)` call.
+  Net SCSS saved in this commit: ~46 lines.
+
+- **Tier 4a — `<app-empty-state>`.** Padded muted text for "nothing
+  to show" panels. Two shapes: headline + body via `[icon] [title]
+  [body]` inputs, or single-line via content projection. A
+  `[compact]` variant tightens padding for dense lists. Five
+  `<div class="studio-empty">` blocks in `studio-shell.component.html`
+  migrated as the first adopter.
+
+- **Tier 4b — `<app-tree-row>`.** The Explorer workspace tree, the
+  Tasks outline, and the legacy `.tree-row` all repeated the same
+  chevron + glyph + name + meta + count layout. The component owns
+  it with two levels (`root` 8 px / `child` 44 px padding) and an
+  optional SVG icon vs initial-character glyph. ViewEncapsulation.None
+  + the legacy BEM class names so the existing styles.scss bridge
+  still applies during incremental migration.
+
+- **Tier 4c — `<app-section-header>`.** Uppercase title bar used by
+  kanban columns, sidebar groups, lane groups, and project-hub rails.
+  Inputs cover icon (SVG or single char), title, count, active state;
+  an `actions` slot projects trailing chips/buttons. An `[interactive]`
+  flag flips between `<header>` and `<button>` rendering for the
+  cases (Workspace group head, lane filter chip) that need to be
+  clickable.
+
+### Final component inventory (src/app/components/)
+
+  app-dialog/        chat/        concept-help/
+  empty-state/       error-dialog/info-button/
+  media-lightbox/    pane-header/ section-header/
+  sidesheet/         studio-icon/ tooltip/
+  tree-row/          markdown-rich-editor*
+
+  (20 total — 6 of those are SCSS-quality-pass extractions.)
+
+### Final !important location count
+
+`styles.scss` has exactly **2** `!important` declarations remaining:
+
+  background: rgba(0, 0, 0, 0.03) !important;  // beats inline style="background:rgba(15,23,42,…)"
+  color: #1a1a1a !important;                    // beats inline style="color:#cdd6f4"
+
+Both fight inline `style=""` attributes (specificity 1,0,0,0) inside
+the activity-log bubble markup — the only way around them is to
+remove the inline-style React-ported markup, which is a much larger
+change than the value of those two lines.
+
+### What still remains (lower priority, deferred)
+
+- **Tier 1.3 — Migrate the 12 existing sidesheet/dialog overlays to
+  `<app-sidesheet>`.** Each carries its own focus-trap + animation
+  + route binding; safest as one PR per overlay. Component is ready.
+
+- **Adoption of `<app-tree-row>` and `<app-section-header>` in their
+  existing call sites.** Mechanical template edits. Skipped here to
+  avoid blocking the metric-improvement commits behind 6+ template
+  rewrites; the next pass picks them up.
+
+- **Long-tail hex literal cleanup.** 1 664 hex occurrences remain.
+  About 700 live in `styles.scss` (the light-theme bridge — these
+  describe *the light values*, can't be tokenised because the bridge
+  is what *defines* the tokens). Another ~400 live in mockup zones
+  that aren't shipped (`mockups/next-gen-chat/`). The realistic
+  floor is ~600-700 in active code.
+
+---
+
 ## Update — Tier 1+2+3 follow-up pass (same day)
 
 A second iteration drove the metrics further. Updated table:
