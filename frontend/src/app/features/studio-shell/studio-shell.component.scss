@@ -1472,15 +1472,24 @@
   display: inline-block;
   width: 1px;
   height: 18px;
-  background: var(--studio-border);
-  margin: 0 4px;
+  background: var(--studio-border-strong);
+  // Was 4px → 8px so the separator visually divides three groups
+  // (pane-toggles | pager | complete) rather than being eaten by the
+  // gap between adjacent buttons.
+  margin: 0 8px;
   flex-shrink: 0;
 }
 
 .studio-tab-action__pane-toggles {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  // 4px gap between the three pane-toggle icons (book / bot / diff)
+  // gives them breathing room without looking disconnected.
+  gap: 4px;
+  // Sub-group has its own padded shell so the trio reads as one cluster
+  // of pane toggles, not as three loose icons. Matches the visual grouping
+  // of pager arrows + Complete pill on the right side.
+  padding: 0 2px;
 }
 
 .studio-tab-action__pager {

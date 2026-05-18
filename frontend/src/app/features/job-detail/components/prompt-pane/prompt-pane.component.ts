@@ -112,4 +112,42 @@ export class PromptPaneComponent {
     if (Number.isNaN(d.getTime())) return iso;
     return d.toLocaleString();
   }
+
+  /** "created Xh ago" / "Xm ago" / "Xd ago" relative-time rendering for
+   *  the description meta strip. */
+  formatRelativeTime(iso: string): string {
+    if (!iso) return '';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    const diffMs = Date.now() - d.getTime();
+    const minutes = Math.round(diffMs / 60_000);
+    if (minutes < 1) return 'just now';
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.round(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.round(hours / 24);
+    if (days < 30) return `${days}d ago`;
+    const months = Math.round(days / 30);
+    if (months < 12) return `${months}mo ago`;
+    return `${Math.round(months / 12)}y ago`;
+  }
+
+  /** Human label for a kanban-state slug. Slugs match
+   *  STATE_TO_LANE in job.service.ts. */
+  laneLabel(state: string): string {
+    switch (state) {
+      case '0-backlog':            return 'Backlog';
+      case '1-preparation':        return 'In Preparation';
+      case '1a-orchestrator-prep': return 'Orchestrator Prep';
+      case '1b-needs-human-review': return 'Needs Human Review';
+      case '2-ready':              return 'Human Ready';
+      case '3-progress':           return 'In Progress';
+      case '3a-failed-pickup':     return 'Failed Pickup';
+      case '4-auto-review':        return 'Auto Review';
+      case '5-human-review':       return 'Human Review';
+      case '6-completed':          return 'Completed';
+      case '7-archive':            return 'Archive';
+      default:                     return state ?? '';
+    }
+  }
 }

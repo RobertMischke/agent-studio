@@ -82,6 +82,60 @@
   }
 }
 
+/* Meta strip rendered between the description tab header and the
+ * markdown body — "#ID · created Xh ago · ● Lane state". Mirrors the
+ * agent-orchestrator.zip detail-v2 mockup so the user can see the task
+ * identity + lane state on the Description tab without leaving for the
+ * detail-header. Lane-state colour comes from the same --lane-* tokens
+ * the kanban column chips use, so the eye reads board + detail as one
+ * cue. */
+.desc-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 16px;
+  padding: 0 4px;
+  font-size: 12.5px;
+  color: var(--studio-fg-dim);
+  flex-wrap: wrap;
+}
+.desc-meta__id {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--studio-fg-strong);
+}
+.desc-meta__sep {
+  color: var(--studio-fg-muted);
+}
+.desc-meta__time {
+  font-variant-numeric: tabular-nums;
+}
+.desc-meta__state {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-weight: 600;
+  color: var(--lane-backlog);
+  // Lane palette per state slug (matches STATE_TO_LANE in job.service.ts
+  // and the kanban column-chip colours). Falls back to muted fg when an
+  // unknown slug arrives.
+  &.state--0-backlog            { color: var(--lane-backlog); }
+  &.state--1-preparation        { color: var(--lane-prep); }
+  &.state--1a-orchestrator-prep { color: var(--lane-prep); }
+  &.state--1b-needs-human-review { color: var(--lane-human-review); }
+  &.state--2-ready              { color: var(--lane-ready); }
+  &.state--3-progress           { color: var(--lane-progress); }
+  &.state--3a-failed-pickup     { color: var(--lane-failed); }
+  &.state--4-auto-review        { color: var(--lane-auto-review); }
+  &.state--5-human-review       { color: var(--lane-human-review); }
+  &.state--6-completed          { color: var(--lane-completed); }
+  &.state--7-archive            { color: var(--lane-archive); }
+}
+.desc-meta__state-dot {
+  font-size: 0.8em;
+  line-height: 1;
+}
+
 /* Spacer so the tabs stay flush-left and the maximize/hide buttons
  * float to the right inside the tabbed header. */
 .pane__spacer { flex: 1; }
