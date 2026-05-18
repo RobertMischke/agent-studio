@@ -14,31 +14,34 @@
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #94a3b8;
+  color: var(--studio-fg-dim);
   font-weight: 600;
 }
 .qstrip__updated {
   font-size: 10px;
-  color: #64748b;
+  color: var(--studio-fg-muted);
 }
 .qstrip__refresh {
   margin-left: auto;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.08);
-  color: #cbd5e1;
+  background: var(--studio-bg-hover);
+  border: 1px solid var(--studio-border);
+  color: var(--studio-fg);
   width: 22px; height: 22px;
   border-radius: 6px;
   cursor: pointer;
   font-size: 11px;
   line-height: 1;
 }
-.qstrip__refresh:hover:not(:disabled) { background: rgba(255,255,255,0.1); }
+.qstrip__refresh:hover:not(:disabled) {
+  background: var(--studio-bg-elevated);
+  color: var(--studio-fg-strong);
+}
 .qstrip__error {
   margin-bottom: 8px;
   padding: 6px 10px;
-  background: rgba(244,63,94,0.1);
-  border: 1px solid rgba(244,63,94,0.18);
-  color: #fda4af;
+  background: color-mix(in srgb, var(--severity-high) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--severity-high) 28%, transparent);
+  color: var(--severity-high);
   border-radius: 6px;
   font-size: 11px;
 }
@@ -48,9 +51,9 @@
   gap: 8px;
 }
 .qcard {
-  border: 1px solid rgba(255,255,255,0.06);
+  border: 1px solid var(--studio-border);
   border-radius: 8px;
-  background: rgba(255,255,255,0.03);
+  background: var(--studio-bg-hover);
   padding: 8px 10px;
 }
 .qcard__head {
@@ -60,39 +63,39 @@
   margin-bottom: 6px;
 }
 .qcard__icon { font-size: 14px; line-height: 1; }
-.qcard__cli { font-weight: 600; font-size: 12px; color: #e2e8f0; }
+.qcard__cli { font-weight: 600; font-size: 12px; color: var(--studio-fg-strong); }
 .qcard__plan {
   font-size: 10px;
   padding: 1px 6px;
   border-radius: 999px;
-  background: rgba(99,102,241,0.16);
-  color: #a5b4fc;
+  background: color-mix(in srgb, var(--studio-accent-4) 18%, transparent);
+  color: var(--studio-accent-4);
   letter-spacing: 0.04em;
 }
 .qcard__refresh {
   margin-left: auto;
   background: transparent;
   border: 0;
-  color: #64748b;
+  color: var(--studio-fg-muted);
   cursor: pointer;
   font-size: 11px;
   width: 18px; height: 18px;
   line-height: 1;
 }
-.qcard__refresh:hover:not(:disabled) { color: #cbd5e1; }
-.qcard__error { font-size: 11px; color: #fda4af; }
-.qcard__hint  { font-size: 11px; color: #64748b; font-style: italic; }
-.qwin + .qwin { margin-top: 6px; padding-top: 6px; border-top: 1px dashed rgba(255,255,255,0.05); }
+.qcard__refresh:hover:not(:disabled) { color: var(--studio-fg-strong); }
+.qcard__error { font-size: 11px; color: var(--severity-high); }
+.qcard__hint  { font-size: 11px; color: var(--studio-fg-muted); font-style: italic; }
+.qwin + .qwin { margin-top: 6px; padding-top: 6px; border-top: 1px dashed var(--studio-border); }
 .qwin__row { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; }
-.qwin__label { color: #cbd5e1; }
+.qwin__label { color: var(--studio-fg); }
 .qwin__pct { font-family: var(--font-mono, monospace); font-weight: 600; }
-.qwin__pct.ok    { color: #4ade80; }
-.qwin__pct.warn  { color: #facc15; }
-.qwin__pct.crit  { color: #f87171; }
+.qwin__pct.ok    { color: var(--severity-pass); }
+.qwin__pct.warn  { color: var(--severity-warn); }
+.qwin__pct.crit  { color: var(--severity-high); }
 .qwin__bar {
   margin-top: 4px;
   height: 6px;
-  background: rgba(255,255,255,0.06);
+  background: var(--studio-bg-elevated);
   border-radius: 999px;
   overflow: hidden;
 }
@@ -100,17 +103,16 @@
   display: block;
   height: 100%;
   transition: width 0.4s ease;
-  background: #4ade80;
+  background: var(--severity-pass);
 }
-.qwin__fill.warn { background: #facc15; }
-.qwin__fill.crit { background: #f87171; }
+.qwin__fill.warn { background: var(--severity-warn); }
+.qwin__fill.crit { background: var(--severity-high); }
 .qwin__meta {
   margin-top: 4px;
   display: flex;
   justify-content: space-between;
   gap: 8px;
   font-size: 10px;
-  color: #64748b;
+  color: var(--studio-fg-muted);
 }
 .qwin__reset { font-style: italic; }
-  
