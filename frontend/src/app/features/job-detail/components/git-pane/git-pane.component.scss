@@ -17,19 +17,34 @@
   gap: 12px;
   align-items: center;
   font-size: 12px;
-  color: #cbd5e1;
+  color: var(--studio-fg);
 }
-.git-view__branch { color: #a5b4fc; }
-.git-view__count  { color: #f8fafc; font-weight: 600; }
-.git-view__diffstat { color: #94a3b8; font-family: var(--font-mono, monospace); }
-.git-view__empty { color: #94a3b8; font-size: 13px; padding: 12px 0; }
+.git-view__branch { color: var(--severity-info); }
+.git-view__count  { color: var(--studio-fg-strong); font-weight: 600; }
+.git-view__diffstat { color: var(--studio-fg-dim); font-family: var(--font-mono, monospace); }
+.git-view__empty {
+  // Centred empty state — message reads as the focal point of the
+  // otherwise-blank git pane, not a forgotten top-left header.
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  flex: 1 1 auto;
+  min-height: 120px;
+  color: var(--studio-fg-dim);
+  font-size: 13px;
+  padding: 24px 16px;
+  max-width: 480px;
+  margin: 0 auto;
+}
 .git-view__files {
   list-style: none;
   margin: 0;
   padding: 0;
   max-height: 30vh;
   overflow: auto;
-  border: 1px solid rgba(255,255,255,0.05);
+  border: 1px solid var(--studio-border);
   border-radius: 10px;
 }
 .git-view__file {
@@ -39,19 +54,22 @@
   padding: 6px 10px;
   cursor: pointer;
   font-size: 12px;
-  border-bottom: 1px solid rgba(255,255,255,0.03);
+  border-bottom: 1px solid var(--studio-border);
 }
 .git-view__file:last-child { border-bottom: 0; }
-.git-view__file:hover { background: rgba(255,255,255,0.04); }
-.git-view__file--selected { background: rgba(99,102,241,0.18); }
+.git-view__file:hover { background: var(--studio-bg-hover); }
+.git-view__file--selected {
+  background: var(--studio-bg-selected);
+  color: var(--studio-fg-strong);
+}
 .git-view__file-status {
   width: 28px;
   font-family: var(--font-mono, monospace);
-  color: #fbbf24;
+  color: var(--severity-warn);
 }
 .git-view__file-path {
   flex: 1;
-  color: #cbd5e1;
+  color: var(--studio-fg);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -59,7 +77,7 @@
 .git-view__file-stat {
   font-family: var(--font-mono, monospace);
   font-size: 11px;
-  color: #94a3b8;
+  color: var(--studio-fg-dim);
 }
 
 .git-view__diff-col {
@@ -72,9 +90,9 @@
 .git-view__diff-wrap {
   display: flex;
   flex-direction: column;
-  border: 1px solid rgba(255,255,255,0.05);
+  border: 1px solid var(--studio-border);
   border-radius: 10px;
-  background: rgba(0,0,0,0.3);
+  background: var(--studio-bg-editor);
   overflow: hidden;
   min-height: 0;
   min-width: 0;
@@ -87,11 +105,11 @@
   border-radius: 0;
   /* Solid (not translucent) — the maximized diff is a focus mode and must
      fully obscure the board behind it. */
-  background: #0d1117;
+  background: var(--studio-bg-editor);
   border: 0;
 }
 .git-view__diff-wrap--maximized .git-view__diff {
-  background: #0d1117;
+  background: var(--studio-bg-editor);
 }
 .git-view__diff-toolbar {
   display: flex;
@@ -99,14 +117,14 @@
   gap: 10px;
   padding: 6px 10px;
   font-size: 11px;
-  color: #94a3b8;
-  border-bottom: 1px solid rgba(255,255,255,0.05);
-  background: rgba(0,0,0,0.25);
+  color: var(--studio-fg-dim);
+  border-bottom: 1px solid var(--studio-border);
+  background: var(--studio-bg-hover);
 }
 .git-view__diff-path {
   flex: 1;
   font-family: var(--font-mono, monospace);
-  color: #cbd5e1;
+  color: var(--studio-fg);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -121,7 +139,7 @@
   min-height: 0;
   overflow: auto;
   padding: 0;
-  color: #cbd5e1;
+  color: var(--studio-fg);
   font-size: 12px;
   // diff2html renders `.d2h-code-linenumber` (and `.d2h-code-side-linenumber`
   // in side-by-side mode) as `position: absolute`. Without a positioned
@@ -159,9 +177,9 @@
 // We keep the in-header "Viewed" checkbox hidden - it does not match
 // the rest of the protocol pane and would only confuse the user.
 .git-view__diff ::ng-deep .d2h-file-header {
-  background: rgba(0, 0, 0, 0.35);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  color: #cbd5e1;
+  background: var(--studio-bg-hover);
+  border-bottom: 1px solid var(--studio-border);
+  color: var(--studio-fg);
   padding: 4px 10px;
   height: auto;
   min-height: 28px;
@@ -181,15 +199,15 @@
 .git-view__msg {
   width: 100%;
   box-sizing: border-box;
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid var(--studio-border);
   border-radius: 10px;
-  background: rgba(0,0,0,0.2);
-  color: #cbd5e1;
+  background: var(--studio-bg-editor);
+  color: var(--studio-fg-strong);
   padding: 8px 10px;
   font: 12px/1.5 var(--font-mono, monospace);
   resize: vertical;
 }
-.git-view__msg:focus { outline: none; border-color: rgba(129,140,248,0.55); }
+.git-view__msg:focus { outline: none; border-color: var(--studio-accent); }
 .git-view__commit-actions {
   display: flex;
   justify-content: flex-end;
@@ -207,8 +225,8 @@
   gap: 6px;
   padding: 8px 10px;
   border-radius: 10px;
-  background: rgba(16, 185, 129, 0.08);
-  border: 1px solid rgba(16, 185, 129, 0.22);
+  background: color-mix(in srgb, var(--severity-pass) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--severity-pass) 22%, transparent);
 }
 .git-view__commit-row {
   display: flex;
@@ -219,10 +237,10 @@
 .git-view__commit-sha {
   font-family: var(--font-mono, monospace);
   font-weight: 600;
-  color: #86efac;
+  color: var(--severity-pass);
 }
-.git-view__commit-files { color: #cbd5e1; }
-.git-view__commit-when { color: #94a3b8; margin-left: auto; }
+.git-view__commit-files { color: var(--studio-fg); }
+.git-view__commit-when { color: var(--studio-fg-dim); margin-left: auto; }
 
 /*
  * Split layout: when the pane is maximized the user wants the tree on
@@ -281,8 +299,8 @@
   margin: 0;
   padding: 6px 8px;
   border-radius: 8px;
-  background: rgba(0,0,0,0.25);
-  color: #cbd5e1;
+  background: var(--studio-bg-hover);
+  color: var(--studio-fg);
   font: 12px/1.5 var(--font-mono, monospace);
   white-space: pre-wrap;
   word-break: break-word;
@@ -291,7 +309,7 @@
 .git-view__empty-hint {
   display: block;
   margin: 6px 0 0;
-  color: #64748b;
+  color: var(--studio-fg-muted);
   font-size: 12px;
   line-height: 1.5;
 }
@@ -309,10 +327,10 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  border: 1px solid rgba(255,255,255,0.05);
+  border: 1px solid var(--studio-border);
   border-radius: 8px;
   padding: 6px;
-  background: rgba(0,0,0,0.2);
+  background: var(--studio-bg-hover);
 }
 .git-view__commit-chain-item { margin: 0; }
 .git-view__commit-chain-button {
@@ -325,24 +343,24 @@
   border-radius: 6px;
   border: 1px solid transparent;
   background: transparent;
-  color: #cbd5e1;
+  color: var(--studio-fg);
   text-align: left;
   cursor: pointer;
   font-size: 12px;
 }
-.git-view__commit-chain-button:hover { background: rgba(255,255,255,0.05); }
+.git-view__commit-chain-button:hover { background: var(--studio-bg-elevated); color: var(--studio-fg-strong); }
 .git-view__commit-chain-item--selected .git-view__commit-chain-button {
-  border-color: #a5b4fc;
-  background: rgba(165,180,252,0.08);
-  color: #f8fafc;
+  border-color: var(--studio-accent);
+  background: var(--studio-bg-selected);
+  color: var(--studio-fg-strong);
 }
 .git-view__commit-chain-step {
-  color: #64748b;
+  color: var(--studio-fg-muted);
   font-family: var(--font-mono, monospace);
   font-size: 11px;
 }
 .git-view__commit-chain-sha {
-  color: #a5b4fc;
+  color: var(--studio-accent);
   font-family: var(--font-mono, monospace);
 }
 .git-view__commit-chain-subject {
@@ -351,7 +369,7 @@
   white-space: nowrap;
 }
 .git-view__commit-chain-meta {
-  color: #94a3b8;
+  color: var(--studio-fg-dim);
   font-family: var(--font-mono, monospace);
   font-size: 11px;
 }
