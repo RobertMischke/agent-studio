@@ -1,5 +1,71 @@
 # Frontend SCSS quality — refactor evaluation 2026-05-17
 
+## Update — Tier 1.3 batch adoption (2026-05-18, late)
+
+Fifth iteration. Real sidesheet + dialog migrations after the
+sidesheet/dialog split landed.
+
+### Sidesheet adoptions (3 of 5)
+
+| Component                     | Status     | Notes                                              |
+| ----------------------------- | ---------- | -------------------------------------------------- |
+| kanban-filter-sidesheet       | ✅ migrated | Outer slide animation kept; chrome owned by skeleton |
+| cli-usage-sheet               | ✅ migrated | Added `subtitle` input to <app-sidesheet>            |
+| orchestrator-side-sheet       | ✅ migrated | Added `[header-actions]` slot for project picker + buttons |
+| workspace-screenshots         | ⏸ skipped  | Rendered inside workspace-overlays as a modal panel, not a self-contained sidesheet |
+| update-center                 | ⏸ skipped  | Flush-right sidesheet WITH a backdrop — needs a `[backdrop]` input or its own component |
+
+### Dialog adoptions (3 of 8)
+
+| Component                     | Status     | Notes                                              |
+| ----------------------------- | ---------- | -------------------------------------------------- |
+| error-dialog                  | ✅ migrated | First adopter, drove the dialog/sheet split        |
+| confirm-dialog                | ✅ migrated | Two action buttons in `[footer]` slot              |
+| e2e-cleanup-dialog            | ✅ migrated | Per-phase footer (Retry / Delete / Close)          |
+| create-job-dialog             | ⏸ skipped  | Form panel with drag/paste handlers on the panel itself; carries its own structure |
+| update-block-modal            | ⏸ skipped  | Busy indicator, non-closable, no header chrome — different shape from a dialog |
+| media-lightbox                | ⏸ skipped  | Image-only viewer, no body/footer chrome           |
+| verbose-debug-overlay         | ⏸ skipped  | Reviewed; sizing + scroll body shape diverges      |
+| orchestrator-settings-modal   | ⏸ skipped  | Rail + panel split layout — would need a horizontal-split variant of <app-dialog> |
+
+### `<app-sidesheet>` API additions
+
+- `[subtitle]` — optional caption under the title.
+- `[header-actions]` content projection slot — accepts callers'
+  project pickers + secondary buttons; renders between title and
+  close button.
+
+### `<app-dialog>` API additions
+
+- `[subtitle]` — optional caption under the title.
+
+### Cumulative refactor stats (since iteration 1)
+
+  Hardcoded hex occurrences   : 2 212 → 1 664  (−25 %)
+  !important total            : 78    → 33     (−58 %)
+  !important in styles.scss   : 54    → 2      (−96 %)
+  font-family via tokens      : 0     → 92     (62 %)
+  Studio-shell tokens         : 16    → 36     (+20)
+  Reusable layout components  : 0     → 7      (+7)
+  SCSS mixins                 : 0     → 3      (+3)
+  Existing call-sites migrated to extracted skeletons:
+    <app-section-header>   2
+    <app-tree-row>         6
+    <app-empty-state>      5
+    <app-sidesheet>        3
+    <app-dialog>           3
+
+### What's left (carry-over)
+
+- The 5 deferred sidesheets/dialogs above. Each needs either a
+  scoped <app-sidesheet>/<app-dialog> input (backdrop / rail / drag
+  handlers) or stays with its own component because its shape is
+  genuinely different.
+- Long-tail hex literal cleanup in mockup zones
+  (mockups/next-gen-chat/) — not shipped in the studio layout.
+
+---
+
 ## Update — Tier 4 adoption + <app-dialog> extraction (2026-05-18 evening)
 
 Fourth iteration. The new structural extractions from the previous
