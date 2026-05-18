@@ -6,8 +6,8 @@
   align-items: center;
   gap: 8px;
   padding: 4px 8px;
-  background: rgba(12,12,23,0.55);
-  border: 1px solid rgba(255,255,255,0.06);
+  background: var(--studio-bg-editor);
+  border: 1px solid var(--studio-border);
   border-radius: 4px;
   flex-wrap: wrap;
   min-height: 30px;
@@ -27,7 +27,7 @@
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: #64748b;
+  color: var(--studio-fg-muted);
   white-space: nowrap;
 }
 /*
@@ -50,9 +50,9 @@
 .commandbar__select {
   flex: 1;
   min-width: 0;
-  background: rgba(0,0,0,0.25);
-  color: #cdd6f4;
-  border: 1px solid rgba(255,255,255,0.10);
+  background: var(--studio-bg-hover);
+  color: var(--studio-fg-strong);
+  border: 1px solid var(--studio-border);
   border-radius: 3px;
   padding: 3px 6px;
   font-size: 12px;
@@ -65,20 +65,20 @@
   height: 22px;
   line-height: 1.2;
 }
-.commandbar__select:focus { outline: none; border-color: rgba(99,102,241,0.55); }
+.commandbar__select:focus { outline: none; border-color: var(--studio-accent); }
 .commandbar__select:disabled { opacity: 0.6; cursor: not-allowed; }
 .commandbar__cli {
   display: inline-flex;
   gap: 2px;
   padding: 2px;
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid var(--studio-border);
   border-radius: 3px;
-  background: rgba(0,0,0,0.25);
+  background: var(--studio-bg-hover);
 }
 .commandbar__cli-btn {
   border: 0;
   background: transparent;
-  color: #94a3b8;
+  color: var(--studio-fg-dim);
   padding: 2px 7px;
   font-size: 11px;
   border-radius: 2px;
@@ -88,8 +88,13 @@
   gap: 3px;
 }
 .commandbar__cli-icon { font-size: 12px; line-height: 1; }
-.commandbar__cli-btn:hover:not(:disabled) { color: #e2e8f0; background: rgba(255,255,255,0.06); }
-.commandbar__cli-btn--active { background: rgba(99,102,241,0.22); color: #c7d2fe; }
+.commandbar__cli-btn:hover:not(:disabled) { color: var(--studio-fg-strong); background: var(--studio-bg-elevated); }
+.commandbar__cli-btn--active {
+  // Brand-orange tint for the active CLI selector matches the rest
+  // of the studio's active state. Old indigo lavender clashed.
+  background: var(--studio-bg-selected);
+  color: var(--studio-fg-strong);
+}
 .commandbar__cli-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 /*
@@ -106,13 +111,13 @@
   align-items: center;
   gap: 6px;
   font-size: 12px;
-  color: #94a3b8;
+  color: var(--studio-fg-dim);
   font-variant-numeric: tabular-nums;
 }
 .commandbar__pulse {
   width: 7px; height: 7px;
   border-radius: 50%;
-  background: #3b82f6;
+  background: var(--severity-info);
   animation: cdpulse 1.5s infinite;
 }
 .commandbar__action { padding: 4px 10px; font-size: 12px; border-radius: 3px; }
@@ -127,28 +132,28 @@
   font-size: 11px;
   padding: 1px 7px;
   border-radius: 3px;
-  background: rgba(99,102,241,0.18);
-  color: #c7d2fe;
-  border: 1px solid rgba(99,102,241,0.28);
+  background: color-mix(in srgb, var(--studio-accent) 18%, transparent);
+  color: var(--studio-accent);
+  border: 1px solid color-mix(in srgb, var(--studio-accent) 30%, transparent);
   white-space: nowrap;
 }
 .commandbar__chip--muted {
-  background: rgba(255,255,255,0.04);
-  color: #94a3b8;
-  border-color: rgba(255,255,255,0.10);
+  background: var(--studio-bg-hover);
+  color: var(--studio-fg-dim);
+  border-color: var(--studio-border);
   font-family: var(--font-mono, monospace);
 }
 .commandbar__toggle {
   background: transparent;
-  border: 1px solid rgba(255,255,255,0.12);
-  color: #cbd5e1;
+  border: 1px solid var(--studio-border);
+  color: var(--studio-fg);
   border-radius: 3px;
   padding: 3px 8px;
   font-size: 11px;
   cursor: pointer;
   white-space: nowrap;
 }
-.commandbar__toggle:hover { background: rgba(255,255,255,0.06); color: #e2e8f0; }
+.commandbar__toggle:hover { background: var(--studio-bg-hover); color: var(--studio-fg-strong); }
 .commandbar--collapsed { padding: 3px 8px; }
 
 .btn-exec {
@@ -160,20 +165,20 @@
   font-weight: 600;
 }
 .btn-exec--start {
-  background: rgba(34,197,94,0.15);
-  color: #4ade80;
-  border: 1px solid rgba(34,197,94,0.3);
+  background: color-mix(in srgb, var(--severity-pass) 18%, transparent);
+  color: var(--severity-pass);
+  border: 1px solid color-mix(in srgb, var(--severity-pass) 35%, transparent);
 }
-.btn-exec--start:hover { background: rgba(34,197,94,0.25); }
+.btn-exec--start:hover { background: color-mix(in srgb, var(--severity-pass) 28%, transparent); }
 .btn-exec--stop {
-  background: rgba(239,68,68,0.15);
-  color: #f87171;
-  border: 1px solid rgba(239,68,68,0.3);
+  background: color-mix(in srgb, var(--severity-high) 18%, transparent);
+  color: var(--severity-high);
+  border: 1px solid color-mix(in srgb, var(--severity-high) 35%, transparent);
 }
-.btn-exec--stop:hover { background: rgba(239,68,68,0.25); }
+.btn-exec--stop:hover { background: color-mix(in srgb, var(--severity-high) 28%, transparent); }
 .btn-exec:disabled { opacity: 0.5; cursor: wait; }
 
 @keyframes cdpulse {
-  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(59,130,246,0.4); }
-  50% { opacity: 0.7; box-shadow: 0 0 0 6px rgba(59,130,246,0); }
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 color-mix(in srgb, var(--severity-info) 40%, transparent); }
+  50% { opacity: 0.7; box-shadow: 0 0 0 6px color-mix(in srgb, var(--severity-info) 0%, transparent); }
 }
