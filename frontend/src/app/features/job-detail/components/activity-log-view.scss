@@ -322,14 +322,18 @@
       font-variant-numeric: tabular-nums;
     }
     .convo-turn__body {
-      color: var(--studio-fg);
+      color: var(--studio-fg-strong);
       font-size: 13.5px;
       line-height: 1.6;
       word-break: break-word;
     }
-    .convo-turn__body--user { color: #ccfbf1; white-space: pre-wrap; }
-    .convo-turn__body--system { color: #fecaca; white-space: pre-wrap; }
-    .convo-turn__body--agent { color: #ede9fe; }
+    // Body text reads the strong fg token; bubble background variants
+    // already carry the per-actor tint, so an extra body-color was
+    // washing the text out (pastel-on-white in light mode, pale-on-
+    // dark in dark mode).
+    .convo-turn__body--user { color: var(--studio-fg-strong); white-space: pre-wrap; }
+    .convo-turn__body--system { color: var(--studio-fg-strong); white-space: pre-wrap; }
+    .convo-turn__body--agent { color: var(--studio-fg-strong); }
 
     /* Markdown typography for agent turns lives in the global
        `.markdown-body` class (`src/styles/_markdown-body.scss`); we apply
@@ -349,8 +353,8 @@
       padding: 4px 10px;
       background: transparent;
       border: 0;
-      border-top: 1px solid rgba(148,163,184,0.08);
-      border-bottom: 1px solid rgba(148,163,184,0.08);
+      border-top: 1px solid var(--studio-border);
+      border-bottom: 1px solid var(--studio-border);
       border-radius: 0;
       color: var(--studio-fg-muted);
       font: inherit;
@@ -363,8 +367,8 @@
     .convo-tools:hover,
     .convo-tools[aria-expanded='true'] {
       opacity: 1;
-      color: var(--studio-fg-dim);
-      background: rgba(30,41,59,0.35);
+      color: var(--studio-fg-strong);
+      background: var(--studio-bg-hover);
     }
     .convo-tools__chevron { color: var(--studio-fg-muted); font-size: 10px; flex: 0 0 auto; }
     .convo-tools__icon { color: var(--studio-fg-muted); flex: 0 0 auto; font-size: 11px; }
@@ -381,17 +385,20 @@
       gap: 3px;
       padding: 1px 7px;
       border-radius: 999px;
-      background: rgba(148,163,184,0.10);
-      border: 1px solid rgba(148,163,184,0.16);
+      background: var(--studio-bg-hover);
+      border: 1px solid var(--studio-border);
       font-size: 10.5px;
       line-height: 1.5;
     }
-    .convo-tools__chip[data-kind='read']    { color: #7dd3fc; border-color: rgba(125,211,252,0.28); background: rgba(125,211,252,0.08); }
-    .convo-tools__chip[data-kind='search']  { color: var(--severity-pending); border-color: rgba(196,181,253,0.28); background: rgba(196,181,253,0.08); }
-    .convo-tools__chip[data-kind='command'] { color: #fcd34d; border-color: rgba(252,211,77,0.28); background: rgba(252,211,77,0.08); }
-    .convo-tools__chip[data-kind='edit']    { color: #6ee7b7; border-color: rgba(110,231,183,0.28); background: rgba(110,231,183,0.08); }
-    .convo-tools__chip[data-kind='task']    { color: #f9a8d4; border-color: rgba(249,168,212,0.28); background: rgba(249,168,212,0.08); }
-    .convo-tools__chip[data-kind='todo']    { color: #fdba74; border-color: rgba(253,186,116,0.28); background: rgba(253,186,116,0.08); }
+    // Tool-kind chips: read severity tokens so the per-kind tint stays
+    // saturated on either theme. The pinned Tailwind pastels rendered
+    // unreadably faint on the light shell.
+    .convo-tools__chip[data-kind='read']    { color: var(--severity-info); border-color: color-mix(in srgb, var(--severity-info) 28%, transparent); background: color-mix(in srgb, var(--severity-info) 8%, transparent); }
+    .convo-tools__chip[data-kind='search']  { color: var(--severity-pending); border-color: color-mix(in srgb, var(--severity-pending) 28%, transparent); background: color-mix(in srgb, var(--severity-pending) 8%, transparent); }
+    .convo-tools__chip[data-kind='command'] { color: var(--severity-warn); border-color: color-mix(in srgb, var(--severity-warn) 28%, transparent); background: color-mix(in srgb, var(--severity-warn) 8%, transparent); }
+    .convo-tools__chip[data-kind='edit']    { color: var(--severity-pass); border-color: color-mix(in srgb, var(--severity-pass) 28%, transparent); background: color-mix(in srgb, var(--severity-pass) 8%, transparent); }
+    .convo-tools__chip[data-kind='task']    { color: var(--studio-accent-4); border-color: color-mix(in srgb, var(--studio-accent-4) 28%, transparent); background: color-mix(in srgb, var(--studio-accent-4) 8%, transparent); }
+    .convo-tools__chip[data-kind='todo']    { color: var(--studio-accent); border-color: color-mix(in srgb, var(--studio-accent) 28%, transparent); background: color-mix(in srgb, var(--studio-accent) 8%, transparent); }
     .convo-tools__chip-label {
       font-weight: 600;
       letter-spacing: 0.02em;
@@ -408,7 +415,7 @@
       font-variant-numeric: tabular-nums;
       padding: 1px 6px;
       border-radius: 999px;
-      background: rgba(148,163,184,0.06);
+      background: var(--studio-bg-hover);
     }
     .convo-tools__time {
       flex: 0 0 auto;
