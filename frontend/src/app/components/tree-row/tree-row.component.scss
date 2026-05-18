@@ -1,0 +1,104 @@
+/*
+ * Tree row — workspace tree + task outline + sub-rows. Centralises
+ * the chevron + glyph + name + meta + count layout. Reads only
+ * studio-shell tokens so theme flipping happens for free.
+ *
+ * Selector names mirror the legacy `studio-tree-row__*` so the
+ * existing styles.scss bridge entries still apply when the migration
+ * is incomplete.
+ */
+.tree-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 24px;
+  padding-top: 0;
+  padding-right: 12px;
+  padding-bottom: 0;
+  background: transparent;
+  border: 0;
+  font-size: 13px;
+  color: var(--studio-fg);
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 120ms ease, color 120ms ease;
+
+  &:hover {
+    background: var(--studio-bg-hover);
+  }
+
+  &--active {
+    background: var(--studio-bg-selected);
+    color: var(--studio-fg-strong);
+  }
+
+  &--root  { padding-left: 8px;  }
+  &--child { padding-left: 44px; font-size: 12px; }
+
+  &__chev {
+    display: inline-grid;
+    place-items: center;
+    width: 14px;
+    height: 14px;
+    color: var(--studio-fg-muted);
+    flex-shrink: 0;
+    cursor: pointer;
+    transition: color 120ms ease;
+
+    &:hover { color: var(--studio-fg); }
+  }
+
+  &__glyph {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    display: grid;
+    place-items: center;
+    background: var(--studio-fg-muted);
+    color: var(--studio-on-accent);
+    font-size: 9px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  &__glyph-icon {
+    display: inline-grid;
+    place-items: center;
+    width: 14px;
+    color: var(--studio-fg-muted);
+    flex-shrink: 0;
+  }
+
+  &__name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  &__meta {
+    color: var(--studio-fg-muted);
+    font-size: 11px;
+    font-family: var(--font-mono);
+  }
+
+  &__count {
+    min-width: 18px;
+    height: 14px;
+    padding: 0 5px;
+    background: var(--studio-bg-elevated);
+    color: var(--studio-fg-dim);
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    display: grid;
+    place-items: center;
+  }
+
+  &--active &__count {
+    background: var(--studio-accent);
+    color: var(--studio-on-accent);
+  }
+}

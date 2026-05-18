@@ -1,0 +1,36 @@
+@if (interactive) {
+  <button type="button"
+          class="section-header section-header--btn"
+          [class.section-header--active]="active"
+          [attr.data-testid]="testid">
+    @if (icon) {
+      <span class="section-header__icon" aria-hidden="true">
+        <app-studio-icon [name]="icon" [size]="12"></app-studio-icon>
+      </span>
+    } @else if (iconChar) {
+      <span class="section-header__icon-char" aria-hidden="true">{{ iconChar }}</span>
+    }
+    <span class="section-header__title">{{ title }}</span>
+    @if (count !== null) {
+      <span class="section-header__count">{{ count }}</span>
+    }
+    <ng-content select="[actions]"></ng-content>
+  </button>
+} @else {
+  <header class="section-header"
+          [class.section-header--active]="active"
+          [attr.data-testid]="testid">
+    @if (icon) {
+      <span class="section-header__icon" aria-hidden="true">
+        <app-studio-icon [name]="icon" [size]="12"></app-studio-icon>
+      </span>
+    } @else if (iconChar) {
+      <span class="section-header__icon-char" aria-hidden="true">{{ iconChar }}</span>
+    }
+    <h2 class="section-header__title">{{ title }}</h2>
+    @if (count !== null) {
+      <span class="section-header__count">{{ count }}</span>
+    }
+    <ng-content select="[actions]"></ng-content>
+  </header>
+}

@@ -1,0 +1,33 @@
+<button type="button"
+        class="tree-row"
+        [class.tree-row--active]="active"
+        [class.tree-row--root]="level === 'root'"
+        [class.tree-row--child]="level === 'child'"
+        [attr.data-testid]="testid"
+        (click)="onSelect($event)"
+        (dblclick)="onSecondary($event)">
+  @if (chevron !== null) {
+    <span class="tree-row__chev"
+          [attr.aria-label]="chevron === 'expanded' ? 'Collapse' : 'Expand'"
+          (click)="onChevronClick($event)">
+      <app-studio-icon [name]="chevron === 'expanded' ? 'chevronDown' : 'chevronRight'" [size]="10"></app-studio-icon>
+    </span>
+  }
+  @if (glyph) {
+    <span class="tree-row__glyph-icon" aria-hidden="true">
+      <app-studio-icon [name]="glyph" [size]="12"></app-studio-icon>
+    </span>
+  } @else if (glyphChar) {
+    <span class="tree-row__glyph"
+          [style.background]="glyphColor"
+          aria-hidden="true">{{ glyphChar }}</span>
+  }
+  <span class="tree-row__name">{{ label }}</span>
+  <ng-content></ng-content>
+  @if (meta) {
+    <span class="tree-row__meta">{{ meta }}</span>
+  }
+  @if (count !== null) {
+    <span class="tree-row__count">{{ count }}</span>
+  }
+</button>
