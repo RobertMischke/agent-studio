@@ -1,10 +1,35 @@
-:host { display: block; }
+:host {
+  // Claim the rest of the prompt-pane's Evidence section so the empty
+  // state can vertically centre inside the panel rather than floating
+  // at the top of a huge white pane.
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+}
 .evidence-panel {
   border: 1px solid var(--studio-border);
   border-radius: 10px;
   background: var(--studio-bg-hover);
   padding: 10px 12px;
   margin: 8px 0 12px;
+  display: flex;
+  flex-direction: column;
+  // When the panel itself flexes (empty-state mode without entries) we
+  // still want it to fill the pane so the empty message centres.
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.evidence-panel:has(.evidence-panel__empty) {
+  // In empty state, centre the message inside the panel — the user
+  // sees the placeholder as the focal point of the otherwise-blank
+  // Evidence tab, not as a top-left header.
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+.evidence-panel:has(.evidence-panel__empty) .evidence-panel__header {
+  display: none;
 }
 .evidence-panel__header {
   display: flex;

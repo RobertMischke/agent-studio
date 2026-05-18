@@ -336,7 +336,18 @@ export class StudioShellComponent {
     switch (tab.kind) {
       case 'board':    return 'Board';
       case 'hub':      return 'Project Hub';
-      case 'task':     return `Task ${tab.jobKey.split('/').pop() ?? tab.jobKey}`;
+      case 'task': {
+        // jobKey on Windows looks like
+        // `C:\Projects\…\projects\agent-taskboard::<task-slug>`. The
+        // previous `split('/').pop()` didn't help on backslash paths
+        // and dumped the entire watch-path into the titlebar. Take the
+        // tail after the last `\`, `/`, or `::` and clamp to ~36 chars
+        // so the breadcrumb stays a single readable label.
+        const raw = tab.jobKey;
+        const tail = raw.split(/[\\/]|::/).filter(Boolean).pop() ?? raw;
+        const clipped = tail.length > 36 ? tail.slice(0, 33) + '…' : tail;
+        return `Task ${clipped}`;
+      }
       case 'activity': return 'Activity';
       case 'diff':     return 'Diff';
       case 'welcome':  return 'Welcome';
@@ -674,15 +685,16 @@ export class StudioShellComponent {
     }
   }
 
-  /** Marker for the tab list — used for #N pills on task tabs. */
+  /** Marker for the tab list — used for the small chip on the left
+   *  edge of the tab (e.g. `#90` for tasks). The hub / diff / activity
+   *  tab labels already include the kind ("· Hub" / commit SHA /
+   *  "Activity · …"), so we only render a leading num pill for
+   *  task tabs where the `#order` adds info the title doesn't repeat. */
   tabNum(tab: StudioTab): string | null {
     if (tab.kind === 'task') {
       const job = this.findJob(tab.jobKey);
       return job ? `#${job.order ?? '?'}` : null;
     }
-    if (tab.kind === 'hub') return 'hub';
-    if (tab.kind === 'diff') return 'diff';
-    if (tab.kind === 'activity') return 'log';
     return null;
   }
 
