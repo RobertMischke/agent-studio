@@ -808,3 +808,46 @@ Polling, bounded buffers, and visibility-aware timers are already enforced by [`
 **Implementation pointers.** [`docs/frontend-architecture-review-2026-05-09.md`](frontend-architecture-review-2026-05-09.md) (the audit + ranked extraction plan with per-file Tier 1/2/3 targets); [`docs/perf-frontend.md`](perf-frontend.md) (perf rules that pair with this ADR); the existing per-job-detail polling services (`cli-output-poll.service`, `git-pane.service`, `claude-session-poll.service`, `run-timeline-poll.service`, `session-events-poll.service`, `screenshots-poll.service`, `hygiene-strip` polling) are the reference shape for service extraction.
 
 **Status.** Accepted.
+
+---
+
+## ADR-0035 - Orchestrator chat uses canonical scope sessions with visible memory (2026-05-17)
+
+**Decision.** The persistent Orchestrator Chat is the user-facing surface for the existing canonical orchestrator session of its scope: the global orchestrator for board-level chat and the project orchestrator for project-level chat. It is backed by a durable event log and an inspectable memory snapshot. Forks are explicit, short-lived research or recovery branches that report back to the canonical session; they do not become peer orchestrators.
+
+**Context.** The user wants an optional always-available orchestrator chat that feels alive across days, can explain what happened in the software, understands the application it controls, and can eventually steer the app. The central ambiguity was whether the chat should be a separate instance, whether each app needs two orchestrators, and whether "keeping it alive" means pinging a model. Existing ADRs already established per-project long-lived sessions (ADR-0007) and a global orchestrator above them (ADR-0009). This decision connects those sessions to the chat surface and adds the missing memory contract.
+
+**Non-goals.**
+- A second peer project orchestrator just for chat. The chat talks to the canonical project orchestrator so there is one owner of project memory and decisions.
+- A permanently running model process. Continuity comes from session id, event log, and memory snapshot; the CLI process may start and exit per interaction.
+- Blind keep-alive pings. Local freshness checks are fine; LLM calls should happen for user questions, auto-mode decisions, or meaningful memory refreshes.
+- Hidden memory. The memory snapshot must be visible, refreshable, and rebuildable from local evidence.
+- Free-form UI automation. The orchestrator can control the app only through typed actions validated by normal backend policy.
+- Forks that silently replace the canonical session. Forks produce evidence or proposals that the canonical orchestrator may absorb.
+
+**Reasoning style.** Treat user trust as a context observability problem. The user does not need a model process that never sleeps; they need to know which orchestrator they are talking to, what it remembers, where that memory came from, what it decided, and which app action it is proposing. Use deterministic memory assembly first, then model judgment only where compression or reconciliation adds value.
+
+**Implementation pointers.** [docs/orchestrator-chat.md](orchestrator-chat.md) for product shape, memory model, first slice, and open questions; [README.md](../README.md) "Persistent orchestrator chat"; [ROADMAP.md](../ROADMAP.md) "Persistent Orchestrator Chat"; [docs/design-principles.md](design-principles.md) "The orchestrator has visible memory"; existing session primitives in [backend/Services/Runner/OrchestratorSession.cs](../backend/Services/Runner/OrchestratorSession.cs), [backend/Services/Runner/GlobalOrchestratorSession.cs](../backend/Services/Runner/GlobalOrchestratorSession.cs), and [backend/Services/Runner/OrchestratorLog.cs](../backend/Services/Runner/OrchestratorLog.cs).
+
+**Status.** Accepted.
+
+---
+
+## ADR-0036 - Session mechanics render as timeline events, not primary chat objects (2026-05-17)
+
+**Decision.** The Orchestrator Chat UI treats CLI session continuity mechanics as compact, expandable timeline events attached to the conversation, while the primary chat object remains the canonical Global or Project conversation.
+
+**Context.** The current chat panel can expose many rows such as "You steered; Orchestrator responded". Those rows are valuable audit evidence, but when shown as the main surface they make the product feel like a session registry instead of a continuous project conversation. The user wants a durable chat on the project with strong search and context. Session chains, recoveries, steering handoffs, and auto-loop decisions should be visible, but visually subordinate.
+
+**Non-goals.**
+- Hiding session evidence. Every event remains expandable and traceable to raw logs or event records.
+- Treating each technical session or recovery as a separate top-level conversation.
+- Moving continuity evidence out of the product into backend logs only.
+- Collapsing real semantic content. User requests, orchestrator answers, agent replies, warnings, and action proposals remain messages.
+- Building a separate "session view" before the conversation-first surface exists. A technical view may come later, but it is not the primary entry point.
+
+**Reasoning style.** Separate meaning from transport. The user cares about the project story: intent, decisions, evidence, search hits, and next actions. Session ids, recovery markers, and steering labels are still important, but they explain how continuity was maintained. They should behave like audit annotations that can be expanded when needed, not like the main narrative.
+
+**Implementation pointers.** [docs/orchestrator-chat-redesign-handoff.md](orchestrator-chat-redesign-handoff.md) "Session Events Become Bubbles"; [docs/orchestrator-chat.md](orchestrator-chat.md) "Session Events Versus Conversation"; existing session-event polling in [frontend/src/app/components/job-detail/session-events-poll.service.ts](../frontend/src/app/components/job-detail/session-events-poll.service.ts); existing protocol pane chat and session chip in [frontend/src/app/components/job-detail/protocol-pane/protocol-pane.component.ts](../frontend/src/app/components/job-detail/protocol-pane/protocol-pane.component.ts).
+
+**Status.** Accepted.

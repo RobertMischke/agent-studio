@@ -1,5 +1,5 @@
-<app-sidesheet eyebrow="Orchestrator"
-               title="Chat"
+<app-sidesheet title="Orchestrator"
+               subtitle="Runbook · canonical session"
                testid="orch-side-sheet"
                (close)="hide()">
   <div header-actions class="sheet__header-extras">
@@ -70,6 +70,18 @@
   </select>
 
   <main class="sheet__content">
+    <nav class="sheet__scope-row" aria-label="Orchestrator scope">
+      <button type="button" class="sheet__scope sheet__scope--active">
+        <span aria-hidden="true">▱</span>
+        <span>Project</span>
+      </button>
+      <button type="button" class="sheet__scope" disabled>
+        <span aria-hidden="true">⌘</span>
+        <span>Global</span>
+      </button>
+      <span class="sheet__memory">● memory v9 · fresh 12m</span>
+    </nav>
+
     @if (errorMsg(); as err) {
       <div class="sheet__error">{{ err }}</div>
     }

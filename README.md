@@ -56,6 +56,8 @@ The board exists to make the queue the only thing you maintain. Tasks land in `2
 
 **Make the patterns visible — and explain the why next to the lever.** A major part of this product is *exposing* the patterns and best practices the platform has accumulated, instead of hiding them in code or a wiki nobody opens. Every controllable behavior — agent permissions, sandbox modes, auto-commit/push, review thresholds, drift rules, skill catalog — should show up in Project Settings and the agent configuration surfaces *with* an inline explanation: what it does, why we picked this default, what the risk is, what the alternative would cost. The user should never have to leave the screen to understand a setting. Standalone docs in `docs/` remain the source of truth; the UI embeds the relevant section in-line at the spot the decision is made. See [docs/design-principles.md §Inline meta](docs/design-principles.md#inline-meta-explain-decisions-next-to-the-lever).
 
+**A living orchestrator, not a hidden daemon.** The orchestrator should be someone the user can talk to, not just code that moves folders. Each project has a canonical orchestrator session with inspectable memory: what it was booted with, which jobs and decisions it has seen, what the project does, what the roadmap says, and what should happen next. The long-term concept is documented in [docs/orchestrator-chat.md](docs/orchestrator-chat.md).
+
 **Sequential within a project, never parallel.** One task at a time per project. No worktrees. No branch-per-task. No intra-project fan-out. Parallelism only exists *across* projects (different watch paths run independently).
 
 **Security is a first-class workstream.** Security review is not a side quest at the end of a feature. It is a repeatable project-level activity with its own skills, evidence, history, and review surface. The board should make it normal to ask "when was this last reviewed, what was checked, what changed since then, and what evidence supports the conclusion?"
@@ -293,3 +295,5 @@ The four most-asked-for individual documents (the index covers the full set):
 - [docs/filesystem-contract.md](docs/filesystem-contract.md) — job folder contract
 - [docs/agent-task-contract.md](docs/agent-task-contract.md) — application and agent ownership boundary
 - [docs/architecture-decisions.md](docs/architecture-decisions.md) — ADR archive with the load-bearing decisions
+- [docs/orchestrator-chat.md](docs/orchestrator-chat.md) — persistent orchestrator chat, memory, scope, and control surface
+- [docs/orchestrator-chat-redesign-handoff.md](docs/orchestrator-chat-redesign-handoff.md) — conversation-first chat redesign handoff

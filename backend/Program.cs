@@ -201,6 +201,7 @@ builder.Services.AddSingleton<OrchestratorApi.Services.Drift.SoftwareArchitectur
 builder.Services.AddSingleton<OrchestratorApi.Services.Drift.ArchitectureElementStateStore>();
 builder.Services.AddSingleton<OrchestratorApi.Services.Tags.TagRegistryService>();
 builder.Services.AddSingleton<ProjectObservationService>();
+builder.Services.AddSingleton<FilesystemLayerSnapshotService>();
 builder.Services.AddSingleton<SupervisorInterventionService>();
 builder.Services.AddHostedService<HardHealthCheckHostedService>();
 builder.Services.AddHostedService<SoftReasoningHostedService>();

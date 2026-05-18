@@ -163,6 +163,7 @@ Existing tooling for roadmap work:
 | Design principles | `docs/design-principles.md` | UX contract for the abstraction layer over agents + software: top-level summary, always-available drill-down, run-as-unit-of-conversation. |
 | Protocol & image style | `docs/protocol-style.md` | `status.md` shape, Activity Log markers, `attachments/` vs `results/`, per-CLI image retention. |
 | Agent task contract | `docs/agent-task-contract.md` | App-owned lifecycle boundary copied into watched targets. |
+| Orchestrator chat | `docs/orchestrator-chat.md` | Persistent global and project orchestrator chat, visible memory, scope, forks, and typed app actions. |
 | Portable skills architecture | `docs/skills-architecture.md` | Central skill library, project README lookup contract, and future project-level checks. |
 | Product roadmap | `ROADMAP.md` | Product thesis, roadmap themes, hard boundaries, and decision principles. |
 | Repo prompts | `.github/prompts/` | Reusable prompt templates. |

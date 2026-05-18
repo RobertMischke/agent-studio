@@ -151,6 +151,21 @@ The first, dashboard-like diagnostic surface remains valuable as a separate `Ver
 
 The next-generation chat mockup lives at [mockups/chat-window-next-gen](mockups/chat-window-next-gen/README.md).
 
+## The orchestrator has visible memory
+
+The orchestrator should feel present because it can explain what it knows, not because the UI pretends a hidden model is always awake.
+
+The user must be able to answer:
+
+- Which orchestrator am I talking to: global or project?
+- Which session id, model, and CLI back this conversation?
+- What was loaded when the orchestrator booted?
+- Which job results, decisions, roadmap items, and open tasks are currently in memory?
+- When was that memory refreshed?
+- Which app action is the orchestrator proposing or taking?
+
+Durable memory is a product surface. It should be visible, refreshable, and rebuildable from local evidence. The memory snapshot may be compact, but it must not be mysterious.
+
 ## Continuous over batch
 
 The agent runs continuously; so does our view of it. We summarize as we go, not just at the end:
