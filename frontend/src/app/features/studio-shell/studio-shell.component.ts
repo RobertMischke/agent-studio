@@ -15,6 +15,7 @@ import { JobService } from '../../services/job.service';
 import { StudioIconComponent, StudioIconName } from '../../components/studio-icon/studio-icon.component';
 import { EmptyStateComponent } from '../../components/empty-state/empty-state.component';
 import { SectionHeaderComponent } from '../../components/section-header/section-header.component';
+import { TreeRowComponent } from '../../components/tree-row/tree-row.component';
 import { ClientService } from '../../services/client.service';
 import { FeatureFlagsService } from '../../services/feature-flags.service';
 import { projectIdentity } from '../../services/project-identity.util';
@@ -72,7 +73,7 @@ function cliColorFor(cli: string): string {
 @Component({
   selector: 'app-studio-shell',
   standalone: true,
-  imports: [FormsModule, StudioIconComponent, EmptyStateComponent, SectionHeaderComponent],
+  imports: [FormsModule, StudioIconComponent, EmptyStateComponent, SectionHeaderComponent, TreeRowComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   templateUrl: './studio-shell.component.html',

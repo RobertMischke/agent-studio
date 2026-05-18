@@ -258,20 +258,17 @@
                   (click)="pickProject(null)" />
                 @for (p of projectRows(); track p.name) {
                   <div class="studio-tree-project">
-                    <button type="button"
-                            class="studio-tree-row studio-tree-row--project"
-                            [class.studio-tree-row--active]="p.isActive"
-                            [attr.data-testid]="'studio-explorer-project-' + p.name"
-                            (click)="openBoard(p.name)"
-                            (dblclick)="openHub(p.name)">
-                      <span class="studio-tree-row__chev"
-                            [class.studio-tree-row__chev--open]="isProjectExpanded(p.name)"
-                            [attr.aria-label]="isProjectExpanded(p.name) ? 'Collapse' : 'Expand'"
-                            (click)="toggleProjectExpanded(p.name, $event)">
-                        <app-studio-icon [name]="isProjectExpanded(p.name) ? 'chevronDown' : 'chevronRight'" [size]="10"></app-studio-icon>
-                      </span>
-                      <span class="studio-tree-row__glyph" [style.background]="p.color" aria-hidden="true">{{ p.initial }}</span>
-                      <span class="studio-tree-row__name">{{ p.name }}</span>
+                    <app-tree-row level="root"
+                                  [chevron]="isProjectExpanded(p.name) ? 'expanded' : 'collapsed'"
+                                  [glyphChar]="p.initial"
+                                  [glyphColor]="p.color"
+                                  [label]="p.name"
+                                  [count]="p.totalJobs"
+                                  [active]="p.isActive"
+                                  [testid]="'studio-explorer-project-' + p.name"
+                                  (chevronClick)="toggleProjectExpanded(p.name, $event)"
+                                  (select)="openBoard(p.name)"
+                                  (secondary)="openHub(p.name)">
                       <button type="button"
                               class="studio-tree-row__hub-link"
                               title="Open Project Hub"
@@ -279,49 +276,28 @@
                               (click)="openHub(p.name); $event.stopPropagation()">
                         <app-studio-icon name="grid" [size]="10"></app-studio-icon>
                       </button>
-                      <span class="studio-tree-row__count">{{ p.totalJobs }}</span>
-                    </button>
+                    </app-tree-row>
                     @if (isProjectExpanded(p.name)) {
                       <div class="studio-tree-children">
-                        <button type="button"
-                                class="studio-tree-row studio-tree-row--child"
-                                title="Backlog (preparation + ready + needs human review)"
-                                (click)="openBoard(p.name)">
-                          <span class="studio-tree-row__sub-icon"><app-studio-icon name="folder" [size]="12"></app-studio-icon></span>
-                          <span class="studio-tree-row__name">backlog</span>
-                          <span class="studio-tree-row__count">{{ laneCount(p.name, 'backlog') }}</span>
-                        </button>
-                        <button type="button"
-                                class="studio-tree-row studio-tree-row--child"
-                                title="Active (in progress / failed pickup)"
-                                (click)="openBoard(p.name)">
-                          <span class="studio-tree-row__sub-icon"><app-studio-icon name="play" [size]="12"></app-studio-icon></span>
-                          <span class="studio-tree-row__name">active</span>
-                          <span class="studio-tree-row__count">{{ laneCount(p.name, 'active') }}</span>
-                        </button>
-                        <button type="button"
-                                class="studio-tree-row studio-tree-row--child"
-                                title="Review (auto-review + human review)"
-                                (click)="openBoard(p.name)">
-                          <span class="studio-tree-row__sub-icon"><app-studio-icon name="eye" [size]="12"></app-studio-icon></span>
-                          <span class="studio-tree-row__name">human review</span>
-                          <span class="studio-tree-row__count">{{ laneCount(p.name, 'review') }}</span>
-                        </button>
-                        <button type="button"
-                                class="studio-tree-row studio-tree-row--child"
-                                title="Project Hub"
-                                (click)="openHub(p.name)">
-                          <span class="studio-tree-row__sub-icon"><app-studio-icon name="grid" [size]="12"></app-studio-icon></span>
-                          <span class="studio-tree-row__name">Project Hub</span>
-                        </button>
-                        <button type="button"
-                                class="studio-tree-row studio-tree-row--child"
-                                title="Archive / completed jobs"
-                                (click)="openBoard(p.name)">
-                          <span class="studio-tree-row__sub-icon"><app-studio-icon name="archive" [size]="12"></app-studio-icon></span>
-                          <span class="studio-tree-row__name">archive</span>
-                          <span class="studio-tree-row__count">{{ laneCount(p.name, 'archive') }}</span>
-                        </button>
+                        <app-tree-row level="child" glyph="folder"
+                                      label="backlog"
+                                      [count]="laneCount(p.name, 'backlog')"
+                                      (select)="openBoard(p.name)" />
+                        <app-tree-row level="child" glyph="play"
+                                      label="active"
+                                      [count]="laneCount(p.name, 'active')"
+                                      (select)="openBoard(p.name)" />
+                        <app-tree-row level="child" glyph="eye"
+                                      label="human review"
+                                      [count]="laneCount(p.name, 'review')"
+                                      (select)="openBoard(p.name)" />
+                        <app-tree-row level="child" glyph="grid"
+                                      label="Project Hub"
+                                      (select)="openHub(p.name)" />
+                        <app-tree-row level="child" glyph="archive"
+                                      label="archive"
+                                      [count]="laneCount(p.name, 'archive')"
+                                      (select)="openBoard(p.name)" />
                       </div>
                     }
                   </div>
