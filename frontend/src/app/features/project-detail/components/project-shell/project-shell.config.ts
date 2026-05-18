@@ -10,7 +10,6 @@ export type ProjectRailGroup = 'insight' | 'quality' | 'operations' | 'config';
 
 export type ProjectRailKey =
   | 'overview'
-  | 'design'
   | 'visual-evidence'
   | 'security'
   | 'architecture'
@@ -44,6 +43,11 @@ export interface ProjectRailItem {
 
 export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
   // ---- INSIGHT: what the project IS / does ----
+  // Order matches the agent-orchestrator.zip mockup (hub-view.png):
+  // Overview · Visual Evidence · Architecture · Drift · UX / UI ·
+  // Observability. The earlier extra "Design" entry was a transitional
+  // placeholder that didn't appear in the mockup — drop it so the
+  // INSIGHT group reads as the mockup intends.
   {
     key: 'overview',
     group: 'insight',
@@ -52,15 +56,6 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Snapshot of project health and quick actions',
     empty: 'Overview placeholder. Health snapshot and quick actions will land in a later slice.',
     icon: '▤',
-  },
-  {
-    key: 'design',
-    group: 'insight',
-    label: 'Design',
-    panelTitle: 'Design',
-    description: 'Design system tokens, components, patterns, and reference mockups for this project',
-    empty: 'No design surface yet. The Design panel will catalog the studio shell tokens (color / shape / type / motion) per the Material 3 Expressive vocabulary, link to component mockups, and surface the reference layout artefacts. Canonical spec: docs/design-system.md.',
-    icon: '◇',
   },
   {
     key: 'visual-evidence',
@@ -109,6 +104,10 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
   },
 
   // ---- QUALITY: what guards the project ----
+  // Per mockup order: Security · Test Quality · Audits & Checks ·
+  // Product Runtime. Product Runtime lived under OPERATIONS before;
+  // the mockup groups it with the quality bar since it's about how
+  // the built software behaves under load, not project operations.
   {
     key: 'security',
     group: 'quality',
@@ -136,6 +135,15 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     empty: 'Audits & Checks placeholder. The review-definition model lands in a later slice.',
     icon: '⊟',
   },
+  {
+    key: 'product-runtime',
+    group: 'quality',
+    label: 'Product Runtime',
+    panelTitle: 'Product Runtime',
+    description: 'How the built software behaved during local runs and tests: events, errors, latency, domain timeline',
+    empty: 'No runtime events captured yet. Once the built software emits structured events to the runtime JSONL files, recent events, error groups, latency summaries, and the domain timeline appear here.',
+    icon: '⊜',
+  },
 
   // ---- OPERATIONS: what's running right now ----
   {
@@ -155,15 +163,6 @@ export const PROJECT_RAIL_ITEMS: readonly ProjectRailItem[] = [
     description: 'Inference spend by job, supporting runs, orchestrator turns, and time window',
     empty: 'Token Usage placeholder. Heatmap, timeline, and per-job drill-down land in a later slice.',
     icon: '▦',
-  },
-  {
-    key: 'product-runtime',
-    group: 'operations',
-    label: 'Product Runtime',
-    panelTitle: 'Product Runtime',
-    description: 'How the built software behaved during local runs and tests: events, errors, latency, domain timeline',
-    empty: 'No runtime events captured yet. Once the built software emits structured events to the runtime JSONL files, recent events, error groups, latency summaries, and the domain timeline appear here.',
-    icon: '⊜',
   },
   {
     key: 'activity',
