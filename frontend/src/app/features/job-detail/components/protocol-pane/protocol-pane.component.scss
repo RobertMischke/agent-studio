@@ -129,16 +129,16 @@
   font-size: 12px;
 
   &[data-kind="ok"] {
-    border-left-color: #16a34a;
-    background: rgba(34, 197, 94, 0.08);
+    border-left-color: var(--severity-pass);
+    background: color-mix(in srgb, var(--severity-pass) 8%, transparent);
   }
   &[data-kind="problem"] {
     border-left-color: var(--severity-high);
-    background: rgba(239, 68, 68, 0.08);
+    background: color-mix(in srgb, var(--severity-high) 8%, transparent);
   }
   &[data-kind="unclear"] {
-    border-left-color: #ca8a04;
-    background: rgba(234, 179, 8, 0.08);
+    border-left-color: var(--severity-warn);
+    background: color-mix(in srgb, var(--severity-warn) 8%, transparent);
   }
 
   &__emoji {
@@ -163,19 +163,8 @@
   }
 }
 
-// Light-theme contrast for verdict text.
-html[data-studio-theme='light'] .protocol-verdict {
-  border-color: #e1e1e1;
-  background: var(--studio-fg-strong);
-  color: #1a1a1a;
-
-  &[data-kind="ok"]      { background: rgba(22, 163, 74, 0.06); }
-  &[data-kind="problem"] { background: rgba(220, 38, 38, 0.06); }
-  &[data-kind="unclear"] { background: rgba(202, 138, 4, 0.08); }
-
-  &__label  { color: #1a1a1a; }
-  &__detail { color: #4a4a4a; }
-}
+// Protocol-verdict reads --studio-* / --severity-* tokens that flip
+// per theme — no separate `[data-studio-theme='light']` bridge needed.
 
 .pane__interim-btn {
   display: inline-flex;
