@@ -143,8 +143,17 @@
   </header>
 
   <!-- ============ Body ============ -->
+  <!-- Grid columns are conditional on `sidebarVisible()`: when the
+       sidebar is hidden, the `<aside class="studio-sidebar">` is removed
+       from the DOM entirely (Angular `@if`), so the grid drops to two
+       columns (activitybar + editor). Keeping a 3rd `1fr` column while
+       only two children render pushed the editor into a 0px middle
+       slot and left the workspace painting empty — looked exactly like
+       the detail view had been closed. -->
   <div class="studio-body"
-       [style.grid-template-columns]="'var(--studio-activitybar-w) ' + (sidebarVisible() ? sidebarWidth() + 'px' : '0px') + ' 1fr'">
+       [style.grid-template-columns]="sidebarVisible()
+           ? 'var(--studio-activitybar-w) ' + sidebarWidth() + 'px 1fr'
+           : 'var(--studio-activitybar-w) 1fr'">
     <!-- Activity bar -->
     <aside class="studio-activitybar" data-testid="studio-activity-bar">
       @for (item of activityBarItems; track item.key) {

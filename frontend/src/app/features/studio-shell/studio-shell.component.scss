@@ -507,7 +507,15 @@
 }
 
 .studio--sidebar-hidden .studio-body {
-  grid-template-columns: var(--studio-activitybar-w) 0 1fr !important;
+  // When the sidebar is hidden the `<aside class="studio-sidebar">` is
+  // removed from the DOM (Angular `@if`). Keeping a middle `0` column
+  // here used to push the editor (auto-placed by CSS grid into the
+  // next available cell) into the 0px slot and leave the actual `1fr`
+  // column empty — the workspace painted blank, looked exactly like
+  // the detail view had been closed.
+  //
+  // Drop to two columns to match the actual DOM child count.
+  grid-template-columns: var(--studio-activitybar-w) 1fr !important;
 }
 
 // Mirror layout when the user puts the activity bar on the right.
