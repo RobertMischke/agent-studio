@@ -1,5 +1,95 @@
 # Frontend SCSS quality — refactor evaluation 2026-05-17
 
+## Update — Tier 4 adoption + <app-dialog> extraction (2026-05-18 evening)
+
+Fourth iteration. The new structural extractions from the previous
+pass now adopt their first real call sites, and a missing piece
+surfaces: the sidesheet/dialog split.
+
+### What shipped in this pass
+
+- **Tier 4 — `<app-section-header>` adopted in 2 studio-shell call
+  sites.** Workspace group head + Open Tabs group head. The
+  workspace head is now `[interactive]` so clicking it scopes the
+  board to "All projects" (mirrors the titlebar picker).
+
+- **Tier 4 — `<app-tree-row>` adopted in 6 studio-shell call sites.**
+  Every project row + its five lane children (backlog / active /
+  human review / Project Hub / archive) now render via
+  `<app-tree-row>`. Each row went from ~9 lines to ~4. The hub-link
+  button slots into the row via projection. The `(chevronClick) /
+  (select) / (secondary)` outputs preserve the existing click +
+  double-click semantics.
+
+- **Tier 4 — `<app-empty-state>` adopted in 5 studio-shell call
+  sites.** All single-line "No projects loaded" / "No jobs loaded
+  yet" / etc. blocks migrated.
+
+- **Sidesheet/dialog split.** The user flagged that the original
+  `<app-sidesheet>` was conflating two distinct UI shapes:
+
+    Side panel (sheet)         | Modal dialog
+    ---------------------------+-----------------------------------
+    Pinned to viewport edge    | Centred, backdrop-overlaid
+    role="region"              | role="alertdialog"
+    Persistent / toggleable    | One decision, then close
+    No backdrop click-to-close | Backdrop click-to-close
+    No focus trap              | Focus trap
+    kanban-filter / cli-usage  | error / confirm / create-job /
+                               | media-lightbox / verbose-debug
+
+  Fix: `<app-sidesheet>` narrowed to side-panel-only (the
+  `variant="dialog"` option dropped, role flipped from `dialog` to
+  `region`); a new `<app-dialog>` skeleton owns the modal shape.
+
+- **`<app-dialog>` extracted** as the companion component:
+    - Centred panel with backdrop overlay
+    - `[role]="dialog | alertdialog"`
+    - eyebrow + title + close header
+    - body via default `<ng-content>`, footer via `<ng-content
+      select="[footer]">`
+    - `kind: default | danger | primary` drives a top accent stripe
+    - `(close)` + `(backdropClick)` outputs let callers keep custom
+      cancellation semantics
+
+- **Two migrations validate the new skeleton:**
+    - `error-dialog` — uses `<app-dialog kind="danger">`. The custom
+      .overlay + .error-dialog__header + .error-dialog__close all
+      go away; the inner sections (source / message / actions /
+      output / stack-trace) project into the body slot.
+    - `confirm-dialog` — uses `<app-dialog kind="danger | primary">`
+      driven by the live dialog state. The two action buttons
+      project into the `[footer]` slot. The keydown handler stays
+      on the host. Template went from 50 → 22 lines.
+
+### Component inventory grew to 7 Quality-Pass extractions
+
+Under `src/app/components/`:
+  app-dialog/ (host wrapper)   chat/               concept-help/
+  dialog/                  ⭐  empty-state/    ⭐  error-dialog/
+  info-button/                 media-lightbox/     pane-header/   ⭐
+  section-header/          ⭐  sidesheet/      ⭐  studio-icon/   ⭐
+  tooltip/                     tree-row/       ⭐
+
+  ⭐ = SCSS-quality-pass extraction (now seven: dialog +
+       empty-state + pane-header + section-header + sidesheet +
+       studio-icon + tree-row).
+
+### What remains (lower priority, deferred)
+
+- **Real `<app-sidesheet>` adoption.** The five existing sidesheets
+  (kanban-filter, cli-usage, orchestrator-side-sheet,
+  workspace-screenshots, update-center) carry their own slide
+  animation + open-state binding. Migration safely happens one PR
+  per sheet; the component is ready.
+
+- **Remaining `<app-dialog>` adoptions** for: create-job,
+  e2e-cleanup, update-block, media-lightbox, verbose-debug,
+  orchestrator-settings. Mechanical — each follows the
+  error-dialog / confirm-dialog pattern.
+
+---
+
 ## Update — Tier 2 + 4 follow-up pass (2026-05-18)
 
 Third iteration: the remaining structural extractions and the
