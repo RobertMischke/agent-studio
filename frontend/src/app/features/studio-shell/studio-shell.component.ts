@@ -267,6 +267,29 @@ export class StudioShellComponent {
     localStorage.setItem('atp.studio.theme', t);
   });
 
+  /**
+   * Auto-expand the active project in the Explorer tree so the lane
+   * children (backlog / active / human review / Project Hub / archive)
+   * are visible the moment the user opens a board or task. Matches the
+   * agent-orchestrator.zip mockup, which always shows the active project
+   * expanded.
+   *
+   * The user can still manually collapse via the chevron; we only
+   * auto-expand if the project isn't already in the set. We never auto-
+   * collapse, so user-pinned expansions for other projects stay open.
+   */
+  private readonly autoExpandActiveFx = effect(() => {
+    const name = this.activeProjectName();
+    if (!name) return;
+    if (this._expandedProjects().has(name)) return;
+    this._expandedProjects.update(set => {
+      const next = new Set(set);
+      next.add(name);
+      this.writeExpandedProjects(next);
+      return next;
+    });
+  });
+
   /** All jobs, grouped under their project for the Explorer panel. */
   readonly grouped = this.jobService.grouped;
 
