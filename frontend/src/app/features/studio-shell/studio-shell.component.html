@@ -52,6 +52,24 @@
                 [style.background]="activeProjectColor()"
                 aria-hidden="true">{{ activeProjectInitial() }}</span>
           <span class="studio-pill__label">{{ name }}</span>
+          <!-- Auto-pickup state sits inline behind the project name (per
+               user feedback) so the chip reads as one unit:
+               "<glyph> <name> <auto-dot> <count> <caret>". Clicking the
+               dot cycles auto-continuous ⇄ paused; clicking the rest of
+               the chip opens the project picker. `stopPropagation()`
+               keeps the two click targets independent. -->
+          <span class="studio-auto-toggle studio-auto-toggle--inline"
+                role="button"
+                tabindex="0"
+                [class.studio-auto-toggle--on]="autoModeFor(name) !== 'manual' && autoModeFor(name) !== 'paused'"
+                data-testid="studio-titlebar-auto-toggle"
+                [title]="autoToggleTooltip(name)"
+                (click)="toggleAuto.emit(name); $event.stopPropagation()"
+                (keydown.enter)="toggleAuto.emit(name); $event.stopPropagation()"
+                (keydown.space)="toggleAuto.emit(name); $event.stopPropagation()">
+            <span class="studio-auto-toggle__dot" aria-hidden="true"></span>
+            <span class="studio-auto-toggle__label">{{ autoModeLabelFor(name) }}</span>
+          </span>
           <span class="studio-pill__count" aria-label="open jobs">{{ activeProjectTotalJobs() }}</span>
         } @else {
           <span class="studio-pill__glyph studio-pill__glyph--all" aria-hidden="true">
@@ -61,22 +79,6 @@
         }
         <span class="studio-pill__caret" aria-hidden="true">▾</span>
       </button>
-
-      <!-- Auto-pickup toggle for the active project. Shows the current
-           runner state and click cycles auto-continuous ⇄ paused. Hidden
-           in "All projects" mode (toggling per-workspace would require
-           a new API surface). -->
-      @if (activeProjectName(); as name) {
-        <button type="button"
-                class="studio-auto-toggle"
-                [class.studio-auto-toggle--on]="autoModeFor(name) !== 'manual' && autoModeFor(name) !== 'paused'"
-                data-testid="studio-titlebar-auto-toggle"
-                [title]="autoToggleTooltip(name)"
-                (click)="toggleAuto.emit(name); $event.stopPropagation()">
-          <span class="studio-auto-toggle__dot" aria-hidden="true"></span>
-          <span class="studio-auto-toggle__label">{{ autoModeLabelFor(name) }}</span>
-        </button>
-      }
 
       @if (pickerOpen()) {
         <div class="studio-titlebar__picker-menu"

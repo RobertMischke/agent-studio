@@ -495,6 +495,35 @@
     background: var(--studio-accent);
     box-shadow: 0 0 0 3px rgba(217, 119, 87, 0.18);
   }
+
+  // Inline variant — sits between the project name and the count
+  // badge inside the project pill. Drops the rounded border + padded
+  // chip look in favour of a flush "name • dot • count" arrangement
+  // so the chip reads as one unit.
+  &--inline {
+    height: auto;
+    padding: 0;
+    margin: 0 2px 0 6px;
+    border: 0;
+    background: transparent;
+    border-radius: 0;
+    font-size: 9.5px;
+    letter-spacing: 0.05em;
+    line-height: 1;
+    text-transform: uppercase;
+    color: var(--studio-fg-muted);
+    cursor: pointer;
+
+    &:hover {
+      background: transparent;
+      color: var(--studio-fg-strong);
+    }
+    &.studio-auto-toggle--on {
+      background: transparent;
+      border-color: transparent;
+      color: var(--studio-accent);
+    }
+  }
 }
 
 // -------------------------------------------------------------------------
