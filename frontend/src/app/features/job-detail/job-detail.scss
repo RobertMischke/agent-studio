@@ -69,10 +69,10 @@
       gap: 6px;
       align-items: center;
       padding-bottom: 4px;
-      border-bottom: 1px dashed rgba(255,255,255,0.08);
+      border-bottom: 1px dashed var(--studio-border);
     }
     .chat-mode__label {
-      color: rgba(255,255,255,0.55);
+      color: var(--studio-fg-dim);
       text-transform: uppercase;
       letter-spacing: 0.08em;
       font-size: 0.65rem;
@@ -85,21 +85,29 @@
       gap: 5px;
       padding: 4px 9px;
       border-radius: 999px;
-      border: 1px solid rgba(255,255,255,0.14);
-      background: rgba(255,255,255,0.04);
-      color: var(--studio-fg-muted);
+      border: 1px solid var(--studio-border);
+      background: var(--studio-bg-hover);
+      color: var(--studio-fg-dim);
       font-size: 0.78rem;
       font-weight: 600;
       cursor: pointer;
       transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
     }
-    .chat-mode__pill:hover { color: var(--studio-fg); border-color: rgba(255,255,255,0.28); }
+    .chat-mode__pill:hover {
+      color: var(--studio-fg-strong);
+      border-color: var(--studio-border-strong);
+      background: var(--studio-bg-elevated);
+    }
     .chat-mode__icon { font-size: 0.85rem; line-height: 1; }
-    .chat-mode__pill--active { color: #1e1e2e; }
-    .chat-mode__pill--active[data-mode="continue"] { background: var(--severity-info); border-color: var(--severity-info); }
+    // Active state — the orange brand fills the "Continue" pill (the
+    // default mode), while the secondary modes keep their semantic
+    // tints. Text reads `--studio-on-accent` (dark) which works on all
+    // four saturated fills in both themes.
+    .chat-mode__pill--active { color: var(--studio-on-accent, #1a1a1a); font-weight: 700; }
+    .chat-mode__pill--active[data-mode="continue"] { background: var(--studio-accent); border-color: var(--studio-accent); }
     .chat-mode__pill--active[data-mode="steer"]    { background: var(--severity-warn); border-color: var(--severity-warn); }
     .chat-mode__pill--active[data-mode="extend"]   { background: var(--severity-pass); border-color: var(--severity-pass); }
-    .chat-mode__pill--active[data-mode="newTask"]  { background: #f5c2e7; border-color: #f5c2e7; }
+    .chat-mode__pill--active[data-mode="newTask"]  { background: var(--studio-accent-4); border-color: var(--studio-accent-4); }
 
     .chat-compose:has(.chat-mode__pill--active[data-mode="steer"])    { border-color: rgba(249,226,175,0.35); }
     .chat-compose:has(.chat-mode__pill--active[data-mode="extend"])   { border-color: rgba(166,227,161,0.35); }

@@ -16,9 +16,9 @@
   flex-wrap: nowrap;
   gap: 6px;
   padding: 2px 4px;
-  border: 1px solid rgba(148, 163, 184, 0.16);
+  border: 1px solid var(--studio-border);
   border-radius: 3px;
-  background: rgba(30, 41, 59, 0.30);
+  background: var(--studio-bg-elevated);
   min-height: 26px;
 }
 .run-timeline__icons {
@@ -37,37 +37,61 @@
   display: inline-grid;
   place-items: center;
   border-radius: 2px;
-  border: 1px solid rgba(148, 163, 184, 0.30);
-  background: rgba(148, 163, 184, 0.18);
-  color: var(--studio-fg);
+  border: 1px solid var(--studio-border-strong);
+  background: var(--studio-bg-elevated);
+  color: var(--studio-fg-strong);
   font-size: 11px;
   line-height: 1;
   cursor: pointer;
   font-variant-numeric: tabular-nums;
 }
 .run-timeline__icon:hover { filter: brightness(1.15); }
-.run-timeline__icon[data-status="completed"] { background: rgba(34, 197, 94, 0.28); border-color: rgba(74, 222, 128, 0.55); color: #bbf7d0; }
-.run-timeline__icon[data-status="failed"]    { background: rgba(220, 38, 38, 0.40); border-color: rgba(248, 113, 113, 0.55); color: #fecaca; }
-.run-timeline__icon[data-status="running"]   { background: rgba(56, 189, 248, 0.30); border-color: rgba(125, 211, 252, 0.60); color: #bae6fd; }
+// Status tints — use semantic severity tokens so the *fill* tracks the
+// theme. Text colour reads `--studio-fg-strong` (white on dark, near-
+// black on light) which keeps the run number readable against either
+// the saturated pill or the soft pastel tint. Previously the tints
+// were dark-mode pastels (#bbf7d0 / #fecaca / …) that disappeared on a
+// white shell.
+.run-timeline__icon[data-status="completed"] {
+  background: color-mix(in srgb, var(--severity-pass) 30%, transparent);
+  border-color: color-mix(in srgb, var(--severity-pass) 60%, transparent);
+  color: var(--studio-fg-strong);
+}
+.run-timeline__icon[data-status="failed"] {
+  background: color-mix(in srgb, var(--severity-high) 35%, transparent);
+  border-color: color-mix(in srgb, var(--severity-high) 65%, transparent);
+  color: var(--studio-fg-strong);
+}
+.run-timeline__icon[data-status="running"] {
+  background: color-mix(in srgb, var(--severity-info) 30%, transparent);
+  border-color: color-mix(in srgb, var(--severity-info) 60%, transparent);
+  color: var(--studio-fg-strong);
+}
 .run-timeline__icon[data-status="stopped"],
-.run-timeline__icon[data-status="cancelled"] { background: rgba(251, 191, 36, 0.26); border-color: rgba(251, 191, 36, 0.50); color: #fde68a; }
-.run-timeline__icon--active { box-shadow: 0 0 0 2px rgba(196, 181, 253, 0.55); }
+.run-timeline__icon[data-status="cancelled"] {
+  background: color-mix(in srgb, var(--severity-warn) 30%, transparent);
+  border-color: color-mix(in srgb, var(--severity-warn) 55%, transparent);
+  color: var(--studio-fg-strong);
+}
+.run-timeline__icon--active {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--studio-accent) 55%, transparent);
+}
 .run-timeline__listtoggle {
   width: 22px; height: 22px;
   padding: 0; display: inline-grid; place-items: center;
-  border-radius: 2px; border: 1px solid rgba(148, 163, 184, 0.30);
+  border-radius: 2px; border: 1px solid var(--studio-border);
   background: transparent; color: var(--studio-fg-dim); cursor: pointer; font-size: 12px;
 }
-.run-timeline__listtoggle:hover { background: rgba(148, 163, 184, 0.10); color: var(--studio-fg); }
+.run-timeline__listtoggle:hover { background: var(--studio-bg-hover); color: var(--studio-fg-strong); }
 .run-card--popover { margin-top: 2px; }
 .run-card__close {
   margin-left: auto;
   width: 20px; height: 20px;
   padding: 0; display: inline-grid; place-items: center;
-  border-radius: 2px; border: 1px solid rgba(148, 163, 184, 0.30);
+  border-radius: 2px; border: 1px solid var(--studio-border);
   background: transparent; color: var(--studio-fg-dim); cursor: pointer; font-size: 14px; line-height: 1;
 }
-.run-card__close:hover { background: rgba(148, 163, 184, 0.10); color: var(--studio-fg-strong); }
+.run-card__close:hover { background: var(--studio-bg-hover); color: var(--studio-fg-strong); }
 .run-timeline__caret { width: 12px; text-align: center; color: var(--studio-fg-dim); font-size: 11px; }
 .run-timeline__title { font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--studio-fg-dim); font-weight: 600; }
 .run-timeline__aggregate { font-size: 11.5px; color: var(--studio-fg-dim); }

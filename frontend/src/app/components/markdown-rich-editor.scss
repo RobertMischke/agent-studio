@@ -25,9 +25,9 @@
   display: inline-flex;
   gap: 2px;
   padding: 2px;
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid var(--studio-border);
   border-radius: 3px;
-  background: rgba(255,255,255,0.03);
+  background: var(--studio-bg-hover);
 }
 .md-editor__tab--icon {
   width: 22px;
@@ -87,34 +87,37 @@
 .md-editor__save {
   border: 0;
   border-radius: 4px;
-  color: #94a3b8;
+  color: var(--studio-fg-dim);
   background: transparent;
   cursor: pointer;
   font-size: 12px;
   padding: 4px 8px;
 }
 .md-editor__tab--active {
-  color: #ddd6fe;
-  background: rgba(99,102,241,0.25);
+  // Active segment reads the brand accent + the strong fg colour so
+  // the "P" / "M" glyph stays legible on both themes. The old indigo
+  // tint produced white-on-white in light mode.
+  color: var(--studio-fg-strong);
+  background: var(--studio-bg-selected);
 }
 .md-editor__tab--upload {
-  color: #cbd5e1;
-  border-left: 1px solid rgba(255,255,255,0.08);
+  color: var(--studio-fg);
+  border-left: 1px solid var(--studio-border);
   margin-left: 4px;
   padding-left: 10px;
 }
 .md-editor__tab--upload:hover:not(:disabled) {
-  color: #ddd6fe;
-  background: rgba(99,102,241,0.18);
+  color: var(--studio-fg-strong);
+  background: var(--studio-bg-hover);
 }
 .md-editor__tab--upload:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 .md-editor__save {
-  border: 1px solid rgba(34,197,94,0.35);
-  color: #86efac;
-  background: rgba(34,197,94,0.12);
+  border: 1px solid color-mix(in srgb, var(--severity-pass) 45%, transparent);
+  color: var(--severity-pass);
+  background: color-mix(in srgb, var(--severity-pass) 14%, transparent);
 }
 .md-editor__content {
   display: flex;

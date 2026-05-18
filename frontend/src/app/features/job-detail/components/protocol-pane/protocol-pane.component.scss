@@ -6,8 +6,11 @@
 :host { display: contents; }
 
 .pane__header--cool {
-  background: linear-gradient(180deg, rgba(99, 102, 241, 0.10), transparent 70%);
-  border-bottom: 1px solid rgba(99, 102, 241, 0.18);
+  // Was a slate-indigo wash that looked muddy on the white shell and
+  // clashed with the brand orange. Switch to a subtle brand-tinted
+  // gradient that reads on both themes.
+  background: linear-gradient(180deg, color-mix(in srgb, var(--studio-accent) 8%, transparent), transparent 70%);
+  border-bottom: 1px solid var(--studio-border);
 }
 
 .pane__title-block {
@@ -43,8 +46,8 @@
   gap: 4px;
   padding: 2px 8px;
   border-radius: 3px;
-  background: rgba(148, 163, 184, 0.10);
-  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: var(--studio-bg-hover);
+  border: 1px solid var(--studio-border);
   color: var(--studio-fg-dim);
   font-family: var(--font-mono, monospace);
   font-size: 11px;

@@ -30,17 +30,22 @@
   border: 0;
   border-bottom: 2px solid transparent;
   font-size: 12px;
-  color: var(--text-muted, #8a8f99);
+  // `--studio-fg-dim` flips per theme (#9d9d9d dark / #555 light) so the
+  // inactive tab keeps a calm grey in both. Previously this read an
+  // undefined `--text-muted` token and fell back to a hardcoded grey.
+  color: var(--studio-fg-dim);
   cursor: pointer;
   white-space: nowrap;
 
   &:hover {
-    color: var(--text-primary, #1a1a1a);
-    background: rgba(0, 0, 0, 0.03);
+    // `--studio-fg-strong` flips (#fff dark / #1a1a1a light). The old
+    // fallback `#1a1a1a` was invisible on the dark shell.
+    color: var(--studio-fg-strong);
+    background: var(--studio-bg-hover);
   }
 
   &--active {
-    color: var(--text-primary, #1a1a1a);
+    color: var(--studio-fg-strong);
     border-bottom-color: var(--studio-accent, #d97757);
     font-weight: 600;
   }
@@ -50,7 +55,7 @@
     height: 16px;
     padding: 0 5px;
     background: var(--studio-accent, #d97757);
-    color: #1a1a1a;
+    color: var(--studio-on-accent, #1a1a1a);
     border-radius: 8px;
     font-size: 10px;
     font-weight: 700;
@@ -227,14 +232,8 @@
   .evidence-view__empty { color: rgba(255, 255, 255, 0.55); }
 }
 
-[data-studio-theme='dark'] .pane-tab,
-[data-studio-theme='dark'] .pane-tab:hover {
-  color: rgba(255, 255, 255, 0.7);
-}
-[data-studio-theme='dark'] .pane-tab:hover { background: rgba(255, 255, 255, 0.04); color: #fff; }
-[data-studio-theme='dark'] .pane-tab--active { color: #fff; }
-[data-studio-theme='dark'] .evidence-empty { color: rgba(255, 255, 255, 0.55); }
-[data-studio-theme='dark'] .evidence-empty code { background: rgba(255, 255, 255, 0.08); }
+// Pane-tab + evidence-empty palette now reads `--studio-*` tokens, which
+// flip per theme — no separate dark/light override block is needed.
 
 /*
  * Blog-style timeline of task extensions written by Extend mode. Each

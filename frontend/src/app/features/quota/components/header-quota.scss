@@ -1,5 +1,8 @@
 :host { display: inline-flex; }
 .hquota { display: inline-flex; gap: 6px; align-items: center; }
+// Card chrome reads studio tokens that flip per theme. The old palette
+// (rgba(255,255,255,*) surfaces + Catppuccin pastel text) read as
+// invisible-on-white in the light shell.
 .hquota__card {
   display: inline-flex;
   align-items: center;
@@ -7,9 +10,9 @@
   min-height: 28px;
   padding: 4px 9px;
   border-radius: 6px;
-  border: 1px solid rgba(255,255,255,0.12);
-  background: rgba(255,255,255,0.045);
-  color: #cdd6f4;
+  border: 1px solid var(--studio-border);
+  background: var(--studio-bg-hover);
+  color: var(--studio-fg);
   font: inherit;
   cursor: pointer;
   min-width: 138px;
@@ -17,27 +20,27 @@
 }
 .hquota__card:hover,
 .hquota__card:focus-visible {
-  background: rgba(255,255,255,0.075);
-  border-color: rgba(255,255,255,0.22);
+  background: var(--studio-bg-elevated);
+  border-color: var(--studio-border-strong);
   outline: none;
 }
-.hquota__card--stale { border-color: rgba(249, 226, 175, 0.40); }
-.hquota__card--error { border-color: rgba(244, 63, 94, 0.40); }
+.hquota__card--stale { border-color: color-mix(in srgb, var(--severity-warn) 50%, transparent); }
+.hquota__card--error { border-color: color-mix(in srgb, var(--severity-high) 50%, transparent); }
 .hquota__head {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   min-width: 62px;
   font-size: 12px;
-  color: rgba(248,250,252,0.86);
+  color: var(--studio-fg);
   letter-spacing: 0;
 }
 .hquota__icon { font-size: 12px; }
 .hquota__label { font-weight: 650; }
-.hquota__stale-dot { color: #fcd34d; }
+.hquota__stale-dot { color: var(--severity-warn); }
 .hquota__value {
   min-width: 36px;
-  color: #f8fafc;
+  color: var(--studio-fg-strong);
   font-size: 13px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
@@ -45,13 +48,13 @@
 }
 .hquota__trend {
   width: 12px;
-  color: rgba(255,255,255,0.58);
+  color: var(--studio-fg-dim);
   font-size: 12px;
   text-align: center;
 }
 .hquota__window {
   min-width: 22px;
-  color: rgba(255,255,255,0.58);
+  color: var(--studio-fg-dim);
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -61,17 +64,17 @@
   height: 4px;
   overflow: hidden;
   border-radius: 999px;
-  background: rgba(255,255,255,0.12);
+  background: var(--studio-bg-elevated);
 }
 .hquota__bar-fill {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: #86efac;
+  background: var(--severity-pass);
 }
-.hquota__card[data-tone="warn"] .hquota__bar-fill { background: #fcd34d; }
-.hquota__card[data-tone="hot"] .hquota__bar-fill { background: #fda4af; }
-.hquota__card[data-tone="unknown"] .hquota__bar-fill { background: rgba(255,255,255,0.28); }
-.hquota__card[data-tone="warn"] .hquota__trend { color: #fcd34d; }
-.hquota__card[data-tone="hot"] .hquota__trend { color: #fda4af; }
+.hquota__card[data-tone="warn"] .hquota__bar-fill { background: var(--severity-warn); }
+.hquota__card[data-tone="hot"]  .hquota__bar-fill { background: var(--severity-high); }
+.hquota__card[data-tone="unknown"] .hquota__bar-fill { background: var(--studio-fg-muted); }
+.hquota__card[data-tone="warn"] .hquota__trend { color: var(--severity-warn); }
+.hquota__card[data-tone="hot"]  .hquota__trend { color: var(--severity-high); }
   
