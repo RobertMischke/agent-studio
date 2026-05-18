@@ -308,9 +308,9 @@ html[data-studio-theme='light'] .protocol-verdict {
   height: 18px;
   font-size: 12px;
   line-height: 1;
-  color: #fecaca;
-  background: rgba(239, 68, 68, 0.18);
-  border: 1px solid rgba(239, 68, 68, 0.55);
+  color: var(--severity-high);
+  background: color-mix(in srgb, var(--severity-high) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--severity-high) 55%, transparent);
   border-radius: 50%;
   cursor: help;
 }
@@ -318,8 +318,8 @@ html[data-studio-theme='light'] .protocol-verdict {
 .spinner-ring {
   width: 12px;
   height: 12px;
-  border: 2px solid rgba(99, 102, 241, 0.25);
-  border-top-color: rgba(99, 102, 241, 0.95);
+  border: 2px solid color-mix(in srgb, var(--studio-accent) 25%, transparent);
+  border-top-color: var(--studio-accent);
   border-radius: 50%;
   animation: spinner-ring-spin 0.8s linear infinite;
 
@@ -334,7 +334,7 @@ html[data-studio-theme='light'] .protocol-verdict {
   display: inline-flex;
   gap: 2px;
   padding: 2px;
-  background: rgba(120, 120, 140, 0.12);
+  background: var(--studio-bg-hover);
   border-radius: 3px;
 
   .inspector__tab {
@@ -347,11 +347,11 @@ html[data-studio-theme='light'] .protocol-verdict {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    color: var(--text-muted, #6b7280);
+    color: var(--studio-fg-dim);
     transition: background 0.12s ease, color 0.12s ease;
 
     &:hover:not(:disabled) {
-      color: var(--text, #111827);
+      color: var(--studio-fg-strong);
     }
 
     &:disabled {
@@ -360,8 +360,11 @@ html[data-studio-theme='light'] .protocol-verdict {
     }
 
     &--active {
-      background: var(--surface-1, var(--studio-fg-strong));
-      color: var(--text, #111827);
+      // Active inspector tab reads `--studio-bg-editor` so the pill
+      // stands "raised" against the elevated tab-strip surrounding,
+      // and text reads `--studio-fg-strong` for max contrast.
+      background: var(--studio-bg-editor);
+      color: var(--studio-fg-strong);
       box-shadow: 0 1px 2px rgba(0, 0, 0, 0.06);
     }
   }
@@ -375,8 +378,8 @@ html[data-studio-theme='light'] .protocol-verdict {
 .inspector__tab-spinner {
   width: 10px;
   height: 10px;
-  border: 2px solid rgba(99, 102, 241, 0.25);
-  border-top-color: rgba(99, 102, 241, 0.95);
+  border: 2px solid color-mix(in srgb, var(--studio-accent) 25%, transparent);
+  border-top-color: var(--studio-accent);
   border-radius: 50%;
   animation: spinner-ring-spin 0.8s linear infinite;
 }
