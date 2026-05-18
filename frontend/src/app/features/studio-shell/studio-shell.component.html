@@ -19,10 +19,11 @@
         <span>Workspace</span>
         <span class="studio-titlebar__crumb-caret" aria-hidden="true">▾</span>
       </button>
-      @if (currentProjectName(); as proj) {
-        <span class="studio-titlebar__crumb-sep" aria-hidden="true">›</span>
-        <span class="studio-titlebar__crumb" data-testid="studio-titlebar-active-project">{{ proj }}</span>
-      }
+      <!-- The active project name lives ONLY on the picker chip to the
+           right (with glyph + count). Repeating it here as a breadcrumb
+           crumb was pure duplication. Keep the breadcrumb as Workspace
+           › <leaf>, where <leaf> is the tab kind (Board / Project Hub /
+           Task <slug>). -->
       @if (activeTab(); as tab) {
         @if (tab.kind !== 'board' || currentProjectName()) {
           <span class="studio-titlebar__crumb-sep" aria-hidden="true">›</span>
