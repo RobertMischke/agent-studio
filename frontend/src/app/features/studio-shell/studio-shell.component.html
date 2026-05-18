@@ -243,18 +243,19 @@
           @switch (activePanel()) {
             @case ('explorer') {
               <section class="studio-explorer">
-                <!-- Clicking the Workspace group head selects "All projects"
-                     (mirrors the picker in the title bar). The dedicated
-                     chevron only toggles expand/collapse via stopPropagation. -->
-                <button type="button"
-                        class="studio-explorer__group-head studio-explorer__group-head--btn"
-                        data-testid="studio-explorer-workspace-head"
-                        [class.studio-explorer__group-head--active]="activeProjectName() === null && activeTab()?.kind === 'board'"
-                        (click)="pickProject(null)">
-                  <span class="studio-explorer__chev" aria-hidden="true">▼</span>
-                  <span>Workspace</span>
-                  <span class="studio-explorer__count">{{ projectRows().length }}</span>
-                </button>
+                <!-- Workspace group head — adopts the shared
+                     <app-section-header> component. The chevron is
+                     omitted since the explorer's projects-list lives
+                     directly below; clicking the header selects
+                     "All projects" (mirrors the titlebar picker). -->
+                <app-section-header
+                  [interactive]="true"
+                  iconChar="▼"
+                  title="Workspace"
+                  [count]="projectRows().length"
+                  [active]="activeProjectName() === null && activeTab()?.kind === 'board'"
+                  testid="studio-explorer-workspace-head"
+                  (click)="pickProject(null)" />
                 @for (p of projectRows(); track p.name) {
                   <div class="studio-tree-project">
                     <button type="button"
@@ -329,11 +330,12 @@
                   <app-empty-state>No projects loaded</app-empty-state>
                 }
                 @if (tabs().length > 0) {
-                  <div class="studio-explorer__group-head studio-explorer__group-head--mt">
-                    <span class="studio-explorer__chev" aria-hidden="true">▼</span>
-                    <span>Open tabs</span>
-                    <span class="studio-explorer__count">{{ tabs().length }}</span>
-                  </div>
+                  <app-section-header
+                    iconChar="▼"
+                    title="Open tabs"
+                    [count]="tabs().length"
+                    class="studio-explorer__group-head--mt" />
+
                   @for (t of tabs(); track tabKey(t)) {
                     <button type="button"
                             class="studio-tree-row studio-tree-row--child"
