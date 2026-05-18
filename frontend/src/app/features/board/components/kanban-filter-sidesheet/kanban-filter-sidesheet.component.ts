@@ -10,6 +10,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { NgTemplateOutlet } from '@angular/common';
 import { ClientSummary, TagRegistryEntry } from '../../../../models/job.model';
 import { ModalStackService } from '../../../../services/modal-stack.service';
 import { TypeFilterOption } from '../filters-dropdown/filters-dropdown.component';
@@ -32,7 +33,7 @@ import { SidesheetComponent } from '../../../../components/sidesheet/sidesheet.c
 @Component({
   selector: 'app-kanban-filter-sidesheet',
   standalone: true,
-  imports: [TooltipDirective, SidesheetComponent],
+  imports: [TooltipDirective, SidesheetComponent, NgTemplateOutlet],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './kanban-filter-sidesheet.component.html',
   styleUrl: './kanban-filter-sidesheet.component.scss',
@@ -42,6 +43,13 @@ import { SidesheetComponent } from '../../../../components/sidesheet/sidesheet.c
 })
 export class KanbanFilterSidesheetComponent {
   readonly open = input<boolean>(false);
+  /** When true, render the filter sections directly without the
+   *  `<app-sidesheet>` chrome (no slide-in animation, no header/close
+   *  button). Used to embed the same filter UI into the studio-shell's
+   *  left sidebar filter panel so the user can scope the board from
+   *  the activity-bar's filter icon instead of opening the right-edge
+   *  sheet. */
+  readonly inline = input<boolean>(false);
   readonly query = input<string>('');
   readonly typeOptions = input<readonly TypeFilterOption[]>([]);
   readonly activeType = input<string | null>(null);

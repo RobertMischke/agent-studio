@@ -1,7 +1,36 @@
-<app-sidesheet eyebrow="Board"
-               title="Filter & view"
-               testid="kanban-filter-sidesheet"
-               (close)="close()">
+<!--
+  Two render modes:
+    - default (inline=false): wrapped in <app-sidesheet> so it slides
+      in from the right with header chrome and close button.
+    - inline=true: same sections rendered directly into whatever
+      parent we're embedded in (currently studio-shell's filter panel).
+
+  The shared body lives in a single <ng-template #body> below so both
+  paths render identical markup.
+-->
+@if (inline()) {
+  <div class="kanban-filter kanban-filter--inline" data-testid="kanban-filter-sidesheet-inline">
+    <ng-container *ngTemplateOutlet="body" />
+  </div>
+} @else {
+  <app-sidesheet eyebrow="Board"
+                 title="Filter & view"
+                 testid="kanban-filter-sidesheet"
+                 (close)="close()">
+    <ng-container *ngTemplateOutlet="body" />
+    <div footer class="sheet__footer-bits" data-testid="kanban-filter-sidesheet-footer">
+      <span class="sheet__hits"
+            data-testid="kanban-filter-sidesheet-hitcount">{{ hitCount() }} / {{ totalCount() }} jobs match</span>
+      <button type="button"
+              class="sheet__clear-all"
+              data-testid="kanban-filter-sidesheet-clear-all"
+              [disabled]="!hasAnyFilter()"
+              (click)="onClearAll()">Clear filters</button>
+    </div>
+  </app-sidesheet>
+}
+
+<ng-template #body>
   <section class="sheet__section">
     <div class="sheet__search-row">
       <span class="sheet__search-icon" aria-hidden="true">🔍</span>
@@ -128,13 +157,16 @@
     </ul>
   </section>
 
-  <div footer class="sheet__footer-bits" data-testid="kanban-filter-sidesheet-footer">
-    <span class="sheet__hits"
-          data-testid="kanban-filter-sidesheet-hitcount">{{ hitCount() }} / {{ totalCount() }} jobs match</span>
-    <button type="button"
-            class="sheet__clear-all"
-            data-testid="kanban-filter-sidesheet-clear-all"
-            [disabled]="!hasAnyFilter()"
-            (click)="onClearAll()">Clear filters</button>
-  </div>
-</app-sidesheet>
+  <!-- Inline-mode footer rendered as a normal section row (the right-
+       sidesheet mode renders its own footer via the @else branch
+       above, projected into <app-sidesheet>[footer]). -->
+  @if (inline()) {
+    <section class="sheet__section sheet__section--inline-foot">
+      <span class="sheet__hits">{{ hitCount() }} / {{ totalCount() }} jobs match</span>
+      <button type="button"
+              class="sheet__clear-all"
+              [disabled]="!hasAnyFilter()"
+              (click)="onClearAll()">Clear filters</button>
+    </section>
+  }
+</ng-template>

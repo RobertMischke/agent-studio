@@ -14,6 +14,30 @@
 }
 :host(.is-open) { width: min(320px, 92vw); }
 
+/* Inline mode: render filter sections directly into the studio-shell
+ * filter panel without the slide-in chrome. The host stops collapsing
+ * to zero width and just fills whatever parent it's projected into. */
+.kanban-filter--inline {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+:host:has(.kanban-filter--inline) {
+  width: 100%;
+  overflow: visible;
+  flex: 1 1 auto;
+  transition: none;
+}
+.sheet__section--inline-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-top: 1px solid var(--studio-border);
+  padding-top: 12px;
+  margin-top: auto;
+}
+
 .sheet__section {
   padding: 12px 14px;
   border-bottom: 1px solid var(--studio-border);

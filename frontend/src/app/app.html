@@ -62,6 +62,32 @@
           (toggleCliAdmin)="toggleCliAdmin()"
           (defaultCliChange)="onDefaultCliChange($event)"
           (defaultModelChange)="onDefaultModelChange($event)" />
+        <!-- Inline filter UI for the activity-bar Filter panel. Same
+             component as the right-edge sheet, just rendered without
+             the slide-in chrome. Hosted inside studio-shell's filter
+             panel slot so the user can scope the board from the left
+             sidebar instead of opening a separate sheet. -->
+        <app-kanban-filter-sidesheet
+          studioFilterPanel
+          [inline]="true"
+          [open]="true"
+          [query]="searchQuery()"
+          [typeOptions]="typeFilterOptions"
+          [activeType]="activeType()"
+          [tags]="tagRegistry()"
+          [activeTagIds]="activeTagFilter()"
+          [owners]="clientService.clients()"
+          [activeOwnerId]="activeClientFilter()"
+          [compactCards]="compactCards()"
+          [hitCount]="filteredJobCount()"
+          [totalCount]="totalJobCount()"
+          [hasAnyFilter]="hasActiveFiltersOrSearch()"
+          (queryChange)="setSearchQuery($event)"
+          (setType)="onSetType($event)"
+          (toggleTag)="toggleTagFilter($event)"
+          (setOwner)="setClientFilter($event)"
+          (toggleCompactCards)="toggleCompactCards()"
+          (clearAll)="onSidesheetClearAll()" />
         <!-- Per-tab actions land in the tab bar via this slot. The board
              tab gets filter + compact + add-task; task tabs reuse the
              existing detail-pane toggles via the JobDetail's own header. -->
