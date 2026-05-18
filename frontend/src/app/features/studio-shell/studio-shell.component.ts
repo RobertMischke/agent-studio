@@ -8,6 +8,7 @@ import {
   inject,
   output,
   signal,
+  untracked,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import type { JobInfo } from '../../models/job.model';
@@ -268,25 +269,40 @@ export class StudioShellComponent {
   });
 
   /**
+   * Track which active-project name we've already auto-expanded for, so
+   * the auto-expand effect only fires when the active project CHANGES —
+   * not when the user manually collapses it. Without this guard the
+   * effect re-runs on every `_expandedProjects` mutation, instantly
+   * re-expanding the project the user just collapsed.
+   */
+  private lastAutoExpandedActive: string | null = null;
+
+  /**
    * Auto-expand the active project in the Explorer tree so the lane
    * children (backlog / active / human review / Project Hub / archive)
    * are visible the moment the user opens a board or task. Matches the
    * agent-orchestrator.zip mockup, which always shows the active project
    * expanded.
    *
-   * The user can still manually collapse via the chevron; we only
-   * auto-expand if the project isn't already in the set. We never auto-
-   * collapse, so user-pinned expansions for other projects stay open.
+   * Only acts when the active project name CHANGES — never on
+   * `_expandedProjects` mutations, so the user's chevron-collapse is
+   * preserved. We read `_expandedProjects` via `untracked()` to avoid
+   * setting up a reactive dependency that would re-fire the effect on
+   * every mutation.
    */
   private readonly autoExpandActiveFx = effect(() => {
     const name = this.activeProjectName();
     if (!name) return;
-    if (this._expandedProjects().has(name)) return;
-    this._expandedProjects.update(set => {
-      const next = new Set(set);
-      next.add(name);
-      this.writeExpandedProjects(next);
-      return next;
+    if (this.lastAutoExpandedActive === name) return;
+    this.lastAutoExpandedActive = name;
+    untracked(() => {
+      if (this._expandedProjects().has(name)) return;
+      this._expandedProjects.update(set => {
+        const next = new Set(set);
+        next.add(name);
+        this.writeExpandedProjects(next);
+        return next;
+      });
     });
   });
 
