@@ -668,8 +668,8 @@
       flex: 0 0 auto;
       padding: 1px 7px;
       border-radius: 999px;
-      background: rgba(15,23,42,0.45);
-      color: rgba(255,255,255,0.7);
+      background: var(--studio-bg-elevated);
+      color: var(--studio-fg);
       font-size: 10.5px;
       font-variant-numeric: tabular-nums;
       letter-spacing: 0.02em;
