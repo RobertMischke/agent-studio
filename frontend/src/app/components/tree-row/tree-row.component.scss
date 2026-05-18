@@ -34,8 +34,11 @@
     color: var(--studio-fg-strong);
   }
 
-  &--root  { padding-left: 8px;  }
-  &--child { padding-left: 44px; font-size: 12px; }
+  // Padding-left lives below: `.studio button` (specificity 0,1,1)
+  // resets padding to 0 inside the shell, so single-class
+  // `.tree-row--root` / `.tree-row--child` (0,1,0) is too weak. The
+  // scoped rules at the end of this file bump to (0,2,0) so the
+  // hierarchy indent actually applies.
 
   &__chev {
     display: inline-grid;
@@ -102,3 +105,20 @@
     color: var(--studio-on-accent);
   }
 }
+
+/*
+ * Specificity-bumped scoped variants. `.studio button { padding: 0 }`
+ * inside studio-shell.component.scss has specificity (0,1,1) and beats
+ * bare `.tree-row--root` / `.tree-row--child` (0,1,0), killing the
+ * indent that distinguishes project rows from their lane children. We
+ * deliberately scope the modifiers to `.studio` so they land at (0,2,0)
+ * and outrank the universal button reset.
+ *
+ * Same trick the old studio-tree-row migration used (see the
+ * `.studio .studio-tree-row--child` block in studio-shell.component.
+ * scss). Without this the tree renders as a flat list of identically-
+ * indented rows — projects and lane children are visually
+ * indistinguishable.
+ */
+.studio .tree-row--root  { padding-left: 8px;  }
+.studio .tree-row--child { padding-left: 44px; font-size: 12px; }
