@@ -148,12 +148,20 @@
   gap: 18px;
   max-width: 820px;
   margin: 0 auto;
+  // Pane already gives us a full-height flex column; claim the rest of
+  // it so the empty-state placeholder can vertically center inside the
+  // panel rather than floating at the top of a huge white gap.
+  flex: 1 1 auto;
+  min-height: 0;
 
   &__empty {
     padding: 24px 8px;
     color: var(--studio-fg-dim);
-    font-size: 12px;
+    font-size: 12.5px;
     line-height: 1.55;
+    text-align: center;
+    margin: auto;
+    max-width: 480px;
   }
 }
 
