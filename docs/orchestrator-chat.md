@@ -4,6 +4,8 @@ This document describes the product and architecture target for an optional, alw
 
 The feature is not "another task chat". It is the user's standing relationship with the system that controls the board: what happened, why decisions were made, what the application knows about each project, and what should happen next.
 
+For the redesign handoff, roadmap slices, and UI contract, see [Orchestrator Chat Redesign Handoff](orchestrator-chat-redesign-handoff.md).
+
 ## Research Notes
 
 Current coding-agent systems keep continuity through a few repeating patterns:
@@ -95,6 +97,21 @@ The chat window should include a **Context** view. It answers:
 - What is the last known context or token usage where the CLI exposes it?
 
 This makes the orchestrator feel present without becoming mystical. The user can see what it knows and where that knowledge came from.
+
+## Session Events Versus Conversation
+
+CLI session mechanics are evidence, not the primary chat object. A continuation, recovery, steering handoff, or auto-orchestrator intervention should be rendered as a compact timeline event unless it contains semantic content the user needs to read as a message.
+
+Examples of event-bubble content:
+
+- session continued,
+- session recovered,
+- user steered the agent,
+- orchestrator reissued a follow-up,
+- memory refreshed,
+- auto-loop circuit breaker fired.
+
+The raw event remains expandable and auditable, but the main surface stays a continuous Global or Project conversation. This keeps the user's attention on project intent, decisions, and next steps instead of a registry of transport/session details.
 
 ## Control Surface
 

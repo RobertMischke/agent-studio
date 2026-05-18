@@ -1,9 +1,7 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { OrchestratorLogEntry } from '../models/job.model';
 import { JobService } from '../services/job.service';
-import { TokenSummaryBlockComponent } from './token-summary-block';
-import { GlobalOrchestratorCardComponent } from './global-orchestrator-card';
 
 /**
  * Per-project orchestrator log feed. Reads
@@ -21,261 +19,528 @@ import { GlobalOrchestratorCardComponent } from './global-orchestrator-card';
 @Component({
   selector: 'app-orchestrator-feed',
   standalone: true,
-  imports: [FormsModule, TokenSummaryBlockComponent, GlobalOrchestratorCardComponent],
+  imports: [FormsModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <section class="orch-feed" data-testid="orchestrator-feed">
-      <header class="orch-feed__head">
-        <div class="orch-feed__title-block">
-          <h2 class="orch-feed__title">Orchestrator activity</h2>
-          <p class="orch-feed__sub">{{ projectName() }} · {{ entries().length }} {{ entries().length === 1 ? 'entry' : 'entries' }}</p>
+    <section class="orch-chat" data-testid="orchestrator-feed">
+      <header class="orch-chat__head">
+        <div class="orch-chat__brand">
+          <span class="orch-chat__avatar">⚙</span>
+          <div>
+            <h2 class="orch-chat__title">Orchestrator</h2>
+            <p class="orch-chat__sub">Runbook · canonical session</p>
+          </div>
         </div>
-        <button class="orch-feed__refresh" (click)="refresh()" [disabled]="loading()" data-testid="orchestrator-refresh">
-          {{ loading() ? '…' : 'Refresh' }}
-        </button>
+        <div class="orch-chat__actions" aria-label="Chat actions">
+          <button class="orch-chat__icon" (click)="refresh()" [disabled]="loading()" data-testid="orchestrator-refresh" title="Refresh">
+            {{ loading() ? '…' : '↻' }}
+          </button>
+          <button class="orch-chat__icon" title="Session log">▤</button>
+          <button class="orch-chat__icon" title="Archive">▭</button>
+          <button class="orch-chat__icon" (click)="close.emit()" title="Close">×</button>
+        </div>
       </header>
+
+      <nav class="orch-chat__scope" aria-label="Orchestrator scope">
+        <button class="orch-chat__scope-btn orch-chat__scope-btn--active" type="button">▱ Project</button>
+        <button class="orch-chat__scope-btn" type="button">▦ Global</button>
+        <span class="orch-chat__memory">● memory v9 · fresh {{ memoryAgeLabel() }}</span>
+      </nav>
+
       @if (error()) {
-        <div class="orch-feed__error">{{ error() }}</div>
+        <div class="orch-chat__error">{{ error() }}</div>
       }
 
-      <app-global-orchestrator-card />
-
-      <app-token-summary-block [projectName]="projectName()" />
-
-      @if (entries().length === 0 && !loading() && !error()) {
-        <div class="orch-feed__empty">No orchestrator activity yet for this project.</div>
-      }
-      <ul class="orch-feed__list">
-        @for (entry of reversed(); track entry.ts + entry.summary) {
-          <li class="orch-feed__entry"
-              [class.orch-feed__entry--decision]="entry.kind === 'decision'"
-              [class.orch-feed__entry--action]="entry.kind === 'action'"
-              [class.orch-feed__entry--observation]="entry.kind === 'observation'"
-              [class.orch-feed__entry--intervention]="entry.kind === 'intervention'">
-            <p class="orch-feed__summary">{{ entry.summary }}</p>
-            <footer class="orch-feed__entry-head">
-              <span class="orch-feed__kind">{{ kindLabel(entry.kind) }}</span>
-              <span class="orch-feed__topic">{{ entry.topic }}</span>
-              <span class="orch-feed__ts">{{ formatTime(entry.ts) }}</span>
-              @if (entry.tokenUsage; as tu) {
-                <span class="orch-feed__tokens" [title]="tokenTooltip(tu)">
-                  {{ tu.model || '?' }} · ↑{{ tu.inputTokens }} ↓{{ tu.outputTokens }}
-                </span>
-              }
-            </footer>
-            @if (entry.reasoning) {
-              <details class="orch-feed__reasoning">
-                <summary>Why</summary>
-                <p>{{ entry.reasoning }}</p>
-              </details>
-            }
-            @if (entry.kind === 'decision' && entry.jobId) {
-              @if (overridingTs() === entry.ts) {
-                <div class="orch-feed__override-form">
-                  <textarea class="orch-feed__override-input"
-                            placeholder="Your direction. Will be sent as a Steer follow-up."
-                            [(ngModel)]="overrideDraft"
-                            data-testid="orchestrator-override-input"
-                            rows="3"></textarea>
-                  <div class="orch-feed__override-actions">
-                    <button class="orch-feed__override-cancel"
-                            (click)="cancelOverride()"
-                            [disabled]="submittingOverride()">Cancel</button>
-                    <button class="orch-feed__override-submit"
-                            (click)="submitOverride(entry)"
-                            [disabled]="submittingOverride() || !overrideDraft.trim()"
-                            data-testid="orchestrator-override-submit">
-                      {{ submittingOverride() ? 'Sending...' : 'Send override' }}
-                    </button>
-                  </div>
-                </div>
-              } @else {
-                <button class="orch-feed__override"
-                        (click)="startOverride(entry)"
-                        data-testid="orchestrator-override-start"
-                        title="Disagree with this decision? Send a Steer follow-up to the agent.">
-                  Override this decision
-                </button>
-              }
-            }
-          </li>
+      <main class="orch-chat__body">
+        @if (entries().length === 0 && !loading() && !error()) {
+          <div class="orch-chat__empty">
+            <span class="orch-chat__empty-icon">▤</span>
+            <p>No project chat events yet.</p>
+            <small>{{ projectName() }} · waiting for the canonical session</small>
+          </div>
         }
-      </ul>
+        @for (entry of reversed(); track entry.ts + entry.summary) {
+          @if (isEvent(entry)) {
+            <article class="orch-chat__event"
+                     [class.orch-chat__event--action]="entry.kind === 'action'"
+                     [class.orch-chat__event--observation]="entry.kind === 'observation'">
+              <span class="orch-chat__event-icon">{{ eventIcon(entry) }}</span>
+              <span>{{ entry.summary }}</span>
+              <time>{{ formatTime(entry.ts) }}</time>
+            </article>
+          } @else {
+            <article class="orch-chat__turn"
+                     [class.orch-chat__turn--user]="entry.kind === 'intervention'"
+                     [class.orch-chat__turn--orchestrator]="entry.kind !== 'intervention'">
+              <div class="orch-chat__person">
+                <span class="orch-chat__person-avatar">{{ avatarText(entry) }}</span>
+                <strong>{{ authorLabel(entry) }}</strong>
+                <time>{{ formatTime(entry.ts) }}</time>
+              </div>
+              <div class="orch-chat__bubble">
+                <p>{{ entry.summary }}</p>
+                @if (entry.reasoning) {
+                  <details class="orch-chat__details">
+                    <summary>Reasoning</summary>
+                    <p>{{ entry.reasoning }}</p>
+                  </details>
+                }
+                <div class="orch-chat__chips">
+                  <span class="orch-chat__chip"># {{ entry.topic || kindLabel(entry.kind) }}</span>
+                  @if (entry.jobId) {
+                    <span class="orch-chat__chip">task {{ entry.jobId }}</span>
+                  }
+                  @if (entry.tokenUsage; as tu) {
+                    <span class="orch-chat__chip" [title]="tokenTooltip(tu)">
+                      {{ tu.model || 'model' }} · ↑{{ tu.inputTokens }} ↓{{ tu.outputTokens }}
+                    </span>
+                  }
+                </div>
+              </div>
+              @if (entry.kind === 'decision' && entry.jobId) {
+                @if (overridingTs() === entry.ts) {
+                  <div class="orch-chat__override-form">
+                    <textarea class="orch-chat__override-input"
+                              placeholder="Your direction. Will be sent as a Steer follow-up."
+                              [(ngModel)]="overrideDraft"
+                              data-testid="orchestrator-override-input"
+                              rows="3"></textarea>
+                    <div class="orch-chat__override-actions">
+                      <button class="orch-chat__mini-btn"
+                              (click)="cancelOverride()"
+                              [disabled]="submittingOverride()">Cancel</button>
+                      <button class="orch-chat__mini-btn orch-chat__mini-btn--primary"
+                              (click)="submitOverride(entry)"
+                              [disabled]="submittingOverride() || !overrideDraft.trim()"
+                              data-testid="orchestrator-override-submit">
+                        {{ submittingOverride() ? 'Sending...' : 'Send override' }}
+                      </button>
+                    </div>
+                  </div>
+                } @else {
+                  <button class="orch-chat__override"
+                          (click)="startOverride(entry)"
+                          data-testid="orchestrator-override-start"
+                          title="Disagree with this decision? Send a Steer follow-up to the agent.">
+                    Steer this decision
+                  </button>
+                }
+              }
+            </article>
+          }
+        }
+      </main>
+
+      <footer class="orch-chat__composer">
+        <div class="orch-chat__composer-tools">
+          <button type="button">☰ #</button>
+          <button type="button">⇄ thread</button>
+          <span>routing: Codex (Claude paused)</span>
+        </div>
+        <textarea [(ngModel)]="composerDraft"
+                  placeholder="Ask the project orchestrator..."
+                  rows="3"
+                  data-testid="orchestrator-composer"></textarea>
+        <div class="orch-chat__composer-bottom">
+          <span>↵ send · / command</span>
+          <button class="orch-chat__task-btn" type="button">/task</button>
+          <button class="orch-chat__send" type="button" [disabled]="!composerDraft.trim()">↗ Send</button>
+        </div>
+      </footer>
     </section>
   `,
   styles: [`
-    /*
-     * Visual redesign: drop the dense gear-icon + uppercase header in
-     * favor of a stacked title block with a quiet subtitle. Less
-     * "control panel", more "page". Width is also widened from 880px
-     * so the longer entry summaries breathe.
-     */
-    :host { display: block; padding: 24px 28px; max-width: 920px; margin: 0 auto; }
-    .orch-feed__head {
-      display: flex;
-      align-items: flex-start;
-      gap: 16px;
-      margin-bottom: 24px;
-      padding-bottom: 12px;
-      border-bottom: 1px solid rgba(255,255,255,0.06);
+    :host {
+      display: block;
+      height: 100%;
+      color: #1d2430;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     }
-    .orch-feed__title-block { flex: 1; }
-    .orch-feed__title {
+    button,
+    textarea {
+      font: inherit;
+    }
+    .orch-chat {
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr) auto;
+      height: 100%;
+      background: #f7f5f2;
+    }
+    .orch-chat__head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 26px 28px 16px;
+      border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+    }
+    .orch-chat__brand {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      min-width: 0;
+    }
+    .orch-chat__avatar {
+      display: inline-grid;
+      place-items: center;
+      width: 40px;
+      height: 40px;
+      border-radius: 11px;
+      background: #f26a3d;
+      color: #101827;
+      font-size: 19px;
+      font-weight: 900;
+      flex: 0 0 auto;
+    }
+    .orch-chat__title {
       margin: 0;
-      color: #f1f5f9;
-      font-size: 1.35rem;
-      font-weight: 600;
+      color: #0f172a;
+      font-size: 21px;
+      line-height: 1.1;
+      font-weight: 760;
       letter-spacing: 0;
     }
-    .orch-feed__sub {
+    .orch-chat__sub {
       margin: 4px 0 0;
-      color: rgba(255,255,255,0.50);
-      font-size: 0.86rem;
+      color: #9ca3af;
+      font-size: 15px;
+      line-height: 1.25;
     }
-    .orch-feed__refresh {
-      margin-left: auto;
-      background: rgba(255,255,255,0.06);
-      color: #cdd6f4;
-      border: 1px solid rgba(255,255,255,0.12);
-      border-radius: 6px;
-      padding: 4px 10px;
-      font-size: 0.78rem;
-      cursor: pointer;
-    }
-    .orch-feed__refresh:hover:not(:disabled) { background: rgba(255,255,255,0.1); }
-    .orch-feed__refresh:disabled { opacity: 0.5; cursor: progress; }
-    .orch-feed__error {
-      color: #fda4af;
-      background: rgba(244, 63, 94, 0.10);
-      border: 1px solid rgba(244, 63, 94, 0.25);
-      padding: 8px 10px;
-      border-radius: 6px;
-      margin-bottom: 12px;
-    }
-    .orch-feed__empty {
-      color: rgba(255,255,255,0.5);
-      font-style: italic;
-      padding: 24px 0;
-      text-align: center;
-    }
-    /*
-     * Entry layout: drop the boxy card treatment in favor of a left
-     * accent line + generous gap. The summary is the headline (1rem,
-     * relaxed line height); kind / topic / time / tokens collapse into
-     * a single quiet line below it. Closer to a feed of human notes,
-     * further from the previous "control panel" feel.
-     */
-    .orch-feed__list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 22px; }
-    .orch-feed__entry {
-      padding: 0 0 0 14px;
-      border-left: 2px solid rgba(255,255,255,0.10);
-      background: none;
-    }
-    .orch-feed__entry--decision { border-left-color: rgba(196,181,253,0.55); }
-    .orch-feed__entry--action { border-left-color: rgba(125,211,252,0.55); }
-    .orch-feed__entry--observation { border-left-color: rgba(148,163,184,0.40); }
-    .orch-feed__entry--intervention { border-left-color: rgba(249,226,175,0.65); }
-    .orch-feed__summary {
-      color: #f1f5f9;
-      margin: 0 0 6px;
-      font-size: 1.0rem;
-      line-height: 1.55;
-    }
-    .orch-feed__entry-head {
+    .orch-chat__actions {
       display: flex;
-      align-items: baseline;
-      gap: 12px;
-      font-size: 0.78rem;
-      color: rgba(255,255,255,0.55);
-      flex-wrap: wrap;
+      align-items: center;
+      gap: 18px;
+      color: #475569;
     }
-    .orch-feed__kind { font-weight: 600; color: #cbd5e1; }
-    .orch-feed__topic { padding: 1px 6px; border-radius: 3px; background: rgba(255,255,255,0.05); font-family: var(--font-mono, monospace); font-size: 0.74rem; }
-    .orch-feed__ts { font-variant-numeric: tabular-nums; }
-    .orch-feed__tokens {
-      margin-left: auto;
-      font-family: var(--font-mono, monospace);
-      font-size: 0.74rem;
-      color: rgba(255,255,255,0.45);
-      cursor: help;
-    }
-    .orch-feed__reasoning summary {
-      cursor: pointer;
-      color: rgba(255,255,255,0.55);
-      font-size: 0.78rem;
-      user-select: none;
-    }
-    .orch-feed__reasoning summary:hover { color: #cdd6f4; }
-    .orch-feed__reasoning p { margin: 6px 0 0; color: rgba(255,255,255,0.75); font-size: 0.84rem; }
-    /*
-     * Override controls. The plain "Override this decision" link sits
-     * unobtrusively under the summary; clicking it expands an inline
-     * textarea + Send/Cancel pair. Loud styling on Send so the user is
-     * sure they are taking an action that goes back to the agent.
-     */
-    .orch-feed__override {
-      margin-top: 6px;
+    .orch-chat__icon {
+      display: inline-grid;
+      place-items: center;
+      width: 28px;
+      height: 28px;
+      border: 0;
+      border-radius: 8px;
       background: transparent;
-      border: 1px dashed rgba(249, 226, 175, 0.35);
-      color: #fcd34d;
-      border-radius: 6px;
-      padding: 4px 10px;
-      font-size: 0.78rem;
+      color: #334155;
+      cursor: pointer;
+      font-size: 20px;
+      line-height: 1;
+    }
+    .orch-chat__icon:hover:not(:disabled) {
+      background: rgba(15, 23, 42, 0.06);
+    }
+    .orch-chat__icon:disabled {
+      opacity: 0.45;
+      cursor: progress;
+    }
+    .orch-chat__scope {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 22px;
+      border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+      background: rgba(255, 255, 255, 0.38);
+    }
+    .orch-chat__scope-btn {
+      min-height: 31px;
+      padding: 5px 13px;
+      border: 1px solid transparent;
+      border-radius: 7px;
+      background: transparent;
+      color: #64748b;
       cursor: pointer;
     }
-    .orch-feed__override:hover { background: rgba(249, 226, 175, 0.08); }
-    .orch-feed__override-form {
-      margin-top: 8px;
+    .orch-chat__scope-btn--active {
+      border-color: rgba(242, 106, 61, 0.22);
+      background: rgba(242, 106, 61, 0.08);
+      color: #172033;
+    }
+    .orch-chat__memory {
+      margin-left: auto;
+      color: #9ca3af;
+      font-size: 15px;
+      white-space: nowrap;
+    }
+    .orch-chat__memory::first-letter {
+      color: #10b981;
+    }
+    .orch-chat__error {
+      margin: 10px 22px 0;
+      padding: 9px 11px;
+      border: 1px solid rgba(248, 113, 113, 0.30);
+      border-radius: 12px;
+      background: rgba(254, 226, 226, 0.80);
+      color: #991b1b;
+    }
+    .orch-chat__body {
+      min-height: 0;
+      overflow-y: auto;
+      padding: 20px 20px 18px;
       display: flex;
       flex-direction: column;
-      gap: 6px;
-      padding: 8px;
-      border: 1px solid rgba(249, 226, 175, 0.40);
-      border-radius: 8px;
-      background: rgba(249, 226, 175, 0.06);
+      gap: 14px;
+      scrollbar-color: rgba(148, 163, 184, 0.7) transparent;
     }
-    .orch-feed__override-input {
-      width: 100%;
-      box-sizing: border-box;
-      background: rgba(0,0,0,0.30);
-      color: #cdd6f4;
-      border: 1px solid rgba(255,255,255,0.10);
-      border-radius: 6px;
-      padding: 6px 8px;
-      font-family: inherit;
-      font-size: 0.85rem;
-      resize: vertical;
-      min-height: 60px;
+    .orch-chat__empty {
+      margin: auto;
+      text-align: center;
+      color: #94a3b8;
     }
-    .orch-feed__override-input:focus { outline: none; border-color: rgba(249, 226, 175, 0.60); }
-    .orch-feed__override-actions { display: flex; gap: 8px; justify-content: flex-end; }
-    .orch-feed__override-cancel,
-    .orch-feed__override-submit {
-      border-radius: 6px;
-      padding: 4px 12px;
-      font-size: 0.80rem;
-      cursor: pointer;
-      border: 1px solid transparent;
+    .orch-chat__empty-icon {
+      display: inline-grid;
+      place-items: center;
+      width: 42px;
+      height: 42px;
+      margin-bottom: 8px;
+      border-radius: 50%;
+      background: rgba(15, 23, 42, 0.05);
+      color: #64748b;
     }
-    .orch-feed__override-cancel {
-      background: rgba(255,255,255,0.06);
-      color: #cdd6f4;
-      border-color: rgba(255,255,255,0.12);
-    }
-    .orch-feed__override-cancel:hover:not(:disabled) { background: rgba(255,255,255,0.10); }
-    .orch-feed__override-submit {
-      background: rgba(249, 226, 175, 0.20);
-      color: #1e1e2e;
-      border-color: rgba(249, 226, 175, 0.50);
+    .orch-chat__empty p {
+      margin: 0;
+      color: #475569;
       font-weight: 700;
     }
-    .orch-feed__override-submit:hover:not(:disabled) { background: rgba(249, 226, 175, 0.35); }
-    .orch-feed__override-submit:disabled,
-    .orch-feed__override-cancel:disabled { opacity: 0.5; cursor: not-allowed; }
+    .orch-chat__empty small {
+      display: block;
+      margin-top: 4px;
+      color: #94a3b8;
+    }
+    .orch-chat__event {
+      display: grid;
+      grid-template-columns: 18px minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      padding: 1px 10px;
+      color: #475569;
+      font-size: 15px;
+    }
+    .orch-chat__event-icon {
+      color: #d97706;
+      font-weight: 900;
+    }
+    .orch-chat__event--observation .orch-chat__event-icon {
+      color: #0f7df2;
+    }
+    .orch-chat__event time,
+    .orch-chat__person time {
+      color: #a8a29e;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+    .orch-chat__turn {
+      display: grid;
+      gap: 7px;
+    }
+    .orch-chat__person {
+      display: grid;
+      grid-template-columns: 36px minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 9px;
+      color: #0f172a;
+    }
+    .orch-chat__person-avatar {
+      display: inline-grid;
+      place-items: center;
+      width: 31px;
+      height: 31px;
+      border-radius: 50%;
+      background: #0f7df2;
+      color: #fff;
+      font-size: 12px;
+      font-weight: 800;
+    }
+    .orch-chat__turn--user .orch-chat__person-avatar {
+      background: #df7b54;
+      color: #111827;
+    }
+    .orch-chat__turn--orchestrator .orch-chat__person-avatar {
+      background: #d777d4;
+    }
+    .orch-chat__bubble {
+      margin-left: 45px;
+      padding: 14px 18px;
+      border: 1px solid rgba(15, 125, 242, 0.14);
+      border-radius: 11px;
+      background: #eef3f8;
+      color: #111827;
+      box-shadow: 0 1px 0 rgba(15, 23, 42, 0.03);
+    }
+    .orch-chat__turn--user .orch-chat__bubble {
+      border-color: rgba(242, 106, 61, 0.18);
+      background: #fff1ec;
+    }
+    .orch-chat__turn--orchestrator .orch-chat__bubble {
+      border-color: rgba(209, 101, 207, 0.18);
+      background: #fff7ff;
+    }
+    .orch-chat__bubble p {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+    }
+    .orch-chat__details {
+      margin-top: 10px;
+      color: #475569;
+      font-size: 14px;
+    }
+    .orch-chat__details summary {
+      cursor: pointer;
+      font-weight: 700;
+    }
+    .orch-chat__details p {
+      margin-top: 6px;
+      font-size: 14px;
+      color: #475569;
+    }
+    .orch-chat__chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin-top: 12px;
+    }
+    .orch-chat__chip {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 2px 8px;
+      border: 1px solid rgba(15, 23, 42, 0.08);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.52);
+      color: #78716c;
+      font-size: 14px;
+    }
+    .orch-chat__override {
+      justify-self: start;
+      margin-left: 45px;
+      border: 1px solid rgba(242, 106, 61, 0.18);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.72);
+      color: #f26a3d;
+      padding: 4px 10px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .orch-chat__override:hover {
+      background: #fff7ed;
+    }
+    .orch-chat__override-form {
+      margin-left: 45px;
+      padding: 10px;
+      border: 1px solid rgba(242, 106, 61, 0.22);
+      border-radius: 12px;
+      background: #fff7ed;
+    }
+    .orch-chat__override-input,
+    .orch-chat__composer textarea {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid rgba(15, 23, 42, 0.08);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.84);
+      color: #111827;
+      padding: 9px 11px;
+      font-family: inherit;
+      font-size: 14px;
+      resize: vertical;
+    }
+    .orch-chat__override-input:focus,
+    .orch-chat__composer textarea:focus {
+      outline: none;
+      border-color: rgba(242, 106, 61, 0.40);
+      box-shadow: 0 0 0 3px rgba(242, 106, 61, 0.10);
+    }
+    .orch-chat__override-actions {
+      display: flex;
+      gap: 8px;
+      justify-content: flex-end;
+      margin-top: 8px;
+    }
+    .orch-chat__mini-btn,
+    .orch-chat__task-btn,
+    .orch-chat__send,
+    .orch-chat__composer-tools button {
+      border: 1px solid rgba(15, 23, 42, 0.08);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.72);
+      color: #64748b;
+      padding: 5px 10px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    .orch-chat__mini-btn--primary,
+    .orch-chat__send {
+      background: #f26a3d;
+      border-color: #f26a3d;
+      color: #fff;
+      font-weight: 700;
+    }
+    .orch-chat__mini-btn:disabled,
+    .orch-chat__send:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+    }
+    .orch-chat__composer {
+      padding: 10px 20px 16px;
+      border-top: 1px solid rgba(15, 23, 42, 0.07);
+      background: rgba(247, 245, 242, 0.94);
+    }
+    .orch-chat__composer-tools,
+    .orch-chat__composer-bottom {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      color: #a8a29e;
+      font-size: 14px;
+    }
+    .orch-chat__composer-tools {
+      margin-bottom: 8px;
+    }
+    .orch-chat__composer-tools span {
+      margin-left: auto;
+    }
+    .orch-chat__composer textarea {
+      min-height: 82px;
+      max-height: 130px;
+      font-size: 18px;
+    }
+    .orch-chat__composer-bottom {
+      margin-top: 8px;
+    }
+    .orch-chat__task-btn {
+      margin-left: auto;
+      color: #111827;
+    }
+    @media (max-width: 720px) {
+      .orch-chat__head {
+        padding: 18px 16px 12px;
+      }
+      .orch-chat__actions {
+        gap: 6px;
+      }
+      .orch-chat__scope {
+        padding: 8px 14px;
+        flex-wrap: wrap;
+      }
+      .orch-chat__memory {
+        width: 100%;
+        margin-left: 0;
+      }
+      .orch-chat__bubble,
+      .orch-chat__override,
+      .orch-chat__override-form {
+        margin-left: 0;
+      }
+      .orch-chat__bubble p,
+      .orch-chat__composer textarea {
+        font-size: 16px;
+      }
+    }
   `]
 })
 export class OrchestratorFeedComponent implements OnInit, OnDestroy {
   readonly projectName = input.required<string>();
+  readonly close = output<void>();
 
   private readonly jobService = inject(JobService);
   readonly entries = signal<OrchestratorLogEntry[]>([]);
@@ -287,6 +552,7 @@ export class OrchestratorFeedComponent implements OnInit, OnDestroy {
   readonly submittingOverride = signal(false);
   /** Two-way bound textarea draft. Cleared after each submit / cancel. */
   overrideDraft = '';
+  composerDraft = '';
   private pollTimer: ReturnType<typeof setInterval> | null = null;
 
   /** UI shows newest entries first; the on-disk log is oldest first. */
@@ -326,6 +592,34 @@ export class OrchestratorFeedComponent implements OnInit, OnDestroy {
       case 'intervention': return 'Intervention';
       default: return kind;
     }
+  }
+
+  isEvent(entry: OrchestratorLogEntry): boolean {
+    return entry.kind === 'action' || entry.kind === 'observation';
+  }
+
+  eventIcon(entry: OrchestratorLogEntry): string {
+    return entry.kind === 'action' ? '◔' : '▤';
+  }
+
+  authorLabel(entry: OrchestratorLogEntry): string {
+    return entry.kind === 'intervention' ? 'You' : 'Orchestrator';
+  }
+
+  avatarText(entry: OrchestratorLogEntry): string {
+    return entry.kind === 'intervention' ? 'YO' : 'OR';
+  }
+
+  memoryAgeLabel(): string {
+    const newest = this.entries()
+      .map(e => new Date(e.ts).getTime())
+      .filter(t => !Number.isNaN(t))
+      .sort((a, b) => b - a)[0];
+    if (!newest) return 'now';
+    const minutes = Math.max(0, Math.round((Date.now() - newest) / 60_000));
+    if (minutes < 1) return 'now';
+    if (minutes < 60) return `${minutes}m`;
+    return `${Math.round(minutes / 60)}h`;
   }
 
   formatTime(iso: string): string {

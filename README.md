@@ -129,6 +129,8 @@ The goal is not to keep a process alive forever. The goal is to keep **context**
 
 The orchestrator chat may later control the app through typed actions such as creating task drafts, refreshing memory, opening a job, or continuing a task. State-changing or quota-spending actions should stay visible and auditable. Forks are allowed for research or speculative planning, but the default project chat talks to the canonical project orchestrator so the user has one stable counterpart per watched project.
 
+The redesign target is captured in [docs/orchestrator-chat-redesign-handoff.md](docs/orchestrator-chat-redesign-handoff.md): the project conversation is the primary surface, search and context are first-class, and technical session continuity is rendered as compact expandable events instead of a top-level session list.
+
 ---
 
 ## Portable skills, not CLI-local silos

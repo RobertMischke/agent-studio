@@ -109,12 +109,17 @@ Planned capabilities:
 
 - Optional pinned or collapsible Orchestrator Chat window.
 - Scope selector for Global vs current Project orchestrator.
+- Conversation-first timeline where technical session continuity appears as compact, expandable event bubbles instead of primary rows.
 - Chat log loaded from the orchestrator event log so reloads preserve the conversation.
 - Context view showing model, CLI, session id, boot source, last activity, memory snapshot, and recent summarized job evidence.
 - Project memory snapshots built from README, ROADMAP, AGENTS, architecture decisions, job results, open tasks, recent decisions, and review outcomes.
+- Project search across chat turns, orchestrator decisions, task prompts, status protocols, commits, files, screenshots, result artifacts, project docs, and memory snapshots.
+- Search results that can be opened, cited, or attached to the next chat message as explicit context.
 - Manual "Refresh memory" action before automatic memory maintenance.
 - Typed app actions from chat, starting with safe actions such as create task draft, open job detail, refresh memory, and summarize recent results.
 - Explicit fork semantics for research or speculative planning. The canonical project orchestrator remains the default chat partner.
+
+The redesign handoff is [docs/orchestrator-chat-redesign-handoff.md](docs/orchestrator-chat-redesign-handoff.md). The load-bearing UI boundary is archived in [ADR-0012](docs/architecture-decisions.md#adr-0012---session-mechanics-render-as-timeline-events-not-primary-chat-objects-2026-05-17): session mechanics are audit events, not the primary chat object.
 
 ### Focused UX
 

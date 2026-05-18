@@ -244,3 +244,24 @@ Numbering is monotonic. Never reuse a number; never silently delete history.
 **Implementation pointers.** [docs/orchestrator-chat.md](orchestrator-chat.md) for product shape, memory model, first slice, and open questions; [README.md](../README.md) "Persistent orchestrator chat"; [ROADMAP.md](../ROADMAP.md) "Persistent Orchestrator Chat"; [docs/design-principles.md](design-principles.md) "The orchestrator has visible memory"; existing session primitives in [backend/Services/Runner/OrchestratorSession.cs](../backend/Services/Runner/OrchestratorSession.cs), [backend/Services/Runner/GlobalOrchestratorSession.cs](../backend/Services/Runner/GlobalOrchestratorSession.cs), and [backend/Services/Runner/OrchestratorLog.cs](../backend/Services/Runner/OrchestratorLog.cs).
 
 **Status.** Accepted.
+
+---
+
+## ADR-0012 - Session mechanics render as timeline events, not primary chat objects (2026-05-17)
+
+**Decision.** The Orchestrator Chat UI treats CLI session continuity mechanics as compact, expandable timeline events attached to the conversation, while the primary chat object remains the canonical Global or Project conversation.
+
+**Context.** The current chat panel can expose many rows such as "You steered; Orchestrator responded". Those rows are valuable audit evidence, but when shown as the main surface they make the product feel like a session registry instead of a continuous project conversation. The user wants a durable chat on the project with strong search and context. Session chains, recoveries, steering handoffs, and auto-loop decisions should be visible, but visually subordinate.
+
+**Non-goals.**
+- Hiding session evidence. Every event remains expandable and traceable to raw logs or event records.
+- Treating each technical session or recovery as a separate top-level conversation.
+- Moving continuity evidence out of the product into backend logs only.
+- Collapsing real semantic content. User requests, orchestrator answers, agent replies, warnings, and action proposals remain messages.
+- Building a separate "session view" before the conversation-first surface exists. A technical view may come later, but it is not the primary entry point.
+
+**Reasoning style.** Separate meaning from transport. The user cares about the project story: intent, decisions, evidence, search hits, and next actions. Session ids, recovery markers, and steering labels are still important, but they explain how continuity was maintained. They should behave like audit annotations that can be expanded when needed, not like the main narrative.
+
+**Implementation pointers.** [docs/orchestrator-chat-redesign-handoff.md](orchestrator-chat-redesign-handoff.md) "Session Events Become Bubbles"; [docs/orchestrator-chat.md](orchestrator-chat.md) "Session Events Versus Conversation"; existing session-event polling in [frontend/src/app/components/job-detail/session-events-poll.service.ts](../frontend/src/app/components/job-detail/session-events-poll.service.ts); existing protocol pane chat and session chip in [frontend/src/app/components/job-detail/protocol-pane/protocol-pane.component.ts](../frontend/src/app/components/job-detail/protocol-pane/protocol-pane.component.ts).
+
+**Status.** Accepted.

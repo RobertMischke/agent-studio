@@ -51,8 +51,11 @@ import { projectIdentity } from './services/project-identity.util';
           <button class="btn" (click)="usageSheet.toggle()" title="CLI sessions">
             🪙 Usage
           </button>
-          <button class="btn" (click)="toggleOrchFeed()" [title]="orchFeedTooltip()">
-            📜 Feed
+          <button class="btn btn--project-chat"
+                  data-testid="open-orchestrator-project-chat"
+                  (click)="toggleOrchFeed()"
+                  [title]="orchFeedTooltip()">
+            ▣ Project Chat
           </button>
           <button class="btn btn--create" (click)="openCreate()">
             ＋ Add Task
@@ -160,9 +163,8 @@ import { projectIdentity } from './services/project-identity.util';
 
       @if (orchFeedProject(); as proj) {
         <div class="overlay" (click)="closeOrchFeed()">
-          <div class="overlay__panel" (click)="$event.stopPropagation()">
-            <button class="overlay__close" (click)="closeOrchFeed()" title="Close">×</button>
-            <app-orchestrator-feed [projectName]="proj" />
+          <div class="overlay__panel overlay__panel--orchestrator" (click)="$event.stopPropagation()">
+            <app-orchestrator-feed [projectName]="proj" (close)="closeOrchFeed()" />
           </div>
         </div>
       }
@@ -447,6 +449,16 @@ import { projectIdentity } from './services/project-identity.util';
       box-shadow: 0 2px 8px rgba(139,92,246,0.30);
     }
     .btn--create:hover { background: rgba(139,92,246,0.6); border-color: rgba(196,181,253,0.95); }
+    .btn--project-chat {
+      background: rgba(255, 107, 74, 0.16);
+      border-color: rgba(255, 107, 74, 0.55);
+      color: #fed7c7;
+      font-weight: 700;
+    }
+    .btn--project-chat:hover {
+      background: rgba(255, 107, 74, 0.24);
+      border-color: rgba(255, 107, 74, 0.75);
+    }
     .btn--primary {
       background: #6366f1;
       border-color: #818cf8;
@@ -471,6 +483,16 @@ import { projectIdentity } from './services/project-identity.util';
       width: min(960px, 94vw);
       max-height: 90vh;
       overflow-y: auto;
+    }
+    .overlay__panel--orchestrator {
+      width: min(640px, 96vw);
+      height: min(940px, 94vh);
+      max-height: 94vh;
+      overflow: hidden;
+      border: 1px solid rgba(15, 23, 42, 0.10);
+      border-radius: 26px;
+      background: #f7f5f2;
+      box-shadow: 0 28px 80px rgba(0,0,0,0.45);
     }
     .overlay__close {
       position: absolute;

@@ -24,6 +24,7 @@ public static class EndpointMapping
 
         app.MapRunnerEndpoints();
         app.MapProjectSettingsEndpoints();
+        app.MapFilesystemLayerEndpoints();
         app.MapSystemEndpoints();
         app.MapCliEndpoints();
     }
