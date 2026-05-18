@@ -252,12 +252,12 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  border-top: 1px dashed rgba(255, 255, 255, 0.12);
+  border-top: 1px dashed var(--studio-border);
   padding-top: 10px;
 }
 
 .prompt-history__title {
-  color: #cdd6f4;
+  color: var(--studio-fg-strong);
   font-weight: 700;
   font-size: 0.85rem;
   letter-spacing: 0.04em;
@@ -265,14 +265,14 @@
 }
 
 .prompt-history__hint {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--studio-fg-dim);
   font-size: 0.75rem;
 }
 
 .prompt-history__entry {
   border-radius: 10px;
-  border: 1px solid rgba(166, 227, 161, 0.28);
-  background: rgba(64, 160, 43, 0.08);
+  border: 1px solid color-mix(in srgb, var(--severity-pass) 28%, transparent);
+  background: color-mix(in srgb, var(--severity-pass) 8%, transparent);
   padding: 10px 14px;
 }
 
@@ -288,13 +288,13 @@
   font-size: 0.7rem;
   padding: 2px 6px;
   border-radius: 4px;
-  background: rgba(166, 227, 161, 0.18);
+  background: color-mix(in srgb, var(--severity-pass) 18%, transparent);
   color: var(--severity-pass);
   letter-spacing: 0.04em;
 }
 
 .prompt-history__time {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--studio-fg-dim);
   font-size: 0.7rem;
   font-variant-numeric: tabular-nums;
 }
@@ -315,8 +315,8 @@
   margin-bottom: 14px;
   padding: 8px 12px;
   border-radius: 8px;
-  border: 1px dashed rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed var(--studio-border);
+  background: var(--studio-bg-hover);
 }
 
 .title-history__head {
@@ -326,7 +326,7 @@
 }
 
 .title-history__title {
-  color: #cdd6f4;
+  color: var(--studio-fg-strong);
   font-weight: 700;
   font-size: 0.75rem;
   letter-spacing: 0.04em;
@@ -334,7 +334,7 @@
 }
 
 .title-history__hint {
-  color: rgba(255, 255, 255, 0.5);
+  color: var(--studio-fg-dim);
   font-size: 0.7rem;
 }
 
@@ -353,25 +353,25 @@
   align-items: baseline;
   gap: 6px;
   font-size: 0.78rem;
-  color: rgba(255, 255, 255, 0.78);
+  color: var(--studio-fg);
 }
 
 .title-history__time {
-  color: rgba(255, 255, 255, 0.45);
+  color: var(--studio-fg-muted);
   font-size: 0.7rem;
   font-variant-numeric: tabular-nums;
   min-width: 11ch;
 }
 
 .title-history__from {
-  color: rgba(255, 255, 255, 0.55);
+  color: var(--studio-fg-dim);
   text-decoration: line-through;
 }
 
 .title-history__arrow {
-  color: rgba(255, 255, 255, 0.4);
+  color: var(--studio-fg-muted);
 }
 
 .title-history__to {
-  color: #cdd6f4;
+  color: var(--studio-fg-strong);
 }
