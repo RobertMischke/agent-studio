@@ -49,6 +49,8 @@ import { StudioIconComponent } from '../studio-icon/studio-icon.component';
 export class DialogComponent {
   @Input() eyebrow: string | null = null;
   @Input() title: string = '';
+  /** Optional one-line caption under the title. */
+  @Input() subtitle: string | null = null;
   /** ARIA role — `alertdialog` for confirms/errors, `dialog` for forms. */
   @Input() role: 'dialog' | 'alertdialog' = 'dialog';
   /** Optional width override (px). Default 520. */

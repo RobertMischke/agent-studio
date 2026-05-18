@@ -4,6 +4,7 @@ import { DevToolsService, E2EJob, DeleteE2EReport } from '../../../services/dev-
 import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
 
 import { TooltipDirective } from '../../../components/tooltip';
+import { DialogComponent } from '../../../components/dialog/dialog.component';
 type Phase = 'loading' | 'list' | 'deleting' | 'report' | 'error';
 
 /**
@@ -18,7 +19,7 @@ type Phase = 'loading' | 'list' | 'deleting' | 'report' | 'error';
 @Component({
   selector: 'app-e2e-cleanup-dialog',
   standalone: true,
-  imports: [FormsModule, TooltipDirective],
+  imports: [FormsModule, TooltipDirective, DialogComponent],
   templateUrl: './e2e-cleanup-dialog.component.html',
   styleUrl: './e2e-cleanup-dialog.component.scss'
 })

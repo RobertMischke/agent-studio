@@ -71,6 +71,12 @@
   white-space: nowrap;
 }
 
+.dialog__subtitle {
+  font-size: 11px;
+  color: var(--studio-fg-muted);
+  line-height: 1.4;
+}
+
 .dialog__close {
   @include m.icon-button(26px);
   flex-shrink: 0;

@@ -17,6 +17,9 @@
           <span class="dialog__eyebrow">{{ eyebrow }}</span>
         }
         <h2 class="dialog__title">{{ title }}</h2>
+        @if (subtitle) {
+          <span class="dialog__subtitle">{{ subtitle }}</span>
+        }
       </div>
       @if (closable) {
         <button type="button"
