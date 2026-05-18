@@ -5,6 +5,7 @@ import type { CliOutputLine, CliType } from '../../../models/job.model';
 import type { CliSessionInfo, CliUsageProjectGroup, CliUsageReport, CliUsageSection } from '../../../features/cli';
 
 import { TooltipDirective } from '../../../components/tooltip';
+import { SidesheetComponent } from '../../../components/sidesheet/sidesheet.component';
 interface SelectedSession {
   cliType: CliType;
   projectName: string;
@@ -27,7 +28,7 @@ interface SelectedSession {
 @Component({
   selector: 'app-cli-usage-sheet',
   standalone: true,
-  imports: [QuotaStripComponent, TooltipDirective],
+  imports: [QuotaStripComponent, TooltipDirective, SidesheetComponent],
   templateUrl: './cli-usage-sheet.html',
   styleUrl: './cli-usage-sheet.scss',
   host: {

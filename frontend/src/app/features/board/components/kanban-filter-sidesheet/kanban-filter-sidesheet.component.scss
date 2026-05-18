@@ -1,3 +1,10 @@
+/*
+ * Outer host owns the slide-in animation. The inner <app-sidesheet>
+ * owns the chrome (background, border, header, body grid, theme
+ * tokens). Header/title/close SCSS deleted in the migration to the
+ * shared skeleton — see docs/frontend-scss-quality-eval-2026-05-17.md
+ * Tier 1.3a.
+ */
 :host {
   display: block;
   width: 0;
@@ -6,54 +13,6 @@
   flex: 0 0 auto;
 }
 :host(.is-open) { width: min(320px, 92vw); }
-
-.sheet {
-  width: min(320px, 92vw);
-  height: 100%;
-  background: #11111b;
-  border-left: 1px solid rgba(255,255,255,0.08);
-  display: flex;
-  flex-direction: column;
-  color: #e2e8f0;
-  overflow-y: auto;
-}
-.sheet__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  padding: 12px 14px 10px;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
-  background:
-    radial-gradient(circle at top left, rgba(99,102,241,0.14), transparent 60%),
-    rgba(255,255,255,0.02);
-  position: sticky;
-  top: 0;
-  z-index: 2;
-}
-.sheet__title-block { display: flex; flex-direction: column; gap: 2px; }
-.sheet__eyebrow {
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: #93c5fd;
-  font-weight: 700;
-}
-.sheet__title {
-  margin: 0;
-  font-size: 14px;
-  color: #f8fafc;
-  font-weight: 600;
-}
-.sheet__close {
-  background: rgba(255,255,255,0.06);
-  border: 0;
-  color: #cbd5e1;
-  width: 26px; height: 26px;
-  border-radius: 999px;
-  cursor: pointer;
-  font-size: 13px;
-}
-.sheet__close:hover { background: rgba(255,255,255,0.12); }
 
 .sheet__section {
   padding: 12px 14px;

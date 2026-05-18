@@ -9,7 +9,13 @@
         <span class="sidesheet__eyebrow">{{ eyebrow }}</span>
       }
       <h2 class="sidesheet__title">{{ title }}</h2>
+      @if (subtitle) {
+        <span class="sidesheet__subtitle">{{ subtitle }}</span>
+      }
     </div>
+    <!-- Header actions slot — callers project project pickers,
+         secondary buttons, etc. between title and close. -->
+    <ng-content select="[header-actions]"></ng-content>
     @if (closable) {
       <button type="button"
               class="sidesheet__close"

@@ -22,6 +22,7 @@ import { ChatEvent, ChatMessage, ChatSubmitEvent } from '../../../../components/
 import { ProjectChatListComponent } from '../../../project-chat/components/project-chat-list/project-chat-list.component';
 
 import { TooltipDirective } from '../../../../components/tooltip';
+import { SidesheetComponent } from '../../../../components/sidesheet/sidesheet.component';
 /**
  * Right-hand side sheet that hosts the orchestrator chat. Shell follows
  * the same flex-collapse pattern as `cli-usage-sheet` (host width animates
@@ -44,7 +45,8 @@ import { TooltipDirective } from '../../../../components/tooltip';
   imports: [
     ChatComponent,
     ProjectChatListComponent,
-    TooltipDirective
+    TooltipDirective,
+    SidesheetComponent
   ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './orchestrator-side-sheet.component.html',

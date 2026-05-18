@@ -67,6 +67,12 @@
   white-space: nowrap;
 }
 
+.sidesheet__subtitle {
+  font-size: 11px;
+  color: var(--studio-fg-muted);
+  line-height: 1.4;
+}
+
 .sidesheet__close {
   @include m.icon-button(26px);
   flex-shrink: 0;

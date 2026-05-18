@@ -1,10 +1,8 @@
-<aside class="sheet" [class.sheet--open]="open()" data-testid="orch-side-sheet">
-  <header class="sheet__header">
-    <div class="sheet__title-block">
-      <span class="sheet__eyebrow">Orchestrator</span>
-      <h2 class="sheet__title" data-testid="orch-side-sheet-title">Chat</h2>
-    </div>
-
+<app-sidesheet eyebrow="Orchestrator"
+               title="Chat"
+               testid="orch-side-sheet"
+               (close)="hide()">
+  <div header-actions class="sheet__header-extras">
     <div class="sheet__project-picker sheet__combo-wrap--active"
          [class.sheet__combo-wrap--open]="comboOpen()"
          data-testid="orch-side-sheet-project-combo-wrap">
@@ -59,13 +57,8 @@
               data-testid="orch-side-sheet-refresh">
         {{ loading() ? '...' : 'Refresh' }}
       </button>
-      <button class="sheet__close"
-              type="button"
-              (click)="hide()"
-              [appTooltip]="'Close panel'"
-              data-testid="orch-side-sheet-close">✕</button>
     </div>
-  </header>
+  </div>
 
   <select hidden
           data-testid="orch-side-sheet-project-select"
@@ -133,4 +126,4 @@
       <div class="sheet__no-project">No watched projects yet.</div>
     }
   </main>
-</aside>
+</app-sidesheet>

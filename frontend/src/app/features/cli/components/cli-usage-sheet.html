@@ -1,30 +1,21 @@
-<aside class="sheet" [class.sheet--open]="open()">
-  <header class="sheet__header">
-    <div>
-      <h2 class="sheet__title">CLI Usage</h2>
-      <div class="sheet__subtitle">Quota windows only. Sessions live in the Orchestrator window.</div>
-    </div>
-    <div class="sheet__header-actions">
-      <button class="sheet__close" type="button" (click)="closed.emit()" [appTooltip]="'Close panel'">✕</button>
-    </div>
-  </header>
+<app-sidesheet title="CLI Usage"
+               subtitle="Quota windows only. Sessions live in the Orchestrator window."
+               testid="cli-usage-sheet"
+               (close)="closed.emit()">
+  <section class="seg">
+    <button class="seg__head" type="button" (click)="toggleSegment('quota')">
+      <span class="seg__chev">{{ isSegmentCollapsed('quota') ? '▶' : '▼' }}</span>
+      <span class="seg__title">Quota</span>
+      <span class="seg__hint">subscription limits</span>
+    </button>
+    @if (!isSegmentCollapsed('quota')) {
+      <app-quota-strip />
+    }
+  </section>
 
-  <div class="sheet__body">
-    <section class="seg">
-      <button class="seg__head" type="button" (click)="toggleSegment('quota')">
-        <span class="seg__chev">{{ isSegmentCollapsed('quota') ? '▶' : '▼' }}</span>
-        <span class="seg__title">Quota</span>
-        <span class="seg__hint">subscription limits</span>
-      </button>
-      @if (!isSegmentCollapsed('quota')) {
-        <app-quota-strip />
-      }
-    </section>
-
-    <section class="seg">
-      <div class="sheet__detail-empty">
-        Full CLI session inventory moved to <strong>Orchestrator → Sessions</strong> and loads only when opened.
-      </div>
-    </section>
-  </div>
-</aside>
+  <section class="seg">
+    <div class="sheet__detail-empty">
+      Full CLI session inventory moved to <strong>Orchestrator → Sessions</strong> and loads only when opened.
+    </div>
+  </section>
+</app-sidesheet>

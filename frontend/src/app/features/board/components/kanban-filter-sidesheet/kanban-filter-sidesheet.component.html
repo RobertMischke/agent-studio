@@ -1,21 +1,7 @@
-<aside class="sheet"
-       [class.sheet--open]="open()"
-       data-testid="kanban-filter-sidesheet"
-       role="dialog"
-       aria-label="Board filters">
-  <header class="sheet__header">
-    <div class="sheet__title-block">
-      <span class="sheet__eyebrow">Board</span>
-      <h2 class="sheet__title">Filter &amp; view</h2>
-    </div>
-    <button class="sheet__close"
-            type="button"
-            (click)="close()"
-            [appTooltip]="'Close panel (Esc)'"
-            aria-label="Close filter panel"
-            data-testid="kanban-filter-sidesheet-close">✕</button>
-  </header>
-
+<app-sidesheet eyebrow="Board"
+               title="Filter & view"
+               testid="kanban-filter-sidesheet"
+               (close)="close()">
   <section class="sheet__section">
     <div class="sheet__search-row">
       <span class="sheet__search-icon" aria-hidden="true">🔍</span>
@@ -142,7 +128,7 @@
     </ul>
   </section>
 
-  <footer class="sheet__footer" data-testid="kanban-filter-sidesheet-footer">
+  <div footer class="sheet__footer-bits" data-testid="kanban-filter-sidesheet-footer">
     <span class="sheet__hits"
           data-testid="kanban-filter-sidesheet-hitcount">{{ hitCount() }} / {{ totalCount() }} jobs match</span>
     <button type="button"
@@ -150,6 +136,5 @@
             data-testid="kanban-filter-sidesheet-clear-all"
             [disabled]="!hasAnyFilter()"
             (click)="onClearAll()">Clear filters</button>
-  </footer>
-</aside>
-  
+  </div>
+</app-sidesheet>
