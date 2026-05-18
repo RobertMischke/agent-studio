@@ -1,3 +1,5 @@
+@use '../../../styles/mixins' as m;
+
 // =========================================================================
 // Studio shell — Agent Software Studio (VS-Code-inspired)
 //
@@ -625,23 +627,7 @@
   }
 
   &__action {
-    width: 22px;
-    height: 22px;
-    display: grid;
-    place-items: center;
-    border: 0;
-    border-radius: 3px;
-    background: transparent;
-    color: var(--studio-fg-dim);
-    line-height: 1;
-    cursor: pointer;
-    padding: 0;
-    transition: background 120ms ease, color 120ms ease;
-
-    &:hover {
-      background: var(--studio-bg-hover);
-      color: var(--studio-fg);
-    }
+    @include m.icon-button(22px);
   }
 
   &__body {

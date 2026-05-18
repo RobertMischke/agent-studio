@@ -1,3 +1,5 @@
+@use '../../../styles/mixins' as m;
+
 /*
  * Pane header — shared chrome for the prompt / protocol / git panes.
  * Reads only studio-shell tokens so it inherits theme flipping for
@@ -51,20 +53,6 @@
 .pane-header__spacer { flex: 1 1 auto; }
 
 .pane-header__btn {
-  display: inline-grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
+  @include m.icon-button(24px);
   align-self: center;
-  border: 0;
-  border-radius: 3px;
-  background: transparent;
-  color: var(--studio-fg-dim);
-  cursor: pointer;
-  transition: background 0.12s ease, color 0.12s ease;
-
-  &:hover {
-    background: var(--studio-bg-hover);
-    color: var(--studio-fg-strong);
-  }
 }

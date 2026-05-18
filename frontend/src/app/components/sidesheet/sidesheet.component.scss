@@ -1,3 +1,5 @@
+@use '../../../styles/mixins' as m;
+
 /*
  * Sidesheet skeleton.
  *
@@ -77,22 +79,8 @@
 }
 
 .sidesheet__close {
-  width: 26px;
-  height: 26px;
-  display: grid;
-  place-items: center;
-  border: 0;
-  border-radius: 4px;
-  background: transparent;
-  color: var(--studio-fg-dim);
-  cursor: pointer;
+  @include m.icon-button(26px);
   flex-shrink: 0;
-  transition: background 0.12s ease, color 0.12s ease;
-
-  &:hover {
-    background: var(--studio-bg-hover);
-    color: var(--studio-fg-strong);
-  }
 }
 
 .sidesheet__body {
