@@ -618,13 +618,26 @@ export class StudioShellComponent {
   }
 
   /**
-   * Trigger a stable-checkout update through the standalone update
-   * service. Mirrors the legacy "Update Stable" devtool menu action;
-   * the Settings panel surfaces it as a primary control.
+   * Click handler for the Settings panel "Update stable now" /
+   * "Check for updates" button. The label flips based on `behindBy()`:
+   *
+   *   - behindBy > 0   → "Update stable now"  → actually run the update
+   *   - behindBy === 0 → "Check for updates"  → only POLL origin/main,
+   *                                              don't kick off a stable
+   *                                              re-checkout / restart.
+   *
+   * Previously this always called `trigger()`, so clicking "Check for
+   * updates" immediately ran the full stable update pipeline — a
+   * destructive action triggered by a button label that read like a
+   * safe poll.
    */
   triggerUpdate(force = false): void {
     this.updateClient.openCenter();
-    void this.updateClient.trigger(null, force);
+    if (force || this.updateClient.behindBy() > 0) {
+      void this.updateClient.trigger(null, force);
+    } else {
+      void this.updateClient.refreshNow();
+    }
   }
 
   openUpdateCenter(): void {
