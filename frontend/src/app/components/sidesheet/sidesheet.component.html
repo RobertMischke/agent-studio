@@ -1,10 +1,8 @@
 <div class="sidesheet"
-     [class.sidesheet--sheet]="variant === 'sheet'"
-     [class.sidesheet--dialog]="variant === 'dialog'"
      [style.width.px]="width"
      [attr.data-testid]="testid"
-     role="dialog"
-     aria-modal="true">
+     role="region"
+     [attr.aria-label]="title">
   <header class="sidesheet__header">
     <div class="sidesheet__title-block">
       @if (eyebrow) {

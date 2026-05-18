@@ -1,11 +1,12 @@
 @use '../../../styles/mixins' as m;
 
 /*
- * Sidesheet skeleton.
+ * Sidesheet skeleton — flush-right panel pinned to the viewport edge.
+ * Used for kanban filter, CLI usage, orchestrator chat, etc.
  *
- * Two variants:
- *  - sheet  : flush-right panel pinned to the viewport edge
- *  - dialog : centred modal panel
+ * Modal dialogs (error / confirm / create-job / media-lightbox /
+ * verbose-debug) are a different shape and keep their own components
+ * — see the docstring on SidesheetComponent for the rationale.
  *
  * Tokens come from studio-shell (see docs/frontend-scss-quality.md).
  * Light theme inherits the var() flip automatically.
@@ -25,21 +26,9 @@
   overflow: hidden;
   min-height: 0;
   font-size: 13px;
-}
-
-.sidesheet--sheet {
   width: 360px;
   max-width: 100%;
   height: 100%;
-}
-
-.sidesheet--dialog {
-  width: 520px;
-  max-width: 92vw;
-  max-height: 86vh;
-  border: 1px solid var(--studio-border);
-  border-radius: 10px;
-  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
 }
 
 .sidesheet__header {
