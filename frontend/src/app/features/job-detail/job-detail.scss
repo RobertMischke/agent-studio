@@ -409,27 +409,31 @@
     }
     .detail__state--select option {
       color: var(--studio-fg);
-      background: #11131a;
+      background: var(--studio-bg-elevated);
       text-transform: none;
       letter-spacing: normal;
     }
-    .state--1-preparation { background: rgba(139,92,246,0.15); color: #8b5cf6; }
-    .state--2-ready { background: rgba(6,182,212,0.15); color: #06b6d4; }
-    .state--3-progress { background: rgba(59,130,246,0.15); color: var(--severity-info); }
+    // Lane state pills — use --lane-* tokens that flip per theme.
+    // Was hardcoded Tailwind hexes; now reads the same lane palette
+    // the kanban columns use, so the detail-header state pill
+    // matches the column color cue.
+    .state--1-preparation { background: color-mix(in srgb, var(--lane-prep) 15%, transparent); color: var(--lane-prep); }
+    .state--2-ready { background: color-mix(in srgb, var(--lane-ready) 15%, transparent); color: var(--lane-ready); }
+    .state--3-progress { background: color-mix(in srgb, var(--lane-progress) 15%, transparent); color: var(--lane-progress); }
     /* ADR-0025 lanes (auto-review = amber, human-review = sky); legacy
        4-review and 5/6-completed selectors retained so older payloads
        keep matching during the transition. */
-    .state--4-review { background: rgba(245,158,11,0.15); color: #f59e0b; }
-    .state--4-auto-review { background: rgba(245,158,11,0.15); color: #f59e0b; }
-    .state--5-human-review { background: rgba(56,189,248,0.15); color: #38bdf8; }
-    .state--5-completed { background: rgba(16,185,129,0.15); color: #10b981; }
-    .state--6-completed { background: rgba(16,185,129,0.15); color: #10b981; }
-    .state--6-archive { background: rgba(100,116,139,0.15); color: var(--studio-fg-dim); }
-    .state--7-archive { background: rgba(100,116,139,0.15); color: var(--studio-fg-dim); }
+    .state--4-review { background: color-mix(in srgb, var(--lane-auto-review) 15%, transparent); color: var(--lane-auto-review); }
+    .state--4-auto-review { background: color-mix(in srgb, var(--lane-auto-review) 15%, transparent); color: var(--lane-auto-review); }
+    .state--5-human-review { background: color-mix(in srgb, var(--lane-human-review) 15%, transparent); color: var(--lane-human-review); }
+    .state--5-completed { background: color-mix(in srgb, var(--lane-completed) 15%, transparent); color: var(--lane-completed); }
+    .state--6-completed { background: color-mix(in srgb, var(--lane-completed) 15%, transparent); color: var(--lane-completed); }
+    .state--6-archive { background: color-mix(in srgb, var(--lane-archive) 15%, transparent); color: var(--lane-archive); }
+    .state--7-archive { background: color-mix(in srgb, var(--lane-archive) 15%, transparent); color: var(--lane-archive); }
     .detail__complete-next {
-      background: rgba(16,185,129,0.12);
-      border: 1px solid rgba(16,185,129,0.35);
-      color: #10b981;
+      background: color-mix(in srgb, var(--severity-pass) 12%, transparent);
+      border: 1px solid color-mix(in srgb, var(--severity-pass) 35%, transparent);
+      color: var(--severity-pass);
       padding: 7px 14px;
       border-radius: 999px;
       cursor: pointer;
@@ -440,9 +444,9 @@
       flex-shrink: 0;
     }
     .detail__complete-next:hover:not(:disabled) {
-      background: rgba(16,185,129,0.22);
-      border-color: rgba(16,185,129,0.6);
-      color: #34d399;
+      background: color-mix(in srgb, var(--severity-pass) 22%, transparent);
+      border-color: color-mix(in srgb, var(--severity-pass) 60%, transparent);
+      filter: brightness(1.06);
     }
     .detail__complete-next:disabled {
       opacity: 0.5;
@@ -451,11 +455,12 @@
 
     /* "Do Next" — visible only on 2-ready cards, distinct from the green
        "Complete & Next" review button so the two never read as the same
-       action. Uses the cyan ready-lane palette to echo the lane chip. */
+       action. Uses the brand-orange accent to echo the start CTA on
+       in-progress lanes. */
     .detail__do-next {
-      background: rgba(6,182,212,0.12);
-      border: 1px solid rgba(6,182,212,0.35);
-      color: #06b6d4;
+      background: color-mix(in srgb, var(--studio-accent) 12%, transparent);
+      border: 1px solid color-mix(in srgb, var(--studio-accent) 35%, transparent);
+      color: var(--studio-accent);
       padding: 7px 14px;
       border-radius: 999px;
       cursor: pointer;
@@ -466,9 +471,9 @@
       flex-shrink: 0;
     }
     .detail__do-next:hover:not(:disabled) {
-      background: rgba(6,182,212,0.22);
-      border-color: rgba(6,182,212,0.6);
-      color: #22d3ee;
+      background: color-mix(in srgb, var(--studio-accent) 22%, transparent);
+      border-color: color-mix(in srgb, var(--studio-accent) 60%, transparent);
+      filter: brightness(1.06);
     }
     .detail__do-next:disabled {
       opacity: 0.5;
@@ -501,9 +506,9 @@
       color: var(--studio-fg-dim);
     }
     .detail__project-select {
-      background: rgba(255,255,255,0.06);
-      border: 1px solid rgba(255,255,255,0.1);
-      color: var(--studio-fg);
+      background: var(--studio-bg-hover);
+      border: 1px solid var(--studio-border);
+      color: var(--studio-fg-strong);
       padding: 4px 8px;
       border-radius: 8px;
       font-size: 12px;
