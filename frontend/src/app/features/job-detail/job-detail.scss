@@ -9,7 +9,7 @@
       border-radius: 8px;
     }
     .session-usage__row { display: flex; justify-content: space-between; gap: 12px; }
-    .session-usage__label { color: rgba(255,255,255,0.55); text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.7rem; }
+    .session-usage__label { color: var(--studio-fg-dim); text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.7rem; }
     .session-usage__value { color: var(--studio-fg); font-family: var(--font-mono, monospace); }
     .activity-metrics {
       display: flex;
@@ -20,7 +20,7 @@
       align-items: baseline;
     }
     .activity-metrics__row { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-    .activity-metrics__label { color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.65rem; }
+    .activity-metrics__label { color: var(--studio-fg-dim); text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.65rem; }
     .activity-metrics__value { color: var(--studio-fg); font-family: var(--font-mono, monospace); font-size: 0.85rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .chat-compose {
       display: flex;
@@ -29,15 +29,15 @@
       margin-top: 10px;
       padding: 10px;
       border-radius: 10px;
-      background: rgba(0,0,0,0.28);
-      border: 1px solid rgba(255,255,255,0.08);
+      background: var(--studio-bg-hover);
+      border: 1px solid var(--studio-border);
     }
     .chat-compose__input {
       width: 100%;
       box-sizing: border-box;
-      background: rgba(0,0,0,0.35);
-      color: var(--studio-fg);
-      border: 1px solid rgba(255,255,255,0.08);
+      background: var(--studio-bg-editor);
+      color: var(--studio-fg-strong);
+      border: 1px solid var(--studio-border);
       border-radius: 8px;
       padding: 8px 10px;
       font-family: inherit;
@@ -45,7 +45,7 @@
       resize: vertical;
       min-height: 44px;
     }
-    .chat-compose__input:focus { outline: none; border-color: rgba(137,180,250,0.5); }
+    .chat-compose__input:focus { outline: none; border-color: var(--studio-accent); }
     .chat-compose__actions {
       display: flex;
       gap: 8px;
@@ -53,9 +53,26 @@
       align-items: center;
     }
     .chat-compose__stop {
-      background: rgba(245, 194, 231, 0.12);
-      color: #f5c2e7;
-      border-color: rgba(245, 194, 231, 0.35);
+      background: color-mix(in srgb, var(--studio-accent-4) 14%, transparent);
+      color: var(--studio-accent-4);
+      border-color: color-mix(in srgb, var(--studio-accent-4) 35%, transparent);
+    }
+    // Send is the PRIMARY action of the compose box. The mockup paints
+    // it as a small brand-orange pill so it's instantly findable on the
+    // bottom-right of the chat. Previously it had no explicit style and
+    // inherited the calm grey from .panel button.
+    .chat-compose__send {
+      background: var(--studio-accent);
+      color: var(--studio-on-accent, #1a1a1a);
+      border: 1px solid var(--studio-accent);
+      border-radius: 6px;
+      padding: 4px 12px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .chat-compose__send:hover:not(:disabled) {
+      filter: brightness(1.08);
     }
     .chat-compose__send:disabled { opacity: 0.45; cursor: not-allowed; }
 
@@ -109,24 +126,24 @@
     .chat-mode__pill--active[data-mode="extend"]   { background: var(--severity-pass); border-color: var(--severity-pass); }
     .chat-mode__pill--active[data-mode="newTask"]  { background: var(--studio-accent-4); border-color: var(--studio-accent-4); }
 
-    .chat-compose:has(.chat-mode__pill--active[data-mode="steer"])    { border-color: rgba(249,226,175,0.35); }
-    .chat-compose:has(.chat-mode__pill--active[data-mode="extend"])   { border-color: rgba(166,227,161,0.35); }
-    .chat-compose:has(.chat-mode__pill--active[data-mode="newTask"])  { border-color: rgba(245,194,231,0.35); }
+    .chat-compose:has(.chat-mode__pill--active[data-mode="steer"])    { border-color: color-mix(in srgb, var(--severity-warn) 40%, transparent); }
+    .chat-compose:has(.chat-mode__pill--active[data-mode="extend"])   { border-color: color-mix(in srgb, var(--severity-pass) 40%, transparent); }
+    .chat-compose:has(.chat-mode__pill--active[data-mode="newTask"])  { border-color: color-mix(in srgb, var(--studio-accent-4) 40%, transparent); }
 
     .session-followup { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
     .session-followup__input {
       width: 100%;
       box-sizing: border-box;
-      background: rgba(0,0,0,0.25);
-      color: var(--studio-fg);
-      border: 1px solid rgba(255,255,255,0.08);
+      background: var(--studio-bg-editor);
+      color: var(--studio-fg-strong);
+      border: 1px solid var(--studio-border);
       border-radius: 8px;
       padding: 8px 10px;
       font-family: inherit;
       font-size: 0.85rem;
       resize: vertical;
     }
-    .session-followup__input:focus { outline: none; border-color: rgba(137,180,250,0.5); }
+    .session-followup__input:focus { outline: none; border-color: var(--studio-accent); }
     .cli-picker {
       display: flex;
       align-items: center;
@@ -137,15 +154,15 @@
       font-size: 0.7rem;
       text-transform: uppercase;
       letter-spacing: 0.06em;
-      color: rgba(255,255,255,0.55);
+      color: var(--studio-fg-dim);
     }
     .cli-picker__group {
       display: inline-flex;
       gap: 2px;
       padding: 2px;
-      border: 1px solid rgba(255,255,255,0.08);
+      border: 1px solid var(--studio-border);
       border-radius: 8px;
-      background: rgba(0,0,0,0.25);
+      background: var(--studio-bg-hover);
     }
     .cli-picker__btn {
       border: 0;
@@ -157,12 +174,12 @@
       cursor: pointer;
     }
     .cli-picker__btn:hover:not(:disabled) {
-      color: var(--studio-fg);
-      background: rgba(255,255,255,0.06);
+      color: var(--studio-fg-strong);
+      background: var(--studio-bg-elevated);
     }
     .cli-picker__btn--active {
-      background: rgba(99,102,241,0.22);
-      color: #c7d2fe;
+      background: var(--studio-bg-selected);
+      color: var(--studio-fg-strong);
     }
     .cli-picker__btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .model-picker {
@@ -941,17 +958,31 @@
     .log__detail { color: var(--studio-fg-dim); font-size: 12px; }
 
     .btn-sm {
-      background: rgba(255,255,255,0.06);
-      border: 1px solid rgba(255,255,255,0.08);
-      color: var(--studio-fg-dim);
+      background: var(--studio-bg-hover);
+      border: 1px solid var(--studio-border);
+      color: var(--studio-fg);
       padding: 4px 10px;
       border-radius: 3px;
       cursor: pointer;
       font-size: 12px;
     }
-    .btn-sm:hover { background: rgba(255,255,255,0.1); }
-    .btn-sm--primary { background: #6366f1; border-color: #6366f1; color: white; }
-    .btn-sm--primary:hover { background: #5558e6; }
+    .btn-sm:hover { background: var(--studio-bg-elevated); color: var(--studio-fg-strong); }
+    // Primary action variant — was pinned to indigo `#6366f1`, the
+    // brand-orange accent matches the rest of the studio (active tabs,
+    // run pills, mode pills) and gives "Send" the visual weight it
+    // deserves on the chat compose row.
+    .btn-sm--primary {
+      background: var(--studio-accent);
+      border-color: var(--studio-accent);
+      color: var(--studio-on-accent, #1a1a1a);
+      font-weight: 600;
+    }
+    .btn-sm--primary:hover:not(:disabled) { filter: brightness(1.08); }
+    .btn-sm--primary:disabled {
+      background: var(--studio-bg-elevated);
+      border-color: var(--studio-border);
+      color: var(--studio-fg-muted);
+    }
     .section__actions { display: flex; gap: 6px; }
     .section__editor {
       width: 100%;
