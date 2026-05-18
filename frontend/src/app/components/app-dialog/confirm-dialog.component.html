@@ -1,55 +1,28 @@
 @if (state(); as confirm) {
-  <div class="overlay overlay--confirm"
-       data-testid="confirm-dialog"
-       role="presentation"
-       (click)="onBackdropClick()">
-    <div class="app-dialog app-dialog--{{ confirm.kind }}"
-         role="alertdialog"
-         aria-modal="true"
-         [attr.aria-label]="confirm.title"
-         data-testid="confirm-dialog-panel"
-         tabindex="-1"
-         (click)="$event.stopPropagation()"
-         (keydown)="onPanelKeydown($event)">
-      <div class="app-dialog__header">
-        <div>
-          <div class="app-dialog__eyebrow"
-               [attr.data-testid]="'confirm-dialog-eyebrow'">
-            @if (confirm.kind === 'danger') {
-              Confirm delete
-            } @else {
-              Please confirm
-            }
-          </div>
-          <h2 class="app-dialog__title" data-testid="confirm-dialog-title">{{ confirm.title }}</h2>
-        </div>
-        <button class="app-dialog__close"
-                type="button"
-                aria-label="Cancel"
-                data-testid="confirm-dialog-close"
-                (click)="onCancel()">✕</button>
-      </div>
-
-      <div class="app-dialog__body">
-        <p class="app-dialog__message" data-testid="confirm-dialog-message">{{ confirm.message }}</p>
-        @if (confirm.detail) {
-          <p class="app-dialog__detail" data-testid="confirm-dialog-detail">{{ confirm.detail }}</p>
-        }
-      </div>
-
-      <div class="app-dialog__actions">
-        <button class="btn btn--ghost"
-                type="button"
-                data-testid="confirm-dialog-cancel"
-                (click)="onCancel()">{{ confirm.cancelLabel }}</button>
-        <button #confirmBtn
-                class="btn"
-                [class.btn--danger]="confirm.kind === 'danger'"
-                [class.btn--primary]="confirm.kind === 'primary'"
-                type="button"
-                data-testid="confirm-dialog-confirm"
-                (click)="onAccept()">{{ confirm.confirmLabel }}</button>
-      </div>
+  <app-dialog [eyebrow]="confirm.kind === 'danger' ? 'Confirm delete' : 'Please confirm'"
+              [title]="confirm.title"
+              role="alertdialog"
+              [kind]="confirm.kind === 'danger' ? 'danger' : 'primary'"
+              testid="confirm-dialog"
+              (close)="onCancel()"
+              (backdropClick)="onBackdropClick()"
+              (keydown)="onPanelKeydown($event)">
+    <p class="app-dialog__message" data-testid="confirm-dialog-message">{{ confirm.message }}</p>
+    @if (confirm.detail) {
+      <p class="app-dialog__detail" data-testid="confirm-dialog-detail">{{ confirm.detail }}</p>
+    }
+    <div footer>
+      <button class="btn btn--ghost"
+              type="button"
+              data-testid="confirm-dialog-cancel"
+              (click)="onCancel()">{{ confirm.cancelLabel }}</button>
+      <button #confirmBtn
+              class="btn"
+              [class.btn--danger]="confirm.kind === 'danger'"
+              [class.btn--primary]="confirm.kind === 'primary'"
+              type="button"
+              data-testid="confirm-dialog-confirm"
+              (click)="onAccept()">{{ confirm.confirmLabel }}</button>
     </div>
-  </div>
+  </app-dialog>
 }

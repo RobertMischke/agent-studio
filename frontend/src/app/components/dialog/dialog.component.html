@@ -1,0 +1,38 @@
+<div class="dialog__overlay"
+     [attr.data-testid]="testid ? testid + '-overlay' : null"
+     (click)="onBackdropClick()">
+  <div class="dialog"
+       [class.dialog--danger]="kind === 'danger'"
+       [class.dialog--primary]="kind === 'primary'"
+       [style.width.px]="width"
+       [attr.role]="role"
+       aria-modal="true"
+       [attr.aria-label]="title"
+       [attr.data-testid]="testid"
+       tabindex="-1"
+       (click)="$event.stopPropagation()">
+    <header class="dialog__header">
+      <div class="dialog__title-block">
+        @if (eyebrow) {
+          <span class="dialog__eyebrow">{{ eyebrow }}</span>
+        }
+        <h2 class="dialog__title">{{ title }}</h2>
+      </div>
+      @if (closable) {
+        <button type="button"
+                class="dialog__close"
+                aria-label="Close"
+                [attr.data-testid]="testid ? testid + '-close' : null"
+                (click)="close.emit()">
+          <app-studio-icon name="close" [size]="14"></app-studio-icon>
+        </button>
+      }
+    </header>
+    <div class="dialog__body">
+      <ng-content></ng-content>
+    </div>
+    <footer class="dialog__footer">
+      <ng-content select="[footer]"></ng-content>
+    </footer>
+  </div>
+</div>

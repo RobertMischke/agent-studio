@@ -11,6 +11,7 @@ import {
 } from '@angular/core';
 import { ConfirmDialogService } from '../../services/confirm-dialog.service';
 import { ModalStackService } from '../../services/modal-stack.service';
+import { DialogComponent } from '../dialog/dialog.component';
 
 /**
  * App-wide confirm dialog. Mounted once at the shell; visibility driven by
@@ -32,6 +33,7 @@ import { ModalStackService } from '../../services/modal-stack.service';
   selector: 'app-confirm-dialog',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [DialogComponent],
   templateUrl: './confirm-dialog.component.html',
 })
 export class ConfirmDialogComponent {

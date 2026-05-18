@@ -1,6 +1,7 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, inject, input, output } from '@angular/core';
 import { ErrorDialogState } from '../../models/error-dialog.model';
 import { ModalStackService } from '../../services/modal-stack.service';
+import { DialogComponent } from '../dialog/dialog.component';
 
 /**
  * Error overlay used by the global ErrorDialogService. The parent
@@ -11,6 +12,7 @@ import { ModalStackService } from '../../services/modal-stack.service';
   selector: 'app-error-dialog',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [DialogComponent],
   templateUrl: './error-dialog.component.html'
 })
 export class ErrorDialogComponent {
