@@ -1729,12 +1729,18 @@
       min-width: 0;
       min-height: 0;
       position: relative;
+      // The studio shell projects this into `.studio-projected-content`,
+      // which is `flex-direction: column`. Without `flex: 1` here, the
+      // main element only takes its intrinsic content height, leaving a
+      // ~230px white gap below the detail panes on 1080p viewports.
+      flex: 1;
     }
     .workspace__main > app-job-detail {
       display: block;
       flex: 1;
       min-width: 0;
       min-height: 0;
+      height: 100%;
     }
     /* Triage banner shown by the auto-advance flow (lane cleared / external
        move). Sits anchored bottom-right of the detail viewport so the user
