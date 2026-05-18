@@ -193,11 +193,27 @@ function placeSide(
       break;
   }
 
+  // Fit-test per axis. For top/bottom placements (arrow on the vertical
+  // edges of the tooltip) only the VERTICAL fit is load-bearing — the
+  // horizontal position can be clamped to the viewport without
+  // changing the semantics (tooltip is still above/below the anchor,
+  // we just slide it sideways so the arrow ends up under the anchor
+  // centre via `arrowFor()`). Conversely for left/right placements
+  // only the HORIZONTAL fit is load-bearing.
+  //
+  // Previously a single 4-axis fit test rejected `top`/`bottom`
+  // whenever the anchor sat near the viewport edge on the OTHER axis
+  // (e.g. an auto-pickup chip at bottom-left → `top` placement was
+  // vertically fine but its centered-horizontal calc went off-screen
+  // left, so the algorithm bailed and ended up clamping `bottom` back
+  // up over the anchor). That painted the tooltip directly OVER the
+  // element it was supposed to explain, with the arrow pointing away.
+  const fitsVertically = top >= VIEWPORT_PAD && top + h.height <= vh - VIEWPORT_PAD;
+  const fitsHorizontally = left >= VIEWPORT_PAD && left + h.width <= vw - VIEWPORT_PAD;
   const fits =
-    top >= VIEWPORT_PAD &&
-    left >= VIEWPORT_PAD &&
-    top + h.height <= vh - VIEWPORT_PAD &&
-    left + h.width <= vw - VIEWPORT_PAD;
+    (side === 'top' || side === 'bottom') ? fitsVertically :
+    (side === 'left' || side === 'right') ? fitsHorizontally :
+    fitsVertically && fitsHorizontally;
 
   if (!fits && !force) return null;
 
