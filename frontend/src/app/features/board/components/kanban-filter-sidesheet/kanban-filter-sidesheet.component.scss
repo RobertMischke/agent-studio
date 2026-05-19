@@ -179,19 +179,10 @@
   text-overflow: ellipsis;
 }
 
-.sheet__footer {
-  margin-top: auto;
-  padding: 10px 14px;
-  border-top: 1px solid var(--studio-border);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 11.5px;
-  background: var(--studio-bg-hover);
-  position: sticky;
-  bottom: 0;
-}
+// `.sheet__footer` removed: the footer chrome is owned by
+// `<app-sidesheet>` (`.sidesheet__footer`); the kanban filter
+// projects the hit-count + clear-all controls into that slot, so the
+// per-caller `.sheet__footer` rule never matched any DOM element.
 .sheet__hits { color: var(--studio-fg-dim); }
 .sheet__clear-all {
   background: var(--studio-bg-hover);
