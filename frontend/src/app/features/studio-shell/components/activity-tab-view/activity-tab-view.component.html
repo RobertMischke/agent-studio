@@ -20,7 +20,7 @@
           <dd>
             {{ j.execution.status }} ·
             @if (j.execution.runOutcome) { {{ j.execution.runOutcome }} · }
-            @if (j.execution.durationSeconds != null) { {{ j.execution.durationSeconds }}s }
+            @if (j.execution.durationSeconds !== null) { {{ j.execution.durationSeconds }}s }
           </dd>
         }
       </dl>

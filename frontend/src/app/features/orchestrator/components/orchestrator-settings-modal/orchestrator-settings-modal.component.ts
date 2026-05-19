@@ -65,7 +65,7 @@ export class OrchestratorSettingsModalComponent {
     this.closed.emit();
   }
 
-  onBackdropClick(event: MouseEvent): void {
+  onBackdropClick(event: Event): void {
     if (event.target === event.currentTarget) this.close();
   }
 

@@ -114,7 +114,8 @@ export class ProjectHubViewComponent {
     this.overlays.openOrchFeed(this.projectName());
   }
 
-  openFeedFromDetail(_intent: string): void {
+  openFeedFromDetail(intent: string): void {
+    void intent;
     this.overlays.openOrchFeed(this.projectName());
   }
 
@@ -127,9 +128,9 @@ export class ProjectHubViewComponent {
     /* no-op — the tab close button handles this */
   }
 
-  onSecurityFollowUp(_evt: unknown): void { /* parent ignores for now */ }
-  onSecurityOpenEvidence(_evt: unknown): void { /* parent ignores for now */ }
-  onSecurityAuditQueued(_evt: unknown): void { /* parent ignores for now */ }
-  onUxuiFollowUp(_evt: unknown): void { /* parent ignores for now */ }
-  onUxuiActionQueued(_evt: unknown): void { /* parent ignores for now */ }
+  onSecurityFollowUp(evt: unknown): void { void evt; }
+  onSecurityOpenEvidence(evt: unknown): void { void evt; }
+  onSecurityAuditQueued(evt: unknown): void { void evt; }
+  onUxuiFollowUp(evt: unknown): void { void evt; }
+  onUxuiActionQueued(evt: unknown): void { void evt; }
 }

@@ -1,8 +1,8 @@
-import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { JobService } from '../../../../services/job.service';
 import type { CliType } from '../../../../models/job.model';
-import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../../../features/quota';
+import type { QuotaReport } from '../../../../features/quota';
 import { cliTypeIcon, cliTypeLabel } from '../../../../services/format.util';
 import { QuotaApiService } from '../../../../features/quota';
 
@@ -38,7 +38,8 @@ interface CapRow {
   standalone: true,
   imports: [FormsModule],
   templateUrl: './cli-admin-panel.html',
-  styleUrl: './cli-admin-panel.scss'
+  styleUrl: './cli-admin-panel.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class CliAdminPanelComponent implements OnInit, OnDestroy {
   private readonly quotaApi = inject(QuotaApiService);
@@ -246,7 +247,15 @@ export class CliAdminPanelComponent implements OnInit, OnDestroy {
     return label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
   }
 
-  private errorMessage(err: any, fallback: string): string {
-    return err?.error?.error || err?.message || fallback;
+  private errorMessage(err: unknown, fallback: string): string {
+    if (typeof err !== 'object' || err === null) return fallback;
+    const candidate = err as { error?: unknown; message?: unknown };
+    if (typeof candidate.error === 'object' && candidate.error !== null && 'error' in candidate.error) {
+      const message = (candidate.error as { error?: unknown }).error;
+      if (typeof message === 'string' && message.trim()) return message;
+    }
+    if (typeof candidate.error === 'string' && candidate.error.trim()) return candidate.error;
+    if (typeof candidate.message === 'string' && candidate.message.trim()) return candidate.message;
+    return fallback;
   }
 }

@@ -1,4 +1,4 @@
-import { Component, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, output } from '@angular/core';
 
 import { USAGE_STRIP } from './next-gen-chat-workbench-prototype.data';
 import { StatusPanel } from './next-gen-chat-workbench-prototype.models';
@@ -8,6 +8,7 @@ import { StatusPanel } from './next-gen-chat-workbench-prototype.models';
   standalone: true,
   templateUrl: './found-next-statusbar.component.html',
   styleUrl: './found-next-statusbar.component.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class FoundNextStatusbarComponent {
   readonly statusPanelRequested = output<StatusPanel>();

@@ -147,7 +147,7 @@ export class TooltipController {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
 
-    const order: Array<Exclude<TooltipPosition, 'auto'>> =
+    const order: Exclude<TooltipPosition, 'auto'>[] =
       preferred === 'auto'
         ? ['bottom', 'top', 'right', 'left']
         : [preferred, ...(['bottom', 'top', 'right', 'left'] as const).filter(p => p !== preferred)];

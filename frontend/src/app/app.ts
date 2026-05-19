@@ -1,4 +1,16 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, OnInit, signal, untracked, ViewChild, ViewEncapsulation } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  inject,
+  OnInit,
+  signal,
+  untracked,
+  ViewChild,
+  ViewEncapsulation,
+  OnDestroy,
+} from '@angular/core';
 import { forkJoin } from 'rxjs';
 import { FormsModule } from '@angular/forms';
 import {
@@ -19,7 +31,10 @@ import {
 } from './features/board';
 import { JobDetailComponent, JobSelectionService, TriageController } from './features/job-detail';
 import { CliUsageSheetComponent } from './features/cli';
-import { OrchestratorSettingsModalComponent, OrchestratorSideSheetComponent } from './features/orchestrator';
+import {
+  OrchestratorSettingsModalComponent,
+  OrchestratorSideSheetComponent,
+} from './features/orchestrator';
 import {
   DEFAULT_PROJECT_RAIL_KEY,
   ProjectOverlaysComponent,
@@ -42,14 +57,22 @@ import {
   UpdateVersionBadgeComponent,
 } from './features/update';
 import { VerboseDebugOverlayComponent } from './features/verbose-debug';
-import { StudioShellComponent, ProjectHubViewComponent, StudioDiffViewComponent, StudioActivityViewComponent, StudioTabStateService } from './features/studio-shell';
+import {
+  StudioShellComponent,
+  ProjectHubViewComponent,
+  StudioDiffViewComponent,
+  StudioActivityViewComponent,
+  StudioTabStateService,
+} from './features/studio-shell';
 import { JobService } from './services/job.service';
 import { ClientService } from './services/client.service';
-import type { JobDetail, JobInfo, WatchPathEntry, CliType } from './models/job.model';
+import type { JobInfo, WatchPathEntry, CliType } from './models/job.model';
 import { CLI_TYPES } from './models/job.model';
-import type { CliModelInfo } from './features/cli';
 import { ErrorDialogService } from './services/error-dialog.service';
-import { cliTypeLabel as fmtCliTypeLabel, formatMultiplier as fmtMultiplier } from './services/format.util';
+import {
+  cliTypeLabel as fmtCliTypeLabel,
+  formatMultiplier as fmtMultiplier,
+} from './services/format.util';
 import { ErrorDialogComponent } from './components/error-dialog/error-dialog.component';
 import { ConfirmDialogComponent } from './components/app-dialog/confirm-dialog/confirm-dialog.component';
 import { StudioIconComponent } from './components/studio-icon/studio-icon.component';
@@ -77,7 +100,39 @@ interface VerboseDebugContext {
 
 @Component({
   selector: 'app-root',
-  imports: [JobColumnComponent, JobDetailComponent, CliUsageSheetComponent, OrchestratorSideSheetComponent, OrchestratorSettingsModalComponent, ProjectOverlaysComponent, AutoReviewIndicatorComponent, StatusBarComponent, FormsModule, CreateJobDialogComponent, ErrorDialogComponent, ConfirmDialogComponent, NotificationStackComponent, MediaLightboxComponent, ProjectTabsComponent, E2ECleanupDialogComponent, WorkspaceOverlaysComponent, WorkspaceBannerComponent, UpdateBannerComponent, UpdateVersionBadgeComponent, UpdateCenterComponent, UpdateBlockModalComponent, VerboseDebugOverlayComponent, FiltersDropdownComponent, KanbanFilterSidesheetComponent, TooltipDirective, StudioShellComponent, ProjectHubViewComponent, StudioDiffViewComponent, StudioActivityViewComponent, StudioIconComponent],
+  imports: [
+    JobColumnComponent,
+    JobDetailComponent,
+    CliUsageSheetComponent,
+    OrchestratorSideSheetComponent,
+    OrchestratorSettingsModalComponent,
+    ProjectOverlaysComponent,
+    AutoReviewIndicatorComponent,
+    StatusBarComponent,
+    FormsModule,
+    CreateJobDialogComponent,
+    ErrorDialogComponent,
+    ConfirmDialogComponent,
+    NotificationStackComponent,
+    MediaLightboxComponent,
+    ProjectTabsComponent,
+    E2ECleanupDialogComponent,
+    WorkspaceOverlaysComponent,
+    WorkspaceBannerComponent,
+    UpdateBannerComponent,
+    UpdateVersionBadgeComponent,
+    UpdateCenterComponent,
+    UpdateBlockModalComponent,
+    VerboseDebugOverlayComponent,
+    FiltersDropdownComponent,
+    KanbanFilterSidesheetComponent,
+    TooltipDirective,
+    StudioShellComponent,
+    ProjectHubViewComponent,
+    StudioDiffViewComponent,
+    StudioActivityViewComponent,
+    StudioIconComponent,
+  ],
   // Cycle 7b: OnPush. The shell mounts kanban + detail panel + many
   // sheets; default (Default) change detection re-checked the whole
   // tree on every async event (every poll tick, every signal write).
@@ -92,9 +147,18 @@ interface VerboseDebugContext {
   // class rules used by the extracted dialogs and project-tabs.
   encapsulation: ViewEncapsulation.None,
   templateUrl: './app.html',
-  styleUrl: './app.scss'
+  styleUrl: './app.scss',
 })
-export class App implements OnInit {
+export class App implements OnInit, OnDestroy {
+  readonly jobService = inject(JobService);
+  readonly errorDialog = inject(ErrorDialogService);
+  readonly devTools = inject(DevToolsService);
+  readonly clientService = inject(ClientService);
+  readonly featureFlags = inject(FeatureFlagsService);
+  private readonly _completionSound = inject(JobCompletionSoundService);
+  readonly updateClient = inject(UpdateClientService);
+  readonly studioTabState = inject(StudioTabStateService);
+
   /**
    * Cycle 9j: selection state (selected detail, triage toast, lane
    * peers, URL sync, request-token guard) lives in JobSelectionService.
@@ -185,7 +249,9 @@ export class App implements OnInit {
   // Cycle 9: side-sheet width owned by UiPreferencesService.
   private readonly uiPrefs = inject(UiPreferencesService);
   readonly sideSheetWidth = this.uiPrefs.sideSheetWidth;
-  readonly collapsedGroups = signal<Set<string>>(new Set(JSON.parse(localStorage.getItem('collapsedGroups') ?? '[]')));
+  readonly collapsedGroups = signal<Set<string>>(
+    new Set(JSON.parse(localStorage.getItem('collapsedGroups') ?? '[]')),
+  );
   /**
    * Per-lane collapse preference for the main board. Values are state ids
    * (`1-preparation` … `7-archive`); a state present here renders as a
@@ -239,7 +305,7 @@ export class App implements OnInit {
    * reload.
    */
   readonly kanbanFilterSidesheetOpen = signal<boolean>(
-    localStorage.getItem('atp.kanban.filterSidesheetOpen') === '1'
+    localStorage.getItem('atp.kanban.filterSidesheetOpen') === '1',
   );
 
   toggleKanbanFilterSidesheet(): void {
@@ -258,7 +324,7 @@ export class App implements OnInit {
   }
 
   readonly projectNames = computed(() => {
-    return this.watchPaths().map(wp => wp.name);
+    return this.watchPaths().map((wp) => wp.name);
   });
 
   /**
@@ -284,7 +350,9 @@ export class App implements OnInit {
       this.clearContainerFocus();
     }
     queueMicrotask(() => {
-      const el = document.querySelector('[data-testid="lane-3a-failed-pickup"]') as HTMLElement | null;
+      const el = document.querySelector(
+        '[data-testid="lane-3a-failed-pickup"]',
+      ) as HTMLElement | null;
       if (!el) return;
       el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
       el.classList.add('column--failed-pickup-pulse');
@@ -312,18 +380,34 @@ export class App implements OnInit {
     { value: 'chore', label: 'Chores', icon: '·', kind: 'chore' },
   ];
 
-  setClientFilter(id: string | null): void { this.boardFilters.setClientFilter(id); }
-  clientFilterChange(event: Event): string | null { return this.boardFilters.clientFilterChange(event); }
-  clearTypeFilters(): void { this.boardFilters.clearTypeFilters(); }
-  onSetType(type: string | null): void { this.boardFilters.onSetType(type); }
-  toggleTypeFilter(type: string): void { this.boardFilters.toggleTypeFilter(type); }
-  toggleTagFilter(id: string): void { this.boardFilters.toggleTagFilter(id); }
-  clearAllFilters(): void { this.boardFilters.clearAllFilters(); }
-  removeFilterPill(pill: ActiveFilterPill): void { this.boardFilters.removeFilterPill(pill); }
+  setClientFilter(id: string | null): void {
+    this.boardFilters.setClientFilter(id);
+  }
+  clientFilterChange(event: Event): string | null {
+    return this.boardFilters.clientFilterChange(event);
+  }
+  clearTypeFilters(): void {
+    this.boardFilters.clearTypeFilters();
+  }
+  onSetType(type: string | null): void {
+    this.boardFilters.onSetType(type);
+  }
+  toggleTypeFilter(type: string): void {
+    this.boardFilters.toggleTypeFilter(type);
+  }
+  toggleTagFilter(id: string): void {
+    this.boardFilters.toggleTagFilter(id);
+  }
+  clearAllFilters(): void {
+    this.boardFilters.clearAllFilters();
+  }
+  removeFilterPill(pill: ActiveFilterPill): void {
+    this.boardFilters.removeFilterPill(pill);
+  }
 
   loadTagRegistry(): void {
     this.jobService.listTags().subscribe({
-      next: tags => this.tagRegistryStore.set(tags),
+      next: (tags) => this.tagRegistryStore.set(tags),
       error: () => this.tagRegistryStore.set([]),
     });
   }
@@ -344,25 +428,40 @@ export class App implements OnInit {
     const lanes = [
       { state: '0-backlog', title: 'Backlog', icon: '🗒️', jobs: grouped.backlog ?? [] },
       { state: '1-preparation', title: 'In Preparation', icon: '📋', jobs: grouped.preparation },
-      { state: '1a-orchestrator-prep', title: 'Orch Prep', icon: '🤖', jobs: grouped.orchestratorPrep },
+      {
+        state: '1a-orchestrator-prep',
+        title: 'Orch Prep',
+        icon: '🤖',
+        jobs: grouped.orchestratorPrep,
+      },
     ];
     if (grouped.needsHumanReview.length > 0) {
-      lanes.push({ state: '1b-needs-human-review', title: 'Needs Clar', icon: '🚩', jobs: grouped.needsHumanReview });
+      lanes.push({
+        state: '1b-needs-human-review',
+        title: 'Needs Clar',
+        icon: '🚩',
+        jobs: grouped.needsHumanReview,
+      });
     }
     lanes.push(
       { state: '2-ready', title: 'Ready', icon: '📦', jobs: grouped.ready },
-      { state: '3-progress', title: 'In Progress', icon: '🔵', jobs: grouped.progress }
+      { state: '3-progress', title: 'In Progress', icon: '🔵', jobs: grouped.progress },
     );
     // ADR-0028: 3a-failed-pickup is hide-when-empty. The card style and the
     // amber outline live on the column component when state === '3a-failed-pickup'.
     if ((grouped.failedPickup ?? []).length > 0) {
-      lanes.push({ state: '3a-failed-pickup', title: 'Failed Pickup', icon: '⚠️', jobs: grouped.failedPickup });
+      lanes.push({
+        state: '3a-failed-pickup',
+        title: 'Failed Pickup',
+        icon: '⚠️',
+        jobs: grouped.failedPickup,
+      });
     }
     lanes.push(
       { state: '4-auto-review', title: 'Auto Review', icon: '🤖', jobs: grouped.autoReview },
       { state: '5-human-review', title: 'Human Review', icon: '👁️', jobs: grouped.humanReview },
       { state: '6-completed', title: 'Completed', icon: '🟢', jobs: grouped.completed },
-      { state: '7-archive', title: 'Archive', icon: '🗄️', jobs: grouped.archive ?? [] }
+      { state: '7-archive', title: 'Archive', icon: '🗄️', jobs: grouped.archive ?? [] },
     );
     return lanes;
   });
@@ -398,35 +497,75 @@ export class App implements OnInit {
     //   4. 1-preparation                     — in human preparation
     //   5. 0-backlog                         — fresh inbox / triage
     const readySplit = splitReadyByPhase(grouped.ready);
-    const backlogLanes: Array<{ state: string; title: string; icon: string; jobs: JobInfo[] }> = [];
-    backlogLanes.push({ state: '2-ready', title: 'Human Ready', icon: '📦', jobs: readySplit.humanReady });
+    const backlogLanes: { state: string; title: string; icon: string; jobs: JobInfo[] }[] = [];
+    backlogLanes.push({
+      state: '2-ready',
+      title: 'Human Ready',
+      icon: '📦',
+      jobs: readySplit.humanReady,
+    });
     if (readySplit.intake.length > 0) {
-      backlogLanes.push({ state: '2-ready-intake', title: 'Orch Intake', icon: '🛂', jobs: readySplit.intake });
+      backlogLanes.push({
+        state: '2-ready-intake',
+        title: 'Orch Intake',
+        icon: '🛂',
+        jobs: readySplit.intake,
+      });
     }
     if (grouped.needsHumanReview.length > 0) {
-      backlogLanes.push({ state: '1b-needs-human-review', title: 'Needs Clar', icon: '🚩', jobs: grouped.needsHumanReview });
+      backlogLanes.push({
+        state: '1b-needs-human-review',
+        title: 'Needs Clar',
+        icon: '🚩',
+        jobs: grouped.needsHumanReview,
+      });
     }
-    backlogLanes.push({ state: '1a-orchestrator-prep', title: 'Orch Prep', icon: '🤖', jobs: grouped.orchestratorPrep });
-    backlogLanes.push({ state: '1-preparation', title: 'In Preparation', icon: '📋', jobs: grouped.preparation });
-    backlogLanes.push({ state: '0-backlog', title: 'Backlog', icon: '🗒️', jobs: grouped.backlog ?? [] });
-    const activeLanes: Array<{ state: string; title: string; icon: string; jobs: JobInfo[] }> = [
+    backlogLanes.push({
+      state: '1a-orchestrator-prep',
+      title: 'Orch Prep',
+      icon: '🤖',
+      jobs: grouped.orchestratorPrep,
+    });
+    backlogLanes.push({
+      state: '1-preparation',
+      title: 'In Preparation',
+      icon: '📋',
+      jobs: grouped.preparation,
+    });
+    backlogLanes.push({
+      state: '0-backlog',
+      title: 'Backlog',
+      icon: '🗒️',
+      jobs: grouped.backlog ?? [],
+    });
+    const activeLanes: { state: string; title: string; icon: string; jobs: JobInfo[] }[] = [
       { state: '3-progress', title: 'In Progress', icon: '🔵', jobs: grouped.progress },
     ];
     // ADR-0028: 3a-failed-pickup is hide-when-empty.
     if ((grouped.failedPickup ?? []).length > 0) {
-      activeLanes.push({ state: '3a-failed-pickup', title: 'Failed Pickup', icon: '⚠️', jobs: grouped.failedPickup });
+      activeLanes.push({
+        state: '3a-failed-pickup',
+        title: 'Failed Pickup',
+        icon: '⚠️',
+        jobs: grouped.failedPickup,
+      });
     }
-    activeLanes.push({ state: '4-auto-review', title: 'Auto Review', icon: '🤖', jobs: grouped.autoReview });
+    activeLanes.push({
+      state: '4-auto-review',
+      title: 'Auto Review',
+      icon: '🤖',
+      jobs: grouped.autoReview,
+    });
     return [
       {
         id: 'backlog',
         label: 'Backlog',
-        lanes: backlogLanes
+        lanes: backlogLanes,
       },
       {
         id: 'active',
         label: 'Active',
-        lanes: activeLanes
+        lanes: activeLanes,
       },
       {
         id: 'decide',
@@ -436,12 +575,14 @@ export class App implements OnInit {
           // completed and archive in the user-owned tail.
           { state: '5-human-review', title: 'Human Review', icon: '👁️', jobs: grouped.humanReview },
           { state: '6-completed', title: 'Completed', icon: '🟢', jobs: grouped.completed },
-          { state: '7-archive', title: 'Archive', icon: '🗄️', jobs: grouped.archive ?? [] }
-        ]
-      }
+          { state: '7-archive', title: 'Archive', icon: '🗄️', jobs: grouped.archive ?? [] },
+        ],
+      },
     ];
   });
-  readonly selectedJobUsesCopilot = computed(() => (this.selectedJob()?.info.cliType ?? 'copilot') === 'copilot');
+  readonly selectedJobUsesCopilot = computed(
+    () => (this.selectedJob()?.info.cliType ?? 'copilot') === 'copilot',
+  );
 
   // Cycle 9j: triageLanePeers lives in JobSelectionService.
   readonly triageLanePeers = this.jobSelection.triageLanePeers;
@@ -454,7 +595,7 @@ export class App implements OnInit {
     const job = this.selectedJob();
     const peers = this.triageLanePeers();
     if (!job || peers.length === 0) return 0;
-    const idx = peers.findIndex(p => p.jobKey === job.info.jobKey);
+    const idx = peers.findIndex((p) => p.jobKey === job.info.jobKey);
     return idx >= 0 ? idx + 1 : 0;
   });
   readonly slimPagerTotal = computed<number>(() => this.triageLanePeers().length);
@@ -464,12 +605,25 @@ export class App implements OnInit {
   // template `[(ngModel)]` and helper-method bindings working unchanged.
   readonly cliTypes = CLI_TYPES;
 
-  cliTypeLabel(t: CliType): string { return fmtCliTypeLabel(t); }
-  formatMultiplier(mult: number | null): string { return fmtMultiplier(mult); }
-  onCreateCliTypeChange(t: CliType): void { this.createJobForm.onCreateCliTypeChange(t); }
-  onDefaultCliChange(t: CliType): void { this.createJobForm.applyStoredCliDefault(); }
-  onDefaultModelChange(ev: { cliType: CliType; model: string }): void { this.createJobForm.onDefaultModelChange(ev); }
-  canAddTaskToGroup(state: string): boolean { return this.createJobForm.canAddTaskToGroup(state); }
+  cliTypeLabel(t: CliType): string {
+    return fmtCliTypeLabel(t);
+  }
+  formatMultiplier(mult: number | null): string {
+    return fmtMultiplier(mult);
+  }
+  onCreateCliTypeChange(t: CliType): void {
+    this.createJobForm.onCreateCliTypeChange(t);
+  }
+  onDefaultCliChange(t: CliType): void {
+    void t;
+    this.createJobForm.applyStoredCliDefault();
+  }
+  onDefaultModelChange(ev: { cliType: CliType; model: string }): void {
+    this.createJobForm.onDefaultModelChange(ev);
+  }
+  canAddTaskToGroup(state: string): boolean {
+    return this.createJobForm.canAddTaskToGroup(state);
+  }
 
   readonly devToolsFlags = computed(() => this.devTools.flags());
 
@@ -507,16 +661,7 @@ export class App implements OnInit {
     this.orchestratorSettingsOpen.set(false);
   }
 
-  constructor(
-    readonly jobService: JobService,
-    readonly errorDialog: ErrorDialogService,
-    readonly devTools: DevToolsService,
-    readonly clientService: ClientService,
-    readonly featureFlags: FeatureFlagsService,
-    private readonly _completionSound: JobCompletionSoundService,
-    readonly updateClient: UpdateClientService,
-    readonly studioTabState: StudioTabStateService,
-  ) {
+  constructor() {
     // Cycle 10a: refresh the kanban after a successful create — the
     // CreateJobFormService doesn't call jobService.refresh itself
     // because that orchestration concern lives here.
@@ -542,7 +687,11 @@ export class App implements OnInit {
           if (tab.projectName === '__all__') {
             // Clear project filter for the "All projects" pill.
             this.boardFilters.activeProjects.set(new Set<string>());
-            try { localStorage.setItem('activeProjects', JSON.stringify([])); } catch { /* storage may be blocked */ }
+            try {
+              localStorage.setItem('activeProjects', JSON.stringify([]));
+            } catch {
+              /* storage may be blocked */
+            }
           } else {
             // Single-select: only this project's jobs render in the lanes.
             this.boardFilters.selectProject(tab.projectName, false);
@@ -562,7 +711,7 @@ export class App implements OnInit {
       if (!selected) return;
       const key = `task:${selected.info.jobKey}`;
       const tabs = untracked(() => this.studioTabState.tabs());
-      const present = tabs.some(t => t.kind === 'task' && t.jobKey === selected.info.jobKey);
+      const present = tabs.some((t) => t.kind === 'task' && t.jobKey === selected.info.jobKey);
       untracked(() => {
         if (!present) {
           this.studioTabState.open({ kind: 'task', jobKey: selected.info.jobKey });
@@ -580,7 +729,7 @@ export class App implements OnInit {
         return;
       }
 
-      const latest = jobs.find(job => job.jobKey === selected.info.jobKey);
+      const latest = jobs.find((job) => job.jobKey === selected.info.jobKey);
       if (!latest) {
         return;
       }
@@ -627,7 +776,9 @@ export class App implements OnInit {
       if (this.jobDetailRef?.triageActingId() != null) return;
       const peers = untracked(() => this.triageLanePeers());
       // The job no longer matches the lane it was being triaged in; advance.
-      untracked(() => this.triage.advanceToNextInLane(lane, sel.info.jobKey, peers, /*external*/ true));
+      untracked(() =>
+        this.triage.advanceToNextInLane(lane, sel.info.jobKey, peers, /*external*/ true),
+      );
     });
   }
 
@@ -652,7 +803,7 @@ export class App implements OnInit {
         this.errorDialog.show(err, {
           title: 'Failed to load projects',
           fallbackMessage: 'Failed to load projects',
-          source: 'Project list'
+          source: 'Project list',
         });
       },
     });
@@ -687,11 +838,27 @@ export class App implements OnInit {
         if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
         if ((target as HTMLElement).isContentEditable) return;
       }
-      const ids = this.laneGroups().map(g => g.id);
-      if (ev.key === '1' && ids[0]) { this.toggleContainerFocus(ids[0]); ev.preventDefault(); return; }
-      if (ev.key === '2' && ids[1]) { this.toggleContainerFocus(ids[1]); ev.preventDefault(); return; }
-      if (ev.key === '3' && ids[2]) { this.toggleContainerFocus(ids[2]); ev.preventDefault(); return; }
-      if (ev.key === '0') { this.clearContainerFocus(); ev.preventDefault(); return; }
+      const ids = this.laneGroups().map((g) => g.id);
+      if (ev.key === '1' && ids[0]) {
+        this.toggleContainerFocus(ids[0]);
+        ev.preventDefault();
+        return;
+      }
+      if (ev.key === '2' && ids[1]) {
+        this.toggleContainerFocus(ids[1]);
+        ev.preventDefault();
+        return;
+      }
+      if (ev.key === '3' && ids[2]) {
+        this.toggleContainerFocus(ids[2]);
+        ev.preventDefault();
+        return;
+      }
+      if (ev.key === '0') {
+        this.clearContainerFocus();
+        ev.preventDefault();
+        return;
+      }
     };
     window.addEventListener('keydown', this.kanbanKeyListener);
   }
@@ -715,27 +882,59 @@ export class App implements OnInit {
     this.jobService.refresh();
   }
 
-  openDetail(job: JobInfo) { this.jobSelection.openDetail(job); }
-  closeDetail() { this.jobSelection.closeDetail(); }
-  isSelectedJob(job: JobInfo): boolean { return this.jobSelection.isSelected(job); }
+  openDetail(job: JobInfo) {
+    this.jobSelection.openDetail(job);
+  }
+  closeDetail() {
+    this.jobSelection.closeDetail();
+  }
+  isSelectedJob(job: JobInfo): boolean {
+    return this.jobSelection.isSelected(job);
+  }
 
   // Cycle 10c: triage panel + j/k navigation + auto-advance delegated
   // to TriageController. The shell forwards events from JobDetailComponent.
-  onTriageMove(info: JobInfo, ev: { targetState: string; actionId: string }) { this.triage.move(info, ev); }
-  onTriageMoveToTop(info: JobInfo, ev: { actionId: string }) { this.triage.moveToTop(info, ev); }
-  onTriageDelete(info: JobInfo, ev: { actionId: string }) { this.triage.delete(info, ev); }
-  onTriageStart(info: JobInfo, ev: { actionId: string }) { this.triage.start(info, ev); }
-  onTriageNext(info: JobInfo) { this.triage.next(info); }
-  onTriagePrev(info: JobInfo) { this.triage.prev(info); }
-  onCompleteAndNextReview() { this.triage.completeAndNextReview(); }
+  onTriageMove(info: JobInfo, ev: { targetState: string; actionId: string }) {
+    this.triage.move(info, ev);
+  }
+  onTriageMoveToTop(info: JobInfo, ev: { actionId: string }) {
+    this.triage.moveToTop(info, ev);
+  }
+  onTriageDelete(info: JobInfo, ev: { actionId: string }) {
+    this.triage.delete(info, ev);
+  }
+  onTriageStart(info: JobInfo, ev: { actionId: string }) {
+    this.triage.start(info, ev);
+  }
+  onTriageNext(info: JobInfo) {
+    this.triage.next(info);
+  }
+  onTriagePrev(info: JobInfo) {
+    this.triage.prev(info);
+  }
+  onCompleteAndNextReview() {
+    this.triage.completeAndNextReview();
+  }
 
   // Cycle 10b: board-mutation handlers delegate to BoardMutationsService.
-  onJobDrop(event: { jobId: string; watchPath: string; targetState: string; targetIndex: number }) { this.boardMutations.moveJob(event); }
-  onJobReorder(event: { state: string; jobs: { jobId: string; watchPath: string }[] }) { this.boardMutations.reorderJobs(event); }
-  onDeleteFromBoard(job: JobInfo) { this.boardMutations.deleteFromBoard(job); }
-  onDeleteFromDetail(info: JobInfo) { this.boardMutations.deleteFromDetail(info); }
-  onStateChangeFromDetail(info: JobInfo, targetState: string) { this.boardMutations.changeStateFromDetail(info, targetState); }
-  onArchiveAll() { this.boardMutations.archiveAllCompleted(this.filteredGrouped().completed); }
+  onJobDrop(event: { jobId: string; watchPath: string; targetState: string; targetIndex: number }) {
+    this.boardMutations.moveJob(event);
+  }
+  onJobReorder(event: { state: string; jobs: { jobId: string; watchPath: string }[] }) {
+    this.boardMutations.reorderJobs(event);
+  }
+  onDeleteFromBoard(job: JobInfo) {
+    this.boardMutations.deleteFromBoard(job);
+  }
+  onDeleteFromDetail(info: JobInfo) {
+    this.boardMutations.deleteFromDetail(info);
+  }
+  onStateChangeFromDetail(info: JobInfo, targetState: string) {
+    this.boardMutations.changeStateFromDetail(info, targetState);
+  }
+  onArchiveAll() {
+    this.boardMutations.archiveAllCompleted(this.filteredGrouped().completed);
+  }
 
   openCreate(targetState?: string) {
     this.createJobForm.open({
@@ -801,9 +1000,7 @@ export class App implements OnInit {
   /** Tooltip for the toolbar button; shows which project the feed will open for. */
   orchFeedTooltip(): string {
     const project = this.pickOrchFeedProject();
-    return project
-      ? `Open orchestrator feed for "${project}"`
-      : 'No project selected';
+    return project ? `Open orchestrator feed for "${project}"` : 'No project selected';
   }
 
   /**
@@ -824,9 +1021,7 @@ export class App implements OnInit {
 
   orchChatTooltip(): string {
     const project = this.orchSideSheetPreferredProject();
-    return project
-      ? `Toggle orchestrator chat for "${project}"`
-      : 'No project selected';
+    return project ? `Toggle orchestrator chat for "${project}"` : 'No project selected';
   }
 
   toggleOrchestratorChat(): void {
@@ -848,12 +1043,16 @@ export class App implements OnInit {
    * `<app-verbose-debug-overlay>`. The overlay is read-only; it never
    * mutates state and never starts a run.
    */
-  onOpenVerboseDebugFromSheet(event: { jobId: string; watchPath: string; jobTitle: string | null }): void {
+  onOpenVerboseDebugFromSheet(event: {
+    jobId: string;
+    watchPath: string;
+    jobTitle: string | null;
+  }): void {
     forkJoin({
       detail: this.jobService.getDetail(event.jobId, event.watchPath),
       lines: this.jobService.getJobOutput(event.jobId, event.watchPath),
       runs: this.jobService.getRunTimeline(event.jobId, event.watchPath),
-      screenshots: this.jobService.getJobScreenshots(event.jobId, event.watchPath)
+      screenshots: this.jobService.getJobScreenshots(event.jobId, event.watchPath),
     }).subscribe({
       next: ({ detail, lines, runs, screenshots }) => {
         this.verboseDebugContext.set({
@@ -861,15 +1060,15 @@ export class App implements OnInit {
           runTimeline: runs ?? null,
           screenshots: screenshots?.screenshots ?? [],
           tokenSummary: detail?.info?.tokenSummary ?? null,
-          job: detail?.info ?? null
+          job: detail?.info ?? null,
         });
       },
       error: (err) => {
         this.errorDialog.show(err, {
           title: 'Verbose Debug failed to load',
-          source: `task ${event.jobTitle ?? event.jobId}`
+          source: `task ${event.jobTitle ?? event.jobId}`,
         });
-      }
+      },
     });
   }
 
@@ -889,7 +1088,7 @@ export class App implements OnInit {
     history.replaceState(
       null,
       '',
-      `?job=${encodeURIComponent(event.jobId)}&watchPath=${encodeURIComponent(event.watchPath)}`
+      `?job=${encodeURIComponent(event.jobId)}&watchPath=${encodeURIComponent(event.watchPath)}`,
     );
     const token = this.jobSelection.bumpOpenDetailToken();
     this.jobService.getDetail(event.jobId, event.watchPath).subscribe({
@@ -898,9 +1097,9 @@ export class App implements OnInit {
         history.replaceState(null, '', window.location.pathname);
         this.errorDialog.show(err, {
           title: 'Failed to open task',
-          source: `task ${event.jobId}`
+          source: `task ${event.jobId}`,
         });
-      }
+      },
     });
   }
 
@@ -922,7 +1121,8 @@ export class App implements OnInit {
    * slice. Today the project's `security/reviews/` folder is the canonical
    * pointer; the panel already shows the rel path next to each row.
    */
-  onSecurityOpenEvidence(_event: { projectName: string; relPath: string }): void {
+  onSecurityOpenEvidence(event: { projectName: string; relPath: string }): void {
+    void event;
     // The relPath is rendered in the panel row itself; refresh the kanban
     // so a freshly-queued audit's eventual completion is visible without
     // a manual reload.
@@ -930,7 +1130,8 @@ export class App implements OnInit {
   }
 
   /** Refresh the kanban after a security audit was queued so the new job appears. */
-  onSecurityAuditQueued(_event: { projectName: string; jobId: string }): void {
+  onSecurityAuditQueued(event: { projectName: string; jobId: string }): void {
+    void event;
     this.refresh();
   }
 
@@ -946,7 +1147,8 @@ export class App implements OnInit {
   }
 
   /** Refresh the kanban after a UX/UI design action was queued so the new job appears. */
-  onUxuiActionQueued(_event: { projectName: string; action: string; jobId: string }): void {
+  onUxuiActionQueued(event: { projectName: string; action: string; jobId: string }): void {
+    void event;
     this.refresh();
   }
 
@@ -970,11 +1172,15 @@ export class App implements OnInit {
   openProjectShell(name: string, rail: ProjectRailKey = DEFAULT_PROJECT_RAIL_KEY): void {
     this.projectOverlays.openProjectShell(name, rail, this.watchPaths());
   }
-  closeProjectShell(): void { this.projectOverlays.closeProjectShell(); }
+  closeProjectShell(): void {
+    this.projectOverlays.closeProjectShell();
+  }
   openAnalysisReport(project: string, reportId: string): void {
     this.projectOverlays.openAnalysisReport(project, reportId);
   }
-  closeAnalysisReport(): void { this.projectOverlays.closeAnalysisReport(); }
+  closeAnalysisReport(): void {
+    this.projectOverlays.closeAnalysisReport();
+  }
   private applyProjectShellHash(): void {
     this.projectOverlays.syncShellFromHash(this.watchPaths());
   }
@@ -984,13 +1190,27 @@ export class App implements OnInit {
   // because external call sites (status bar, usage hover panel, dev-tools
   // menu, screenshot reel) and deep-link entry points still go through
   // the shell.
-  openWorkspaceTokens(): void { this.workspaceOverlays.openTokens(); }
-  closeWorkspaceTokens(): void { this.workspaceOverlays.closeTokens(); }
-  openWorkspaceScreenshots(): void { this.workspaceOverlays.openScreenshots(); }
-  closeWorkspaceScreenshots(): void { this.workspaceOverlays.closeScreenshots(); }
-  toggleWorkspaceScreenshots(): void { this.workspaceOverlays.toggleScreenshots(); }
-  openCliAdmin(): void { this.workspaceOverlays.openCliAdmin(); }
-  closeCliAdmin(): void { this.workspaceOverlays.closeCliAdmin(); }
+  openWorkspaceTokens(): void {
+    this.workspaceOverlays.openTokens();
+  }
+  closeWorkspaceTokens(): void {
+    this.workspaceOverlays.closeTokens();
+  }
+  openWorkspaceScreenshots(): void {
+    this.workspaceOverlays.openScreenshots();
+  }
+  closeWorkspaceScreenshots(): void {
+    this.workspaceOverlays.closeScreenshots();
+  }
+  toggleWorkspaceScreenshots(): void {
+    this.workspaceOverlays.toggleScreenshots();
+  }
+  openCliAdmin(): void {
+    this.workspaceOverlays.openCliAdmin();
+  }
+  closeCliAdmin(): void {
+    this.workspaceOverlays.closeCliAdmin();
+  }
   toggleCliAdmin(): void {
     this.workspaceOverlays.toggleCliAdmin();
   }
@@ -1004,15 +1224,25 @@ export class App implements OnInit {
   onOpenTaskFromReel(s: JobScreenshot): void {
     this.closeWorkspaceScreenshots();
     if (!s?.jobId || !s?.watchPath) return;
-    history.replaceState(null, '', `?job=${encodeURIComponent(s.jobId)}&watchPath=${encodeURIComponent(s.watchPath)}`);
+    history.replaceState(
+      null,
+      '',
+      `?job=${encodeURIComponent(s.jobId)}&watchPath=${encodeURIComponent(s.watchPath)}`,
+    );
     this.jobService.getDetail(s.jobId, s.watchPath).subscribe({
       next: (detail) => this.selectedJob.set(detail),
-      error: () => { /* keep the user where they were */ }
+      error: () => {
+        /* keep the user where they were */
+      },
     });
   }
 
-  cancelCreate() { this.createJobForm.cancel(); }
-  submitCreate() { this.createJobForm.submit(); }
+  cancelCreate() {
+    this.createJobForm.cancel();
+  }
+  submitCreate() {
+    this.createJobForm.submit();
+  }
 
   toggleProject(event: { name: string; additive: boolean } | string) {
     if (typeof event === 'string') {
@@ -1023,7 +1253,9 @@ export class App implements OnInit {
     }
     this.boardFilters.selectProject(event.name, event.additive);
   }
-  isProjectActive(name: string): boolean { return this.boardFilters.isProjectActive(name); }
+  isProjectActive(name: string): boolean {
+    return this.boardFilters.isProjectActive(name);
+  }
 
   // Pre-bound arrow-function aliases for child components that take a
   // predicate-style input (e.g. <app-project-tabs>). Using arrows keeps
@@ -1081,16 +1313,14 @@ export class App implements OnInit {
       }
     }
     if (totalTokens <= 0 || jobsWithTokens === 0) return null;
-    const models = [...modelLastSeen.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .map(([m]) => m);
+    const models = [...modelLastSeen.entries()].sort((a, b) => b[1] - a[1]).map(([m]) => m);
     const fmt = this.formatTokensCompact;
-    const tooltipParts: string[] = [
-      `↑ ${fmt(inputTokens)} input · ↓ ${fmt(outputTokens)} output`
-    ];
+    const tooltipParts: string[] = [`↑ ${fmt(inputTokens)} input · ↓ ${fmt(outputTokens)} output`];
     if (cacheReadTokens > 0) tooltipParts.push(`⚡ ${fmt(cacheReadTokens)} cache read`);
     if (cacheCreationTokens > 0) tooltipParts.push(`+ ${fmt(cacheCreationTokens)} cache write`);
-    tooltipParts.push(`${jobsWithTokens} ${jobsWithTokens === 1 ? 'task' : 'tasks'} with AI activity`);
+    tooltipParts.push(
+      `${jobsWithTokens} ${jobsWithTokens === 1 ? 'task' : 'tasks'} with AI activity`,
+    );
     if (models.length > 0) tooltipParts.push(`Models: ${models.join(', ')}`);
     return {
       totalTokens,
@@ -1101,7 +1331,7 @@ export class App implements OnInit {
       jobsWithTokens,
       models,
       label: fmt(totalTokens),
-      tooltip: tooltipParts.join('\n')
+      tooltip: tooltipParts.join('\n'),
     };
   }
 
@@ -1139,9 +1369,10 @@ export class App implements OnInit {
         readyCount,
         icon: '🔁',
         label: 'Auto',
-        tooltip: readyCount > 0
-          ? `Auto-pickup is on — when the current task finishes, the next Ready task starts automatically (${readyCount} waiting). Click to stop; the running task will continue, but no further tasks will be picked up.`
-          : `Auto-pickup is on — the next task moved to Ready will start automatically. Click to stop; the running task (if any) will continue but no further tasks will be picked up.`
+        tooltip:
+          readyCount > 0
+            ? `Auto-pickup is on — when the current task finishes, the next Ready task starts automatically (${readyCount} waiting). Click to stop; the running task will continue, but no further tasks will be picked up.`
+            : `Auto-pickup is on — the next task moved to Ready will start automatically. Click to stop; the running task (if any) will continue but no further tasks will be picked up.`,
       };
     }
 
@@ -1151,7 +1382,7 @@ export class App implements OnInit {
         readyCount,
         icon: '⏸',
         label: 'Stopping',
-        tooltip: `Auto-pickup stopped — the current task keeps running, but no more tasks will be picked up automatically. Click to resume auto-pickup.`
+        tooltip: `Auto-pickup stopped — the current task keeps running, but no more tasks will be picked up automatically. Click to resume auto-pickup.`,
       };
     }
 
@@ -1160,25 +1391,27 @@ export class App implements OnInit {
       readyCount,
       icon: '▶',
       label: 'Auto',
-      tooltip: readyCount > 0
-        ? `Enable auto-pickup — when the current task finishes, the next Ready task starts automatically (${readyCount} waiting).`
-        : `Enable auto-pickup — as soon as a task moves to Ready, it will start automatically.`
+      tooltip:
+        readyCount > 0
+          ? `Enable auto-pickup — when the current task finishes, the next Ready task starts automatically (${readyCount} waiting).`
+          : `Enable auto-pickup — as soon as a task moves to Ready, it will start automatically.`,
     };
   }
 
   onToggleAuto(name: string) {
     const runner = this.jobService.runnerStatus().projects[name];
     const mode = runner?.mode ?? 'manual';
-    const newMode = (mode === 'auto-continuous' || mode === 'auto-single') ? 'paused' : 'auto-continuous';
+    const newMode =
+      mode === 'auto-continuous' || mode === 'auto-single' ? 'paused' : 'auto-continuous';
     this.jobService.setRunnerMode(name, newMode).subscribe({
       next: () => this.jobService.refreshRunnerStatus(true),
       error: (err) => {
         this.errorDialog.show(err, {
           title: 'Failed to change auto-pickup mode',
           fallbackMessage: 'Failed to change auto-pickup mode',
-          source: `Project ${name}`
+          source: `Project ${name}`,
         });
-      }
+      },
     });
   }
 
@@ -1199,7 +1432,7 @@ export class App implements OnInit {
     if (jobs.length === 0) return null;
     const first = jobs[0].projectName ?? null;
     if (!first) return null;
-    return jobs.every(j => j.projectName === first) ? first : null;
+    return jobs.every((j) => j.projectName === first) ? first : null;
   }
 
   /** Current runner mode (lookup mirrors the studio-shell header chip). */
@@ -1209,8 +1442,12 @@ export class App implements OnInit {
     return this.jobService.runnerStatus().projects[proj]?.mode ?? 'manual';
   }
 
-  onFileSaved() { this.boardMutations.refreshAfterFileSave(); }
-  onProjectChanged(targetWatchPath: string) { this.boardMutations.reopenAfterProjectChange(targetWatchPath); }
+  onFileSaved() {
+    this.boardMutations.refreshAfterFileSave();
+  }
+  onProjectChanged(targetWatchPath: string) {
+    this.boardMutations.reopenAfterProjectChange(targetWatchPath);
+  }
 
   closeErrorDialog() {
     this.errorDialog.close();
@@ -1256,20 +1493,36 @@ export class App implements OnInit {
   // The shell forwards the lane-id list so the service stays free of
   // the kanban catalogue shape; everything else is straight pass-through.
 
-  toggleLaneCollapse(state: string): void { this.laneCollapse.toggleLaneCollapse(state); }
-  isLaneCollapsed(state: string): boolean { return this.laneCollapse.isLaneCollapsed(state); }
-  expandedLaneCount(group: { lanes: Array<{ state: string }> }): number {
+  toggleLaneCollapse(state: string): void {
+    this.laneCollapse.toggleLaneCollapse(state);
+  }
+  isLaneCollapsed(state: string): boolean {
+    return this.laneCollapse.isLaneCollapsed(state);
+  }
+  expandedLaneCount(group: { lanes: { state: string }[] }): number {
     return this.laneCollapse.expandedLaneCount(group);
   }
-  isContainerFocused(id: string): boolean { return this.laneCollapse.isContainerFocused(id); }
-  toggleContainerFocus(id: string): void {
-    this.laneCollapse.toggleContainerFocus(id, this.laneGroups().map(g => g.id));
+  isContainerFocused(id: string): boolean {
+    return this.laneCollapse.isContainerFocused(id);
   }
-  clearContainerFocus(): void { this.laneCollapse.clearContainerFocus(); }
+  toggleContainerFocus(id: string): void {
+    this.laneCollapse.toggleContainerFocus(
+      id,
+      this.laneGroups().map((g) => g.id),
+    );
+  }
+  clearContainerFocus(): void {
+    this.laneCollapse.clearContainerFocus();
+  }
 
   // Cycle 9: UI-pref methods delegate to UiPreferencesService.
-  setTaskNavCollapsed(collapsed: boolean): void { this.uiPrefs.setTaskNavCollapsed(collapsed); }
-  toggleCompactCards(): void { this.uiPrefs.toggleCompactCards(); }
-  startResize(event: MouseEvent): void { this.uiPrefs.startResize(event); }
-
+  setTaskNavCollapsed(collapsed: boolean): void {
+    this.uiPrefs.setTaskNavCollapsed(collapsed);
+  }
+  toggleCompactCards(): void {
+    this.uiPrefs.toggleCompactCards();
+  }
+  startResize(event: MouseEvent): void {
+    this.uiPrefs.startResize(event);
+  }
 }

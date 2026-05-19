@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, computed, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 
 /**
@@ -60,7 +60,8 @@ const BANNER_TOPICS: ReadonlySet<string> = new Set([
   selector: 'app-workspace-banner',
   standalone: true,
   templateUrl: './workspace-banner.html',
-  styleUrl: './workspace-banner.scss'
+  styleUrl: './workspace-banner.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class WorkspaceBannerComponent implements OnInit, OnDestroy {
   private readonly http = inject(HttpClient);

@@ -276,6 +276,14 @@
       cursor: pointer;
       padding: 0;
     }
+    .obs__timeline-mark-text {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
     .obs__timeline-mark--observation { background: var(--studio-fg-dim); }
     .obs__timeline-mark--question { background: #fcd34d; }
     .obs__timeline-mark--decision { background: var(--severity-pending); }

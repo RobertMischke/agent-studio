@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, inject, input, signal } from '@angular/core';
 import type { TokenSummary } from '../../../../features/tokens';
 import { JobService } from '../../../../services/job.service';
 import { TokensApiService } from '../../../../features/tokens';

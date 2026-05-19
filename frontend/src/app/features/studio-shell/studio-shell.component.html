@@ -83,8 +83,9 @@
       @if (pickerOpen()) {
         <div class="studio-titlebar__picker-menu"
              role="menu"
+             tabindex="-1"
              data-testid="studio-project-picker-menu"
-             (click)="$event.stopPropagation()">
+             (click)="$event.stopPropagation()" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
           <button type="button"
                   class="studio-titlebar__picker-item"
                   [class.studio-titlebar__picker-item--active]="activeBoardProject() === null && activeTab()?.kind === 'board'"
@@ -279,7 +280,7 @@
                                   [active]="p.isActive"
                                   [testid]="'studio-explorer-project-' + p.name"
                                   (chevronClick)="toggleProjectExpanded(p.name, $event)"
-                                  (select)="openBoard(p.name)"
+                                  (selectRequest)="openBoard(p.name)"
                                   (secondary)="openHub(p.name)">
                       <button type="button"
                               class="studio-tree-row__hub-link"
@@ -294,22 +295,22 @@
                         <app-tree-row level="child" glyph="folder"
                                       label="backlog"
                                       [count]="laneCount(p.name, 'backlog')"
-                                      (select)="openBoard(p.name)" />
+                                      (selectRequest)="openBoard(p.name)" />
                         <app-tree-row level="child" glyph="play"
                                       label="active"
                                       [count]="laneCount(p.name, 'active')"
-                                      (select)="openBoard(p.name)" />
+                                      (selectRequest)="openBoard(p.name)" />
                         <app-tree-row level="child" glyph="eye"
                                       label="human review"
                                       [count]="laneCount(p.name, 'review')"
-                                      (select)="openBoard(p.name)" />
+                                      (selectRequest)="openBoard(p.name)" />
                         <app-tree-row level="child" glyph="grid"
                                       label="Project Hub"
-                                      (select)="openHub(p.name)" />
+                                      (selectRequest)="openHub(p.name)" />
                         <app-tree-row level="child" glyph="archive"
                                       label="archive"
                                       [count]="laneCount(p.name, 'archive')"
-                                      (select)="openBoard(p.name)" />
+                                      (selectRequest)="openBoard(p.name)" />
                       </div>
                     }
                   </div>
@@ -332,7 +333,7 @@
                       <span class="studio-tree-row__name">{{ tabLabel(t) }}</span>
                       <span class="studio-tree-row__close"
                             (click)="closeTab(tabKey(t), $event)"
-                            aria-label="Close tab">×</span>
+                            aria-label="Close tab" tabindex="0" (keydown.enter)="closeTab(tabKey(t), $event)" (keydown.space)="closeTab(tabKey(t), $event); $event.preventDefault()">×</span>
                     </button>
                   }
                 }
@@ -595,18 +596,21 @@
           @for (t of tabs(); track tabKey(t)) {
             <div class="studio-tab"
                  role="tab"
+                 tabindex="0"
                  draggable="true"
                  [class.studio-tab--active]="activeKey() === tabKey(t)"
                  [class.studio-tab--dragging]="draggingTabKey() === tabKey(t)"
                  [class.studio-tab--drop-before]="dragOverTabKey() === tabKey(t) && draggingTabKey() !== tabKey(t)"
                  [attr.data-tab-key]="tabKey(t)"
                  (click)="selectTab(tabKey(t))"
+                 (keydown.enter)="selectTab(tabKey(t))"
+                 (keydown.space)="selectTab(tabKey(t)); $event.preventDefault()"
                  (contextmenu)="openTabContextMenu($event, tabKey(t))"
                  (dragstart)="onTabDragStart($event, tabKey(t))"
                  (dragover)="onTabDragOver($event, tabKey(t))"
                  (dragleave)="onTabDragLeave($event, tabKey(t))"
                  (drop)="onTabDrop($event, tabKey(t))"
-                 (dragend)="onTabDragEnd($event)">
+                 (dragend)="onTabDragEnd($event)" (keydown.enter)="selectTab(tabKey(t))" (keydown.space)="selectTab(tabKey(t)); $event.preventDefault()">
               @if (tabNum(t); as n) {
                 <span class="studio-tab__num">{{ n }}</span>
               }
@@ -722,7 +726,7 @@
   @if (tabContextMenu(); as ctx) {
     <div class="studio-tab-ctx-backdrop"
          (click)="closeTabContextMenu()"
-         (contextmenu)="$event.preventDefault(); closeTabContextMenu()"></div>
+         (contextmenu)="$event.preventDefault(); closeTabContextMenu()" tabindex="0" (keydown.enter)="closeTabContextMenu()" (keydown.space)="closeTabContextMenu(); $event.preventDefault()"></div>
     <div class="studio-tab-ctx"
          role="menu"
          data-testid="studio-tab-context-menu"

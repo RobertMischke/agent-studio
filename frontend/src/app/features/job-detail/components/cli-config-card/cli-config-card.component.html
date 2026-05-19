@@ -2,7 +2,7 @@
   <div class="cli-config">
     <div class="cli-config__header">
       <span class="cli-config__title">🔧 CLI Configuration</span>
-      <button class="detail__error-close" (click)="close.emit()">✕</button>
+      <button class="detail__error-close" (click)="closeRequest.emit()">✕</button>
     </div>
     @if (status()) {
       <div class="cli-config__status" [class.cli-config__status--ok]="status()!.available"

@@ -46,7 +46,7 @@
         class="rail__menu"
         data-testid="pchat-rail-cluster-menu"
         [style.top.px]="cluster.topPx + 14"
-        (click)="$event.stopPropagation()">
+        (click)="$event.stopPropagation()" tabindex="0" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
         @for (member of cluster.members; track member.turnId) {
           <button
             type="button"

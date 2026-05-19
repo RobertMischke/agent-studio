@@ -1,4 +1,4 @@
-import { Component, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { beforeEach, describe, expect, it } from 'vitest';
@@ -9,15 +9,8 @@ const TIP_TESTID = 'app-tooltip';
 @Component({
   standalone: true,
   imports: [TooltipDirective],
-  template: `
-    <button
-      data-testid="anchor"
-      [appTooltip]="content()"
-      [tooltipPosition]="position()"
-      [tooltipSeverity]="severity()">
-      anchor
-    </button>
-  `
+  templateUrl: './tooltip.directive.host.html',
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 class HostComponent {
   content = signal<string | { title?: string; body: string } | null | undefined>('hello world');

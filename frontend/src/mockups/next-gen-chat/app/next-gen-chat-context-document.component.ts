@@ -1,4 +1,4 @@
-import { Component, computed, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output } from '@angular/core';
 
 import { ICON_PATHS } from './next-gen-chat-workbench-prototype.data';
 import {
@@ -14,6 +14,7 @@ import {
   selector: 'mockup-next-gen-chat-context-document',
   standalone: true,
   templateUrl: './next-gen-chat-context-document.component.html',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class NextGenChatContextDocumentComponent {
   readonly pane = input.required<ContextPane>();

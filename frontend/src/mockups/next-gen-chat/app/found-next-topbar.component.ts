@@ -1,4 +1,4 @@
-import { Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
 import { ICON_PATHS, PROJECT_TABS, TOPBAR_RUN_STATS } from './next-gen-chat-workbench-prototype.data';
 import { Density, StatusPanel, Theme } from './next-gen-chat-workbench-prototype.models';
@@ -8,6 +8,7 @@ import { Density, StatusPanel, Theme } from './next-gen-chat-workbench-prototype
   standalone: true,
   templateUrl: './found-next-topbar.component.html',
   styleUrl: './found-next-topbar.component.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class FoundNextTopbarComponent {
   readonly theme = input.required<Theme>();

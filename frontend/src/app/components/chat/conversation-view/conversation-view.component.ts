@@ -1,12 +1,5 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  inject,
-  input,
-  output,
-} from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output } from '@angular/core';
+
 import { DomSanitizer, type SafeHtml } from '@angular/platform-browser';
 import { markdownToHtml } from '../../markdown-utils';
 import { ToolBurstChipComponent } from '../tool-burst-chip/tool-burst-chip.component';
@@ -73,12 +66,12 @@ type RenderRow =
   selector: 'app-conversation-view',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, ToolBurstChipComponent, TooltipDirective],
+  imports: [ToolBurstChipComponent, TooltipDirective],
   templateUrl: './conversation-view.component.html',
   styleUrl: './conversation-view.component.scss',
 })
 export class ConversationViewComponent {
-  readonly events = input.required<ReadonlyArray<ConversationEvent>>();
+  readonly events = input.required<readonly ConversationEvent[]>();
   readonly isRunning = input<boolean>(false);
   readonly variant = input<'framed' | 'embedded'>('embedded');
 
@@ -158,21 +151,31 @@ export class ConversationViewComponent {
 
   actorLabel(kind: MessageEvent['kind']): string {
     switch (kind) {
-      case 'message.user': return 'You';
-      case 'message.taskAgent': return 'Agent';
-      case 'message.orchestrator': return 'Orchestrator';
-      case 'message.supervisor': return 'Supervisor';
-      case 'message.supportingAgent': return 'Supporting agent';
+      case 'message.user':
+        return 'You';
+      case 'message.taskAgent':
+        return 'Agent';
+      case 'message.orchestrator':
+        return 'Orchestrator';
+      case 'message.supervisor':
+        return 'Supervisor';
+      case 'message.supportingAgent':
+        return 'Supporting agent';
     }
   }
 
   actorGlyph(kind: MessageEvent['kind']): string {
     switch (kind) {
-      case 'message.user': return '🧑';
-      case 'message.taskAgent': return '🤖';
-      case 'message.orchestrator': return '🛰';
-      case 'message.supervisor': return '🛡';
-      case 'message.supportingAgent': return '🧰';
+      case 'message.user':
+        return '🧑';
+      case 'message.taskAgent':
+        return '🤖';
+      case 'message.orchestrator':
+        return '🛰';
+      case 'message.supervisor':
+        return '🛡';
+      case 'message.supportingAgent':
+        return '🧰';
     }
   }
 

@@ -1,4 +1,4 @@
-import { Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
 import { ICON_PATHS } from './next-gen-chat-workbench-prototype.data';
 import { WorkbenchDocument, WorkbenchDocumentId } from './next-gen-chat-workbench-prototype.models';
@@ -7,6 +7,7 @@ import { WorkbenchDocument, WorkbenchDocumentId } from './next-gen-chat-workbenc
   selector: 'mockup-next-gen-chat-document-tabs',
   standalone: true,
   templateUrl: './next-gen-chat-document-tabs.component.html',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class NextGenChatDocumentTabsComponent {
   readonly documents = input.required<readonly WorkbenchDocument[]>();

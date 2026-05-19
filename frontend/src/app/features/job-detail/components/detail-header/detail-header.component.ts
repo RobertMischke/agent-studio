@@ -73,7 +73,7 @@ export class DetailHeaderComponent {
    * orchestrator-managed lanes (ADR-0026) — listed but unusual to pick by
    * hand, hence the discreet labels.
    */
-  readonly laneOptions: ReadonlyArray<{ state: string; label: string }> = [
+  readonly laneOptions: readonly { state: string; label: string }[] = [
     { state: '1-preparation',         label: 'Preparation' },
     { state: '1a-orchestrator-prep',  label: 'Orch Prep' },
     { state: '1b-needs-human-review', label: 'Needs Clarification' },

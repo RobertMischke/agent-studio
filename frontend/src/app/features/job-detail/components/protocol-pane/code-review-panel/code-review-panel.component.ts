@@ -1,5 +1,13 @@
-import { ChangeDetectionStrategy, Component, OnInit, computed, inject, input, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  OnInit,
+  computed,
+  inject,
+  input,
+  signal,
+} from '@angular/core';
+
 import { FormsModule } from '@angular/forms';
 import { JobInfo } from '../../../../../models/job.model';
 import { CodeReviewListEntry, JobService } from '../../../../../services/job.service';
@@ -30,9 +38,9 @@ import { TooltipDirective } from '../../../../../components/tooltip';
   selector: 'app-code-review-panel',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, FormsModule, TooltipDirective],
+  imports: [FormsModule, TooltipDirective],
   templateUrl: './code-review-panel.component.html',
-  styleUrl: './code-review-panel.component.scss'
+  styleUrl: './code-review-panel.component.scss',
 })
 export class CodeReviewPanelComponent implements OnInit {
   readonly job = input.required<JobInfo>();
@@ -53,9 +61,9 @@ export class CodeReviewPanelComponent implements OnInit {
    * can wire {@link CliService}'s model catalogue endpoint here when it
    * becomes useful.
    */
-  readonly availableModels: ReadonlyArray<{ id: string; label: string }> = [
-    { id: 'claude-opus-4-7',         label: 'Opus 4.7 (default)' },
-    { id: 'claude-sonnet-4-6',       label: 'Sonnet 4.6' },
+  readonly availableModels: readonly { id: string; label: string }[] = [
+    { id: 'claude-opus-4-7', label: 'Opus 4.7 (default)' },
+    { id: 'claude-sonnet-4-6', label: 'Sonnet 4.6' },
     { id: 'claude-haiku-4-5-20251001', label: 'Haiku 4.5' },
   ];
 
@@ -83,7 +91,7 @@ export class CodeReviewPanelComponent implements OnInit {
       error: (err) => {
         this.error.set(err?.message ?? 'Failed to load code reviews.');
         this.loading.set(false);
-      }
+      },
     });
   }
 
@@ -99,18 +107,16 @@ export class CodeReviewPanelComponent implements OnInit {
     if (this.running()) return;
     this.running.set(true);
     this.error.set(null);
-    this.jobs
-      .runCodeReview(job.id, { model: this.selectedModel() }, job.watchPath)
-      .subscribe({
-        next: () => {
-          this.running.set(false);
-          this.refresh();
-        },
-        error: (err) => {
-          this.error.set(err?.message ?? 'Code review failed.');
-          this.running.set(false);
-        }
-      });
+    this.jobs.runCodeReview(job.id, { model: this.selectedModel() }, job.watchPath).subscribe({
+      next: () => {
+        this.running.set(false);
+        this.refresh();
+      },
+      error: (err) => {
+        this.error.set(err?.message ?? 'Code review failed.');
+        this.running.set(false);
+      },
+    });
   }
 
   /** Toggle the inline body view for one row. */
@@ -134,7 +140,7 @@ export class CodeReviewPanelComponent implements OnInit {
         if (this.expandedFile() === entry.fileName) {
           this.expandedBody.set('Failed to load review body.');
         }
-      }
+      },
     });
   }
 

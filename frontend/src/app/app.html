@@ -336,8 +336,8 @@
           [error]="error"
           [canOpenCliConfig]="error.canOpenCliConfig && selectedJobUsesCopilot()"
           [copyButtonLabel]="copyErrorButtonLabel()"
-          (close)="closeErrorDialog()"
-          (copy)="copyErrorDetails()"
+          (closeRequest)="closeErrorDialog()"
+          (copyRequest)="copyErrorDetails()"
           (openCliConfig)="openCliConfigFromError()" />
       }
       @if (showCreate()) {
@@ -354,8 +354,8 @@
           [(newTags)]="createJobForm.newTags"
           [(newTargetState)]="createJobForm.newTargetState"
           (cliTypeChange)="onCreateCliTypeChange($event)"
-          (cancel)="cancelCreate()"
-          (submit)="submitCreate()" />
+          (cancelRequest)="cancelCreate()"
+          (submitRequest)="submitCreate()" />
       }
       @if (showE2ECleanup()) {
         <app-e2e-cleanup-dialog
@@ -385,7 +385,7 @@
             [tokenSummary]="ctx.tokenSummary"
             [job]="ctx.job"
             [source]="ctx.job?.id ?? 'cli-output.log'"
-            (close)="closeVerboseDebug()" />
+            (closeRequest)="closeVerboseDebug()" />
         }
       }
       </div>
@@ -409,7 +409,7 @@
           [runnerIndicator]="getRunnerIndicatorFn"
           [autoInfo]="getAutoInfoFn"
           [projectTokens]="getProjectTokenChipFn"
-          (toggle)="toggleProject($event)"
+          (toggleRequest)="toggleProject($event)"
           (toggleAuto)="onToggleAuto($event)"
           (openShell)="openProjectShell($event)" />
         <div class="header__actions">
@@ -471,10 +471,17 @@
                     data-testid="devtools-menu-trigger"
                     [appTooltip]="'Dev tools'"
                     [class.devtools-menu__trigger--open]="devToolsMenuOpen()"
-                    (click)="devToolsMenuOpen.set(!devToolsMenuOpen()); $event.stopPropagation()">⋮</button>
+                    (click)="devToolsMenuOpen.set(!devToolsMenuOpen()); $event.stopPropagation()" tabindex="0" (keydown.enter)="devToolsMenuOpen.set(!devToolsMenuOpen()); $event.stopPropagation()" (keydown.space)="devToolsMenuOpen.set(!devToolsMenuOpen()); $event.stopPropagation(); $event.preventDefault()">⋮</button>
             @if (devToolsMenuOpen()) {
-              <div class="devtools-menu__backdrop" (click)="devToolsMenuOpen.set(false)"></div>
-              <div class="devtools-menu__panel" (click)="$event.stopPropagation()">
+              <div class="devtools-menu__backdrop"
+                   tabindex="0"
+                   (click)="devToolsMenuOpen.set(false)"
+                   (keydown.enter)="devToolsMenuOpen.set(false)"
+                   (keydown.space)="devToolsMenuOpen.set(false); $event.preventDefault()"></div>
+              <div class="devtools-menu__panel"
+                   tabindex="-1"
+                   (click)="$event.stopPropagation()"
+                   (keydown)="$event.stopPropagation()">
                 <div class="devtools-menu__header">System</div>
                 <button class="devtools-menu__item"
                         data-testid="devtool-orch-config"
@@ -570,7 +577,7 @@
                   <button class="task-nav__collapse"
                           data-testid="task-nav-collapse"
                           [appTooltip]="'Collapse task list'"
-                          (click)="setTaskNavCollapsed(true)">‹</button>
+                          (click)="setTaskNavCollapsed(true)" tabindex="0" (keydown.enter)="setTaskNavCollapsed(true)" (keydown.space)="setTaskNavCollapsed(true); $event.preventDefault()">‹</button>
                 </div>
                 <div>
                   <div class="task-nav__eyebrow">Task list</div>
@@ -581,7 +588,11 @@
               <div class="task-nav__groups">
                 @for (group of focusGroups(); track group.state) {
                   <section class="task-nav__group" [class.task-nav__group--collapsed]="isGroupCollapsed(group.state)">
-                    <div class="task-nav__group-header" (click)="toggleGroupCollapse(group.state)">
+                    <div class="task-nav__group-header"
+                         tabindex="0"
+                         (click)="toggleGroupCollapse(group.state)"
+                         (keydown.enter)="toggleGroupCollapse(group.state)"
+                         (keydown.space)="toggleGroupCollapse(group.state); $event.preventDefault()">
                       <span>
                         <span class="task-nav__group-toggle">{{ isGroupCollapsed(group.state) ? '▶' : '▼' }}</span>
                         {{ group.icon }} {{ group.title }}
@@ -618,7 +629,7 @@
                   </section>
                 }
               </div>
-              
+
               <div class="task-nav__resize-handle"
                    (mousedown)="startResize($event)"></div>
             </aside>
@@ -779,8 +790,8 @@
           [(newTags)]="createJobForm.newTags"
           [(newTargetState)]="createJobForm.newTargetState"
           (cliTypeChange)="onCreateCliTypeChange($event)"
-          (cancel)="cancelCreate()"
-          (submit)="submitCreate()" />
+          (cancelRequest)="cancelCreate()"
+          (submitRequest)="submitCreate()" />
       }
 
       @if (showE2ECleanup()) {
@@ -794,8 +805,8 @@
           [error]="error"
           [canOpenCliConfig]="error.canOpenCliConfig && selectedJobUsesCopilot()"
           [copyButtonLabel]="copyErrorButtonLabel()"
-          (close)="closeErrorDialog()"
-          (copy)="copyErrorDetails()"
+          (closeRequest)="closeErrorDialog()"
+          (copyRequest)="copyErrorDetails()"
           (openCliConfig)="openCliConfigFromError()" />
       }
 
@@ -818,7 +829,7 @@
             [tokenSummary]="ctx.tokenSummary"
             [job]="ctx.job"
             [source]="ctx.job?.id ?? 'cli-output.log'"
-            (close)="closeVerboseDebug()" />
+            (closeRequest)="closeVerboseDebug()" />
         }
       }
     </div>

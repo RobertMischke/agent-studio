@@ -409,7 +409,8 @@ export class ActivityLogViewComponent implements AfterViewInit, OnDestroy {
     return `${index + 1}`;
   }
 
-  onSteerOptionClick(option: string, _index: number): void {
+  onSteerOptionClick(option: string, index: number): void {
+    void index;
     if (!option) return;
     this.applyComposeSuggestion.emit(option);
   }

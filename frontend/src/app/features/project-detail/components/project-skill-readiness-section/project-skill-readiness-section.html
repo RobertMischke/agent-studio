@@ -30,11 +30,11 @@
 @if (open()) {
   <div class="psr-modal__backdrop"
        data-testid="project-skill-readiness-modal"
-       (click)="closeModal()">
+       (click)="closeModal()" tabindex="0" (keydown.enter)="closeModal()" (keydown.space)="closeModal(); $event.preventDefault()">
     <div class="psr-modal"
          role="dialog"
          aria-label="Skill readiness"
-         (click)="$event.stopPropagation()">
+         (click)="$event.stopPropagation()" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
       <header class="psr-modal__head">
         <h3>Skill readiness · {{ projectName() }}</h3>
         <button type="button"

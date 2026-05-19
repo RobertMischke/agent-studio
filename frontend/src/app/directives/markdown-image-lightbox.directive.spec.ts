@@ -1,5 +1,5 @@
 import { describe, expect, it, beforeEach } from 'vitest';
-import { Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
@@ -9,7 +9,8 @@ import { MediaLightboxService } from '../services/media-lightbox.service';
 @Component({
   standalone: true,
   imports: [MarkdownImageLightboxDirective],
-  template: `<div appMarkdownLightbox [innerHTML]="safeHtml"></div>`,
+  templateUrl: './markdown-image-lightbox.directive.host.html',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 class HostComponent {
   private readonly sanitizer = inject(DomSanitizer);

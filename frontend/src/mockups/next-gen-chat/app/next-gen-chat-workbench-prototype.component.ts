@@ -1,4 +1,4 @@
-import { Component, computed, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, signal } from '@angular/core';
 
 import { FoundNextStatusbarComponent } from './found-next-statusbar.component';
 import { FoundNextTopbarComponent } from './found-next-topbar.component';
@@ -49,7 +49,8 @@ import {
     NextGenChatQueueComponent,
     NextGenChatRailComponent,
   ],
-  templateUrl: './next-gen-chat-workbench-prototype.component.html'
+  templateUrl: './next-gen-chat-workbench-prototype.component.html',
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class NextGenChatWorkbenchPrototypeComponent {
   readonly closed = signal(false);
@@ -145,14 +146,14 @@ export class NextGenChatWorkbenchPrototypeComponent {
     drift: { label: 'Schema drift', actor: 'system', tone: 'warn', icon: 'warning' },
   };
 
-  readonly composeModes: Array<{ id: ComposeMode; label: string; icon: string; description: string }> = [
+  readonly composeModes: { id: ComposeMode; label: string; icon: string; description: string }[] = [
     { id: 'continue', label: 'Continue', icon: 'play', description: 'Continue the running task or restart the next run with this follow-up.' },
     { id: 'extend', label: 'Extend task', icon: 'file', description: 'Append a task extension to prompt history before the next run.' },
     { id: 'steer', label: 'Steer', icon: 'panel', description: 'Send steering to the orchestrator without changing the task body.' },
     { id: 'followup', label: 'Follow-up job', icon: 'plus', description: 'Create a queued follow-up task from this chat turn.' },
   ];
 
-  readonly debugTabs: Array<{ id: DebugTab; label: string }> = [
+  readonly debugTabs: { id: DebugTab; label: string }[] = [
     { id: 'overview', label: 'Overview' },
     { id: 'actors', label: 'Actors' },
     { id: 'tools', label: 'Tools' },
@@ -813,7 +814,8 @@ export class NextGenChatWorkbenchPrototypeComponent {
     if (action === 'Show technical layer') this.toolOpen.set(true);
   }
 
-  openTrace(_range: string): void {
+  openTrace(range: string): void {
+    void range;
     this.debugTab.set('trace');
     this.debugOpen.set(true);
   }

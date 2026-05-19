@@ -3,8 +3,8 @@
             role="alertdialog"
             kind="danger"
             testid="error-dialog"
-            (close)="close.emit()"
-            (backdropClick)="close.emit()">
+            (closeRequest)="closeRequest.emit()"
+            (backdropClick)="closeRequest.emit()">
   @if (error().source) {
     <div class="error-dialog__source">{{ error().source }}</div>
   }
@@ -12,7 +12,7 @@
   <div class="error-dialog__message" data-testid="error-dialog-message">{{ error().message }}</div>
 
   <div class="error-dialog__actions">
-    <button class="btn" type="button" (click)="copy.emit()">{{ copyButtonLabel() }}</button>
+    <button class="btn" type="button" (click)="copyRequest.emit()">{{ copyButtonLabel() }}</button>
     @if (canOpenCliConfig()) {
       <button class="btn btn--primary" type="button" (click)="openCliConfig.emit()">🔧 Configure CLI</button>
     }

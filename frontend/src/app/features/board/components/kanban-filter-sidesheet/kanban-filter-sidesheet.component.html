@@ -16,7 +16,7 @@
   <app-sidesheet eyebrow="Board"
                  title="Filter & view"
                  testid="kanban-filter-sidesheet"
-                 (close)="close()">
+                 (closeRequest)="close()">
     <ng-container *ngTemplateOutlet="body" />
     <div footer class="sheet__footer-bits" data-testid="kanban-filter-sidesheet-footer">
       <span class="sheet__hits"

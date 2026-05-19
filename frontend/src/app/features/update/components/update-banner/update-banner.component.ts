@@ -1,5 +1,12 @@
-import { ChangeDetectionStrategy, Component, computed, effect, inject, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  effect,
+  inject,
+  signal,
+} from '@angular/core';
+
 import { UpdateClientService } from '../../../../services/update.service';
 import { UpdateHistoryEntry } from '../../../../models/update-service.model';
 
@@ -27,7 +34,7 @@ import { UpdateHistoryEntry } from '../../../../models/update-service.model';
 @Component({
   selector: 'app-update-banner',
   standalone: true,
-  imports: [CommonModule],
+  imports: [],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './update-banner.component.html',
   styleUrl: './update-banner.component.scss',
@@ -85,7 +92,9 @@ export class UpdateBannerComponent {
     if (s.phase === 'done' && !sameRunStillDismissed && s.lastRunFinishedAt) {
       const finishedMs = Date.parse(s.lastRunFinishedAt);
       if (!Number.isNaN(finishedMs) && this.nowMs() - finishedMs <= this.DONE_LINGER_MS) {
-        return s.lastRunHeadAfter && s.lastRunHeadBefore && s.lastRunHeadAfter !== s.lastRunHeadBefore
+        return s.lastRunHeadAfter &&
+          s.lastRunHeadBefore &&
+          s.lastRunHeadAfter !== s.lastRunHeadBefore
           ? 'done'
           : 'done-no-change';
       }
@@ -145,7 +154,7 @@ export class UpdateBannerComponent {
     this.pickerLoading.set(true);
     try {
       const all = await this.client.readHistory(20);
-      const failedFirst = all.filter(e => e.status === 'failed').reverse();
+      const failedFirst = all.filter((e) => e.status === 'failed').reverse();
       this.pickerEntries.set(failedFirst);
     } catch (e) {
       this.pickerError.set((e as Error)?.message ?? 'history fetch failed');

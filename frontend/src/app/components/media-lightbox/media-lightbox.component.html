@@ -5,14 +5,14 @@
        aria-label="Image preview"
        data-testid="media-lightbox"
        tabindex="-1"
-       (click)="close()">
+       (click)="close()" (keydown.enter)="close()" (keydown.space)="close(); $event.preventDefault()">
     <button type="button"
             class="media-lightbox__close"
             data-testid="media-lightbox-close"
             aria-label="Close"
             (click)="close(); $event.stopPropagation()">×</button>
     <figure class="media-lightbox__figure"
-            (click)="$event.stopPropagation()">
+            (click)="$event.stopPropagation()" tabindex="0" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
       <img class="media-lightbox__img"
            data-testid="media-lightbox-image"
            [src]="media.src"

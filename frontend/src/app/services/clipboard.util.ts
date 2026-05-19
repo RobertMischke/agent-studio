@@ -19,8 +19,11 @@ export async function copyTextToClipboard(text: string): Promise<boolean> {
   ta.style.opacity = '0';
   document.body.appendChild(ta);
   ta.select();
-  let ok = false;
-  try { ok = document.execCommand('copy'); } catch { ok = false; }
-  document.body.removeChild(ta);
-  return ok;
+  try {
+    return document.execCommand('copy');
+  } catch {
+    return false;
+  } finally {
+    document.body.removeChild(ta);
+  }
 }

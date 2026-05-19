@@ -151,7 +151,10 @@
             <li class="psd__warning psd__warning--{{ w.severity }}"
                 [attr.data-testid]="'project-steering-docs-warning-' + w.kind"
                 [class.psd__warning--clickable]="w.evidenceRefs.length > 0"
-                (click)="onWarningClick(w)">
+                tabindex="0"
+                (click)="onWarningClick(w)"
+                (keydown.enter)="onWarningClick(w)"
+                (keydown.space)="onWarningClick(w); $event.preventDefault()">
               <header>
                 <span class="psd__sev psd__sev--{{ w.severity }}">{{ w.severity }}</span>
                 <span class="psd__warn-kind">{{ humanWarningKind(w.kind) }}</span>

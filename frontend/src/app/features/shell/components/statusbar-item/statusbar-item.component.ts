@@ -23,15 +23,15 @@ import { TooltipDirective } from '../../../../components/tooltip';
 })
 export class StatusbarItemComponent {
   @Input() icon: StudioIconName | null = null;
-  @Input() iconSize: number = 12;
-  @Input() label: string = '';
+  @Input() iconSize = 12;
+  @Input() label = '';
   /** Tooltip text — uses the project's TooltipDirective. */
-  @Input() tooltip: string = '';
+  @Input() tooltip = '';
   /** Renders as a button (default true) vs read-only text chip. */
-  @Input() button: boolean = true;
+  @Input() button = true;
   @Input() testid: string | null = null;
   /** Animate the icon as a live indicator (e.g. the "● running" chip). */
-  @Input() pulsing: boolean = false;
+  @Input() pulsing = false;
   /** Bullet character used for read-only chips that pre-date the SVG icon
    *  set ("● running" / "↻ N/M auto"); takes precedence over `icon` so
    *  callers can keep the legacy glyph without forcing every status-bar

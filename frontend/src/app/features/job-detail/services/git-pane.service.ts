@@ -1,9 +1,18 @@
-import { Injectable, OnDestroy, computed, signal } from '@angular/core';
+import { Injectable, OnDestroy, computed, signal, inject } from '@angular/core';
 import type { JobInfo } from '../../../models/job.model';
-import type { GitFileChange, GitStatus, JobCommitDetail, JobCommitInfo } from '../../../features/git';
+import type {
+  GitFileChange,
+  GitStatus,
+  JobCommitDetail,
+  JobCommitInfo,
+} from '../../../features/git';
 import { JobService } from '../../../services/job.service';
 import { ErrorDialogService } from '../../../services/error-dialog.service';
-import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../utils/visible-interval';
+import {
+  setVisibleInterval,
+  clearVisibleInterval,
+  VisibleIntervalHandle,
+} from '../../../utils/visible-interval';
 
 /**
  * Owns the Git pane state and API calls for a single job-detail
@@ -17,6 +26,9 @@ import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from 
  */
 @Injectable()
 export class GitPaneService implements OnDestroy {
+  private jobService = inject(JobService);
+  private errorDialog = inject(ErrorDialogService);
+
   readonly status = signal<GitStatus | null>(null);
   readonly loading = signal(false);
   readonly selectedDiffPath = signal<string | null>(null);
@@ -31,7 +43,7 @@ export class GitPaneService implements OnDestroy {
   // to see when reviewing a finished task.
   readonly commitDetail = signal<JobCommitDetail | null>(null);
   readonly viewMode = computed<'commit' | 'worktree'>(() =>
-    this.commitDetail()?.commit ? 'commit' : 'worktree'
+    this.commitDetail()?.commit ? 'commit' : 'worktree',
   );
 
   /**
@@ -46,11 +58,6 @@ export class GitPaneService implements OnDestroy {
 
   private currentJob: JobInfo | null = null;
   private refreshTimer: VisibleIntervalHandle | null = null;
-
-  constructor(
-    private jobService: JobService,
-    private errorDialog: ErrorDialogService
-  ) {}
 
   /** Start polling git status every `intervalMs` ms. No-op if already running. */
   startAutoRefresh(intervalMs = 5000): void {
@@ -83,9 +90,11 @@ export class GitPaneService implements OnDestroy {
    * we don't blow away in-flight selections.
    */
   setJob(info: JobInfo | null | undefined): void {
-    const sameJob = this.currentJob && info
-      && this.currentJob.id === info.id
-      && this.currentJob.watchPath === info.watchPath;
+    const sameJob =
+      this.currentJob &&
+      info &&
+      this.currentJob.id === info.id &&
+      this.currentJob.watchPath === info.watchPath;
     if (sameJob) {
       const hadCommit = !!this.currentJob!.commit;
       const oldChainLen = this.commitChain().length;
@@ -131,7 +140,7 @@ export class GitPaneService implements OnDestroy {
   selectChainCommit(sha: string): void {
     const info = this.currentJob;
     if (!info) return;
-    const entry = this.commitChain().find(c => c.sha === sha);
+    const entry = this.commitChain().find((c) => c.sha === sha);
     if (!entry) return;
     if (this.selectedCommitSha() === sha) return;
     this.selectedCommitSha.set(sha);
@@ -149,7 +158,7 @@ export class GitPaneService implements OnDestroy {
         const first = files[0]?.path ?? null;
         if (first) this.selectDiffPath(first);
       },
-      error: () => this.commitDetail.set({ commit: entry, files: [] })
+      error: () => this.commitDetail.set({ commit: entry, files: [] }),
     });
   }
 
@@ -170,7 +179,7 @@ export class GitPaneService implements OnDestroy {
         const first = detail?.files?.[0]?.path ?? null;
         if (first) this.selectDiffPath(first);
       },
-      error: () => this.commitDetail.set(null)
+      error: () => this.commitDetail.set(null),
     });
   }
 
@@ -185,7 +194,7 @@ export class GitPaneService implements OnDestroy {
         // If a previously selected file is no longer in the change set,
         // clear the diff so we don't keep stale text on screen.
         const selected = this.selectedDiffPath();
-        if (selected && !status.files.some(f => f.path === selected)) {
+        if (selected && !status.files.some((f) => f.path === selected)) {
           this.selectedDiffPath.set(null);
           this.diffText.set('');
         }
@@ -193,7 +202,7 @@ export class GitPaneService implements OnDestroy {
       error: (err) => {
         this.loading.set(false);
         this.errorDialog.show(err, { title: 'Git status failed', source: `Task ${info.id}` });
-      }
+      },
     });
   }
 
@@ -226,10 +235,12 @@ export class GitPaneService implements OnDestroy {
       };
       const handlers = {
         next: setDiff,
-        error: () => this.diffText.set('(failed to load diff)')
+        error: () => this.diffText.set('(failed to load diff)'),
       };
       if (useShaEndpoint) {
-        this.jobService.getJobCommitDiffBySha(info.id, selectedSha!, path, info.watchPath).subscribe(handlers);
+        this.jobService
+          .getJobCommitDiffBySha(info.id, selectedSha!, path, info.watchPath)
+          .subscribe(handlers);
       } else {
         this.jobService.getJobCommitDiff(info.id, path, info.watchPath).subscribe(handlers);
       }
@@ -237,7 +248,7 @@ export class GitPaneService implements OnDestroy {
     }
     this.jobService.getGitDiff(info.id, path, info.watchPath).subscribe({
       next: (text: unknown) => this.diffText.set(typeof text === 'string' ? text : ''),
-      error: () => this.diffText.set('(failed to load diff)')
+      error: () => this.diffText.set('(failed to load diff)'),
     });
   }
 
@@ -252,8 +263,11 @@ export class GitPaneService implements OnDestroy {
       },
       error: (err) => {
         this.generatingMsg.set(false);
-        this.errorDialog.show(err, { title: 'Generate commit message failed', source: `Task ${info.id}` });
-      }
+        this.errorDialog.show(err, {
+          title: 'Generate commit message failed',
+          source: `Task ${info.id}`,
+        });
+      },
     });
   }
 
@@ -271,7 +285,7 @@ export class GitPaneService implements OnDestroy {
       error: (err) => {
         this.committing.set(false);
         this.errorDialog.show(err, { title: 'Commit failed', source: `Task ${info.id}` });
-      }
+      },
     });
   }
 
@@ -279,7 +293,8 @@ export class GitPaneService implements OnDestroy {
     const info = this.currentJob;
     if (!info) return;
     this.jobService.openInVsCode(info.id, info.watchPath).subscribe({
-      error: (err) => this.errorDialog.show(err, { title: 'Open in VS Code failed', source: `Task ${info.id}` })
+      error: (err) =>
+        this.errorDialog.show(err, { title: 'Open in VS Code failed', source: `Task ${info.id}` }),
     });
   }
 }

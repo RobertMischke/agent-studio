@@ -1,4 +1,4 @@
-import { AfterViewInit, Component, ElementRef, HostListener, OnDestroy, ViewChild, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
+import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, HostListener, OnDestroy, ViewChild, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import type { Editor } from '@tiptap/core';
 import { htmlToMarkdown, markdownToHtml, MarkdownImageOptions } from '../markdown-utils';
@@ -16,7 +16,8 @@ const ATTACHMENTS_PREFIX = 'attachments/';
   standalone: true,
   imports: [FormsModule, TooltipDirective],
   templateUrl: './markdown-rich-editor.html',
-  styleUrl: './markdown-rich-editor.scss'
+  styleUrl: './markdown-rich-editor.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class MarkdownRichEditorComponent implements AfterViewInit, OnDestroy {
   readonly value = input('');

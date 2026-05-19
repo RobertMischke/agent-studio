@@ -1,11 +1,5 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  inject,
-  input,
-} from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { ChangeDetectionStrategy, Component, computed, inject, input } from '@angular/core';
+
 import { DomSanitizer, type SafeHtml } from '@angular/platform-browser';
 import { markdownToHtml } from '../markdown-utils';
 import { RoleBadgeComponent } from '../../features/workforce';
@@ -64,7 +58,7 @@ export interface ChatRowInput {
 @Component({
   selector: 'app-chat-row',
   standalone: true,
-  imports: [CommonModule, RoleBadgeComponent],
+  imports: [RoleBadgeComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './chat-row.component.html',
   styleUrl: './chat-row.component.scss',

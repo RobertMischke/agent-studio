@@ -48,7 +48,7 @@
       the full card" — the data the user is looking for is the
       first thing they see, no modal stack to navigate.
     -->
-    @if (expandedIndex() != null) {
+    @if (expandedIndex() !== null) {
       @for (r of visibleRuns(); track r.index) {
         @if (r.index === expandedIndex()) {
           <div class="run-card run-card--popover"
@@ -62,8 +62,8 @@
                 {{ r.userFollowup || '(no follow-up)' }}
               </span>
               <span class="run-card__meta">
-                @if (r.durationSeconds != null) { <span>{{ formatDuration(r.durationSeconds) }}</span> }
-                @if (r.exitCode != null) { <span class="run-card__exit">exit {{ r.exitCode }}</span> }
+                @if (r.durationSeconds !== null) { <span>{{ formatDuration(r.durationSeconds) }}</span> }
+                @if (r.exitCode !== null) { <span class="run-card__exit">exit {{ r.exitCode }}</span> }
                 <span class="run-card__time">{{ formatTime(r.startedAt) }}</span>
               </span>
               <button type="button"
@@ -117,7 +117,7 @@
                 <button type="button"
                         class="run-card__filter"
                         (click)="emitFilter(r); $event.stopPropagation()"
-                        [disabled]="r.lineStart == null">
+                        [disabled]="r.lineStart === null">
                   Filter activity log to this run
                 </button>
                 <button type="button"
@@ -155,10 +155,10 @@
             {{ r.userFollowup || '(no follow-up)' }}
           </span>
           <span class="run-card__meta">
-            @if (r.durationSeconds != null) {
+            @if (r.durationSeconds !== null) {
               <span>{{ formatDuration(r.durationSeconds) }}</span>
             }
-            @if (r.exitCode != null) {
+            @if (r.exitCode !== null) {
               <span class="run-card__exit">exit {{ r.exitCode }}</span>
             }
             <span class="run-card__time">{{ formatTime(r.startedAt) }}</span>
@@ -210,7 +210,7 @@
               <button type="button"
                       class="run-card__filter"
                       (click)="emitFilter(r); $event.stopPropagation()"
-                      [disabled]="r.lineStart == null">
+                      [disabled]="r.lineStart === null">
                 Filter activity log to this run
               </button>
               <button type="button"
@@ -232,4 +232,4 @@
     }
   </div>
 }
-  
+

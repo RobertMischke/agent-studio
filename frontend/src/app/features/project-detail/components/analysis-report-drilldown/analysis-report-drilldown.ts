@@ -25,7 +25,7 @@ import { AnalysisReport, AnalysisReportReference } from '../../../../models/anal
 export class AnalysisReportDrilldownComponent implements OnInit {
   readonly projectName = input.required<string>();
   readonly reportId = input.required<string>();
-  readonly close = output<void>();
+  readonly closeRequest = output<void>();
 
   private readonly svc = inject(AnalysisReportService);
 

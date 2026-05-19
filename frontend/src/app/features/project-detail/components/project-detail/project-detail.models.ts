@@ -6,7 +6,7 @@
  * to be capable; the cheap models are deliberately excluded as
  * orchestrator-models even though they can run as task agents.
  */
-export const OrchestratorRunner_KnownModels: ReadonlyArray<{ id: string; label: string }> = [
+export const OrchestratorRunner_KnownModels: readonly { id: string; label: string }[] = [
   { id: '',                  label: 'Default (Opus 4.7)' },
   { id: 'claude-opus-4-7',   label: 'Claude Opus 4.7' },
   { id: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6 (cheaper)' }

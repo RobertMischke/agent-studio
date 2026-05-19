@@ -7,9 +7,9 @@ import {
   inject,
   input,
   output,
-  signal
+  signal,
 } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { JobService } from '../../../../services/job.service';
 import type { JobScreenshot } from '../../../../features/screenshots';
 import { ScreenshotStripComponent } from '../screenshot-strip/screenshot-strip.component';
@@ -24,9 +24,9 @@ const STORAGE_WINDOW_KEY = 'workspaceScreenshots.windowHours';
 const STORAGE_PROJECT_KEY = 'workspaceScreenshots.project';
 
 const WINDOW_OPTIONS: { hours: number; label: string; testId: string }[] = [
-  { hours: 24,  label: '24 h', testId: '24h' },
-  { hours: 72,  label: '3 days', testId: '3d' },
-  { hours: 168, label: '7 days', testId: '7d' }
+  { hours: 24, label: '24 h', testId: '24h' },
+  { hours: 72, label: '3 days', testId: '3d' },
+  { hours: 168, label: '7 days', testId: '7d' },
 ];
 
 /**
@@ -45,11 +45,13 @@ const WINDOW_OPTIONS: { hours: number; label: string; testId: string }[] = [
   selector: 'app-workspace-screenshots',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, ScreenshotStripComponent],
+  imports: [ScreenshotStripComponent],
   templateUrl: './workspace-screenshots.html',
-  styleUrl: './workspace-screenshots.scss'
+  styleUrl: './workspace-screenshots.scss',
 })
 export class WorkspaceScreenshotsComponent implements OnInit, OnDestroy {
+  private readonly jobs = inject(JobService);
+
   readonly projectName = input<string | null>(null);
   readonly openTask = output<JobScreenshot>();
 
@@ -93,8 +95,6 @@ export class WorkspaceScreenshotsComponent implements OnInit, OnDestroy {
 
   private timer: ReturnType<typeof setInterval> | null = null;
 
-  constructor(private readonly jobs: JobService) {}
-
   ngOnInit(): void {
     this.refresh();
     this.timer = setInterval(() => this.refresh(true), 30_000);
@@ -110,7 +110,11 @@ export class WorkspaceScreenshotsComponent implements OnInit, OnDestroy {
   setWindow(hours: number): void {
     if (this.windowHours() === hours) return;
     this.windowHours.set(hours);
-    try { localStorage.setItem(STORAGE_WINDOW_KEY, String(hours)); } catch { /* ignore */ }
+    try {
+      localStorage.setItem(STORAGE_WINDOW_KEY, String(hours));
+    } catch {
+      /* ignore */
+    }
     this.refresh();
   }
 
@@ -121,19 +125,23 @@ export class WorkspaceScreenshotsComponent implements OnInit, OnDestroy {
     try {
       if (v) localStorage.setItem(STORAGE_PROJECT_KEY, v);
       else localStorage.removeItem(STORAGE_PROJECT_KEY);
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     this.refresh();
   }
 
-  refresh(silent: boolean = false): void {
+  refresh(silent = false): void {
     if (!silent) this.loading.set(true);
     this.jobs.getWorkspaceScreenshots(this.windowHours(), this.effectiveProjectFilter()).subscribe({
       next: (res) => {
         this.entries.set(res?.screenshots ?? []);
         this.loaded.set(true);
       },
-      error: () => { /* keep prior entries */ },
-      complete: () => this.loading.set(false)
+      error: () => {
+        /* keep prior entries */
+      },
+      complete: () => this.loading.set(false),
     });
   }
 
@@ -145,7 +153,7 @@ export class WorkspaceScreenshotsComponent implements OnInit, OnDestroy {
     try {
       const raw = localStorage.getItem(STORAGE_WINDOW_KEY);
       const n = raw ? Number(raw) : 72;
-      return WINDOW_OPTIONS.some(o => o.hours === n) ? n : 72;
+      return WINDOW_OPTIONS.some((o) => o.hours === n) ? n : 72;
     } catch {
       return 72;
     }

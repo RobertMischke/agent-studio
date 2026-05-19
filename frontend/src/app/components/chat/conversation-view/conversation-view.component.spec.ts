@@ -102,7 +102,7 @@ describe('ConversationViewComponent', () => {
 
   it('emits openTrace when the user clicks the Trace header button', async () => {
     const fixture = await makeFixture([userMessage()]);
-    const emissions: Array<RawLineRange | null> = [];
+    const emissions: (RawLineRange | null)[] = [];
     fixture.componentInstance.openTrace.subscribe((r) => emissions.push(r));
     const btn = (fixture.nativeElement as HTMLElement).querySelector<HTMLButtonElement>(
       '[data-testid="conversation-open-trace"]'

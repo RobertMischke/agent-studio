@@ -83,7 +83,7 @@ export interface AnalysisReportDetailResponse {
  * path lands. Slugs are camelCase to match the schedule map keys on the
  * backend.
  */
-export const ANALYSIS_TOPICS: ReadonlyArray<{ slug: string; label: string; description: string }> = [
+export const ANALYSIS_TOPICS: readonly { slug: string; label: string; description: string }[] = [
   { slug: 'roadmapAlignment', label: 'Roadmap alignment', description: 'Are queued tasks and active work aligned with the ROADMAP?' },
   { slug: 'queueHealth', label: 'Queue health', description: 'Backlog shape, blocked / stalled tasks, lane balance.' },
   { slug: 'docsDrift', label: 'Docs drift', description: 'Docs (README, AGENTS, ADR) lagging behind code or product changes.' },
@@ -93,7 +93,7 @@ export const ANALYSIS_TOPICS: ReadonlyArray<{ slug: string; label: string; descr
 ];
 
 /** Cadence options for scheduled reports. Default is `disabled`. */
-export const ANALYSIS_CADENCES: ReadonlyArray<{ id: string; label: string; tooltip: string }> = [
+export const ANALYSIS_CADENCES: readonly { id: string; label: string; tooltip: string }[] = [
   { id: 'disabled', label: 'Disabled', tooltip: 'No scheduled run. Manual trigger remains available.' },
   { id: 'fewHours', label: 'Every few hours', tooltip: 'Run on a multi-hour cadence.' },
   { id: 'daily', label: 'Daily', tooltip: 'Run once a day.' },

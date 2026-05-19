@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { UpdateClientService } from '../../../../services/update.service';
 
 import { TooltipDirective } from '../../../../components/tooltip';
@@ -11,10 +11,10 @@ import { TooltipDirective } from '../../../../components/tooltip';
 @Component({
   selector: 'app-update-version-badge',
   standalone: true,
-  imports: [CommonModule, TooltipDirective],
+  imports: [TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './update-version-badge.component.html',
-  styleUrl: './update-version-badge.component.scss'
+  styleUrl: './update-version-badge.component.scss',
 })
 export class UpdateVersionBadgeComponent {
   private readonly client = inject(UpdateClientService);

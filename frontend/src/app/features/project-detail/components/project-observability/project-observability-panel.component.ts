@@ -16,7 +16,6 @@ import {
   AGENT_MESSAGE_KINDS,
   AGENT_MESSAGE_SEVERITIES,
   AgentMessage,
-  AgentMessageQuery,
   AgentMessageSummary,
 } from '../../../../models/agent-bus.model';
 
@@ -50,13 +49,13 @@ interface OutcomeIssueChip {
 interface MatrixRow {
   participantId: string;
   total: number;
-  kindCounts: Record<string, number>;
+  kindCounts: Partial<Record<string, number>>;
   jobs: ReadonlySet<string>;
 }
 
 interface TimelineLane {
   participantId: string;
-  marks: ReadonlyArray<{ id: string; offsetPct: number; kind: string; severity: string | null; title: string }>;
+  marks: readonly { id: string; offsetPct: number; kind: string; severity: string | null; title: string }[];
 }
 
 interface HeatmapCell {
@@ -80,7 +79,7 @@ const DEFAULT_FILTER: FilterState = {
   rangeHours: 24,
 };
 
-const RANGE_OPTIONS: ReadonlyArray<{ id: number; label: string }> = [
+const RANGE_OPTIONS: readonly { id: number; label: string }[] = [
   { id: 1, label: 'Last 1h' },
   { id: 6, label: 'Last 6h' },
   { id: 24, label: 'Last 24h' },
@@ -88,7 +87,7 @@ const RANGE_OPTIONS: ReadonlyArray<{ id: number; label: string }> = [
   { id: 0, label: 'All time' },
 ];
 
-const OUTCOME_ISSUE_TOPICS: ReadonlyArray<{ topic: string; label: string; tone: 'warn' | 'high' }> = [
+const OUTCOME_ISSUE_TOPICS: readonly { topic: string; label: string; tone: 'warn' | 'high' }[] = [
   { topic: 'permission-blocked', label: 'Permission blocked', tone: 'high' },
   { topic: 'watchdog-timeout', label: 'Watchdog timeout', tone: 'high' },
   { topic: 'missing-terminal-sentinel', label: 'Missing sentinel', tone: 'warn' },
@@ -170,7 +169,7 @@ export class ProjectObservabilityPanelComponent implements OnInit, OnDestroy {
       next: (s) => {
         this.summary.set(s);
       },
-      error: () => {},
+      error: () => this.summary.set(null),
     });
     this.bus.getRecent(name, 500).subscribe({
       next: (msgs) => {
@@ -202,7 +201,7 @@ export class ProjectObservabilityPanelComponent implements OnInit, OnDestroy {
   selectMessage(id: string): void {
     this.selectedMessageId.set(id);
   }
-  selectFirst(ids: ReadonlyArray<string>): void {
+  selectFirst(ids: readonly string[]): void {
     if (ids.length > 0) this.selectedMessageId.set(ids[0]);
   }
   clearSelection(): void {
@@ -381,7 +380,7 @@ export class ProjectObservabilityPanelComponent implements OnInit, OnDestroy {
   });
 
   readonly matrixRows = computed<MatrixRow[]>(() => {
-    const rows = new Map<string, { kindCounts: Record<string, number>; total: number; jobs: Set<string> }>();
+    const rows = new Map<string, { kindCounts: Partial<Record<string, number>>; total: number; jobs: Set<string> }>();
     for (const m of this.filtered()) {
       const row = rows.get(m.participantId) ?? { kindCounts: {}, total: 0, jobs: new Set<string>() };
       row.kindCounts[m.kind] = (row.kindCounts[m.kind] ?? 0) + 1;

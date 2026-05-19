@@ -11,7 +11,7 @@ import {
   output,
   signal,
 } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import type { ProjectChatTurn } from '../../../../features/project-chat';
 
 import { TooltipDirective } from '../../../../components/tooltip';
@@ -59,12 +59,11 @@ interface RailCluster {
 }
 
 const CLUSTER_PX = 14; // collision radius — slightly above chip height
-const CHIP_HEIGHT_PX = 12;
 
 @Component({
   selector: 'app-project-chat-rail',
   standalone: true,
-  imports: [CommonModule, TooltipDirective],
+  imports: [TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-chat-rail.component.html',
   styleUrl: './project-chat-rail.component.scss',
@@ -215,7 +214,9 @@ export class ProjectChatRailComponent implements AfterViewInit, OnDestroy {
     }
   }
 
-  isSingle(c: RailCluster): boolean { return c.members.length === 1; }
+  isSingle(c: RailCluster): boolean {
+    return c.members.length === 1;
+  }
 
   clusterInViewport(c: RailCluster): boolean {
     const start = this.visibleStart();
@@ -225,10 +226,14 @@ export class ProjectChatRailComponent implements AfterViewInit, OnDestroy {
 
   glyphFor(kind: RailChipKind): string {
     switch (kind) {
-      case 'long':    return '▼';
-      case 'event':   return '⚙';
-      case 'error':   return '🐞';
-      case 'running': return '⚡';
+      case 'long':
+        return '▼';
+      case 'event':
+        return '⚙';
+      case 'error':
+        return '🐞';
+      case 'running':
+        return '⚡';
     }
   }
 
@@ -242,9 +247,7 @@ export class ProjectChatRailComponent implements AfterViewInit, OnDestroy {
 
   titleFor(c: RailCluster): string {
     if (c.members.length === 1) return c.members[0].preview || kindLabel(c.members[0].kind);
-    const lines = c.members
-      .slice(0, 6)
-      .map((m) => `${this.glyphFor(m.kind)} ${m.preview}`);
+    const lines = c.members.slice(0, 6).map((m) => `${this.glyphFor(m.kind)} ${m.preview}`);
     if (c.members.length > 6) lines.push(`… +${c.members.length - 6} more`);
     return lines.join('\n');
   }
@@ -292,17 +295,24 @@ function countLines(body: string): number {
 
 function previewFor(t: ProjectChatTurn): string {
   // Strip markdown punctuation that adds noise without information.
-  const raw = (t.body || '').replace(/[`*_>#\[\]()!]/g, ' ').replace(/\s+/g, ' ').trim();
+  const raw = (t.body || '')
+    .replace(/[`*_>#[\]()!]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
   if (raw.length <= 80) return raw;
   return raw.slice(0, 77) + '…';
 }
 
 function kindLabel(kind: RailChipKind): string {
   switch (kind) {
-    case 'long':    return 'Long turn';
-    case 'event':   return 'Event';
-    case 'error':   return 'Error event';
-    case 'running': return 'Running CLI';
+    case 'long':
+      return 'Long turn';
+    case 'event':
+      return 'Event';
+    case 'error':
+      return 'Error event';
+    case 'running':
+      return 'Running CLI';
   }
 }
 

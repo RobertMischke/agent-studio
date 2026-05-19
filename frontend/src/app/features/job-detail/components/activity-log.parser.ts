@@ -166,7 +166,7 @@ export interface ChatMessage {
   collapsedByDefault: boolean;
 }
 
-const TOOL_KINDS: ReadonlyArray<ActivityLogKind> = ['read', 'search', 'command', 'edit', 'task', 'todo'];
+const TOOL_KINDS: readonly ActivityLogKind[] = ['read', 'search', 'command', 'edit', 'task', 'todo'];
 
 export function buildChatMessages(groups: ActivityLogGroup[]): ChatMessage[] {
   return groups.map((group, index) => groupToChatMessage(group, index));
@@ -560,7 +560,7 @@ function isLiveStatusNoise(group: ActivityLogGroup): boolean {
 }
 
 const LIVE_VERB_PREFIX_RE =
-  /^(Read|Reading|Search|Searching|Grep|Edit|Editing|Write|Writing|Run|Running|Build|Building|Check|Checking|Update|Updating|Apply|Applying|Move|Moving|Delete|Deleting|Create|Creating|Execute|Executing|Task|Todo)\b\s*[:(\-]?\s*/i;
+  /^(Read|Reading|Search|Searching|Grep|Edit|Editing|Write|Writing|Run|Running|Build|Building|Check|Checking|Update|Updating|Apply|Applying|Move|Moving|Delete|Deleting|Create|Creating|Execute|Executing|Task|Todo)\b\s*[-:(]?\s*/i;
 
 /**
  * Pulls the operand out of an action title so the live status reads
@@ -816,7 +816,7 @@ const STEER_TAG_RE = /\[steer\]\s*/i;
 const STEER_NEED_RE = /\*\*Need:\*\*\s*([^*]+?)(?=\s*\*\*|$)/i;
 const STEER_WHY_RE = /\*\*Why:\*\*\s*([^*]+?)(?=\s*\*\*|$)/i;
 const STEER_OPTIONS_RE = /\*\*Options:\*\*\s*(.+?)$/i;
-const STEER_OPTION_ITEM_RE = /(?:^|\|)\s*(?:[A-Za-z][\)\.]|\d+[\)\.]|-)\s*([^|]+)/g;
+const STEER_OPTION_ITEM_RE = /(?:^|\|)\s*(?:[A-Za-z][).]|\d+[).]|-)\s*([^|]+)/g;
 
 export function parseOrchestratorSteer(text: string): ParsedSteer | null {
   if (!text || !STEER_TAG_RE.test(text)) return null;

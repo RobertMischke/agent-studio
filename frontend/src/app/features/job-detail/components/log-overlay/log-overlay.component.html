@@ -1,5 +1,5 @@
-<dialog #dlg class="log-overlay" data-testid="log-overlay" aria-label="Agent log" (close)="close.emit()" (click)="onBackdropClick($event)">
-  <div class="log-overlay__panel" (click)="$event.stopPropagation()">
+<dialog #dlg class="log-overlay" data-testid="log-overlay" aria-label="Agent log" (close)="closeRequest.emit()" (click)="onBackdropClick($event)" tabindex="0" (keydown.enter)="onBackdropClick($event)" (keydown.space)="onBackdropClick($event); $event.preventDefault()">
+  <div class="log-overlay__panel" (click)="$event.stopPropagation()" tabindex="0" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
     <div class="log-overlay__header">
       <div>
         <h3 class="log-overlay__title">Agent log</h3>

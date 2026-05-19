@@ -245,14 +245,14 @@
           @for (r of reports(); track r.reportId) {
             <li class="pdov__hist-row pdov__hist-row--{{ bandClass(r.scoreBand) }}"
                 [attr.data-testid]="'project-drift-overview-history-row'"
-                (click)="openReport(r.reportId)">
+                (click)="openReport(r.reportId)" tabindex="0" (keydown.enter)="openReport(r.reportId)" (keydown.space)="openReport(r.reportId); $event.preventDefault()">
               <span class="pdov__hist-band pdov__hist-band--{{ bandClass(r.scoreBand) }}">{{ tc(r.scoreBand) }}</span>
               <span class="pdov__hist-score">{{ r.overallScore }}</span>
               <span class="pdov__hist-summary">{{ r.summary }}</span>
               <span class="pdov__hist-trigger">{{ tc(r.trigger) }}</span>
               @if (!parseStatusEq(r.parseStatus, 'Structured')) {
                 <span class="pdov__hist-parse"
-                      [attr.data-testid]="'project-drift-overview-history-parse-' + (r.parseStatus ?? '').toString().toLowerCase()"
+                      [attr.data-testid]="'project-drift-overview-history-parse-' + parseStatusClass(r.parseStatus)"
                       [appTooltip]="parseStatusEq(r.parseStatus, 'MalformedJson') ? (r.parseError ?? 'sidecar invalid') : 'no JSON sidecar'">
                   ⚠️ {{ parseStatusEq(r.parseStatus, 'MalformedJson') ? 'malformed' : 'unstructured' }}
                 </span>
@@ -266,8 +266,8 @@
       @if (reportDetail(); as detail) {
         <section class="pdov__report-modal"
                  data-testid="project-drift-overview-report-modal"
-                 (click)="closeReport($event)">
-          <article class="pdov__report-card" (click)="stop($event)">
+                 (click)="closeReport($event)" tabindex="0" (keydown.enter)="closeReport($event)" (keydown.space)="closeReport($event); $event.preventDefault()">
+          <article class="pdov__report-card" (click)="stop($event)" tabindex="0" (keydown.enter)="stop($event)" (keydown.space)="stop($event); $event.preventDefault()">
             <header>
               <h3>
                 Drift report
@@ -309,4 +309,4 @@
         </section>
       }
     </section>
-  
+

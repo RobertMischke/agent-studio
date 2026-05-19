@@ -1,7 +1,29 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, computed, HostListener, inject, input, output, signal, effect, OnDestroy, ViewChild, ViewEncapsulation } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  DestroyRef,
+  computed,
+  HostListener,
+  inject,
+  input,
+  output,
+  signal,
+  effect,
+  OnDestroy,
+  ViewChild,
+  ViewEncapsulation,
+} from '@angular/core';
 import { ModalStackService } from '../../services/modal-stack.service';
 import { FormsModule } from '@angular/forms';
-import type { JobDetail, JobInfo, WatchPathEntry, CliSettings, CliType, ContinueMode, ReviewEvidenceEntry } from '../../models/job.model';
+import type {
+  JobDetail,
+  JobInfo,
+  WatchPathEntry,
+  CliSettings,
+  CliType,
+  ContinueMode,
+  ReviewEvidenceEntry,
+} from '../../models/job.model';
 import { CLI_TYPES } from '../../models/job.model';
 import type { CliModelInfo } from '../../features/cli';
 import { JobService } from '../../services/job.service';
@@ -16,7 +38,7 @@ import {
   formatDate as fmtDate,
   formatDateTime as fmtDateTime,
   formatMultiplier as fmtMultiplier,
-  cliTypeLabel as fmtCliTypeLabel
+  cliTypeLabel as fmtCliTypeLabel,
 } from '../../services/format.util';
 import { LayoutPanesService } from './services/layout-panes.service';
 import { LanePagerService } from './state/lane-pager.service';
@@ -35,15 +57,38 @@ import { ProtocolPaneComponent } from './components/protocol-pane/protocol-pane/
 import { DetailHeaderComponent } from './components/detail-header/detail-header.component';
 import { CliConfigCardComponent } from './components/cli-config-card/cli-config-card.component';
 import { PaneToggleBarComponent } from './components/pane-toggle-bar/pane-toggle-bar.component';
-import { TriagePanelComponent, TriageActionPayload } from './components/triage-panel/triage-panel.component';
+import {
+  TriagePanelComponent,
+  TriageActionPayload,
+} from './components/triage-panel/triage-panel.component';
 import { markdownToHtml } from '../../components/markdown-utils';
 
 import { TooltipDirective } from '../../components/tooltip';
 @Component({
   selector: 'app-job-detail',
   standalone: true,
-  imports: [FormsModule, GitPaneComponent, CommandDeckComponent, PromptPaneComponent, LogOverlayComponent, ProtocolPaneComponent, DetailHeaderComponent, CliConfigCardComponent, PaneToggleBarComponent, TriagePanelComponent, TooltipDirective],
-  providers: [LayoutPanesService, ClaudeSessionPollService, SessionEventsPollService, RunTimelinePollService, ScreenshotsPollService, GitPaneService, CliOutputPollService],
+  imports: [
+    FormsModule,
+    GitPaneComponent,
+    CommandDeckComponent,
+    PromptPaneComponent,
+    LogOverlayComponent,
+    ProtocolPaneComponent,
+    DetailHeaderComponent,
+    CliConfigCardComponent,
+    PaneToggleBarComponent,
+    TriagePanelComponent,
+    TooltipDirective,
+  ],
+  providers: [
+    LayoutPanesService,
+    ClaudeSessionPollService,
+    SessionEventsPollService,
+    RunTimelinePollService,
+    ScreenshotsPollService,
+    GitPaneService,
+    CliOutputPollService,
+  ],
   // Cycle 7b: OnPush. The detail panel mounts seven polling services
   // (claude session, session events, run timeline, screenshots,
   // git pane, cli output, hygiene strip) plus the protocol/log/git
@@ -58,9 +103,12 @@ import { TooltipDirective } from '../../components/tooltip';
   // styles) can flip this back to default once all blocks have moved.
   encapsulation: ViewEncapsulation.None,
   templateUrl: './job-detail.html',
-  styleUrl: './job-detail.scss'
+  styleUrl: './job-detail.scss',
 })
 export class JobDetailComponent implements OnDestroy {
+  private jobService = inject(JobService);
+  private errorDialog = inject(ErrorDialogService);
+
   readonly detail = input.required<JobDetail>();
   readonly watchPaths = input<WatchPathEntry[]>([]);
   /** Peers in the same on-disk lane as the current job, in kanban order. */
@@ -79,18 +127,20 @@ export class JobDetailComponent implements OnDestroy {
       .acknowledgeReviewEvidence(job.id, payload.entry.id, payload.acknowledged, job.watchPath)
       .subscribe({
         next: () => this.fileSaved.emit(),
-        error: () => { /* the panel's own busy state clears on next reviewEvidence emission */ }
+        error: () => {
+          /* the panel's own busy state clears on next reviewEvidence emission */
+        },
       });
   }
 
   onEvidenceCreateFollowup(entry: ReviewEvidenceEntry): void {
     const job = this.detail().info;
-    this.jobService
-      .createReviewEvidenceFollowup(job.id, entry.id, {}, job.watchPath)
-      .subscribe({
-        next: () => this.fileSaved.emit(),
-        error: () => { /* surfaced by the panel's own error toast */ }
-      });
+    this.jobService.createReviewEvidenceFollowup(job.id, entry.id, {}, job.watchPath).subscribe({
+      next: () => this.fileSaved.emit(),
+      error: () => {
+        /* surfaced by the panel's own error toast */
+      },
+    });
   }
   readonly projectChanged = output<string>();
   readonly completeAndNextReview = output<void>();
@@ -177,10 +227,12 @@ export class JobDetailComponent implements OnDestroy {
 
   modelMultiplier(id: string | null | undefined): number | null {
     if (!id) return null;
-    return this.availableModels().find(m => m.id === id)?.multiplier ?? null;
+    return this.availableModels().find((m) => m.id === id)?.multiplier ?? null;
   }
 
-  formatMultiplier(mult: number | null): string { return fmtMultiplier(mult); }
+  formatMultiplier(mult: number | null): string {
+    return fmtMultiplier(mult);
+  }
   readonly showCliConfig = signal(false);
   readonly cliStatus = signal<CliSettings | null>(null);
   readonly cliPathDraft = signal('');
@@ -214,7 +266,7 @@ export class JobDetailComponent implements OnDestroy {
   readonly laneIndex = computed(() => {
     const peers = this.lanePeers();
     const key = this.detail().info.jobKey;
-    return peers.findIndex(p => p.jobKey === key);
+    return peers.findIndex((p) => p.jobKey === key);
   });
   readonly laneSize = computed(() => this.lanePeers().length);
 
@@ -237,7 +289,7 @@ export class JobDetailComponent implements OnDestroy {
   // failed snapshot) does not re-pop the dialog. Keyed by `${jobKey}|${startedAt}`.
   private lastShownFailureKey: string | null = null;
 
-  constructor(private jobService: JobService, private errorDialog: ErrorDialogService) {
+  constructor() {
     // Load the initial catalog for whatever CLI the current job uses; the effect below
     // will re-trigger this when the user switches CLIs.
     this.loadModelCatalog('copilot');
@@ -279,13 +331,13 @@ export class JobDetailComponent implements OnDestroy {
         this.availableModels.set(models);
         this.modelCatalogSource.set(catalog.source ?? '');
         if (!this.modelDraft()) {
-          const def = models.find(m => m.isDefault);
+          const def = models.find((m) => m.isDefault);
           if (def) this.modelDraft.set(def.id);
         }
       },
       error: () => {
         this.availableModels.set([]);
-      }
+      },
     });
   }
 
@@ -298,13 +350,17 @@ export class JobDetailComponent implements OnDestroy {
     this.modelDraft.set('');
     this.loadModelCatalog(next);
 
-    this.jobService.setJobCliType(this.detail().info.id, next, this.detail().info.watchPath).subscribe({
-      next: () => this.fileSaved.emit(),
-      error: (err) => this.showError(err)
-    });
+    this.jobService
+      .setJobCliType(this.detail().info.id, next, this.detail().info.watchPath)
+      .subscribe({
+        next: () => this.fileSaved.emit(),
+        error: (err) => this.showError(err),
+      });
   }
 
-  cliTypeLabel(t: CliType): string { return fmtCliTypeLabel(t); }
+  cliTypeLabel(t: CliType): string {
+    return fmtCliTypeLabel(t);
+  }
 
   /** When the run ends, drop the user's "Show setup" override so the next run
    *  starts compact again. Idempotent — only writes when the flag would change. */
@@ -330,7 +386,9 @@ export class JobDetailComponent implements OnDestroy {
     // lane: every advance shows another 2-ready job). The dropdown's
     // "changing" flag belongs to the action on the OLD job and must clear
     // when we switch, otherwise the next dropdown click is disabled.
-    const jobSwitched = this.lastObservedJobKeyForChangingState !== null && jobKey !== this.lastObservedJobKeyForChangingState;
+    const jobSwitched =
+      this.lastObservedJobKeyForChangingState !== null &&
+      jobKey !== this.lastObservedJobKeyForChangingState;
     if ((stateChanged || jobSwitched) && this.changingState()) {
       this.changingState.set(false);
     }
@@ -350,7 +408,7 @@ export class JobDetailComponent implements OnDestroy {
     if (d.info.model) {
       this.modelDraft.set(d.info.model);
     } else {
-      const def = this.availableModels().find(m => m.isDefault);
+      const def = this.availableModels().find((m) => m.isDefault);
       this.modelDraft.set(def?.id ?? '');
     }
     const nextCliType = (d.info.cliType ?? 'copilot') as CliType;
@@ -372,7 +430,9 @@ export class JobDetailComponent implements OnDestroy {
       // The auto-switch effect below promotes Activity → Protocol once
       // Haiku finishes, unless the user has manually picked a tab.
       const isInProgress = d.info.state === '3-progress';
-      this.activeInspectorTab.set(isInProgress ? 'activity' : (d.statusMarkdown ? 'protocol' : 'activity'));
+      this.activeInspectorTab.set(
+        isInProgress ? 'activity' : d.statusMarkdown ? 'protocol' : 'activity',
+      );
       this.userTouchedInspectorTab = false;
       this.showCliConfig.set(false);
       this.cliTestResult.set(null);
@@ -435,9 +495,8 @@ export class JobDetailComponent implements OnDestroy {
       error: (err) => {
         if (err.status !== 0) return; // silent for 404 etc
         this.showError(err);
-      }
+      },
     });
-
   });
   private cliConfigEffect = effect(() => {
     const requestId = this.errorDialog.cliConfigRequest();
@@ -491,7 +550,7 @@ export class JobDetailComponent implements OnDestroy {
       error: (err) => {
         this.stopRegenPolling();
         this.showError(err);
-      }
+      },
     });
   }
 
@@ -600,7 +659,7 @@ export class JobDetailComponent implements OnDestroy {
       error: (err) => {
         this.starting.set(false);
         this.showError(err);
-      }
+      },
     });
   }
 
@@ -608,7 +667,7 @@ export class JobDetailComponent implements OnDestroy {
     this.errorMsg.set(null);
     this.jobService.stopJob(this.detail().info.id, this.detail().info.watchPath).subscribe({
       next: () => this.cliPoll.stop(),
-      error: (err) => this.showError(err)
+      error: (err) => this.showError(err),
     });
   }
 
@@ -624,28 +683,37 @@ export class JobDetailComponent implements OnDestroy {
     this.cliPoll.appendOptimisticUserMessage(prompt);
     this.followupPrompt.set('');
     const model = this.modelDraft().trim() || undefined;
-    this.jobService.continueJob(this.detail().info.id, prompt, this.detail().info.watchPath, model, undefined, this.continueMode()).subscribe({
-      next: (resp) => {
-        this.continuing.set(false);
-        if (resp.status === 'started' && resp.execution) {
-          this.cliPoll.beginContinuation(new Date(resp.execution.startedAt));
-          this.sessionEventsPoll.refresh();
-        }
-        // status === 'queued': the project was busy. The backend already
-        // saved the user's intent + posted a [queued] orchestrator line
-        // into the chat; nothing more for us to do here. The optimistic
-        // user-message echo above stays so the chat reads forward.
-      },
-      error: (err) => {
-        this.continuing.set(false);
-        // Restore the user's text so they can correct or retry — the backend
-        // never accepted it, so the optimistic echo above is a lie we shouldn't
-        // leave on screen permanently. We keep it visible for now (so the user
-        // can see what they tried) but the inline error banner explains why.
-        this.followupPrompt.set(prompt);
-        this.showError(err);
-      }
-    });
+    this.jobService
+      .continueJob(
+        this.detail().info.id,
+        prompt,
+        this.detail().info.watchPath,
+        model,
+        undefined,
+        this.continueMode(),
+      )
+      .subscribe({
+        next: (resp) => {
+          this.continuing.set(false);
+          if (resp.status === 'started' && resp.execution) {
+            this.cliPoll.beginContinuation(new Date(resp.execution.startedAt));
+            this.sessionEventsPoll.refresh();
+          }
+          // status === 'queued': the project was busy. The backend already
+          // saved the user's intent + posted a [queued] orchestrator line
+          // into the chat; nothing more for us to do here. The optimistic
+          // user-message echo above stays so the chat reads forward.
+        },
+        error: (err) => {
+          this.continuing.set(false);
+          // Restore the user's text so they can correct or retry — the backend
+          // never accepted it, so the optimistic echo above is a lie we shouldn't
+          // leave on screen permanently. We keep it visible for now (so the user
+          // can see what they tried) but the inline error banner explains why.
+          this.followupPrompt.set(prompt);
+          this.showError(err);
+        },
+      });
   }
 
   canSendChat(): boolean {
@@ -675,17 +743,19 @@ export class JobDetailComponent implements OnDestroy {
     // crash modal between the kill and the follow-up start.
     this.errorMsg.set(null);
     this.continuing.set(true);
-    this.jobService.stopJob(this.detail().info.id, this.detail().info.watchPath, 'followup').subscribe({
-      next: () => {
-        this.isRunning.set(false);
-        this.continuing.set(false);
-        this.continueJob();
-      },
-      error: (err) => {
-        this.continuing.set(false);
-        this.showError(err);
-      }
-    });
+    this.jobService
+      .stopJob(this.detail().info.id, this.detail().info.watchPath, 'followup')
+      .subscribe({
+        next: () => {
+          this.isRunning.set(false);
+          this.continuing.set(false);
+          this.continueJob();
+        },
+        error: (err) => {
+          this.continuing.set(false);
+          this.showError(err);
+        },
+      });
   }
 
   onModelDraftChange(value: string): void {
@@ -694,30 +764,41 @@ export class JobDetailComponent implements OnDestroy {
     const current = this.detail().info.model ?? '';
     if (trimmed === current) return;
 
-    this.jobService.setJobModel(
-      this.detail().info.id,
-      trimmed === '' ? null : trimmed,
-      this.detail().info.watchPath
-    ).subscribe({
-      error: (err) => this.showError(err)
-    });
+    this.jobService
+      .setJobModel(
+        this.detail().info.id,
+        trimmed === '' ? null : trimmed,
+        this.detail().info.watchPath,
+      )
+      .subscribe({
+        error: (err) => this.showError(err),
+      });
   }
 
-  private showError(err: any): void {
-    const message = err.status === 0
-      ? 'Backend not reachable — is the API running on localhost:5030?'
-      : err.error?.error || (typeof err.error === 'string' ? err.error : `Request failed (${err.status || 'unknown'}): ${err.statusText || err.message || 'Unknown error'}`);
+  private showError(err: unknown): void {
+    const detail = err as { status?: number; statusText?: string; message?: string; error?: unknown };
+    const bodyError =
+      typeof detail.error === 'object' && detail.error !== null && 'error' in detail.error
+        ? (detail.error as { error?: unknown }).error
+        : detail.error;
+    const message =
+      detail.status === 0
+        ? 'Backend not reachable — is the API running on localhost:5030?'
+        : (typeof bodyError === 'string' && bodyError.trim()) ||
+          `Request failed (${detail.status || 'unknown'}): ${detail.statusText || detail.message || 'Unknown error'}`;
 
     this.errorMsg.set(message);
     this.errorDialog.show(err, {
       title: 'Task action failed',
       fallbackMessage: message,
       source: `Task ${this.detail().info.id}`,
-      canOpenCliConfig: this.canOpenCliConfigForCurrentJob(message)
+      canOpenCliConfig: this.canOpenCliConfigForCurrentJob(message),
     });
   }
 
-  private applyExecutionState(execution: import('../../models/job.model').CliExecution | null): void {
+  private applyExecutionState(
+    execution: import('../../models/job.model').CliExecution | null,
+  ): void {
     if (!execution) return;
     this.cliPoll.applyExecution(execution);
     // 'stopped' is the deliberate-kill status (user pause, Pause-&-Send,
@@ -730,9 +811,10 @@ export class JobDetailComponent implements OnDestroy {
       return;
     }
     if (shouldShowFailureToast(execution)) {
-      const message = execution.exitCode === null
-        ? 'Task execution failed.'
-        : `Task execution failed with exit code ${execution.exitCode}.`;
+      const message =
+        execution.exitCode === null
+          ? 'Task execution failed.'
+          : `Task execution failed with exit code ${execution.exitCode}.`;
       this.errorMsg.set(message);
 
       // The backend keeps the failed CliExecution in memory until the next run,
@@ -748,7 +830,7 @@ export class JobDetailComponent implements OnDestroy {
         title: 'Task execution failed',
         fallbackMessage: message,
         source: `Task ${this.detail().info.id}`,
-        output: { execution, cliOutput: this.cliOutput() }
+        output: { execution, cliOutput: this.cliOutput() },
       });
     }
   }
@@ -876,9 +958,9 @@ export class JobDetailComponent implements OnDestroy {
         this.errorDialog.show(err, {
           title: 'Failed to complete task',
           fallbackMessage: 'Failed to move task to Completed',
-          source: `Task ${id}`
+          source: `Task ${id}`,
         });
-      }
+      },
     });
   }
 
@@ -921,9 +1003,9 @@ export class JobDetailComponent implements OnDestroy {
         this.errorDialog.show(err, {
           title: 'Failed to move task to top',
           fallbackMessage: 'Failed to move task to the top of the Ready queue',
-          source: `Task ${info.id}`
+          source: `Task ${info.id}`,
         });
-      }
+      },
     });
   }
 
@@ -949,7 +1031,7 @@ export class JobDetailComponent implements OnDestroy {
    *  selectors. Only meaningful while a run is active — when not running, the
    *  bar is always expanded and the toggle isn't shown. */
   toggleSetupCollapsed() {
-    this.setupExpandedDuringRun.update(v => !v);
+    this.setupExpandedDuringRun.update((v) => !v);
   }
 
   startTitleEdit() {
@@ -973,17 +1055,19 @@ export class JobDetailComponent implements OnDestroy {
     }
 
     this.savingTitle.set(true);
-    this.jobService.setJobTitle(this.detail().info.id, trimmed, this.detail().info.watchPath).subscribe({
-      next: () => {
-        this.savingTitle.set(false);
-        this.editingTitle.set(false);
-        this.fileSaved.emit();
-      },
-      error: (err) => {
-        this.savingTitle.set(false);
-        this.showError(err);
-      }
-    });
+    this.jobService
+      .setJobTitle(this.detail().info.id, trimmed, this.detail().info.watchPath)
+      .subscribe({
+        next: () => {
+          this.savingTitle.set(false);
+          this.editingTitle.set(false);
+          this.fileSaved.emit();
+        },
+        error: (err) => {
+          this.savingTitle.set(false);
+          this.showError(err);
+        },
+      });
   }
 
   cancelEdit(which: 'prompt') {
@@ -998,13 +1082,15 @@ export class JobDetailComponent implements OnDestroy {
 
   saveFileContent(fileName: string, content: string) {
     if (this.isRunning()) return;
-    this.jobService.updateJobFile(this.detail().info.id, fileName, content, this.detail().info.watchPath).subscribe({
-      next: () => {
-        if (fileName === 'prompt.md') this.editingPrompt.set(false);
-        this.fileSaved.emit();
-      },
-      error: (err) => this.showError(err)
-    });
+    this.jobService
+      .updateJobFile(this.detail().info.id, fileName, content, this.detail().info.watchPath)
+      .subscribe({
+        next: () => {
+          if (fileName === 'prompt.md') this.editingPrompt.set(false);
+          this.fileSaved.emit();
+        },
+        error: (err) => this.showError(err),
+      });
   }
 
   handleFileKeydown(event: KeyboardEvent, fileName: string): void {
@@ -1020,7 +1106,9 @@ export class JobDetailComponent implements OnDestroy {
 
   // === 3-pane layout — facades for LayoutPanesService ====================
 
-  startLayoutResize(event: PointerEvent): void { this.layout.startLayoutResize(event); }
+  startLayoutResize(event: PointerEvent): void {
+    this.layout.startLayoutResize(event);
+  }
 
   togglePane(name: 'prompt' | 'protocol' | 'git'): void {
     const next = this.layout.togglePane(name);
@@ -1030,13 +1118,23 @@ export class JobDetailComponent implements OnDestroy {
     }
   }
 
-  toggleMaximize(name: 'prompt' | 'protocol' | 'git'): void { this.layout.toggleMaximize(name); }
+  toggleMaximize(name: 'prompt' | 'protocol' | 'git'): void {
+    this.layout.toggleMaximize(name);
+  }
 
-  isPaneRendered(name: 'prompt' | 'protocol' | 'git'): boolean { return this.layout.isPaneRendered(name); }
+  isPaneRendered(name: 'prompt' | 'protocol' | 'git'): boolean {
+    return this.layout.isPaneRendered(name);
+  }
 
-  firstVisibleAfter(name: 'prompt' | 'protocol' | 'git'): 'protocol' | 'git' { return this.layout.firstVisibleAfter(name); }
+  firstVisibleAfter(name: 'prompt' | 'protocol' | 'git'): 'protocol' | 'git' {
+    return this.layout.firstVisibleAfter(name);
+  }
 
-  startPaneResize(event: PointerEvent, left: 'prompt' | 'protocol', right: 'protocol' | 'git'): void {
+  startPaneResize(
+    event: PointerEvent,
+    left: 'prompt' | 'protocol',
+    right: 'protocol' | 'git',
+  ): void {
     this.layout.startPaneResize(event, left, right);
   }
 
@@ -1046,15 +1144,21 @@ export class JobDetailComponent implements OnDestroy {
   // wrappers here keep older same-class call sites working (e.g. the
   // togglePane lazy-load below).
 
-  refreshGit(): void { this.git.refresh(); }
-  openInVsCode(): void { this.git.openInVsCode(); }
+  refreshGit(): void {
+    this.git.refresh();
+  }
+  openInVsCode(): void {
+    this.git.openInVsCode();
+  }
 
   // === Claude live session telemetry =====================================
   // Polling lives in ClaudeSessionPollService (provided locally on this
   // component); the claudeSessionEffect above bridges detail() changes
   // into it, and the session/rateLimit signals are exposed as facades.
 
-  formatTokens(n: number): string { return fmtTokens(n); }
+  formatTokens(n: number): string {
+    return fmtTokens(n);
+  }
 
   claudeSessionTooltip(): string {
     const cs = this.claudeSession();
@@ -1066,37 +1170,51 @@ export class JobDetailComponent implements OnDestroy {
       `Cache read: ${cs.cacheReadTokens.toLocaleString()} tokens`,
       `Cache creation: ${cs.cacheCreationTokens.toLocaleString()} tokens`,
       `Turns recorded: ${cs.turnCount}`,
-      cs.lastTurnAt ? `Last turn: ${cs.lastTurnAt}` : ''
-    ].filter(Boolean).join('\n');
+      cs.lastTurnAt ? `Last turn: ${cs.lastTurnAt}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
   }
 
-  formatRateWindow(window: string | null): string { return fmtRateWindow(window); }
+  formatRateWindow(window: string | null): string {
+    return fmtRateWindow(window);
+  }
 
-  formatResetIn(epochSeconds: number): string { return fmtResetIn(epochSeconds, this.nowTick()); }
+  formatResetIn(epochSeconds: number): string {
+    return fmtResetIn(epochSeconds, this.nowTick());
+  }
 
   rateLimitTooltip(): string {
     const rl = this.claudeRateLimit();
     if (!rl) return '';
-    const reset = rl.resetsAt
-      ? new Date(rl.resetsAt * 1000).toLocaleString()
-      : 'unknown';
+    const reset = rl.resetsAt ? new Date(rl.resetsAt * 1000).toLocaleString() : 'unknown';
     return [
       `Window: ${this.formatRateWindow(rl.window)}`,
       `Status: ${rl.status ?? '?'}`,
       `Resets at: ${reset}`,
       `Overage: ${rl.overageStatus ?? '—'}`,
       rl.isUsingOverage ? 'Currently using overage budget' : '',
-      `Captured: ${new Date(rl.capturedAt).toLocaleTimeString()}`
-    ].filter(Boolean).join('\n');
+      `Captured: ${new Date(rl.capturedAt).toLocaleTimeString()}`,
+    ]
+      .filter(Boolean)
+      .join('\n');
   }
 
-  stateLabel(state: string): string { return fmtStateLabel(state); }
+  stateLabel(state: string): string {
+    return fmtStateLabel(state);
+  }
 
-  formatTime(dateStr: string): string { return fmtTime(dateStr); }
+  formatTime(dateStr: string): string {
+    return fmtTime(dateStr);
+  }
 
-  formatDate(dateStr: string): string { return fmtDate(dateStr); }
+  formatDate(dateStr: string): string {
+    return fmtDate(dateStr);
+  }
 
-  formatDateTime(dateStr: string): string { return fmtDateTime(dateStr); }
+  formatDateTime(dateStr: string): string {
+    return fmtDateTime(dateStr);
+  }
 
   isCliError(): boolean {
     const msg = this.errorMsg();
@@ -1112,7 +1230,7 @@ export class JobDetailComponent implements OnDestroy {
         this.cliStatus.set(settings);
         this.cliPathDraft.set(settings.path);
       },
-      error: (err) => this.showError(err)
+      error: (err) => this.showError(err),
     });
   }
 
@@ -1134,7 +1252,7 @@ export class JobDetailComponent implements OnDestroy {
       error: (err) => {
         this.cliTesting.set(false);
         this.showError(err);
-      }
+      },
     });
   }
 
@@ -1155,7 +1273,7 @@ export class JobDetailComponent implements OnDestroy {
       error: (err) => {
         this.cliTesting.set(false);
         this.showError(err);
-      }
+      },
     });
   }
 
@@ -1175,16 +1293,18 @@ export class JobDetailComponent implements OnDestroy {
       error: (err) => {
         this.tokenSaving.set(false);
         this.showError(err);
-      }
+      },
     });
   }
 
   onProjectChange(targetWatchPath: string) {
     if (targetWatchPath === this.detail().info.watchPath) return;
-    this.jobService.changeProject(this.detail().info.id, targetWatchPath, this.detail().info.watchPath).subscribe({
-      next: () => this.projectChanged.emit(targetWatchPath),
-      error: (err) => this.showError(err)
-    });
+    this.jobService
+      .changeProject(this.detail().info.id, targetWatchPath, this.detail().info.watchPath)
+      .subscribe({
+        next: () => this.projectChanged.emit(targetWatchPath),
+        error: (err) => this.showError(err),
+      });
   }
 
   private isCliErrorMessage(message: string | null | undefined): boolean {

@@ -1,4 +1,4 @@
-import { Component, input, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, output } from '@angular/core';
 
 import { ICON_PATHS } from './next-gen-chat-workbench-prototype.data';
 import {
@@ -13,6 +13,7 @@ import {
   selector: 'mockup-next-gen-chat-rail',
   standalone: true,
   templateUrl: './next-gen-chat-rail.component.html',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class NextGenChatRailComponent {
   readonly paneButtons = input.required<readonly PaneButton[]>();

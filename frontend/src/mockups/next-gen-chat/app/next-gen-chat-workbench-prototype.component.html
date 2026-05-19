@@ -624,8 +624,8 @@
   </app-found-next-statusbar>
 
   @if (debugOpen()) {
-    <div class="modal" data-testid="prototype-debug-modal" (click)="debugOpen.set(false)">
-      <section class="modal__panel modal__panel--debug" (click)="$event.stopPropagation()">
+    <div class="modal" data-testid="prototype-debug-modal" (click)="debugOpen.set(false)" tabindex="0" (keydown.enter)="debugOpen.set(false)" (keydown.space)="debugOpen.set(false); $event.preventDefault()">
+      <section class="modal__panel modal__panel--debug" (click)="$event.stopPropagation()" tabindex="0" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
         <header>
           <strong>Verbose Debug</strong>
           <div>
@@ -739,8 +739,8 @@
   }
 
   @if (guideOpen()) {
-    <div class="modal" data-testid="prototype-rail-guide-modal" (click)="guideOpen.set(false)">
-      <section class="modal__panel modal__panel--guide" (click)="$event.stopPropagation()">
+    <div class="modal" data-testid="prototype-rail-guide-modal" (click)="guideOpen.set(false)" tabindex="0" (keydown.enter)="guideOpen.set(false)" (keydown.space)="guideOpen.set(false); $event.preventDefault()">
+      <section class="modal__panel modal__panel--guide" (click)="$event.stopPropagation()" tabindex="0" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
         <header>
           <strong>Workbench rail</strong>
           <button (click)="guideOpen.set(false)">Close</button>
@@ -768,8 +768,8 @@
   }
 
   @if (lightboxOpen()) {
-    <div class="modal" data-testid="prototype-lightbox" (click)="lightboxOpen.set(false)">
-      <section class="modal__panel modal__panel--image" (click)="$event.stopPropagation()">
+    <div class="modal" data-testid="prototype-lightbox" (click)="lightboxOpen.set(false)" tabindex="0" (keydown.enter)="lightboxOpen.set(false)" (keydown.space)="lightboxOpen.set(false); $event.preventDefault()">
+      <section class="modal__panel modal__panel--image" (click)="$event.stopPropagation()" tabindex="0" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
         <header>
           <strong>Screenshot evidence</strong>
           <button (click)="lightboxOpen.set(false)">Close</button>
@@ -783,8 +783,8 @@
   }
 
   @if (featureModal(); as feature) {
-    <div class="modal" data-testid="prototype-feature-modal" (click)="featureModal.set(null)">
-      <section class="modal__panel modal__panel--guide" (click)="$event.stopPropagation()">
+    <div class="modal" data-testid="prototype-feature-modal" (click)="featureModal.set(null)" tabindex="0" (keydown.enter)="featureModal.set(null)" (keydown.space)="featureModal.set(null); $event.preventDefault()">
+      <section class="modal__panel modal__panel--guide" (click)="$event.stopPropagation()" tabindex="0" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
         <header>
           <strong>{{ featureTitle(feature) }}</strong>
           <button (click)="featureModal.set(null)">Close</button>
@@ -852,8 +852,8 @@
   }
 
   @if (commandOpen()) {
-    <div class="modal" data-testid="prototype-command-palette" (click)="commandOpen.set(false)">
-      <section class="command" (click)="$event.stopPropagation()">
+    <div class="modal" data-testid="prototype-command-palette" (click)="commandOpen.set(false)" tabindex="0" (keydown.enter)="commandOpen.set(false)" (keydown.space)="commandOpen.set(false); $event.preventDefault()">
+      <section class="command" (click)="$event.stopPropagation()" tabindex="0" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
         <input value="workbench: switch to git changes" aria-label="Command palette input" />
         <button (click)="setPane('git'); commandOpen.set(false)">Pin Git review</button>
         <button (click)="setPane('preview'); commandOpen.set(false)">Open screenshots</button>

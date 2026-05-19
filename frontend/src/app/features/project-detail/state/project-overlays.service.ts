@@ -53,7 +53,7 @@ export class ProjectOverlaysService {
   // ---------- project-shell (URL-deep-linked) ----------
 
   openProjectShell(name: string, rail: ProjectRailKey = DEFAULT_PROJECT_RAIL_KEY,
-                   watchPaths: ReadonlyArray<{ name: string }> = []): void {
+                   watchPaths: readonly { name: string }[] = []): void {
     const slug = toProjectSlug(name);
     if (!slug) return;
     const target = `${this.shellHashPrefix}${slug}`
@@ -126,7 +126,7 @@ export class ProjectOverlaysService {
    * resolution requires the workspace watch-paths; if they haven't
    * loaded yet we leave the signals alone — call again when they do.
    */
-  syncShellFromHash(watchPaths: ReadonlyArray<{ name: string }>): void {
+  syncShellFromHash(watchPaths: readonly { name: string }[]): void {
     const hash = window.location.hash;
     if (!hash.startsWith(this.shellHashPrefix)) {
       if (this.projectShellName() !== null) {

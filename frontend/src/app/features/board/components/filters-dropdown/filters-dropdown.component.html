@@ -17,11 +17,11 @@
   @if (open()) {
     <div class="filters-dropdown__backdrop"
          data-testid="filters-dropdown-backdrop"
-         (click)="close()"></div>
+         (click)="close()" tabindex="0" (keydown.enter)="close()" (keydown.space)="close(); $event.preventDefault()"></div>
     <div class="filters-dropdown__panel"
          data-testid="filters-dropdown-panel"
          role="dialog"
-         (click)="$event.stopPropagation()">
+         (click)="$event.stopPropagation()" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
       <section class="filters-dropdown__section" data-testid="type-filter">
         <h3 class="filters-dropdown__section-title">Task type</h3>
         <div class="filters-dropdown__type-pills">

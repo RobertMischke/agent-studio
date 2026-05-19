@@ -73,7 +73,7 @@ export class CreateJobFormService {
    * else falls back to `1-preparation`.
    */
   open(opts: {
-    watchPaths: ReadonlyArray<WatchPathEntry>;
+    watchPaths: readonly WatchPathEntry[];
     activeProjects: ReadonlySet<string>;
     targetState?: string;
   }): void {
@@ -92,7 +92,7 @@ export class CreateJobFormService {
    */
   openSecurityFollowUp(
     event: { projectName: string; prefill: string },
-    watchPaths: ReadonlyArray<WatchPathEntry>,
+    watchPaths: readonly WatchPathEntry[],
   ): void {
     const watchEntry = watchPaths.find((wp) => wp.name === event.projectName);
     if (!watchEntry) return;
@@ -111,7 +111,7 @@ export class CreateJobFormService {
    */
   openUxuiFollowUp(
     event: { projectName: string; prefill: string; title: string },
-    watchPaths: ReadonlyArray<WatchPathEntry>,
+    watchPaths: readonly WatchPathEntry[],
   ): void {
     const watchEntry = watchPaths.find((wp) => wp.name === event.projectName);
     if (!watchEntry) return;
@@ -129,7 +129,7 @@ export class CreateJobFormService {
    */
   openOrchestratorDraftFollowUp(
     event: { projectName: string; promptText: string },
-    watchPaths: ReadonlyArray<WatchPathEntry>,
+    watchPaths: readonly WatchPathEntry[],
   ): void {
     const watchEntry = watchPaths.find((wp) => wp.name === event.projectName);
     if (!watchEntry) return;
@@ -330,7 +330,7 @@ function escapeRegex(s: string): string {
 }
 
 function pickCreateWatchPath(
-  paths: ReadonlyArray<WatchPathEntry>,
+  paths: readonly WatchPathEntry[],
   active: ReadonlySet<string>,
 ): string {
   if (paths.length === 0) return '';

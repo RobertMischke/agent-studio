@@ -34,7 +34,7 @@ export class LogOverlayComponent implements AfterViewInit, OnDestroy {
   readonly log = input<JobLogEntry[]>([]);
   readonly isRunning = input(false);
 
-  readonly close = output<void>();
+  readonly closeRequest = output<void>();
 
   readonly copyState = signal<'idle' | 'copied' | 'failed'>('idle');
   private copyResetTimer: ReturnType<typeof setTimeout> | null = null;
@@ -62,7 +62,7 @@ export class LogOverlayComponent implements AfterViewInit, OnDestroy {
     if (el?.open) {
       el.close(); // fires `close` event -> emits this.close
     } else {
-      this.close.emit();
+      this.closeRequest.emit();
     }
   }
 
@@ -71,7 +71,7 @@ export class LogOverlayComponent implements AfterViewInit, OnDestroy {
    * clicks the backdrop area outside the panel. We stop propagation on the
    * panel, so any click reaching the dialog is a backdrop click.
    */
-  onBackdropClick(event: MouseEvent): void {
+  onBackdropClick(event: Event): void {
     if (event.target === this.dlg()?.nativeElement) {
       this.dismiss();
     }

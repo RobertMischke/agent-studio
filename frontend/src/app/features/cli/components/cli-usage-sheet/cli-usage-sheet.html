@@ -1,7 +1,7 @@
 <app-sidesheet title="CLI Usage"
                subtitle="Quota windows only. Sessions live in the Orchestrator window."
                testid="cli-usage-sheet"
-               (close)="closed.emit()">
+               (closeRequest)="closed.emit()">
   <section class="seg">
     <button class="seg__head" type="button" (click)="toggleSegment('quota')">
       <span class="seg__chev">{{ isSegmentCollapsed('quota') ? '▶' : '▼' }}</span>

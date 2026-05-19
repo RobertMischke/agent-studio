@@ -22,7 +22,7 @@ export class CliConfigCardComponent {
   readonly testing = input(false);
   readonly tokenSaving = input(false);
 
-  readonly close = output<void>();
+  readonly closeRequest = output<void>();
   readonly pathDraftChange = output<string>();
   readonly tokenDraftChange = output<string>();
   readonly testPath = output<void>();

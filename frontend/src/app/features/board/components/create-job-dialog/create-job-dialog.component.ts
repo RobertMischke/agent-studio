@@ -103,8 +103,8 @@ export class CreateJobDialogComponent implements AfterViewInit {
   }
 
   readonly cliTypeChange = output<CliType>();
-  readonly cancel = output<void>();
-  readonly submit = output<void>();
+  readonly cancelRequest = output<void>();
+  readonly submitRequest = output<void>();
 
   readonly isDragging = model<boolean>(false);
   readonly attachmentError = model<string | null>(null);
@@ -156,7 +156,7 @@ export class CreateJobDialogComponent implements AfterViewInit {
     // stack ordering honest without touching the parent.
     this.modalStack.pushUntilDestroyed(
       'create-job-dialog',
-      () => this.cancel.emit(),
+      () => this.cancelRequest.emit(),
       this.destroyRef,
     );
   }

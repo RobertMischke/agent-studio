@@ -16,7 +16,7 @@
         <dd>{{ o.job.title || o.job.id }}</dd>
         <dt>Project</dt>
         <dd>{{ o.job.projectName }}</dd>
-        @if (o.commit.filesChanged != null) {
+        @if (o.commit.filesChanged !== null) {
           <dt>Files</dt>
           <dd>{{ o.commit.filesChanged }}</dd>
         }

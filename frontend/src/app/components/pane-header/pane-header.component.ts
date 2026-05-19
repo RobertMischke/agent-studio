@@ -24,10 +24,10 @@ import { StudioIconComponent, StudioIconName } from '../studio-icon/studio-icon.
 })
 export class PaneHeaderComponent {
   @Input() icon: StudioIconName | null = null;
-  @Input() title: string = '';
-  @Input() maximized: boolean = false;
-  @Input() maximizable: boolean = true;
-  @Input() hideable: boolean = true;
+  @Input() title = '';
+  @Input() maximized = false;
+  @Input() maximizable = true;
+  @Input() hideable = true;
   /** Optional extra subtitle that follows the title. */
   @Input() subtitle: string | null = null;
   /** data-testid passthrough. */

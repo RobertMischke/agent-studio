@@ -1,5 +1,5 @@
-    <div class="overlay" (click)="onBackdropClick()">
-      <div class="panel" (click)="$event.stopPropagation()">
+    <div class="overlay" (click)="onBackdropClick()" tabindex="0" (keydown.enter)="onBackdropClick()" (keydown.space)="onBackdropClick(); $event.preventDefault()">
+      <div class="panel" (click)="$event.stopPropagation()" tabindex="0" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
         <header class="panel__head">
           <div>
             <div class="panel__eyebrow">Dev tool</div>

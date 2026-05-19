@@ -1,4 +1,4 @@
-import { AfterViewChecked, Component, ElementRef, EventEmitter, OnDestroy, Output, signal, ViewChild } from '@angular/core';
+import { AfterViewChecked, ChangeDetectionStrategy, Component, ElementRef, EventEmitter, OnDestroy, Output, signal, ViewChild } from '@angular/core';
 
 import { TooltipDirective } from '../../../../components/tooltip';
 interface ConsoleLine {
@@ -19,7 +19,8 @@ interface ConsoleLine {
   standalone: true,
   imports: [TooltipDirective],
   templateUrl: './update-stable-console.component.html',
-  styleUrl: './update-stable-console.component.scss'
+  styleUrl: './update-stable-console.component.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class UpdateStableConsoleComponent implements OnDestroy, AfterViewChecked {
   @Output() closed = new EventEmitter<void>();

@@ -1,7 +1,17 @@
-import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  OnInit,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
+
 import { FormsModule } from '@angular/forms';
-import { OrchestratorConfigOption, OrchestratorConfigService } from '../../../../services/orchestrator-config.service';
+import {
+  OrchestratorConfigOption,
+  OrchestratorConfigService,
+} from '../../../../services/orchestrator-config.service';
 
 interface OptionGroup {
   name: string;
@@ -11,7 +21,7 @@ interface OptionGroup {
 @Component({
   selector: 'app-orchestrator-logic-panel',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [FormsModule],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './orchestrator-logic-panel.component.html',
   styleUrl: './orchestrator-logic-panel.component.scss',
@@ -34,8 +44,8 @@ export class OrchestratorLogicPanelComponent implements OnInit {
       buckets.set(opt.group, list);
     }
     return order
-      .filter(name => buckets.has(name))
-      .map(name => ({ name, options: buckets.get(name)! }));
+      .filter((name) => buckets.has(name))
+      .map((name) => ({ name, options: buckets.get(name)! }));
   });
 
   readonly hasPending = computed(() => Object.keys(this.pending()).length > 0);
@@ -71,7 +81,9 @@ export class OrchestratorLogicPanelComponent implements OnInit {
     }
   }
 
-  asBool(v: unknown): boolean { return v === true || v === 'true'; }
+  asBool(v: unknown): boolean {
+    return v === true || v === 'true';
+  }
   asInt(v: unknown): number {
     const n = Number(v);
     return Number.isFinite(n) ? Math.trunc(n) : 0;

@@ -337,7 +337,7 @@ export class JobSelectionService {
    * with other app-wide feedback while the detail-anchored banner stays
    * for users focused on the panel.
    */
-  showTriageToast(msg: string, durationMs: number = 3000): void {
+  showTriageToast(msg: string, durationMs = 3000): void {
     if (this.triageToastTimer) clearTimeout(this.triageToastTimer);
     this.triageToast.set(msg);
     this.triageToastTimer = setTimeout(() => {

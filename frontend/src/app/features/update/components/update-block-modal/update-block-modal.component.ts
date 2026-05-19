@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { UpdateClientService } from '../../../../services/update.service';
 import { UpdatePhase } from '../../../../models/update-service.model';
 
@@ -21,10 +21,10 @@ import { UpdatePhase } from '../../../../models/update-service.model';
 @Component({
   selector: 'app-update-block-modal',
   standalone: true,
-  imports: [CommonModule],
+  imports: [],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './update-block-modal.component.html',
-  styleUrl: './update-block-modal.component.scss'
+  styleUrl: './update-block-modal.component.scss',
 })
 export class UpdateBlockModalComponent {
   private readonly client = inject(UpdateClientService);
@@ -52,16 +52,27 @@ export class UpdateBlockModalComponent {
 
 function humanPhase(phase: UpdatePhase | string): string {
   switch (phase) {
-    case 'preparing':                 return 'Preparing snapshot';
-    case 'pausing-runners':           return 'Pausing runners';
-    case 'pulling':                   return 'Pulling and rebuilding';
-    case 'building':                  return 'Building';
-    case 'restarting':                return 'Restarting backend';
-    case 'verifying-after-restart':   return 'Verifying restart';
-    case 'resuming':                  return 'Resuming runners';
-    case 'rolling-back':              return 'Rolling back';
-    case 'done':                      return 'Update verified';
-    case 'failed':                    return 'Update failed';
-    default:                          return String(phase);
+    case 'preparing':
+      return 'Preparing snapshot';
+    case 'pausing-runners':
+      return 'Pausing runners';
+    case 'pulling':
+      return 'Pulling and rebuilding';
+    case 'building':
+      return 'Building';
+    case 'restarting':
+      return 'Restarting backend';
+    case 'verifying-after-restart':
+      return 'Verifying restart';
+    case 'resuming':
+      return 'Resuming runners';
+    case 'rolling-back':
+      return 'Rolling back';
+    case 'done':
+      return 'Update verified';
+    case 'failed':
+      return 'Update failed';
+    default:
+      return String(phase);
   }
 }

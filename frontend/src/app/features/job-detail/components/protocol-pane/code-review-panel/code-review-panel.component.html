@@ -2,55 +2,78 @@
   <header class="cr-header">
     <h3 class="cr-title">Code Reviews</h3>
     <div class="cr-actions">
-      <select class="cr-model"
-              data-testid="code-review-model"
-              [ngModel]="selectedModel()"
-              (ngModelChange)="selectedModel.set($event)"
-              [disabled]="running()"
-              [appTooltip]="'Model used for the next review'">
-        <option *ngFor="let m of availableModels" [value]="m.id">{{ m.label }}</option>
+      <select
+        class="cr-model"
+        data-testid="code-review-model"
+        [ngModel]="selectedModel()"
+        (ngModelChange)="selectedModel.set($event)"
+        [disabled]="running()"
+        [appTooltip]="'Model used for the next review'"
+      >
+        @for (m of availableModels; track m) {
+          <option [value]="m.id">{{ m.label }}</option>
+        }
       </select>
-      <button class="cr-run"
-              data-testid="code-review-run"
-              type="button"
-              (click)="runReview()"
-              [disabled]="running()">
-        <span *ngIf="!running()">▶ Run Code Review</span>
-        <span *ngIf="running()" class="cr-running" data-testid="code-review-running">
-          ⟳ Reviewing with {{ selectedModel() }}...
-        </span>
+      <button
+        class="cr-run"
+        data-testid="code-review-run"
+        type="button"
+        (click)="runReview()"
+        [disabled]="running()"
+      >
+        @if (!running()) {
+          <span>▶ Run Code Review</span>
+        }
+        @if (running()) {
+          <span class="cr-running" data-testid="code-review-running">
+            ⟳ Reviewing with {{ selectedModel() }}...
+          </span>
+        }
       </button>
     </div>
   </header>
 
-  <p *ngIf="error() as e" class="cr-error" data-testid="code-review-error">{{ e }}</p>
+  @if (error(); as e) {
+    <p class="cr-error" data-testid="code-review-error">{{ e }}</p>
+  }
 
-  <p *ngIf="loading() && !hasEntries()" class="cr-empty">Loading...</p>
+  @if (loading() && !hasEntries()) {
+    <p class="cr-empty">Loading...</p>
+  }
 
-  <p *ngIf="!loading() && !hasEntries() && !running()"
-     class="cr-empty"
-     data-testid="code-review-empty">
-    No reviews yet. Click <em>Run Code Review</em> to review the most recent commit.
-  </p>
+  @if (!loading() && !hasEntries() && !running()) {
+    <p class="cr-empty" data-testid="code-review-empty">
+      No reviews yet. Click <em>Run Code Review</em> to review the most recent commit.
+    </p>
+  }
 
-  <ul *ngIf="hasEntries()" class="cr-list" data-testid="code-review-list">
-    <li *ngFor="let entry of entries(); trackBy: trackByFile"
-        class="cr-row"
-        [attr.data-verdict]="verdictTone(entry.verdict)">
-      <button class="cr-row-toggle"
-              type="button"
-              (click)="toggle(entry)"
-              [attr.aria-expanded]="expandedFile() === entry.fileName">
-        <span class="cr-verdict cr-verdict-{{ verdictTone(entry.verdict) }}">
-          {{ entry.verdict }}
-        </span>
-        <span class="cr-summary">{{ entry.summary || '(no summary)' }}</span>
-        <span class="cr-meta">
-          {{ entry.model }}<span *ngIf="entry.commit"> &middot; {{ entry.commit?.substring(0, 7) }}</span>
-          &middot; {{ formatTimestamp(entry.runAt) }}
-        </span>
-      </button>
-      <pre *ngIf="expandedFile() === entry.fileName" class="cr-body">{{ expandedBody() ?? 'Loading...' }}</pre>
-    </li>
-  </ul>
+  @if (hasEntries()) {
+    <ul class="cr-list" data-testid="code-review-list">
+      @for (entry of entries(); track trackByFile($index, entry)) {
+        <li class="cr-row" [attr.data-verdict]="verdictTone(entry.verdict)">
+          <button
+            class="cr-row-toggle"
+            type="button"
+            (click)="toggle(entry)"
+            [attr.aria-expanded]="expandedFile() === entry.fileName"
+          >
+            <span class="cr-verdict cr-verdict-{{ verdictTone(entry.verdict) }}">
+              {{ entry.verdict }}
+            </span>
+            <span class="cr-summary">{{ entry.summary || '(no summary)' }}</span>
+            <span class="cr-meta">
+              {{ entry.model }}
+              @if (entry.commit) {
+                <span> &middot; {{ entry.commit.substring(0, 7) }}</span>
+              }
+              &middot; {{ formatTimestamp(entry.runAt) }}
+            </span>
+          </button>
+          @if (expandedFile() === entry.fileName) {
+            <pre class="cr-body">{{ expandedBody() ?? 'Loading...' }}</pre>
+          }
+        </li>
+      }
+    </ul>
+  }
 </section>

@@ -34,7 +34,7 @@
             </span>
             <span class="evidence-row__source">{{ sourceLabel(e.source) }}</span>
             <span class="evidence-row__ts" [appTooltip]="e.createdAt">{{ formatTime(e.createdAt) }}</span>
-            @if (e.runIndex != null) {
+            @if (e.runIndex !== null) {
               <span class="evidence-row__run">run #{{ e.runIndex }}</span>
             }
             @if (e.acknowledged) {

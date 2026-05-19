@@ -98,8 +98,11 @@ export class InfoButtonComponent {
         this.http.get<ConceptDocPayload>(`/api/concept-docs/${encodeURIComponent(this.topic())}`)
       );
       this.doc.set(payload);
-    } catch (err: any) {
-      const status = err?.status ?? 0;
+    } catch (err: unknown) {
+      const status =
+        typeof err === 'object' && err !== null && 'status' in err
+          ? Number((err as { status?: unknown }).status ?? 0)
+          : 0;
       this.errorMessage.set(
         status === 404
           ? `No concept doc found for "${this.topic()}".`

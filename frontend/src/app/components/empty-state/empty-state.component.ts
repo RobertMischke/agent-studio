@@ -34,6 +34,6 @@ export class EmptyStateComponent {
   @Input() title: string | null = null;
   @Input() body: string | null = null;
   /** Smaller padding + body-only variant (used inside dense lists). */
-  @Input() compact: boolean = false;
+  @Input() compact = false;
   @Input() testid: string | null = null;
 }

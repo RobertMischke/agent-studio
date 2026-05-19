@@ -113,7 +113,7 @@ export class ProjectSecuritySectionComponent {
         this.editing.set(false);
         this.refresh();
       },
-      error: () => {}
+      error: () => this.editing.set(true)
     });
   }
 
@@ -137,14 +137,14 @@ export class ProjectSecuritySectionComponent {
         this.refresh();
         this.openFile(name);
       },
-      error: () => {}
+      error: () => this.newFileMode.set(true)
     });
   }
 
   saveMeta() {
     this.docs.putSecurityMeta(this.projectName(), this.metaDraft).subscribe({
       next: () => this.refresh(),
-      error: () => {}
+      error: () => this.refresh()
     });
   }
 }

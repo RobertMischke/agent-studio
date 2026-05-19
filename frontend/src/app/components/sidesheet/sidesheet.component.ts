@@ -42,15 +42,15 @@ import { StudioIconComponent } from '../studio-icon/studio-icon.component';
 })
 export class SidesheetComponent {
   @Input() eyebrow: string | null = null;
-  @Input() title: string = '';
+  @Input() title = '';
   /** Optional one-line caption under the title. */
   @Input() subtitle: string | null = null;
   /** Optional width override (px). Default 360. */
   @Input() width: number | null = null;
   /** Hides the close button when set to `false`. */
-  @Input() closable: boolean = true;
+  @Input() closable = true;
   /** data-testid passthrough for stable element selection. */
   @Input() testid: string | null = null;
 
-  @Output() readonly close = new EventEmitter<void>();
+  @Output() readonly closeRequest = new EventEmitter<void>();
 }

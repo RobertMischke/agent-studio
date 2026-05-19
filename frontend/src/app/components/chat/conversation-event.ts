@@ -49,10 +49,7 @@ export type ToolFamily =
   | 'todo'
   | 'other';
 
-export interface ToolBurstSamples {
-  /** A short representative label per family ("Read prompt.md", "Run npm test"). */
-  readonly [family: string]: string | undefined;
-}
+export type ToolBurstSamples = Readonly<Record<string, string | undefined>>;
 
 export type ConversationEventSeverity = 'info' | 'warn' | 'error';
 
@@ -119,7 +116,7 @@ export interface MessageEvent extends ConversationEventBase {
   /** Optional target chip ("→ task: foo") used by user steering messages. */
   target?: string;
   /** Attachment paths or URIs the host already resolved. */
-  attachments?: ReadonlyArray<string>;
+  attachments?: readonly string[];
 }
 
 export interface ToolBurstEvent extends ConversationEventBase {
@@ -133,11 +130,11 @@ export interface ToolBurstEvent extends ConversationEventBase {
   /** Wall-clock span in milliseconds, from first to last call. */
   durationMs: number;
   /** Files touched (edit / write / delete). */
-  files?: ReadonlyArray<string>;
+  files?: readonly string[];
   /** Test commands and final pass/fail status, when detected. */
-  tests?: ReadonlyArray<{ command: string; status: 'pass' | 'fail' | 'unknown' }>;
+  tests?: readonly { command: string; status: 'pass' | 'fail' | 'unknown' }[];
   /** Artifact paths produced (screenshots, reports, etc.). */
-  artifacts?: ReadonlyArray<string>;
+  artifacts?: readonly string[];
   /** Representative example per family for the collapsed badge. */
   samples?: ToolBurstSamples;
 }
@@ -267,9 +264,9 @@ export interface WorkbenchSummaryEvent extends ConversationEventBase {
   /** Headline shown in the summary strip ("12 reads · 3 edits · tests passing"). */
   headline: string;
   /** Optional bullets the strip can expand into. */
-  bullets?: ReadonlyArray<string>;
+  bullets?: readonly string[];
   /** Linked drill-down events the right pane can open. */
-  drillDowns?: ReadonlyArray<TraceLink>;
+  drillDowns?: readonly TraceLink[];
   /** Typed aggregate so renderers don't need to scan the event list themselves. */
   aggregate?: WorkbenchSummaryAggregate;
 }
@@ -277,7 +274,7 @@ export interface WorkbenchSummaryEvent extends ConversationEventBase {
 export interface WorkbenchGitPreviewEvent extends ConversationEventBase {
   kind: 'workbench.gitPreview';
   /** Files touched within the run that anchors this preview. */
-  files: ReadonlyArray<{ status: string; path: string; added: number; removed: number }>;
+  files: readonly { status: string; path: string; added: number; removed: number }[];
   /** SHA range that the Git split should default to. */
   headShaBefore?: string | null;
   headShaAfter?: string | null;
@@ -286,7 +283,7 @@ export interface WorkbenchGitPreviewEvent extends ConversationEventBase {
 export interface WorkbenchVisualPreviewEvent extends ConversationEventBase {
   kind: 'workbench.visualPreview';
   /** Image set the preview pane should show by default. */
-  images: ReadonlyArray<{ caption: string; path: string }>;
+  images: readonly { caption: string; path: string }[];
   /** Optional caption above the strip. */
   groupCaption?: string;
 }
@@ -337,7 +334,7 @@ export interface WorkbenchDebugEvent extends ConversationEventBase {
     cancelledCount: number;
   };
   /** Trace ranges exposed for the "Trace" tab. */
-  traceLinks: ReadonlyArray<TraceLink>;
+  traceLinks: readonly TraceLink[];
 }
 
 /**
@@ -369,7 +366,7 @@ export interface TaskMarkerEvent extends ConversationEventBase {
   /** Total run duration aggregated for the task, when finalised. */
   durationSeconds?: number;
   tokens?: { inputTokens: number; outputTokens: number };
-  evidenceLinks?: ReadonlyArray<TraceLink>;
+  evidenceLinks?: readonly TraceLink[];
 }
 
 export interface RunMarkerEvent extends ConversationEventBase {
@@ -416,7 +413,7 @@ export type ConversationEvent =
   | TraceLinkEvent;
 
 /** Stable list of all known kinds — used by tests to assert exhaustiveness. */
-export const CONVERSATION_EVENT_KINDS: ReadonlyArray<ConversationEventKind> = [
+export const CONVERSATION_EVENT_KINDS: readonly ConversationEventKind[] = [
   'message.user',
   'message.taskAgent',
   'message.orchestrator',

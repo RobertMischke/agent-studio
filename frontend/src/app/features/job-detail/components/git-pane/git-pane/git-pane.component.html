@@ -37,7 +37,7 @@
                       (click)="git.selectChainCommit(entry.sha)">
                 <span class="git-view__commit-chain-step">#{{ i + 1 }}</span>
                 <span class="git-view__commit-chain-sha">{{ entry.shortSha }}</span>
-                <span class="git-view__commit-chain-subject">{{ entry.message?.split('\n')?.[0] }}</span>
+                <span class="git-view__commit-chain-subject">{{ entry.message.split('\n')[0] }}</span>
                 <span class="git-view__commit-chain-meta">{{ entry.filesChanged }}f · {{ entry.at | date:'shortTime' }}</span>
               </button>
             </li>
@@ -60,7 +60,7 @@
                 [files]="git.commitDetail()!.files"
                 [selected]="git.selectedDiffPath()"
                 [fill]="maximized()"
-                (select)="git.selectDiffPath($event)" />
+                (selectRequest)="git.selectDiffPath($event)" />
             </div>
 
             @if (git.selectedDiffPath()) {
@@ -128,7 +128,7 @@
                 [files]="g.files"
                 [selected]="git.selectedDiffPath()"
                 [fill]="maximized()"
-                (select)="git.selectDiffPath($event)" />
+                (selectRequest)="git.selectDiffPath($event)" />
             </div>
 
             @if (git.selectedDiffPath()) {

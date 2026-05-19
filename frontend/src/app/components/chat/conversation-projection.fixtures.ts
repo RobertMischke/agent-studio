@@ -22,7 +22,7 @@ function ts(offsetSec = 0): string {
   return new Date(base + (offsetSec + (TS_COUNTER += 1)) * 1000).toISOString();
 }
 
-function line(text: string, stream: string = 'stdout'): CliOutputLine {
+function line(text: string, stream = 'stdout'): CliOutputLine {
   return { timestamp: ts(), stream, text };
 }
 

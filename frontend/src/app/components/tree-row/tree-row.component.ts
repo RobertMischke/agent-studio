@@ -36,27 +36,27 @@ export class TreeRowComponent {
   @Input() glyphChar: string | null = null;
   /** Coloured square behind the glyph initial. */
   @Input() glyphColor: string | null = null;
-  @Input() label: string = '';
+  @Input() label = '';
   @Input() count: string | number | null = null;
   @Input() meta: string | null = null;
-  @Input() active: boolean = false;
+  @Input() active = false;
   @Input() level: 'root' | 'child' = 'root';
   @Input() testid: string | null = null;
 
-  @Output() readonly chevronClick = new EventEmitter<MouseEvent>();
-  @Output() readonly select = new EventEmitter<MouseEvent>();
-  @Output() readonly secondary = new EventEmitter<MouseEvent>();
+  @Output() readonly chevronClick = new EventEmitter<Event>();
+  @Output() readonly selectRequest = new EventEmitter<Event>();
+  @Output() readonly secondary = new EventEmitter<Event>();
 
-  onChevronClick(ev: MouseEvent): void {
+  onChevronClick(ev: Event): void {
     ev.stopPropagation();
     this.chevronClick.emit(ev);
   }
 
-  onSelect(ev: MouseEvent): void {
-    this.select.emit(ev);
+  onSelect(ev: Event): void {
+    this.selectRequest.emit(ev);
   }
 
-  onSecondary(ev: MouseEvent): void {
+  onSecondary(ev: Event): void {
     this.secondary.emit(ev);
   }
 }

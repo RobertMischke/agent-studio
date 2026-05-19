@@ -11,18 +11,24 @@ import { TooltipDirective } from '../../../../../components/tooltip';
 // chunk even though most users never open the git pane on first paint.
 // The lazy module + dark-color-scheme constant are cached after first
 // load so the second diff render is synchronous.
-// We hold the dynamically-imported modules behind `any` to keep this
-// component free of compile-time references to diff2html types - those
-// types only land in the bundle if you import them. The shape we need
-// is narrow (one function + one enum value).
-let diff2htmlModuleCache: { html: (diff: string, opts: any) => string; darkScheme: number } | null = null;
+// We hold the dynamically-imported modules behind a narrow local type so
+// the component stays free of static diff2html imports. The shape we need
+// is one function plus the dark color-scheme enum value.
+interface Diff2HtmlOptions {
+  drawFileList: boolean;
+  outputFormat: 'line-by-line' | 'side-by-side';
+  matching: 'lines';
+  colorScheme: number;
+}
+type Diff2HtmlRenderer = (diff: string, opts: Diff2HtmlOptions) => string;
+let diff2htmlModuleCache: { html: Diff2HtmlRenderer; darkScheme: number } | null = null;
 async function loadDiff2Html(): Promise<typeof diff2htmlModuleCache> {
   if (diff2htmlModuleCache) return diff2htmlModuleCache;
   const [main, types] = await Promise.all([
     import('diff2html'),
     import('diff2html/lib-esm/types'),
   ]);
-  diff2htmlModuleCache = { html: main.html as any, darkScheme: types.ColorSchemeType.DARK as unknown as number };
+  diff2htmlModuleCache = { html: main.html as unknown as Diff2HtmlRenderer, darkScheme: types.ColorSchemeType.DARK as unknown as number };
   return diff2htmlModuleCache;
 }
 

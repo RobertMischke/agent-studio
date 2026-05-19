@@ -55,7 +55,7 @@ export class GitFileTreeComponent {
   readonly selected = input<string | null>(null);
   /** Stretch the tree to fill the parent height (used in pane-maximized split layout). */
   readonly fill = input<boolean>(false);
-  readonly select = output<string>();
+  readonly selectRequest = output<string>();
 
   readonly tree = computed<TreeNode[]>(() => buildTree(this.files()));
 
@@ -96,7 +96,7 @@ export class GitFileTreeComponent {
 
   onClick(node: TreeNode): void {
     if (node.isFile) {
-      this.select.emit(node.path);
+      this.selectRequest.emit(node.path);
       return;
     }
     const files = this.files();
@@ -109,7 +109,7 @@ export class GitFileTreeComponent {
 function buildTree(files: readonly GitFileChange[]): TreeNode[] {
   // Build a nested directory tree from forward-slash paths. Status / numstat
   // ride on the leaf; folders sum +/- across their descendants.
-  type Bucket = { name: string; isFile: boolean; file?: GitFileChange; children: Map<string, Bucket> };
+  interface Bucket { name: string; isFile: boolean; file?: GitFileChange; children: Map<string, Bucket> }
   const root: Bucket = { name: '', isFile: false, children: new Map() };
 
   for (const f of files) {

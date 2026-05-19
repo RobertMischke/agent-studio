@@ -3,6 +3,7 @@
   "version": "0.0.0",
   "scripts": {
     "ng": "ng",
+    "prestart": "npm run lint",
     "start": "ng serve frontend --proxy-config proxy.conf.json",
     "build": "ng build frontend",
     "mockup:chat": "ng serve next-gen-chat-mockup --port 4022 --host 127.0.0.1",

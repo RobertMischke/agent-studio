@@ -1,6 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { JobInfo, ReviewEvidenceEntry, ReviewEvidenceSeverity } from '../../../../../models/job.model';
+
+import {
+  JobInfo,
+  ReviewEvidenceEntry,
+  ReviewEvidenceSeverity,
+} from '../../../../../models/job.model';
 
 import { TooltipDirective } from '../../../../../components/tooltip';
 /**
@@ -26,9 +30,9 @@ import { TooltipDirective } from '../../../../../components/tooltip';
   selector: 'app-review-evidence-panel',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, TooltipDirective],
+  imports: [TooltipDirective],
   templateUrl: './review-evidence-panel.component.html',
-  styleUrl: './review-evidence-panel.component.scss'
+  styleUrl: './review-evidence-panel.component.scss',
 })
 export class ReviewEvidencePanelComponent {
   readonly entries = input.required<ReviewEvidenceEntry[]>();
@@ -63,11 +67,16 @@ export class ReviewEvidencePanelComponent {
 
   sourceLabel(s: string): string {
     switch (s) {
-      case 'security-audit': return 'Security audit';
-      case 'code-review':    return 'Code review';
-      case 'task-check':     return 'Task check';
-      case 'human-note':     return 'Human note';
-      default:               return 'Other';
+      case 'security-audit':
+        return 'Security audit';
+      case 'code-review':
+        return 'Code review';
+      case 'task-check':
+        return 'Task check';
+      case 'human-note':
+        return 'Human note';
+      default:
+        return 'Other';
     }
   }
 

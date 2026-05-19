@@ -42,8 +42,8 @@ export class CommandDeckComponent {
   readonly projectChange = output<string>();
   readonly cliTypeChange = output<CliType>();
   readonly modelChange = output<string>();
-  readonly start = output<void>();
-  readonly stop = output<void>();
+  readonly startRequest = output<void>();
+  readonly stopRequest = output<void>();
   readonly toggleCollapsed = output<void>();
 
   readonly cliTypes = CLI_TYPES;

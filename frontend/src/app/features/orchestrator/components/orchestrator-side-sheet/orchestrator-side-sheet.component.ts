@@ -430,7 +430,13 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
 
   show(): void { this.open.set(true); }
   hide(): void { this.open.set(false); }
-  toggle(): void { this.open() ? this.hide() : this.show(); }
+  toggle(): void {
+    if (this.open()) {
+      this.hide();
+    } else {
+      this.show();
+    }
+  }
 
   setActiveProject(proj: string): void {
     if (proj === this.activeProject()) return;
@@ -501,7 +507,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     event.preventDefault();
   }
 
-  selectComboOption(proj: string, event: MouseEvent): void {
+  selectComboOption(proj: string, event: Event): void {
     event.preventDefault();
     this.commitComboSelection(proj);
   }
@@ -595,7 +601,7 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     // reference real files. We do this sequentially to keep error
     // surfaces simple and the frontend code small; orchestrator chats
     // rarely carry more than 1-2 images per turn.
-    let uploaded: { alt: string; relativePath: string }[] = [];
+    const uploaded: { alt: string; relativePath: string }[] = [];
     try {
       for (const att of event.attachments) {
         const resp = await this.uploadOne(proj, att.file);

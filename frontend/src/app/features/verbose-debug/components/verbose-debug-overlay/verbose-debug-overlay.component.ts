@@ -6,9 +6,9 @@ import {
   inject,
   input,
   output,
-  signal
+  signal,
 } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { ModalStackService } from '../../../../services/modal-stack.service';
 import type { CliOutputLine, JobInfo } from '../../../../models/job.model';
 import type { RunRecord, RunTimeline } from '../../../../features/run-timeline';
@@ -19,7 +19,7 @@ import type {
   ConversationEvent,
   RawLineRange,
   ToolFamily,
-  WorkbenchDebugEvent
+  WorkbenchDebugEvent,
 } from '../../../../components/chat/conversation-event';
 import { formatTokens as fmtTokens } from '../../../../services/format.util';
 
@@ -82,7 +82,7 @@ const TOOL_LABELS: Record<ToolFamily, string> = {
   edit: 'Edit',
   task: 'Task',
   todo: 'Todo',
-  other: 'Other'
+  other: 'Other',
 };
 
 /**
@@ -97,14 +97,14 @@ const TOOL_LABELS: Record<ToolFamily, string> = {
   selector: 'app-verbose-debug-overlay',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, TooltipDirective],
+  imports: [TooltipDirective],
   templateUrl: './verbose-debug-overlay.component.html',
-  styleUrl: './verbose-debug-overlay.component.scss'
+  styleUrl: './verbose-debug-overlay.component.scss',
 })
 export class VerboseDebugOverlayComponent {
-  readonly lines = input<ReadonlyArray<CliOutputLine>>([]);
+  readonly lines = input<readonly CliOutputLine[]>([]);
   readonly runTimeline = input<RunTimeline | null>(null);
-  readonly screenshots = input<ReadonlyArray<JobScreenshot>>([]);
+  readonly screenshots = input<readonly JobScreenshot[]>([]);
   readonly tokenSummary = input<JobTokenSummary | null>(null);
   readonly job = input<JobInfo | null>(null);
   readonly source = input<string>('cli-output.log');
@@ -112,13 +112,13 @@ export class VerboseDebugOverlayComponent {
   readonly initialTab = input<VerboseDebugTab>('overview');
   readonly initialTheme = input<'light' | 'dark'>('dark');
 
-  readonly close = output<void>();
+  readonly closeRequest = output<void>();
   readonly openTrace = output<RawLineRange>();
 
   readonly activeTab = signal<VerboseDebugTab>('overview');
   readonly theme = signal<'light' | 'dark'>('dark');
 
-  readonly tabs: Array<{ id: VerboseDebugTab; label: string; icon: string }> = [
+  readonly tabs: { id: VerboseDebugTab; label: string; icon: string }[] = [
     { id: 'overview', label: 'Overview', icon: '📊' },
     { id: 'actors', label: 'Actors', icon: '🎭' },
     { id: 'orchestrator', label: 'Orchestrator', icon: '🛰' },
@@ -126,7 +126,7 @@ export class VerboseDebugOverlayComponent {
     { id: 'warnings', label: 'Warnings', icon: '⚠' },
     { id: 'tasks', label: 'Tasks', icon: '🎯' },
     { id: 'tokens', label: 'Tokens', icon: '🪙' },
-    { id: 'artifacts', label: 'Artifacts', icon: '🖼' }
+    { id: 'artifacts', label: 'Artifacts', icon: '🖼' },
   ];
 
   constructor() {
@@ -140,7 +140,7 @@ export class VerboseDebugOverlayComponent {
     // when it sits above the task detail or another lower overlay.
     inject(ModalStackService).pushUntilDestroyed(
       'verbose-debug-overlay',
-      () => this.close.emit(),
+      () => this.closeRequest.emit(),
       inject(DestroyRef),
     );
   }
@@ -159,7 +159,12 @@ export class VerboseDebugOverlayComponent {
 
   readonly events = computed<ConversationEvent[]>(() => {
     const lines = this.lines();
-    if (!lines.length && !this.runTimeline() && !this.tokenSummary() && !this.screenshots().length) {
+    if (
+      !lines.length &&
+      !this.runTimeline() &&
+      !this.tokenSummary() &&
+      !this.screenshots().length
+    ) {
       return [];
     }
     const screenshots = this.screenshots().map((s) => ({
@@ -167,7 +172,7 @@ export class VerboseDebugOverlayComponent {
       sourcePath: s.localPath || s.relativePath,
       durablePath: s.relativePath,
       sourceTool: 'screenshot',
-      timestamp: s.timestampUtc
+      timestamp: s.timestampUtc,
     }));
     return projectConversation({
       source: this.source(),
@@ -181,7 +186,7 @@ export class VerboseDebugOverlayComponent {
       emitWorkbenchPreviews: false,
       emitTraceLink: true,
       emitDebugAggregate: true,
-      latestResult: this.latestResult() ?? undefined
+      latestResult: this.latestResult() ?? undefined,
     });
   });
 
@@ -193,19 +198,20 @@ export class VerboseDebugOverlayComponent {
   readonly orchestratorDecisions = computed(() => {
     return this.events().filter(
       (e): e is Extract<ConversationEvent, { kind: 'decision.orchestrator' }> =>
-        e.kind === 'decision.orchestrator'
+        e.kind === 'decision.orchestrator',
     );
   });
 
   readonly toolBursts = computed(() => {
     return this.events().filter(
-      (e): e is Extract<ConversationEvent, { kind: 'toolBurst' }> => e.kind === 'toolBurst'
+      (e): e is Extract<ConversationEvent, { kind: 'toolBurst' }> => e.kind === 'toolBurst',
     );
   });
 
   readonly supervisorWaits = computed(() => {
     return this.events().filter(
-      (e): e is Extract<ConversationEvent, { kind: 'supervisor.wait' }> => e.kind === 'supervisor.wait'
+      (e): e is Extract<ConversationEvent, { kind: 'supervisor.wait' }> =>
+        e.kind === 'supervisor.wait',
     );
   });
 
@@ -233,7 +239,7 @@ export class VerboseDebugOverlayComponent {
         schemaDrifts: 0,
         needsInputLoops: 0,
         watchdogQuiet: 0,
-        watchdogKills: 0
+        watchdogKills: 0,
       };
     }
     return d.warningCounts;
@@ -297,7 +303,7 @@ export class VerboseDebugOverlayComponent {
       { key: 'taskAgent', label: 'Task agent', count: a.taskAgent, glyph: '🤖' },
       { key: 'orchestrator', label: 'Orchestrator', count: a.orchestrator, glyph: '🛰' },
       { key: 'supervisor', label: 'Supervisor', count: a.supervisor, glyph: '🛡' },
-      { key: 'supportingAgent', label: 'Supporting agents', count: a.supportingAgent, glyph: '🧰' }
+      { key: 'supportingAgent', label: 'Supporting agents', count: a.supportingAgent, glyph: '🧰' },
     ].filter((r) => r.count > 0 || r.key === 'user' || r.key === 'taskAgent');
   });
 
@@ -328,7 +334,7 @@ export class VerboseDebugOverlayComponent {
         label: TOOL_LABELS[family] ?? family,
         count: count ?? 0,
         failures: failureMap.get(family) ?? 0,
-        percent: total > 0 ? Math.max(4, Math.round(((count ?? 0) / total) * 100)) : 0
+        percent: total > 0 ? Math.max(4, Math.round(((count ?? 0) / total) * 100)) : 0,
       }));
   });
 
@@ -342,49 +348,49 @@ export class VerboseDebugOverlayComponent {
         label: 'Parser warnings',
         count: w.parserWarnings,
         tone: tone(w.parserWarnings, 3, 1),
-        description: 'Activity-log parser could not classify a sentinel'
+        description: 'Activity-log parser could not classify a sentinel',
       },
       {
         key: 'captureFail',
         label: 'Session capture-fail',
         count: w.captureFails,
         tone: tone(w.captureFails, 1, 1),
-        description: 'CLI session id was not captured; recovery branch fired'
+        description: 'CLI session id was not captured; recovery branch fired',
       },
       {
         key: 'schemaDrift',
         label: 'Schema drift',
         count: w.schemaDrifts,
         tone: tone(w.schemaDrifts, 2, 1),
-        description: 'Structured Markdown / JSON did not match the expected shape'
+        description: 'Structured Markdown / JSON did not match the expected shape',
       },
       {
         key: 'needsInput',
         label: 'NEEDS_INPUT loops',
         count: w.needsInputLoops,
         tone: tone(w.needsInputLoops, 5, 2),
-        description: 'Agent paused for an answer; circuit breaker counts loops'
+        description: 'Agent paused for an answer; circuit breaker counts loops',
       },
       {
         key: 'watchdogQuiet',
         label: 'Watchdog quiet windows',
         count: w.watchdogQuiet,
         tone: tone(w.watchdogQuiet, 3, 1),
-        description: 'Long quiet stretches noticed by Layer 2 supervisor'
+        description: 'Long quiet stretches noticed by Layer 2 supervisor',
       },
       {
         key: 'watchdogKill',
         label: 'Watchdog kills',
         count: w.watchdogKills,
         tone: tone(w.watchdogKills, 1, 1),
-        description: 'Run aborted by the supervisor watchdog'
-      }
+        description: 'Run aborted by the supervisor watchdog',
+      },
     ];
   });
 
   readonly tokenRows = computed<TokenRow[]>(() => {
     const tokenEvents = this.events().filter(
-      (e): e is Extract<ConversationEvent, { kind: 'metric.token' }> => e.kind === 'metric.token'
+      (e): e is Extract<ConversationEvent, { kind: 'metric.token' }> => e.kind === 'metric.token',
     );
     const grouped = new Map<string, { input: number; output: number }>();
     for (const e of tokenEvents) {
@@ -392,7 +398,7 @@ export class VerboseDebugOverlayComponent {
       const prev = grouped.get(key) ?? { input: 0, output: 0 };
       grouped.set(key, {
         input: prev.input + (e.inputTokens ?? 0),
-        output: prev.output + (e.outputTokens ?? 0)
+        output: prev.output + (e.outputTokens ?? 0),
       });
     }
     const t = this.tokenSummary();
@@ -400,7 +406,7 @@ export class VerboseDebugOverlayComponent {
       const prev = grouped.get('orchestrator') ?? { input: 0, output: 0 };
       grouped.set('orchestrator', {
         input: prev.input + (t.inputTokens ?? 0),
-        output: prev.output + (t.outputTokens ?? 0)
+        output: prev.output + (t.outputTokens ?? 0),
       });
     }
     const rows = Array.from(grouped.entries()).map(([scope, v]) => ({
@@ -409,13 +415,16 @@ export class VerboseDebugOverlayComponent {
       inputTokens: v.input,
       outputTokens: v.output,
       total: v.input + v.output,
-      percent: 0
+      percent: 0,
     }));
     const max = rows.reduce((acc, r) => Math.max(acc, r.total), 0);
     return rows
       .filter((r) => r.total > 0)
       .sort((a, b) => b.total - a.total)
-      .map((r) => ({ ...r, percent: max > 0 ? Math.max(6, Math.round((r.total / max) * 100)) : 0 }));
+      .map((r) => ({
+        ...r,
+        percent: max > 0 ? Math.max(6, Math.round((r.total / max) * 100)) : 0,
+      }));
   });
 
   readonly artifactRows = computed<ArtifactRow[]>(() => {
@@ -425,7 +434,7 @@ export class VerboseDebugOverlayComponent {
       sourcePath: s.localPath,
       url: s.url,
       status: s.status,
-      timestamp: s.timestampUtc
+      timestamp: s.timestampUtc,
     }));
   });
 
@@ -437,11 +446,15 @@ export class VerboseDebugOverlayComponent {
     const orchestrator = this.orchestratorDecisions().length;
     const max = Math.max(1, tools, tokens / 100, warnings, screenshots, orchestrator);
     const bands = [
-      { name: 'Tool density', value: `${tools} call${tools === 1 ? '' : 's'}`, percent: bandPercent(tools, max) },
+      {
+        name: 'Tool density',
+        value: `${tools} call${tools === 1 ? '' : 's'}`,
+        percent: bandPercent(tools, max),
+      },
       { name: 'Tokens', value: fmtTokens(tokens), percent: bandPercent(tokens / 100, max) },
       { name: 'Warnings', value: `${warnings}`, percent: bandPercent(warnings, max) },
       { name: 'Artifacts', value: `${screenshots}`, percent: bandPercent(screenshots, max) },
-      { name: 'Orchestrator', value: `${orchestrator}`, percent: bandPercent(orchestrator, max) }
+      { name: 'Orchestrator', value: `${orchestrator}`, percent: bandPercent(orchestrator, max) },
     ];
     return bands.filter((b) => b.percent > 0 || b.name === 'Tokens' || b.name === 'Tool density');
   });
@@ -482,7 +495,9 @@ export class VerboseDebugOverlayComponent {
     return Math.max(4, Math.round((value / max) * 100));
   }
 
-  formatTokens(n: number): string { return fmtTokens(n); }
+  formatTokens(n: number): string {
+    return fmtTokens(n);
+  }
 
   formatTime(ts: string): string {
     if (!ts) return '';
@@ -504,16 +519,24 @@ export class VerboseDebugOverlayComponent {
     return min === 0 ? `${h}h` : `${h}h ${min}m`;
   }
 
-  traceSource(): string { return this.source(); }
+  traceSource(): string {
+    return this.source();
+  }
 
   private scopeLabel(scope: string): string {
     switch (scope) {
-      case 'task': return 'Task agent';
-      case 'orchestrator': return 'Orchestrator';
-      case 'run': return 'Latest run';
-      case 'project': return 'Project';
-      case 'supporting-agent': return 'Supporting agents';
-      default: return scope;
+      case 'task':
+        return 'Task agent';
+      case 'orchestrator':
+        return 'Orchestrator';
+      case 'run':
+        return 'Latest run';
+      case 'project':
+        return 'Project';
+      case 'supporting-agent':
+        return 'Supporting agents';
+      default:
+        return scope;
     }
   }
 }

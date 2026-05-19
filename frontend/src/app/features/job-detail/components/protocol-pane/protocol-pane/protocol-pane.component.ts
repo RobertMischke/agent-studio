@@ -1,5 +1,21 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, computed, inject, input, output, signal, ViewChild } from '@angular/core';
-import type { CliOutputLine, ContinueMode, JobDetail, JobOutcomeIssue, JobSummaryStatus, ReviewEvidenceEntry } from '../../../../../models/job.model';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  OnDestroy,
+  computed,
+  inject,
+  input,
+  output,
+  signal,
+} from '@angular/core';
+import type {
+  CliOutputLine,
+  ContinueMode,
+  JobDetail,
+  JobOutcomeIssue,
+  JobSummaryStatus,
+  ReviewEvidenceEntry,
+} from '../../../../../models/job.model';
 import type { RunRecord } from '../../../../../features/run-timeline';
 import { deriveWatchdogPill } from '../watchdog-state';
 import { ActivityLogViewComponent } from '../../activity-log-view/activity-log-view';
@@ -9,7 +25,7 @@ import { copyTextToClipboard } from '../../../../../services/clipboard.util';
 import {
   formatTokens as fmtTokens,
   formatRateWindow as fmtRateWindow,
-  formatResetIn as fmtResetIn
+  formatResetIn as fmtResetIn,
 } from '../../../../../services/format.util';
 import { ClaudeSessionPollService } from '../../../../polling/services/claude-session-poll.service';
 import { CliOutputPollService } from '../../../../polling/services/cli-output-poll.service';
@@ -20,14 +36,15 @@ import { ScreenshotStripComponent } from '../../../../../features/screenshots';
 import { NowTickService } from '../../../../../services/now-tick.service';
 import { RunTimelineComponent } from '../run-timeline/run-timeline.component';
 import { RunGitViewerComponent } from '../run-git-viewer/run-git-viewer.component';
-import { CommonModule } from '@angular/common';
+
 import { FeatureFlagsService } from '../../../../../services/feature-flags.service';
 import { VerboseDebugOverlayComponent } from '../../../../../features/verbose-debug';
 import { HygieneStripComponent } from '../../hygiene-strip/hygiene-strip/hygiene-strip.component';
-import { ReviewEvidencePanelComponent } from '../review-evidence-panel/review-evidence-panel.component';
-import { CodeReviewPanelComponent } from '../code-review-panel/code-review-panel.component';
 import { JobService } from '../../../../../services/job.service';
-import type { ConversationEvent, RawLineRange } from '../../../../../components/chat/conversation-event';
+import type {
+  ConversationEvent,
+  RawLineRange,
+} from '../../../../../components/chat/conversation-event';
 import { ConversationViewComponent } from '../../../../../components/chat/conversation-view/conversation-view.component';
 import { projectConversation } from '../../../../../components/chat/conversation-projection';
 import { BeautifulResultsComponent } from '../../beautiful-results/beautiful-results.component';
@@ -59,9 +76,19 @@ interface InterimSummaryState {
   selector: 'app-protocol-pane',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, ActivityLogViewComponent, ConversationViewComponent, RunTimelineComponent, RunGitViewerComponent, ScreenshotStripComponent, VerboseDebugOverlayComponent, HygieneStripComponent, ReviewEvidencePanelComponent, BeautifulResultsComponent, CodeReviewPanelComponent, TooltipDirective],
+  imports: [
+    ActivityLogViewComponent,
+    ConversationViewComponent,
+    RunTimelineComponent,
+    RunGitViewerComponent,
+    ScreenshotStripComponent,
+    VerboseDebugOverlayComponent,
+    HygieneStripComponent,
+    BeautifulResultsComponent,
+    TooltipDirective,
+  ],
   templateUrl: './protocol-pane.component.html',
-  styleUrls: ['./protocol-pane.component.scss']
+  styleUrls: ['./protocol-pane.component.scss'],
 })
 export class ProtocolPaneComponent implements OnDestroy {
   readonly detail = input.required<JobDetail>();
@@ -127,7 +154,9 @@ export class ProtocolPaneComponent implements OnDestroy {
    * banner. The filter is line-span-based so we can re-apply it
    * deterministically as cliOutput grows during a live run.
    */
-  readonly runFilterRange = signal<{ index: number; lineStart: number; lineEnd: number } | null>(null);
+  readonly runFilterRange = signal<{ index: number; lineStart: number; lineEnd: number } | null>(
+    null,
+  );
 
   /**
    * The activity-log lines visible in the embedded view. When a run
@@ -185,7 +214,8 @@ export class ProtocolPaneComponent implements OnDestroy {
     if (!r || r.events.length === 0) return null;
     const last = r.events[r.events.length - 1];
     const chainLength = r.sessionChain.filter((s) => s && s !== '(recovery)').length;
-    const segmentCount = r.sessionChain.filter((s) => s === '(recovery)').length + (chainLength > 0 ? 1 : 0);
+    const segmentCount =
+      r.sessionChain.filter((s) => s === '(recovery)').length + (chainLength > 0 ? 1 : 0);
 
     let kind: 'continued' | 'lost' | 'fresh';
     let label: string;
@@ -214,14 +244,16 @@ export class ProtocolPaneComponent implements OnDestroy {
       inputLine.trim(),
       capturedLine.trim(),
       `Chain length: ${chainLength}`,
-      segmentCount > 1 ? `Chain breaks: ${segmentCount - 1}` : ''
-    ].filter(Boolean).join('\n');
+      segmentCount > 1 ? `Chain breaks: ${segmentCount - 1}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
 
     return { kind, label, emoji, tooltip, chainLength, segmentCount };
   });
 
   readonly summaryStatus = computed<JobSummaryStatus>(
-    () => this.detail().summaryState?.status ?? 'none'
+    () => this.detail().summaryState?.status ?? 'none',
   );
 
   /**
@@ -230,13 +262,15 @@ export class ProtocolPaneComponent implements OnDestroy {
    * from the existing signals - see protocol-verdict.ts for the priority
    * table. Recomputes on any input change.
    */
-  readonly protocolVerdict = computed<ProtocolVerdict>(() => deriveProtocolVerdict({
-    isRunning: this.isRunning(),
-    summaryStatus: this.summaryStatus(),
-    statusMarkdown: this.detail().statusMarkdown,
-    outcomeIssue: this.detail().info.outcomeIssue,
-    hasActivity: this.hasActivity()
-  }));
+  readonly protocolVerdict = computed<ProtocolVerdict>(() =>
+    deriveProtocolVerdict({
+      isRunning: this.isRunning(),
+      summaryStatus: this.summaryStatus(),
+      statusMarkdown: this.detail().statusMarkdown,
+      outcomeIssue: this.detail().info.outcomeIssue,
+      hasActivity: this.hasActivity(),
+    }),
+  );
 
   /**
    * Progressive spinner label so a slow Haiku call doesn't look frozen.
@@ -266,11 +300,13 @@ export class ProtocolPaneComponent implements OnDestroy {
    * whether to render at all and uses .label / .state / .tooltip for
    * the visual.
    */
-  readonly watchdogPill = computed(() => deriveWatchdogPill({
-    lines: this.cliOutput(),
-    isRunning: this.isRunning(),
-    now: new Date(this.nowTick())
-  }));
+  readonly watchdogPill = computed(() =>
+    deriveWatchdogPill({
+      lines: this.cliOutput(),
+      isRunning: this.isRunning(),
+      now: new Date(this.nowTick()),
+    }),
+  );
   readonly outcomeIssue = computed(() => this.detail().info.outcomeIssue ?? null);
   readonly outcomeIssueModalOpen = signal(false);
   readonly outcomeIssueTone = computed<'info' | 'warn' | 'high'>(() => {
@@ -283,24 +319,50 @@ export class ProtocolPaneComponent implements OnDestroy {
    * short icon glyph, a one-word title for the pill, and a tooltip the user
    * sees on hover so the meaning is discoverable without leaving the page.
    */
-  readonly modeOptions: ReadonlyArray<{ id: ContinueMode; title: string; icon: string; tooltip: string }> = [
-    { id: 'continue', title: 'Continue', icon: '➤',
-      tooltip: 'Send as the next conversation turn (default).' },
-    { id: 'steer', title: 'Steer', icon: '↺',
-      tooltip: 'Course correction: agent overrides its current plan and adopts your direction.' },
-    { id: 'extend', title: 'Extend', icon: '＋',
-      tooltip: 'Add to the task. Backend writes a new prompt-N.md so the task description grows blog-style.' },
-    { id: 'newTask', title: 'New task', icon: '✦',
-      tooltip: 'Start a new sub-task in the same session. Prior context preserved, new request.' }
+  readonly modeOptions: readonly {
+    id: ContinueMode;
+    title: string;
+    icon: string;
+    tooltip: string;
+  }[] = [
+    {
+      id: 'continue',
+      title: 'Continue',
+      icon: '➤',
+      tooltip: 'Send as the next conversation turn (default).',
+    },
+    {
+      id: 'steer',
+      title: 'Steer',
+      icon: '↺',
+      tooltip: 'Course correction: agent overrides its current plan and adopts your direction.',
+    },
+    {
+      id: 'extend',
+      title: 'Extend',
+      icon: '＋',
+      tooltip:
+        'Add to the task. Backend writes a new prompt-N.md so the task description grows blog-style.',
+    },
+    {
+      id: 'newTask',
+      title: 'New task',
+      icon: '✦',
+      tooltip: 'Start a new sub-task in the same session. Prior context preserved, new request.',
+    },
   ];
 
   /** Compose-area placeholder, mode-aware. */
   composePlaceholder(): string {
     switch (this.continueMode()) {
-      case 'steer':   return 'Course correction — what should the agent do differently? Ctrl+Enter to send.';
-      case 'extend':  return 'Extend the task — this becomes a new prompt-N.md alongside the original. Ctrl+Enter to send.';
-      case 'newTask': return 'New sub-task in this session — describe the new request. Ctrl+Enter to send.';
-      default:        return 'Type a follow-up — Ctrl+Enter to send. Sends while running pauses the agent first.';
+      case 'steer':
+        return 'Course correction — what should the agent do differently? Ctrl+Enter to send.';
+      case 'extend':
+        return 'Extend the task — this becomes a new prompt-N.md alongside the original. Ctrl+Enter to send.';
+      case 'newTask':
+        return 'New sub-task in this session — describe the new request. Ctrl+Enter to send.';
+      default:
+        return 'Type a follow-up — Ctrl+Enter to send. Sends while running pauses the agent first.';
     }
   }
 
@@ -367,9 +429,13 @@ export class ProtocolPaneComponent implements OnDestroy {
         summary: 'Last run ended with an error — agent did not produce a reply.',
         question: null,
         suggestions: [
-          { label: 'Continue (rebuild)', prompt: 'Continue from where the previous run left off — rebuild context from the job folder.' },
-          { label: 'Retry as new task', prompt: 'Treat this as a fresh request and start over: ' }
-        ]
+          {
+            label: 'Continue (rebuild)',
+            prompt:
+              'Continue from where the previous run left off — rebuild context from the job folder.',
+          },
+          { label: 'Retry as new task', prompt: 'Treat this as a fresh request and start over: ' },
+        ],
       };
     }
     return classifyOutcome(lastAgent ?? '');
@@ -386,13 +452,20 @@ export class ProtocolPaneComponent implements OnDestroy {
   /** Maps outcome kind to a short emoji glyph for the banner badge. */
   outcomeEmoji(kind: string): string {
     switch (kind) {
-      case 'done': return '✓';
-      case 'blocked': return '⚠';
-      case 'failed': return '✗';
-      case 'question': return '?';
-      case 'needs_input': return '?';
-      case 'progress': return '⏳';
-      default: return 'i';
+      case 'done':
+        return '✓';
+      case 'blocked':
+        return '⚠';
+      case 'failed':
+        return '✗';
+      case 'question':
+        return '?';
+      case 'needs_input':
+        return '?';
+      case 'progress':
+        return '⏳';
+      default:
+        return 'i';
     }
   }
 
@@ -421,7 +494,7 @@ export class ProtocolPaneComponent implements OnDestroy {
     markdown: null,
     error: null,
     startedAt: null,
-    finishedAt: null
+    finishedAt: null,
   });
 
   /** Elapsed seconds since the interim call started; for the pending label. */
@@ -440,9 +513,7 @@ export class ProtocolPaneComponent implements OnDestroy {
    * peek at progress without stopping the run. Hidden otherwise to keep
    * the header from looking like a control panel when the task is idle.
    */
-  readonly canRequestInterim = computed<boolean>(
-    () => this.isRunning() && !this.interimInFlight()
-  );
+  readonly canRequestInterim = computed<boolean>(() => this.isRunning() && !this.interimInFlight());
 
   requestInterimSummary(): void {
     if (this.interimInFlight()) return;
@@ -452,7 +523,7 @@ export class ProtocolPaneComponent implements OnDestroy {
       markdown: null,
       error: null,
       startedAt: Date.now(),
-      finishedAt: null
+      finishedAt: null,
     });
     this.jobs.requestInterimSummary(job.id, job.watchPath).subscribe({
       next: (resp) => {
@@ -461,7 +532,7 @@ export class ProtocolPaneComponent implements OnDestroy {
           markdown: resp.markdown ?? '',
           error: null,
           startedAt: this.interimSummary().startedAt,
-          finishedAt: Date.now()
+          finishedAt: Date.now(),
         });
       },
       error: (err) => {
@@ -471,9 +542,9 @@ export class ProtocolPaneComponent implements OnDestroy {
           markdown: null,
           error: message,
           startedAt: this.interimSummary().startedAt,
-          finishedAt: Date.now()
+          finishedAt: Date.now(),
         });
-      }
+      },
     });
   }
 
@@ -483,7 +554,7 @@ export class ProtocolPaneComponent implements OnDestroy {
       markdown: null,
       error: null,
       startedAt: null,
-      finishedAt: null
+      finishedAt: null,
     });
   }
 
@@ -545,10 +616,11 @@ export class ProtocolPaneComponent implements OnDestroy {
    * explicitly toggled the Trace fallback for the current view.
    */
   readonly showConversationView = computed(
-    () => this.featureFlags.nextGenChat() && !this.nextGenChatTraceFallback()
+    () => this.featureFlags.nextGenChat() && !this.nextGenChatTraceFallback(),
   );
 
-  onConversationOpenTrace(_range: RawLineRange | null): void {
+  onConversationOpenTrace(range: RawLineRange | null): void {
+    void range;
     this.nextGenChatTraceFallback.set(true);
   }
 
@@ -560,7 +632,8 @@ export class ProtocolPaneComponent implements OnDestroy {
     this.nextGenChatTraceFallback.set(false);
   }
 
-  onVerboseDebugOpenTrace(_range: RawLineRange): void {
+  onVerboseDebugOpenTrace(range: RawLineRange): void {
+    void range;
     // Route trace links to the existing activity-log maximized view so the
     // raw activity log stays the single source of truth for line-level
     // inspection. Closing Verbose Debug first keeps focus deterministic.
@@ -594,9 +667,15 @@ export class ProtocolPaneComponent implements OnDestroy {
     }, 2000);
   }
 
-  formatTokens(n: number): string { return fmtTokens(n); }
-  formatRateWindow(window: string | null): string { return fmtRateWindow(window); }
-  formatResetIn(epoch: number): string { return fmtResetIn(epoch, this.nowTick()); }
+  formatTokens(n: number): string {
+    return fmtTokens(n);
+  }
+  formatRateWindow(window: string | null): string {
+    return fmtRateWindow(window);
+  }
+  formatResetIn(epoch: number): string {
+    return fmtResetIn(epoch, this.nowTick());
+  }
 
   outcomeIssueExplanation(issue: JobOutcomeIssue): string {
     switch (issue.kind) {
@@ -634,8 +713,10 @@ export class ProtocolPaneComponent implements OnDestroy {
       `Cache read: ${cs.cacheReadTokens.toLocaleString()} tokens`,
       `Cache creation: ${cs.cacheCreationTokens.toLocaleString()} tokens`,
       `Turns recorded: ${cs.turnCount}`,
-      cs.lastTurnAt ? `Last turn: ${cs.lastTurnAt}` : ''
-    ].filter(Boolean).join('\n');
+      cs.lastTurnAt ? `Last turn: ${cs.lastTurnAt}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
   }
 
   /**
@@ -666,7 +747,7 @@ export class ProtocolPaneComponent implements OnDestroy {
    */
   onSteerUploadRequest(): void {
     const input = document.querySelector<HTMLInputElement>(
-      '[data-testid="orchestrator-steer-upload-input"]'
+      '[data-testid="orchestrator-steer-upload-input"]',
     );
     input?.click();
   }
@@ -682,8 +763,9 @@ export class ProtocolPaneComponent implements OnDestroy {
     const job = this.detail()?.info;
     if (!job?.id) return;
     const watchPath = job.watchPath ?? '';
-    const url = `/api/jobs/${encodeURIComponent(job.id)}/attachments`
-      + (watchPath ? `?watchPath=${encodeURIComponent(watchPath)}` : '');
+    const url =
+      `/api/jobs/${encodeURIComponent(job.id)}/attachments` +
+      (watchPath ? `?watchPath=${encodeURIComponent(watchPath)}` : '');
     const form = new FormData();
     form.append('file', file, file.name || 'steer-screenshot.png');
     try {
@@ -696,7 +778,7 @@ export class ProtocolPaneComponent implements OnDestroy {
 
   onEvidenceAcknowledge(
     payload: { entry: ReviewEvidenceEntry; acknowledged: boolean },
-    panel: { clearBusy(): void }
+    panel: { clearBusy(): void },
   ): void {
     const job = this.detail().info;
     this.jobs
@@ -706,26 +788,21 @@ export class ProtocolPaneComponent implements OnDestroy {
           panel.clearBusy();
           this.evidenceMutated.emit();
         },
-        error: () => panel.clearBusy()
+        error: () => panel.clearBusy(),
       });
   }
 
-  onEvidenceCreateFollowup(
-    entry: ReviewEvidenceEntry,
-    panel: { clearBusy(): void }
-  ): void {
+  onEvidenceCreateFollowup(entry: ReviewEvidenceEntry, panel: { clearBusy(): void }): void {
     const job = this.detail().info;
-    this.jobs
-      .createReviewEvidenceFollowup(job.id, entry.id, {}, job.watchPath)
-      .subscribe({
-        next: (resp) => {
-          panel.clearBusy();
-          this.followupCreated.set({ jobId: resp.jobId, targetState: resp.targetState });
-          this.followupCreatedFromEvidence.emit(resp);
-          this.evidenceMutated.emit();
-        },
-        error: () => panel.clearBusy()
-      });
+    this.jobs.createReviewEvidenceFollowup(job.id, entry.id, {}, job.watchPath).subscribe({
+      next: (resp) => {
+        panel.clearBusy();
+        this.followupCreated.set({ jobId: resp.jobId, targetState: resp.targetState });
+        this.followupCreatedFromEvidence.emit(resp);
+        this.evidenceMutated.emit();
+      },
+      error: () => panel.clearBusy(),
+    });
   }
 
   dismissFollowupBanner(): void {
@@ -746,16 +823,16 @@ export class ProtocolPaneComponent implements OnDestroy {
   rateLimitTooltip(): string {
     const rl = this.claudeRateLimit();
     if (!rl) return '';
-    const reset = rl.resetsAt
-      ? new Date(rl.resetsAt * 1000).toLocaleString()
-      : 'unknown';
+    const reset = rl.resetsAt ? new Date(rl.resetsAt * 1000).toLocaleString() : 'unknown';
     return [
       `Window: ${this.formatRateWindow(rl.window)}`,
       `Status: ${rl.status ?? '?'}`,
       `Resets at: ${reset}`,
       `Overage: ${rl.overageStatus ?? '—'}`,
       rl.isUsingOverage ? 'Currently using overage budget' : '',
-      `Captured: ${new Date(rl.capturedAt).toLocaleTimeString()}`
-    ].filter(Boolean).join('\n');
+      `Captured: ${new Date(rl.capturedAt).toLocaleTimeString()}`,
+    ]
+      .filter(Boolean)
+      .join('\n');
   }
 }

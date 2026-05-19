@@ -1,6 +1,6 @@
 <div class="dialog__overlay"
      [attr.data-testid]="testid ? testid + '-overlay' : null"
-     (click)="onBackdropClick()">
+     (click)="onBackdropClick()" tabindex="0" (keydown.enter)="onBackdropClick()" (keydown.space)="onBackdropClick(); $event.preventDefault()">
   <div class="dialog"
        [class.dialog--danger]="kind === 'danger'"
        [class.dialog--primary]="kind === 'primary'"
@@ -10,7 +10,7 @@
        [attr.aria-label]="title"
        [attr.data-testid]="testid"
        tabindex="-1"
-       (click)="$event.stopPropagation()">
+       (click)="$event.stopPropagation()" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
     <header class="dialog__header">
       <div class="dialog__title-block">
         @if (eyebrow) {
@@ -26,7 +26,7 @@
                 class="dialog__close"
                 aria-label="Close"
                 [attr.data-testid]="testid ? testid + '-close' : null"
-                (click)="close.emit()">
+                (click)="closeRequest.emit()">
           <app-studio-icon name="close" [size]="14"></app-studio-icon>
         </button>
       }

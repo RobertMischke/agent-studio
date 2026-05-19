@@ -31,7 +31,7 @@ export class GitHygieneService {
    * share the same in-flight fetch.
    */
   ensurePolling(projectName: string, intervalMs = 15_000): () => void {
-    if (!projectName) return () => {};
+    if (!projectName) return () => undefined;
     const tracker = this.subscribers.get(projectName) ?? { count: 0, timer: null as VisibleIntervalHandle | null };
     if (tracker.count === 0) {
       this.refresh(projectName);

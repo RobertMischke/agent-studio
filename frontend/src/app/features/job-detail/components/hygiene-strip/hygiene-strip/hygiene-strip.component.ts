@@ -1,10 +1,23 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, computed, effect, inject, input, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  OnDestroy,
+  computed,
+  effect,
+  inject,
+  input,
+  signal,
+} from '@angular/core';
+
 import type { JobInfo } from '../../../../../models/job.model';
 import type { GitHygieneStatus } from '../../../../../features/git';
 import { GitHygieneService } from '../../../../../services/git-hygiene.service';
 import { ErrorDialogService } from '../../../../../services/error-dialog.service';
-import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../../utils/visible-interval';
+import {
+  setVisibleInterval,
+  clearVisibleInterval,
+  VisibleIntervalHandle,
+} from '../../../../../utils/visible-interval';
 
 import { TooltipDirective } from '../../../../../components/tooltip';
 /**
@@ -23,9 +36,9 @@ import { TooltipDirective } from '../../../../../components/tooltip';
   selector: 'app-hygiene-strip',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, TooltipDirective],
+  imports: [TooltipDirective],
   templateUrl: './hygiene-strip.component.html',
-  styleUrls: ['./hygiene-strip.component.scss']
+  styleUrls: ['./hygiene-strip.component.scss'],
 })
 export class HygieneStripComponent implements OnDestroy {
   readonly job = input.required<JobInfo>();
@@ -50,10 +63,15 @@ export class HygieneStripComponent implements OnDestroy {
   // Lanes where we want the strip visible. Pre-progress lanes don't
   // produce committable evidence so the chip would be noise.
   private static readonly VISIBLE_STATES = new Set([
-    '4-auto-review', '5-human-review', '6-completed', '7-archive'
+    '4-auto-review',
+    '5-human-review',
+    '6-completed',
+    '7-archive',
   ]);
 
-  readonly visibleForState = computed(() => HygieneStripComponent.VISIBLE_STATES.has(this.job().state));
+  readonly visibleForState = computed(() =>
+    HygieneStripComponent.VISIBLE_STATES.has(this.job().state),
+  );
 
   readonly commitTooltip = computed(() => {
     const h = this.hygiene();
@@ -111,8 +129,11 @@ export class HygieneStripComponent implements OnDestroy {
       },
       error: (err) => {
         this.committing.set(false);
-        this.errorDialog.show(err, { title: 'Commit accepted evidence failed', source: `Task ${j.id}` });
-      }
+        this.errorDialog.show(err, {
+          title: 'Commit accepted evidence failed',
+          source: `Task ${j.id}`,
+        });
+      },
     });
   }
 
@@ -125,7 +146,9 @@ export class HygieneStripComponent implements OnDestroy {
   private refreshOnce(j: JobInfo): void {
     this.hygieneSvc.fetchForJob(j.id, j.watchPath).subscribe({
       next: (s) => this.hygiene.set(s),
-      error: () => { /* keep last snapshot */ }
+      error: () => {
+        /* keep last snapshot */
+      },
     });
   }
 

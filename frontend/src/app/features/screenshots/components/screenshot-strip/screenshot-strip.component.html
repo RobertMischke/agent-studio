@@ -36,7 +36,7 @@
        data-testid="screenshot-lightbox"
        role="dialog"
        aria-modal="true"
-       (click)="close()">
+       (click)="close()" (keydown.enter)="close()" (keydown.space)="close(); $event.preventDefault()">
     <button type="button" class="lightbox__close"
             data-testid="screenshot-lightbox-close"
             (click)="close(); $event.stopPropagation()"
@@ -46,7 +46,7 @@
               data-testid="screenshot-lightbox-prev"
               (click)="prev(); $event.stopPropagation()"
               aria-label="Previous">‹</button>
-      <figure class="lightbox__figure" (click)="$event.stopPropagation()">
+      <figure class="lightbox__figure" (click)="$event.stopPropagation()" tabindex="0" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
         <img class="lightbox__img" [src]="c.url" [alt]="c.caption"
              data-testid="screenshot-lightbox-image" />
         <figcaption class="lightbox__caption">

@@ -77,7 +77,7 @@
             [class.par__item--high]="r.severity === 'High'"
             [class.par__item--critical]="r.severity === 'Critical'"
             [attr.data-testid]="'project-analysis-report-row'"
-            (click)="openReport.emit(r)">
+            (click)="openReport.emit(r)" tabindex="0" (keydown.enter)="openReport.emit(r)" (keydown.space)="openReport.emit(r); $event.preventDefault()">
           <header>
             <span class="par__sev par__sev--{{ r.severity.toLowerCase() }}">{{ r.severity }}</span>
             <span class="par__topic">{{ r.topic }}</span>

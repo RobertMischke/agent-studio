@@ -202,7 +202,7 @@ export class BoardMutationsService {
    * passes the list (typically `filteredGrouped().completed`) so the
    * service stays free of BoardFilters coupling.
    */
-  archiveAllCompleted(completed: ReadonlyArray<JobInfo>): void {
+  archiveAllCompleted(completed: readonly JobInfo[]): void {
     if (completed.length === 0) return;
     if (this.archiving()) return;
     this.archiving.set(true);

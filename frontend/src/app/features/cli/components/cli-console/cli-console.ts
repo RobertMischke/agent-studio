@@ -1,11 +1,12 @@
-import { Component, ElementRef, ViewChild, input, signal, computed, effect, OnDestroy } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, ViewChild, input, signal, computed, effect, OnDestroy } from '@angular/core';
 import { CliOutputLine } from '../../../../models/job.model';
 
 @Component({
   selector: 'app-cli-console',
   standalone: true,
   templateUrl: './cli-console.html',
-  styleUrl: './cli-console.scss'
+  styleUrl: './cli-console.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class CliConsoleComponent implements OnDestroy {
   readonly lines = input<CliOutputLine[]>([]);

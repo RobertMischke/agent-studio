@@ -180,7 +180,9 @@
                               [appTooltip]="m.title"
                               [attr.data-testid]="'observability-timeline-mark'"
                               [attr.data-msg-id]="m.id"
-                              (click)="selectMessage(m.id)"></button>
+                              (click)="selectMessage(m.id)">
+                        <span class="obs__timeline-mark-text">{{ m.title }}</span>
+                      </button>
                     }
                   </div>
                 </div>

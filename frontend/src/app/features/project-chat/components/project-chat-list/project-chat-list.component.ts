@@ -12,7 +12,7 @@ import {
   output,
   signal,
 } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { FormsModule } from '@angular/forms';
 import { JobService } from '../../../../services/job.service';
 import { ConfirmDialogService } from '../../../../services/confirm-dialog.service';
@@ -21,7 +21,10 @@ import { markdownToHtml } from '../../../../components/markdown-utils';
 import { ProjectChatRailComponent } from '../project-chat-rail/project-chat-rail.component';
 import { decideLoadAction, formatLoadedSummary } from './load-strategy';
 import { TooltipDirective } from '../../../../components/tooltip';
-import { ChatRowComponent, type ChatRowInput } from '../../../../components/chat-row/chat-row.component';
+import {
+  ChatRowComponent,
+  type ChatRowInput,
+} from '../../../../components/chat-row/chat-row.component';
 import {
   RoleBadgeComponent,
   PhaseSummaryListComponent,
@@ -52,7 +55,14 @@ import {
 @Component({
   selector: 'app-project-chat-list',
   standalone: true,
-  imports: [CommonModule, FormsModule, ProjectChatRailComponent, RoleBadgeComponent, PhaseSummaryListComponent, TooltipDirective, ChatRowComponent],
+  imports: [
+    FormsModule,
+    ProjectChatRailComponent,
+    RoleBadgeComponent,
+    PhaseSummaryListComponent,
+    TooltipDirective,
+    ChatRowComponent,
+  ],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-chat-list.component.html',
   styleUrl: './project-chat-list.component.scss',
@@ -255,7 +265,9 @@ export class ProjectChatListComponent implements OnInit, OnDestroy {
         this.totalCount.set(resp.totalCount ?? null);
         this.oldestServerTs.set(resp.oldestTs ?? null);
       },
-      error: () => { /* tolerate; panel falls back to loaded-only counts */ },
+      error: () => {
+        /* tolerate; panel falls back to loaded-only counts */
+      },
     });
     this.jobService.scrollProjectChat(proj, { limit: 50 }).subscribe({
       next: (resp) => {
@@ -286,11 +298,20 @@ export class ProjectChatListComponent implements OnInit, OnDestroy {
    */
   private loadOlder(pageSize = 50): Promise<number> {
     return new Promise((resolve) => {
-      if (this.loadingOlder() || !this.hasMoreOlder()) { resolve(0); return; }
+      if (this.loadingOlder() || !this.hasMoreOlder()) {
+        resolve(0);
+        return;
+      }
       const proj = this.project();
-      if (!proj) { resolve(0); return; }
+      if (!proj) {
+        resolve(0);
+        return;
+      }
       const all = this.allTurns();
-      if (all.length === 0) { resolve(0); return; }
+      if (all.length === 0) {
+        resolve(0);
+        return;
+      }
       this.loadingOlder.set(true);
       const oldest = all[0].ts;
       const host = this.scrollHost.nativeElement;
@@ -426,7 +447,7 @@ export class ProjectChatListComponent implements OnInit, OnDestroy {
       this.flash(turnId);
       queueMicrotask(() => {
         const el = this.scrollHost.nativeElement.querySelector<HTMLElement>(
-          `[data-turnid="${CSS.escape(turnId)}"]`
+          `[data-turnid="${CSS.escape(turnId)}"]`,
         );
         el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
       });
@@ -446,7 +467,7 @@ export class ProjectChatListComponent implements OnInit, OnDestroy {
             this.hasMoreOlder.set(true);
             queueMicrotask(() => {
               const el = this.scrollHost.nativeElement.querySelector<HTMLElement>(
-                `[data-turnid="${CSS.escape(turnId)}"]`
+                `[data-turnid="${CSS.escape(turnId)}"]`,
               );
               el?.scrollIntoView({ behavior: 'auto', block: 'center' });
               this.recomputeWindow();
@@ -488,9 +509,7 @@ export class ProjectChatListComponent implements OnInit, OnDestroy {
     // Backend returns HTML-encoded text with `<b>...</b>` markers
     // preserved. Map to <mark> for accessibility and keep the rest
     // as-is so the host bodies cannot inject arbitrary HTML.
-    return (snippet || '')
-      .replace(/<b>/g, '<mark>')
-      .replace(/<\/b>/g, '</mark>');
+    return (snippet || '').replace(/<b>/g, '<mark>').replace(/<\/b>/g, '</mark>');
   }
 
   // ── Step-load actions ─────────────────────────────────────────────
@@ -580,7 +599,10 @@ export class ProjectChatListComponent implements OnInit, OnDestroy {
   formatTs(iso: string): string {
     try {
       return new Date(iso).toLocaleString(undefined, {
-        month: 'short', day: '2-digit', hour: '2-digit', minute: '2-digit'
+        month: 'short',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
       });
     } catch {
       return iso;

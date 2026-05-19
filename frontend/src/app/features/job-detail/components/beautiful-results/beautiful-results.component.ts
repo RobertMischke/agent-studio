@@ -109,7 +109,7 @@ export class BeautifulResultsComponent {
    * renderer still emits and forwards them to the shared
    * `MediaLightboxService`.
    */
-  onBodyClick(event: MouseEvent): void {
+  onBodyClick(event: Event): void {
     const target = event.target as HTMLElement | null;
     if (!target) return;
     const copyBtn = target.closest<HTMLElement>('[data-results-copy]');

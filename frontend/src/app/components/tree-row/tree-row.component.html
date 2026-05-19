@@ -9,7 +9,7 @@
   @if (chevron !== null) {
     <span class="tree-row__chev"
           [attr.aria-label]="chevron === 'expanded' ? 'Collapse' : 'Expand'"
-          (click)="onChevronClick($event)">
+          (click)="onChevronClick($event)" tabindex="0" (keydown.enter)="onChevronClick($event)" (keydown.space)="onChevronClick($event); $event.preventDefault()">
       <app-studio-icon [name]="chevron === 'expanded' ? 'chevronDown' : 'chevronRight'" [size]="10"></app-studio-icon>
     </span>
   }

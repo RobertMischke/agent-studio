@@ -49,7 +49,7 @@ export interface CommitEvidence {
   shortSha: string;
   subject: string;
   authorDateUtc: string;
-  files: ReadonlyArray<GitFileChange>;
+  files: readonly GitFileChange[];
   runIndex?: number;
 }
 
@@ -57,12 +57,12 @@ export interface ConversationProjectionContext {
   /** Source identifier kept on every `RawLineRange` (job id is preferred). */
   source: string;
   /** Raw activity log lines. The projection numbers them 1-based for ranges. */
-  lines: ReadonlyArray<CliOutputLine>;
+  lines: readonly CliOutputLine[];
   job?: JobInfo | null;
   runTimeline?: RunTimeline | null;
   tokenSummary?: JobTokenSummary | null;
-  screenshots?: ReadonlyArray<ScreenshotEvidence>;
-  commits?: ReadonlyArray<CommitEvidence>;
+  screenshots?: readonly ScreenshotEvidence[];
+  commits?: readonly CommitEvidence[];
   /** When true, runs are emitted as `runMarker` events even if the timeline is empty. */
   emitRunMarkers?: boolean;
   /** When true, the projection appends a `workbench.summary` event for the whole transcript. */
@@ -379,7 +379,7 @@ function projectGroup(
 // Tool burst summarisation
 // ──────────────────────────────────────────────────────────────────────────
 
-const TOOL_KINDS: ReadonlyArray<ActivityLogKind> = ['read', 'search', 'command', 'edit', 'task', 'todo'];
+const TOOL_KINDS: readonly ActivityLogKind[] = ['read', 'search', 'command', 'edit', 'task', 'todo'];
 
 function isToolKind(k: ActivityLogKind): k is Exclude<ToolFamily, 'other'> {
   return TOOL_KINDS.includes(k);
@@ -424,12 +424,12 @@ interface BurstMember {
 }
 
 function toMergedToolBurst(
-  members: ReadonlyArray<BurstMember>,
+  members: readonly BurstMember[],
   range: RawLineRange,
   runId: number | undefined
 ) {
   const families: Partial<Record<ToolFamily, number>> = {};
-  const samples: { [family: string]: string | undefined } = {};
+  const samples: Record<string, string | undefined> = {};
   const files: string[] = [];
   const artifacts: string[] = [];
   const tests: { command: string; status: 'pass' | 'fail' | 'unknown' }[] = [];
@@ -559,7 +559,7 @@ function detectTest(group: ActivityLogGroup): { command: string; status: 'pass' 
 }
 
 function collapseTestsByCommand(
-  tests: ReadonlyArray<{ command: string; status: 'pass' | 'fail' | 'unknown' }>
+  tests: readonly { command: string; status: 'pass' | 'fail' | 'unknown' }[]
 ): { command: string; status: 'pass' | 'fail' | 'unknown' }[] {
   const order: string[] = [];
   const map = new Map<string, 'pass' | 'fail' | 'unknown'>();
@@ -584,7 +584,7 @@ function inferBatchSize(group: ActivityLogGroup): number {
   return 1;
 }
 
-function computeDurationMs(lines: ReadonlyArray<CliOutputLine>): number {
+function computeDurationMs(lines: readonly CliOutputLine[]): number {
   let first = Number.POSITIVE_INFINITY;
   let last = Number.NEGATIVE_INFINITY;
   for (const l of lines) {
@@ -643,7 +643,7 @@ function joinGroupBody(group: ActivityLogGroup): string {
 // Range / run helpers
 // ──────────────────────────────────────────────────────────────────────────
 
-function numberLines(lines: ReadonlyArray<CliOutputLine>): Map<CliOutputLine, number> {
+function numberLines(lines: readonly CliOutputLine[]): Map<CliOutputLine, number> {
   const map = new Map<CliOutputLine, number>();
   lines.forEach((l, i) => map.set(l, i + 1));
   return map;
@@ -674,7 +674,7 @@ function pickInitialRun(timeline: RunTimeline | null): RunContext {
 }
 
 function buildRunIndex(
-  lines: ReadonlyArray<CliOutputLine>,
+  lines: readonly CliOutputLine[],
   timeline: RunTimeline | null
 ): Map<number, RunContext> {
   const map = new Map<number, RunContext>();
@@ -691,7 +691,8 @@ function buildRunIndex(
 // Companion-evidence projection
 // ──────────────────────────────────────────────────────────────────────────
 
-function transcriptRange(ctx: ConversationProjectionContext, _: Map<CliOutputLine, number>): RawLineRange {
+function transcriptRange(ctx: ConversationProjectionContext, lineNumbers: Map<CliOutputLine, number>): RawLineRange {
+  void lineNumbers;
   const len = ctx.lines.length;
   return { source: ctx.source, start: 1, end: Math.max(1, len) };
 }
@@ -733,7 +734,7 @@ function toTaskTokenMetric(
 }
 
 function toGitPreview(
-  commits: ReadonlyArray<CommitEvidence>,
+  commits: readonly CommitEvidence[],
   ctx: ConversationProjectionContext,
   lineNumbers: Map<CliOutputLine, number>
 ) {
@@ -749,7 +750,7 @@ function toGitPreview(
 }
 
 function toVisualPreview(
-  shots: ReadonlyArray<ScreenshotEvidence>,
+  shots: readonly ScreenshotEvidence[],
   ctx: ConversationProjectionContext,
   lineNumbers: Map<CliOutputLine, number>
 ) {

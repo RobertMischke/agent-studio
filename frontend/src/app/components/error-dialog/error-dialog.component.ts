@@ -20,8 +20,8 @@ export class ErrorDialogComponent {
   readonly canOpenCliConfig = input(false);
   readonly copyButtonLabel = input<string>('Copy details');
 
-  readonly close = output<void>();
-  readonly copy = output<void>();
+  readonly closeRequest = output<void>();
+  readonly copyRequest = output<void>();
   readonly openCliConfig = output<void>();
 
   constructor() {
@@ -31,7 +31,7 @@ export class ErrorDialogComponent {
     // routes through the central stack like every other modal.
     inject(ModalStackService).pushUntilDestroyed(
       'error-dialog',
-      () => this.close.emit(),
+      () => this.closeRequest.emit(),
       inject(DestroyRef),
     );
   }

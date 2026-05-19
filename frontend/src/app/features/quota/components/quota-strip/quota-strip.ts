@@ -1,4 +1,4 @@
-import { Component, OnDestroy, OnInit, inject, signal, computed } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, inject, signal, computed } from '@angular/core';
 import { JobService } from '../../../../services/job.service';
 import type { CliType } from '../../../../models/job.model';
 import { QuotaApiService } from '../../../../features/quota';
@@ -24,16 +24,22 @@ import { TooltipDirective } from '../../../../components/tooltip';
   standalone: true,
   imports: [TooltipDirective],
   templateUrl: './quota-strip.html',
-  styleUrl: './quota-strip.scss'
+  styleUrl: './quota-strip.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class QuotaStripComponent implements OnInit, OnDestroy {
+  private jobService = inject(JobService);
+
   private readonly quotaApi = inject(QuotaApiService);
   readonly report = signal<QuotaReport | null>(null);
   readonly errorMsg = signal<string | null>(null);
   readonly refreshingAll = signal(false);
   // Per-CLI in-flight refresh flags so each card's spinner is independent.
   readonly refreshing = signal<Record<CliType, boolean>>({
-    copilot: false, claude: false, codex: false, gemini: false
+    copilot: false,
+    claude: false,
+    codex: false,
+    gemini: false,
   });
   // Tick once a second so countdown labels (`resets in 23m`) stay live without
   // re-fetching the snapshot.
@@ -45,11 +51,12 @@ export class QuotaStripComponent implements OnInit, OnDestroy {
   readonly lastUpdate = computed(() => {
     const at = this.report()?.at;
     if (!at) return null;
-    try { return new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
-    catch { return null; }
+    try {
+      return new Date(at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } catch {
+      return null;
+    }
   });
-
-  constructor(private jobService: JobService) {}
 
   ngOnInit() {
     this.load();
@@ -66,10 +73,10 @@ export class QuotaStripComponent implements OnInit, OnDestroy {
   private load(silent = false) {
     if (!silent) this.errorMsg.set(null);
     this.quotaApi.getQuotaReport().subscribe({
-      next: r => this.report.set(r),
-      error: err => {
+      next: (r) => this.report.set(r),
+      error: (err) => {
         if (!silent) this.errorMsg.set(err.error?.error || err.message || 'Failed to load quota');
-      }
+      },
     });
   }
 
@@ -77,46 +84,55 @@ export class QuotaStripComponent implements OnInit, OnDestroy {
     this.refreshingAll.set(true);
     this.errorMsg.set(null);
     this.quotaApi.refreshQuotaAll().subscribe({
-      next: r => { this.report.set(r); this.refreshingAll.set(false); },
-      error: err => {
+      next: (r) => {
+        this.report.set(r);
+        this.refreshingAll.set(false);
+      },
+      error: (err) => {
         this.errorMsg.set(err.error?.error || err.message || 'Quota refresh failed');
         this.refreshingAll.set(false);
-      }
+      },
     });
   }
 
   refreshOne(cliType: CliType) {
-    this.refreshing.update(m => ({ ...m, [cliType]: true }));
+    this.refreshing.update((m) => ({ ...m, [cliType]: true }));
     this.quotaApi.refreshQuotaForCli(cliType).subscribe({
-      next: snap => {
+      next: (snap) => {
         // Splice the updated snapshot back into the cached report.
         const cur = this.report();
         if (cur) {
           const next = {
             ...cur,
-            snapshots: cur.snapshots.map(s => s.cliType === cliType ? snap : s)
+            snapshots: cur.snapshots.map((s) => (s.cliType === cliType ? snap : s)),
           };
           this.report.set(next);
         }
-        this.refreshing.update(m => ({ ...m, [cliType]: false }));
+        this.refreshing.update((m) => ({ ...m, [cliType]: false }));
       },
-      error: err => {
+      error: (err) => {
         this.errorMsg.set(err.error?.error || err.message || `Refresh failed for ${cliType}`);
-        this.refreshing.update(m => ({ ...m, [cliType]: false }));
-      }
+        this.refreshing.update((m) => ({ ...m, [cliType]: false }));
+      },
     });
   }
 
   cliLabel(t: CliType): string {
     switch (t) {
-      case 'copilot': return 'Copilot';
-      case 'claude':  return 'Claude Code';
-      case 'codex':   return 'Codex';
-      case 'gemini':  return 'Gemini';
+      case 'copilot':
+        return 'Copilot';
+      case 'claude':
+        return 'Claude Code';
+      case 'codex':
+        return 'Codex';
+      case 'gemini':
+        return 'Gemini';
     }
   }
 
-  cliIcon(t: CliType): string { return cliTypeIcon(t); }
+  cliIcon(t: CliType): string {
+    return cliTypeIcon(t);
+  }
 
   formatPct(pct: number | null): string {
     if (pct === null || isNaN(pct)) return '—';

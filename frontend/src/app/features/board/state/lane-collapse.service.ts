@@ -40,7 +40,7 @@ export class LaneCollapseService {
    * which group it lives in. Zero is intentional when every lane in
    * the group is collapsed: the group then sizes to its rails only.
    */
-  expandedLaneCount(group: { lanes: Array<{ state: string }> }): number {
+  expandedLaneCount(group: { lanes: { state: string }[] }): number {
     return group.lanes.reduce((n, l) => n + (this.isLaneCollapsed(l.state) ? 0 : 1), 0);
   }
 

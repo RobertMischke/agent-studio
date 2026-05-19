@@ -29,11 +29,11 @@ import { StudioIconComponent, StudioIconName } from '../studio-icon/studio-icon.
 export class SectionHeaderComponent {
   @Input() icon: StudioIconName | null = null;
   @Input() iconChar: string | null = null;
-  @Input() title: string = '';
+  @Input() title = '';
   @Input() count: string | number | null = null;
   /** Render as an `<h2>` (default) for accessibility; switch to a `<button>`
    *  via `interactive` so the entire row becomes clickable. */
-  @Input() interactive: boolean = false;
-  @Input() active: boolean = false;
+  @Input() interactive = false;
+  @Input() active = false;
   @Input() testid: string | null = null;
 }

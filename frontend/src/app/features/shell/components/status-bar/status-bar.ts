@@ -22,7 +22,6 @@ import { cliTypeIcon, cliTypeLabel } from '../../../../services/format.util';
 import { UsageHoverPanelComponent } from '../../../tokens';
 
 import { TooltipDirective } from '../../../../components/tooltip';
-import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
 import { StatusbarItemComponent } from '../statusbar-item/statusbar-item.component';
 const STORAGE_DEFAULT_CLI = 'defaultCliType';
 const STORAGE_DEFAULT_MODEL_PREFIX = 'defaultModel:';
@@ -46,7 +45,7 @@ const STORAGE_DEFAULT_MODEL_PREFIX = 'defaultModel:';
   // Selectors stay scoped via the .statusbar__quota class so we don't
   // leak globally to other usages of header-quota.
   encapsulation: ViewEncapsulation.None,
-  imports: [UsageHoverPanelComponent, TooltipDirective, StudioIconComponent, StatusbarItemComponent],
+  imports: [UsageHoverPanelComponent, TooltipDirective, StatusbarItemComponent],
   templateUrl: './status-bar.html',
   styleUrl: './status-bar.scss',
 })

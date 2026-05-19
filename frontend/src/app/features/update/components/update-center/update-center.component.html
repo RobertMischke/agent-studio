@@ -1,5 +1,5 @@
 @if (open()) {
-  <div class="upd-center__backdrop" data-testid="update-center-backdrop" (click)="close()"></div>
+  <div class="upd-center__backdrop" data-testid="update-center-backdrop" (click)="close()" tabindex="0" (keydown.enter)="close()" (keydown.space)="close(); $event.preventDefault()"></div>
   <aside class="upd-center" data-testid="update-center" role="dialog" aria-label="Update center">
     <header class="upd-center__head">
       <div>

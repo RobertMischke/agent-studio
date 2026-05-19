@@ -8,7 +8,7 @@
 @if (open()) {
   <div class="info-btn__backdrop"
        [attr.data-testid]="'info-button-backdrop-' + topic()"
-       (click)="close()"></div>
+       (click)="close()" tabindex="0" (keydown.enter)="close()" (keydown.space)="close(); $event.preventDefault()"></div>
   <aside class="info-btn__drawer"
          role="dialog"
          [attr.aria-label]="title()"

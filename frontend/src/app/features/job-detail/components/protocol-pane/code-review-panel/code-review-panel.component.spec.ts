@@ -24,7 +24,7 @@ import type { JobInfo } from '../../../../../models/job.model';
  * this folder.</p>
  */
 describe('CodeReviewPanelComponent', () => {
-  function setup(detail?: { reviewEvidence?: any }) {
+  function setup() {
     return TestBed.configureTestingModule({
       imports: [CodeReviewPanelComponent],
       providers: [

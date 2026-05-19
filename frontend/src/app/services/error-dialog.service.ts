@@ -1,4 +1,4 @@
-import { ErrorHandler, Injectable, NgZone, signal } from '@angular/core';
+import { ErrorHandler, Injectable, NgZone, signal, inject } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ErrorDialogOptions, ErrorDialogState } from '../models/error-dialog.model';
 
@@ -14,8 +14,10 @@ export class ErrorDialogService {
     const normalizedError = normalizeError(error, options);
     this.activeError.set({
       ...normalizedError,
-      output: options.output !== undefined ? serializeValue(options.output) : normalizedError.output,
-      stackTrace: options.stackTrace !== undefined ? options.stackTrace : normalizedError.stackTrace
+      output:
+        options.output !== undefined ? serializeValue(options.output) : normalizedError.output,
+      stackTrace:
+        options.stackTrace !== undefined ? options.stackTrace : normalizedError.stackTrace,
     });
     this.copyState.set('idle');
   }
@@ -47,14 +49,14 @@ export class ErrorDialogService {
       activeError.output,
       '',
       'Stack trace:',
-      activeError.stackTrace ?? 'No stack trace available.'
+      activeError.stackTrace ?? 'No stack trace available.',
     ]
       .filter((line): line is string => line !== null)
       .join('\n');
 
     navigator.clipboard.writeText(payload).then(
       () => this.setCopyState('copied'),
-      () => this.setCopyState('failed')
+      () => this.setCopyState('failed'),
     );
   }
 
@@ -72,7 +74,8 @@ export class ErrorDialogService {
 
 @Injectable()
 export class ModalErrorHandler implements ErrorHandler {
-  constructor(private readonly errorDialog: ErrorDialogService, private readonly zone: NgZone) {}
+  private readonly errorDialog = inject(ErrorDialogService);
+  private readonly zone = inject(NgZone);
 
   handleError(error: unknown): void {
     if (isResizeObserverLoopError(error)) {
@@ -83,7 +86,7 @@ export class ModalErrorHandler implements ErrorHandler {
       this.errorDialog.show(error, {
         title: 'Unexpected application error',
         fallbackMessage: 'The application hit an unexpected error.',
-        source: 'Frontend runtime'
+        source: 'Frontend runtime',
       });
     });
   }
@@ -119,11 +122,11 @@ function normalizeError(error: unknown, options: ErrorDialogOptions): ErrorDialo
       message: error.message || options.fallbackMessage || 'An unexpected error occurred.',
       output: serializeValue({
         name: error.name,
-        message: error.message
+        message: error.message,
       }),
       stackTrace: error.stack ?? null,
       source: options.source ?? null,
-      canOpenCliConfig: options.canOpenCliConfig ?? looksLikeCliError(error.message)
+      canOpenCliConfig: options.canOpenCliConfig ?? looksLikeCliError(error.message),
     };
   }
 
@@ -134,7 +137,7 @@ function normalizeError(error: unknown, options: ErrorDialogOptions): ErrorDialo
       output: error,
       stackTrace: looksLikeStackTrace(error) ? error : null,
       source: options.source ?? null,
-      canOpenCliConfig: options.canOpenCliConfig ?? looksLikeCliError(error)
+      canOpenCliConfig: options.canOpenCliConfig ?? looksLikeCliError(error),
     };
   }
 
@@ -145,28 +148,33 @@ function normalizeError(error: unknown, options: ErrorDialogOptions): ErrorDialo
     output: serializeValue(error),
     stackTrace: extractStackTrace(error),
     source: options.source ?? null,
-    canOpenCliConfig: options.canOpenCliConfig ?? looksLikeCliError(objectMessage)
+    canOpenCliConfig: options.canOpenCliConfig ?? looksLikeCliError(objectMessage),
   };
 }
 
-function normalizeHttpError(error: HttpErrorResponse, options: ErrorDialogOptions): ErrorDialogState {
+function normalizeHttpError(
+  error: HttpErrorResponse,
+  options: ErrorDialogOptions,
+): ErrorDialogState {
   const payload = error.error;
   const message = extractHttpMessage(error) ?? options.fallbackMessage ?? 'The request failed.';
   const source = options.source ?? buildHttpSource(error);
 
   return {
-    title: options.title ?? (error.status === 0 ? 'Connection error' : `Request failed (${error.status})`),
+    title:
+      options.title ??
+      (error.status === 0 ? 'Connection error' : `Request failed (${error.status})`),
     message,
     output: serializeValue({
       status: error.status,
       statusText: error.statusText,
       url: error.url,
       message: error.message,
-      payload
+      payload,
     }),
     stackTrace: extractStackTrace(payload) ?? (error as { stack?: string }).stack ?? null,
     source,
-    canOpenCliConfig: options.canOpenCliConfig ?? looksLikeCliError(message)
+    canOpenCliConfig: options.canOpenCliConfig ?? looksLikeCliError(message),
   };
 }
 
@@ -199,7 +207,8 @@ function extractHttpMessage(error: HttpErrorResponse): string | null {
 function isEmptyHttpPayload(payload: unknown): boolean {
   if (payload === null || payload === undefined) return true;
   if (typeof payload === 'string') return payload.trim().length === 0;
-  if (typeof payload === 'object') return Object.keys(payload as Record<string, unknown>).length === 0;
+  if (typeof payload === 'object')
+    return Object.keys(payload as Record<string, unknown>).length === 0;
   return false;
 }
 
@@ -229,7 +238,7 @@ function extractStackTrace(value: unknown): string | null {
     record['stackTrace'],
     record['stack'],
     record['details'],
-    record['exception']
+    record['exception'],
   ];
 
   for (const candidate of candidates) {
@@ -273,7 +282,7 @@ function jsonReplacer(_key: string, value: unknown): unknown {
     return {
       name: value.name,
       message: value.message,
-      stack: value.stack
+      stack: value.stack,
     };
   }
 

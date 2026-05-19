@@ -22,6 +22,7 @@ module.exports = tseslint.config(
         'error',
         { type: 'element', prefix: ['app', 'mockup'], style: 'kebab-case' },
       ],
+      '@angular-eslint/prefer-on-push-component-change-detection': 'error',
       // Cycle 11d: hard-floor the 3-file shape established in 11a/b.
       // Inline `template:` and `styles:` blocks bloat .ts files, defeat
       // per-file-type grep, and shut Prettier/template-aware lint out

@@ -48,7 +48,7 @@ import { StudioIconComponent } from '../studio-icon/studio-icon.component';
 })
 export class DialogComponent {
   @Input() eyebrow: string | null = null;
-  @Input() title: string = '';
+  @Input() title = '';
   /** Optional one-line caption under the title. */
   @Input() subtitle: string | null = null;
   /** ARIA role — `alertdialog` for confirms/errors, `dialog` for forms. */
@@ -56,12 +56,12 @@ export class DialogComponent {
   /** Optional width override (px). Default 520. */
   @Input() width: number | null = null;
   /** Hides the close button when set to `false`. */
-  @Input() closable: boolean = true;
+  @Input() closable = true;
   /** Visual variant — drives accent stripe colour. */
   @Input() kind: 'default' | 'danger' | 'primary' = 'default';
   @Input() testid: string | null = null;
 
-  @Output() readonly close = new EventEmitter<void>();
+  @Output() readonly closeRequest = new EventEmitter<void>();
   @Output() readonly backdropClick = new EventEmitter<void>();
 
   onBackdropClick(): void {
@@ -71,5 +71,5 @@ export class DialogComponent {
   /** Pressing Esc on the dialog itself emits `close`. Outer Esc handling
    *  (ModalStackService) is the caller's concern. */
   @HostListener('keydown.escape')
-  onEscape(): void { this.close.emit(); }
+  onEscape(): void { this.closeRequest.emit(); }
 }

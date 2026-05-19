@@ -1,13 +1,48 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, signal, inject } from '@angular/core';
 import { HttpClient, HttpParams } from '@angular/common/http';
-import type { CreateJobRequest, GroupedJobs, JobDetail, JobInfo, WatchPathEntry, CliExecution, CliOutputLine, RunnerStatus, CliSettings, JobOrderItem, ContextUsageSnapshot, CliType, ContinueMode, ContinueJobResponse, ProjectSnapshot } from '../models/job.model';
+import type {
+  CreateJobRequest,
+  GroupedJobs,
+  JobDetail,
+  JobInfo,
+  WatchPathEntry,
+  CliOutputLine,
+  RunnerStatus,
+  CliSettings,
+  JobOrderItem,
+  ContextUsageSnapshot,
+  CliType,
+  ContinueMode,
+  ContinueJobResponse,
+  ProjectSnapshot,
+} from '../models/job.model';
 import type { ClaudeSessionResponse } from '../features/claude';
 import type { CopilotModelCatalog, CliModelCatalog, CliUsageReport } from '../features/cli';
 import type { GitFileChange, GitStatus, JobCommitDetail } from '../features/git';
-import type { OrchestratorLogResponse, OrchestratorSessionResponse, OrchestratorChatResponse, OrchestratorChatTurn } from '../features/orchestrator';
-import type { ProjectChatScrollResponse, ProjectChatSearchResponse, ProjectChatTurnResponse, ProjectChatStatsResponse } from '../features/project-chat';
-import type { ProjectTokenUsageSummary, ProjectTokenHeatmap, ProjectExpensiveJobsResponse, ProjectJobTokenDetail } from '../features/project-token-usage';
-import type { RunTimeline, RunCommitsResponse, RunFilesResponse, RunDiffResponse } from '../features/run-timeline';
+import type {
+  OrchestratorLogResponse,
+  OrchestratorSessionResponse,
+  OrchestratorChatResponse,
+  OrchestratorChatTurn,
+} from '../features/orchestrator';
+import type {
+  ProjectChatScrollResponse,
+  ProjectChatSearchResponse,
+  ProjectChatTurnResponse,
+  ProjectChatStatsResponse,
+} from '../features/project-chat';
+import type {
+  ProjectTokenUsageSummary,
+  ProjectTokenHeatmap,
+  ProjectExpensiveJobsResponse,
+  ProjectJobTokenDetail,
+} from '../features/project-token-usage';
+import type {
+  RunTimeline,
+  RunCommitsResponse,
+  RunFilesResponse,
+  RunDiffResponse,
+} from '../features/run-timeline';
 import type { JobScreenshotsResponse, WorkspaceScreenshotsResponse } from '../features/screenshots';
 import type { SessionEventsResponse } from '../features/session-events';
 import { ErrorDialogService } from './error-dialog.service';
@@ -53,11 +88,14 @@ const STATE_TO_LANE: Record<string, LaneKey> = {
   '4-auto-review': 'autoReview',
   '5-human-review': 'humanReview',
   '6-completed': 'completed',
-  '7-archive': 'archive'
+  '7-archive': 'archive',
 };
 
 @Injectable({ providedIn: 'root' })
 export class JobService {
+  private http = inject(HttpClient);
+  private errorDialog = inject(ErrorDialogService);
+
   private readonly baseUrl = '/api';
   private liveUpdateTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -91,11 +129,23 @@ export class JobService {
   }
 
   readonly jobs = signal<JobInfo[]>([]);
-  readonly grouped = signal<GroupedJobs>({ backlog: [], preparation: [], orchestratorPrep: [], needsHumanReview: [], ready: [], progress: [], failedPickup: [], review: [], autoReview: [], humanReview: [], completed: [], archive: [] });
+  readonly grouped = signal<GroupedJobs>({
+    backlog: [],
+    preparation: [],
+    orchestratorPrep: [],
+    needsHumanReview: [],
+    ready: [],
+    progress: [],
+    failedPickup: [],
+    review: [],
+    autoReview: [],
+    humanReview: [],
+    completed: [],
+    archive: [],
+  });
   readonly loading = signal(false);
   readonly error = signal<string | null>(null);
   readonly runnerStatus = signal<RunnerStatus>({ projects: {} });
-  constructor(private http: HttpClient, private errorDialog: ErrorDialogService) {}
 
   refresh(silent = false): void {
     if (!silent) {
@@ -123,20 +173,21 @@ export class JobService {
         this.loading.set(false);
       },
       error: (err) => {
-        const message = err.status === 0
-          ? 'Backend not reachable — is the API running on localhost:5030?'
-          : err.error?.error || err.message || 'Failed to load jobs';
+        const message =
+          err.status === 0
+            ? 'Backend not reachable — is the API running on localhost:5030?'
+            : err.error?.error || err.message || 'Failed to load jobs';
 
         this.error.set(message);
         if (!silent) {
           this.errorDialog.show(err, {
             title: 'Failed to load jobs',
             fallbackMessage: 'Failed to load jobs',
-            source: 'Dashboard refresh'
+            source: 'Dashboard refresh',
           });
         }
         this.loading.set(false);
-      }
+      },
     });
 
     this.http.get<GroupedJobs>(`${this.baseUrl}/jobs/grouped`).subscribe({
@@ -150,10 +201,10 @@ export class JobService {
           this.errorDialog.show(err, {
             title: 'Failed to load board columns',
             fallbackMessage: 'Failed to load board columns',
-            source: 'Board refresh'
+            source: 'Board refresh',
           });
         }
-      }
+      },
     });
 
     this.refreshRunnerStatus(silent);
@@ -166,12 +217,15 @@ export class JobService {
    * supplied list. Returns the previous lane snapshot so callers can roll
    * back on a failed POST.
    */
-  applyOptimisticReorder(state: string, orderedKeys: { jobId: string; watchPath: string }[]): JobInfo[] | null {
+  applyOptimisticReorder(
+    state: string,
+    orderedKeys: { jobId: string; watchPath: string }[],
+  ): JobInfo[] | null {
     const lane = STATE_TO_LANE[state];
     if (!lane) return null;
     const current = this.grouped();
     const before = current[lane] ?? [];
-    const byKey = new Map(before.map(j => [`${j.watchPath}::${j.id}`, j]));
+    const byKey = new Map(before.map((j) => [`${j.watchPath}::${j.id}`, j]));
     const reordered: JobInfo[] = [];
     const seen = new Set<string>();
     for (const k of orderedKeys) {
@@ -202,7 +256,12 @@ export class JobService {
    * rewrites every sibling's `order` field so the resulting position is
    * stable across silent polls.
    */
-  applyOptimisticMove(jobId: string, watchPath: string, targetState: string, insertAt?: number): { fromLane: LaneKey; before: JobInfo[]; toLane: LaneKey; toBefore: JobInfo[] } | null {
+  applyOptimisticMove(
+    jobId: string,
+    watchPath: string,
+    targetState: string,
+    insertAt?: number,
+  ): { fromLane: LaneKey; before: JobInfo[]; toLane: LaneKey; toBefore: JobInfo[] } | null {
     const toLane = STATE_TO_LANE[targetState];
     if (!toLane) return null;
     const current = this.grouped();
@@ -210,8 +269,12 @@ export class JobService {
     let fromLane: LaneKey | null = null;
     let moving: JobInfo | null = null;
     for (const k of Object.keys(current) as LaneKey[]) {
-      const found = (current[k] ?? []).find(j => `${j.watchPath}::${j.id}` === key);
-      if (found) { fromLane = k; moving = found; break; }
+      const found = (current[k] ?? []).find((j) => `${j.watchPath}::${j.id}` === key);
+      if (found) {
+        fromLane = k;
+        moving = found;
+        break;
+      }
     }
     if (!fromLane || !moving) return null;
     // Same-lane "move" is a no-op at the data layer: the previous shape
@@ -225,7 +288,7 @@ export class JobService {
     const fromBefore = current[fromLane] ?? [];
     const toBefore = current[toLane] ?? [];
     const next: GroupedJobs = { ...current };
-    next[fromLane] = fromBefore.filter(j => `${j.watchPath}::${j.id}` !== key);
+    next[fromLane] = fromBefore.filter((j) => `${j.watchPath}::${j.id}` !== key);
     const movedCard = { ...moving, state: targetState };
     if (typeof insertAt === 'number') {
       const slot = Math.max(0, Math.min(insertAt, toBefore.length));
@@ -250,7 +313,12 @@ export class JobService {
   }
 
   /** Roll back a failed optimistic cross-lane move. */
-  revertOptimisticMove(snapshot: { fromLane: LaneKey; before: JobInfo[]; toLane: LaneKey; toBefore: JobInfo[] }): void {
+  revertOptimisticMove(snapshot: {
+    fromLane: LaneKey;
+    before: JobInfo[];
+    toLane: LaneKey;
+    toBefore: JobInfo[];
+  }): void {
     const current = this.grouped();
     const next: GroupedJobs = { ...current };
     next[snapshot.fromLane] = snapshot.before;
@@ -261,23 +329,37 @@ export class JobService {
   }
 
   private withWatchPath(watchPath?: string): { params?: HttpParams } {
-    return watchPath
-      ? { params: new HttpParams().set('watchPath', watchPath) }
-      : {};
+    return watchPath ? { params: new HttpParams().set('watchPath', watchPath) } : {};
+  }
+
+  private withWatchPathAndPath(watchPath: string | undefined, path: string): { params: HttpParams } {
+    const base = this.withWatchPath(watchPath);
+    return { params: (base.params ?? new HttpParams()).set('path', path) };
   }
 
   getDetail(jobId: string, watchPath?: string) {
-    return this.http.get<JobDetail>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}`, this.withWatchPath(watchPath));
+    return this.http.get<JobDetail>(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}`,
+      this.withWatchPath(watchPath),
+    );
   }
 
   updateState(jobId: string, state: string, watchPath?: string) {
-    return this.http.put(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/state`, { targetState: state }, this.withWatchPath(watchPath));
+    return this.http.put(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/state`,
+      { targetState: state },
+      this.withWatchPath(watchPath),
+    );
   }
 
   moveJob(jobId: string, targetState: string, watchPath?: string, targetIndex?: number) {
     const body: { targetState: string; targetIndex?: number } = { targetState };
     if (typeof targetIndex === 'number') body.targetIndex = targetIndex;
-    return this.http.post(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/move`, body, this.withWatchPath(watchPath));
+    return this.http.post(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/move`,
+      body,
+      this.withWatchPath(watchPath),
+    );
   }
 
   getWatchPaths() {
@@ -294,7 +376,10 @@ export class JobService {
   }
 
   createTag(req: { id?: string; label: string; color?: string; description?: string }) {
-    return this.http.post<import('../models/job.model').TagRegistryEntry>(`${this.baseUrl}/tags`, req);
+    return this.http.post<import('../models/job.model').TagRegistryEntry>(
+      `${this.baseUrl}/tags`,
+      req,
+    );
   }
 
   deleteTag(id: string) {
@@ -305,7 +390,8 @@ export class JobService {
     return this.http.put(
       `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/tags`,
       { tags },
-      this.withWatchPath(watchPath));
+      this.withWatchPath(watchPath),
+    );
   }
 
   /**
@@ -316,7 +402,8 @@ export class JobService {
   listCodeReviews(jobId: string, watchPath?: string) {
     return this.http.get<{ entries: CodeReviewListEntry[] }>(
       `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/code-review/list`,
-      this.withWatchPath(watchPath));
+      this.withWatchPath(watchPath),
+    );
   }
 
   /**
@@ -327,12 +414,13 @@ export class JobService {
   runCodeReview(
     jobId: string,
     body: { model?: string; cliType?: string; commit?: string },
-    watchPath?: string
+    watchPath?: string,
   ) {
     return this.http.post<CodeReviewRunResponse>(
       `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/code-review`,
       body,
-      this.withWatchPath(watchPath));
+      this.withWatchPath(watchPath),
+    );
   }
 
   /**
@@ -341,7 +429,8 @@ export class JobService {
   readCodeReview(jobId: string, fileName: string, watchPath?: string) {
     return this.http.get<{ fileName: string; content: string }>(
       `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/code-review/${encodeURIComponent(fileName)}`,
-      this.withWatchPath(watchPath));
+      this.withWatchPath(watchPath),
+    );
   }
 
   /**
@@ -349,11 +438,17 @@ export class JobService {
    * the backend writes a new line into `results/review-evidence.jsonl`
    * with the same `id` and the updated `acknowledged` flag.
    */
-  acknowledgeReviewEvidence(jobId: string, evidenceId: string, acknowledged: boolean, watchPath?: string) {
+  acknowledgeReviewEvidence(
+    jobId: string,
+    evidenceId: string,
+    acknowledged: boolean,
+    watchPath?: string,
+  ) {
     return this.http.post(
       `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/review-evidence/${encodeURIComponent(evidenceId)}/acknowledge`,
       { acknowledged },
-      this.withWatchPath(watchPath));
+      this.withWatchPath(watchPath),
+    );
   }
 
   /**
@@ -365,23 +460,29 @@ export class JobService {
     jobId: string,
     evidenceId: string,
     body: { title?: string; targetState?: string },
-    watchPath?: string
+    watchPath?: string,
   ) {
     return this.http.post<{ jobId: string; targetState: string }>(
       `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/review-evidence/${encodeURIComponent(evidenceId)}/follow-up`,
       body,
-      this.withWatchPath(watchPath));
+      this.withWatchPath(watchPath),
+    );
   }
 
   setJobTaskType(jobId: string, taskType: string, watchPath?: string) {
     return this.http.put(
       `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/task-type`,
       { taskType },
-      this.withWatchPath(watchPath));
+      this.withWatchPath(watchPath),
+    );
   }
 
   updateJobFile(jobId: string, fileName: string, content: string, watchPath?: string) {
-    return this.http.put(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/files/${encodeURIComponent(fileName)}`, { content }, this.withWatchPath(watchPath));
+    return this.http.put(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/files/${encodeURIComponent(fileName)}`,
+      { content },
+      this.withWatchPath(watchPath),
+    );
   }
 
   reorderJobs(jobs: JobOrderItem[]) {
@@ -397,49 +498,78 @@ export class JobService {
     return this.http.post<{ position: number }>(
       `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/move-to-top`,
       null,
-      this.withWatchPath(watchPath)
+      this.withWatchPath(watchPath),
     );
   }
 
   changeProject(jobId: string, targetWatchPath: string, watchPath?: string) {
-    return this.http.post(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/change-project`, { targetWatchPath }, this.withWatchPath(watchPath));
+    return this.http.post(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/change-project`,
+      { targetWatchPath },
+      this.withWatchPath(watchPath),
+    );
   }
 
   deleteJob(jobId: string, watchPath?: string) {
-    return this.http.delete(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}`, this.withWatchPath(watchPath));
+    return this.http.delete(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}`,
+      this.withWatchPath(watchPath),
+    );
   }
 
   // Git
   getGitStatus(jobId: string, watchPath?: string) {
-    return this.http.get<GitStatus>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/git/status`, this.withWatchPath(watchPath));
+    return this.http.get<GitStatus>(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/git/status`,
+      this.withWatchPath(watchPath),
+    );
   }
 
   getGitDiff(jobId: string, path: string | null, watchPath?: string) {
     const opts = this.withWatchPath(watchPath);
     const params = (opts.params as Record<string, string> | undefined) ?? {};
     if (path) params['path'] = path;
-    return this.http.get(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/git/diff`, { ...opts, params, responseType: 'text' });
+    return this.http.get(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/git/diff`, {
+      ...opts,
+      params,
+      responseType: 'text',
+    });
   }
 
   commitJob(jobId: string, message: string, watchPath?: string) {
-    return this.http.post<{ sha?: string }>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/git/commit`, { message }, this.withWatchPath(watchPath));
+    return this.http.post<{ sha?: string }>(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/git/commit`,
+      { message },
+      this.withWatchPath(watchPath),
+    );
   }
 
   generateCommitMessage(jobId: string, watchPath?: string) {
-    return this.http.post<{ message: string }>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/git/generate-message`, {}, this.withWatchPath(watchPath));
+    return this.http.post<{ message: string }>(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/git/generate-message`,
+      {},
+      this.withWatchPath(watchPath),
+    );
   }
 
   // Per-task commit snapshot — what the auto-commit recorded on the
   // progress→review transition, plus a live re-derivation of the file list.
   getJobCommit(jobId: string, watchPath?: string) {
-    return this.http.get<JobCommitDetail>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/commit`, this.withWatchPath(watchPath));
+    return this.http.get<JobCommitDetail>(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/commit`,
+      this.withWatchPath(watchPath),
+    );
   }
 
   getJobCommitDiff(jobId: string, path: string | null, watchPath?: string) {
     const opts = this.withWatchPath(watchPath);
     const params = (opts.params as Record<string, string> | undefined) ?? {};
     if (path) params['path'] = path;
-    return this.http.get(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/commit/diff`, { ...opts, params, responseType: 'text' });
+    return this.http.get(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/commit/diff`, {
+      ...opts,
+      params,
+      responseType: 'text',
+    });
   }
 
   /**
@@ -450,7 +580,8 @@ export class JobService {
   getJobCommitFilesBySha(jobId: string, sha: string, watchPath?: string) {
     return this.http.get<{ sha: string; files: GitFileChange[] }>(
       `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/commits/${encodeURIComponent(sha)}/files`,
-      this.withWatchPath(watchPath));
+      this.withWatchPath(watchPath),
+    );
   }
 
   /**
@@ -464,44 +595,62 @@ export class JobService {
     if (path) params['path'] = path;
     return this.http.get<{ diff: string }>(
       `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/commits/${encodeURIComponent(sha)}/diff`,
-      { ...opts, params });
+      { ...opts, params },
+    );
   }
 
   openInVsCode(jobId: string, watchPath?: string) {
-    return this.http.post(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/open-in-vscode`, {}, this.withWatchPath(watchPath));
+    return this.http.post(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/open-in-vscode`,
+      {},
+      this.withWatchPath(watchPath),
+    );
   }
 
   getClaudeSessionInfo(jobId: string, watchPath?: string) {
-    return this.http.get<ClaudeSessionResponse>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/claude/session-info`, this.withWatchPath(watchPath));
+    return this.http.get<ClaudeSessionResponse>(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/claude/session-info`,
+      this.withWatchPath(watchPath),
+    );
   }
 
   /** Per-job session-event log: start/continue/recovery rows + sessionChain. */
   getSessionEvents(jobId: string, watchPath?: string) {
-    return this.http.get<SessionEventsResponse>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/session-events`, this.withWatchPath(watchPath));
+    return this.http.get<SessionEventsResponse>(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/session-events`,
+      this.withWatchPath(watchPath),
+    );
   }
 
   /** Per-job run timeline: ordered list of CLI invocations + aggregates. */
   getRunTimeline(jobId: string, watchPath?: string) {
-    return this.http.get<RunTimeline>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/runs`, this.withWatchPath(watchPath));
+    return this.http.get<RunTimeline>(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/runs`,
+      this.withWatchPath(watchPath),
+    );
   }
 
   /** Commits whose author date falls inside the given run's wall-clock window. */
   getRunCommits(jobId: string, runIndex: number, watchPath?: string) {
-    return this.http.get<RunCommitsResponse>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/runs/${runIndex}/commits`, this.withWatchPath(watchPath));
+    return this.http.get<RunCommitsResponse>(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/runs/${runIndex}/commits`,
+      this.withWatchPath(watchPath),
+    );
   }
 
   /** Aggregated file list for one run's SHA range - drives the run git viewer's file tree. */
   getRunFiles(jobId: string, runIndex: number, watchPath?: string) {
-    return this.http.get<RunFilesResponse>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/runs/${runIndex}/files`, this.withWatchPath(watchPath));
+    return this.http.get<RunFilesResponse>(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/runs/${runIndex}/files`,
+      this.withWatchPath(watchPath),
+    );
   }
 
   /** Unified diff for one path inside a run's SHA range. */
   getRunDiff(jobId: string, runIndex: number, path: string, watchPath?: string) {
-    const opts = this.withWatchPath(watchPath);
-    const params = (opts.params as any) ?? {};
     return this.http.get<RunDiffResponse>(
       `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/runs/${runIndex}/diff`,
-      { ...opts, params: { ...params, path } }
+      this.withWatchPathAndPath(watchPath, path),
     );
   }
 
@@ -510,7 +659,11 @@ export class JobService {
     const body: { model?: string; cliType?: CliType } = {};
     if (model) body.model = model;
     if (cliType) body.cliType = cliType;
-    return this.http.post<ContinueJobResponse>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/start`, body, this.withWatchPath(watchPath));
+    return this.http.post<ContinueJobResponse>(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/start`,
+      body,
+      this.withWatchPath(watchPath),
+    );
   }
 
   /**
@@ -527,30 +680,58 @@ export class JobService {
   stopJob(jobId: string, watchPath?: string, reason: 'user' | 'followup' = 'user') {
     const base = this.withWatchPath(watchPath);
     const params = (base.params ?? new HttpParams()).set('reason', reason);
-    return this.http.post(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/stop`, {}, { ...base, params });
+    return this.http.post(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/stop`,
+      {},
+      { ...base, params },
+    );
   }
 
-  continueJob(jobId: string, prompt: string, watchPath?: string, model?: string, cliType?: CliType, mode?: ContinueMode) {
-    const body: { prompt: string; model?: string; cliType?: CliType; mode?: ContinueMode } = { prompt };
+  continueJob(
+    jobId: string,
+    prompt: string,
+    watchPath?: string,
+    model?: string,
+    cliType?: CliType,
+    mode?: ContinueMode,
+  ) {
+    const body: { prompt: string; model?: string; cliType?: CliType; mode?: ContinueMode } = {
+      prompt,
+    };
     if (model) body.model = model;
     if (cliType) body.cliType = cliType;
     if (mode) body.mode = mode;
-    return this.http.post<ContinueJobResponse>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/continue`, body, this.withWatchPath(watchPath));
+    return this.http.post<ContinueJobResponse>(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/continue`,
+      body,
+      this.withWatchPath(watchPath),
+    );
   }
 
   setJobModel(jobId: string, model: string | null, watchPath?: string) {
-    return this.http.put(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/model`, { model }, this.withWatchPath(watchPath));
+    return this.http.put(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/model`,
+      { model },
+      this.withWatchPath(watchPath),
+    );
   }
 
   setJobCliType(jobId: string, cliType: CliType, watchPath?: string, useOwnSession?: boolean) {
     const body: { cliType: CliType; useOwnSession?: boolean } = { cliType };
     if (useOwnSession !== undefined) body.useOwnSession = useOwnSession;
-    return this.http.put(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/cli-type`, body, this.withWatchPath(watchPath));
+    return this.http.put(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/cli-type`,
+      body,
+      this.withWatchPath(watchPath),
+    );
   }
 
   getCliModelCatalog(cliType: CliType, refresh = false) {
     const params = refresh ? new HttpParams().set('refresh', 'true') : undefined;
-    return this.http.get<CliModelCatalog>(`${this.baseUrl}/cli/${cliType}/models`, params ? { params } : {});
+    return this.http.get<CliModelCatalog>(
+      `${this.baseUrl}/cli/${cliType}/models`,
+      params ? { params } : {},
+    );
   }
 
   getCliUsageReport() {
@@ -563,7 +744,11 @@ export class JobService {
   // method names stay identical.
 
   setJobTitle(jobId: string, title: string, watchPath?: string) {
-    return this.http.put(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/title`, { title }, this.withWatchPath(watchPath));
+    return this.http.put(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/title`,
+      { title },
+      this.withWatchPath(watchPath),
+    );
   }
 
   getModelCatalog() {
@@ -571,15 +756,26 @@ export class JobService {
   }
 
   getJobOutput(jobId: string, watchPath?: string) {
-    return this.http.get<CliOutputLine[]>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/output`, this.withWatchPath(watchPath));
+    return this.http.get<CliOutputLine[]>(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/output`,
+      this.withWatchPath(watchPath),
+    );
   }
 
   refreshContextUsage(jobId: string, watchPath?: string) {
-    return this.http.post<ContextUsageSnapshot>(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/context-usage/refresh`, {}, this.withWatchPath(watchPath));
+    return this.http.post<ContextUsageSnapshot>(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/context-usage/refresh`,
+      {},
+      this.withWatchPath(watchPath),
+    );
   }
 
   regenerateSummary(jobId: string, watchPath?: string) {
-    return this.http.post(`${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/summary/regenerate`, {}, this.withWatchPath(watchPath));
+    return this.http.post(
+      `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/summary/regenerate`,
+      {},
+      this.withWatchPath(watchPath),
+    );
   }
 
   /**
@@ -592,7 +788,7 @@ export class JobService {
     return this.http.post<{ markdown: string; durationMs: number }>(
       `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/summary/interim`,
       {},
-      this.withWatchPath(watchPath)
+      this.withWatchPath(watchPath),
     );
   }
 
@@ -609,7 +805,7 @@ export class JobService {
    */
   getOrchestratorLog(projectName: string) {
     return this.http.get<OrchestratorLogResponse>(
-      `${this.baseUrl}/runner/${encodeURIComponent(projectName)}/orchestrator-log`
+      `${this.baseUrl}/runner/${encodeURIComponent(projectName)}/orchestrator-log`,
     );
   }
 
@@ -620,9 +816,10 @@ export class JobService {
    * decision (or is about to make one in the next tick).
    */
   getReviewDecisionsPending(projectName: string) {
-    return this.http.get<{ project: string; items: { jobId: string; title: string; reason: string | null }[] }>(
-      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/review-decisions-pending`
-    );
+    return this.http.get<{
+      project: string;
+      items: { jobId: string; title: string; reason: string | null }[];
+    }>(`${this.baseUrl}/projects/${encodeURIComponent(projectName)}/review-decisions-pending`);
   }
 
   /**
@@ -633,9 +830,16 @@ export class JobService {
    * agent prints [[TASK_NEEDS_INPUT]] / [[TASK_BLOCKED]] to stdout.
    */
   getRunnerPendingDecisions(projectName: string) {
-    return this.http.get<{ project: string; items: { jobId: string; title: string; kind: string; reason: string | null; detectedAt: string }[] }>(
-      `${this.baseUrl}/runner/${encodeURIComponent(projectName)}/pending-decisions`
-    );
+    return this.http.get<{
+      project: string;
+      items: {
+        jobId: string;
+        title: string;
+        kind: string;
+        reason: string | null;
+        detectedAt: string;
+      }[];
+    }>(`${this.baseUrl}/runner/${encodeURIComponent(projectName)}/pending-decisions`);
   }
 
   /**
@@ -649,46 +853,70 @@ export class JobService {
    */
   getProjectSnapshot(projectName: string) {
     return this.http.get<ProjectSnapshot>(
-      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/snapshot`
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/snapshot`,
     );
   }
 
   repairProjectQueueHealth(projectName: string) {
-    return this.http.post<{ project: string; moved: unknown[]; failed: unknown[]; queueHealth: ProjectSnapshot['queueHealth'] }>(
-      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/queue-health/repair`,
-      {}
-    );
+    return this.http.post<{
+      project: string;
+      moved: unknown[];
+      failed: unknown[];
+      queueHealth: ProjectSnapshot['queueHealth'];
+    }>(`${this.baseUrl}/projects/${encodeURIComponent(projectName)}/queue-health/repair`, {});
   }
 
   /** All per-project settings (auto-commit, auto-push, runner mode, orchestrator model). */
   getAllProjectSettings() {
-    return this.http.get<{ [project: string]: { autoCommit: boolean; autoPushStrategy: 'never' | 'on-completed' | 'always-immediate'; runnerMode: string | null; orchestratorModel: string | null } }>(
-      `${this.baseUrl}/projects/settings`
-    );
+    return this.http.get<
+      Record<
+        string,
+        {
+          autoCommit: boolean;
+          autoPushStrategy: 'never' | 'on-completed' | 'always-immediate';
+          runnerMode: string | null;
+          orchestratorModel: string | null;
+        }
+      >
+    >(`${this.baseUrl}/projects/settings`);
   }
 
   setProjectAutoCommit(projectName: string, enabled: boolean) {
-    return this.http.put(`${this.baseUrl}/projects/${encodeURIComponent(projectName)}/auto-commit`, { enabled });
+    return this.http.put(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/auto-commit`,
+      { enabled },
+    );
   }
 
-  setProjectAutoPushStrategy(projectName: string, strategy: 'never' | 'on-completed' | 'always-immediate') {
-    return this.http.put(`${this.baseUrl}/projects/${encodeURIComponent(projectName)}/auto-push-strategy`, { strategy });
+  setProjectAutoPushStrategy(
+    projectName: string,
+    strategy: 'never' | 'on-completed' | 'always-immediate',
+  ) {
+    return this.http.put(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/auto-push-strategy`,
+      { strategy },
+    );
   }
 
   setProjectOrchestratorModel(projectName: string, model: string | null) {
-    return this.http.put(`${this.baseUrl}/projects/${encodeURIComponent(projectName)}/orchestrator-model`, { model });
+    return this.http.put(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/orchestrator-model`,
+      { model },
+    );
   }
 
   /** ADR-0026: read the per-project orchestrator-prep autonomy level (0..4). */
   getProjectAutonomyLevel(projectName: string) {
-    return this.http.get<{ level: number }>(`${this.baseUrl}/projects/${encodeURIComponent(projectName)}/autonomy`);
+    return this.http.get<{ level: number }>(
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/autonomy`,
+    );
   }
 
   /** ADR-0026: write the per-project orchestrator-prep autonomy level. Server clamps to 0..4. */
   setProjectAutonomyLevel(projectName: string, level: number) {
     return this.http.put<{ level: number }>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/autonomy`,
-      { level }
+      { level },
     );
   }
 
@@ -699,7 +927,7 @@ export class JobService {
    */
   getOrchestratorSession(projectName: string) {
     return this.http.get<OrchestratorSessionResponse>(
-      `${this.baseUrl}/runner/${encodeURIComponent(projectName)}/orchestrator-session`
+      `${this.baseUrl}/runner/${encodeURIComponent(projectName)}/orchestrator-session`,
     );
   }
 
@@ -711,7 +939,7 @@ export class JobService {
    */
   getGlobalOrchestratorSession() {
     return this.http.get<OrchestratorSessionResponse>(
-      `${this.baseUrl}/runner/global/orchestrator-session`
+      `${this.baseUrl}/runner/global/orchestrator-session`,
     );
   }
 
@@ -778,7 +1006,7 @@ export class JobService {
     if (watchPath) params = params.set('watchPath', watchPath);
     return this.http.get<JobScreenshotsResponse>(
       `${this.baseUrl}/jobs/${encodeURIComponent(jobId)}/screenshots`,
-      { params }
+      { params },
     );
   }
 
@@ -790,10 +1018,9 @@ export class JobService {
   getWorkspaceScreenshots(windowHours: number, projectFilter?: string | null) {
     let params = new HttpParams().set('windowHours', String(windowHours));
     if (projectFilter) params = params.set('projectFilter', projectFilter);
-    return this.http.get<WorkspaceScreenshotsResponse>(
-      `${this.baseUrl}/workspace/screenshots`,
-      { params }
-    );
+    return this.http.get<WorkspaceScreenshotsResponse>(`${this.baseUrl}/workspace/screenshots`, {
+      params,
+    });
   }
 
   /**
@@ -803,7 +1030,7 @@ export class JobService {
    */
   getOrchestratorChat(projectName: string) {
     return this.http.get<OrchestratorChatResponse>(
-      `${this.baseUrl}/runner/${encodeURIComponent(projectName)}/orchestrator-chat`
+      `${this.baseUrl}/runner/${encodeURIComponent(projectName)}/orchestrator-chat`,
     );
   }
 
@@ -818,11 +1045,11 @@ export class JobService {
       text: string;
       attachments?: { alt: string; relativePath: string }[];
       navigationContext?: import('../features/orchestrator').ChatNavigationContext;
-    }
+    },
   ) {
     return this.http.post<{ project: string; reply: OrchestratorChatTurn }>(
       `${this.baseUrl}/runner/${encodeURIComponent(projectName)}/orchestrator-chat`,
-      body
+      body,
     );
   }
 
@@ -836,7 +1063,7 @@ export class JobService {
     form.append('file', file, file.name || 'image.png');
     return this.http.post<{ fileName: string; relativePath: string; url: string }>(
       `${this.baseUrl}/runner/${encodeURIComponent(projectName)}/orchestrator-chat/attachments`,
-      form
+      form,
     );
   }
 
@@ -849,7 +1076,7 @@ export class JobService {
    */
   scrollProjectChat(
     projectName: string,
-    opts: { before?: string; after?: string; limit?: number }
+    opts: { before?: string; after?: string; limit?: number },
   ) {
     let params = new HttpParams();
     if (opts.before) params = params.set('before', opts.before);
@@ -857,7 +1084,7 @@ export class JobService {
     if (opts.limit != null) params = params.set('limit', String(opts.limit));
     return this.http.get<ProjectChatScrollResponse>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/chat/scroll`,
-      { params }
+      { params },
     );
   }
 
@@ -868,12 +1095,10 @@ export class JobService {
    * mapping the markers to `<mark>`.
    */
   searchProjectChat(projectName: string, query: string, limit = 20) {
-    const params = new HttpParams()
-      .set('q', query)
-      .set('limit', String(limit));
+    const params = new HttpParams().set('q', query).set('limit', String(limit));
     return this.http.get<ProjectChatSearchResponse>(
       `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/chat/search`,
-      { params }
+      { params },
     );
   }
 
@@ -883,7 +1108,7 @@ export class JobService {
    */
   getProjectChatStats(projectName: string) {
     return this.http.get<ProjectChatStatsResponse>(
-      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/chat/stats`
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/chat/stats`,
     );
   }
 
@@ -893,7 +1118,7 @@ export class JobService {
    */
   getProjectChatTurn(projectName: string, turnId: string) {
     return this.http.get<ProjectChatTurnResponse>(
-      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/chat/turn/${encodeURIComponent(turnId)}`
+      `${this.baseUrl}/projects/${encodeURIComponent(projectName)}/chat/turn/${encodeURIComponent(turnId)}`,
     );
   }
 
@@ -903,10 +1128,7 @@ export class JobService {
    * Create-task dialog. Returns immediately when the prompt is empty.
    */
   generateTaskTitle(prompt: string) {
-    return this.http.post<{ title: string }>(
-      `${this.baseUrl}/title/generate`,
-      { prompt }
-    );
+    return this.http.post<{ title: string }>(`${this.baseUrl}/title/generate`, { prompt });
   }
 
   /**
@@ -918,7 +1140,7 @@ export class JobService {
   enhancePrompt(prompt: string) {
     return this.http.post<{ refinedPrompt: string; intent: string; tags: string[] }>(
       `${this.baseUrl}/prompt/enhance`,
-      { prompt }
+      { prompt },
     );
   }
 
@@ -929,16 +1151,18 @@ export class JobService {
    */
   overrideOrchestratorEntry(
     projectName: string,
-    body: { originalTs: string; jobId: string; newDirection: string }
+    body: { originalTs: string; jobId: string; newDirection: string },
   ) {
     return this.http.post<{ applied: boolean; error?: string; note?: string }>(
       `${this.baseUrl}/runner/${encodeURIComponent(projectName)}/orchestrator-log/override`,
-      body
+      body,
     );
   }
 
   setRunnerMode(projectName: string, mode: string) {
-    return this.http.put(`${this.baseUrl}/runner/${encodeURIComponent(projectName)}/mode`, { mode });
+    return this.http.put(`${this.baseUrl}/runner/${encodeURIComponent(projectName)}/mode`, {
+      mode,
+    });
   }
 
   startRunner(projectName: string) {
@@ -957,10 +1181,10 @@ export class JobService {
           this.errorDialog.show(err, {
             title: 'Failed to load runner status',
             fallbackMessage: 'Failed to load runner status',
-            source: 'Runner status'
+            source: 'Runner status',
           });
         }
-      }
+      },
     });
   }
 

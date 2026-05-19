@@ -1,7 +1,7 @@
 <app-sidesheet title="Orchestrator"
                subtitle="Runbook · canonical session"
                testid="orch-side-sheet"
-               (close)="hide()">
+               (closeRequest)="hide()">
   <div header-actions class="sheet__header-extras">
     <div class="sheet__project-picker sheet__combo-wrap--active"
          [class.sheet__combo-wrap--open]="comboOpen()"
@@ -25,11 +25,13 @@
           @for (proj of filteredProjects(); track proj; let i = $index) {
             <li class="sheet__combo-option"
                 role="option"
+                tabindex="0"
+                [attr.aria-selected]="proj === activeProject()"
                 [class.sheet__combo-option--active]="i === comboHighlight()"
                 [class.sheet__combo-option--current]="proj === activeProject()"
                 [attr.data-testid]="'orch-side-sheet-project-combo-option-' + proj"
                 (mousedown)="onComboOptionMousedown($event)"
-                (click)="selectComboOption(proj, $event)">
+                (click)="selectComboOption(proj, $event)" (keydown.enter)="selectComboOption(proj, $event)" (keydown.space)="selectComboOption(proj, $event); $event.preventDefault()">
               {{ proj }}
             </li>
           }

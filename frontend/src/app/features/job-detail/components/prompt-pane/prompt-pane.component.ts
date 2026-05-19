@@ -11,8 +11,6 @@ import { resolveProtocolImageSrc } from '../protocol-pane/protocol-image-resolve
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';
 import { PaneHeaderComponent } from '../../../../components/pane-header/pane-header.component';
 
-import { TooltipDirective } from '../../../../components/tooltip';
-
 /** Display-grouping for the Evidence tab, modeled after the reference layout. */
 interface EvidenceSection {
   key: ReviewEvidenceSource;

@@ -1,5 +1,12 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, computed, inject, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  OnDestroy,
+  computed,
+  inject,
+  signal,
+} from '@angular/core';
+
 import { UpdateClientService } from '../../../../services/update.service';
 import { DevToolsService } from '../../../../services/dev-tools.service';
 import { ErrorDialogService } from '../../../../services/error-dialog.service';
@@ -19,10 +26,10 @@ import { TooltipDirective } from '../../../../components/tooltip';
 @Component({
   selector: 'app-update-center',
   standalone: true,
-  imports: [CommonModule, TooltipDirective],
+  imports: [TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './update-center.component.html',
-  styleUrl: './update-center.component.scss'
+  styleUrl: './update-center.component.scss',
 })
 export class UpdateCenterComponent implements OnDestroy {
   private readonly client = inject(UpdateClientService);
@@ -37,11 +44,9 @@ export class UpdateCenterComponent implements OnDestroy {
   readonly triggerInFlight = signal(false);
   readonly refreshInFlight = signal(false);
   readonly history = signal<UpdateHistoryEntry[]>([]);
-  readonly canTrigger = computed(() =>
-    this.isDev() &&
-    !this.serviceUnreachable() &&
-    !this.triggerInFlight() &&
-    !this.isRunning()
+  readonly canTrigger = computed(
+    () =>
+      this.isDev() && !this.serviceUnreachable() && !this.triggerInFlight() && !this.isRunning(),
   );
 
   private readonly historyTimer: ReturnType<typeof setInterval>;
@@ -65,10 +70,7 @@ export class UpdateCenterComponent implements OnDestroy {
     if (this.refreshInFlight()) return;
     this.refreshInFlight.set(true);
     try {
-      await Promise.all([
-        this.client.refreshNow(),
-        this.refreshHistory(),
-      ]);
+      await Promise.all([this.client.refreshNow(), this.refreshHistory()]);
     } finally {
       this.refreshInFlight.set(false);
     }
@@ -82,10 +84,10 @@ export class UpdateCenterComponent implements OnDestroy {
       // The block-modal will own the running UI from here; we keep the
       // drawer open but let the block-modal's z-index sit above it.
       this.refreshHistory();
-    } catch (err: any) {
+    } catch (err: unknown) {
       this.errors.show({
         title: 'Update trigger failed',
-        message: err?.message ?? 'Could not reach UpdateService at :5039.',
+        message: err instanceof Error ? err.message : 'Could not reach UpdateService at :5039.',
       });
     } finally {
       this.triggerInFlight.set(false);
@@ -97,6 +99,8 @@ export class UpdateCenterComponent implements OnDestroy {
       const list = await this.client.readHistory(15);
       // newest first
       this.history.set([...list].reverse());
-    } catch { /* leave previous list */ }
+    } catch {
+      /* leave previous list */
+    }
   }
 }

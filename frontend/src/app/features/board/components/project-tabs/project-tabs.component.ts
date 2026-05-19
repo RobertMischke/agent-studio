@@ -58,7 +58,7 @@ export class ProjectTabsComponent {
    * — that signals "extend the multi-select" rather than the default
    * single-select switch.
    */
-  readonly toggle = output<{ name: string; additive: boolean }>();
+  readonly toggleRequest = output<{ name: string; additive: boolean }>();
   readonly toggleAuto = output<string>();
   readonly openShell = output<string>();
 

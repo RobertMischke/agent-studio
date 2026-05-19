@@ -169,8 +169,8 @@ export class UxuiPanelComponent {
   onCreateFollowUp(reason: 'add-reference' | 'design-followup' | 'council', note?: DesignCouncilNote): void {
     const name = this.projectName();
     if (!name) return;
-    let prefill = '';
-    let title = '';
+    let prefill: string;
+    let title: string;
     if (reason === 'add-reference') {
       title = `Add design reference (${name})`;
       prefill = [

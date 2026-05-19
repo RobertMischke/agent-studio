@@ -176,12 +176,12 @@
       @if (outcomeIssue(); as issue) {
         <div class="outcome-dialog-backdrop"
              data-testid="protocol-outcome-issue-modal"
-             (click)="outcomeIssueModalOpen.set(false)">
+             (click)="outcomeIssueModalOpen.set(false)" tabindex="0" (keydown.enter)="outcomeIssueModalOpen.set(false)" (keydown.space)="outcomeIssueModalOpen.set(false); $event.preventDefault()">
           <section class="outcome-dialog"
                    role="dialog"
                    aria-modal="true"
                    aria-labelledby="outcome-dialog-title"
-                   (click)="$event.stopPropagation()">
+                   (click)="$event.stopPropagation()" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
             <header class="outcome-dialog__head">
               <div>
                 <p class="outcome-dialog__eyebrow">Runner outcome</p>
@@ -355,7 +355,7 @@
                 [job]="detail().info"
                 [run]="gitViewerRun()"
                 [visible]="gitViewerRun() !== null"
-                (close)="closeGitViewer()" />
+                (closeRequest)="closeGitViewer()" />
 
               @if (cliOutput().length > 0 || isRunning()) {
                 @if (showConversationView()) {
@@ -502,6 +502,6 @@
     [tokenSummary]="detail().info.tokenSummary ?? null"
     [job]="detail().info"
     [source]="detail().info.id"
-    (close)="verboseDebugOpen.set(false)"
+    (closeRequest)="verboseDebugOpen.set(false)"
     (openTrace)="onVerboseDebugOpenTrace($event)" />
 }

@@ -53,7 +53,7 @@
       </button>
 
       @if (cliMenuOpen()) {
-        <div class="statusbar__menu" (click)="$event.stopPropagation()">
+        <div class="statusbar__menu" (click)="$event.stopPropagation()" tabindex="0" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
           <div class="statusbar__menu-title">Default CLI for new tasks</div>
           @for (t of cliTypes; track t) {
             <button class="statusbar__menu-item"
@@ -78,7 +78,10 @@
       </button>
 
       @if (modelMenuOpen()) {
-        <div class="statusbar__menu" (click)="$event.stopPropagation()">
+        <div class="statusbar__menu"
+             tabindex="-1"
+             (click)="$event.stopPropagation()"
+             (keydown)="$event.stopPropagation()">
           <div class="statusbar__menu-title">
             Default model · {{ cliLabel(defaultCli()) }}
           </div>
@@ -122,4 +125,4 @@
     </div>
   </div>
 </div>
-  
+

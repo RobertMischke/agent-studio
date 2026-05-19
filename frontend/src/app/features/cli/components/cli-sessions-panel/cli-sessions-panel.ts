@@ -1,8 +1,14 @@
-import { Component, OnInit, computed, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, output, signal, inject } from '@angular/core';
 import { JobService } from '../../../../services/job.service';
 import { CliConsoleComponent } from '../cli-console/cli-console';
 import type { CliOutputLine, CliType } from '../../../../models/job.model';
-import type { CliSessionInfo, CliUsageProjectGroup, CliUsageReport, CliUsageSection, LinkedJobRef } from '../../../../features/cli';
+import type {
+  CliSessionInfo,
+  CliUsageProjectGroup,
+  CliUsageReport,
+  CliUsageSection,
+  LinkedJobRef,
+} from '../../../../features/cli';
 
 import { TooltipDirective } from '../../../../components/tooltip';
 interface SelectedSession {
@@ -17,8 +23,11 @@ interface SelectedSession {
   imports: [CliConsoleComponent, TooltipDirective],
   templateUrl: './cli-sessions-panel.html',
   styleUrl: './cli-sessions-panel.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class CliSessionsPanelComponent implements OnInit {
+  private jobService = inject(JobService);
+
   /**
    * Emitted when the user clicks a session row's task-link chip. The shell
    * (via `orchestrator-side-sheet`) routes this through the existing
@@ -38,10 +47,10 @@ export class CliSessionsPanelComponent implements OnInit {
 
   readonly visibleSections = computed<CliUsageSection[]>(() => {
     const all = this.report()?.sections ?? [];
-    return all.filter(s => s.available || s.projects.length > 0);
+    return all.filter((s) => s.available || s.projects.length > 0);
   });
   readonly totalSessionCount = computed<number>(() =>
-    this.visibleSections().reduce((sum, s) => sum + this.totalSessions(s), 0)
+    this.visibleSections().reduce((sum, s) => sum + this.totalSessions(s), 0),
   );
   readonly detailLines = computed<CliOutputLine[]>(() => {
     const sel = this.selected();
@@ -49,12 +58,18 @@ export class CliSessionsPanelComponent implements OnInit {
     return [
       { timestamp: new Date().toISOString(), stream: 'stdout', text: `Session: ${sel.session.id}` },
       { timestamp: new Date().toISOString(), stream: 'stdout', text: `CLI:     ${sel.cliType}` },
-      { timestamp: new Date().toISOString(), stream: 'stdout', text: `Project: ${sel.projectName}` },
-      { timestamp: new Date().toISOString(), stream: 'stdout', text: sel.session.cwd ? `Cwd:     ${sel.session.cwd}` : '' }
-    ].filter(l => !!l.text);
+      {
+        timestamp: new Date().toISOString(),
+        stream: 'stdout',
+        text: `Project: ${sel.projectName}`,
+      },
+      {
+        timestamp: new Date().toISOString(),
+        stream: 'stdout',
+        text: sel.session.cwd ? `Cwd:     ${sel.session.cwd}` : '',
+      },
+    ].filter((l) => !!l.text);
   });
-
-  constructor(private jobService: JobService) {}
 
   ngOnInit(): void {
     this.refresh();
@@ -73,7 +88,7 @@ export class CliSessionsPanelComponent implements OnInit {
         this.errorMsg.set(err.error?.error || err.message || 'Failed to load CLI sessions');
         this.loaded.set(true);
         this.loading.set(false);
-      }
+      },
     });
   }
 
@@ -106,7 +121,12 @@ export class CliSessionsPanelComponent implements OnInit {
 
   isSelected(cliType: CliType, project: CliUsageProjectGroup, session: CliSessionInfo): boolean {
     const sel = this.selected();
-    return !!sel && sel.cliType === cliType && sel.projectName === project.projectName && sel.session.id === session.id;
+    return (
+      !!sel &&
+      sel.cliType === cliType &&
+      sel.projectName === project.projectName &&
+      sel.session.id === session.id
+    );
   }
 
   totalSessions(section: CliUsageSection): number {
@@ -118,16 +138,21 @@ export class CliSessionsPanelComponent implements OnInit {
   }
 
   usageSessionCount(project: CliUsageProjectGroup): number {
-    return project.sessions.filter(s => !!s.lastUsage).length;
+    return project.sessions.filter((s) => !!s.lastUsage).length;
   }
 
   cliLabel(t: string): string {
     switch (t) {
-      case 'copilot': return 'Copilot';
-      case 'claude': return 'Claude Code';
-      case 'codex': return 'Codex';
-      case 'gemini': return 'Gemini';
-      default: return t;
+      case 'copilot':
+        return 'Copilot';
+      case 'claude':
+        return 'Claude Code';
+      case 'codex':
+        return 'Codex';
+      case 'gemini':
+        return 'Gemini';
+      default:
+        return t;
     }
   }
 
@@ -136,8 +161,16 @@ export class CliSessionsPanelComponent implements OnInit {
   }
 
   formatTime(iso: string): string {
-    try { return new Date(iso).toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }); }
-    catch { return iso; }
+    try {
+      return new Date(iso).toLocaleString([], {
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return iso;
+    }
   }
 
   private projectKey(cliType: string, project: CliUsageProjectGroup): string {

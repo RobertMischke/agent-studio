@@ -78,7 +78,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   readonly recentEntries = signal<OrchestratorLogEntry[]>([]);
   readonly orchSession = signal<OrchestratorSession | null>(null);
   readonly projectPaths = signal<{ path: string; rootPath: string | null; repositoryPath: string | null } | null>(null);
-  readonly pendingDecisions = signal<ReadonlyArray<{ jobId: string; title: string; reason: string | null }>>([]);
+  readonly pendingDecisions = signal<readonly { jobId: string; title: string; reason: string | null }[]>([]);
   readonly queueHealth = signal<ProjectQueueHealth | null>(null);
   readonly queueRepairBusy = signal(false);
   readonly queueRepairMessage = signal<string | null>(null);
@@ -87,10 +87,10 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   // job. Distinct from pendingDecisions (post-run, lane-scoped). Polled on
   // the same 5 s interval refreshAll uses; cleared by the backend the
   // moment the user replies (the [user] line resolves the sentinel).
-  readonly livePendingDecisions = signal<ReadonlyArray<{ jobId: string; title: string; kind: string; reason: string | null; detectedAt: string }>>([]);
-  readonly liveReplyDrafts: { [jobId: string]: string } = {};
-  readonly liveReplySending: { [jobId: string]: boolean } = {};
-  readonly liveReplyErrors: { [jobId: string]: string | null } = {};
+  readonly livePendingDecisions = signal<readonly { jobId: string; title: string; kind: string; reason: string | null; detectedAt: string }[]>([]);
+  readonly liveReplyDrafts: Record<string, string> = {};
+  readonly liveReplySending: Record<string, boolean> = {};
+  readonly liveReplyErrors: Record<string, string | null> = {};
 
   // Two-way bound drafts so the form is responsive even before the
   // server round-trip completes.
@@ -103,7 +103,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
    * (run one then revert), auto-continuous (run all ready), paused
    * (deny auto-pickup but keep state). Click sends a PUT and refreshes.
    */
-  readonly modes: ReadonlyArray<{ id: string; label: string; tooltip: string }> = [
+  readonly modes: readonly { id: string; label: string; tooltip: string }[] = [
     { id: 'manual', label: 'Manual', tooltip: 'Auto-pickup off; user starts each task.' },
     { id: 'auto-single', label: 'Auto · single', tooltip: 'Pick up the next ready task once, then revert to manual.' },
     { id: 'auto-continuous', label: 'Auto · continuous', tooltip: 'Pick up ready tasks continuously.' },
@@ -111,7 +111,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   ];
 
   readonly orchModelOptions = OrchestratorRunner_KnownModels;
-  readonly autoPushOptions: ReadonlyArray<{ id: AutoPushStrategy; label: string; tooltip: string; isDefault?: boolean }> = [
+  readonly autoPushOptions: readonly { id: AutoPushStrategy; label: string; tooltip: string; isDefault?: boolean }[] = [
     {
       id: 'never',
       label: 'Never',
@@ -160,9 +160,9 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
 
   readonly laneCounts = computed(() => {
     const grouped = this.grouped();
-    if (!grouped) return [] as ReadonlyArray<{ state: string; label: string; count: number }>;
+    if (!grouped) return [] as readonly { state: string; label: string; count: number }[];
     const proj = this.projectName();
-    const c = (jobs: ReadonlyArray<{ projectName: string }>) => jobs.filter(j => j.projectName === proj).length;
+    const c = (jobs: readonly { projectName: string }[]) => jobs.filter(j => j.projectName === proj).length;
     return [
       { state: '0-backlog',     label: 'Backlog',     count: c(grouped.backlog ?? []) },
       { state: '1-preparation', label: 'Preparation', count: c(grouped.preparation) },
@@ -182,7 +182,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     if (!activeId) return null;
     const grouped = this.grouped();
     if (!grouped) return null;
-    const lanes: ReadonlyArray<[string, ReadonlyArray<{ id: string }>]> = [
+    const lanes: readonly [string, readonly { id: string }[]][] = [
       ['Backlog', grouped.backlog ?? []],
       ['Preparation', grouped.preparation ?? []],
       ['Ready', grouped.ready ?? []],
@@ -301,14 +301,14 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   setMode(mode: string): void {
     this.jobService.setRunnerMode(this.projectName(), mode).subscribe({
       next: () => this.refreshAll(true),
-      error: () => {}
+      error: () => this.refreshAll(true)
     });
   }
 
   onAutoCommitChange(): void {
     this.jobService.setProjectAutoCommit(this.projectName(), this.autoCommitDraft).subscribe({
       next: () => this.refreshAll(true),
-      error: () => {}
+      error: () => this.refreshAll(true)
     });
   }
 
@@ -317,7 +317,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     this.autoPushStrategyDraft = strategy;
     this.jobService.setProjectAutoPushStrategy(this.projectName(), strategy).subscribe({
       next: () => this.refreshAll(true),
-      error: () => {}
+      error: () => this.refreshAll(true)
     });
   }
 
@@ -325,7 +325,7 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     const model = this.orchModelDraft.trim();
     this.jobService.setProjectOrchestratorModel(this.projectName(), model || null).subscribe({
       next: () => this.refreshAll(true),
-      error: () => {}
+      error: () => this.refreshAll(true)
     });
   }
 

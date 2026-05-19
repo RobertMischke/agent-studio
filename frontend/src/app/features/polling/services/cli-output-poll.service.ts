@@ -1,8 +1,11 @@
-import { Injectable, OnDestroy, computed, signal } from '@angular/core';
+import { Injectable, OnDestroy, computed, signal, inject } from '@angular/core';
 import { CliExecution, CliOutputLine } from '../../../models/job.model';
 import { JobService } from '../../../services/job.service';
 
-interface JobRef { id: string; watchPath: string; }
+interface JobRef {
+  id: string;
+  watchPath: string;
+}
 
 /**
  * Owns the live-CLI side of the job-detail view: the rolling output
@@ -37,6 +40,8 @@ function capLines(lines: CliOutputLine[]): CliOutputLine[] {
 
 @Injectable()
 export class CliOutputPollService implements OnDestroy {
+  private jobService = inject(JobService);
+
   // The polled buffer is what GET /api/jobs/{id}/output returns — it's the
   // authoritative server state. We keep it separate from the optimistic
   // echo buffer so a poll round-trip never wipes the user's just-typed
@@ -51,10 +56,8 @@ export class CliOutputPollService implements OnDestroy {
     // Drop pending lines whose text already appears as a [user]-stream entry
     // in the polled output — that means the backend has persisted our optimistic
     // line and we'd otherwise show a duplicate.
-    const persisted = new Set(
-      polled.filter(l => l.stream === 'user').map(l => l.text)
-    );
-    const stillPending = pending.filter(l => !persisted.has(l.text));
+    const persisted = new Set(polled.filter((l) => l.stream === 'user').map((l) => l.text));
+    const stillPending = pending.filter((l) => !persisted.has(l.text));
     if (stillPending.length === 0) return polled;
     return [...polled, ...stillPending];
   });
@@ -67,8 +70,6 @@ export class CliOutputPollService implements OnDestroy {
   private pollGeneration = 0;
   private pollTimeout: ReturnType<typeof setTimeout> | null = null;
   private currentJob: JobRef | null = null;
-
-  constructor(private jobService: JobService) {}
 
   setJob(job: JobRef | null): void {
     this.currentJob = job;
@@ -134,9 +135,9 @@ export class CliOutputPollService implements OnDestroy {
     if (!trimmed) return;
     const now = new Date().toISOString();
     const oneLine = trimmed.replace(/[\r\n]+/g, ' ');
-    this.pendingUserLines.update(lines => [
+    this.pendingUserLines.update((lines) => [
       ...lines,
-      { timestamp: now, stream: 'user', text: oneLine }
+      { timestamp: now, stream: 'user', text: oneLine },
     ]);
   }
 
@@ -174,14 +175,16 @@ export class CliOutputPollService implements OnDestroy {
         },
         error: () => {
           this.pollTimeout = setTimeout(poll, 5000);
-        }
+        },
       });
     };
     this.pollTimeout = setTimeout(poll, 1000);
   }
 
   /** Whether the output buffer is currently being polled. */
-  isPolling(): boolean { return this.pollTimeout !== null; }
+  isPolling(): boolean {
+    return this.pollTimeout !== null;
+  }
 
   /** Hydrate the buffer from a prior run's logs (called by detail-effect). */
   hydrateOutput(output: CliOutputLine[], execStartedAt?: string | null): void {
@@ -203,7 +206,10 @@ export class CliOutputPollService implements OnDestroy {
 
   private updateElapsed(): void {
     const start = this.startedAt();
-    if (!start) { this.elapsedTime.set('0s'); return; }
+    if (!start) {
+      this.elapsedTime.set('0s');
+      return;
+    }
     const secs = Math.floor((Date.now() - start.getTime()) / 1000);
     if (secs < 60) this.elapsedTime.set(`${secs}s`);
     else if (secs < 3600) this.elapsedTime.set(`${Math.floor(secs / 60)}m ${secs % 60}s`);

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject, input, output, signal, DoCheck } from '@angular/core';
 import { NgTemplateOutlet } from '@angular/common';
 import type { JobInfo } from '../../../../../models/job.model';
 import type { RunFileChange, RunRecord } from '../../../../../features/run-timeline';
@@ -56,12 +56,12 @@ interface TreeNode {
   templateUrl: './run-git-viewer.component.html',
   styleUrl: './run-git-viewer.component.scss'
 })
-export class RunGitViewerComponent {
+export class RunGitViewerComponent implements DoCheck {
   readonly job = input<JobInfo | null>(null);
   readonly run = input<RunRecord | null>(null);
   readonly visible = input<boolean>(false);
 
-  readonly close = output<void>();
+  readonly closeRequest = output<void>();
 
   readonly files = signal<RunFileChange[]>([]);
   readonly filesState = signal<'idle' | 'loading' | 'loaded' | 'error'>('idle');

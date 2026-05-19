@@ -57,7 +57,7 @@ const RESUMED_PATTERNS = [
  *   "Killed", the pill says hung even if a newer line arrived.
  */
 export function deriveWatchdogPill(input: {
-  lines: ReadonlyArray<CliOutputLine>;
+  lines: readonly CliOutputLine[];
   isRunning: boolean;
   now: Date;
   warmUpGraceSeconds?: number;
@@ -119,11 +119,22 @@ export function deriveWatchdogPill(input: {
       visible: true
     };
   }
-
+  if (latestWatchdogText && RESUMED_PATTERNS.some((re) => re.test(latestWatchdogText!))) {
+    return {
+      state: 'healthy',
+      label: '● Live',
+      tooltip: latestWatchdogText,
+      visible: true
+    };
+  }
   const now = input.now ?? new Date();
   const lastSeen = lastRealStreamAt ?? runStartedAt;
   const silenceSec = Math.max(0, (now.getTime() - lastSeen.getTime()) / 1000);
   const ageSec = Math.max(0, (now.getTime() - runStartedAt.getTime()) / 1000);
+  const watchdogSaysSuspicious =
+    latestWatchdogText && SUSPICIOUS_PATTERNS.some((re) => re.test(latestWatchdogText));
+  const watchdogSaysQuiet =
+    latestWatchdogText && QUIET_PATTERNS.some((re) => re.test(latestWatchdogText));
 
   if (ageSec < warmUp) {
     return {
@@ -146,7 +157,9 @@ export function deriveWatchdogPill(input: {
     return {
       state: 'suspicious',
       label: `⚠ Watchdog ${Math.round(silenceSec)}s`,
-      tooltip: `No streamed output for ${Math.round(silenceSec)}s. Watchdog will kill the run at ${hung}s if no signal arrives.`,
+      tooltip: watchdogSaysSuspicious
+        ? latestWatchdogText!
+        : `No streamed output for ${Math.round(silenceSec)}s. Watchdog will kill the run at ${hung}s if no signal arrives.`,
       visible: true
     };
   }
@@ -154,7 +167,9 @@ export function deriveWatchdogPill(input: {
     return {
       state: 'quiet',
       label: `◐ Quiet ${Math.round(silenceSec)}s`,
-      tooltip: `Agent has been quiet ${Math.round(silenceSec)}s. Watchdog warns at ${suspicious}s.`,
+      tooltip: watchdogSaysQuiet
+        ? latestWatchdogText!
+        : `Agent has been quiet ${Math.round(silenceSec)}s. Watchdog warns at ${suspicious}s.`,
       visible: true
     };
   }

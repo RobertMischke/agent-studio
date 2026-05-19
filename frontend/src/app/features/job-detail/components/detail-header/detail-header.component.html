@@ -37,7 +37,7 @@
         </div>
         <h2 class="detail__title"
             (click)="startTitleEdit.emit()"
-            [appTooltip]="'Click to rename'">
+            [appTooltip]="'Click to rename'" tabindex="0" (keydown.enter)="startTitleEdit.emit()" (keydown.space)="startTitleEdit.emit(); $event.preventDefault()">
           {{ info().title || info().id }}
           <button type="button"
                   class="detail__title-edit-btn"
@@ -111,7 +111,7 @@
       {{ completingAndNext() ? '⏳' : '✓ Complete & Next' }}
     </button>
   }
-  <div class="detail__menu-wrap" (click)="$event.stopPropagation()">
+  <div class="detail__menu-wrap" (click)="$event.stopPropagation()" tabindex="0" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
     <button type="button"
             class="detail__menu-btn"
             data-testid="detail-menu-btn"

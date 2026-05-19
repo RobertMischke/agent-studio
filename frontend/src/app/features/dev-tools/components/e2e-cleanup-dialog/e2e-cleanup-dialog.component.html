@@ -4,7 +4,7 @@
             role="dialog"
             kind="danger"
             testid="e2e-cleanup-dialog"
-            (close)="closed.emit()"
+            (closeRequest)="closed.emit()"
             (backdropClick)="onBackdropClick()">
   @switch (phase()) {
     @case ('loading') {
@@ -12,16 +12,10 @@
     }
     @case ('error') {
       <div class="empty empty--error">{{ errorText() }}</div>
-      <div footer>
-        <button class="btn" (click)="load()">Retry</button>
-      </div>
     }
     @case ('list') {
       @if (jobs().length === 0) {
         <div class="empty">No E2E-named jobs found.</div>
-        <div footer>
-          <button class="btn" (click)="closed.emit()">Close</button>
-        </div>
       } @else {
         <div class="toolbar">
           <label class="check">
@@ -52,15 +46,6 @@
             </li>
           }
         </ul>
-        <div footer>
-          <button class="btn btn--ghost" (click)="closed.emit()">Cancel</button>
-          <button class="btn btn--danger"
-                  data-testid="e2e-delete-confirm"
-                  [disabled]="selectedCount() === 0"
-                  (click)="confirmDelete()">
-            Delete {{ selectedCount() }} job{{ selectedCount() === 1 ? '' : 's' }}
-          </button>
-        </div>
       }
     }
     @case ('deleting') {
@@ -78,9 +63,37 @@
           </div>
         }
       </div>
-      <div footer>
-        <button class="btn" (click)="closed.emit()">Close</button>
-      </div>
     }
   }
+  <ng-container footer>
+    @switch (phase()) {
+      @case ('error') {
+        <div>
+          <button class="btn" (click)="load()">Retry</button>
+        </div>
+      }
+      @case ('list') {
+        @if (jobs().length === 0) {
+          <div>
+            <button class="btn" (click)="closed.emit()">Close</button>
+          </div>
+        } @else {
+          <div>
+            <button class="btn btn--ghost" (click)="closed.emit()">Cancel</button>
+            <button class="btn btn--danger"
+                    data-testid="e2e-delete-confirm"
+                    [disabled]="selectedCount() === 0"
+                    (click)="confirmDelete()">
+              Delete {{ selectedCount() }} job{{ selectedCount() === 1 ? '' : 's' }}
+            </button>
+          </div>
+        }
+      }
+      @case ('report') {
+        <div>
+          <button class="btn" (click)="closed.emit()">Close</button>
+        </div>
+      }
+    }
+  </ng-container>
 </app-dialog>

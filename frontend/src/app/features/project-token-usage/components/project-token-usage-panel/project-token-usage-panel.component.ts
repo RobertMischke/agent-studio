@@ -107,9 +107,9 @@ export class ProjectTokenUsagePanelComponent {
   /** Per-day buckets folded across all heatmap rows (the timeline view). */
   readonly timelineBuckets = computed(() => {
     const h = this.heatmap();
-    if (!h || h.days.length === 0) return [] as Array<{
+    if (!h || h.days.length === 0) return [] as {
       day: string; shortDay: string; total: number; calls: number; heightPct: number;
-    }>;
+    }[];
     const totals = new Map<string, { total: number; calls: number }>();
     for (const day of h.days) totals.set(day, { total: 0, calls: 0 });
     for (const row of h.jobs) {

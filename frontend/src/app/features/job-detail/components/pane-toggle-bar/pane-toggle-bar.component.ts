@@ -19,6 +19,6 @@ import { TooltipDirective } from '../../../../components/tooltip';
 export class PaneToggleBarComponent {
   readonly panesVisible = input.required<PanesVisible>();
 
-  readonly toggle = output<PaneName>();
+  readonly toggleRequest = output<PaneName>();
   readonly openInVsCode = output<void>();
 }

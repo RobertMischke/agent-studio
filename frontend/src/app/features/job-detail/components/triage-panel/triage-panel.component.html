@@ -28,8 +28,9 @@
   @if (menuOpen()) {
     <div class="triage__menu"
          role="menu"
+         tabindex="-1"
          data-testid="triage-menu"
-         (click)="$event.stopPropagation()">
+         (click)="$event.stopPropagation()" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
       <div class="triage__menu-head">
         <span class="triage__menu-title">{{ laneLabel() }} actions</span>
         @if (laneSize() > 0) {

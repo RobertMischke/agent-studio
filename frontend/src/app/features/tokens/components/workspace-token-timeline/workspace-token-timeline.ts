@@ -9,7 +9,7 @@ import {
 } from '@angular/core';
 import { JobService } from '../../../../services/job.service';
 import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
-import type { TokenTimeline, TokenTimelineCell, TokenTimelineProject } from '../../../../features/tokens';
+import type { TokenTimeline, TokenTimelineCell } from '../../../../features/tokens';
 import { TokensApiService } from '../../../../features/tokens';
 
 const STORAGE_DISABLED_KEY = 'workspaceTokens.disabledProjects';

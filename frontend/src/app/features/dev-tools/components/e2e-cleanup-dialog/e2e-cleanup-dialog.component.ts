@@ -1,9 +1,8 @@
-import { Component, EventEmitter, OnInit, Output, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, EventEmitter, OnInit, Output, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DevToolsService, E2EJob, DeleteE2EReport } from '../../../../services/dev-tools.service';
 import { ConfirmDialogService } from '../../../../services/confirm-dialog.service';
 
-import { TooltipDirective } from '../../../../components/tooltip';
 import { DialogComponent } from '../../../../components/dialog/dialog.component';
 type Phase = 'loading' | 'list' | 'deleting' | 'report' | 'error';
 
@@ -19,11 +18,14 @@ type Phase = 'loading' | 'list' | 'deleting' | 'report' | 'error';
 @Component({
   selector: 'app-e2e-cleanup-dialog',
   standalone: true,
-  imports: [FormsModule, TooltipDirective, DialogComponent],
+  imports: [FormsModule, DialogComponent],
   templateUrl: './e2e-cleanup-dialog.component.html',
-  styleUrl: './e2e-cleanup-dialog.component.scss'
+  styleUrl: './e2e-cleanup-dialog.component.scss',
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class E2ECleanupDialogComponent implements OnInit {
+  private devTools = inject(DevToolsService);
+
   @Output() closed = new EventEmitter<void>();
   @Output() didDelete = new EventEmitter<void>();
 
@@ -36,9 +38,9 @@ export class E2ECleanupDialogComponent implements OnInit {
 
   private readonly confirmDialog = inject(ConfirmDialogService);
 
-  constructor(private devTools: DevToolsService) {}
-
-  ngOnInit(): void { this.load(); }
+  ngOnInit(): void {
+    this.load();
+  }
 
   load(): void {
     this.phase.set('loading');
@@ -46,28 +48,35 @@ export class E2ECleanupDialogComponent implements OnInit {
       next: (jobs) => {
         this.jobs.set(jobs);
         // Pre-select everything: the common case is "kill all of them".
-        this.selected.set(new Set(jobs.map(j => j.jobKey)));
+        this.selected.set(new Set(jobs.map((j) => j.jobKey)));
         this.phase.set('list');
       },
       error: (err) => {
         this.errorText.set(err?.error?.error || err?.message || 'Failed to load E2E jobs');
         this.phase.set('error');
-      }
+      },
     });
   }
 
-  selectedCount(): number { return this.selected().size; }
-  allSelected(): boolean { return this.jobs().length > 0 && this.selected().size === this.jobs().length; }
-  someSelected(): boolean { return this.selected().size > 0; }
+  selectedCount(): number {
+    return this.selected().size;
+  }
+  allSelected(): boolean {
+    return this.jobs().length > 0 && this.selected().size === this.jobs().length;
+  }
+  someSelected(): boolean {
+    return this.selected().size > 0;
+  }
 
   toggle(key: string, checked: boolean): void {
     const next = new Set(this.selected());
-    if (checked) next.add(key); else next.delete(key);
+    if (checked) next.add(key);
+    else next.delete(key);
     this.selected.set(next);
   }
 
   toggleAll(checked: boolean): void {
-    if (checked) this.selected.set(new Set(this.jobs().map(j => j.jobKey)));
+    if (checked) this.selected.set(new Set(this.jobs().map((j) => j.jobKey)));
     else this.selected.set(new Set());
   }
 
@@ -93,7 +102,7 @@ export class E2ECleanupDialogComponent implements OnInit {
       error: (err) => {
         this.errorText.set(err?.error?.error || err?.message || 'Delete failed');
         this.phase.set('error');
-      }
+      },
     });
   }
 

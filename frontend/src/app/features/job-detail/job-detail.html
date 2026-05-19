@@ -40,8 +40,8 @@
     (projectChange)="onProjectChange($event)"
     (cliTypeChange)="onCliTypeChange($event)"
     (modelChange)="onModelDraftChange($event)"
-    (start)="startJob()"
-    (stop)="stopJob()"
+    (startRequest)="startJob()"
+    (stopRequest)="stopJob()"
     (toggleCollapsed)="toggleSetupCollapsed()" />
 
 
@@ -53,7 +53,7 @@
       [tokenDraft]="tokenDraft()"
       [testing]="cliTesting()"
       [tokenSaving]="tokenSaving()"
-      (close)="showCliConfig.set(false)"
+      (closeRequest)="showCliConfig.set(false)"
       (pathDraftChange)="cliPathDraft.set($event)"
       (tokenDraftChange)="tokenDraft.set($event)"
       (testPath)="testCliPath()"
@@ -63,7 +63,7 @@
 
   <app-pane-toggle-bar
     [panesVisible]="panesVisible()"
-    (toggle)="togglePane($event)"
+    (toggleRequest)="togglePane($event)"
     (openInVsCode)="openInVsCode()" />
 
   <div class="detail__panes" [class.detail__panes--maximized]="!!maximizedPane()" data-testid="detail-panes">
@@ -153,6 +153,6 @@
       [cliOutput]="cliOutput()"
       [log]="detail().log"
       [isRunning]="isRunning()"
-      (close)="showLogOverlay.set(false)" />
+      (closeRequest)="showLogOverlay.set(false)" />
   }
 </div>

@@ -19,7 +19,7 @@
             (click)="toggleCollapsed.emit()">
       Show setup
     </button>
-    <button class="btn-exec btn-exec--stop commandbar__action" (click)="stop.emit()">⏹ Stop</button>
+    <button class="btn-exec btn-exec--stop commandbar__action" (click)="stopRequest.emit()">⏹ Stop</button>
   } @else {
     <!--
       Compressed Project chip: the text "Project" label is dropped from
@@ -83,11 +83,11 @@
               (click)="toggleCollapsed.emit()">
         Hide setup
       </button>
-      <button class="btn-exec btn-exec--stop commandbar__action" (click)="stop.emit()">⏹ Stop</button>
+      <button class="btn-exec btn-exec--stop commandbar__action" (click)="stopRequest.emit()">⏹ Stop</button>
     } @else if (canStart()) {
       <button class="btn-exec btn-exec--start commandbar__action"
               data-testid="command-deck-start"
-              (click)="start.emit()"
+              (click)="startRequest.emit()"
               [disabled]="starting() || !!startDisabledReason()"
               [appTooltip]="startDisabledReason()">
         {{ starting() ? '⏳' : '▶ Start' }}

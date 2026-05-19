@@ -79,7 +79,8 @@ export class TriageController {
   }
 
   /** Triage "Move to top" (only on 2-ready). Stays in lane; clears acting. */
-  moveToTop(info: JobInfo, _ev: { actionId: string }): void {
+  moveToTop(info: JobInfo, ev: { actionId: string }): void {
+    void ev;
     this.jobService.beginOptimisticPersist();
     this.jobService.moveJobToTop(info.id, info.watchPath).subscribe({
       next: () => {
@@ -104,7 +105,8 @@ export class TriageController {
    * menu's delete flow (so the user does not lose the safety net by
    * accident).
    */
-  async delete(info: JobInfo, _ev: { actionId: string }): Promise<void> {
+  async delete(info: JobInfo, ev: { actionId: string }): Promise<void> {
+    void ev;
     const lane = this.jobSelection.triageLaneState ?? info.state;
     const peers = this.jobSelection.triageLanePeers();
     const label = info.title || info.id;
@@ -145,7 +147,8 @@ export class TriageController {
    * Triage "Run now": kick the start path then leave the panel on the
    * same job (it will transition to 3-progress on its own).
    */
-  start(info: JobInfo, _ev: { actionId: string }): void {
+  start(info: JobInfo, ev: { actionId: string }): void {
+    void ev;
     this.jobService.startJob(info.id, info.watchPath).subscribe({
       next: () => this.clearActing(),
       error: (err) => {
@@ -205,7 +208,7 @@ export class TriageController {
   advanceToNextInLane(
     lane: string,
     departingJobKey: string,
-    peersBefore: ReadonlyArray<JobInfo>,
+    peersBefore: readonly JobInfo[],
     external = false,
   ): void {
     this.clearActing();

@@ -21,16 +21,75 @@ import {
   watchdogQuietResumeFragment
 } from './conversation-projection.fixtures';
 import { CONVERSATION_EVENT_KINDS } from './conversation-event';
+import type { ConversationEvent, RawLineRange } from './conversation-event';
 import { projectConversation } from './conversation-projection';
 
 const SOURCE = 'fixture-job';
+
+interface EventProbe {
+  action?: string;
+  actorCounts: { user: number; taskAgent: number };
+  aggregate: {
+    state?: string;
+    runCount?: number;
+    latestRunStatus?: string;
+    totalDurationSeconds?: number;
+    totalInputTokens?: number;
+    totalOutputTokens?: number;
+    commitCount?: number;
+    filesChanged?: number;
+    screenshotCount?: number;
+    toolCallCount?: number;
+    toolFailureCount?: number;
+    retryWarningCount?: number;
+    latestResult?: string;
+  };
+  artifacts: readonly string[];
+  body?: string;
+  cliType?: string;
+  collapsedByDefault: boolean;
+  count: number;
+  decisionType?: string;
+  durablePath?: string;
+  expectedKind?: string;
+  expectedSchema?: string;
+  fallback?: string;
+  failures?: number;
+  families: { edit?: number; read?: number; search?: number };
+  files: readonly string[];
+  headline?: string;
+  inputTokens?: number;
+  link: { range: RawLineRange };
+  quietSeconds?: number;
+  question?: string;
+  rawLink?: { range: RawLineRange };
+  rawRange: RawLineRange;
+  runStats: { runCount: number; completedCount: number };
+  severity?: string;
+  state?: string;
+  tests: readonly { status: string }[];
+  tokenTotals: { inputTokens: number };
+  toolDensity: { total: number };
+  traceLinks: readonly { range: RawLineRange }[];
+  warningCounts: {
+    captureFails: number;
+    parserWarnings: number;
+    schemaDrifts: number;
+    watchdogQuiet: number;
+  };
+}
+
+function probe(event: ConversationEvent | undefined): EventProbe {
+  expect(event).toBeDefined();
+  return event as unknown as EventProbe;
+}
 
 describe('projectConversation', () => {
   it('classifies a user follow-up as message.user', () => {
     const events = projectConversation({ source: SOURCE, lines: userMessageFragment() });
     expect(events).toHaveLength(1);
     expect(events[0].kind).toBe('message.user');
-    expect((events[0] as any).body).toContain('NextGenChat');
+    expect(probe(events[0]).body).toContain('NextGenChat');
     expect(events[0].rawRange.source).toBe(SOURCE);
     expect(events[0].rawRange.start).toBe(1);
   });
@@ -42,7 +101,7 @@ describe('projectConversation', () => {
     const events = projectConversation({ source: SOURCE, lines: agentTextFragment() });
     expect(events.length).toBeGreaterThanOrEqual(1);
     expect(events.every((e) => e.kind === 'message.taskAgent')).toBe(true);
-    const joined = events.map((e) => (e as any).body).join('\n');
+    const joined = events.map((e) => probe(e).body).join('\n');
     expect(joined).toContain('NextGenChat');
     expect(joined).toContain('host inventory');
   });
@@ -51,8 +110,8 @@ describe('projectConversation', () => {
     const events = projectConversation({ source: SOURCE, lines: orchestratorReissueFragment() });
     expect(events).toHaveLength(1);
     expect(events[0].kind).toBe('decision.orchestrator');
-    expect((events[0] as any).decisionType).toBe('reissue');
-    expect((events[0] as any).action).toBe('reissue');
+    expect(probe(events[0]).decisionType).toBe('reissue');
+    expect(probe(events[0]).action).toBe('reissue');
   });
 
   it('collapses a contiguous read/search/edit run into a single multi-family toolBurst', () => {
@@ -62,7 +121,7 @@ describe('projectConversation', () => {
     // "12 reads · 3 searches · 4 edits" inside that single row.
     const tools = events.filter((e) => e.kind === 'toolBurst');
     expect(tools).toHaveLength(1);
-    const burst = tools[0] as any;
+    const burst = probe(tools[0]);
     expect(burst.count).toBe(5);
     expect(burst.families.read).toBe(3);
     expect(burst.families.search).toBe(1);
@@ -82,16 +141,16 @@ describe('projectConversation', () => {
   it('emits a supervisor.wait quiet event then resumed event for watchdog quiet/resume', () => {
     const events = projectConversation({ source: SOURCE, lines: watchdogQuietResumeFragment() });
     expect(events.map((e) => e.kind)).toEqual(['supervisor.wait', 'supervisor.wait']);
-    expect((events[0] as any).state).toBe('quiet');
-    expect((events[0] as any).quietSeconds).toBe(47);
-    expect((events[1] as any).state).toBe('resumed');
+    expect(probe(events[0]).state).toBe('quiet');
+    expect(probe(events[0]).quietSeconds).toBe(47);
+    expect(probe(events[1]).state).toBe('resumed');
   });
 
   it('emits a killed supervisor.wait for watchdog kill lines', () => {
     const events = projectConversation({ source: SOURCE, lines: watchdogKillFragment() });
     expect(events).toHaveLength(1);
     expect(events[0].kind).toBe('supervisor.wait');
-    expect((events[0] as any).state).toBe('killed');
+    expect(probe(events[0]).state).toBe('killed');
     expect(events[0].severity).toBe('error');
   });
 
@@ -100,29 +159,29 @@ describe('projectConversation', () => {
     const events = projectConversation({ source: SOURCE, lines });
     const warnings = events.filter((e) => e.kind === 'system.parserWarning');
     expect(warnings).toHaveLength(1);
-    expect((warnings[0] as any).expectedKind).toBe('sentinel');
+    expect(probe(warnings[0]).expectedKind).toBe('sentinel');
   });
 
   it('emits a system.captureFail row with cli type and fallback for capture-fail', () => {
     const events = projectConversation({ source: SOURCE, lines: captureFailFragment() });
     expect(events).toHaveLength(1);
     expect(events[0].kind).toBe('system.captureFail');
-    expect((events[0] as any).cliType.toLowerCase()).toContain('claude');
-    expect((events[0] as any).fallback).toMatch(/rebuild/i);
+    expect(probe(events[0]).cliType?.toLowerCase()).toContain('claude');
+    expect(probe(events[0]).fallback).toMatch(/rebuild/i);
   });
 
   it('classifies TASK_NEEDS_INPUT lines as agent.needsInput with the question', () => {
     const events = projectConversation({ source: SOURCE, lines: needsInputLoopFragment() });
     expect(events).toHaveLength(1);
     expect(events[0].kind).toBe('agent.needsInput');
-    expect((events[0] as any).question).toMatch(/CLI/);
+    expect(probe(events[0]).question).toMatch(/CLI/);
   });
 
   it('classifies a write-to-results edit as a toolBurst with file path captured', () => {
     const events = projectConversation({ source: SOURCE, lines: imageArtifactFragment() });
     const burst = events.find((e) => e.kind === 'toolBurst');
     expect(burst).toBeDefined();
-    expect((burst as any).families.edit).toBe(1);
+    expect(probe(burst).families?.edit).toBe(1);
   });
 
   it('emits a message.supervisor for high-severity supervisor advisories', () => {
@@ -163,7 +222,7 @@ describe('projectConversation', () => {
     });
     const image = events.find((e) => e.kind === 'artifact.image');
     expect(image).toBeDefined();
-    expect((image as any).durablePath).toBe('results/01-empty-state.png');
+    expect(probe(image).durablePath).toBe('results/01-empty-state.png');
   });
 
   it('emits a metric.token event when the host passes a tokenSummary', () => {
@@ -184,7 +243,7 @@ describe('projectConversation', () => {
     });
     const metric = events.find((e) => e.kind === 'metric.token');
     expect(metric).toBeDefined();
-    expect((metric as any).inputTokens).toBe(1500);
+    expect(probe(metric).inputTokens).toBe(1500);
   });
 
   it('emits a workbench.gitPreview / workbench.visualPreview / workbench.summary / traceLink set when requested', () => {
@@ -231,8 +290,8 @@ describe('projectConversation', () => {
       'supervisor.wait',
       'supervisor.wait'
     ]);
-    expect((events[0] as any).state).toBe('quiet');
-    expect((events[3] as any).state).toBe('resumed');
+    expect(probe(events[0]).state).toBe('quiet');
+    expect(probe(events[3]).state).toBe('resumed');
     // Trace preservation: every wait row must point back into the source.
     for (const ev of events) {
       expect(ev.rawRange.source).toBe(SOURCE);
@@ -245,8 +304,8 @@ describe('projectConversation', () => {
     const events = projectConversation({ source: SOURCE, lines: schemaDriftFragment() });
     expect(events).toHaveLength(1);
     expect(events[0].kind).toBe('system.schemaDrift');
-    expect((events[0] as any).expectedSchema).toBe('MetaCycleReport');
-    expect((events[0] as any).rawLink.range.source).toBe(SOURCE);
+    expect(probe(events[0]).expectedSchema).toBe('MetaCycleReport');
+    expect(probe(events[0]).rawLink?.range.source).toBe(SOURCE);
     expect(events[0].severity).toBe('warn');
   });
 
@@ -259,15 +318,15 @@ describe('projectConversation', () => {
     });
     const metric = events.find((e) => e.kind === 'metric.token');
     expect(metric).toBeDefined();
-    expect((metric as any).inputTokens).toBe(280_000);
+    expect(probe(metric).inputTokens).toBe(280_000);
 
     const summary = events.find((e) => e.kind === 'workbench.summary');
     expect(summary).toBeDefined();
-    const aggregate = (summary as any).aggregate;
+    const aggregate = probe(summary).aggregate;
     expect(aggregate.totalInputTokens).toBe(280_000);
     expect(aggregate.totalOutputTokens).toBe(14_500);
     // Headline must reference tokens so the summary strip can show pressure.
-    expect((summary as any).headline).toMatch(/token/i);
+    expect(probe(summary).headline).toMatch(/token/i);
   });
 
   it('models a test fail/retry/pass burst as one merged burst with failure + tests rollup', () => {
@@ -276,7 +335,7 @@ describe('projectConversation', () => {
       lines: testFailRetryFragment(),
       emitWorkbenchSummary: true
     });
-    const tools = events.filter((e) => e.kind === 'toolBurst') as any[];
+    const tools = events.filter((e) => e.kind === 'toolBurst').map(probe);
     // Fail/retry/pass is one tool burst, not three. Failure stays visible in
     // both the burst row and the summary headline.
     expect(tools).toHaveLength(1);
@@ -288,8 +347,8 @@ describe('projectConversation', () => {
     // Final status survives the retry: the latest non-unknown status wins.
     expect(burst.tests[0].status).toBe('pass');
 
-    const summary = events.find((e) => e.kind === 'workbench.summary') as any;
-    expect(summary.aggregate.toolFailureCount).toBeGreaterThan(0);
+    const summary = probe(events.find((e) => e.kind === 'workbench.summary'));
+    expect(summary.aggregate?.toolFailureCount).toBeGreaterThan(0);
     expect(summary.headline).toMatch(/failure/);
   });
 
@@ -301,7 +360,7 @@ describe('projectConversation', () => {
         ...imageArtifactFragment()
       ]
     });
-    const tools = events.filter((e) => e.kind === 'toolBurst') as any[];
+    const tools = events.filter((e) => e.kind === 'toolBurst').map(probe);
     expect(tools).toHaveLength(1);
     const burst = tools[0];
     expect(burst.files).toBeDefined();
@@ -388,7 +447,7 @@ describe('projectConversation', () => {
       emitRunMarkers: true
     });
 
-    const summary = events.find((e) => e.kind === 'workbench.summary') as any;
+    const summary = probe(events.find((e) => e.kind === 'workbench.summary'));
     expect(summary).toBeDefined();
     const a = summary.aggregate;
     expect(a.state).toBe('3-progress');
@@ -429,8 +488,7 @@ describe('projectConversation', () => {
       },
       emitDebugAggregate: true
     });
-    const debug = events.find((e) => e.kind === 'workbench.debug') as any;
-    expect(debug).toBeDefined();
+    const debug = probe(events.find((e) => e.kind === 'workbench.debug'));
     expect(debug.actorCounts.user).toBeGreaterThan(0);
     expect(debug.actorCounts.taskAgent).toBeGreaterThan(0);
     expect(debug.toolDensity.total).toBeGreaterThan(0);
@@ -467,8 +525,7 @@ describe('projectConversation', () => {
     }
     // The dedicated trace link is the explicit "open raw" handle the renderer
     // uses; it must address the full transcript.
-    const trace = events.find((e) => e.kind === 'traceLink') as any;
-    expect(trace).toBeDefined();
+    const trace = probe(events.find((e) => e.kind === 'traceLink'));
     expect(trace.link.range.start).toBe(1);
     expect(trace.link.range.end).toBe(lines.length);
   });

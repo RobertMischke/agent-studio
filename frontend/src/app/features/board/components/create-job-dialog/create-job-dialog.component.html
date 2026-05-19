@@ -12,7 +12,7 @@
             data-testid="create-dialog-close"
             aria-label="Close"
             [appTooltip]="'Close'"
-            (click)="cancel.emit()">×</button>
+            (click)="cancelRequest.emit()">×</button>
     <h2 class="create-dialog__title" data-testid="create-dialog-header">{{ header() }}</h2>
 
     <div class="field">
@@ -166,7 +166,7 @@
       <div class="create-dialog__dropzone"
            data-testid="create-dropzone"
            [class.create-dialog__dropzone--drag]="isDragging()"
-           (click)="triggerFilePicker()">
+           (click)="triggerFilePicker()" tabindex="0" (keydown.enter)="triggerFilePicker()" (keydown.space)="triggerFilePicker(); $event.preventDefault()">
         <span class="create-dialog__dropzone-icon" aria-hidden="true">🖼️</span>
         <span class="create-dialog__dropzone-text">
           Drag &amp; drop a screenshot, paste with <kbd>Ctrl</kbd>+<kbd>V</kbd>, or
@@ -230,8 +230,8 @@
     </div>
 
     <div class="create-dialog__actions">
-      <button class="btn" (click)="cancel.emit()">Cancel</button>
-      <button class="btn btn--primary" (click)="submit.emit()" [disabled]="!newTitle().trim()">Create</button>
+      <button class="btn" (click)="cancelRequest.emit()">Cancel</button>
+      <button class="btn btn--primary" (click)="submitRequest.emit()" [disabled]="!newTitle().trim()">Create</button>
     </div>
     <input #fileInput
            type="file"

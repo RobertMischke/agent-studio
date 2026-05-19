@@ -4,7 +4,7 @@
               role="alertdialog"
               [kind]="confirm.kind === 'danger' ? 'danger' : 'primary'"
               testid="confirm-dialog"
-              (close)="onCancel()"
+              (closeRequest)="onCancel()"
               (backdropClick)="onBackdropClick()"
               (keydown)="onPanelKeydown($event)">
     <p class="app-dialog__message" data-testid="confirm-dialog-message">{{ confirm.message }}</p>

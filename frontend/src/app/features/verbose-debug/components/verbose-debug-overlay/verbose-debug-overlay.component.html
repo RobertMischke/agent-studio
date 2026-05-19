@@ -1,5 +1,5 @@
-    <div class="vdbg" data-testid="verbose-debug-overlay" [attr.data-theme]="theme()" (click)="close.emit()">
-      <section class="vdbg__panel" role="dialog" aria-label="Verbose debug" (click)="$event.stopPropagation()">
+    <div class="vdbg" data-testid="verbose-debug-overlay" [attr.data-theme]="theme()" (click)="closeRequest.emit()" tabindex="0" (keydown.enter)="closeRequest.emit()" (keydown.space)="closeRequest.emit(); $event.preventDefault()">
+      <section class="vdbg__panel" role="dialog" aria-label="Verbose debug" (click)="$event.stopPropagation()" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
         <header class="vdbg__header">
           <div class="vdbg__title-block">
             <strong class="vdbg__title">🐞 Verbose Debug</strong>
@@ -14,7 +14,7 @@
             <button class="vdbg__close"
                     type="button"
                     data-testid="verbose-debug-close"
-                    (click)="close.emit()">✕ Close</button>
+                    (click)="closeRequest.emit()">✕ Close</button>
           </div>
         </header>
 
@@ -228,7 +228,7 @@
                       <span class="vdbg__row-label">Run #{{ run.index }} · {{ run.intent }}</span>
                       <span class="vdbg__row-meta">
                         {{ run.cli || '?' }} · {{ run.status }} · {{ formatDuration(run.durationSeconds ?? 0) }}
-                        @if (run.exitCode != null) {
+                        @if (run.exitCode !== null) {
                           · exit {{ run.exitCode }}
                         }
                       </span>

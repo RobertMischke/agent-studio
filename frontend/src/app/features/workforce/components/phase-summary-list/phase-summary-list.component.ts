@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { RoleBadgeComponent } from '../role-badge/role-badge.component';
 import type { ChatPhase } from '../../models/chat-phase';
 
@@ -18,7 +18,7 @@ import { TooltipDirective } from '../../../../components/tooltip';
 @Component({
   selector: 'app-phase-summary-list',
   standalone: true,
-  imports: [CommonModule, RoleBadgeComponent, TooltipDirective],
+  imports: [RoleBadgeComponent, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './phase-summary-list.component.html',
   styleUrl: './phase-summary-list.component.scss',
@@ -65,7 +65,7 @@ export class PhaseSummaryListComponent {
   });
 
   toggleCompactRevealed(): void {
-    this.compactRevealed.update(v => !v);
+    this.compactRevealed.update((v) => !v);
   }
 
   private readonly internalExpanded = signal<Set<string>>(new Set());

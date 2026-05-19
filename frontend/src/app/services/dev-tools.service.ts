@@ -1,4 +1,4 @@
-import { Injectable, signal } from '@angular/core';
+import { Injectable, signal, inject } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 
@@ -31,20 +31,26 @@ export interface DeleteE2EReport {
  */
 @Injectable({ providedIn: 'root' })
 export class DevToolsService {
-  readonly flags = signal<DevToolsFlags>({ updateStableEnabled: false, deleteE2EJobsEnabled: false });
+  private http = inject(HttpClient);
 
-  constructor(private http: HttpClient) {}
+  readonly flags = signal<DevToolsFlags>({
+    updateStableEnabled: false,
+    deleteE2EJobsEnabled: false,
+  });
 
   loadFlags(): void {
     this.http.get<{ devTools?: DevToolsFlags }>('/api/environment').subscribe({
       next: (env) => {
         const dt = env.devTools;
-        if (dt) this.flags.set({
-          updateStableEnabled: !!dt.updateStableEnabled,
-          deleteE2EJobsEnabled: !!dt.deleteE2EJobsEnabled,
-        });
+        if (dt)
+          this.flags.set({
+            updateStableEnabled: !!dt.updateStableEnabled,
+            deleteE2EJobsEnabled: !!dt.deleteE2EJobsEnabled,
+          });
       },
-      error: () => { /* leave defaults */ }
+      error: () => {
+        /* leave defaults */
+      },
     });
   }
 

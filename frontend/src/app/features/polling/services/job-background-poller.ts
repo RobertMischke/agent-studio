@@ -39,7 +39,8 @@ export abstract class JobBackgroundPoller<TResponse> implements OnDestroy {
    * non-claude jobs (so the loop doesn't burn requests for jobs that
    * have nothing to report).
    */
-  protected shouldPoll(_info: JobInfo): boolean {
+  protected shouldPoll(info: JobInfo): boolean {
+    void info;
     return true;
   }
 

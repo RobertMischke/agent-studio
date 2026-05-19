@@ -1,6 +1,6 @@
 @if (overlays.tokensOpen()) {
-  <div class="overlay" data-testid="workspace-tokens-overlay" (click)="overlays.closeTokens()">
-    <div class="overlay__panel overlay__panel--wtt" (click)="$event.stopPropagation()">
+  <div class="overlay" data-testid="workspace-tokens-overlay" (click)="overlays.closeTokens()" tabindex="0" (keydown.enter)="overlays.closeTokens()" (keydown.space)="overlays.closeTokens(); $event.preventDefault()">
+    <div class="overlay__panel overlay__panel--wtt" (click)="$event.stopPropagation()" tabindex="0" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
       <button class="overlay__close" (click)="overlays.closeTokens()" [appTooltip]="'Close'">×</button>
       <app-workspace-token-timeline />
     </div>
@@ -8,8 +8,8 @@
 }
 
 @if (overlays.screenshotsOpen()) {
-  <div class="overlay" data-testid="workspace-screenshots-overlay" (click)="overlays.closeScreenshots()">
-    <div class="overlay__panel overlay__panel--wtt" (click)="$event.stopPropagation()">
+  <div class="overlay" data-testid="workspace-screenshots-overlay" (click)="overlays.closeScreenshots()" tabindex="0" (keydown.enter)="overlays.closeScreenshots()" (keydown.space)="overlays.closeScreenshots(); $event.preventDefault()">
+    <div class="overlay__panel overlay__panel--wtt" (click)="$event.stopPropagation()" tabindex="0" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
       <button class="overlay__close" (click)="overlays.closeScreenshots()" [appTooltip]="'Close'">×</button>
       <app-workspace-screenshots (openTask)="openTask.emit($event)" />
     </div>
@@ -17,8 +17,8 @@
 }
 
 @if (overlays.cliAdminOpen()) {
-  <div class="overlay" data-testid="cli-admin-overlay" (click)="overlays.closeCliAdmin()">
-    <div class="overlay__panel" (click)="$event.stopPropagation()">
+  <div class="overlay" data-testid="cli-admin-overlay" (click)="overlays.closeCliAdmin()" tabindex="0" (keydown.enter)="overlays.closeCliAdmin()" (keydown.space)="overlays.closeCliAdmin(); $event.preventDefault()">
+    <div class="overlay__panel" (click)="$event.stopPropagation()" tabindex="0" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
       <button class="overlay__close" (click)="overlays.closeCliAdmin()" [appTooltip]="'Close'">×</button>
       @defer {
         <app-cli-admin-panel />

@@ -18,7 +18,7 @@ export class SupervisorService {
     );
   }
 
-  recentEvents(project: string, max: number = 50): Observable<SupervisorRecentEvents> {
+  recentEvents(project: string, max = 50): Observable<SupervisorRecentEvents> {
     return this.http.get<SupervisorRecentEvents>(
       `${this.baseUrl}/${encodeURIComponent(project)}/recent-events?max=${max}`
     );
@@ -52,7 +52,7 @@ export class SupervisorService {
     );
   }
 
-  metaCycle(project: string, max: number = 8): Observable<MetaCycleResponse> {
+  metaCycle(project: string, max = 8): Observable<MetaCycleResponse> {
     return this.http.get<MetaCycleResponse>(
       `${this.baseUrl}/${encodeURIComponent(project)}/meta-cycle?max=${max}`
     );

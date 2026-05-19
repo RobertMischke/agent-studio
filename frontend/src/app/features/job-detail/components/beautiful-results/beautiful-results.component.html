@@ -43,7 +43,7 @@
                appMarkdownLightbox
                data-testid="results-rendered"
                (click)="onBodyClick($event)"
-               [innerHTML]="bodyHtml()"></article>
+               [innerHTML]="bodyHtml()" tabindex="0" (keydown.enter)="onBodyClick($event)" (keydown.space)="onBodyClick($event); $event.preventDefault()"></article>
     } @else {
       <p class="results-view__empty" data-testid="results-empty">No result content.</p>
     }

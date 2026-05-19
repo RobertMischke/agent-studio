@@ -41,7 +41,7 @@ const DEFAULT_FILTER: FilterState = {
   rangeHours: 24,
 };
 
-const RANGE_OPTIONS: ReadonlyArray<{ id: number; label: string }> = [
+const RANGE_OPTIONS: readonly { id: number; label: string }[] = [
   { id: 1, label: 'Last 1h' },
   { id: 6, label: 'Last 6h' },
   { id: 24, label: 'Last 24h' },
@@ -143,7 +143,7 @@ export class ProjectProductRuntimePanelComponent implements OnInit, OnDestroy {
   private readonly runtime = inject(ProductRuntimeService);
 
   readonly Math = Math;
-  readonly levels: ReadonlyArray<ProductRuntimeLevel> = PRODUCT_RUNTIME_LEVELS;
+  readonly levels: readonly ProductRuntimeLevel[] = PRODUCT_RUNTIME_LEVELS;
   readonly rangeOptions = RANGE_OPTIONS;
 
   readonly loading = signal<boolean>(false);

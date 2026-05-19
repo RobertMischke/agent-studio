@@ -8,9 +8,9 @@ import {
   inject,
   input,
   output,
-  signal
+  signal,
 } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import type { JobScreenshot } from '../../../../features/screenshots';
 import { copyTextToClipboard } from '../../../../services/clipboard.util';
 import { ModalStackService } from '../../../../services/modal-stack.service';
@@ -41,9 +41,9 @@ import { TooltipDirective } from '../../../../components/tooltip';
   selector: 'app-screenshot-strip',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, TooltipDirective],
+  imports: [TooltipDirective],
   templateUrl: './screenshot-strip.component.html',
-  styleUrl: './screenshot-strip.component.scss'
+  styleUrl: './screenshot-strip.component.scss',
 })
 export class ScreenshotStripComponent {
   readonly screenshots = input.required<JobScreenshot[]>();
@@ -57,7 +57,7 @@ export class ScreenshotStripComponent {
   readonly active = computed(() =>
     this.activeIndex() >= 0 && this.activeIndex() < this.screenshots().length
       ? this.activeIndex()
-      : null
+      : null,
   );
 
   readonly current = computed<JobScreenshot | null>(() => {
@@ -68,7 +68,7 @@ export class ScreenshotStripComponent {
   });
 
   readonly ariaLabel = computed(() =>
-    this.variant() === 'reel' ? 'Workspace visual evidence reel' : 'Task screenshots'
+    this.variant() === 'reel' ? 'Workspace visual evidence reel' : 'Task screenshots',
   );
 
   readonly pathCopyState = signal<'idle' | 'copied' | 'failed'>('idle');
@@ -115,10 +115,14 @@ export class ScreenshotStripComponent {
 
   statusLabel(status: string): string {
     switch (status) {
-      case 'passed':  return 'Passed';
-      case 'failed':  return 'Failed';
-      case 'skipped': return 'Skipped';
-      default:        return 'Unknown';
+      case 'passed':
+        return 'Passed';
+      case 'failed':
+        return 'Failed';
+      case 'skipped':
+        return 'Skipped';
+      default:
+        return 'Unknown';
     }
   }
 
@@ -142,8 +146,13 @@ export class ScreenshotStripComponent {
   @HostListener('window:keydown', ['$event'])
   onKey(e: KeyboardEvent): void {
     if (this.activeIndex() < 0) return;
-    if (e.key === 'ArrowLeft') { this.prev(); e.preventDefault(); }
-    else if (e.key === 'ArrowRight') { this.next(); e.preventDefault(); }
+    if (e.key === 'ArrowLeft') {
+      this.prev();
+      e.preventDefault();
+    } else if (e.key === 'ArrowRight') {
+      this.next();
+      e.preventDefault();
+    }
   }
 
   private readonly modalStack = inject(ModalStackService);
@@ -157,7 +166,9 @@ export class ScreenshotStripComponent {
       const open = this.activeIndex() >= 0;
       if (open) {
         if (!this.lightboxStackDispose) {
-          this.lightboxStackDispose = this.modalStack.push('screenshot-lightbox', () => this.close());
+          this.lightboxStackDispose = this.modalStack.push('screenshot-lightbox', () =>
+            this.close(),
+          );
         }
       } else if (this.lightboxStackDispose) {
         this.lightboxStackDispose();
@@ -179,6 +190,8 @@ function formatLocalDateTime(iso: string): string {
   if (Number.isNaN(d.getTime())) return iso;
   // Locale-neutral compact form: YYYY-MM-DD HH:mm
   const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} `
-       + `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return (
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ` +
+    `${pad(d.getHours())}:${pad(d.getMinutes())}`
+  );
 }

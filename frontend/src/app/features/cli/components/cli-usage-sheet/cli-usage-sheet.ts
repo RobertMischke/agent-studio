@@ -1,10 +1,14 @@
-import { Component, OnDestroy, OnInit, signal, computed } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnDestroy, signal, computed, inject } from '@angular/core';
 import { JobService } from '../../../../services/job.service';
 import { QuotaStripComponent } from '../../../quota';
 import type { CliOutputLine, CliType } from '../../../../models/job.model';
-import type { CliSessionInfo, CliUsageProjectGroup, CliUsageReport, CliUsageSection } from '../../../../features/cli';
+import type {
+  CliSessionInfo,
+  CliUsageProjectGroup,
+  CliUsageReport,
+  CliUsageSection,
+} from '../../../../features/cli';
 
-import { TooltipDirective } from '../../../../components/tooltip';
 import { SidesheetComponent } from '../../../../components/sidesheet/sidesheet.component';
 interface SelectedSession {
   cliType: CliType;
@@ -28,14 +32,17 @@ interface SelectedSession {
 @Component({
   selector: 'app-cli-usage-sheet',
   standalone: true,
-  imports: [QuotaStripComponent, TooltipDirective, SidesheetComponent],
+  imports: [QuotaStripComponent, SidesheetComponent],
   templateUrl: './cli-usage-sheet.html',
   styleUrl: './cli-usage-sheet.scss',
   host: {
-    '[class.is-open]': 'open()'
-  }
+    '[class.is-open]': 'open()',
+  },
+  changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class CliUsageSheetComponent implements OnInit, OnDestroy {
+export class CliUsageSheetComponent implements OnDestroy {
+  private jobService = inject(JobService);
+
   readonly open = signal(false);
   readonly report = signal<CliUsageReport | null>(null);
   readonly loading = signal(false);
@@ -50,10 +57,10 @@ export class CliUsageSheetComponent implements OnInit, OnDestroy {
 
   readonly visibleSections = computed<CliUsageSection[]>(() => {
     const all = this.report()?.sections ?? [];
-    return all.filter(s => s.available || s.projects.length > 0);
+    return all.filter((s) => s.available || s.projects.length > 0);
   });
   readonly totalSessionCount = computed<number>(() =>
-    this.visibleSections().reduce((sum, s) => sum + this.totalSessions(s), 0)
+    this.visibleSections().reduce((sum, s) => sum + this.totalSessions(s), 0),
   );
   readonly detailLines = computed<CliOutputLine[]>(() => {
     const sel = this.selected();
@@ -61,23 +68,34 @@ export class CliUsageSheetComponent implements OnInit, OnDestroy {
     return [
       { timestamp: new Date().toISOString(), stream: 'stdout', text: `Session: ${sel.session.id}` },
       { timestamp: new Date().toISOString(), stream: 'stdout', text: `CLI:     ${sel.cliType}` },
-      { timestamp: new Date().toISOString(), stream: 'stdout', text: `Project: ${sel.projectName}` },
-      { timestamp: new Date().toISOString(), stream: 'stdout', text: sel.session.cwd ? `Cwd:     ${sel.session.cwd}` : '' }
-    ].filter(l => !!l.text);
+      {
+        timestamp: new Date().toISOString(),
+        stream: 'stdout',
+        text: `Project: ${sel.projectName}`,
+      },
+      {
+        timestamp: new Date().toISOString(),
+        stream: 'stdout',
+        text: sel.session.cwd ? `Cwd:     ${sel.session.cwd}` : '',
+      },
+    ].filter((l) => !!l.text);
   });
 
   closed = { emit: () => this.open.set(false) };
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
 
-  constructor(private jobService: JobService) {}
-
-  show() { this.open.set(true); }
-  hide() { this.open.set(false); }
-  toggle() { this.open() ? this.hide() : this.show(); }
-
-  ngOnInit() {
-    // Sessions intentionally do not load from this usage sheet anymore.
-    // The native CLI session scan is lazy in Orchestrator -> Sessions.
+  show() {
+    this.open.set(true);
+  }
+  hide() {
+    this.open.set(false);
+  }
+  toggle() {
+    if (this.open()) {
+      this.hide();
+    } else {
+      this.show();
+    }
   }
 
   ngOnDestroy() {
@@ -95,7 +113,7 @@ export class CliUsageSheetComponent implements OnInit, OnDestroy {
       error: (err) => {
         this.errorMsg.set(err.error?.error || err.message || 'Failed to load CLI usage');
         this.loading.set(false);
-      }
+      },
     });
   }
 
@@ -105,7 +123,9 @@ export class CliUsageSheetComponent implements OnInit, OnDestroy {
     else next.add(name);
     this.collapsedSegments.set(next);
   }
-  isSegmentCollapsed(name: string): boolean { return this.collapsedSegments().has(name); }
+  isSegmentCollapsed(name: string): boolean {
+    return this.collapsedSegments().has(name);
+  }
 
   toggleCli(cliType: string) {
     const next = new Set(this.collapsedClis());
@@ -113,7 +133,9 @@ export class CliUsageSheetComponent implements OnInit, OnDestroy {
     else next.add(cliType);
     this.collapsedClis.set(next);
   }
-  isCliCollapsed(cliType: string): boolean { return this.collapsedClis().has(cliType); }
+  isCliCollapsed(cliType: string): boolean {
+    return this.collapsedClis().has(cliType);
+  }
 
   toggleProject(cliType: string, project: CliUsageProjectGroup) {
     const key = this.projectKey(cliType, project);
@@ -140,7 +162,7 @@ export class CliUsageSheetComponent implements OnInit, OnDestroy {
   }
 
   usageSessionCount(project: CliUsageProjectGroup): number {
-    return project.sessions.filter(s => !!s.lastUsage).length;
+    return project.sessions.filter((s) => !!s.lastUsage).length;
   }
 
   select(cliType: CliType, project: CliUsageProjectGroup, session: CliSessionInfo) {
@@ -149,16 +171,26 @@ export class CliUsageSheetComponent implements OnInit, OnDestroy {
 
   isSelected(cliType: CliType, project: CliUsageProjectGroup, session: CliSessionInfo): boolean {
     const sel = this.selected();
-    return !!sel && sel.cliType === cliType && sel.projectName === project.projectName && sel.session.id === session.id;
+    return (
+      !!sel &&
+      sel.cliType === cliType &&
+      sel.projectName === project.projectName &&
+      sel.session.id === session.id
+    );
   }
 
   cliLabel(t: string): string {
     switch (t) {
-      case 'copilot': return 'Copilot';
-      case 'claude':  return 'Claude Code';
-      case 'codex':   return 'Codex';
-      case 'gemini':  return 'Gemini';
-      default:        return t;
+      case 'copilot':
+        return 'Copilot';
+      case 'claude':
+        return 'Claude Code';
+      case 'codex':
+        return 'Codex';
+      case 'gemini':
+        return 'Gemini';
+      default:
+        return t;
     }
   }
 
@@ -167,7 +199,15 @@ export class CliUsageSheetComponent implements OnInit, OnDestroy {
   }
 
   formatTime(iso: string): string {
-    try { return new Date(iso).toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }); }
-    catch { return iso; }
+    try {
+      return new Date(iso).toLocaleString([], {
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return iso;
+    }
   }
 }

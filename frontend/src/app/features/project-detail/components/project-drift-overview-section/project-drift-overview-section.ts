@@ -440,6 +440,10 @@ signal; do not let the suggestion text replace evidence-based scoping.
     return (actual ?? '').toString().toLowerCase() === expected.toLowerCase();
   }
 
+  parseStatusClass(actual: string | null | undefined): string {
+    return (actual ?? '').toString().toLowerCase();
+  }
+
   bandClass(b: DriftScoreBand | string | undefined | null): string {
     return (b ?? 'unknown').toString().toLowerCase();
   }

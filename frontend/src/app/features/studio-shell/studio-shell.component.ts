@@ -13,7 +13,7 @@ import {
 import { FormsModule } from '@angular/forms';
 import type { JobInfo } from '../../models/job.model';
 import { JobService } from '../../services/job.service';
-import { StudioIconComponent, StudioIconName } from '../../components/studio-icon/studio-icon.component';
+import { StudioIconComponent } from '../../components/studio-icon/studio-icon.component';
 import { EmptyStateComponent } from '../../components/empty-state/empty-state.component';
 import { SectionHeaderComponent } from '../../components/section-header/section-header.component';
 import { TreeRowComponent } from '../../components/tree-row/tree-row.component';
@@ -452,7 +452,7 @@ export class StudioShellComponent {
     this.tabState.select(key);
   }
 
-  closeTab(key: string, event?: MouseEvent): void {
+  closeTab(key: string, event?: Event): void {
     event?.stopPropagation();
     this.tabState.close(key);
   }
@@ -504,7 +504,8 @@ export class StudioShellComponent {
     this.tabState.move(source, overKey);
   }
 
-  onTabDragEnd(_event: DragEvent): void {
+  onTabDragEnd(event: DragEvent): void {
+    void event;
     this.draggingTabKey.set(null);
     this.dragOverTabKey.set(null);
   }

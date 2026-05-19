@@ -8,7 +8,7 @@ export const CLI_TYPES: CliType[] = ['copilot', 'claude', 'codex', 'gemini'];
 // live under their own `features/X/models/` and are accessed via the
 // feature barrel. The two `import type` lines below let JobInfo's
 // own field types reference feature-owned shapes without copying them.
-import type { JobCommitInfo, GitFileChange } from '../features/git';
+import type { JobCommitInfo } from '../features/git';
 import type { JobTokenSummary } from '../features/tokens';
 import type { OrchestratorLogEntry, OrchestratorSession } from '../features/orchestrator';
 
@@ -483,7 +483,7 @@ export interface ProjectRunnerStatus {
 }
 
 export interface RunnerStatus {
-  projects: { [key: string]: ProjectRunnerStatus };
+  projects: Record<string, ProjectRunnerStatus>;
 }
 
 /**
