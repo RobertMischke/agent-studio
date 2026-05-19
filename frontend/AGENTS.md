@@ -87,21 +87,29 @@ Shared utility files (e.g. `*.util.ts`, `*.parser.ts`, `*-types.ts`, fixtures) t
 
 CSS linting runs with `npm run lint:css` (Stylelint, configured in `.stylelintrc.json`). Both run as part of `npm run lint`.
 
-## Chat surfaces (`<app-chat>`, `<app-project-chat-list>`, `<app-chat-row>`)
+## Chat surfaces (`<app-chat>` is canonical)
 
-Two chat surfaces exist today and one shared row component:
+**`<app-chat>`** (`components/chat/chat/`) is **the** chat component. The metaphor: any coding-agent / model interaction is a chat. A single generic, agent-and-model-agnostic surface should render all of it — messages, inline event cards, composer with pluggable toolbar — so the orchestrator side sheet, the per-task chat, and any future "talk to model X" surface all look and behave the same. The component is intentionally free of orchestrator-specific or task-board-specific imports so it can be **extracted as a standalone "talk to models" library** down the line.
 
-- **`<app-chat>`** (`components/chat/chat/`) — interactive surface with draft text, attachments, pending indicator, inline `ChatEvent` cards. Used by the orchestrator side sheet and (planned) task chat. Renders every message inline; not virtualised.
-- **`<app-project-chat-list>`** (`features/project-chat/components/project-chat-list/`) — virtualised, read-only view of the per-month markdown corpus (`/api/projects/{name}/chat/scroll`). Live + search modes. Opt-in inside the orchestrator side sheet via `?virtualChat=1`.
-- **`<app-chat-row>`** (`components/chat-row/`) — shared single-row presentation: role badge / author label / kind chip / timestamp / markdown body. Adopted by `<app-project-chat-list>`; `<app-chat>` still owns its richer per-message variant (collapse-on-overflow, pending pulse, error footer) and should migrate row rendering to `<app-chat-row>` once those features land in the shared row.
+Inputs/outputs (informally):
+- `messages: ChatMessage[]` — turns, with optional `attachments`, `pending`, `error`.
+- `events: ChatEvent[]` — inline state cards interleaved by timestamp (`tool-call`, `watchdog`, `rate-limit`, `decision`, `update`, `task`, `session-recovered`, `memory-refreshed`). New kinds are added to the `ChatEventKind` union, not to per-host components.
+- `toolbarStart` / `toolbarEnd` (`ChatToolbarItem[]`) + `routingLabel` — composer toolbar plugin slots; the host emits whatever affordances it needs. Clicks come back via `toolbarAction({id})`.
+- `compactPhaseSummary` (default `true`) — collapse the phase-summary list above the chat into a single "▸ N earlier phases" strip until the user reveals it.
 
-Unification plan (open work, multi-session):
+Supporting bits in the same area:
+- `<app-chat-row>` (`components/chat-row/`) — single-row presentation primitive. Currently used by `<app-project-chat-list>` only; `<app-chat>` keeps its richer per-message rendering (collapse-on-overflow, pending pulse, error footer) until the row supports those variants. See migration plan below.
+- `<app-project-chat-list>` (`features/project-chat/components/project-chat-list/`) — **legacy** virtualised, read-only view over the per-month markdown corpus. Co-mounted opt-in (`?virtualChat=1`) in the orchestrator side sheet. The direction is to fold virtualisation into `<app-chat>` and drop this component.
 
-1. Extend `<app-chat-row>` with the optional bits `<app-chat>` needs (collapse-with-show-more, pending pulse, error footer, inline event card variant).
-2. Migrate `<app-chat>`'s per-message rendering to `<app-chat-row>`; keep the input composer and the events/messages merge logic in `<app-chat>`.
-3. Once both surfaces share the row, decide whether `<app-project-chat-list>` can absorb `<app-chat>`'s input composer as an optional mode (so the orchestrator side sheet drops one of the two), or whether to keep them as distinct surfaces (one virtualised + read-only, one interactive + small-N).
+Migration plan (multi-session, in order):
 
-Until step 3, both surfaces stay co-mounted in the orchestrator side sheet and the `?virtualChat=1` flag picks between them.
+1. Extend `<app-chat-row>` with `<app-chat>`'s richer per-message variants (collapse-with-show-more, pending pulse, error footer, attachments).
+2. Migrate `<app-chat>`'s per-message rendering to `<app-chat-row>`. Keep the composer and the events/messages merge logic in `<app-chat>`.
+3. Add an optional virtualisation mode to `<app-chat>` (windowed render + spacer rows) so it can stand in for `<app-project-chat-list>` when chat history is large.
+4. Delete `<app-project-chat-list>` once `<app-chat>` covers the virtualised + read-only path; flip the `?virtualChat=1` callsite to a no-op.
+5. Move `<app-chat>` (and its types, `<app-chat-row>`, role-badge / phase-summary helpers) into a self-contained area with no app-specific imports so it can be lifted out as a package.
+
+New ChatEvent kinds belong in `chat-types.ts` and get icon + label entries in `chat.component.ts` (`eventIcon` / `eventLabel`). Severity-style tints (warn / error / `session-recovered` / `memory-refreshed`) go in `chat.component.scss` as `.chat__event--<kind>` modifiers.
 
 ## Tests
 
