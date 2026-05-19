@@ -362,6 +362,29 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
           + '  "reset_at": "2026-05-06T13:12:00Z"\n'
           + '}\n'
           + '```'
+      },
+      {
+        id: 'demo-session-recovered-1',
+        kind: 'session-recovered',
+        timestamp: iso(120_000),
+        summary: '1 turn lost, retry succeeded',
+        detail:
+          'The model session dropped between the user steer and the\n'
+          + 'agent reply (network blip, ~7s). Retry succeeded against\n'
+          + 'the same session id; the lost turn was re-issued and the\n'
+          + 'agent picked up at the same instruction.'
+      },
+      {
+        id: 'demo-memory-refreshed-1',
+        kind: 'memory-refreshed',
+        timestamp: iso(150_000),
+        summary: 'sourced from 6 status files + roadmap',
+        detail:
+          '**Sources refreshed:**\n\n'
+          + '- `.orchestrator/status/*.md` (6 files)\n'
+          + '- `ROADMAP.md`\n\n'
+          + 'Working memory updated; the next agent reply will reflect\n'
+          + 'the latest project state.'
       }
     ]);
   }
