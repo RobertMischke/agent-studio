@@ -16,7 +16,7 @@ export { CreateJobDialogComponent, type PendingAttachment } from './components/c
 export { FiltersDropdownComponent, type TypeFilterOption } from './components/filters-dropdown/filters-dropdown.component';
 export { KanbanFilterSidesheetComponent } from './components/kanban-filter-sidesheet/kanban-filter-sidesheet.component';
 export { JobCardComponent } from './components/job-card/job-card.component';
-export { JobColumnComponent } from './components/job-column';
+export { JobColumnComponent } from './components/job-column/job-column';
 export {
   ProjectTabsComponent,
   type ProjectAutoInfo,
