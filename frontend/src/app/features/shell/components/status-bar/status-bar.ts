@@ -3,12 +3,12 @@ import {
   Component,
   DestroyRef,
   HostListener,
-  Input,
   OnInit,
   ViewEncapsulation,
   computed,
   effect,
   inject,
+  input,
   output,
   signal,
 } from '@angular/core';
@@ -51,7 +51,7 @@ const STORAGE_DEFAULT_MODEL_PREFIX = 'defaultModel:';
 export class StatusBarComponent implements OnInit {
   private readonly jobService = inject(JobService);
 
-  @Input() projectNames: string[] = [];
+  readonly projectNames = input<string[]>([]);
 
   readonly toggleUsage = output<void>();
   readonly toggleOrchestrator = output<void>();
@@ -83,7 +83,7 @@ export class StatusBarComponent implements OnInit {
     ).length;
   });
 
-  readonly projectCount = computed(() => this.projectNames.length || Object.keys(this.jobService.runnerStatus().projects).length);
+  readonly projectCount = computed(() => this.projectNames().length || Object.keys(this.jobService.runnerStatus().projects).length);
 
   readonly defaultModelLabel = computed(() => {
     const id = this.defaultModel();

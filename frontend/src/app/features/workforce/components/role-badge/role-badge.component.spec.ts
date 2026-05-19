@@ -7,7 +7,7 @@ import { TooltipDirective } from '../../../../components/tooltip';
 
 function tooltipContent(fixture: ReturnType<typeof TestBed.createComponent<RoleBadgeComponent>>): string {
   const de = fixture.debugElement.query(By.directive(TooltipDirective));
-  return (de.injector.get(TooltipDirective).content as string) ?? '';
+  return (de.injector.get(TooltipDirective).content() as string) ?? '';
 }
 
 describe('RoleBadgeComponent', () => {

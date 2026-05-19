@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, Input } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input } from '@angular/core';
 
 /**
  * Inline-SVG icon set for the Agent Software Studio shell.
@@ -27,7 +27,7 @@ export type StudioIconName =
   templateUrl: './studio-icon.component.html',
 })
 export class StudioIconComponent {
-  @Input() name!: StudioIconName;
-  @Input() size = 16;
-  @Input() strokeWidth = 1.5;
+  readonly name = input.required<StudioIconName>();
+  readonly size = input(16);
+  readonly strokeWidth = input(1.5);
 }

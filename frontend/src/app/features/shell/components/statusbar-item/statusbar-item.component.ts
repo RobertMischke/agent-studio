@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, Input, ViewEncapsulation, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ViewEncapsulation, input, output } from '@angular/core';
 import { StudioIconComponent, StudioIconName } from '../../../../components/studio-icon/studio-icon.component';
 import { TooltipDirective } from '../../../../components/tooltip';
 
@@ -22,21 +22,21 @@ import { TooltipDirective } from '../../../../components/tooltip';
   styleUrls: [],
 })
 export class StatusbarItemComponent {
-  @Input() icon: StudioIconName | null = null;
-  @Input() iconSize = 12;
-  @Input() label = '';
+  readonly icon = input<StudioIconName | null>(null);
+  readonly iconSize = input(12);
+  readonly label = input('');
   /** Tooltip text — uses the project's TooltipDirective. */
-  @Input() tooltip = '';
+  readonly tooltip = input('');
   /** Renders as a button (default true) vs read-only text chip. */
-  @Input() button = true;
-  @Input() testid: string | null = null;
+  readonly button = input(true);
+  readonly testid = input<string | null>(null);
   /** Animate the icon as a live indicator (e.g. the "● running" chip). */
-  @Input() pulsing = false;
+  readonly pulsing = input(false);
   /** Bullet character used for read-only chips that pre-date the SVG icon
    *  set ("● running" / "↻ N/M auto"); takes precedence over `icon` so
    *  callers can keep the legacy glyph without forcing every status-bar
    *  chip to a flat SVG. */
-  @Input() bullet: string | null = null;
+  readonly bullet = input<string | null>(null);
 
   readonly activated = output<MouseEvent>();
 }

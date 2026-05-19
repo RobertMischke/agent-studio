@@ -1,31 +1,31 @@
 <div class="dialog__overlay"
-     [attr.data-testid]="testid ? testid + '-overlay' : null"
+     [attr.data-testid]="testid() ? testid() + '-overlay' : null"
      (click)="onBackdropClick()" tabindex="0" (keydown.enter)="onBackdropClick()" (keydown.space)="onBackdropClick(); $event.preventDefault()">
   <div class="dialog"
-       [class.dialog--danger]="kind === 'danger'"
-       [class.dialog--primary]="kind === 'primary'"
-       [style.width.px]="width"
-       [attr.role]="role"
+       [class.dialog--danger]="kind() === 'danger'"
+       [class.dialog--primary]="kind() === 'primary'"
+       [style.width.px]="width()"
+       [attr.role]="role()"
        aria-modal="true"
-       [attr.aria-label]="title"
-       [attr.data-testid]="testid"
+       [attr.aria-label]="title()"
+       [attr.data-testid]="testid()"
        tabindex="-1"
        (click)="$event.stopPropagation()" (keydown.enter)="$event.stopPropagation()" (keydown.space)="$event.stopPropagation(); $event.preventDefault()">
     <header class="dialog__header">
       <div class="dialog__title-block">
-        @if (eyebrow) {
-          <span class="dialog__eyebrow">{{ eyebrow }}</span>
+        @if (eyebrow(); as e) {
+          <span class="dialog__eyebrow">{{ e }}</span>
         }
-        <h2 class="dialog__title">{{ title }}</h2>
-        @if (subtitle) {
-          <span class="dialog__subtitle">{{ subtitle }}</span>
+        <h2 class="dialog__title">{{ title() }}</h2>
+        @if (subtitle(); as s) {
+          <span class="dialog__subtitle">{{ s }}</span>
         }
       </div>
-      @if (closable) {
+      @if (closable()) {
         <button type="button"
                 class="dialog__close"
                 aria-label="Close"
-                [attr.data-testid]="testid ? testid + '-close' : null"
+                [attr.data-testid]="testid() ? testid() + '-close' : null"
                 (click)="closeRequest.emit()">
           <app-studio-icon name="close" [size]="14"></app-studio-icon>
         </button>

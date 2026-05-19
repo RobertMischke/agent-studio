@@ -4,9 +4,9 @@ import {
   Component,
   DestroyRef,
   ElementRef,
-  Input,
   ViewChild,
   inject,
+  input,
   output,
 } from '@angular/core';
 import type { CliType } from '../../../../models/job.model';
@@ -64,14 +64,14 @@ interface ModelUsageRow {
   styleUrl: './cli-usage-detail-modal.scss',
 })
 export class CliUsageDetailModalComponent implements AfterViewInit {
-  @Input() quotaRows: CliUsageQuotaRow[] = [];
-  @Input() tokens: TokenSummaryAggregate | null = null;
-  @Input() adhoc: AdHocUsageAggregate | null = null;
-  @Input() timeline24h: TokenTimeline | null = null;
-  @Input() timeline7d: TokenTimeline | null = null;
-  @Input() expensiveJobs: WorkspaceExpensiveJob[] = [];
-  @Input() refreshing: Record<string, boolean> = {};
-  @Input() refreshingAll = false;
+  readonly quotaRows = input<CliUsageQuotaRow[]>([]);
+  readonly tokens = input<TokenSummaryAggregate | null>(null);
+  readonly adhoc = input<AdHocUsageAggregate | null>(null);
+  readonly timeline24h = input<TokenTimeline | null>(null);
+  readonly timeline7d = input<TokenTimeline | null>(null);
+  readonly expensiveJobs = input<WorkspaceExpensiveJob[]>([]);
+  readonly refreshing = input<Record<string, boolean>>({});
+  readonly refreshingAll = input(false);
 
   readonly closed = output<void>();
   readonly refreshAll = output<Event>();
@@ -147,7 +147,7 @@ export class CliUsageDetailModalComponent implements AfterViewInit {
 
   modelRowsFor(cliType: CliType): ModelUsageRow[] {
     const rows: ModelUsageRow[] = [];
-    for (const m of this.tokens?.byModel ?? []) {
+    for (const m of this.tokens()?.byModel ?? []) {
       if (!this.modelBelongsToCli(m.model, cliType)) continue;
       rows.push({
         model: m.model,
@@ -161,7 +161,7 @@ export class CliUsageDetailModalComponent implements AfterViewInit {
         modelPriced: m.modelPriced,
       });
     }
-    for (const m of this.adhoc?.byModel ?? []) {
+    for (const m of this.adhoc()?.byModel ?? []) {
       if (!this.modelBelongsToCli(m.model, cliType)) continue;
       rows.push({
         model: m.model,
@@ -182,19 +182,19 @@ export class CliUsageDetailModalComponent implements AfterViewInit {
 
   sourceRowsFor(cliType: CliType) {
     if (cliType !== 'claude') return [];
-    return (this.adhoc?.bySource ?? []).slice(0, 5);
+    return (this.adhoc()?.bySource ?? []).slice(0, 5);
   }
 
   topJobs(): WorkspaceExpensiveJob[] {
-    return this.expensiveJobs.slice(0, 6);
+    return this.expensiveJobs().slice(0, 6);
   }
 
   spark24h(): SparkPoint[] {
-    return this.sparkByBucket(this.timeline24h, 24);
+    return this.sparkByBucket(this.timeline24h(), 24);
   }
 
   spark7d(): SparkPoint[] {
-    const timeline = this.timeline7d;
+    const timeline = this.timeline7d();
     if (!timeline) return [];
     const byDay = new Map<string, number>();
     for (const cell of timeline.cells) {

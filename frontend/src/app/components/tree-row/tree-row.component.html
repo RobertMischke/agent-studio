@@ -1,33 +1,33 @@
 <button type="button"
         class="tree-row"
-        [class.tree-row--active]="active"
-        [class.tree-row--root]="level === 'root'"
-        [class.tree-row--child]="level === 'child'"
-        [attr.data-testid]="testid"
+        [class.tree-row--active]="active()"
+        [class.tree-row--root]="level() === 'root'"
+        [class.tree-row--child]="level() === 'child'"
+        [attr.data-testid]="testid()"
         (click)="onSelect($event)"
         (dblclick)="onSecondary($event)">
-  @if (chevron !== null) {
+  @if (chevron(); as c) {
     <span class="tree-row__chev"
-          [attr.aria-label]="chevron === 'expanded' ? 'Collapse' : 'Expand'"
+          [attr.aria-label]="c === 'expanded' ? 'Collapse' : 'Expand'"
           (click)="onChevronClick($event)" tabindex="0" (keydown.enter)="onChevronClick($event)" (keydown.space)="onChevronClick($event); $event.preventDefault()">
-      <app-studio-icon [name]="chevron === 'expanded' ? 'chevronDown' : 'chevronRight'" [size]="10"></app-studio-icon>
+      <app-studio-icon [name]="c === 'expanded' ? 'chevronDown' : 'chevronRight'" [size]="10"></app-studio-icon>
     </span>
   }
-  @if (glyph) {
+  @if (glyph(); as g) {
     <span class="tree-row__glyph-icon" aria-hidden="true">
-      <app-studio-icon [name]="glyph" [size]="12"></app-studio-icon>
+      <app-studio-icon [name]="g" [size]="12"></app-studio-icon>
     </span>
-  } @else if (glyphChar) {
+  } @else if (glyphChar(); as gc) {
     <span class="tree-row__glyph"
-          [style.background]="glyphColor"
-          aria-hidden="true">{{ glyphChar }}</span>
+          [style.background]="glyphColor()"
+          aria-hidden="true">{{ gc }}</span>
   }
-  <span class="tree-row__name">{{ label }}</span>
+  <span class="tree-row__name">{{ label() }}</span>
   <ng-content></ng-content>
-  @if (meta) {
-    <span class="tree-row__meta">{{ meta }}</span>
+  @if (meta(); as m) {
+    <span class="tree-row__meta">{{ m }}</span>
   }
-  @if (count !== null) {
-    <span class="tree-row__count">{{ count }}</span>
+  @if (count() !== null) {
+    <span class="tree-row__count">{{ count() }}</span>
   }
 </button>

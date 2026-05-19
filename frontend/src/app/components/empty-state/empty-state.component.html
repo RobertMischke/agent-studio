@@ -1,16 +1,16 @@
 <div class="empty-state"
-     [class.empty-state--compact]="compact"
-     [attr.data-testid]="testid">
-  @if (icon) {
+     [class.empty-state--compact]="compact()"
+     [attr.data-testid]="testid()">
+  @if (icon(); as i) {
     <span class="empty-state__icon" aria-hidden="true">
-      <app-studio-icon [name]="icon" [size]="compact ? 14 : 18"></app-studio-icon>
+      <app-studio-icon [name]="i" [size]="compact() ? 14 : 18"></app-studio-icon>
     </span>
   }
-  @if (title) {
-    <p class="empty-state__title">{{ title }}</p>
+  @if (title(); as t) {
+    <p class="empty-state__title">{{ t }}</p>
   }
-  @if (body) {
-    <p class="empty-state__body">{{ body }}</p>
+  @if (body(); as b) {
+    <p class="empty-state__body">{{ b }}</p>
   }
   <!-- Fallback content slot for single-line empty states. -->
   <ng-content></ng-content>

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, Input, ViewEncapsulation, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ViewEncapsulation, input, output } from '@angular/core';
 import { StudioIconComponent, StudioIconName } from '../studio-icon/studio-icon.component';
 
 /**
@@ -29,19 +29,19 @@ import { StudioIconComponent, StudioIconName } from '../studio-icon/studio-icon.
 })
 export class TreeRowComponent {
   /** Visible chevron — pass `null` to suppress the chevron column. */
-  @Input() chevron: 'collapsed' | 'expanded' | null = null;
+  readonly chevron = input<'collapsed' | 'expanded' | null>(null);
   /** Optional SVG glyph; takes precedence over `glyphChar`. */
-  @Input() glyph: StudioIconName | null = null;
+  readonly glyph = input<StudioIconName | null>(null);
   /** Optional initial letter (e.g. project avatar "A"). */
-  @Input() glyphChar: string | null = null;
+  readonly glyphChar = input<string | null>(null);
   /** Coloured square behind the glyph initial. */
-  @Input() glyphColor: string | null = null;
-  @Input() label = '';
-  @Input() count: string | number | null = null;
-  @Input() meta: string | null = null;
-  @Input() active = false;
-  @Input() level: 'root' | 'child' = 'root';
-  @Input() testid: string | null = null;
+  readonly glyphColor = input<string | null>(null);
+  readonly label = input('');
+  readonly count = input<string | number | null>(null);
+  readonly meta = input<string | null>(null);
+  readonly active = input(false);
+  readonly level = input<'root' | 'child'>('root');
+  readonly testid = input<string | null>(null);
 
   readonly chevronClick = output<Event>();
   readonly selectRequest = output<Event>();

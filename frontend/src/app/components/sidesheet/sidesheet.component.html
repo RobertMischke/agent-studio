@@ -1,22 +1,22 @@
 <div class="sidesheet"
-     [style.width.px]="width"
-     [attr.data-testid]="testid"
+     [style.width.px]="width()"
+     [attr.data-testid]="testid()"
      role="region"
-     [attr.aria-label]="title">
+     [attr.aria-label]="title()">
   <header class="sidesheet__header">
     <div class="sidesheet__title-block">
-      @if (eyebrow) {
-        <span class="sidesheet__eyebrow">{{ eyebrow }}</span>
+      @if (eyebrow(); as e) {
+        <span class="sidesheet__eyebrow">{{ e }}</span>
       }
-      <h2 class="sidesheet__title">{{ title }}</h2>
-      @if (subtitle) {
-        <span class="sidesheet__subtitle">{{ subtitle }}</span>
+      <h2 class="sidesheet__title">{{ title() }}</h2>
+      @if (subtitle(); as s) {
+        <span class="sidesheet__subtitle">{{ s }}</span>
       }
     </div>
     <!-- Header actions slot — callers project project pickers,
          secondary buttons, etc. between title and close. -->
     <ng-content select="[header-actions]"></ng-content>
-    @if (closable) {
+    @if (closable()) {
       <button type="button"
               class="sidesheet__close"
               aria-label="Close"

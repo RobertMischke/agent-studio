@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, HostListener, Input, ViewEncapsulation, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, HostListener, ViewEncapsulation, input, output } from '@angular/core';
 import { StudioIconComponent } from '../studio-icon/studio-icon.component';
 
 /**
@@ -47,19 +47,19 @@ import { StudioIconComponent } from '../studio-icon/studio-icon.component';
   styleUrl: './dialog.component.scss',
 })
 export class DialogComponent {
-  @Input() eyebrow: string | null = null;
-  @Input() title = '';
+  readonly eyebrow = input<string | null>(null);
+  readonly title = input('');
   /** Optional one-line caption under the title. */
-  @Input() subtitle: string | null = null;
+  readonly subtitle = input<string | null>(null);
   /** ARIA role — `alertdialog` for confirms/errors, `dialog` for forms. */
-  @Input() role: 'dialog' | 'alertdialog' = 'dialog';
+  readonly role = input<'dialog' | 'alertdialog'>('dialog');
   /** Optional width override (px). Default 520. */
-  @Input() width: number | null = null;
+  readonly width = input<number | null>(null);
   /** Hides the close button when set to `false`. */
-  @Input() closable = true;
+  readonly closable = input(true);
   /** Visual variant — drives accent stripe colour. */
-  @Input() kind: 'default' | 'danger' | 'primary' = 'default';
-  @Input() testid: string | null = null;
+  readonly kind = input<'default' | 'danger' | 'primary'>('default');
+  readonly testid = input<string | null>(null);
 
   readonly closeRequest = output<void>();
   readonly backdropClick = output<void>();

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, Input, ViewEncapsulation, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ViewEncapsulation, input, output } from '@angular/core';
 import { StudioIconComponent } from '../studio-icon/studio-icon.component';
 
 /**
@@ -41,16 +41,16 @@ import { StudioIconComponent } from '../studio-icon/studio-icon.component';
   styleUrl: './sidesheet.component.scss',
 })
 export class SidesheetComponent {
-  @Input() eyebrow: string | null = null;
-  @Input() title = '';
+  readonly eyebrow = input<string | null>(null);
+  readonly title = input('');
   /** Optional one-line caption under the title. */
-  @Input() subtitle: string | null = null;
+  readonly subtitle = input<string | null>(null);
   /** Optional width override (px). Default 360. */
-  @Input() width: number | null = null;
+  readonly width = input<number | null>(null);
   /** Hides the close button when set to `false`. */
-  @Input() closable = true;
+  readonly closable = input(true);
   /** data-testid passthrough for stable element selection. */
-  @Input() testid: string | null = null;
+  readonly testid = input<string | null>(null);
 
   readonly closeRequest = output<void>();
 }

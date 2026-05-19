@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, Input, ViewEncapsulation } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ViewEncapsulation, input } from '@angular/core';
 import { StudioIconComponent, StudioIconName } from '../studio-icon/studio-icon.component';
 
 /**
@@ -27,13 +27,13 @@ import { StudioIconComponent, StudioIconName } from '../studio-icon/studio-icon.
   styleUrl: './section-header.component.scss',
 })
 export class SectionHeaderComponent {
-  @Input() icon: StudioIconName | null = null;
-  @Input() iconChar: string | null = null;
-  @Input() title = '';
-  @Input() count: string | number | null = null;
+  readonly icon = input<StudioIconName | null>(null);
+  readonly iconChar = input<string | null>(null);
+  readonly title = input('');
+  readonly count = input<string | number | null>(null);
   /** Render as an `<h2>` (default) for accessibility; switch to a `<button>`
    *  via `interactive` so the entire row becomes clickable. */
-  @Input() interactive = false;
-  @Input() active = false;
-  @Input() testid: string | null = null;
+  readonly interactive = input(false);
+  readonly active = input(false);
+  readonly testid = input<string | null>(null);
 }

@@ -26,10 +26,10 @@
         <button type="button"
                 class="cli-usage-modal__button cli-usage-modal__button--primary"
                 data-testid="usage-hover-panel-refresh-all"
-                [disabled]="refreshingAll"
+                [disabled]="refreshingAll()"
                 (click)="refreshAll.emit($event)"
                 [appTooltip]="'Re-probe every CLI now'">
-          {{ refreshingAll ? 'Refreshing...' : 'Refresh all' }}
+          {{ refreshingAll() ? 'Refreshing...' : 'Refresh all' }}
         </button>
         <button type="button"
                 class="cli-usage-modal__close"
@@ -42,7 +42,7 @@
     <section class="cli-usage-modal__compare" data-testid="usage-hover-panel-quota">
       <h3>Routing headroom</h3>
       <div class="cli-usage-modal__headroom">
-        @for (row of quotaRows; track row.cliType) {
+        @for (row of quotaRows(); track row.cliType) {
           <article class="cli-usage-modal__headroom-card" [attr.data-tone]="row.primaryTone">
             <div class="cli-usage-modal__headroom-main">
               <span aria-hidden="true">{{ row.icon }}</span>
@@ -64,7 +64,7 @@
     <section class="cli-usage-modal__trend" data-testid="usage-hover-panel-tokens">
       <div class="cli-usage-modal__trend-head">
         <h3>Token trend</h3>
-        @if (tokens; as t) {
+        @if (tokens(); as t) {
           <span>{{ formatTokens(t.totalInputTokens + t.totalOutputTokens + t.totalCacheReadTokens + t.totalCacheCreationTokens) }} total · {{ formatUsd(t.estimatedApiCostUsd) }} theoretical API cost</span>
         }
       </div>
@@ -89,7 +89,7 @@
     </section>
 
     <div class="cli-usage-modal__sections">
-      @for (row of quotaRows; track row.cliType) {
+      @for (row of quotaRows(); track row.cliType) {
         <section class="cli-usage-modal__cli" [attr.data-testid]="'hquota-modal-cli-' + row.cliType">
           <header class="cli-usage-modal__cli-head">
             <div>
@@ -102,11 +102,11 @@
             </div>
             <button type="button"
                     class="cli-usage-modal__icon-button"
-                    [disabled]="refreshing[row.cliType]"
+                    [disabled]="refreshing()[row.cliType]"
                     (click)="refreshOne.emit({ cliType: row.cliType, event: $event })"
                     [attr.data-testid]="'usage-hover-panel-refresh-' + row.cliType"
                     [appTooltip]="'Re-probe ' + row.label">
-              {{ refreshing[row.cliType] ? '...' : '↻' }}
+              {{ refreshing()[row.cliType] ? '...' : '↻' }}
             </button>
           </header>
 
@@ -229,7 +229,7 @@
       }
     </section>
 
-    @if (tokens; as t) {
+    @if (tokens(); as t) {
       <p class="cli-usage-modal__disc">{{ t.disclaimer }}</p>
     }
   </section>

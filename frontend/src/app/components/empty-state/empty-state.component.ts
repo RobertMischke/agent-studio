@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, Input, ViewEncapsulation } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ViewEncapsulation, input } from '@angular/core';
 import { StudioIconComponent, StudioIconName } from '../studio-icon/studio-icon.component';
 
 /**
@@ -30,10 +30,10 @@ import { StudioIconComponent, StudioIconName } from '../studio-icon/studio-icon.
   styleUrl: './empty-state.component.scss',
 })
 export class EmptyStateComponent {
-  @Input() icon: StudioIconName | null = null;
-  @Input() title: string | null = null;
-  @Input() body: string | null = null;
+  readonly icon = input<StudioIconName | null>(null);
+  readonly title = input<string | null>(null);
+  readonly body = input<string | null>(null);
   /** Smaller padding + body-only variant (used inside dense lists). */
-  @Input() compact = false;
-  @Input() testid: string | null = null;
+  readonly compact = input(false);
+  readonly testid = input<string | null>(null);
 }

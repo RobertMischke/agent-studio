@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, Input, ViewEncapsulation, output } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ViewEncapsulation, input, output } from '@angular/core';
 import { StudioIconComponent, StudioIconName } from '../studio-icon/studio-icon.component';
 
 /**
@@ -23,15 +23,15 @@ import { StudioIconComponent, StudioIconName } from '../studio-icon/studio-icon.
   styleUrl: './pane-header.component.scss',
 })
 export class PaneHeaderComponent {
-  @Input() icon: StudioIconName | null = null;
-  @Input() title = '';
-  @Input() maximized = false;
-  @Input() maximizable = true;
-  @Input() hideable = true;
+  readonly icon = input<StudioIconName | null>(null);
+  readonly title = input('');
+  readonly maximized = input(false);
+  readonly maximizable = input(true);
+  readonly hideable = input(true);
   /** Optional extra subtitle that follows the title. */
-  @Input() subtitle: string | null = null;
+  readonly subtitle = input<string | null>(null);
   /** data-testid passthrough. */
-  @Input() testid: string | null = null;
+  readonly testid = input<string | null>(null);
 
   readonly maximize = output<void>();
   readonly hide = output<void>();

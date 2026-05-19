@@ -1,28 +1,28 @@
-@if (button) {
+@if (button()) {
   <button class="statusbar__item statusbar__item--btn"
-          [appTooltip]="tooltip"
-          [attr.data-testid]="testid"
+          [appTooltip]="tooltip()"
+          [attr.data-testid]="testid()"
           (click)="activated.emit($event)">
-    @if (bullet) {
-      <span class="statusbar__icon" [class.statusbar__icon--pulse]="pulsing">{{ bullet }}</span>
-    } @else if (icon) {
-      <span class="statusbar__icon" [class.statusbar__icon--pulse]="pulsing">
-        <app-studio-icon [name]="icon" [size]="iconSize"></app-studio-icon>
+    @if (bullet(); as b) {
+      <span class="statusbar__icon" [class.statusbar__icon--pulse]="pulsing()">{{ b }}</span>
+    } @else if (icon(); as i) {
+      <span class="statusbar__icon" [class.statusbar__icon--pulse]="pulsing()">
+        <app-studio-icon [name]="i" [size]="iconSize()"></app-studio-icon>
       </span>
     }
-    <span>{{ label }}</span>
+    <span>{{ label() }}</span>
   </button>
 } @else {
   <span class="statusbar__item statusbar__item--ro"
-        [appTooltip]="tooltip"
-        [attr.data-testid]="testid">
-    @if (bullet) {
-      <span class="statusbar__icon" [class.statusbar__icon--pulse]="pulsing">{{ bullet }}</span>
-    } @else if (icon) {
-      <span class="statusbar__icon" [class.statusbar__icon--pulse]="pulsing">
-        <app-studio-icon [name]="icon" [size]="iconSize"></app-studio-icon>
+        [appTooltip]="tooltip()"
+        [attr.data-testid]="testid()">
+    @if (bullet(); as b) {
+      <span class="statusbar__icon" [class.statusbar__icon--pulse]="pulsing()">{{ b }}</span>
+    } @else if (icon(); as i) {
+      <span class="statusbar__icon" [class.statusbar__icon--pulse]="pulsing()">
+        <app-studio-icon [name]="i" [size]="iconSize()"></app-studio-icon>
       </span>
     }
-    <span>{{ label }}</span>
+    <span>{{ label() }}</span>
   </span>
 }

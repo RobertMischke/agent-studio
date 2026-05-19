@@ -2,9 +2,9 @@ import {
   Directive,
   ElementRef,
   HostListener,
-  Input,
   OnDestroy,
-  inject
+  inject,
+  input
 } from '@angular/core';
 import { TooltipController } from './tooltip.controller';
 import { TooltipInput, TooltipPosition, TooltipSeverity } from './tooltip.types';
@@ -18,9 +18,9 @@ import { TooltipInput, TooltipPosition, TooltipSeverity } from './tooltip.types'
   standalone: true
 })
 export class TooltipDirective implements OnDestroy {
-  @Input('appTooltip') content: TooltipInput = '';
-  @Input() tooltipPosition: TooltipPosition = 'auto';
-  @Input() tooltipSeverity: TooltipSeverity | undefined = undefined;
+  readonly content = input<TooltipInput>('', { alias: 'appTooltip' });
+  readonly tooltipPosition = input<TooltipPosition>('auto');
+  readonly tooltipSeverity = input<TooltipSeverity | undefined>(undefined);
 
   private readonly host = inject(ElementRef<HTMLElement>);
   private readonly controller = inject(TooltipController);
@@ -76,12 +76,13 @@ export class TooltipDirective implements OnDestroy {
   }
 
   private show(): void {
-    if (!this.content) return;
+    const content = this.content();
+    if (!content) return;
     this.controller.show(
       this.host.nativeElement,
-      this.content,
-      this.tooltipPosition,
-      this.tooltipSeverity
+      content,
+      this.tooltipPosition(),
+      this.tooltipSeverity()
     );
   }
 
