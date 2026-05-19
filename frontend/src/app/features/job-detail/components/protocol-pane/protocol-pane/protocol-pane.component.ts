@@ -28,7 +28,7 @@ import { ReviewEvidencePanelComponent } from '../review-evidence-panel/review-ev
 import { CodeReviewPanelComponent } from '../code-review-panel/code-review-panel.component';
 import { JobService } from '../../../../../services/job.service';
 import type { ConversationEvent, RawLineRange } from '../../../../../components/chat/conversation-event';
-import { ConversationViewComponent } from '../../../../../components/chat/conversation-view.component';
+import { ConversationViewComponent } from '../../../../../components/chat/conversation-view/conversation-view.component';
 import { projectConversation } from '../../../../../components/chat/conversation-projection';
 import { BeautifulResultsComponent } from '../../beautiful-results/beautiful-results.component';
 import { deriveProtocolVerdict, type ProtocolVerdict } from '../protocol-verdict';

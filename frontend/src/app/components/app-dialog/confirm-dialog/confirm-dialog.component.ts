@@ -9,9 +9,9 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { ConfirmDialogService } from '../../services/confirm-dialog.service';
-import { ModalStackService } from '../../services/modal-stack.service';
-import { DialogComponent } from '../dialog/dialog.component';
+import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
+import { ModalStackService } from '../../../services/modal-stack.service';
+import { DialogComponent } from '../../dialog/dialog.component';
 
 /**
  * App-wide confirm dialog. Mounted once at the shell; visibility driven by

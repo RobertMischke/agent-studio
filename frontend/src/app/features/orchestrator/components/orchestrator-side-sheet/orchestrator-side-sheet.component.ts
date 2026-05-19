@@ -17,7 +17,7 @@ import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from 
 import type { WatchPathEntry } from '../../../../models/job.model';
 import type { OrchestratorChatTurn } from '../../../../features/orchestrator';
 import { buildChatNavigationContext } from '../../../../features/orchestrator';
-import { ChatComponent } from '../../../../components/chat/chat.component';
+import { ChatComponent } from '../../../../components/chat/chat/chat.component';
 import { ChatEvent, ChatMessage, ChatSubmitEvent } from '../../../../components/chat/chat-types';
 import { ProjectChatListComponent } from '../../../project-chat/components/project-chat-list/project-chat-list.component';
 

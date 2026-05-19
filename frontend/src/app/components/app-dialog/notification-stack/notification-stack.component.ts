@@ -3,8 +3,8 @@ import {
   Component,
   inject,
 } from '@angular/core';
-import { NotificationService } from '../../services/notification.service';
-import { NotificationKind } from '../../models/app-dialog.model';
+import { NotificationService } from '../../../services/notification.service';
+import { NotificationKind } from '../../../models/app-dialog.model';
 
 /**
  * Stack of transient notification toasts (success / info / warning / error).

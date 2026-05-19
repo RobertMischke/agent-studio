@@ -1,12 +1,12 @@
 import { AfterViewInit, Component, ElementRef, HostListener, OnDestroy, ViewChild, computed, effect, inject, input, output, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import type { Editor } from '@tiptap/core';
-import { htmlToMarkdown, markdownToHtml, MarkdownImageOptions } from './markdown-utils';
+import { htmlToMarkdown, markdownToHtml, MarkdownImageOptions } from '../markdown-utils';
 import { shouldEmitEditorSave } from './markdown-rich-editor.guard';
-import { CLIENT_ID } from '../services/client-id.interceptor';
-import { MediaLightboxService } from '../services/media-lightbox.service';
+import { CLIENT_ID } from '../../services/client-id.interceptor';
+import { MediaLightboxService } from '../../services/media-lightbox.service';
 
-import { TooltipDirective } from './tooltip';
+import { TooltipDirective } from '../tooltip';
 type EditorState = 'idle' | 'dirty' | 'saved';
 
 const ATTACHMENTS_PREFIX = 'attachments/';

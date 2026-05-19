@@ -1,5 +1,5 @@
 import { ChangeDetectionStrategy, Component, computed, input, signal } from '@angular/core';
-import type { ToolBurstEvent, ToolFamily } from './conversation-event';
+import type { ToolBurstEvent, ToolFamily } from '../conversation-event';
 
 /**
  * Dense, collapsed-by-default renderer for `ToolBurst` events in the

@@ -8,9 +8,9 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { DomSanitizer, type SafeHtml } from '@angular/platform-browser';
-import { markdownToHtml } from '../markdown-utils';
-import { ToolBurstChipComponent } from './tool-burst-chip.component';
-import { TooltipDirective } from '../tooltip';
+import { markdownToHtml } from '../../markdown-utils';
+import { ToolBurstChipComponent } from '../tool-burst-chip/tool-burst-chip.component';
+import { TooltipDirective } from '../../tooltip';
 import type {
   AgentNeedsInputEvent,
   ArtifactImageEvent,
@@ -27,7 +27,7 @@ import type {
   TaskMarkerEvent,
   ToolBurstEvent,
   TraceLinkEvent,
-} from './conversation-event';
+} from '../conversation-event';
 
 type RenderRow =
   | { kind: 'message'; event: MessageEvent; bodyHtml: SafeHtml }

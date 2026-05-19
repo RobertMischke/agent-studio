@@ -14,10 +14,10 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
-import { markdownToHtml } from '../markdown-utils';
-import { MarkdownImageLightboxDirective } from '../../directives/markdown-image-lightbox.directive';
-import { mergeByTimestamp } from './merge-by-timestamp';
-import { TooltipDirective } from '../tooltip';
+import { markdownToHtml } from '../../markdown-utils';
+import { MarkdownImageLightboxDirective } from '../../../directives/markdown-image-lightbox.directive';
+import { mergeByTimestamp } from '../merge-by-timestamp';
+import { TooltipDirective } from '../../tooltip';
 import {
   ChatDraftAttachment,
   ChatEvent,
@@ -25,14 +25,14 @@ import {
   ChatMessage,
   ChatRole,
   ChatSubmitEvent
-} from './chat-types';
+} from '../chat-types';
 import {
   RoleBadgeComponent,
   PhaseSummaryListComponent,
   groupIntoPhases,
   type ChatPhase,
   type PhaseInputMessage,
-} from '../../features/workforce';
+} from '../../../features/workforce';
 
 interface RenderedMessage {
   kind: 'message';
