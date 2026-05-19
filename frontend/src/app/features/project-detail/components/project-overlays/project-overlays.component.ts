@@ -6,7 +6,7 @@ import { ProjectDetailComponent } from '../project-detail/project-detail';
 import { ProjectShellComponent } from '../project-shell/project-shell.component';
 import { SecurityPanelComponent } from '../security-panel/security-panel.component';
 import { UxuiPanelComponent } from '../uxui-panel/uxui-panel.component';
-import { ProjectTokenUsagePanelComponent } from '../../../project-token-usage/components/project-token-usage-panel.component';
+import { ProjectTokenUsagePanelComponent } from '../../../project-token-usage';
 import { ProjectObservabilityPanelComponent } from '../project-observability/project-observability-panel.component';
 import { ProjectProductRuntimePanelComponent } from '../project-product-runtime/project-product-runtime-panel.component';
 import { ProjectSteeringDocsSectionComponent } from '../project-steering-docs-section/project-steering-docs-section';

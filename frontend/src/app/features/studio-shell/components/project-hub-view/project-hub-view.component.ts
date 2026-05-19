@@ -11,7 +11,7 @@ import {
   ProjectSteeringDocsSectionComponent,
   ProjectSkillReadinessSectionComponent,
 } from '../../../project-detail';
-import { ProjectTokenUsagePanelComponent } from '../../../project-token-usage/components/project-token-usage-panel.component';
+import { ProjectTokenUsagePanelComponent } from '../../../project-token-usage';
 import { WorkspaceScreenshotsComponent } from '../../../screenshots';
 import {
   DEFAULT_PROJECT_RAIL_KEY,

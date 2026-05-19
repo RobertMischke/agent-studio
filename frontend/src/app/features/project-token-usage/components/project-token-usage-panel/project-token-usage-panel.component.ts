@@ -8,10 +8,10 @@ import {
   signal,
 } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
-import { JobService } from '../../../services/job.service';
-import type { ProjectExpensiveJob, ProjectExpensiveJobsResponse, ProjectJobTokenDetail, ProjectTokenCategory, ProjectTokenHeatmap, ProjectTokenHeatmapJob, ProjectTokenUsageSummary } from '../../../features/project-token-usage';
+import { JobService } from '../../../../services/job.service';
+import type { ProjectExpensiveJob, ProjectExpensiveJobsResponse, ProjectJobTokenDetail, ProjectTokenCategory, ProjectTokenHeatmap, ProjectTokenHeatmapJob, ProjectTokenUsageSummary } from '../../../../features/project-token-usage';
 
-import { TooltipDirective } from '../../../components/tooltip';
+import { TooltipDirective } from '../../../../components/tooltip';
 interface CardSpec {
   testid: string;
   label: string;
