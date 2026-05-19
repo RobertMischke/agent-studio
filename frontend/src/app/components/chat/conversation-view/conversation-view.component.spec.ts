@@ -10,7 +10,7 @@ import type {
   MessageEvent,
   RawLineRange,
   ToolBurstEvent,
-} from './conversation-event';
+} from '../conversation-event';
 
 function range(start = 1, end = 1): RawLineRange {
   return { source: 'cli-output.log', start, end };
