@@ -22,3 +22,4 @@ Imports via `from './features/cli'`. See [`index.ts`](./index.ts).
 ## Notable
 
 - CLI types live alongside other CLI surface (admin / console / usage). Job-coupled CLI types (`CliExecution`, `CliSettings`, `CliOutputLine`, `ContinueMode`) stay in `models/job.model.ts` because they participate in the JobInfo graph.
+- `CliUsageSheetComponent` follows the shared right-edge side-sheet layout contract (host `:host(.is-open) { width: min(440px, 92vw) }`, flex-row-reverse `.app-shell` parent, inner `<app-sidesheet>` width 100 %). Full description in [`frontend/AGENTS.md`](../../../../AGENTS.md) under "Side-sheet layout contract"; regression coverage in `e2e/orchestrator-side-sheet-position.spec.ts`.

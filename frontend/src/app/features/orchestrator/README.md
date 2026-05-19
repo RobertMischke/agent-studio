@@ -22,3 +22,4 @@ Imports via `from './features/orchestrator'`. See [`index.ts`](./index.ts).
 
 - The orchestrator-side-sheet (1321 LOC) hosts THREE tabs in one component. Splitting per-tab is a candidate for a future cycle.
 - Project-chat (Slice D — virtualised history + FTS search) lives in [`features/project-chat/`](../project-chat/), not here. The orchestrator-side-sheet imports it.
+- The sheet's open/close push contract (host `:host(.is-open) { width: min(640px, 96vw) }` + flex-row-reverse `.app-shell` parent + `<app-sidesheet>` inner-width 100 %) is described in [`frontend/AGENTS.md`](../../../../AGENTS.md) under "Side-sheet layout contract" and pinned by `e2e/orchestrator-side-sheet-position.spec.ts`. Don't introduce `position: fixed` on the host or a fixed px width on the inner `.sidesheet`.
