@@ -101,6 +101,14 @@ export class ChatComponent implements AfterViewInit, OnDestroy {
   readonly variant = input<'framed' | 'embedded'>('framed');
   readonly allowAttachments = input<boolean>(true);
   readonly maxAttachmentBytes = input<number>(10 * 1024 * 1024);
+  /**
+   * When true (default), the phase-summary above the chat collapses to
+   * a single "▸ N earlier phases" strip the user can click to expand.
+   * Stops the chat panel from looking like a flat phase-summary table
+   * when there is a lot of history. Pass `false` to keep every phase
+   * row visible at the top.
+   */
+  readonly compactPhaseSummary = input<boolean>(true);
 
   readonly submitMessage = output<ChatSubmitEvent>();
   /**

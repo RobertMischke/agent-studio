@@ -30,8 +30,43 @@ export class PhaseSummaryListComponent {
    * internally and starts with only the last phase expanded.
    */
   readonly expandedPhaseIds = input<ReadonlySet<string> | null>(null);
+  /**
+   * Compact mode collapses the entire list to one "▸ N earlier phases"
+   * strip until the user clicks it. Stops the summary from filling the
+   * chat panel with rows of historical timestamps when the user just
+   * wants to see the active conversation. The last phase (always
+   * expanded by default) is still hidden from the strip header so it
+   * does not double up with the verbatim chat below.
+   */
+  readonly compact = input<boolean>(false);
 
   readonly phaseToggled = output<{ phaseId: string; expanded: boolean }>();
+
+  /** When true and compact, the user has opened the full phase list. */
+  readonly compactRevealed = signal<boolean>(false);
+
+  /** Phases that are "earlier" than the active last phase (compact mode). */
+  readonly earlierPhases = computed<readonly ChatPhase[]>(() => {
+    const all = this.phases();
+    return all.length <= 1 ? [] : all.slice(0, -1);
+  });
+
+  /** Range string spanning all earlier phases — shown in the compact header. */
+  readonly earlierRange = computed<string>(() => {
+    const earlier = this.earlierPhases();
+    if (earlier.length === 0) return '';
+    const first = earlier[0];
+    const last = earlier[earlier.length - 1];
+    const start = first.startTs;
+    const end = last.endTs ?? last.startTs;
+    if (!start) return '';
+    if (start === end) return formatTs(start);
+    return `${formatTs(start)} → ${formatTs(end)}`;
+  });
+
+  toggleCompactRevealed(): void {
+    this.compactRevealed.update(v => !v);
+  }
 
   private readonly internalExpanded = signal<Set<string>>(new Set());
 

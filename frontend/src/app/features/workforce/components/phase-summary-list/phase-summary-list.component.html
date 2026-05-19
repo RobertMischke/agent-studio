@@ -1,12 +1,30 @@
+@let isCompact = compact();
+@let earlier = earlierPhases();
+@let revealed = compactRevealed();
+@let visible = isCompact && !revealed ? [] : phases();
 <section
   class="phase-summary"
+  [class.phase-summary--compact]="isCompact"
   data-testid="phase-summary-list"
   [attr.data-phase-count]="phases().length"
+  [attr.data-compact-revealed]="isCompact ? (revealed ? 'true' : 'false') : null"
   aria-label="Workforce chat phase summary">
-  @if (phases().length === 0) {
+  @if (isCompact && earlier.length > 0) {
+    <button
+      type="button"
+      class="phase-summary__compact-toggle"
+      data-testid="phase-summary-compact-toggle"
+      [attr.aria-expanded]="revealed"
+      (click)="toggleCompactRevealed()">
+      <span class="phase-summary__caret" aria-hidden="true">{{ revealed ? '▾' : '▸' }}</span>
+      <span class="phase-summary__compact-label">{{ earlier.length }} earlier {{ earlier.length === 1 ? 'phase' : 'phases' }}</span>
+      <span class="phase-summary__compact-range">{{ earlierRange() }}</span>
+    </button>
+  }
+  @if (!isCompact && phases().length === 0) {
     <div class="phase-summary__empty">No phases yet.</div>
   }
-  @for (phase of phases(); track phase.id) {
+  @for (phase of visible; track phase.id) {
     <div
       class="phase-summary__row"
       [class.phase-summary__row--expanded]="isExpanded(phase.id)"

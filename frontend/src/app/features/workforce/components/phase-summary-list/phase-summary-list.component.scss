@@ -85,3 +85,41 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+
+.phase-summary--compact {
+  padding: 4px 10px;
+  gap: 0;
+}
+
+.phase-summary__compact-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 6px;
+  background: transparent;
+  border: 0;
+  color: #94a3b8;
+  font: inherit;
+  font-size: 11px;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 3px;
+}
+.phase-summary__compact-toggle:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: #cbd5e1;
+}
+.phase-summary__compact-toggle:focus-visible {
+  outline: 1px solid rgba(196, 181, 253, 0.6);
+  outline-offset: -1px;
+}
+.phase-summary__compact-label {
+  font-weight: 500;
+}
+.phase-summary__compact-range {
+  margin-left: auto;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: #64748b;
+}

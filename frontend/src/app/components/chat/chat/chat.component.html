@@ -3,6 +3,7 @@
         <app-phase-summary-list
           [phases]="phases()"
           [expandedPhaseIds]="expandedPhaseIds()"
+          [compact]="compactPhaseSummary()"
           (phaseToggled)="onPhaseToggled($event)" />
       }
       <div #body
