@@ -28,31 +28,13 @@
   --orch-line: rgba(244, 105, 67, 0.24);
 }
 
-.sheet__header {
-  display: grid;
-  grid-template-columns: minmax(140px, auto) minmax(180px, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px 10px 14px;
-  border-bottom: 1px solid var(--studio-border);
-  background: var(--studio-bg-sidebar);
-}
-
-.sheet__title-block { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.sheet__eyebrow {
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--studio-accent);
-  font-weight: 700;
-}
-.sheet__title {
-  margin: 0;
-  font-size: 15px;
-  color: var(--studio-fg-strong);
-  font-weight: 650;
-}
-
+// Header BEM (`sheet__header`, `sheet__title-block`, `sheet__eyebrow`,
+// `sheet__title`, `sheet__close`) was deleted: the header + close
+// button are rendered by `<app-sidesheet>`'s own template now, so the
+// classes targeted nothing in the live DOM. The header-actions slot,
+// header-extras and the `sheet__btn` rules below are still live —
+// they style the buttons the orchestrator projects into the sidesheet
+// header.
 .sheet__header-actions {
   display: flex;
   justify-content: flex-end;
@@ -60,8 +42,7 @@
   align-items: center;
 }
 
-.sheet__btn,
-.sheet__close {
+.sheet__btn {
   background: var(--studio-bg-hover);
   border: 1px solid var(--studio-border);
   color: var(--studio-fg);
@@ -70,12 +51,13 @@
   cursor: pointer;
   font: inherit;
   font-size: 12px;
+  padding: 3px 10px;
 }
-.sheet__btn { padding: 3px 10px; }
-.sheet__btn:hover:not(:disabled),
-.sheet__close:hover { background: var(--studio-bg-elevated); color: var(--studio-fg-strong); }
+.sheet__btn:hover:not(:disabled) {
+  background: var(--studio-bg-elevated);
+  color: var(--studio-fg-strong);
+}
 .sheet__btn:disabled { opacity: 0.5; cursor: progress; }
-.sheet__close { width: 28px; padding: 0; }
 
 .sheet__project-picker {
   position: relative;
@@ -207,16 +189,15 @@
   flex-direction: column;
   gap: 8px;
 }
-.sheet__no-project,
-.sheet__placeholder {
+// `.sheet__placeholder` was a never-rendered sibling; only the
+// `.sheet__no-project` empty-state block stays.
+.sheet__no-project {
   padding: 22px 16px;
   color: var(--studio-fg-dim);
   border: 1px dashed var(--studio-border);
   border-radius: 8px;
   background: var(--studio-bg-hover);
 }
-.sheet__placeholder h3 { margin: 0 0 8px; color: var(--studio-fg-strong); }
-.sheet__placeholder p { margin: 0 0 12px; max-width: 720px; }
 .sheet__draft-actions {
   display: flex;
   justify-content: flex-end;
@@ -249,13 +230,11 @@
    width on phones. */
 @media (max-width: 720px) {
   :host(.is-open) { width: min(100vw, 460px); }
-  /* `.sheet { width: 100% }` already inherits the host width, so the
-     mobile breakpoint only needs to override the host width override. */
-  .sheet__header {
-    grid-template-columns: 1fr auto;
-  }
+  // `.sheet__header` from the legacy BEM was removed (the header is
+  // owned by `<app-sidesheet>`); the picker still gets a mobile
+  // reflow so it doesn't crowd the title.
   .sheet__project-picker {
-    grid-column: 1 / -1;
-    order: 2;
+    width: 100%;
+    margin-top: 4px;
   }
 }
