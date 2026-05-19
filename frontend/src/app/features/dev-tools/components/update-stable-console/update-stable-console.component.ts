@@ -1,6 +1,6 @@
 import { AfterViewChecked, Component, ElementRef, EventEmitter, OnDestroy, Output, signal, ViewChild } from '@angular/core';
 
-import { TooltipDirective } from '../../../components/tooltip';
+import { TooltipDirective } from '../../../../components/tooltip';
 interface ConsoleLine {
   kind: 'log' | 'stdout' | 'stderr' | 'error' | 'done';
   text: string;

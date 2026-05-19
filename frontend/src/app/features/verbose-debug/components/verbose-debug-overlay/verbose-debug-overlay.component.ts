@@ -9,21 +9,21 @@ import {
   signal
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ModalStackService } from '../../../services/modal-stack.service';
-import type { CliOutputLine, JobInfo } from '../../../models/job.model';
-import type { RunRecord, RunTimeline } from '../../../features/run-timeline';
-import type { JobScreenshot } from '../../../features/screenshots';
-import type { JobTokenSummary } from '../../../features/tokens';
-import { projectConversation } from '../../../components/chat/conversation-projection';
+import { ModalStackService } from '../../../../services/modal-stack.service';
+import type { CliOutputLine, JobInfo } from '../../../../models/job.model';
+import type { RunRecord, RunTimeline } from '../../../../features/run-timeline';
+import type { JobScreenshot } from '../../../../features/screenshots';
+import type { JobTokenSummary } from '../../../../features/tokens';
+import { projectConversation } from '../../../../components/chat/conversation-projection';
 import type {
   ConversationEvent,
   RawLineRange,
   ToolFamily,
   WorkbenchDebugEvent
-} from '../../../components/chat/conversation-event';
-import { formatTokens as fmtTokens } from '../../../services/format.util';
+} from '../../../../components/chat/conversation-event';
+import { formatTokens as fmtTokens } from '../../../../services/format.util';
 
-import { TooltipDirective } from '../../../components/tooltip';
+import { TooltipDirective } from '../../../../components/tooltip';
 export type VerboseDebugTab =
   | 'overview'
   | 'actors'

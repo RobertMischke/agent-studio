@@ -1,10 +1,10 @@
 import { Component, EventEmitter, OnInit, Output, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { DevToolsService, E2EJob, DeleteE2EReport } from '../../../services/dev-tools.service';
-import { ConfirmDialogService } from '../../../services/confirm-dialog.service';
+import { DevToolsService, E2EJob, DeleteE2EReport } from '../../../../services/dev-tools.service';
+import { ConfirmDialogService } from '../../../../services/confirm-dialog.service';
 
-import { TooltipDirective } from '../../../components/tooltip';
-import { DialogComponent } from '../../../components/dialog/dialog.component';
+import { TooltipDirective } from '../../../../components/tooltip';
+import { DialogComponent } from '../../../../components/dialog/dialog.component';
 type Phase = 'loading' | 'list' | 'deleting' | 'report' | 'error';
 
 /**
