@@ -26,7 +26,18 @@
   overflow: hidden;
   min-height: 0;
   font-size: 13px;
-  width: 360px;
+  /* Width defaults to 100% so the caller's outer host (the
+     `<app-orchestrator-side-sheet>`, `<app-cli-usage-sheet>`,
+     `<app-kanban-filter-sidesheet>`, …) drives the visible panel
+     width via its own `:host(.is-open) { width: ... }` rule. The
+     previous fixed `width: 360px` was a dead default — no caller
+     actually wanted 360px and the mismatch left a transparent gap
+     between the open host and the inner panel (visible as
+     unreadable empty space and broken theming on the right side
+     of the orchestrator sheet). Callers that DO want an explicit
+     px width can still drive it via the `[width]` input, which
+     wins through `[style.width.px]` in the template. */
+  width: 100%;
   max-width: 100%;
   height: 100%;
 }

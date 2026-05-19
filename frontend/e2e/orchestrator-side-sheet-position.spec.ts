@@ -100,4 +100,76 @@ test.describe('Orchestrator side sheet position', () => {
 
     await page.screenshot({ path: `${SHOTS}/02-closed.png`, fullPage: false });
   });
+
+  /**
+   * Push contract (not overlay). Opening the orchestrator chat must
+   * narrow the studio-shell by approximately the panel width; the inner
+   * `<app-sidesheet>` chrome must fill the full open host width (no
+   * transparent gap on the right); the panel host must stay in normal
+   * flex flow (position: static).
+   *
+   * Three earlier regressions are pinned here:
+   *  - The host was `position: fixed` via a studio-mode workaround in
+   *    styles.scss, which forced overlay behaviour and prevented any
+   *    push. Fixed by introducing the `.app-shell` flex parent and
+   *    deleting the `position: fixed` rule.
+   *  - The inner `.sidesheet` div had `width: 360px` hard-coded in
+   *    `components/sidesheet/sidesheet.component.scss`, leaving a
+   *    transparent 280 px gap inside the open 640 px host.
+   *  - The studio-shell had to be ordered to the *left* of the side
+   *    sheets without reshuffling the DOM, which `.app-shell` does via
+   *    `flex-direction: row-reverse`.
+   */
+  test('open pushes studio-shell + inner panel fills host', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(400);
+
+    const studio = page.locator('app-studio-shell');
+    const widthClosed = (await studio.boundingBox())!.width;
+
+    const toggle = page.getByTestId('orch-side-sheet-toggle');
+    await expect(toggle).toBeVisible({ timeout: 10_000 });
+    await toggle.click();
+    await page.getByTestId('orch-side-sheet').waitFor({ state: 'visible' });
+    await page.waitForTimeout(450);
+
+    const widthOpen = (await studio.boundingBox())!.width;
+
+    const geometry = await page.evaluate(() => {
+      const orchHost = document.querySelector('app-orchestrator-side-sheet') as HTMLElement | null;
+      const inner = document.querySelector('[data-testid="orch-side-sheet"]') as HTMLElement | null;
+      const studio = document.querySelector('app-studio-shell') as HTMLElement | null;
+      function box(el: HTMLElement | null) {
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        const cs = window.getComputedStyle(el);
+        return {
+          width: Math.round(r.width),
+          x: Math.round(r.x),
+          right: Math.round(r.x + r.width),
+          position: cs.position,
+        };
+      }
+      return { orchHost: box(orchHost), inner: box(inner), studio: box(studio), vw: window.innerWidth };
+    });
+
+    // Inner sidesheet fills its open host (no gap on the right).
+    expect(geometry.inner!.width).toBe(geometry.orchHost!.width);
+
+    // Push, not overlay: studio-shell narrows by approximately the panel
+    // width on open, and grows back on close.
+    expect(widthClosed - widthOpen).toBeGreaterThan(400);
+
+    // Studio-shell sits to the LEFT of the orchestrator (i.e. the panel
+    // is on the right edge). Their boxes are non-overlapping along x.
+    expect(geometry.studio!.right).toBeLessThanOrEqual(geometry.orchHost!.x + 1);
+    expect(geometry.orchHost!.right).toBeGreaterThanOrEqual(geometry.vw - 4);
+
+    // Host stays in normal flow (not `position: fixed`, which was the
+    // overlay regression). The body's `.app-shell` flex parent does the
+    // push; nothing should pull the host out of flow.
+    expect(geometry.orchHost!.position).toBe('static');
+  });
 });

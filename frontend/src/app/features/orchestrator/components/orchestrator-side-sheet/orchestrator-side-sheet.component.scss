@@ -1,16 +1,15 @@
 /* The host participates in flex layout (same as cli-usage-sheet). When
    closed it collapses to zero width so the main board reclaims the space
-   and stays fully visible; when open it animates to a right-hand sheet
-   that does not cover the rest of the workspace. This is a persistent
-   chat surface, not a modal.
+   and stays fully visible; when open it animates to its open width
+   driven entirely from `:host(.is-open)` below. The inner panel chrome
+   (background, border, header / body / footer grid) is owned by
+   `<app-sidesheet>` — it inherits 100 % width from the host so it fills
+   the open animation rather than sitting at a fixed 360 px default
+   that leaves a transparent gap on the right.
 
-   IMPORTANT: `overflow: hidden` + `.sheet { width: 100% }` is the
-   contract that makes the panel actually push the workspace instead of
-   overlaying it. With `overflow: visible` plus a fixed-width inner
-   `.sheet`, the 640px content kept rendering past the host's 0px
-   collapsed width and floated over the studio-shell — the visible
-   behaviour we just fixed. Keep the host clipped so the inner sheet
-   width is always bounded by the animating host width. */
+   `overflow: hidden` ensures content is clipped to the host's animating
+   width; previously `overflow: visible` let the inner sheet float past
+   the collapsed 0 px host and overlay the workspace. */
 :host {
   display: block;
   width: 0;
@@ -27,17 +26,6 @@
   --orch-accent: #f46943;
   --orch-soft: rgba(244, 105, 67, 0.12);
   --orch-line: rgba(244, 105, 67, 0.24);
-}
-
-.sheet {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  flex-direction: column;
-  background: var(--studio-bg-editor);
-  border-left: 1px solid var(--studio-border);
-  color: var(--studio-fg);
-  overflow: hidden;
 }
 
 .sheet__header {

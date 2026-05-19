@@ -1984,10 +1984,18 @@
        side. The wrapper is flex row so each sheet's :host
        `width: 0 / open` animation participates in the layout — when the
        orchestrator chat opens it claims its 640px slice and pushes the
-       studio-shell left rather than overlaying it. */
+       studio-shell left rather than overlaying it.
+
+       `flex-direction: row-reverse` keeps the side sheets visually on
+       the right while letting the studio-shell sit last in the DOM
+       order (which keeps it dom-friendly to existing
+       `app__sidesheet` selectors above + below this rule). With the
+       reverse, the first DOM child (kanban filter, then cli usage,
+       then orchestrator) lands on the right edge, and the studio
+       shell flows from the left consuming the remaining space. */
     .app-shell {
       display: flex;
-      flex-direction: row;
+      flex-direction: row-reverse;
       align-items: stretch;
       height: 100%;
       min-height: 0;
