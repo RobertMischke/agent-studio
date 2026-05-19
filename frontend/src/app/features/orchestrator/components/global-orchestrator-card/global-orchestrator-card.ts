@@ -1,9 +1,9 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
-import type { OrchestratorSession } from '../../../features/orchestrator';
-import { JobService } from '../../../services/job.service';
-import { ConceptHelpComponent } from '../../../components/concept-help/concept-help.component';
+import type { OrchestratorSession } from '../../../../features/orchestrator';
+import { JobService } from '../../../../services/job.service';
+import { ConceptHelpComponent } from '../../../../components/concept-help/concept-help.component';
 
-import { TooltipDirective } from '../../../components/tooltip';
+import { TooltipDirective } from '../../../../components/tooltip';
 /**
  * Global orchestrator card. Sits above the per-project orchestrator panel
  * and surfaces the singleton session that lives across all projects:

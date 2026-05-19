@@ -5,7 +5,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { OrchestratorFeedComponent } from './orchestrator-feed';
-import type { OrchestratorLogEntry } from '../../orchestrator';
+import type { OrchestratorLogEntry } from '../../../orchestrator';
 
 /**
  * Cycle 11c smoke. Compiles + instantiates the standalone component.

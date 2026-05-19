@@ -1,11 +1,11 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import type { OrchestratorLogEntry } from '../../../features/orchestrator';
-import { JobService } from '../../../services/job.service';
-import { TokenSummaryBlockComponent } from '../../tokens';
-import { GlobalOrchestratorCardComponent } from './global-orchestrator-card';
+import type { OrchestratorLogEntry } from '../../../../features/orchestrator';
+import { JobService } from '../../../../services/job.service';
+import { TokenSummaryBlockComponent } from '../../../tokens';
+import { GlobalOrchestratorCardComponent } from '../global-orchestrator-card/global-orchestrator-card';
 
-import { TooltipDirective } from '../../../components/tooltip';
+import { TooltipDirective } from '../../../../components/tooltip';
 /**
  * Per-project orchestrator log feed. Reads
  * `/api/runner/{projectName}/orchestrator-log` on init and every 10s

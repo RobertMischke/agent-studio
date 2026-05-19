@@ -6,7 +6,7 @@ import type { GroupedJobs, ProjectQueueHealth, RunnerStatus } from '../../../mod
 import type { OrchestratorLogEntry, OrchestratorSession } from '../../../features/orchestrator';
 import { OrchestratorRunner_KnownModels } from './project-detail.models';
 import { TokenSummaryBlockComponent } from '../../../features/tokens';
-import { GlobalOrchestratorCardComponent } from '../../../features/orchestrator/components/global-orchestrator-card';
+import { GlobalOrchestratorCardComponent } from '../../../features/orchestrator';
 import { ProjectArchitectureSectionComponent } from './project-architecture-section';
 import { ProjectDriftSectionComponent } from './project-drift-section';
 import { ProjectDriftOverviewSectionComponent } from './project-drift-overview-section';

@@ -1,6 +1,6 @@
 /** Orchestrator feature public API. Cycle 9h / ADR-0034. */
-export { OrchestratorFeedComponent } from './components/orchestrator-feed';
-export { GlobalOrchestratorCardComponent } from './components/global-orchestrator-card';
+export { OrchestratorFeedComponent } from './components/orchestrator-feed/orchestrator-feed';
+export { GlobalOrchestratorCardComponent } from './components/global-orchestrator-card/global-orchestrator-card';
 export { OrchestratorSideSheetComponent } from './components/orchestrator-side-sheet/orchestrator-side-sheet.component';
 export { OrchestratorSettingsModalComponent } from './components/orchestrator-settings-modal/orchestrator-settings-modal.component';
 export type {

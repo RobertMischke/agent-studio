@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, output } from '@angular/core';
 import { ProjectOverlaysService } from '../state/project-overlays.service';
 import { ModalStackService } from '../../../services/modal-stack.service';
-import { OrchestratorFeedComponent } from '../../orchestrator/components/orchestrator-feed';
+import { OrchestratorFeedComponent } from '../../orchestrator';
 import { ProjectDetailComponent } from './project-detail';
 import { ProjectShellComponent } from './project-shell/project-shell.component';
 import { SecurityPanelComponent } from './security-panel/security-panel.component';
