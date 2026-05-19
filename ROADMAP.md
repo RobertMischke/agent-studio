@@ -100,6 +100,84 @@ First implementation order:
 
 This is sibling to Performance Probes (which measure the running app) and to Product Runtime Observability (which records what the built software did). Test Runs answer a different question: "did the built software pass its declared test suite at this commit?" — the gate, not the live behaviour.
 
+### Visual Regression Evidence
+
+Visual regression should become part of the normal feature loop, not a manual screenshot hunt after a UI change. When a task changes a feature, the relevant Playwright specs should be able to run against a named application state, capture the important screenshots, compare them with approved baselines where they exist, and publish a compact evidence record back to the originating task.
+
+The product should make it easy to answer:
+
+- Which Playwright specs ran for this task, commit, viewport, theme, and feature flag set?
+- Which app state was used: seed data, selected project, selected job, route, open panels, theme, viewport, and browser?
+- Which screenshots, traces, videos, console logs, and diff images were produced?
+- Was this a strict regression run, an exploratory before/after run, or a design-iteration run where a new baseline may be accepted?
+- Which visual differences are expected product changes, and which look like accidental regressions?
+
+Core concepts:
+
+- **Visual state profile**: a named setup recipe for route, seed data, project/job selection, feature flags, theme, viewport, and open UI panels. The profile is the stable input, not whatever happened to be open in a developer browser.
+- **Visual evidence record**: spec id, profile id, commit, run id, viewport, theme, screenshot paths, diff paths, trace/video paths, threshold verdict, and human review verdict.
+- **Baseline lifecycle**: approved baseline, candidate baseline, rejected candidate, and expected-diff note. A UI change can update the baseline, but that update is explicit and reviewable.
+- **Task attachment**: visual evidence appears on the task detail and project Test Quality surface, linked to the run and commit that produced it.
+
+Hard rules:
+
+- Visual regression must not become a hidden flaky pixel gate. The app records exact evidence first; strict blocking can be enabled per profile only after the profile is stable.
+- Baselines are versioned by visual state profile, viewport, theme, and relevant feature flags. A dark-theme baseline cannot validate a light-theme run.
+- Evidence is stored as files with pointers in the run record. Do not store screenshot blobs in app state.
+- A design change and a regression are different outcomes. The UI must support "accept new baseline" without pretending the old baseline passed.
+- Playwright traces remain available for debugging; the default task view shows a simple "what ran and what changed" summary.
+
+First implementation order:
+
+1. Define `docs/visual-regression-evidence.md` and `docs/schemas/visual-evidence-run.schema.json` for state profiles, screenshot records, diff records, and baseline verdicts.
+2. Extend the Playwright reporter so selected specs can publish visual evidence into a task or Test Run Service record.
+3. Add a small baseline store under project evidence, keyed by profile, viewport, theme, and feature flags.
+4. Add a task-detail Visual Evidence panel that shows run status, screenshot thumbnails, diff thumbnails, trace links, and baseline status.
+5. Add explicit baseline actions: accept candidate, reject candidate, annotate expected diff, and create follow-up task.
+6. Feed visual verdicts into the Test Run Service quality metrics so CI, local Playwright, and project review all speak one evidence language.
+
+This builds on Test Run Service, Creativity And Design, and Product Runtime Observability. Test Run Service owns the run lifecycle; Visual Regression Evidence owns the screenshots, comparisons, and review semantics.
+
+### CI/CD Status Integrations
+
+External CI/CD status should be visible on tasks and projects. The first concrete target is TeamCity, because it is already part of the user's working environment. The product should still model this as a neutral CI/CD adapter layer so TeamCity does not leak into core task logic.
+
+The task detail should answer:
+
+- Has the relevant commit been built by the configured CI server?
+- Which build configuration or pipeline profile ran?
+- Is the build queued, running, green, failed, canceled, or unknown?
+- Which tests failed, which artifacts were produced, and which logs or screenshots are worth opening?
+- Did the failure come from the task's commit, a later branch state, infrastructure, missing credentials, or an unrelated queued build?
+
+TeamCity V1 should support:
+
+- Project-level mapping from watched project to TeamCity project id and build configurations.
+- Commit-bound status lookup through TeamCity's REST API.
+- Build queue and running-build status.
+- Test result summary, failed-test list, artifact links, and build log links.
+- Optional explicit "trigger CI run" action for selected profiles, never automatic hidden triggering.
+- Webhook receiver later, with polling reconciliation as the source of truth.
+
+Hard rules:
+
+- CI status is commit-bound. Branch-only status is too ambiguous for task review.
+- TeamCity is an adapter behind the Test Run Service contract. Task UI consumes the neutral run record, not TeamCity's raw model.
+- Secrets and server URLs live in local configuration or project settings, not committed docs or job artifacts.
+- Read-only status lands first. Triggering remote builds is explicit, audited, and tied to a human or orchestrator action.
+- CI artifacts stay remote unless fetched deliberately. The app stores pointers and selected summaries, not whole build archives by default.
+
+First implementation order:
+
+1. Extend the Test Run Service contract with an `executor` envelope for CI/CD providers and a commit-bound lookup API.
+2. Add project settings for CI provider, TeamCity server, project id, build configuration mapping, and default profiles.
+3. Implement a TeamCity adapter that maps build queue, running build, finished build, failed tests, and artifacts into the neutral run record.
+4. Show CI/CD status chips on task detail, project Test Quality, and project overview.
+5. Add drill-down from a failed CI run to failed tests, artifacts, logs, screenshots, and follow-up-task creation.
+6. Add optional explicit trigger actions once read-only status is stable.
+
+This is sibling to Visual Regression Evidence. Visual evidence can be produced locally or by TeamCity; the task sees one quality record either way.
+
 ### Drift Control
 
 Make Drift a first-class project dimension beside Architecture. The most important drift is not document-to-document drift; it is when the actual software no longer follows the documented intent, architecture, guidelines, tests, runtime expectations, or product promises.
@@ -413,6 +491,46 @@ First implementation order:
 3. Context enrichment as a Planning step in the Intake phase, producing a richer task context before agent execution begins.
 4. Context health action: scheduled or manual report on stale, contradicting, or missing context, with proposed follow-up tasks.
 5. Memory tier surfaces: job-folder Episodic history, Steering Docs Semantic view, Skills Procedural catalog — unified as a readable project knowledge layer.
+
+### Prompt And Context Optimization
+
+The product should analyze how agents actually gather context, then help the human improve prompts, steering docs, skills, and project knowledge layout. This is not about guessing whether a prompt "sounds good." It is about observing the agent's tool behavior: which files it reads, which docs it repeatedly opens, which search patterns it uses, where it scans too broadly, and which missing or stale context causes extra work.
+
+The first useful signal is simple access telemetry:
+
+- Reads of `README.md`, `AGENTS.md`, `CLAUDE.md`, `.github/copilot-instructions.md`, skill files, runtime prompts, ADRs, roadmap, setup docs, and project-specific steering docs.
+- `rg`, file-list, glob, find, and directory-list operations, including repeated queries and broad searches.
+- Tool access around task start, planning, implementation, verification, and review.
+- Repeated reads of the same documents across similar tasks.
+- Missed high-value documents that were relevant to the task but only discovered late or not at all.
+- Heavy context-gathering loops that cost time and tokens before the agent can act.
+
+What the surface should provide:
+
+- **Context access report** per task: top files read, steering docs read, skills read, search queries, repeated reads, late discoveries, and likely context gaps.
+- **Project context efficiency report**: which docs are used constantly, which are never used, which are too broad, which should be split into a skill, and which should move into an index.
+- **Prompting pattern analysis**: detect repeated task shapes and recommend reusable prompt patterns, intake templates, acceptance-criteria templates, or skill entries.
+- **Context packaging suggestions**: propose a smaller "start here" index, a project-specific AGENTS section, a skill lookup table, or task-template improvements when telemetry shows the agent keeps searching for the same information.
+- **Before/after comparison**: measure whether a steering-doc or prompt-pattern change reduced repeated searches, time to first edit, token spend, or failed pickups.
+
+Hard rules:
+
+- Observation first. The app may propose prompt, skill, README, AGENTS, or ADR edits, but it must not rewrite them silently.
+- Tool telemetry should capture paths, operation types, query text, timestamps, and rough phase. Full file contents are not duplicated unless the source artifact already exists in task evidence.
+- Different CLIs expose different tool-call detail. The analysis must handle partial telemetry and label confidence accordingly.
+- Recommendations become reports, patches, or follow-up tasks. They do not directly alter future prompts without review.
+- Do not optimize for fewer reads at the expense of safety. Reading the right contract twice is better than skipping it.
+
+First implementation order:
+
+1. Define a tool-access event model over existing `tool-calls.jsonl`, CLI logs, and future Agent Message Bus events.
+2. Build a task-level Context Access report that summarizes reads, searches, skills, steering docs, repeated lookups, and likely gaps.
+3. Add a project-level Prompt And Context Optimization report that aggregates recent tasks and identifies recurring context patterns.
+4. Add recommendation types: improve index, split skill, add task template, update AGENTS, update README, add ADR pointer, add acceptance-criteria pattern.
+5. Add follow-up-task creation and proposed patch generation for context improvements.
+6. Add before/after metrics so context optimizations can prove they reduced friction without hiding evidence.
+
+This extends Context Engineering and Analysis Reports. Context Engineering makes the intended context visible; Prompt And Context Optimization compares that intent with what agents actually had to do with tools.
 
 ### Agent Message Bus and Observability
 
