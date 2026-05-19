@@ -97,7 +97,7 @@
       margin: 0;
       font-size: 14px;
       font-weight: 600;
-      color: #e2e8f0;
+      color: var(--studio-fg, #e2e8f0);
       flex: 1 1 0;
       min-width: 0;
       overflow: hidden;
@@ -109,7 +109,7 @@
       border-radius: 10px;
       padding: 2px 8px;
       font-size: 12px;
-      color: #94a3b8;
+      color: var(--studio-fg-dim, #94a3b8);
     }
     .column__body {
       display: flex;
@@ -266,7 +266,7 @@
     .column__archive-all {
       background: rgba(100, 116, 139, 0.12);
       border: 1px solid rgba(100, 116, 139, 0.3);
-      color: #94a3b8;
+      color: var(--studio-fg-dim, #94a3b8);
       padding: 3px 8px;
       border-radius: 8px;
       cursor: pointer;
@@ -313,7 +313,7 @@
     .column__collapse {
       background: rgba(255,255,255,0.04);
       border: 1px solid rgba(255,255,255,0.08);
-      color: #94a3b8;
+      color: var(--studio-fg-dim, #94a3b8);
       width: 22px;
       height: 22px;
       padding: 0;
@@ -328,7 +328,7 @@
     .column__collapse:hover {
       background: rgba(255,255,255,0.10);
       border-color: rgba(255,255,255,0.18);
-      color: #e2e8f0;
+      color: var(--studio-fg, #e2e8f0);
     }
     /*
      * Collapsed-lane rail. Same vertical rhythm as a full column so the
@@ -380,7 +380,7 @@
       transform: rotate(180deg);
       font-size: 11px;
       font-weight: 600;
-      color: #94a3b8;
+      color: var(--studio-fg-dim, #94a3b8);
       letter-spacing: 0.06em;
       text-transform: uppercase;
       margin: 4px 0 6px;
@@ -436,7 +436,7 @@
       filter: saturate(1.1);
     }
     .column-rail__expand {
-      color: #64748b;
+      color: var(--studio-fg-muted, #64748b);
       font-size: 14px;
       line-height: 1;
       margin-top: auto;
@@ -463,7 +463,7 @@
     .archive-row:hover { background: rgba(255,255,255,0.05); color: #f1f5f9; }
     .archive-row__date {
       font-family: var(--font-mono);
-      color: #64748b;
+      color: var(--studio-fg-muted, #64748b);
       font-size: 11px;
       font-variant-numeric: tabular-nums;
     }
@@ -488,7 +488,7 @@
       margin-top: 8px;
       padding: 6px 8px;
       font-size: 11px;
-      color: #64748b;
+      color: var(--studio-fg-muted, #64748b);
       border-top: 1px dashed rgba(255,255,255,0.08);
     }
     .archive-overflow code {

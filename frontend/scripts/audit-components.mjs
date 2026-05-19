@@ -104,10 +104,12 @@ for (const ts of tsFiles) {
   // hex-colour outside :root/:host
   if (scss) {
     const scssText = readAll(scss);
-    // Strip :root and :host blocks, then look for hex.
+    // Strip :root, :host, and `var(--token, #fallback)` fallbacks — the
+    // hex inside a var() fallback IS the token system, not bypassing it.
     const stripped = scssText
       .replace(/:host\b[^{]*\{[\s\S]*?\}/g, '')
-      .replace(/:root\b[^{]*\{[\s\S]*?\}/g, '');
+      .replace(/:root\b[^{]*\{[\s\S]*?\}/g, '')
+      .replace(/var\(\s*--[A-Za-z0-9_-]+\s*,\s*#[0-9a-fA-F]{3,8}\b[^)]*\)/g, '');
     const matches = stripped.match(/#[0-9a-fA-F]{3,8}\b/g) ?? [];
     if (matches.length > 0) issues.push({ kind: 'hex-colour', detail: `${matches.length} hard-coded hex` });
   }

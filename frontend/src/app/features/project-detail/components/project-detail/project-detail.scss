@@ -8,7 +8,7 @@
   padding-bottom: 8px;
   border-bottom: 1px solid rgba(255,255,255,0.10);
 }
-.proj-detail__title { margin: 0; color: #f8fafc; font-size: 1.1rem; }
+.proj-detail__title { margin: 0; color: var(--studio-fg-strong, #f8fafc); font-size: 1.1rem; }
 .proj-detail__feed {
   margin-left: auto;
   background: rgba(249, 226, 175, 0.14);
@@ -71,7 +71,7 @@
   border-radius: 10px;
   background: linear-gradient(180deg, rgba(248,113,113,0.18) 0%, rgba(248,113,113,0.08) 100%);
   box-shadow: 0 6px 18px rgba(248,113,113,0.12);
-  color: #f8fafc;
+  color: var(--studio-fg-strong, #f8fafc);
   font-size: 0.88rem;
 }
 .proj-detail__live-banner--blocked {
@@ -108,7 +108,7 @@
 }
 .proj-detail__live-banner__title {
   margin: 0 0 2px;
-  color: #f8fafc;
+  color: var(--studio-fg-strong, #f8fafc);
   font-weight: 600;
 }
 .proj-detail__live-banner__reason {
@@ -120,7 +120,7 @@
   width: 100%;
   box-sizing: border-box;
   background: rgba(0,0,0,0.30);
-  color: #f8fafc;
+  color: var(--studio-fg-strong, #f8fafc);
   border: 1px solid rgba(255,255,255,0.18);
   border-radius: 6px;
   padding: 8px 10px;
@@ -277,7 +277,7 @@
 .proj-detail__push-option--active {
   border-color: #94e2d5;
   background: rgba(148,226,213,0.16);
-  color: #f8fafc;
+  color: var(--studio-fg-strong, #f8fafc);
   font-weight: 600;
 }
 .proj-detail__push-option small {
@@ -322,7 +322,7 @@
 .proj-detail__status-cell strong {
   display: block;
   margin-top: 4px;
-  color: #e2e8f0;
+  color: var(--studio-fg, #e2e8f0);
   font-size: 0.9rem;
   overflow-wrap: anywhere;
 }
@@ -403,7 +403,7 @@
 .proj-detail__entry--action { border-left-color: rgba(125,211,252,0.50); }
 .proj-detail__entry--observation { border-left-color: rgba(148,163,184,0.40); }
 .proj-detail__entry--intervention { border-left-color: rgba(249,226,175,0.55); }
-.proj-detail__entry p { margin: 0 0 6px; color: #e2e8f0; font-size: 0.92rem; line-height: 1.5; }
+.proj-detail__entry p { margin: 0 0 6px; color: var(--studio-fg, #e2e8f0); font-size: 0.92rem; line-height: 1.5; }
 .proj-detail__entry header {
   display: flex;
   gap: 10px;
