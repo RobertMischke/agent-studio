@@ -10,7 +10,11 @@
 :host(.is-open) { width: min(440px, 92vw); }
 
 .sheet {
-  width: min(440px, 92vw);
+  /* Mirror the host width via 100% rather than repeating the min() so
+     the inner sheet's geometry tracks the host's open/close animation
+     instead of staying at its fully-open size while the host is mid-
+     transition. */
+  width: 100%;
   height: 100%;
   background: #11111b;
   border-left: 1px solid rgba(255,255,255,0.08);

@@ -2,12 +2,20 @@
    closed it collapses to zero width so the main board reclaims the space
    and stays fully visible; when open it animates to a right-hand sheet
    that does not cover the rest of the workspace. This is a persistent
-   chat surface, not a modal. */
+   chat surface, not a modal.
+
+   IMPORTANT: `overflow: hidden` + `.sheet { width: 100% }` is the
+   contract that makes the panel actually push the workspace instead of
+   overlaying it. With `overflow: visible` plus a fixed-width inner
+   `.sheet`, the 640px content kept rendering past the host's 0px
+   collapsed width and floated over the studio-shell — the visible
+   behaviour we just fixed. Keep the host clipped so the inner sheet
+   width is always bounded by the animating host width. */
 :host {
   display: block;
   width: 0;
   transition: width 0.22s ease;
-  overflow: visible;
+  overflow: hidden;
   flex: 0 0 auto;
 }
 
@@ -22,7 +30,7 @@
 }
 
 .sheet {
-  width: min(640px, 96vw);
+  width: 100%;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -253,7 +261,8 @@
    width on phones. */
 @media (max-width: 720px) {
   :host(.is-open) { width: min(100vw, 460px); }
-  .sheet { width: min(100vw, 460px); }
+  /* `.sheet { width: 100% }` already inherits the host width, so the
+     mobile breakpoint only needs to override the host width override. */
   .sheet__header {
     grid-template-columns: 1fr auto;
   }
