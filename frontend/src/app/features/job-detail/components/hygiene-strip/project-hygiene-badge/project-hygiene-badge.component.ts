@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input } from '@angular/core';
-import { GitHygieneService } from '../../../../services/git-hygiene.service';
+import { GitHygieneService } from '../../../../../services/git-hygiene.service';
 
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from '../../../../../components/tooltip';
 /**
  * Compact dirty / unpushed badge rendered on the project header chip.
  * Subscribes to the shared GitHygieneService so multiple consumers share

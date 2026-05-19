@@ -1,10 +1,10 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
-import { GitPaneService } from '../../services/git-pane.service';
-import { GitFileTreeComponent } from './git-file-tree.component';
+import { GitPaneService } from '../../../services/git-pane.service';
+import { GitFileTreeComponent } from '../git-file-tree/git-file-tree.component';
 
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from '../../../../../components/tooltip';
 // Cycle 7f: diff2html (~120 KB minified, includes its own theme CSS) is
 // loaded lazily the first time a non-empty diff arrives. The pre-Cycle-7f
 // import was static, which dragged the whole library into the initial

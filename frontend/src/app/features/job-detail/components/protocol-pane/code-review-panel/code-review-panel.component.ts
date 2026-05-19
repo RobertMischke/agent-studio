@@ -1,10 +1,10 @@
 import { ChangeDetectionStrategy, Component, OnInit, computed, inject, input, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { JobInfo } from '../../../../models/job.model';
-import { CodeReviewListEntry, JobService } from '../../../../services/job.service';
+import { JobInfo } from '../../../../../models/job.model';
+import { CodeReviewListEntry, JobService } from '../../../../../services/job.service';
 
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from '../../../../../components/tooltip';
 /**
  * User-triggered code-review panel that lives in the protocol pane.
  *

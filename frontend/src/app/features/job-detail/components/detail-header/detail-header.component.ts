@@ -8,7 +8,7 @@ import {
 } from '../../../../services/format.util';
 import { NowTickService } from '../../../../services/now-tick.service';
 import { projectIdentity } from '../../../../services/project-identity.util';
-import { ProjectHygieneBadgeComponent } from '../hygiene-strip/project-hygiene-badge.component';
+import { ProjectHygieneBadgeComponent } from '../hygiene-strip/project-hygiene-badge/project-hygiene-badge.component';
 
 import { TooltipDirective } from '../../../../components/tooltip';
 /**

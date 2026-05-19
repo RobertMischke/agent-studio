@@ -5,7 +5,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
 import { CodeReviewPanelComponent } from './code-review-panel.component';
-import type { JobInfo } from '../../../../models/job.model';
+import type { JobInfo } from '../../../../../models/job.model';
 
 /**
  * Behaviour spec for the user-triggered code-review panel. Pins the four

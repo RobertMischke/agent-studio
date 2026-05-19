@@ -26,12 +26,12 @@ import { RunTimelinePollService } from '../polling/services/run-timeline-poll.se
 import { ScreenshotsPollService } from '../polling/services/screenshots-poll.service';
 import { GitPaneService } from './services/git-pane.service';
 import { shouldShowFailureToast } from './services/run-outcome.util';
-import { GitPaneComponent } from './components/git-pane/git-pane.component';
+import { GitPaneComponent } from './components/git-pane/git-pane/git-pane.component';
 import { CliOutputPollService } from '../polling/services/cli-output-poll.service';
 import { CommandDeckComponent } from './components/command-deck/command-deck.component';
 import { PromptPaneComponent } from './components/prompt-pane/prompt-pane.component';
 import { LogOverlayComponent } from './components/log-overlay/log-overlay.component';
-import { ProtocolPaneComponent } from './components/protocol-pane/protocol-pane.component';
+import { ProtocolPaneComponent } from './components/protocol-pane/protocol-pane/protocol-pane.component';
 import { DetailHeaderComponent } from './components/detail-header/detail-header.component';
 import { CliConfigCardComponent } from './components/cli-config-card/cli-config-card.component';
 import { PaneToggleBarComponent } from './components/pane-toggle-bar/pane-toggle-bar.component';

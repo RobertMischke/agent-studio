@@ -1,39 +1,39 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, computed, inject, input, output, signal, ViewChild } from '@angular/core';
-import type { CliOutputLine, ContinueMode, JobDetail, JobOutcomeIssue, JobSummaryStatus, ReviewEvidenceEntry } from '../../../../models/job.model';
-import type { RunRecord } from '../../../../features/run-timeline';
-import { deriveWatchdogPill } from './watchdog-state';
-import { ActivityLogViewComponent } from '../activity-log-view';
-import { buildConversationTurns, parseActivityLog } from '../activity-log.parser';
-import { classifyOutcome, OutcomeAssessment, QuickReply } from '../agent-outcome.util';
-import { copyTextToClipboard } from '../../../../services/clipboard.util';
+import type { CliOutputLine, ContinueMode, JobDetail, JobOutcomeIssue, JobSummaryStatus, ReviewEvidenceEntry } from '../../../../../models/job.model';
+import type { RunRecord } from '../../../../../features/run-timeline';
+import { deriveWatchdogPill } from '../watchdog-state';
+import { ActivityLogViewComponent } from '../../activity-log-view/activity-log-view';
+import { buildConversationTurns, parseActivityLog } from '../../activity-log.parser';
+import { classifyOutcome, OutcomeAssessment, QuickReply } from '../../agent-outcome.util';
+import { copyTextToClipboard } from '../../../../../services/clipboard.util';
 import {
   formatTokens as fmtTokens,
   formatRateWindow as fmtRateWindow,
   formatResetIn as fmtResetIn
-} from '../../../../services/format.util';
-import { ClaudeSessionPollService } from '../../../polling/services/claude-session-poll.service';
-import { CliOutputPollService } from '../../../polling/services/cli-output-poll.service';
-import { SessionEventsPollService } from '../../../polling/services/session-events-poll.service';
-import { RunTimelinePollService } from '../../../polling/services/run-timeline-poll.service';
-import { ScreenshotsPollService } from '../../../polling/services/screenshots-poll.service';
-import { ScreenshotStripComponent } from '../../../../features/screenshots/components/screenshot-strip/screenshot-strip.component';
-import { NowTickService } from '../../../../services/now-tick.service';
-import { RunTimelineComponent } from './run-timeline.component';
-import { RunGitViewerComponent } from './run-git-viewer.component';
+} from '../../../../../services/format.util';
+import { ClaudeSessionPollService } from '../../../../polling/services/claude-session-poll.service';
+import { CliOutputPollService } from '../../../../polling/services/cli-output-poll.service';
+import { SessionEventsPollService } from '../../../../polling/services/session-events-poll.service';
+import { RunTimelinePollService } from '../../../../polling/services/run-timeline-poll.service';
+import { ScreenshotsPollService } from '../../../../polling/services/screenshots-poll.service';
+import { ScreenshotStripComponent } from '../../../../../features/screenshots';
+import { NowTickService } from '../../../../../services/now-tick.service';
+import { RunTimelineComponent } from '../run-timeline/run-timeline.component';
+import { RunGitViewerComponent } from '../run-git-viewer/run-git-viewer.component';
 import { CommonModule } from '@angular/common';
-import { FeatureFlagsService } from '../../../../services/feature-flags.service';
-import { VerboseDebugOverlayComponent } from '../../../../features/verbose-debug';
-import { HygieneStripComponent } from '../hygiene-strip/hygiene-strip.component';
-import { ReviewEvidencePanelComponent } from './review-evidence-panel.component';
-import { CodeReviewPanelComponent } from './code-review-panel.component';
-import { JobService } from '../../../../services/job.service';
-import type { ConversationEvent, RawLineRange } from '../../../../components/chat/conversation-event';
-import { ConversationViewComponent } from '../../../../components/chat/conversation-view.component';
-import { projectConversation } from '../../../../components/chat/conversation-projection';
-import { BeautifulResultsComponent } from '../beautiful-results/beautiful-results.component';
-import { deriveProtocolVerdict, type ProtocolVerdict } from './protocol-verdict';
+import { FeatureFlagsService } from '../../../../../services/feature-flags.service';
+import { VerboseDebugOverlayComponent } from '../../../../../features/verbose-debug';
+import { HygieneStripComponent } from '../../hygiene-strip/hygiene-strip/hygiene-strip.component';
+import { ReviewEvidencePanelComponent } from '../review-evidence-panel/review-evidence-panel.component';
+import { CodeReviewPanelComponent } from '../code-review-panel/code-review-panel.component';
+import { JobService } from '../../../../../services/job.service';
+import type { ConversationEvent, RawLineRange } from '../../../../../components/chat/conversation-event';
+import { ConversationViewComponent } from '../../../../../components/chat/conversation-view.component';
+import { projectConversation } from '../../../../../components/chat/conversation-projection';
+import { BeautifulResultsComponent } from '../../beautiful-results/beautiful-results.component';
+import { deriveProtocolVerdict, type ProtocolVerdict } from '../protocol-verdict';
 
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from '../../../../../components/tooltip';
 export type InspectorTab = 'protocol' | 'activity';
 
 /**

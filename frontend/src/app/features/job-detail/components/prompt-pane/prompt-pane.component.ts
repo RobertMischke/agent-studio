@@ -3,8 +3,8 @@ import { MarkdownRichEditorComponent } from '../../../../components/markdown-ric
 import { JobInfo, JobPromptHistoryEntry, JobTitleHistoryEntry, ReviewEvidenceEntry, ReviewEvidenceSource } from '../../../../models/job.model';
 import type { JobScreenshot } from '../../../screenshots';
 import { ScreenshotStripComponent } from '../../../screenshots/components/screenshot-strip/screenshot-strip.component';
-import { ReviewEvidencePanelComponent } from '../protocol-pane/review-evidence-panel.component';
-import { CodeReviewPanelComponent } from '../protocol-pane/code-review-panel.component';
+import { ReviewEvidencePanelComponent } from '../protocol-pane/review-evidence-panel/review-evidence-panel.component';
+import { CodeReviewPanelComponent } from '../protocol-pane/code-review-panel/code-review-panel.component';
 import { markdownToHtml } from '../../../../components/markdown-utils';
 import { MarkdownImageLightboxDirective } from '../../../../directives/markdown-image-lightbox.directive';
 import { resolveProtocolImageSrc } from '../protocol-pane/protocol-image-resolver';

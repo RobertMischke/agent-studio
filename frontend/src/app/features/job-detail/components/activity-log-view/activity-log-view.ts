@@ -1,8 +1,8 @@
 import { AfterViewInit, ChangeDetectionStrategy, Component, ElementRef, OnDestroy, computed, effect, input, output, signal, viewChild, inject } from '@angular/core';
 import { ScrollingModule } from '@angular/cdk/scrolling';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
-import { CliOutputLine } from '../../../models/job.model';
-import { copyTextToClipboard } from '../../../services/clipboard.util';
+import { CliOutputLine } from '../../../../models/job.model';
+import { copyTextToClipboard } from '../../../../services/clipboard.util';
 import {
   ActivityLogGroup,
   ActivityLogKind,
@@ -18,11 +18,11 @@ import {
   formatLiveSince,
   parseActivityLog,
   parseOrchestratorSteer
-} from './activity-log.parser';
-import { markdownToHtml } from '../../../components/markdown-utils';
-import { MarkdownImageLightboxDirective } from '../../../directives/markdown-image-lightbox.directive';
+} from '../activity-log.parser';
+import { markdownToHtml } from '../../../../components/markdown-utils';
+import { MarkdownImageLightboxDirective } from '../../../../directives/markdown-image-lightbox.directive';
 
-import { TooltipDirective } from '../../../components/tooltip';
+import { TooltipDirective } from '../../../../components/tooltip';
 type ViewMode = 'conversation' | 'trace';
 
 interface ToolChip {

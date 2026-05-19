@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
-import type { GitFileChange } from '../../../../features/git';
+import type { GitFileChange } from '../../../../../features/git';
 
-import { TooltipDirective } from '../../../../components/tooltip';
+import { TooltipDirective } from '../../../../../components/tooltip';
 interface TreeNode {
   /** Full path from repo root for files; folder path with trailing names joined for directories. */
   path: string;
