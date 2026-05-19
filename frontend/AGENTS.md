@@ -68,6 +68,25 @@ Existing deep imports across the codebase still work (they're just paths). Conve
 
 **Enforced by lint** (Cycle 10j): `eslint.config.js` carries a `no-restricted-imports` rule that blocks `**/features/*/{components,services,models,state}/**` from outside the feature. `npm run lint` runs the full ruleset. Files under the same feature and `**/*.spec.ts` / `**/e2e/**` are exempt.
 
+## Folder-per-component layout
+
+Every Angular component lives in its own folder under `components/` (or at the feature root for the feature's entry component). The folder holds the component's `.ts`, `.html`, `.scss`, and `.spec.ts` together — never spread them across the parent directory.
+
+```
+components/
+  cli-console/
+    cli-console.ts
+    cli-console.html
+    cli-console.scss
+    cli-console.spec.ts
+```
+
+Shared utility files (e.g. `*.util.ts`, `*.parser.ts`, `*-types.ts`, fixtures) that several components in the area depend on may stay at the parent `components/` level. The rule is one **component** per folder, not one file per folder.
+
+**Enforced by `npm run lint:structure`**: `scripts/check-component-folders.mjs` scans every `.ts` file under `src/app/` that declares `@Component` and fails the build if two component files share a folder. The same script also warns when a component file's basename doesn't match its containing folder, but the warning is non-blocking (the codebase has a handful of intentional `<folder>-panel.component.ts` cases).
+
+CSS linting runs with `npm run lint:css` (Stylelint, configured in `.stylelintrc.json`). Both run as part of `npm run lint`.
+
 ## Tests
 
 `npm test` runs Vitest via `@angular/build:unit-test` (Angular 21's first-party runner). All `src/**/*.spec.ts` are picked up; `e2e/` is Playwright-only and not part of `npm test`.

@@ -13,7 +13,9 @@
     "e2e:ui": "playwright test --ui",
     "e2e:headed": "playwright test --headed",
     "e2e:report": "playwright show-report",
-    "lint": "ng lint"
+    "lint": "ng lint && npm run lint:css && npm run lint:structure",
+    "lint:css": "stylelint \"src/**/*.scss\"",
+    "lint:structure": "node scripts/check-component-folders.mjs"
   },
   "private": true,
   "packageManager": "npm@11.3.0",
@@ -47,6 +49,8 @@
     "eslint": "^10.0.3",
     "jsdom": "^29.1.1",
     "prettier": "^3.8.1",
+    "stylelint": "^17.11.1",
+    "stylelint-config-standard-scss": "^17.0.0",
     "typescript": "~5.9.2",
     "typescript-eslint": "8.56.1",
     "vitest": "^4.0.0"
