@@ -1,4 +1,4 @@
-import { AfterViewChecked, ChangeDetectionStrategy, Component, ElementRef, EventEmitter, OnDestroy, Output, signal, ViewChild } from '@angular/core';
+import { AfterViewChecked, ChangeDetectionStrategy, Component, ElementRef, OnDestroy, signal, ViewChild, output } from '@angular/core';
 
 import { TooltipDirective } from '../../../../components/tooltip';
 interface ConsoleLine {
@@ -23,7 +23,7 @@ interface ConsoleLine {
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class UpdateStableConsoleComponent implements OnDestroy, AfterViewChecked {
-  @Output() closed = new EventEmitter<void>();
+  readonly closed = output<void>();
 
   readonly lines = signal<ConsoleLine[]>([]);
   readonly running = signal(false);

@@ -33,7 +33,7 @@
               <button type="button"
                       class="git-view__commit-chain-button"
                       [attr.aria-pressed]="git.selectedCommitSha() === entry.sha"
-                      [appTooltip]="(i + 1) + '/' + git.commitChain().length + ' · ' + entry.shortSha + ' · ' + entry.message"
+                      [appTooltip]="commitChainTooltip(entry, i)"
                       (click)="git.selectChainCommit(entry.sha)">
                 <span class="git-view__commit-chain-step">#{{ i + 1 }}</span>
                 <span class="git-view__commit-chain-sha">{{ entry.shortSha }}</span>

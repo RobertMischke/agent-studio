@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, EventEmitter, OnInit, Output, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, inject, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { DevToolsService, E2EJob, DeleteE2EReport } from '../../../../services/dev-tools.service';
 import { ConfirmDialogService } from '../../../../services/confirm-dialog.service';
@@ -26,8 +26,8 @@ type Phase = 'loading' | 'list' | 'deleting' | 'report' | 'error';
 export class E2ECleanupDialogComponent implements OnInit {
   private devTools = inject(DevToolsService);
 
-  @Output() closed = new EventEmitter<void>();
-  @Output() didDelete = new EventEmitter<void>();
+  readonly closed = output<void>();
+  readonly didDelete = output<void>();
 
   readonly phase = signal<Phase>('loading');
   readonly jobs = signal<E2EJob[]>([]);

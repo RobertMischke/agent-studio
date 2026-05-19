@@ -2,15 +2,14 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
-  EventEmitter,
   HostListener,
   Input,
   OnInit,
-  Output,
   ViewEncapsulation,
   computed,
   effect,
   inject,
+  output,
   signal,
 } from '@angular/core';
 import { JobService } from '../../../../services/job.service';
@@ -54,13 +53,13 @@ export class StatusBarComponent implements OnInit {
 
   @Input() projectNames: string[] = [];
 
-  @Output() readonly toggleUsage = new EventEmitter<void>();
-  @Output() readonly toggleOrchestrator = new EventEmitter<void>();
-  @Output() readonly toggleFeed = new EventEmitter<void>();
-  @Output() readonly toggleVisualEvidence = new EventEmitter<void>();
-  @Output() readonly toggleCliAdmin = new EventEmitter<void>();
-  @Output() readonly defaultCliChange = new EventEmitter<CliType>();
-  @Output() readonly defaultModelChange = new EventEmitter<{ cliType: CliType; model: string }>();
+  readonly toggleUsage = output<void>();
+  readonly toggleOrchestrator = output<void>();
+  readonly toggleFeed = output<void>();
+  readonly toggleVisualEvidence = output<void>();
+  readonly toggleCliAdmin = output<void>();
+  readonly defaultCliChange = output<CliType>();
+  readonly defaultModelChange = output<{ cliType: CliType; model: string }>();
 
   readonly cliTypes = CLI_TYPES;
   readonly defaultCli = signal<CliType>(this.readDefaultCli());

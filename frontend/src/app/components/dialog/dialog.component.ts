@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, EventEmitter, HostListener, Input, Output, ViewEncapsulation } from '@angular/core';
+import { ChangeDetectionStrategy, Component, HostListener, Input, ViewEncapsulation, output } from '@angular/core';
 import { StudioIconComponent } from '../studio-icon/studio-icon.component';
 
 /**
@@ -61,8 +61,8 @@ export class DialogComponent {
   @Input() kind: 'default' | 'danger' | 'primary' = 'default';
   @Input() testid: string | null = null;
 
-  @Output() readonly closeRequest = new EventEmitter<void>();
-  @Output() readonly backdropClick = new EventEmitter<void>();
+  readonly closeRequest = output<void>();
+  readonly backdropClick = output<void>();
 
   onBackdropClick(): void {
     this.backdropClick.emit();

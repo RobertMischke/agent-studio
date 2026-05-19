@@ -3,6 +3,7 @@ import { DatePipe } from '@angular/common';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { GitPaneService } from '../../../services/git-pane.service';
 import { GitFileTreeComponent } from '../git-file-tree/git-file-tree.component';
+import type { JobCommitInfo } from '../../../../git';
 
 import { TooltipDirective } from '../../../../../components/tooltip';
 // Cycle 7f: diff2html (~120 KB minified, includes its own theme CSS) is
@@ -128,5 +129,9 @@ export class GitPaneComponent {
 
   toggleDiffMaximize(): void {
     this.diffMaximized.update(v => !v);
+  }
+
+  commitChainTooltip(entry: JobCommitInfo, index: number): string {
+    return `${index + 1}/${this.git.commitChain().length} · ${entry.shortSha} · ${entry.message}`;
   }
 }

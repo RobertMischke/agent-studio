@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, Input, Output, EventEmitter, ViewEncapsulation } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, ViewEncapsulation, output } from '@angular/core';
 import { StudioIconComponent, StudioIconName } from '../studio-icon/studio-icon.component';
 
 /**
@@ -33,6 +33,6 @@ export class PaneHeaderComponent {
   /** data-testid passthrough. */
   @Input() testid: string | null = null;
 
-  @Output() readonly maximize = new EventEmitter<void>();
-  @Output() readonly hide = new EventEmitter<void>();
+  readonly maximize = output<void>();
+  readonly hide = output<void>();
 }

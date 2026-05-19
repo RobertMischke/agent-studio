@@ -14,8 +14,9 @@
     "e2e:ui": "playwright test --ui",
     "e2e:headed": "playwright test --headed",
     "e2e:report": "playwright show-report",
-    "lint": "ng lint && npm run lint:css && npm run lint:structure",
+    "lint": "ng lint && npm run lint:css && npm run lint:components && npm run lint:structure",
     "lint:css": "stylelint \"src/**/*.scss\"",
+    "lint:components": "node scripts/check-component-size.mjs",
     "lint:structure": "node scripts/check-component-folders.mjs"
   },
   "private": true,

@@ -1,0 +1,118 @@
+{
+  "limits": {
+    "typeScript": 450,
+    "template": 260,
+    "styles": 600,
+    "total": 900
+  },
+  "components": {
+    "src/app/app.ts": {
+      "typeScript": 1529,
+      "template": 837,
+      "styles": 2165,
+      "total": 4531
+    },
+    "src/app/components/chat/chat/chat.component.ts": {
+      "typeScript": 608,
+      "template": 235,
+      "styles": 581,
+      "total": 1424
+    },
+    "src/app/components/markdown-rich-editor/markdown-rich-editor.ts": {
+      "typeScript": 451,
+      "template": 91,
+      "styles": 242,
+      "total": 784
+    },
+    "src/app/features/board/components/job-card/job-card.component.ts": {
+      "typeScript": 544,
+      "template": 217,
+      "styles": 723,
+      "total": 1484
+    },
+    "src/app/features/board/components/job-column/job-column.ts": {
+      "typeScript": 555,
+      "template": 193,
+      "styles": 547,
+      "total": 1295
+    },
+    "src/app/features/job-detail/components/activity-log-view/activity-log-view.ts": {
+      "typeScript": 490,
+      "template": 272,
+      "styles": 686,
+      "total": 1448
+    },
+    "src/app/features/job-detail/components/protocol-pane/protocol-pane/protocol-pane.component.ts": {
+      "typeScript": 839,
+      "template": 508,
+      "styles": 960,
+      "total": 2307
+    },
+    "src/app/features/job-detail/job-detail.ts": {
+      "typeScript": 1318,
+      "template": 159,
+      "styles": 1306,
+      "total": 2783
+    },
+    "src/app/features/orchestrator/components/orchestrator-side-sheet/orchestrator-side-sheet.component.ts": {
+      "typeScript": 921,
+      "template": 153,
+      "styles": 274,
+      "total": 1348
+    },
+    "src/app/features/project-chat/components/project-chat-list/project-chat-list.component.ts": {
+      "typeScript": 612,
+      "template": 190,
+      "styles": 224,
+      "total": 1026
+    },
+    "src/app/features/project-detail/components/project-detail/project-detail.ts": {
+      "typeScript": 361,
+      "template": 358,
+      "styles": 445,
+      "total": 1164
+    },
+    "src/app/features/project-detail/components/project-drift-overview-section/project-drift-overview-section.ts": {
+      "typeScript": 552,
+      "template": 313,
+      "styles": 314,
+      "total": 1179
+    },
+    "src/app/features/project-detail/components/project-observability/project-observability-panel.component.ts": {
+      "typeScript": 508,
+      "template": 382,
+      "styles": 449,
+      "total": 1339
+    },
+    "src/app/features/project-detail/components/project-product-runtime/project-product-runtime-panel.component.ts": {
+      "typeScript": 458,
+      "template": 406,
+      "styles": 226,
+      "total": 1090
+    },
+    "src/app/features/project-detail/components/uxui-panel/uxui-panel.component.ts": {
+      "typeScript": 247,
+      "template": 265,
+      "styles": 183,
+      "total": 695
+    },
+    "src/app/features/studio-shell/studio-shell.component.ts": {
+      "typeScript": 741,
+      "template": 767,
+      "styles": 1897,
+      "total": 3405
+    },
+    "src/app/features/verbose-debug/components/verbose-debug-overlay/verbose-debug-overlay.component.ts": {
+      "typeScript": 548,
+      "template": 311,
+      "styles": 336,
+      "total": 1195
+    },
+    "src/mockups/next-gen-chat/app/next-gen-chat-workbench-prototype.component.ts": {
+      "typeScript": 831,
+      "template": 879,
+      "styles": 0,
+      "total": 1710
+    }
+  }
+}

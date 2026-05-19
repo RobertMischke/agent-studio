@@ -6,11 +6,10 @@
  * (`.ts` file declaring `@Component`). Each component lives in its own
  * folder alongside its `.html` / `.scss` files.
  *
- * Soft rule (warning): the containing folder's basename should match
- * the component file's basename (minus the optional `.component`
- * suffix). This is a *warning* — the script does not fail on
- * mismatches, because some components are named with a trailing
- * descriptor (`-panel`, `-section`) that the folder name omits.
+ * Hard rule: the containing folder's basename should match the
+ * component file's basename (minus the optional `.component` suffix).
+ * Existing descriptor-style names stay as explicit baseline exceptions;
+ * new mismatches fail the lint gate.
  *
  * Examples that PASS:
  *   src/app/components/tooltip/tooltip.directive.ts          (utility, no @Component)
@@ -33,6 +32,10 @@ const files = execSync(`git ls-files ${root}`, { encoding: 'utf8' })
 const errors = [];
 const warnings = [];
 const byDir = new Map();
+const allowedFolderNameMismatches = new Set([
+  'src/app/features/project-detail/components/project-observability/project-observability-panel.component.ts',
+  'src/app/features/project-detail/components/project-product-runtime/project-product-runtime-panel.component.ts',
+]);
 
 for (const file of files) {
   const text = readFileSync(file, 'utf8');
@@ -42,10 +45,15 @@ for (const file of files) {
   const dir = dirname(file);
   const dirName = basename(dir);
 
-  if (dirName !== compName) {
+  if (dirName !== compName && allowedFolderNameMismatches.has(file)) {
     warnings.push({
       file,
-      reason: `folder '${dirName}/' does not match component name '${compName}' (soft rule, not enforced)`,
+      reason: `folder '${dirName}/' does not match component name '${compName}' (baseline exception)`,
+    });
+  } else if (dirName !== compName) {
+    errors.push({
+      file,
+      reason: `folder '${dirName}/' does not match component name '${compName}'`,
     });
   }
 
@@ -63,7 +71,7 @@ for (const [dir, entries] of byDir) {
 }
 
 if (warnings.length > 0) {
-  console.warn(`\n${warnings.length} folder-name warning(s) (non-blocking):\n`);
+  console.warn(`\n${warnings.length} folder-name baseline exception(s) (non-blocking):\n`);
   for (const w of warnings) {
     console.warn(`  - ${w.file}`);
     console.warn(`    ${w.reason}`);
@@ -77,12 +85,12 @@ if (errors.length > 0) {
     console.error(`    ${v.reason}`);
   }
   console.error('\nRule: every Angular component (.ts file with @Component) must live in its');
-  console.error('own folder alongside its .html and .scss files. No two components per folder.');
+  console.error('own matching folder alongside its .html and .scss files. No two components per folder.');
   console.error('See AGENTS.md (Frontend / folder-per-component) for details.\n');
   process.exit(1);
 }
 
 console.log(`OK: scanned ${files.length} .ts files; no two-components-per-folder violations.`);
 if (warnings.length > 0) {
-  console.log(`(${warnings.length} folder-name warning(s) above — fix when convenient.)`);
+  console.log(`(${warnings.length} folder-name baseline exception(s) above — remove after renaming.)`);
 }

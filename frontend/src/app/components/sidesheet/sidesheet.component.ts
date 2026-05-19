@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, Input, Output, EventEmitter, ViewEncapsulation } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, ViewEncapsulation, output } from '@angular/core';
 import { StudioIconComponent } from '../studio-icon/studio-icon.component';
 
 /**
@@ -52,5 +52,5 @@ export class SidesheetComponent {
   /** data-testid passthrough for stable element selection. */
   @Input() testid: string | null = null;
 
-  @Output() readonly closeRequest = new EventEmitter<void>();
+  readonly closeRequest = output<void>();
 }

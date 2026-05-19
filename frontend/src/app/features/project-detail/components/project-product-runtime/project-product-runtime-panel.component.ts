@@ -437,9 +437,8 @@ export class ProjectProductRuntimePanelComponent implements OnInit, OnDestroy {
     } catch { return iso; }
   }
   formatMs(ms: number): string { return formatMsStatic(ms); }
-  formatJson(e: ProductRuntimeEvent): string {
-    try { return JSON.stringify(e, null, 2); } catch { return String(e); }
-  }
+  formatJson(e: ProductRuntimeEvent): string { try { return JSON.stringify(e, null, 2); } catch { return String(e); } }
+  isDomainProblem(e: DomainTimelineEntry): boolean { return e.level === 'Error' || e.level === 'Fatal' || e.status === 'Failed' || e.status === 'Timeout'; }
 }
 
 function percentile(sorted: number[], p: number): number | null {

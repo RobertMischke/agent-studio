@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output, ViewEncapsulation } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, ViewEncapsulation, output } from '@angular/core';
 import { StudioIconComponent, StudioIconName } from '../studio-icon/studio-icon.component';
 
 /**
@@ -43,9 +43,9 @@ export class TreeRowComponent {
   @Input() level: 'root' | 'child' = 'root';
   @Input() testid: string | null = null;
 
-  @Output() readonly chevronClick = new EventEmitter<Event>();
-  @Output() readonly selectRequest = new EventEmitter<Event>();
-  @Output() readonly secondary = new EventEmitter<Event>();
+  readonly chevronClick = output<Event>();
+  readonly selectRequest = output<Event>();
+  readonly secondary = output<Event>();
 
   onChevronClick(ev: Event): void {
     ev.stopPropagation();

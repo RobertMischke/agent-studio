@@ -83,9 +83,15 @@ components/
 
 Shared utility files (e.g. `*.util.ts`, `*.parser.ts`, `*-types.ts`, fixtures) that several components in the area depend on may stay at the parent `components/` level. The rule is one **component** per folder, not one file per folder.
 
-**Enforced by `npm run lint:structure`**: `scripts/check-component-folders.mjs` scans every `.ts` file under `src/app/` that declares `@Component` and fails the build if two component files share a folder. The same script also warns when a component file's basename doesn't match its containing folder, but the warning is non-blocking (the codebase has a handful of intentional `<folder>-panel.component.ts` cases).
+**Enforced by `npm run lint:structure`**: `scripts/check-component-folders.mjs` scans every `.ts` file under `src/app/` that declares `@Component` and fails the build if two component files share a folder or if a new component file's basename doesn't match its containing folder. Existing `<folder>-panel.component.ts` descriptor cases are explicit baseline exceptions and should be removed when those components are renamed.
 
-CSS linting runs with `npm run lint:css` (Stylelint, configured in `.stylelintrc.json`). Both run as part of `npm run lint`.
+## Component size budgets
+
+Component size is a lint gate, not a review preference. `npm run lint:components` runs `scripts/check-component-size.mjs` and counts each Angular component across its controller (`.ts`), template (`.html`), stylesheet (`.scss`), and total lines. New or already-small components must stay under the global limits in `scripts/component-size-baseline.json`; existing oversized components are baseline debt and may not grow. Split templates, controllers, or styles before raising a baseline.
+
+The same guard requires external `templateUrl` files and rejects inline `template`, `style`, and `styles` metadata. This is intentionally redundant with ESLint so generated or LLM-authored components fail even before template-specific lint has to reason about the markup.
+
+CSS linting runs with `npm run lint:css` (Stylelint, configured in `.stylelintrc.json`). CSS, component-size, and structure checks all run as part of `npm run lint`.
 
 ## Chat surfaces (`<app-chat>` is canonical)
 

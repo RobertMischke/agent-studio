@@ -57,7 +57,7 @@
           @for (b of timelineBuckets(); track b.day) {
             <div class="tup__timeline-bar" role="listitem"
                  [attr.data-day]="b.day"
-                 [appTooltip]="b.day + ': ' + formatTokens(b.total) + ' tokens (' + b.calls + ' call' + (b.calls === 1 ? '' : 's') + ')'"
+                 [appTooltip]="timelineTooltip(b)"
                  [style.height.%]="b.heightPct">
               <span class="tup__timeline-bar-day">{{ b.shortDay }}</span>
             </div>

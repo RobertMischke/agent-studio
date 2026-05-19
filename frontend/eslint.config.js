@@ -23,6 +23,10 @@ module.exports = tseslint.config(
         { type: 'element', prefix: ['app', 'mockup'], style: 'kebab-case' },
       ],
       '@angular-eslint/prefer-on-push-component-change-detection': 'error',
+      '@angular-eslint/computed-must-return': 'error',
+      '@angular-eslint/no-implicit-take-until-destroyed': 'error',
+      '@angular-eslint/prefer-output-emitter-ref': 'error',
+      '@angular-eslint/prefer-output-readonly': 'error',
       // Cycle 11d: hard-floor the 3-file shape established in 11a/b.
       // Inline `template:` and `styles:` blocks bloat .ts files, defeat
       // per-file-type grep, and shut Prettier/template-aware lint out
@@ -62,7 +66,12 @@ module.exports = tseslint.config(
       ...angular.configs.templateRecommended,
       ...angular.configs.templateAccessibility,
     ],
-    rules: {},
+    rules: {
+      '@angular-eslint/template/conditional-complexity': [
+        'error',
+        { maxComplexity: 6 },
+      ],
+    },
   },
   {
     // The barrel-only rule is a guard for cross-feature wiring.

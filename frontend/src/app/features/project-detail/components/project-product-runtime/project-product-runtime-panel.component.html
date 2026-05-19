@@ -342,8 +342,7 @@
           } @else {
             <ol class="prt__domain-list">
               @for (e of domainTimeline(); track e.id) {
-                <li class="prt__domain-row"
-                    [class.prt__domain-row--bad]="e.level === 'Error' || e.level === 'Fatal' || e.status === 'Failed' || e.status === 'Timeout'"
+                <li class="prt__domain-row" [class.prt__domain-row--bad]="isDomainProblem(e)"
                     [attr.data-testid]="'product-runtime-domain-row'"
                     [attr.data-event]="e.event"
                     [attr.data-correlation]="e.correlationId">
@@ -403,4 +402,3 @@
         }
       }
     </section>
-  

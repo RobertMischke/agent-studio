@@ -20,6 +20,14 @@ interface CardSpec {
   category: ProjectTokenCategory | 'total';
 }
 
+interface TimelineBucket {
+  day: string;
+  shortDay: string;
+  total: number;
+  calls: number;
+  heightPct: number;
+}
+
 /**
  * Project Token Usage panel (slice 8 of the quality-system mockup,
  * docs/mockups/quality-system/, "Token Usage" surface). Renders the
@@ -105,11 +113,9 @@ export class ProjectTokenUsagePanelComponent {
   });
 
   /** Per-day buckets folded across all heatmap rows (the timeline view). */
-  readonly timelineBuckets = computed(() => {
+  readonly timelineBuckets = computed<TimelineBucket[]>(() => {
     const h = this.heatmap();
-    if (!h || h.days.length === 0) return [] as {
-      day: string; shortDay: string; total: number; calls: number; heightPct: number;
-    }[];
+    if (!h || h.days.length === 0) return [];
     const totals = new Map<string, { total: number; calls: number }>();
     for (const day of h.days) totals.set(day, { total: 0, calls: 0 });
     for (const row of h.jobs) {
@@ -257,6 +263,11 @@ export class ProjectTokenUsagePanelComponent {
     // Day strings are YYYY-MM-DD; render MM-DD to keep the heatmap tight.
     if (day.length >= 10) return day.slice(5);
     return day;
+  }
+
+  timelineTooltip(bucket: TimelineBucket): string {
+    const callsLabel = bucket.calls === 1 ? 'call' : 'calls';
+    return `${bucket.day}: ${this.formatTokens(bucket.total)} tokens (${bucket.calls} ${callsLabel})`;
   }
 
   catGlyph(category: ProjectTokenCategory): string {

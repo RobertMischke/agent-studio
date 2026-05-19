@@ -4,11 +4,10 @@ import {
   Component,
   DestroyRef,
   ElementRef,
-  EventEmitter,
   Input,
-  Output,
   ViewChild,
   inject,
+  output,
 } from '@angular/core';
 import type { CliType } from '../../../../models/job.model';
 import { ModalStackService } from '../../../../services/modal-stack.service';
@@ -74,9 +73,9 @@ export class CliUsageDetailModalComponent implements AfterViewInit {
   @Input() refreshing: Record<string, boolean> = {};
   @Input() refreshingAll = false;
 
-  @Output() readonly closed = new EventEmitter<void>();
-  @Output() readonly refreshAll = new EventEmitter<Event>();
-  @Output() readonly refreshOne = new EventEmitter<{ cliType: CliType; event: Event }>();
+  readonly closed = output<void>();
+  readonly refreshAll = output<Event>();
+  readonly refreshOne = output<{ cliType: CliType; event: Event }>();
 
   @ViewChild('dialog') private dialog?: ElementRef<HTMLElement>;
 

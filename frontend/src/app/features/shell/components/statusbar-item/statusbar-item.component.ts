@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, EventEmitter, Input, Output, ViewEncapsulation } from '@angular/core';
+import { ChangeDetectionStrategy, Component, Input, ViewEncapsulation, output } from '@angular/core';
 import { StudioIconComponent, StudioIconName } from '../../../../components/studio-icon/studio-icon.component';
 import { TooltipDirective } from '../../../../components/tooltip';
 
@@ -38,5 +38,5 @@ export class StatusbarItemComponent {
    *  chip to a flat SVG. */
   @Input() bullet: string | null = null;
 
-  @Output() readonly activated = new EventEmitter<MouseEvent>();
+  readonly activated = output<MouseEvent>();
 }
