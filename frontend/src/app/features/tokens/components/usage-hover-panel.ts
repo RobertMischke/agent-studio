@@ -15,7 +15,7 @@ import type { CliType } from '../../../models/job.model';
 import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../../features/quota';
 import type { AdHocUsageAggregate, TokenSummaryAggregate, TokenTimeline, WorkspaceExpensiveJob } from '../../../features/tokens';
 import { cliTypeIcon } from '../../../services/format.util';
-import { HeaderQuotaComponent } from '../../quota/components/header-quota';
+import { HeaderQuotaComponent } from '../../quota';
 import { TokensApiService } from '../../../features/tokens';
 import { QuotaApiService } from '../../../features/quota';
 import { CliUsageDetailModalComponent } from './cli-usage-detail-modal';

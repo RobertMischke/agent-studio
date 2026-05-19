@@ -1,6 +1,6 @@
 import { Component, OnDestroy, OnInit, signal, computed } from '@angular/core';
 import { JobService } from '../../../../services/job.service';
-import { QuotaStripComponent } from '../../../quota/components/quota-strip';
+import { QuotaStripComponent } from '../../../quota';
 import type { CliOutputLine, CliType } from '../../../../models/job.model';
 import type { CliSessionInfo, CliUsageProjectGroup, CliUsageReport, CliUsageSection } from '../../../../features/cli';
 
