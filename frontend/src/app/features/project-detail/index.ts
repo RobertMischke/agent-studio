@@ -4,11 +4,11 @@
 export { ProjectOverlaysService } from './state/project-overlays.service';
 
 // container components
-export { ProjectOverlaysComponent } from './components/project-overlays.component';
-export { ProjectDetailComponent } from './components/project-detail';
+export { ProjectOverlaysComponent } from './components/project-overlays/project-overlays.component';
+export { ProjectDetailComponent } from './components/project-detail/project-detail';
 export { ProjectShellComponent } from './components/project-shell/project-shell.component';
-export { AnalysisReportDrilldownComponent } from './components/analysis-report-drilldown';
-export { AutonomySliderComponent } from './components/autonomy-slider';
+export { AnalysisReportDrilldownComponent } from './components/analysis-report-drilldown/analysis-report-drilldown';
+export { AutonomySliderComponent } from './components/autonomy-slider/autonomy-slider';
 
 // rail panels (consumed by project-overlays + occasionally externally)
 export { SecurityPanelComponent } from './components/security-panel/security-panel.component';
@@ -17,7 +17,8 @@ export { ProjectObservabilityPanelComponent } from './components/project-observa
 export { ProjectProductRuntimePanelComponent } from './components/project-product-runtime/project-product-runtime-panel.component';
 
 // section components used cross-feature
-export { ProjectSteeringDocsSectionComponent } from './components/project-steering-docs-section';
+export { ProjectSteeringDocsSectionComponent } from './components/project-steering-docs-section/project-steering-docs-section';
+export { ProjectSkillReadinessSectionComponent } from './components/project-skill-readiness-section/project-skill-readiness-section';
 
 // project-shell config (deep-link slug helpers)
 export {

@@ -1,12 +1,12 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, signal } from '@angular/core';
-import { SupervisorService } from '../../../services/supervisor.service';
-import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../utils/visible-interval';
+import { SupervisorService } from '../../../../services/supervisor.service';
+import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
 import {
   MetaCycleActionKind,
   MetaCycleConfigDto,
   MetaCycleReport,
   MetaCycleVerdict,
-} from '../../../models/supervisor.model';
+} from '../../../../models/supervisor.model';
 
 /**
  * Project-level meta-cycle panel: shows whether the per-project pause-inspect-resume

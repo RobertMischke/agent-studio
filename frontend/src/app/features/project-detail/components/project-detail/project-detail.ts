@@ -1,22 +1,22 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { JobService } from '../../../services/job.service';
-import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../utils/visible-interval';
-import type { GroupedJobs, ProjectQueueHealth, RunnerStatus } from '../../../models/job.model';
-import type { OrchestratorLogEntry, OrchestratorSession } from '../../../features/orchestrator';
+import { JobService } from '../../../../services/job.service';
+import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
+import type { GroupedJobs, ProjectQueueHealth, RunnerStatus } from '../../../../models/job.model';
+import type { OrchestratorLogEntry, OrchestratorSession } from '../../../../features/orchestrator';
 import { OrchestratorRunner_KnownModels } from './project-detail.models';
-import { TokenSummaryBlockComponent } from '../../../features/tokens';
-import { GlobalOrchestratorCardComponent } from '../../../features/orchestrator';
-import { ProjectArchitectureSectionComponent } from './project-architecture-section';
-import { ProjectDriftSectionComponent } from './project-drift-section';
-import { ProjectDriftOverviewSectionComponent } from './project-drift-overview-section';
-import { ProjectSupervisorSectionComponent } from './project-supervisor-section';
-import { ProjectMetaCycleSectionComponent } from './project-meta-cycle-section';
-import { ProjectAnalysisReportsSectionComponent } from './project-analysis-reports-section';
-import { AutonomySliderComponent } from './autonomy-slider';
-import { AnalysisReport } from '../../../models/analysis-report.model';
+import { TokenSummaryBlockComponent } from '../../../../features/tokens';
+import { GlobalOrchestratorCardComponent } from '../../../../features/orchestrator';
+import { ProjectArchitectureSectionComponent } from '../project-architecture-section/project-architecture-section';
+import { ProjectDriftSectionComponent } from '../project-drift-section/project-drift-section';
+import { ProjectDriftOverviewSectionComponent } from '../project-drift-overview-section/project-drift-overview-section';
+import { ProjectSupervisorSectionComponent } from '../project-supervisor-section/project-supervisor-section';
+import { ProjectMetaCycleSectionComponent } from '../project-meta-cycle-section/project-meta-cycle-section';
+import { ProjectAnalysisReportsSectionComponent } from '../project-analysis-reports-section/project-analysis-reports-section';
+import { AutonomySliderComponent } from '../autonomy-slider/autonomy-slider';
+import { AnalysisReport } from '../../../../models/analysis-report.model';
 
-import { TooltipDirective } from '../../../components/tooltip';
+import { TooltipDirective } from '../../../../components/tooltip';
 interface ProjectSettingsRow {
   autoCommit: boolean;
   autoPushStrategy: AutoPushStrategy;

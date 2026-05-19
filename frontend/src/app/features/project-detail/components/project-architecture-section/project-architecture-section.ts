@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, signal } from '@angular/core';
-import { ProjectDocsService } from '../../../services/project-docs.service';
-import { ArchitectureDecisionSummary, ArchitectureOverview } from '../../../models/project-docs.model';
-import { markdownToHtml } from '../../../components/markdown-utils';
+import { ProjectDocsService } from '../../../../services/project-docs.service';
+import { ArchitectureDecisionSummary, ArchitectureOverview } from '../../../../models/project-docs.model';
+import { markdownToHtml } from '../../../../components/markdown-utils';
 
 /**
  * Project-level Architecture section: browse the project's

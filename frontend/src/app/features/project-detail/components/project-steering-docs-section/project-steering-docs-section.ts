@@ -1,16 +1,16 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, effect, inject, input, signal } from '@angular/core';
 import { Observable, map } from 'rxjs';
-import { SteeringDocsService } from '../../../services/steering-docs.service';
-import { JobService } from '../../../services/job.service';
-import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../utils/visible-interval';
+import { SteeringDocsService } from '../../../../services/steering-docs.service';
+import { JobService } from '../../../../services/job.service';
+import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
 import {
   SteeringDocsOverview,
   SteeringDocsSource,
   SteeringDocsWarning,
-} from '../../../models/steering-docs.model';
-import { markdownToHtml } from '../../../components/markdown-utils';
+} from '../../../../models/steering-docs.model';
+import { markdownToHtml } from '../../../../components/markdown-utils';
 
-import { TooltipDirective } from '../../../components/tooltip';
+import { TooltipDirective } from '../../../../components/tooltip';
 /**
  * Project-level Steering Docs surface. Shows the agent-facing
  * instruction sources for a watched project (README, AGENTS, ROADMAP,

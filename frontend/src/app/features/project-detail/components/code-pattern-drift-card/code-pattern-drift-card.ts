@@ -5,7 +5,7 @@ import {
   CodePatternFinding,
   CodePatternRuleSummary,
   DriftService,
-} from '../../../services/drift.service';
+} from '../../../../services/drift.service';
 
 /**
  * Project-screen card for the **Code Pattern Drift** quality gate. Hits

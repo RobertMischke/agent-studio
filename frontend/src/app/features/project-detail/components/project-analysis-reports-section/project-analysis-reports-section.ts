@@ -1,14 +1,14 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, output, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { AnalysisReportService } from '../../../services/analysis-report.service';
+import { AnalysisReportService } from '../../../../services/analysis-report.service';
 import {
   ANALYSIS_CADENCES,
   ANALYSIS_TOPICS,
   AnalysisReport,
-} from '../../../models/analysis-report.model';
-import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../utils/visible-interval';
+} from '../../../../models/analysis-report.model';
+import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
 
-import { TooltipDirective } from '../../../components/tooltip';
+import { TooltipDirective } from '../../../../components/tooltip';
 /**
  * Project-level Analysis Reports surface (ROADMAP "Analysis Reports and
  * Meta-Actions"). Three things in one section:

@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, inject, input, signal } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { ConceptHelpComponent } from '../../../components/concept-help/concept-help.component';
+import { ConceptHelpComponent } from '../../../../components/concept-help/concept-help.component';
 
 /**
  * Project-level "Check skill readiness" surface (docs/skills-architecture.md

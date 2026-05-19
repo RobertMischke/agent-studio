@@ -1,15 +1,17 @@
 import { ChangeDetectionStrategy, Component, computed, effect, inject, input, output, signal } from '@angular/core';
 import { JobService } from '../../../../services/job.service';
 import type { JobInfo } from '../../../../models/job.model';
-import { ProjectShellComponent } from '../../../project-detail/components/project-shell/project-shell.component';
-import { ProjectDetailComponent } from '../../../project-detail/components/project-detail';
-import { SecurityPanelComponent } from '../../../project-detail/components/security-panel/security-panel.component';
-import { UxuiPanelComponent } from '../../../project-detail/components/uxui-panel/uxui-panel.component';
+import {
+  ProjectShellComponent,
+  ProjectDetailComponent,
+  SecurityPanelComponent,
+  UxuiPanelComponent,
+  ProjectObservabilityPanelComponent,
+  ProjectProductRuntimePanelComponent,
+  ProjectSteeringDocsSectionComponent,
+  ProjectSkillReadinessSectionComponent,
+} from '../../../project-detail';
 import { ProjectTokenUsagePanelComponent } from '../../../project-token-usage/components/project-token-usage-panel.component';
-import { ProjectObservabilityPanelComponent } from '../../../project-detail/components/project-observability/project-observability-panel.component';
-import { ProjectProductRuntimePanelComponent } from '../../../project-detail/components/project-product-runtime/project-product-runtime-panel.component';
-import { ProjectSteeringDocsSectionComponent } from '../../../project-detail/components/project-steering-docs-section';
-import { ProjectSkillReadinessSectionComponent } from '../../../project-detail/components/project-skill-readiness-section';
 import { WorkspaceScreenshotsComponent } from '../../../screenshots';
 import {
   DEFAULT_PROJECT_RAIL_KEY,

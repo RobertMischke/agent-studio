@@ -1,13 +1,13 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, inject, input, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { SupervisorService } from '../../../services/supervisor.service';
-import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../utils/visible-interval';
+import { SupervisorService } from '../../../../services/supervisor.service';
+import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
 import {
   SupervisorAdvisory,
   SupervisorIntervention,
   SupervisorObservation,
-} from '../../../models/supervisor.model';
-import { ConceptHelpComponent } from '../../../components/concept-help/concept-help.component';
+} from '../../../../models/supervisor.model';
+import { ConceptHelpComponent } from '../../../../components/concept-help/concept-help.component';
 
 /**
  * Project-level Supervisor panel: live observation snapshot + recent
