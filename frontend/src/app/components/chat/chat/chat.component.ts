@@ -407,23 +407,27 @@ export class ChatComponent implements AfterViewInit, OnDestroy {
 
   eventIcon(kind: ChatEventKind): string {
     switch (kind) {
-      case 'tool-call':  return '🔧';
-      case 'watchdog':   return '⏱';
-      case 'rate-limit': return '⏳';
-      case 'decision':   return '⚙';
-      case 'update':     return '↻';
-      case 'task':       return '🎯';
+      case 'tool-call':         return '🔧';
+      case 'watchdog':          return '⏱';
+      case 'rate-limit':        return '⏳';
+      case 'decision':          return '⚙';
+      case 'update':            return '↻';
+      case 'task':              return '🎯';
+      case 'session-recovered': return '⟳';
+      case 'memory-refreshed':  return '⊕';
     }
   }
 
   eventLabel(kind: ChatEventKind): string {
     switch (kind) {
-      case 'tool-call':  return 'Tool call';
-      case 'watchdog':   return 'Watchdog';
-      case 'rate-limit': return 'Rate limit';
-      case 'decision':   return 'Decision';
-      case 'update':     return 'Update';
-      case 'task':       return 'Task';
+      case 'tool-call':         return 'Tool call';
+      case 'watchdog':          return 'Watchdog';
+      case 'rate-limit':        return 'Rate limit';
+      case 'decision':          return 'Decision';
+      case 'update':            return 'Update';
+      case 'task':              return 'Task';
+      case 'session-recovered': return 'Session recovered';
+      case 'memory-refreshed':  return 'Memory refreshed';
     }
   }
 

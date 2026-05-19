@@ -183,6 +183,20 @@
       border-color: rgba(239,68,68,0.6);
       background: rgba(127,29,29,0.18);
     }
+    /* Generic agent/model state events. The session-recovered case
+       represents a session resumed after a drop (network, retry); the
+       memory-refreshed case represents the agent's working memory being
+       re-sourced from project state. Same compact-and-expand shape as
+       the other event cards, just tinted so they read as
+       informational rather than warnings. */
+    .chat__event--session-recovered {
+      border-color: rgba(16,185,129,0.45);
+      background: rgba(6,78,59,0.18);
+    }
+    .chat__event--memory-refreshed {
+      border-color: rgba(96,165,250,0.45);
+      background: rgba(30,58,138,0.18);
+    }
     .chat__event-head {
       display: grid;
       grid-template-columns: 18px auto 1fr auto auto;
@@ -215,6 +229,10 @@
     }
     .chat__event--warn .chat__event-kind  { color: #fbbf24; }
     .chat__event--error .chat__event-kind { color: #fca5a5; }
+    .chat__event--session-recovered .chat__event-kind { color: #34d399; }
+    .chat__event--memory-refreshed .chat__event-kind  { color: #60a5fa; }
+    .chat__event--session-recovered .chat__event-icon { color: #34d399; }
+    .chat__event--memory-refreshed .chat__event-icon  { color: #60a5fa; }
     .chat__event-summary {
       color: #e2e8f0;
       overflow: hidden;

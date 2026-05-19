@@ -82,6 +82,8 @@
             <article class="chat__event"
                      [class.chat__event--warn]="item.event.severity === 'warn'"
                      [class.chat__event--error]="item.event.severity === 'error'"
+                     [class.chat__event--session-recovered]="item.event.kind === 'session-recovered'"
+                     [class.chat__event--memory-refreshed]="item.event.kind === 'memory-refreshed'"
                      [class.chat__event--expanded]="item.expanded"
                      [attr.data-testid]="'chat-event-' + item.event.kind"
                      [attr.data-event-id]="item.event.id"

@@ -71,7 +71,19 @@ export type ChatEventKind =
   | 'rate-limit'
   | 'decision'
   | 'update'
-  | 'task';
+  | 'task'
+  /**
+   * The model/agent session was interrupted (network drop, retry, etc.)
+   * and recovery succeeded. Detail typically names how many turns were
+   * lost. Renders with a green accent.
+   */
+  | 'session-recovered'
+  /**
+   * The orchestrator's working memory was refreshed from project-state
+   * sources. Detail typically lists the sources (status files, roadmap,
+   * etc.). Renders with a blue accent.
+   */
+  | 'memory-refreshed';
 
 export interface ChatEvent {
   id: string;
