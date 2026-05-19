@@ -23,6 +23,11 @@ export {
   type ProjectTokenChipInfo,
   type ProjectRunnerIndicator,
 } from './components/project-tabs/project-tabs.component';
+export {
+  buildProjectTokenChip,
+  projectAutoInfo,
+  projectRunnerIndicator,
+} from './components/project-tabs/project-chip-view-model';
 
 // utilities
 export { splitReadyByPhase } from './components/ready-lane-split.util';

@@ -83,17 +83,11 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
   readonly queueRepairBusy = signal(false);
   readonly queueRepairMessage = signal<string | null>(null);
 
-  // ADR-0027: live, in-progress decision sentinels emitted by the running
-  // job. Distinct from pendingDecisions (post-run, lane-scoped). Polled on
-  // the same 5 s interval refreshAll uses; cleared by the backend the
-  // moment the user replies (the [user] line resolves the sentinel).
   readonly livePendingDecisions = signal<readonly { jobId: string; title: string; kind: string; reason: string | null; detectedAt: string }[]>([]);
   readonly liveReplyDrafts: Record<string, string> = {};
   readonly liveReplySending: Record<string, boolean> = {};
   readonly liveReplyErrors: Record<string, string | null> = {};
 
-  // Two-way bound drafts so the form is responsive even before the
-  // server round-trip completes.
   autoCommitDraft = false;
   autoPushStrategyDraft: AutoPushStrategy = 'on-completed';
   orchModelDraft = '';
@@ -195,6 +189,11 @@ export class ProjectDetailComponent implements OnInit, OnDestroy {
     ];
     return lanes.find(([, jobs]) => jobs.some(j => j.id === activeId))?.[0] ?? null;
   });
+
+  queueHealthLabel(health: ProjectQueueHealth, emptyLabel: string, noun: string): string {
+    if (health.issueCount === 0) return emptyLabel;
+    return `${health.issueCount} ${noun}${health.issueCount === 1 ? '' : 's'}`;
+  }
 
   readonly tokenTotalLabel = computed(() => {
     const entries = this.recentEntries();

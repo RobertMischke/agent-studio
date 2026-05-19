@@ -7,23 +7,20 @@ import { cliTypeIcon } from '../../../../services/format.util';
 import { projectIdentity } from '../../../../services/project-identity.util';
 import { TagRegistryStore } from '../../../../services/tag-registry.store';
 import { shouldShowFailureToast } from '../../../job-detail/services/run-outcome.util';
+import {
+  buildCommitTooltip,
+  buildTaskTypeChip,
+  buildTokenBubble,
+  formatShortTime,
+  formatTokens,
+} from './job-card-view-model';
 
 import { TooltipDirective } from '../../../../components/tooltip';
-import type { StructuredTooltip } from '../../../../components/tooltip';
 // Shared 'now' signal that ticks every 30s so all relative timestamps update in lockstep
 // without re-reading Date.now() during change detection (which causes NG0100).
 const nowTick = signal(Date.now());
 if (typeof window !== 'undefined') {
   setInterval(() => nowTick.set(Date.now()), 30_000);
-}
-
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
 }
 
 @Component({
@@ -58,12 +55,7 @@ export class JobCardComponent implements OnInit, OnDestroy {
    * values render as Feature so cards predating the rename keep a stable
    * chip.
    */
-  readonly taskTypeChip = computed<{ kind: string; label: string; icon: string; tooltip: string } | null>(() => {
-    const t = (this.job().taskType || 'chore').toLowerCase();
-    if (t === 'bug') return { kind: 'bug', label: 'Bug', icon: '🐞', tooltip: 'Task type: Bug' };
-    if (t === 'feature' || t === 'user-story') return { kind: 'feature', label: 'Feature', icon: '✨', tooltip: 'Task type: Feature' };
-    return { kind: 'chore', label: 'Chore', icon: '·', tooltip: 'Task type: Chore (default)' };
-  });
+  readonly taskTypeChip = computed(() => buildTaskTypeChip(this.job().taskType));
 
   /**
    * Tag chips on the card. Looks up label + colour from the workspace
@@ -235,35 +227,7 @@ export class JobCardComponent implements OnInit, OnDestroy {
    * and append a "+N more" hint when needed. HTML escaping is handled
    * by the tooltip controller's DOMPurify pass.
    */
-  readonly commitTooltip = computed<StructuredTooltip | string>(() => {
-    const c = this.job().commit;
-    if (!c) return '';
-    const subject = (c.message || '').split('\n')[0];
-    const files = c.files ?? [];
-    const title = `${c.shortSha} — ${c.filesChanged} file(s) changed`;
-    const parts: string[] = [];
-    if (subject) {
-      parts.push(`<div>${escapeHtml(subject)}</div>`);
-    }
-    if (files.length > 0) {
-      const max = JobCardComponent.FILE_LIST_MAX;
-      const shown = files.slice(0, max);
-      const overflow = files.length - shown.length;
-      const items = shown
-        .map(f => `<li><code>${escapeHtml(f)}</code></li>`)
-        .join('');
-      parts.push(`<ul>${items}</ul>`);
-      if (overflow > 0) {
-        parts.push(`<div><small>+${overflow} more file(s)</small></div>`);
-      }
-    }
-    if (parts.length === 0) {
-      return { title, body: `${c.filesChanged} file(s) changed` };
-    }
-    return { title, body: parts.join('') };
-  });
-
-  private static readonly FILE_LIST_MAX = 12;
+  readonly commitTooltip = computed(() => buildCommitTooltip(this.job().commit));
 
   ngOnInit(): void { this.stopPolling = this.gitSummary.ensurePolling(); }
   ngOnDestroy(): void { this.stopPolling?.(); }
@@ -413,7 +377,7 @@ export class JobCardComponent implements OnInit, OnDestroy {
     if (!issue) return null;
     const severity = (issue.severity ?? '').toLowerCase();
     const tone = severity === 'high' ? 'high' : severity === 'warn' ? 'warn' : 'info';
-    const seen = issue.lastSeenAt ? `\nLast seen: ${this.formatShortTime(issue.lastSeenAt)}` : '';
+    const seen = issue.lastSeenAt ? `\nLast seen: ${formatShortTime(issue.lastSeenAt)}` : '';
     const summary = issue.summary ? `\n\n${issue.summary}` : '';
     return {
       label: issue.label || issue.kind,
@@ -449,16 +413,7 @@ export class JobCardComponent implements OnInit, OnDestroy {
   }
 
   /** Compact tokens label: 850 -> "850", 2400 -> "2.4k", 850000 -> "850k", 3_100_000 -> "3.1M". */
-  formatTokens(n: number): string {
-    if (!isFinite(n) || n <= 0) return '0';
-    if (n < 1000) return Math.round(n).toString();
-    if (n < 1_000_000) {
-      const k = n / 1000;
-      return (k >= 100 ? Math.round(k) : Number(k.toFixed(1))) + 'k';
-    }
-    const m = n / 1_000_000;
-    return (m >= 100 ? Math.round(m) : Number(m.toFixed(1))) + 'M';
-  }
+  formatTokens(n: number): string { return formatTokens(n); }
 
   /**
    * Token-bubble descriptor: returns null when the task has no recorded
@@ -466,57 +421,7 @@ export class JobCardComponent implements OnInit, OnDestroy {
    * Tier thresholds match the prompt: < 50k neutral, < 500k blue,
    * < 5M mauve, otherwise peach.
    */
-  readonly tokenBubble = computed<{
-    label: string;
-    total: number;
-    input: number;
-    output: number;
-    cacheRead: number;
-    cacheWrite: number;
-    model: string | null;
-    lastUpdate: string | null;
-    tier: 'neutral' | 'blue' | 'mauve' | 'peach';
-    entries: { ts: string; tsLabel: string; model: string | null; total: number }[];
-  } | null>(() => {
-    const t = this.job().tokenSummary;
-    if (!t) return null;
-    const input = t.inputTokens ?? 0;
-    const output = t.outputTokens ?? 0;
-    const cacheRead = t.cacheReadTokens ?? 0;
-    const cacheWrite = t.cacheCreationTokens ?? 0;
-    const total = input + output + cacheRead + cacheWrite;
-    if (total <= 0) return null;
-    const tier = total >= 5_000_000 ? 'peach'
-      : total >= 500_000 ? 'mauve'
-      : total >= 50_000 ? 'blue'
-      : 'neutral';
-    const entries = (t.entries ?? []).map(e => ({
-      ts: e.ts,
-      tsLabel: this.formatShortTime(e.ts),
-      model: e.model,
-      total: (e.inputTokens ?? 0) + (e.outputTokens ?? 0) + (e.cacheReadTokens ?? 0) + (e.cacheCreationTokens ?? 0)
-    }));
-    return {
-      label: this.formatTokens(total),
-      total,
-      input,
-      output,
-      cacheRead,
-      cacheWrite,
-      model: t.lastModel ?? null,
-      lastUpdate: t.lastUpdate ? this.formatShortTime(t.lastUpdate) : null,
-      tier,
-      entries
-    };
-  });
-
-  private formatShortTime(iso: string): string {
-    try {
-      return new Date(iso).toLocaleString();
-    } catch {
-      return iso;
-    }
-  }
+  readonly tokenBubble = computed(() => buildTokenBubble(this.job().tokenSummary));
 
   readonly agentIcon = computed(() => {
     const t = this.job().cliType;

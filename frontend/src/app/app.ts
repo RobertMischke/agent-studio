@@ -21,12 +21,13 @@ import {
   JobColumnComponent,
   KanbanFilterSidesheetComponent,
   LaneCollapseService,
-  ProjectAutoInfo,
   ProjectTabsComponent,
-  ProjectTokenChipInfo,
   TypeFilterOption,
   BoardMutationsService,
   CreateJobFormService,
+  buildProjectTokenChip,
+  projectAutoInfo,
+  projectRunnerIndicator,
   splitReadyByPhase,
 } from './features/board';
 import { JobDetailComponent, JobSelectionService, TriageController } from './features/job-detail';
@@ -1266,136 +1267,16 @@ export class App implements OnInit, OnDestroy {
   readonly getProjectTokenChipFn = (name: string) => this.getProjectTokenChip(name);
   readonly identityFor = (name: string) => projectIdentity(name);
 
-  /**
-   * Aggregates `JobInfo.tokenSummary` across every job for `name` so the
-   * project chip on the board can show total tokens without an extra
-   * round-trip. Returns null when the project has no tokens at all - the
-   * chip stays clean for AI-untouched projects. The tooltip (hover) and
-   * the badge label use the same `formatTokens` shorthand the per-card
-   * popover uses, so totals read consistently across the surfaces.
-   */
-  private getProjectTokenChip(name: string): ProjectTokenChipInfo | null {
-    const jobs = this.jobService.jobs();
-    let totalTokens = 0;
-    let inputTokens = 0;
-    let outputTokens = 0;
-    let cacheReadTokens = 0;
-    let cacheCreationTokens = 0;
-    let jobsWithTokens = 0;
-    const modelLastSeen = new Map<string, number>();
-    for (const j of jobs) {
-      if (j.projectName !== name) continue;
-      const ts = j.tokenSummary;
-      if (!ts || ts.totalTokens <= 0) continue;
-      jobsWithTokens++;
-      totalTokens += ts.totalTokens;
-      inputTokens += ts.inputTokens;
-      outputTokens += ts.outputTokens;
-      cacheReadTokens += ts.cacheReadTokens;
-      cacheCreationTokens += ts.cacheCreationTokens;
-      // Walk per-call entries so we capture model switches (meta-tasks),
-      // not just the last model. We rank by the entry timestamp so the
-      // most recently used model lands first in the chip tooltip.
-      for (const e of ts.entries ?? []) {
-        const m = (e.model ?? '').trim();
-        if (!m) continue;
-        const t = Date.parse(e.ts) || 0;
-        const prev = modelLastSeen.get(m) ?? 0;
-        if (t > prev) modelLastSeen.set(m, t);
-      }
-      if (ts.lastModel) {
-        const m = ts.lastModel.trim();
-        if (m) {
-          const t = Date.parse(ts.lastUpdate ?? '') || 0;
-          const prev = modelLastSeen.get(m) ?? 0;
-          if (t > prev) modelLastSeen.set(m, t);
-        }
-      }
-    }
-    if (totalTokens <= 0 || jobsWithTokens === 0) return null;
-    const models = [...modelLastSeen.entries()].sort((a, b) => b[1] - a[1]).map(([m]) => m);
-    const fmt = this.formatTokensCompact;
-    const tooltipParts: string[] = [`↑ ${fmt(inputTokens)} input · ↓ ${fmt(outputTokens)} output`];
-    if (cacheReadTokens > 0) tooltipParts.push(`⚡ ${fmt(cacheReadTokens)} cache read`);
-    if (cacheCreationTokens > 0) tooltipParts.push(`+ ${fmt(cacheCreationTokens)} cache write`);
-    tooltipParts.push(
-      `${jobsWithTokens} ${jobsWithTokens === 1 ? 'task' : 'tasks'} with AI activity`,
-    );
-    if (models.length > 0) tooltipParts.push(`Models: ${models.join(', ')}`);
-    return {
-      totalTokens,
-      inputTokens,
-      outputTokens,
-      cacheReadTokens,
-      cacheCreationTokens,
-      jobsWithTokens,
-      models,
-      label: fmt(totalTokens),
-      tooltip: tooltipParts.join('\n'),
-    };
+  private getProjectTokenChip(name: string) {
+    return buildProjectTokenChip(this.jobService.jobs(), name);
   }
-
-  /** Same shorthand as `JobCardComponent.formatTokens` - keeps surfaces consistent. */
-  private formatTokensCompact = (n: number): string => {
-    if (!Number.isFinite(n) || n <= 0) return '0';
-    if (n < 1_000) return Math.round(n).toString();
-    if (n < 10_000) return (n / 1_000).toFixed(1) + 'k';
-    if (n < 1_000_000) return Math.round(n / 1_000) + 'k';
-    if (n < 10_000_000) return (n / 1_000_000).toFixed(1) + 'M';
-    return Math.round(n / 1_000_000) + 'M';
-  };
 
   getRunnerIndicator(name: string): { icon: string; cls: string } | null {
-    const status = this.jobService.runnerStatus();
-    const runner = status.projects[name];
-    if (!runner) return null;
-    if (runner.activeJobId) return { icon: '🔵', cls: 'running' };
-    if (runner.mode === 'paused') return { icon: '⏸', cls: 'paused' };
-    if (runner.mode === 'auto-continuous') return { icon: '🟢', cls: 'idle' };
-    if (runner.mode === 'auto-single') return { icon: '🟢', cls: 'idle' };
-    return null;
+    return projectRunnerIndicator(this.jobService.runnerStatus(), name);
   }
 
-  getAutoInfo(name: string): ProjectAutoInfo {
-    const status = this.jobService.runnerStatus();
-    const runner = status.projects[name];
-    const mode = runner?.mode ?? 'manual';
-    const readyCount = runner?.queuedJobIds.length ?? 0;
-    const hasActive = !!runner?.activeJobId;
-
-    if (mode === 'auto-continuous' || mode === 'auto-single') {
-      return {
-        state: 'on',
-        readyCount,
-        icon: '🔁',
-        label: 'Auto',
-        tooltip:
-          readyCount > 0
-            ? `Auto-pickup is on — when the current task finishes, the next Ready task starts automatically (${readyCount} waiting). Click to stop; the running task will continue, but no further tasks will be picked up.`
-            : `Auto-pickup is on — the next task moved to Ready will start automatically. Click to stop; the running task (if any) will continue but no further tasks will be picked up.`,
-      };
-    }
-
-    if (mode === 'paused' && hasActive) {
-      return {
-        state: 'stopping',
-        readyCount,
-        icon: '⏸',
-        label: 'Stopping',
-        tooltip: `Auto-pickup stopped — the current task keeps running, but no more tasks will be picked up automatically. Click to resume auto-pickup.`,
-      };
-    }
-
-    return {
-      state: 'off',
-      readyCount,
-      icon: '▶',
-      label: 'Auto',
-      tooltip:
-        readyCount > 0
-          ? `Enable auto-pickup — when the current task finishes, the next Ready task starts automatically (${readyCount} waiting).`
-          : `Enable auto-pickup — as soon as a task moves to Ready, it will start automatically.`,
-    };
+  getAutoInfo(name: string) {
+    return projectAutoInfo(this.jobService.runnerStatus(), name);
   }
 
   onToggleAuto(name: string) {

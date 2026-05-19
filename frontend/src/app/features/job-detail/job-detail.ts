@@ -29,17 +29,6 @@ import type { CliModelInfo } from '../../features/cli';
 import { JobService } from '../../services/job.service';
 import { ErrorDialogService } from '../../services/error-dialog.service';
 import { NowTickService } from '../../services/now-tick.service';
-import {
-  formatTokens as fmtTokens,
-  formatRateWindow as fmtRateWindow,
-  formatResetIn as fmtResetIn,
-  stateLabel as fmtStateLabel,
-  formatTime as fmtTime,
-  formatDate as fmtDate,
-  formatDateTime as fmtDateTime,
-  formatMultiplier as fmtMultiplier,
-  cliTypeLabel as fmtCliTypeLabel,
-} from '../../services/format.util';
 import { LayoutPanesService } from './services/layout-panes.service';
 import { LanePagerService } from './state/lane-pager.service';
 import { ClaudeSessionPollService } from '../polling/services/claude-session-poll.service';
@@ -61,6 +50,20 @@ import {
   TriagePanelComponent,
   TriageActionPayload,
 } from './components/triage-panel/triage-panel.component';
+import {
+  claudeSessionTooltip,
+  cliTypeLabel,
+  formatDate,
+  formatDateTime,
+  formatMultiplier,
+  formatRateWindow,
+  formatResetIn,
+  formatTime,
+  formatTokens,
+  isCliErrorMessage,
+  rateLimitTooltip,
+  stateLabel,
+} from './services/job-detail-formatters';
 import { markdownToHtml } from '../../components/markdown-utils';
 
 import { TooltipDirective } from '../../components/tooltip';
@@ -231,7 +234,7 @@ export class JobDetailComponent implements OnDestroy {
   }
 
   formatMultiplier(mult: number | null): string {
-    return fmtMultiplier(mult);
+    return formatMultiplier(mult);
   }
   readonly showCliConfig = signal(false);
   readonly cliStatus = signal<CliSettings | null>(null);
@@ -359,7 +362,7 @@ export class JobDetailComponent implements OnDestroy {
   }
 
   cliTypeLabel(t: CliType): string {
-    return fmtCliTypeLabel(t);
+    return cliTypeLabel(t);
   }
 
   /** When the run ends, drop the user's "Show setup" override so the next run
@@ -1157,68 +1160,44 @@ export class JobDetailComponent implements OnDestroy {
   // into it, and the session/rateLimit signals are exposed as facades.
 
   formatTokens(n: number): string {
-    return fmtTokens(n);
+    return formatTokens(n);
   }
 
   claudeSessionTooltip(): string {
-    const cs = this.claudeSession();
-    if (!cs) return '';
-    return [
-      `Model: ${cs.model ?? '?'}`,
-      `Input: ${cs.inputTokens.toLocaleString()} tokens`,
-      `Output: ${cs.outputTokens.toLocaleString()} tokens`,
-      `Cache read: ${cs.cacheReadTokens.toLocaleString()} tokens`,
-      `Cache creation: ${cs.cacheCreationTokens.toLocaleString()} tokens`,
-      `Turns recorded: ${cs.turnCount}`,
-      cs.lastTurnAt ? `Last turn: ${cs.lastTurnAt}` : '',
-    ]
-      .filter(Boolean)
-      .join('\n');
+    return claudeSessionTooltip(this.claudeSession());
   }
 
   formatRateWindow(window: string | null): string {
-    return fmtRateWindow(window);
+    return formatRateWindow(window);
   }
 
   formatResetIn(epochSeconds: number): string {
-    return fmtResetIn(epochSeconds, this.nowTick());
+    return formatResetIn(epochSeconds, this.nowTick());
   }
 
   rateLimitTooltip(): string {
-    const rl = this.claudeRateLimit();
-    if (!rl) return '';
-    const reset = rl.resetsAt ? new Date(rl.resetsAt * 1000).toLocaleString() : 'unknown';
-    return [
-      `Window: ${this.formatRateWindow(rl.window)}`,
-      `Status: ${rl.status ?? '?'}`,
-      `Resets at: ${reset}`,
-      `Overage: ${rl.overageStatus ?? '—'}`,
-      rl.isUsingOverage ? 'Currently using overage budget' : '',
-      `Captured: ${new Date(rl.capturedAt).toLocaleTimeString()}`,
-    ]
-      .filter(Boolean)
-      .join('\n');
+    return rateLimitTooltip(this.claudeRateLimit());
   }
 
   stateLabel(state: string): string {
-    return fmtStateLabel(state);
+    return stateLabel(state);
   }
 
   formatTime(dateStr: string): string {
-    return fmtTime(dateStr);
+    return formatTime(dateStr);
   }
 
   formatDate(dateStr: string): string {
-    return fmtDate(dateStr);
+    return formatDate(dateStr);
   }
 
   formatDateTime(dateStr: string): string {
-    return fmtDateTime(dateStr);
+    return formatDateTime(dateStr);
   }
 
   isCliError(): boolean {
     const msg = this.errorMsg();
-    return this.isCliErrorMessage(msg);
+    return isCliErrorMessage(msg);
   }
 
   openCliConfig(): void {
@@ -1307,11 +1286,7 @@ export class JobDetailComponent implements OnDestroy {
       });
   }
 
-  private isCliErrorMessage(message: string | null | undefined): boolean {
-    return !!message && /cli|copilot|authenticat/i.test(message);
-  }
-
   private canOpenCliConfigForCurrentJob(message: string | null | undefined): boolean {
-    return this.cliTypeDraft() === 'copilot' && this.isCliErrorMessage(message);
+    return this.cliTypeDraft() === 'copilot' && isCliErrorMessage(message);
   }
 }

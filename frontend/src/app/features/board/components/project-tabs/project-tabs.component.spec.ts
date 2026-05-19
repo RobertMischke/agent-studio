@@ -4,6 +4,8 @@ import { provideHttpClient } from '@angular/common/http';
 import { provideHttpClientTesting } from '@angular/common/http/testing';
 import { provideRouter } from '@angular/router';
 import { provideZonelessChangeDetection } from '@angular/core';
+import type { JobInfo, RunnerStatus } from '../../../../models/job.model';
+import { buildProjectTokenChip, projectAutoInfo, projectRunnerIndicator } from './project-chip-view-model';
 import { ProjectTabsComponent } from './project-tabs.component';
 
 /**
@@ -43,4 +45,76 @@ describe('ProjectTabsComponent (smoke)', () => {
     }
     expect(fixture.componentInstance).toBeTruthy();
   });
+
+  it('aggregates token badges for a single project only', () => {
+    const chip = buildProjectTokenChip([
+      projectJob('alpha', 120_000, 20_000, 'claude-sonnet-4-6', '2026-05-05T08:00:00Z'),
+      projectJob('alpha', 10_000, 2_000, 'gpt-5.2', '2026-05-05T09:00:00Z'),
+      projectJob('beta', 999_000, 1_000, 'other-model', '2026-05-05T10:00:00Z'),
+    ], 'alpha');
+
+    expect(chip).not.toBeNull();
+    expect(chip?.totalTokens).toBe(152_000);
+    expect(chip?.label).toBe('152k');
+    expect(chip?.jobsWithTokens).toBe(2);
+    expect(chip?.models).toEqual(['gpt-5.2', 'claude-sonnet-4-6']);
+    expect(chip?.tooltip).toContain('Input 130k');
+    expect(chip?.tooltip).toContain('Output 22k');
+  });
+
+  it('derives runner and auto-pickup chip state without component logic', () => {
+    const status: RunnerStatus = {
+      projects: {
+        alpha: {
+          projectName: 'alpha',
+          mode: 'auto-continuous',
+          activeJobId: null,
+          activeExecution: null,
+          queuedJobIds: ['job-1', 'job-2'],
+        },
+        beta: {
+          projectName: 'beta',
+          mode: 'paused',
+          activeJobId: 'job-3',
+          activeExecution: null,
+          queuedJobIds: [],
+        },
+      },
+    };
+
+    expect(projectRunnerIndicator(status, 'alpha')).toEqual({ icon: '🟢', cls: 'idle' });
+    expect(projectAutoInfo(status, 'alpha')).toMatchObject({ state: 'on', readyCount: 2 });
+    expect(projectRunnerIndicator(status, 'beta')).toEqual({ icon: '🔵', cls: 'running' });
+    expect(projectAutoInfo(status, 'beta')).toMatchObject({ state: 'stopping', label: 'Stopping' });
+  });
 });
+
+function projectJob(
+  projectName: string,
+  inputTokens: number,
+  outputTokens: number,
+  model: string,
+  ts: string,
+): JobInfo {
+  return {
+    projectName,
+    tokenSummary: {
+      calls: 1,
+      inputTokens,
+      outputTokens,
+      cacheReadTokens: 0,
+      cacheCreationTokens: 0,
+      totalTokens: inputTokens + outputTokens,
+      lastModel: model,
+      lastUpdate: ts,
+      entries: [{
+        ts,
+        model,
+        inputTokens,
+        outputTokens,
+        cacheReadTokens: 0,
+        cacheCreationTokens: 0,
+      }],
+    },
+  } as JobInfo;
+}

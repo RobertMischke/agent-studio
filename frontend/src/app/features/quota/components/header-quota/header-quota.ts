@@ -10,6 +10,7 @@ interface QuotaCardModel {
   cliType: CliType;
   icon: string;
   label: string;
+  ariaLabel: string;
   plan: string | null;
   value: string;
   windowLabel: string;
@@ -101,17 +102,22 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
     const primary = this.primaryWindow(s.windows);
     const pct = primary?.usedPct == null ? null : Math.round(primary.usedPct);
     const tone = this.toneFor(pct);
+    const label = this.cliLabel(s.cliType);
+    const value = pct == null ? (s.error ? '!' : '?') : `${pct}%`;
+    const windowLabel = primary ? this.shortLabel(primary.label) : 'quota';
+    const trendLabel = this.trendLabelFor(tone);
     return {
       cliType: s.cliType as CliType,
       icon: cliTypeIcon(s.cliType as CliType),
-      label: this.cliLabel(s.cliType),
+      label,
+      ariaLabel: this.cardAriaLabel(label, value, windowLabel, trendLabel),
       plan: s.plan,
-      value: pct == null ? (s.error ? '!' : '?') : `${pct}%`,
-      windowLabel: primary ? this.shortLabel(primary.label) : 'quota',
+      value,
+      windowLabel,
       absolute: this.absoluteLabel(primary),
       barPct: Math.max(0, Math.min(100, pct ?? 0)),
       trend: this.trendFor(tone),
-      trendLabel: this.trendLabelFor(tone),
+      trendLabel,
       tone,
       fetchedAt: s.fetchedAt,
       stale,
@@ -123,17 +129,22 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
   }
 
   private emptyCard(cliType: CliType): QuotaCardModel {
+    const label = this.cliLabel(cliType);
+    const value = '?';
+    const windowLabel = 'quota';
+    const trendLabel = 'No quota snapshot yet';
     return {
       cliType,
       icon: cliTypeIcon(cliType),
-      label: this.cliLabel(cliType),
+      label,
+      ariaLabel: this.cardAriaLabel(label, value, windowLabel, trendLabel),
       plan: null,
-      value: '?',
-      windowLabel: 'quota',
+      value,
+      windowLabel,
       absolute: null,
       barPct: 0,
       trend: '→',
-      trendLabel: 'No quota snapshot yet',
+      trendLabel,
       tone: 'unknown',
       fetchedAt: null,
       stale: true,
@@ -142,6 +153,10 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
       error: null,
       source: null
     };
+  }
+
+  private cardAriaLabel(label: string, value: string, windowLabel: string, trendLabel: string): string {
+    return `${label} quota detail: ${value} in ${windowLabel}. ${trendLabel}`;
   }
 
   private primaryWindow(windows: QuotaWindow[]): QuotaWindow | null {

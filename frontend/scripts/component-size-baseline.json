@@ -7,10 +7,10 @@
   },
   "components": {
     "src/app/app.ts": {
-      "typeScript": 1529,
+      "typeScript": 1410,
       "template": 837,
       "styles": 2165,
-      "total": 4531
+      "total": 4412
     },
     "src/app/components/chat/chat/chat.component.ts": {
       "typeScript": 608,
@@ -25,10 +25,10 @@
       "total": 784
     },
     "src/app/features/board/components/job-card/job-card.component.ts": {
-      "typeScript": 544,
+      "typeScript": 449,
       "template": 217,
       "styles": 723,
-      "total": 1484
+      "total": 1389
     },
     "src/app/features/board/components/job-column/job-column.ts": {
       "typeScript": 555,
@@ -37,22 +37,22 @@
       "total": 1295
     },
     "src/app/features/job-detail/components/activity-log-view/activity-log-view.ts": {
-      "typeScript": 490,
+      "typeScript": 397,
       "template": 272,
       "styles": 686,
-      "total": 1448
+      "total": 1355
     },
     "src/app/features/job-detail/components/protocol-pane/protocol-pane/protocol-pane.component.ts": {
-      "typeScript": 839,
+      "typeScript": 791,
       "template": 508,
       "styles": 960,
-      "total": 2307
+      "total": 2259
     },
     "src/app/features/job-detail/job-detail.ts": {
-      "typeScript": 1318,
+      "typeScript": 1293,
       "template": 159,
       "styles": 1306,
-      "total": 2783
+      "total": 2758
     },
     "src/app/features/orchestrator/components/orchestrator-side-sheet/orchestrator-side-sheet.component.ts": {
       "typeScript": 921,
@@ -98,9 +98,9 @@
     },
     "src/app/features/studio-shell/studio-shell.component.ts": {
       "typeScript": 741,
-      "template": 767,
+      "template": 716,
       "styles": 1897,
-      "total": 3405
+      "total": 3354
     },
     "src/app/features/verbose-debug/components/verbose-debug-overlay/verbose-debug-overlay.component.ts": {
       "typeScript": 548,

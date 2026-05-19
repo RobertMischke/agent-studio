@@ -1,8 +1,4 @@
     .app {
-      /* Use 100% of body's content box rather than 100vh so the dev-mode
-         banner (22px padding-top on body) doesn't push the status bar
-         below the viewport. styles.scss ensures html/body fill 100% and
-         box-sizing makes padding subtract from this. */
       height: 100%;
       background: #0f0f1a;
       color: var(--studio-fg);
@@ -11,10 +7,6 @@
       flex-direction: column;
       overflow: hidden;
     }
-    /* Body row holds the main layout and the CLI Usage sidesheet side-by-side.
-       The sheet's :host width animates from 0 to its open width, so the layout
-       reflows around it instead of being covered by an overlay.
-       Body scrolls within the fixed header + status bar shell. */
     .app__body {
       flex: 1 1 auto;
       display: flex;

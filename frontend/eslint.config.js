@@ -25,8 +25,18 @@ module.exports = tseslint.config(
       '@angular-eslint/prefer-on-push-component-change-detection': 'error',
       '@angular-eslint/computed-must-return': 'error',
       '@angular-eslint/no-implicit-take-until-destroyed': 'error',
+      '@angular-eslint/no-async-lifecycle-method': 'error',
+      '@angular-eslint/no-empty-lifecycle-method': 'error',
+      '@angular-eslint/no-input-rename': 'error',
+      '@angular-eslint/no-inputs-metadata-property': 'error',
+      '@angular-eslint/no-output-native': 'error',
+      '@angular-eslint/no-output-on-prefix': 'error',
+      '@angular-eslint/no-output-rename': 'error',
+      '@angular-eslint/no-outputs-metadata-property': 'error',
+      '@angular-eslint/no-queries-metadata-property': 'error',
       '@angular-eslint/prefer-output-emitter-ref': 'error',
       '@angular-eslint/prefer-output-readonly': 'error',
+      '@angular-eslint/prefer-standalone': 'error',
       // Cycle 11d: hard-floor the 3-file shape established in 11a/b.
       // Inline `template:` and `styles:` blocks bloat .ts files, defeat
       // per-file-type grep, and shut Prettier/template-aware lint out
@@ -69,8 +79,11 @@ module.exports = tseslint.config(
     rules: {
       '@angular-eslint/template/conditional-complexity': [
         'error',
-        { maxComplexity: 6 },
+        { maxComplexity: 5 },
       ],
+      '@angular-eslint/template/eqeqeq': 'error',
+      '@angular-eslint/template/no-empty-control-flow': 'error',
+      '@angular-eslint/template/no-negated-async': 'error',
     },
   },
   {

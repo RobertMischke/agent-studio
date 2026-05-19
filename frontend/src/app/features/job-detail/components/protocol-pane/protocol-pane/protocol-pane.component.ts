@@ -12,7 +12,6 @@ import type {
   CliOutputLine,
   ContinueMode,
   JobDetail,
-  JobOutcomeIssue,
   JobSummaryStatus,
   ReviewEvidenceEntry,
 } from '../../../../../models/job.model';
@@ -22,11 +21,6 @@ import { ActivityLogViewComponent } from '../../activity-log-view/activity-log-v
 import { buildConversationTurns, parseActivityLog } from '../../activity-log.parser';
 import { classifyOutcome, OutcomeAssessment, QuickReply } from '../../agent-outcome.util';
 import { copyTextToClipboard } from '../../../../../services/clipboard.util';
-import {
-  formatTokens as fmtTokens,
-  formatRateWindow as fmtRateWindow,
-  formatResetIn as fmtResetIn,
-} from '../../../../../services/format.util';
 import { ClaudeSessionPollService } from '../../../../polling/services/claude-session-poll.service';
 import { CliOutputPollService } from '../../../../polling/services/cli-output-poll.service';
 import { SessionEventsPollService } from '../../../../polling/services/session-events-poll.service';
@@ -49,6 +43,15 @@ import { ConversationViewComponent } from '../../../../../components/chat/conver
 import { projectConversation } from '../../../../../components/chat/conversation-projection';
 import { BeautifulResultsComponent } from '../../beautiful-results/beautiful-results.component';
 import { deriveProtocolVerdict, type ProtocolVerdict } from '../protocol-verdict';
+import {
+  claudeSessionTooltip,
+  formatIssueTime,
+  formatRateWindow,
+  formatResetIn,
+  formatTokens,
+  outcomeIssueExplanation,
+  rateLimitTooltip,
+} from './protocol-pane-view-model';
 
 import { TooltipDirective } from '../../../../../components/tooltip';
 export type InspectorTab = 'protocol' | 'activity';
@@ -667,56 +670,17 @@ export class ProtocolPaneComponent implements OnDestroy {
     }, 2000);
   }
 
-  formatTokens(n: number): string {
-    return fmtTokens(n);
-  }
-  formatRateWindow(window: string | null): string {
-    return fmtRateWindow(window);
-  }
+  readonly formatTokens = formatTokens;
+  readonly formatRateWindow = formatRateWindow;
+  readonly formatIssueTime = formatIssueTime;
+  readonly outcomeIssueExplanation = outcomeIssueExplanation;
+
   formatResetIn(epoch: number): string {
-    return fmtResetIn(epoch, this.nowTick());
-  }
-
-  outcomeIssueExplanation(issue: JobOutcomeIssue): string {
-    switch (issue.kind) {
-      case 'permission-blocked':
-        return 'The orchestrator detected a permission failure. It gets one soft intervention that asks the agent to continue with the permissions already available. If the same category appears again, the task is routed to Human Review.';
-      case 'watchdog-timeout':
-        return 'The watchdog stopped a run after it stopped producing progress. The task is surfaced for human review with the concrete timeout category instead of a generic heuristic fallback.';
-      case 'missing-terminal-sentinel':
-        return 'The agent replied with useful completion text but did not emit a terminal sentinel. The orchestrator asks once for a proper sentinel and then accepts or stops with this visible category.';
-      case 'classifier-unknown':
-        return 'The runner could not map the reply to a known completion shape. This is tracked separately so repeated classifier misses are visible at task and project level.';
-      case 'heuristic-done':
-        return 'The runner accepted a completed-looking reply through the compatibility heuristic. The category remains visible so these cases can be reduced over time.';
-      default:
-        return 'The runner attached a categorized outcome issue to this task. The raw source is still logs/cli-output.log.';
-    }
-  }
-
-  formatIssueTime(iso: string | null | undefined): string {
-    if (!iso) return 'unknown';
-    try {
-      return new Date(iso).toLocaleString();
-    } catch {
-      return iso;
-    }
+    return formatResetIn(epoch, this.nowTick());
   }
 
   claudeSessionTooltip(): string {
-    const cs = this.claudeSession();
-    if (!cs) return '';
-    return [
-      `Model: ${cs.model ?? '?'}`,
-      `Input: ${cs.inputTokens.toLocaleString()} tokens`,
-      `Output: ${cs.outputTokens.toLocaleString()} tokens`,
-      `Cache read: ${cs.cacheReadTokens.toLocaleString()} tokens`,
-      `Cache creation: ${cs.cacheCreationTokens.toLocaleString()} tokens`,
-      `Turns recorded: ${cs.turnCount}`,
-      cs.lastTurnAt ? `Last turn: ${cs.lastTurnAt}` : '',
-    ]
-      .filter(Boolean)
-      .join('\n');
+    return claudeSessionTooltip(this.claudeSession());
   }
 
   /**
@@ -821,18 +785,6 @@ export class ProtocolPaneComponent implements OnDestroy {
   }
 
   rateLimitTooltip(): string {
-    const rl = this.claudeRateLimit();
-    if (!rl) return '';
-    const reset = rl.resetsAt ? new Date(rl.resetsAt * 1000).toLocaleString() : 'unknown';
-    return [
-      `Window: ${this.formatRateWindow(rl.window)}`,
-      `Status: ${rl.status ?? '?'}`,
-      `Resets at: ${reset}`,
-      `Overage: ${rl.overageStatus ?? '—'}`,
-      rl.isUsingOverage ? 'Currently using overage budget' : '',
-      `Captured: ${new Date(rl.capturedAt).toLocaleTimeString()}`,
-    ]
-      .filter(Boolean)
-      .join('\n');
+    return rateLimitTooltip(this.claudeRateLimit(), this.nowTick());
   }
 }

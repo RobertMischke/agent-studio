@@ -25,6 +25,7 @@ import { UiPreferencesService } from '../shell';
 import { BoardFiltersService } from '../board';
 import { UpdateClientService } from '../../services/update.service';
 import { ConfirmDialogService } from '../../services/confirm-dialog.service';
+import { StudioActivityBarComponent, StudioActivityBarItem, StudioActivityPanelKey } from './components/studio-activity-bar/studio-activity-bar.component';
 import { StudioTabStateService } from './services/studio-tab-state.service';
 import { StudioPanelStateService } from './services/studio-panel-state.service';
 import {
@@ -74,7 +75,7 @@ function cliColorFor(cli: string): string {
 @Component({
   selector: 'app-studio-shell',
   standalone: true,
-  imports: [FormsModule, StudioIconComponent, EmptyStateComponent, SectionHeaderComponent, TreeRowComponent],
+  imports: [FormsModule, StudioIconComponent, EmptyStateComponent, SectionHeaderComponent, TreeRowComponent, StudioActivityBarComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   encapsulation: ViewEncapsulation.None,
   templateUrl: './studio-shell.component.html',
@@ -423,14 +424,13 @@ export class StudioShellComponent {
     return null;
   });
 
-  /** Activity-bar entries — matches the reference layout order. */
-  readonly activityBarItems = [
-    { key: 'explorer' as const, icon: 'folder', label: 'Explorer' },
-    { key: 'tasks' as const, icon: 'list', label: 'Tasks' },
-    { key: 'filters' as const, icon: 'filter', label: 'Filters' },
-    { key: 'cli' as const, icon: 'cli', label: 'Agents / CLI' },
-    { key: 'activity' as const, icon: 'activity', label: 'Activity' },
-    { key: 'runbook' as const, icon: 'runbook', label: 'Runbook' },
+  readonly activityBarItems: readonly StudioActivityBarItem[] = [
+    { key: 'explorer', icon: 'folder', label: 'Explorer' },
+    { key: 'tasks', icon: 'list', label: 'Tasks' },
+    { key: 'filters', icon: 'filter', label: 'Filters' },
+    { key: 'cli', icon: 'cli', label: 'Agents / CLI' },
+    { key: 'activity', icon: 'activity', label: 'Activity' },
+    { key: 'runbook', icon: 'runbook', label: 'Runbook' },
   ];
 
   openBoard(projectName: string): void {
@@ -557,7 +557,7 @@ export class StudioShellComponent {
     return this.tabIndexOf(key) > 0;
   }
 
-  togglePanel(panel: typeof this.activityBarItems[number]['key'] | 'settings'): void {
+  togglePanel(panel: StudioActivityPanelKey | 'settings'): void {
     this.panelState.toggle(panel);
   }
 

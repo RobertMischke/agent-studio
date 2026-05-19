@@ -53,7 +53,7 @@
       <h3>Queue health</h3>
       @if (queueHealth(); as health) {
         <div class="proj-detail__health" [class.proj-detail__health--critical]="health.severity === 'critical'">
-          <strong>{{ health.issueCount === 0 ? 'Healthy' : health.issueCount + ' issue' + (health.issueCount === 1 ? '' : 's') }}</strong>
+          <strong>{{ queueHealthLabel(health, 'Healthy', 'issue') }}</strong>
           <span>{{ health.severity }}</span>
         </div>
         @if (health.missingJobJson.length > 0) {
@@ -112,7 +112,7 @@
       <h3>Queue health</h3>
       @if (queueHealth(); as health) {
         <div class="proj-detail__health" [class.proj-detail__health--critical]="health.severity === 'critical'">
-          <strong>{{ health.issueCount === 0 ? 'No structural issues detected' : health.issueCount + ' structural issue' + (health.issueCount === 1 ? '' : 's') }}</strong>
+          <strong>{{ queueHealthLabel(health, 'No structural issues detected', 'structural issue') }}</strong>
           <span>{{ health.severity }}</span>
         </div>
         @if (health.missingJobJson.length > 0) {
