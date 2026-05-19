@@ -1,10 +1,10 @@
 import { Component, OnInit, computed, output, signal } from '@angular/core';
-import { JobService } from '../../../services/job.service';
-import { CliConsoleComponent } from './cli-console';
-import type { CliOutputLine, CliType } from '../../../models/job.model';
-import type { CliSessionInfo, CliUsageProjectGroup, CliUsageReport, CliUsageSection, LinkedJobRef } from '../../../features/cli';
+import { JobService } from '../../../../services/job.service';
+import { CliConsoleComponent } from '../cli-console/cli-console';
+import type { CliOutputLine, CliType } from '../../../../models/job.model';
+import type { CliSessionInfo, CliUsageProjectGroup, CliUsageReport, CliUsageSection, LinkedJobRef } from '../../../../features/cli';
 
-import { TooltipDirective } from '../../../components/tooltip';
+import { TooltipDirective } from '../../../../components/tooltip';
 interface SelectedSession {
   cliType: CliType;
   projectName: string;

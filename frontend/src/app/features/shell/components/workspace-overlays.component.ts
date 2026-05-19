@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, output 
 import { WorkspaceOverlaysService } from '../state/workspace-overlays.service';
 import { WorkspaceTokenTimelineComponent } from '../../tokens/components/workspace-token-timeline';
 import { WorkspaceScreenshotsComponent } from '../../screenshots/components/workspace-screenshots';
-import { CliAdminPanelComponent } from '../../cli/components/cli-admin-panel';
+import { CliAdminPanelComponent } from '../../cli';
 import type { JobScreenshot } from '../../../features/screenshots';
 import { ModalStackService } from '../../../services/modal-stack.service';
 

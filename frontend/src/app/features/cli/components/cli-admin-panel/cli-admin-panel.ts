@@ -1,10 +1,10 @@
 import { Component, OnDestroy, OnInit, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { JobService } from '../../../services/job.service';
-import type { CliType } from '../../../models/job.model';
-import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../../features/quota';
-import { cliTypeIcon, cliTypeLabel } from '../../../services/format.util';
-import { QuotaApiService } from '../../../features/quota';
+import { JobService } from '../../../../services/job.service';
+import type { CliType } from '../../../../models/job.model';
+import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../../../features/quota';
+import { cliTypeIcon, cliTypeLabel } from '../../../../services/format.util';
+import { QuotaApiService } from '../../../../features/quota';
 
 interface CapsResponse {
   defaultCapPct: number;
