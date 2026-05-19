@@ -103,8 +103,13 @@
             [bodyMaxHeight]="'0px'"
             (submitMessage)="onSubmit($event)" />
         } @else {
+          <!-- Single <app-chat> renders the orchestrator chat. Always
+               on virtualised mode so the chat scales to thousands of
+               turns without DOM blow-up; small-N projects pay nothing
+               because the spacer divs collapse to 0px. -->
           <app-chat
             variant="embedded"
+            [virtualised]="true"
             [messages]="messages()"
             [events]="events()"
             [pending]="sending()"
