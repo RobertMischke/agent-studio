@@ -44,7 +44,7 @@
         (openJobDetail)="onOpenJobDetailFromSheet($event)"
         (openSettings)="openOrchestratorSettings()" />
       <app-studio-shell data-testid="studio-shell-root"
-                        (chatToggle)="orchSideSheet.toggle()"
+                        (chatToggle)="toggleOrchestratorChat()"
                         (addTaskRequested)="openCreate()"
                         (openFilterSidesheet)="toggleKanbanFilterSidesheet()"
                         (openUsageSheet)="usageSheet.toggle()"
@@ -56,7 +56,7 @@
         <app-status-bar studioStatusbar
           [projectNames]="projectNames()"
           (toggleUsage)="usageSheet.toggle()"
-          (toggleOrchestrator)="orchSideSheet.toggle()"
+          (toggleOrchestrator)="toggleOrchestratorChat()"
           (toggleFeed)="toggleOrchFeed()"
           (toggleVisualEvidence)="toggleWorkspaceScreenshots()"
           (toggleCliAdmin)="toggleCliAdmin()"
@@ -738,7 +738,7 @@
       <app-status-bar
         [projectNames]="projectNames()"
         (toggleUsage)="usageSheet.toggle()"
-        (toggleOrchestrator)="orchSideSheet.toggle()"
+        (toggleOrchestrator)="toggleOrchestratorChat()"
         (toggleFeed)="toggleOrchFeed()"
         (toggleVisualEvidence)="toggleWorkspaceScreenshots()"
         (toggleCliAdmin)="toggleCliAdmin()"

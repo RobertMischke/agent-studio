@@ -38,5 +38,5 @@ export class StatusbarItemComponent {
    *  chip to a flat SVG. */
   @Input() bullet: string | null = null;
 
-  @Output() readonly click = new EventEmitter<MouseEvent>();
+  @Output() readonly activated = new EventEmitter<MouseEvent>();
 }

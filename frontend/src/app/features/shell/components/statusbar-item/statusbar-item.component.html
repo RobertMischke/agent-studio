@@ -2,7 +2,7 @@
   <button class="statusbar__item statusbar__item--btn"
           [appTooltip]="tooltip"
           [attr.data-testid]="testid"
-          (click)="click.emit($event)">
+          (click)="activated.emit($event)">
     @if (bullet) {
       <span class="statusbar__icon" [class.statusbar__icon--pulse]="pulsing">{{ bullet }}</span>
     } @else if (icon) {

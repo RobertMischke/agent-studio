@@ -829,6 +829,10 @@ export class App implements OnInit {
       : 'No project selected';
   }
 
+  toggleOrchestratorChat(): void {
+    this.orchSideSheetRef?.toggle();
+  }
+
   /**
    * Phase 5: orchestrator side sheet emitted "make a task from this".
    * Picks the watch path that matches the named project, opens the
