@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, output } from '@angular/core';
 import { WorkspaceOverlaysService } from '../../state/workspace-overlays.service';
 import { WorkspaceTokenTimelineComponent } from '../../../tokens';
-import { WorkspaceScreenshotsComponent } from '../../../screenshots/components/workspace-screenshots';
+import { WorkspaceScreenshotsComponent } from '../../../screenshots';
 import { CliAdminPanelComponent } from '../../../cli';
 import type { JobScreenshot } from '../../../../features/screenshots';
 import { ModalStackService } from '../../../../services/modal-stack.service';

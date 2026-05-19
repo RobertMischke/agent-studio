@@ -10,9 +10,9 @@ import {
   signal
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { JobService } from '../../../services/job.service';
-import type { JobScreenshot } from '../../../features/screenshots';
-import { ScreenshotStripComponent } from './screenshot-strip/screenshot-strip.component';
+import { JobService } from '../../../../services/job.service';
+import type { JobScreenshot } from '../../../../features/screenshots';
+import { ScreenshotStripComponent } from '../screenshot-strip/screenshot-strip.component';
 
 interface HourBucket {
   bucketKey: string;
