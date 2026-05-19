@@ -22,24 +22,27 @@
  *   size tokens layout dimensions
  */
 :root {
-  // surfaces
-  --studio-bg-titlebar:    #1e1e1e;
-  --studio-bg-activitybar: #181818;
-  --studio-bg-sidebar:     #1f1f1f;
-  --studio-bg-editor:      #1e1e1e;
-  --studio-bg-elevated:    #252526;
-  --studio-bg-tab-active:   #1e1e1e;
-  --studio-bg-tab-inactive: #2d2d2d;
+  // surfaces — Catppuccin-tuned palette, per
+  // docs/mockups/vscode-layout/ui.html. The previous values were a
+  // plain VS-Code-grey set that drifted from the mockup's slightly
+  // violet-tinted surfaces and warmer text.
+  --studio-bg-titlebar:    #181825;  /* surface-1 */
+  --studio-bg-activitybar: #181825;  /* surface-1 */
+  --studio-bg-sidebar:     #181825;  /* surface-1 */
+  --studio-bg-editor:      #0f0f1a;  /* surface-0 — body / editor base */
+  --studio-bg-elevated:    #1e1e2e;  /* surface-2 */
+  --studio-bg-tab-active:   #1e1e2e;  /* surface-2 (slightly raised) */
+  --studio-bg-tab-inactive: #181825;  /* surface-1 */
   --studio-bg-hover:    rgba(255, 255, 255, 0.04);
-  --studio-bg-selected: rgba(217, 119, 87, 0.12);
+  --studio-bg-selected: #252537;     /* surface-3 (selected row) */
   // separators
-  --studio-border:        #2b2b2b;
-  --studio-border-strong: #3c3c3c;
-  // foreground
-  --studio-fg:        #cccccc;
-  --studio-fg-strong: #ffffff;
-  --studio-fg-dim:    #9d9d9d;
-  --studio-fg-muted:  #6e6e6e;
+  --studio-border:        rgba(255, 255, 255, 0.06);  /* border-1 */
+  --studio-border-strong: rgba(255, 255, 255, 0.10);  /* border-2 */
+  // foreground — text-0/1/2 from the mockup palette
+  --studio-fg:        #e2e8f0;  /* text-0 */
+  --studio-fg-strong: #f8fafc;  /* whiter for emphasis */
+  --studio-fg-dim:    #94a3b8;  /* text-1 — section heads, meta */
+  --studio-fg-muted:  #64748b;  /* text-2 — most muted, timestamps */
   // accents — brand + semantic; alpha derivatives use color-mix()
   --studio-accent:         #d97757;  /* brand orange */
   --studio-accent-2:       #4ec9b0;  /* teal — also legacy 'success' alias */
@@ -582,13 +585,21 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 4px 0;
+  // Mockup uses 6 px vertical padding on the activity bar (gap 2 px
+  // between buttons) so the 36 × 36 buttons sit centred in the
+  // 48 px-wide rail with a 6 px halo. See docs/mockups/vscode-layout.
+  padding: 6px 0;
+  gap: 2px;
 }
 
 .studio-ab {
   &__btn {
-    width: 48px;
-    height: 44px;
+    // Mockup target: 36 × 36 click target with 6 px halo inside the
+    // 48 px activity bar (was 48 × 44, fully filling the rail and
+    // leaving no hover-affordance breathing room).
+    width: 36px;
+    height: 36px;
+    border-radius: 4px;
     display: grid;
     place-items: center;
     color: var(--studio-fg-muted);

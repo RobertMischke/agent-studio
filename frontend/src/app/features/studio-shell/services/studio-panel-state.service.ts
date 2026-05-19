@@ -12,8 +12,11 @@ import type { StudioPanelKind } from '../studio-shell.types';
 export class StudioPanelStateService {
   private readonly _active = signal<StudioPanelKind>('explorer');
   private readonly _visible = signal<boolean>(true);
+  // Mockup default width is 240 px (`docs/mockups/vscode-layout/`).
+  // The previous 280 px default was a holdover that made the editor
+  // pane noticeably narrower than the mockup intended.
   private readonly _sidebarWidth = signal<number>(
-    parseInt(localStorage.getItem('atp.studio.sidebarWidth') ?? '280', 10) || 280,
+    parseInt(localStorage.getItem('atp.studio.sidebarWidth') ?? '240', 10) || 240,
   );
   private readonly _activityBarSide = signal<'left' | 'right'>(
     (localStorage.getItem('atp.studio.activityBarSide') as 'left' | 'right' | null) ?? 'left',

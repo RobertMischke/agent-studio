@@ -6,6 +6,14 @@ body {
   background: #0f0f1a;
   color: #e2e8f0;
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  // Matches docs/mockups/vscode-layout/ui.html — the studio chrome
+  // (statusbar, tree rows, tabs, side sheets) is designed for a 13 px
+  // root. Without this override the browser default of 16 px scales
+  // everything 23 % up and breaks the geometric proportions of the
+  // mockup (statusbar 36 px vs 22 px target, tree rows 24 px vs 18 px,
+  // …). Components that need a different size set it explicitly.
+  font-size: 13px;
+  line-height: 1.45;
   -webkit-font-smoothing: antialiased;
 }
 ::-webkit-scrollbar { width: 6px; height: 6px; }

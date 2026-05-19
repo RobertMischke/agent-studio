@@ -7,10 +7,14 @@
   align-items: center;
   gap: 8px;
   padding: 0 8px;
-  height: 36px;
-  background: #11111b;
+  // Mockup target (docs/mockups/vscode-layout/ui.html `.statusbar`):
+  // 22 px high, 11 px font, solid Catppuccin surface-1 background.
+  // Previous 36 px / 12 px ate more bottom chrome than the design
+  // intended.
+  height: 22px;
+  background: #181825;
   border-top: 1px solid rgba(255,255,255,0.06);
-  font-size: 12px;
+  font-size: 11px;
   color: rgba(255,255,255,0.70);
   letter-spacing: 0;
 }
