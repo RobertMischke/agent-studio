@@ -103,7 +103,7 @@ export class DetailHeaderComponent {
 
   readonly menuOpen = signal(false);
 
-  toggleMenu(event: MouseEvent) {
+  toggleMenu(event: Event) {
     event.stopPropagation();
     this.menuOpen.update(v => !v);
   }
@@ -112,7 +112,7 @@ export class DetailHeaderComponent {
     this.menuOpen.set(false);
   }
 
-  onDeleteClick(event: MouseEvent) {
+  onDeleteClick(event: Event) {
     event.stopPropagation();
     this.menuOpen.set(false);
     this.deleteRequested.emit();

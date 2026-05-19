@@ -59,7 +59,7 @@ export class InfoButtonComponent {
     return this.sanitizer.bypassSecurityTrustHtml(markdownToHtml(d.body));
   });
 
-  toggle(event: MouseEvent): void {
+  toggle(event: Event): void {
     event.stopPropagation();
     if (this.open()) {
       this.close();

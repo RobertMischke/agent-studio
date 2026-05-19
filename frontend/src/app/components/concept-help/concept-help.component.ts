@@ -48,7 +48,7 @@ export class ConceptHelpComponent {
   private readonly popover = viewChild<ElementRef<HTMLElement>>('popover');
   private readonly host = inject(ElementRef<HTMLElement>);
 
-  toggle(event: MouseEvent): void {
+  toggle(event: Event): void {
     event.stopPropagation();
     this.open.update(v => !v);
   }

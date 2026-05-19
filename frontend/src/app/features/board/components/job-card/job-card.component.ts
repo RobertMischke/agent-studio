@@ -106,7 +106,7 @@ export class JobCardComponent implements OnInit, OnDestroy {
     });
   });
 
-  onDeleteClick(event: MouseEvent) {
+  onDeleteClick(event: Event) {
     event.stopPropagation();
     this.deleteRequested.emit(this.job());
   }

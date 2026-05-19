@@ -197,7 +197,7 @@ export class CliSessionsPanelComponent implements OnInit {
     return `Open task: ${linkedJob.title} - ${state}`;
   }
 
-  onOpenLinkedJob(event: MouseEvent, linkedJob: LinkedJobRef): void {
+  onOpenLinkedJob(event: Event, linkedJob: LinkedJobRef): void {
     // Stop the row's own click handler so the chip click does not also
     // select the session in the detail aside.
     event.stopPropagation();

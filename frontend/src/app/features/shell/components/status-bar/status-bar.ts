@@ -149,13 +149,13 @@ export class StatusBarComponent implements OnInit {
     return `${this.autoCount()} of ${this.projectCount()} project(s) have auto-pickup enabled.`;
   }
 
-  toggleCliMenu(ev: MouseEvent) {
+  toggleCliMenu(ev: Event) {
     ev.stopPropagation();
     this.modelMenuOpen.set(false);
     this.cliMenuOpen.update(v => !v);
   }
 
-  toggleModelMenu(ev: MouseEvent) {
+  toggleModelMenu(ev: Event) {
     ev.stopPropagation();
     this.cliMenuOpen.set(false);
     this.modelMenuOpen.update(v => !v);
@@ -182,7 +182,7 @@ export class StatusBarComponent implements OnInit {
     this.defaultModelChange.emit({ cliType: cli, model: modelId });
   }
 
-  refreshModels(ev: MouseEvent) {
+  refreshModels(ev: Event) {
     ev.stopPropagation();
     this.loadModels(this.defaultCli(), true);
   }

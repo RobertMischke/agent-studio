@@ -139,8 +139,13 @@ for (const ts of tsFiles) {
   // no-spec
   if (!spec) issues.push({ kind: 'no-spec', detail: 'no sibling .spec.ts' });
 
-  // mouse-evt
-  if (/:\s*MouseEvent\b/.test(text)) issues.push({ kind: 'mouse-evt', detail: 'handler param typed MouseEvent (loose to Event for keyboard fallback)' });
+  // mouse-evt — only flag template-bound handlers (those at risk from
+  // a later `(keydown.enter)="..."` binding). Strip @HostListener-
+  // decorated methods first; their event type is intrinsic to the
+  // listener registration, not the template, so they can't be broken
+  // by binding edits.
+  const stripped = text.replace(/@HostListener\([^)]*\)\s*[A-Za-z_$][\w$]*\s*\([^)]*\)\s*[:\s][^{]*\{[\s\S]*?\n\s{2}\}/g, '');
+  if (/:\s*MouseEvent\b/.test(stripped)) issues.push({ kind: 'mouse-evt', detail: 'handler param typed MouseEvent (loose to Event for keyboard fallback)' });
 
   reports.push({ name: base, path: ts, dir, tsLoc, htmlLoc, scssLoc, total, issues });
 }
