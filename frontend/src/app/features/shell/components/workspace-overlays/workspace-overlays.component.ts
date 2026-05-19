@@ -1,12 +1,12 @@
 import { ChangeDetectionStrategy, Component, DestroyRef, effect, inject, output } from '@angular/core';
-import { WorkspaceOverlaysService } from '../state/workspace-overlays.service';
-import { WorkspaceTokenTimelineComponent } from '../../tokens/components/workspace-token-timeline';
-import { WorkspaceScreenshotsComponent } from '../../screenshots/components/workspace-screenshots';
-import { CliAdminPanelComponent } from '../../cli';
-import type { JobScreenshot } from '../../../features/screenshots';
-import { ModalStackService } from '../../../services/modal-stack.service';
+import { WorkspaceOverlaysService } from '../../state/workspace-overlays.service';
+import { WorkspaceTokenTimelineComponent } from '../../../tokens/components/workspace-token-timeline';
+import { WorkspaceScreenshotsComponent } from '../../../screenshots/components/workspace-screenshots';
+import { CliAdminPanelComponent } from '../../../cli';
+import type { JobScreenshot } from '../../../../features/screenshots';
+import { ModalStackService } from '../../../../services/modal-stack.service';
 
-import { TooltipDirective } from '../../../components/tooltip';
+import { TooltipDirective } from '../../../../components/tooltip';
 /**
  * Cycle 9g shell-feature container: renders the three workspace-level
  * overlays (tokens / screenshots / cli-admin) above the kanban shell.
