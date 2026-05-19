@@ -10,6 +10,7 @@ import {
   input,
   output,
   signal,
+  untracked,
   viewChild
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
@@ -133,6 +134,22 @@ export class ChatComponent implements AfterViewInit, OnDestroy {
   /** Emitted when the user clicks a toolbar button by id. */
   readonly toolbarAction = output<{ id: string }>();
 
+  /**
+   * When true, only the rows inside (or near) the scroll viewport are
+   * rendered — top/bottom spacer divs hold the rest of the scroll
+   * height so the scroll bar reflects the full timeline. Stays at ~150
+   * DOM nodes regardless of how many thousand turns the chat carries.
+   *
+   * Off by default to keep small-N hosts simple. Hosts with deep
+   * history (project chat, long-running task chats) should switch it
+   * on so the chat can grow without the browser stalling.
+   */
+  readonly virtualised = input<boolean>(false);
+  /** Estimated row height in px. Tuned for typical turns + event cards. */
+  readonly virtualRowHeightPx = input<number>(120);
+  /** Over-scan rows above + below the viewport to smooth the scroll. */
+  readonly virtualBufferRows = input<number>(20);
+
   readonly submitMessage = output<ChatSubmitEvent>();
   /**
    * Slice E: emitted when the user clicks an inline event card's
@@ -205,6 +222,12 @@ export class ChatComponent implements AfterViewInit, OnDestroy {
     return hidden;
   });
 
+  /** First index of the rendered() slice that the template should draw
+   *  when virtualisation is on. */
+  readonly visibleStart = signal<number>(0);
+  /** Exclusive end index of the visible slice (clamped to length). */
+  readonly visibleEnd = signal<number>(50);
+
   readonly rendered = computed<RenderedItem[]>(() => {
     const expanded = this.expandedIds();
     const expandedEvents = this.expandedEventIds();
@@ -252,6 +275,57 @@ export class ChatComponent implements AfterViewInit, OnDestroy {
     return mergeByTimestamp(messageItems, eventItems);
   });
 
+  /**
+   * Rendered() slice the template actually loops over when virtualised
+   * mode is on. In non-virtualised mode this just returns the full
+   * rendered() array — callers can use it unconditionally.
+   */
+  readonly windowedItems = computed<RenderedItem[]>(() => {
+    const items = this.rendered();
+    if (!this.virtualised()) return items;
+    const start = Math.max(0, Math.min(this.visibleStart(), items.length));
+    const end   = Math.max(start, Math.min(this.visibleEnd(), items.length));
+    return items.slice(start, end);
+  });
+  /** Top-spacer height keeping scroll position correct in virtual mode. */
+  readonly topSpacerPx = computed<number>(() => {
+    if (!this.virtualised()) return 0;
+    return Math.max(0, this.visibleStart()) * this.virtualRowHeightPx();
+  });
+  /** Bottom-spacer height for rows below the visible window. */
+  readonly bottomSpacerPx = computed<number>(() => {
+    if (!this.virtualised()) return 0;
+    const total = this.rendered().length;
+    return Math.max(0, total - this.visibleEnd()) * this.virtualRowHeightPx();
+  });
+
+  /**
+   * Keep visibleEnd within bounds as rendered() grows (new turns
+   * arrive) and seed the visible window when virtualisation is first
+   * enabled. The actual scroll-driven update happens inside
+   * onBodyScroll; this effect just makes sure the initial slice is
+   * sensible and that pushing new messages doesn't leave visibleEnd
+   * pointing past the array.
+   */
+  private readonly virtualBoundsEffect = effect(() => {
+    if (!this.virtualised()) return;
+    const total = this.rendered().length;
+    const buffer = this.virtualBufferRows();
+    const sticky = this.stickToBottom();
+    untracked(() => {
+      // When the user is at the bottom (sticky), keep visibleEnd at the
+      // end so new turns appear without manual scroll. Otherwise clamp.
+      if (sticky) {
+        const winSize = Math.max(50, this.visibleEnd() - this.visibleStart());
+        this.visibleEnd.set(total);
+        this.visibleStart.set(Math.max(0, total - winSize));
+      } else {
+        this.visibleEnd.set(Math.min(this.visibleEnd(), total));
+        this.visibleStart.set(Math.min(this.visibleStart(), Math.max(0, total - buffer)));
+      }
+    });
+  });
+
   private readonly autoScrollEffect = effect(() => {
     this.messages();
     this.events();
@@ -270,6 +344,7 @@ export class ChatComponent implements AfterViewInit, OnDestroy {
     }
     for (const draft of this.drafts()) URL.revokeObjectURL(draft.previewUrl);
     this.autoScrollEffect.destroy();
+    this.virtualBoundsEffect.destroy();
   }
 
   canSend(): boolean {
@@ -389,6 +464,18 @@ export class ChatComponent implements AfterViewInit, OnDestroy {
     if (!el) return;
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     this.stickToBottom.set(distanceFromBottom <= 24);
+
+    if (this.virtualised()) {
+      const total = this.rendered().length;
+      const rowH = Math.max(1, this.virtualRowHeightPx());
+      const buffer = this.virtualBufferRows();
+      const firstVisibleRow = Math.floor(el.scrollTop / rowH);
+      const visibleRows = Math.ceil(el.clientHeight / rowH);
+      const start = Math.max(0, firstVisibleRow - buffer);
+      const end = Math.min(total, firstVisibleRow + visibleRows + buffer);
+      this.visibleStart.set(start);
+      this.visibleEnd.set(end);
+    }
   }
 
   jumpToBottom(): void {

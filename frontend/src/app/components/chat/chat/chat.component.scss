@@ -441,6 +441,14 @@
       cursor: pointer;
     }
     .chat__draft-remove:hover { background: rgba(239,68,68,0.7); }
+    /* Virtualisation spacers: invisible blocks that keep the scroll bar
+       at the right size even though we only render the rows near the
+       viewport. See the `virtualised` input. */
+    .chat__spacer {
+      width: 1px;
+      flex: 0 0 auto;
+    }
+
     .chat__attachment-error {
       font-size: 12px;
       color: #fca5a5;

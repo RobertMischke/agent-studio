@@ -21,7 +21,12 @@
         @if (rendered().length === 0) {
           <div class="chat__empty" data-testid="chat-empty">{{ emptyState() }}</div>
         } @else {
-          @for (item of rendered(); track item.id) {
+          @if (virtualised() && topSpacerPx() > 0) {
+            <div class="chat__spacer chat__spacer--top"
+                 data-testid="chat-spacer-top"
+                 [style.height.px]="topSpacerPx()"></div>
+          }
+          @for (item of windowedItems(); track item.id) {
             @if (item.kind === 'message') {
             <article class="chat__msg"
                      [class.chat__msg--user]="item.message.role === 'user'"
@@ -118,6 +123,11 @@
               }
             </article>
             }
+          }
+          @if (virtualised() && bottomSpacerPx() > 0) {
+            <div class="chat__spacer chat__spacer--bottom"
+                 data-testid="chat-spacer-bottom"
+                 [style.height.px]="bottomSpacerPx()"></div>
           }
           @if (pending()) {
             <div class="chat__typing" data-testid="chat-typing">
