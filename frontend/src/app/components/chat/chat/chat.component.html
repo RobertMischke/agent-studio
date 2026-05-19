@@ -153,6 +153,38 @@
           <div class="chat__attachment-error">{{ attachmentError() }}</div>
         }
 
+        @if (toolbarVisible()) {
+          <div class="chat__toolbar" data-testid="chat-toolbar">
+            <div class="chat__toolbar-start">
+              @for (item of toolbarStart(); track item.id) {
+                <button type="button"
+                        class="chat__toolbar-btn"
+                        [class.chat__toolbar-btn--pill]="item.variant === 'pill'"
+                        [appTooltip]="item.label"
+                        [attr.aria-label]="item.label"
+                        [attr.data-testid]="'chat-toolbar-' + item.id"
+                        [disabled]="item.disabled || disabled()"
+                        (click)="onToolbarAction(item.id)">{{ item.glyph }}</button>
+              }
+            </div>
+            <div class="chat__toolbar-end">
+              @if (routingLabel(); as label) {
+                <span class="chat__toolbar-routing" data-testid="chat-toolbar-routing">{{ label }}</span>
+              }
+              @for (item of toolbarEnd(); track item.id) {
+                <button type="button"
+                        class="chat__toolbar-btn"
+                        [class.chat__toolbar-btn--pill]="item.variant === 'pill'"
+                        [appTooltip]="item.label"
+                        [attr.aria-label]="item.label"
+                        [attr.data-testid]="'chat-toolbar-' + item.id"
+                        [disabled]="item.disabled || disabled()"
+                        (click)="onToolbarAction(item.id)">{{ item.glyph }}</button>
+              }
+            </div>
+          </div>
+        }
+
         <div class="chat__composer-row">
           <textarea #input
                     class="chat__input"

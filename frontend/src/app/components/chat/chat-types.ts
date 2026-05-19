@@ -54,6 +54,24 @@ export interface ChatSubmitEvent {
 }
 
 /**
+ * One button rendered in the chat composer's toolbar row above the
+ * textarea. Lets a host plug in chat-surface-specific affordances
+ * (`#` reference, `@` mention, fork-thread, search) without baking
+ * any of them into the shared component. The `id` round-trips through
+ * the `toolbarAction` output so the host can dispatch on it.
+ */
+export interface ChatToolbarItem {
+  id: string;
+  /** Single glyph / emoji / short text rendered as the button face. */
+  glyph: string;
+  /** Tooltip + aria-label. */
+  label: string;
+  /** `icon` (default): square 24x24-ish button. `pill`: text label. */
+  variant?: 'icon' | 'pill';
+  disabled?: boolean;
+}
+
+/**
  * Inline event card surfaced inside the chat timeline. The chat is
  * becoming the primary product surface; events from background CLIs
  * (tool calls, watchdog warnings, rate-limit pills, etc.) belong woven

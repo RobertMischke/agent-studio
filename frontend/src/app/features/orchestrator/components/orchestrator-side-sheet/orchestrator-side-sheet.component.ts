@@ -18,7 +18,7 @@ import type { WatchPathEntry } from '../../../../models/job.model';
 import type { OrchestratorChatTurn } from '../../../../features/orchestrator';
 import { buildChatNavigationContext } from '../../../../features/orchestrator';
 import { ChatComponent } from '../../../../components/chat/chat/chat.component';
-import { ChatEvent, ChatMessage, ChatSubmitEvent } from '../../../../components/chat/chat-types';
+import { ChatEvent, ChatMessage, ChatSubmitEvent, ChatToolbarItem } from '../../../../components/chat/chat-types';
 import { ProjectChatListComponent } from '../../../project-chat/components/project-chat-list/project-chat-list.component';
 
 import { TooltipDirective } from '../../../../components/tooltip';
@@ -160,6 +160,40 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
    * review and Playwright regression coverage of the rendering contract.
    */
   readonly events = signal<ChatEvent[]>([]);
+
+  /**
+   * Composer toolbar items. The chat component is intentionally generic
+   * (a reusable agent-interaction surface) — hosts plug surface-specific
+   * affordances in. The orchestrator side sheet wants the four standard
+   * navigation actions on the left and a `/task` quick action on the
+   * right; clicks land in {@link onChatToolbarAction}.
+   */
+  readonly composerToolbarStart: readonly ChatToolbarItem[] = [
+    { id: 'reference', glyph: '#', label: 'Reference a task' },
+    { id: 'mention',   glyph: '@', label: 'Mention a participant' },
+    { id: 'fork',      glyph: '⑂', label: 'Fork into a new thread' },
+    { id: 'search',    glyph: '🔍', label: 'Search chat history' },
+  ];
+  readonly composerToolbarEnd: readonly ChatToolbarItem[] = [
+    { id: 'task', glyph: '/task', label: 'Open Add Task pre-filled with the draft', variant: 'pill' },
+  ];
+
+  /**
+   * Routing chip shown right-aligned in the composer toolbar — at-a-
+   * glance "which model picks this up". Reads the local default-CLI
+   * pref (set from the status bar) so it stays in sync with the rest
+   * of the workspace. No-op when nothing is set.
+   */
+  readonly composerRoutingLabel = computed<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const defaultCli = window.localStorage?.getItem('defaultCliType');
+      if (!defaultCli) return null;
+      return `routing: ${defaultCli}`;
+    } catch {
+      return null;
+    }
+  });
 
   private readonly jobService = inject(JobService);
   private pollTimer: VisibleIntervalHandle | null = null;
@@ -753,6 +787,24 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
     const target = this.bugEventTargets.get(action.eventId);
     if (!target) return;
     this.openJobDetail.emit(target);
+  }
+
+  /**
+   * Composer-toolbar click handler. The chat component is generic and
+   * just rebroadcasts the toolbar item id; this is where the
+   * orchestrator-specific intent lives.
+   *
+   * - `task`     → reuse the "make task from your message" flow so the
+   *                Add-Task dialog opens pre-filled with the draft.
+   * - `reference`, `mention`, `fork`, `search` → reserved; future slices
+   *                wire these to the relevant pickers / panels. For now
+   *                clicking them is a no-op so the affordance is visible
+   *                without dangling promises.
+   */
+  onChatToolbarAction(action: { id: string }): void {
+    if (action.id === 'task') {
+      this.onCreateTaskFromYourMessage();
+    }
   }
 
   private uploadOne(projectName: string, file: File): Promise<{ relativePath: string; url: string }> {

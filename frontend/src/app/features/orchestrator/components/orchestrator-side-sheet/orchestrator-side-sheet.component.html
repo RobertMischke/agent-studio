@@ -111,8 +111,12 @@
             [disabled]="sending()"
             [placeholder]="'Ask the orchestrator... try /bug &lt;description&gt; to file a bug'"
             [emptyState]="emptyStateText()"
+            [toolbarStart]="composerToolbarStart"
+            [toolbarEnd]="composerToolbarEnd"
+            [routingLabel]="composerRoutingLabel()"
             (submitMessage)="onSubmit($event)"
-            (eventAction)="onChatEventAction($event)" />
+            (eventAction)="onChatEventAction($event)"
+            (toolbarAction)="onChatToolbarAction($event)" />
         }
 
         <div class="sheet__draft-actions" data-testid="orch-side-sheet-draft-actions">

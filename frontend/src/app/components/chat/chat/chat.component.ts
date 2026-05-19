@@ -24,7 +24,8 @@ import {
   ChatEventKind,
   ChatMessage,
   ChatRole,
-  ChatSubmitEvent
+  ChatSubmitEvent,
+  ChatToolbarItem
 } from '../chat-types';
 import {
   RoleBadgeComponent,
@@ -109,6 +110,28 @@ export class ChatComponent implements AfterViewInit, OnDestroy {
    * row visible at the top.
    */
   readonly compactPhaseSummary = input<boolean>(true);
+
+  /**
+   * Buttons rendered on the left of the composer's toolbar row above
+   * the textarea. Hosts plug in chat-surface-specific affordances
+   * (e.g. `#` to reference a task, `@` to mention, fork to start a
+   * new thread, search). Clicking emits `toolbarAction({id})`.
+   * Empty by default — the toolbar row only renders if either
+   * `toolbarStart`, `toolbarEnd`, or `routingLabel` is set.
+   */
+  readonly toolbarStart = input<readonly ChatToolbarItem[]>([]);
+  /** Right-side toolbar items (e.g. `/task` quick action). */
+  readonly toolbarEnd = input<readonly ChatToolbarItem[]>([]);
+  /**
+   * Routing/status chip rendered right-aligned in the toolbar row,
+   * e.g. "routing: Codex (Claude paused)". The chat does not interpret
+   * the string; it is just an at-a-glance affordance for the host to
+   * surface which model/agent will receive the next submit.
+   */
+  readonly routingLabel = input<string | null>(null);
+
+  /** Emitted when the user clicks a toolbar button by id. */
+  readonly toolbarAction = output<{ id: string }>();
 
   readonly submitMessage = output<ChatSubmitEvent>();
   /**
@@ -394,6 +417,17 @@ export class ChatComponent implements AfterViewInit, OnDestroy {
     event.stopPropagation();
     this.eventAction.emit({ eventId });
   }
+
+  onToolbarAction(id: string): void {
+    this.toolbarAction.emit({ id });
+  }
+
+  /** True when at least one of the toolbar slots has content. */
+  readonly toolbarVisible = computed<boolean>(() => {
+    return this.toolbarStart().length > 0
+      || this.toolbarEnd().length > 0
+      || this.routingLabel() !== null;
+  });
 
   toggleEventExpanded(eventId: string): void {
     const next = new Set(this.expandedEventIds());
