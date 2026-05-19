@@ -21,6 +21,7 @@ import { markdownToHtml } from '../../../../components/markdown-utils';
 import { ProjectChatRailComponent } from '../project-chat-rail/project-chat-rail.component';
 import { decideLoadAction, formatLoadedSummary } from './load-strategy';
 import { TooltipDirective } from '../../../../components/tooltip';
+import { ChatRowComponent, type ChatRowInput } from '../../../../components/chat-row/chat-row.component';
 import {
   RoleBadgeComponent,
   PhaseSummaryListComponent,
@@ -51,7 +52,7 @@ import {
 @Component({
   selector: 'app-project-chat-list',
   standalone: true,
-  imports: [CommonModule, FormsModule, ProjectChatRailComponent, RoleBadgeComponent, PhaseSummaryListComponent, TooltipDirective],
+  imports: [CommonModule, FormsModule, ProjectChatRailComponent, RoleBadgeComponent, PhaseSummaryListComponent, TooltipDirective, ChatRowComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './project-chat-list.component.html',
   styleUrl: './project-chat-list.component.scss',
@@ -466,6 +467,21 @@ export class ProjectChatListComponent implements OnInit, OnDestroy {
   // ── Rendering ─────────────────────────────────────────────────────
   renderBody(body: string): string {
     return markdownToHtml(body || '');
+  }
+
+  /** Adapter from the project-chat turn shape to the shared row shape. */
+  toChatRow(turn: ProjectChatTurn): ChatRowInput {
+    return {
+      id: turn.turnId,
+      author: turn.author,
+      kind: turn.kind,
+      refs: turn.refs ?? null,
+      ts: turn.ts,
+      body: turn.body,
+      userVariant: turn.author === 'user',
+      eventVariant: turn.kind !== 'turn',
+      flash: turn.turnId === this.flashTurnId(),
+    };
   }
 
   renderSnippet(snippet: string): string {

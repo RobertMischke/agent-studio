@@ -1,0 +1,24 @@
+@let r = row();
+<article
+  class="chat-row"
+  [class.chat-row--user]="r.userVariant"
+  [class.chat-row--event]="r.eventVariant"
+  [class.chat-row--flash]="r.flash"
+  [attr.data-row-id]="r.id"
+  data-testid="chat-row">
+  <header class="chat-row__head">
+    @if (r.author === 'user') {
+      <span class="chat-row__author">{{ r.authorLabel ?? 'You' }}</span>
+    } @else {
+      <app-role-badge
+        [author]="r.author"
+        [kind]="r.kind ?? 'turn'"
+        [refs]="r.refs ?? null" />
+    }
+    @if (r.kind) {
+      <span class="chat-row__kind">{{ r.kind }}</span>
+    }
+    <time class="chat-row__ts" [attr.datetime]="r.ts">{{ formattedTs() }}</time>
+  </header>
+  <div class="chat-row__body" [innerHTML]="bodySafe()"></div>
+</article>

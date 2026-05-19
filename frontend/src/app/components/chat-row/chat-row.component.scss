@@ -1,0 +1,73 @@
+:host { display: block; }
+
+.chat-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 10px;
+  margin: 6px 0;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  color: #e2e8f0;
+  transition: background 0.4s ease;
+  contain: layout paint;
+}
+
+.chat-row--user {
+  background: rgba(99, 102, 241, 0.18);
+  border-color: rgba(124, 58, 237, 0.5);
+}
+
+.chat-row--event {
+  border-style: dashed;
+  background: rgba(255, 255, 255, 0.015);
+  color: #cbd5e1;
+  font-size: 12px;
+}
+
+.chat-row--flash {
+  background: rgba(250, 204, 21, 0.18);
+  border-color: rgba(250, 204, 21, 0.5);
+}
+
+.chat-row__head {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+.chat-row__author {
+  color: #c4b5fd;
+  font-weight: 600;
+  text-transform: lowercase;
+}
+
+.chat-row__kind {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 10px;
+  color: #64748b;
+}
+
+.chat-row__ts { margin-left: auto; }
+
+.chat-row__body {
+  font-size: 13px;
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.chat-row__body :is(pre, code) {
+  font-family: ui-monospace, SFMono-Regular, monospace;
+  font-size: 12px;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 1px 4px;
+  border-radius: 4px;
+}
+
+.chat-row__body pre {
+  padding: 8px;
+  overflow-x: auto;
+}
