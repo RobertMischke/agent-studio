@@ -5,7 +5,7 @@ import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from 
 import type { GroupedJobs, ProjectQueueHealth, RunnerStatus } from '../../../models/job.model';
 import type { OrchestratorLogEntry, OrchestratorSession } from '../../../features/orchestrator';
 import { OrchestratorRunner_KnownModels } from './project-detail.models';
-import { TokenSummaryBlockComponent } from '../../../features/tokens/components/token-summary-block';
+import { TokenSummaryBlockComponent } from '../../../features/tokens';
 import { GlobalOrchestratorCardComponent } from '../../../features/orchestrator/components/global-orchestrator-card';
 import { ProjectArchitectureSectionComponent } from './project-architecture-section';
 import { ProjectDriftSectionComponent } from './project-drift-section';

@@ -19,7 +19,7 @@ import type { CliType } from '../../../../models/job.model';
 import { CLI_TYPES } from '../../../../models/job.model';
 import type { CliModelInfo } from '../../../../features/cli';
 import { cliTypeIcon, cliTypeLabel } from '../../../../services/format.util';
-import { UsageHoverPanelComponent } from '../../../tokens/components/usage-hover-panel';
+import { UsageHoverPanelComponent } from '../../../tokens';
 
 import { TooltipDirective } from '../../../../components/tooltip';
 import { StudioIconComponent } from '../../../../components/studio-icon/studio-icon.component';

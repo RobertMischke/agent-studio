@@ -2,7 +2,7 @@ import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject
 import { FormsModule } from '@angular/forms';
 import type { OrchestratorLogEntry } from '../../../features/orchestrator';
 import { JobService } from '../../../services/job.service';
-import { TokenSummaryBlockComponent } from '../../tokens/components/token-summary-block';
+import { TokenSummaryBlockComponent } from '../../tokens';
 import { GlobalOrchestratorCardComponent } from './global-orchestrator-card';
 
 import { TooltipDirective } from '../../../components/tooltip';

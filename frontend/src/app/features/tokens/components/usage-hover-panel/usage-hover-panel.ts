@@ -9,16 +9,16 @@ import {
   inject,
   signal,
 } from '@angular/core';
-import { ModalStackService } from '../../../services/modal-stack.service';
-import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../utils/visible-interval';
-import type { CliType } from '../../../models/job.model';
-import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../../features/quota';
-import type { AdHocUsageAggregate, TokenSummaryAggregate, TokenTimeline, WorkspaceExpensiveJob } from '../../../features/tokens';
-import { cliTypeIcon } from '../../../services/format.util';
-import { HeaderQuotaComponent } from '../../quota';
-import { TokensApiService } from '../../../features/tokens';
-import { QuotaApiService } from '../../../features/quota';
-import { CliUsageDetailModalComponent } from './cli-usage-detail-modal';
+import { ModalStackService } from '../../../../services/modal-stack.service';
+import { setVisibleInterval, clearVisibleInterval, VisibleIntervalHandle } from '../../../../utils/visible-interval';
+import type { CliType } from '../../../../models/job.model';
+import type { QuotaReport, QuotaSnapshot, QuotaWindow } from '../../../../features/quota';
+import type { AdHocUsageAggregate, TokenSummaryAggregate, TokenTimeline, WorkspaceExpensiveJob } from '../../../../features/tokens';
+import { cliTypeIcon } from '../../../../services/format.util';
+import { HeaderQuotaComponent } from '../../../quota';
+import { TokensApiService } from '../../../../features/tokens';
+import { QuotaApiService } from '../../../../features/quota';
+import { CliUsageDetailModalComponent } from '../cli-usage-detail-modal/cli-usage-detail-modal';
 
 interface QuotaRow {
   cliType: CliType;

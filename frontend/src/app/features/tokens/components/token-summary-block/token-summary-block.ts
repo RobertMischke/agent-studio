@@ -1,9 +1,9 @@
 import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, signal } from '@angular/core';
-import type { TokenSummary } from '../../../features/tokens';
-import { JobService } from '../../../services/job.service';
-import { TokensApiService } from '../../../features/tokens';
+import type { TokenSummary } from '../../../../features/tokens';
+import { JobService } from '../../../../services/job.service';
+import { TokensApiService } from '../../../../features/tokens';
 
-import { TooltipDirective } from '../../../components/tooltip';
+import { TooltipDirective } from '../../../../components/tooltip';
 /**
  * Per-project token rollup block. Three rows:
  *
