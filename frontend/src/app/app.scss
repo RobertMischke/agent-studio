@@ -1978,6 +1978,25 @@
     :host {
       --resizing-cursor: col-resize;
     }
+
+    /* VS-Code-layout shell wrapper. Hosts the persistent right-edge
+       sheets (CLI usage, orchestrator chat) and the studio-shell side by
+       side. The wrapper is flex row so each sheet's :host
+       `width: 0 / open` animation participates in the layout — when the
+       orchestrator chat opens it claims its 640px slice and pushes the
+       studio-shell left rather than overlaying it. */
+    .app-shell {
+      display: flex;
+      flex-direction: row;
+      align-items: stretch;
+      height: 100%;
+      min-height: 0;
+      overflow: hidden;
+    }
+    .app-shell > app-studio-shell {
+      flex: 1 1 auto;
+      min-width: 0;
+    }
     
     ::ng-deep body.resizing {
       cursor: col-resize !important;
