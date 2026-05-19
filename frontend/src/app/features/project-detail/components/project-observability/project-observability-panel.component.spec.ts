@@ -56,10 +56,15 @@ describe('ProjectObservabilityPanelComponent (smoke)', () => {
 
     const fixture = TestBed.createComponent(ProjectObservabilityPanelComponent);
     fixture.componentRef.setInput('projectName', '');
+    // Use "now" as the createdAt so the messages fall inside whatever
+    // time-window the default filter is set to. The earlier hard-coded
+    // 2026-05-11 timestamp broke this spec a week later because the
+    // default "Last 6h" filter dropped everything older.
+    const now = new Date().toISOString();
     fixture.componentInstance.messages.set([
-      makeMessage('m1', 'permission-blocked', 'High'),
-      makeMessage('m2', 'classifier-unknown', 'Warn'),
-      makeMessage('m3', 'soft-intervention', 'Warn', 'category: permission-blocked'),
+      makeMessage('m1', 'permission-blocked', 'High', '', now),
+      makeMessage('m2', 'classifier-unknown', 'Warn', '', now),
+      makeMessage('m3', 'soft-intervention', 'Warn', 'category: permission-blocked', now),
     ]);
     fixture.detectChanges();
 
@@ -71,11 +76,11 @@ describe('ProjectObservabilityPanelComponent (smoke)', () => {
   });
 });
 
-function makeMessage(id: string, topic: string, severity: 'Warn' | 'High', body = ''): AgentMessage {
+function makeMessage(id: string, topic: string, severity: 'Warn' | 'High', body = '', createdAt = new Date().toISOString()): AgentMessage {
   return {
     schemaVersion: 1,
     id,
-    createdAt: '2026-05-11T10:00:00Z',
+    createdAt,
     participantId: 'orchestrator',
     role: 'assistant',
     kind: topic === 'soft-intervention' ? 'intervention' : 'decision',
