@@ -186,24 +186,30 @@
       padding: 2px 4px 2px 8px;
       font-weight: 600;
     }
+    // Filter pills — coloured by family (owner / project / type / tag).
+    // Each pill's label uses `currentColor` so the icon + glyph inherit
+    // the same tint. The body text relies on `--studio-fg-strong` for
+    // contrast against the tinted background so light theme stays
+    // readable; the dark-theme variants ride the saturated rgba accents
+    // unchanged.
     .active-filter-strip__pill--owner {
       background: rgba(56, 189, 248, 0.10);
       border-color: rgba(56, 189, 248, 0.45);
-      color: #bae6fd;
+      color: var(--studio-fg-strong, #bae6fd);
     }
     .active-filter-strip__pill--project {
       background: rgba(167, 139, 250, 0.12);
       border-color: rgba(167, 139, 250, 0.55);
-      color: #ddd6fe;
+      color: var(--studio-fg-strong, #ddd6fe);
     }
     .active-filter-strip__pill--type {
       background: rgba(139, 92, 246, 0.18);
       border-color: rgba(139, 92, 246, 0.55);
-      color: #ddd6fe;
+      color: var(--studio-fg-strong, #ddd6fe);
     }
     .active-filter-strip__pill--tag {
-      background: rgba(255, 255, 255, 0.04);
-      border-color: rgba(255, 255, 255, 0.20);
+      background: var(--studio-bg-hover, rgba(255, 255, 255, 0.04));
+      border-color: var(--studio-border, rgba(255, 255, 255, 0.20));
       color: var(--studio-fg-strong);
     }
     .active-filter-strip__pill-kind {
