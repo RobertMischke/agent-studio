@@ -1,8 +1,8 @@
     .job-card {
       background: var(--card-bg, #1e1e2e);
       border: 1px solid var(--border, #333);
-      border-radius: 12px;
-      padding: 16px;
+      border-radius: 10px;
+      padding: 14px 16px;
       cursor: pointer;
       /* Compositor-only transitions. transform handles hover lift and
          post-drop settle (CDK rhythm: 180ms cubic-bezier(0,0,0.2,1));
@@ -14,6 +14,13 @@
         box-shadow 0.15s ease,
         opacity 0.18s ease;
       border-left: 4px solid var(--state-color, #555);
+      /* Resting shadow — barely-there elevation that gives cards
+         depth against the lane surface. The light-theme bridge in
+         styles.scss already swaps `--card-bg` to white so this is
+         the missing piece for the premium "floating cards" look on
+         a white surface. Subtle enough that dark theme also picks it
+         up without looking blown out. */
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
     }
     /* Drag-source: while a card is being dragged, dim it to ~55% so the
        drag-image (browser-rendered ghost) reads as the active object.
@@ -29,7 +36,15 @@
     }
     .job-card:hover {
       transform: translateY(-2px);
-      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      // Hover elevation. Two-stop shadow gives a soft cast close to
+      // the card and a longer diffused ambient cast — the "premium"
+      // shadow shape that reads as material on both dark and light
+      // surfaces. Lower alphas than the previous single 0.30 stop
+      // because Light theme magnified the old shadow into a hard
+      // grey haze around the card.
+      box-shadow:
+        0 2px 4px rgba(0, 0, 0, 0.10),
+        0 6px 16px rgba(0, 0, 0, 0.14);
     }
     .job-card--1-preparation { --state-color: #8b5cf6; }
     .job-card--2-ready { --state-color: #06b6d4; }
