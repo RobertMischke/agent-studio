@@ -206,4 +206,38 @@ describe('markdownToHtml', () => {
       expect(markdownToHtml(md)).toBe(`<pre><code>${lines.join('\n')}</code></pre>`);
     });
   });
+
+  describe('language hint capture', () => {
+    it('captures the fence language tag and emits data-lang + class', () => {
+      const md = ['```ts', 'const x: number = 1;', '```'].join('\n');
+      const html = markdownToHtml(md);
+      expect(html).toContain('data-lang="ts"');
+      expect(html).toContain('class="md-code md-code--lang-ts"');
+      expect(html).toContain('const x: number = 1;');
+    });
+
+    it('normalises common aliases (typescript -> ts, shell -> bash)', () => {
+      const tsHtml = markdownToHtml(['```typescript', 'x', '```'].join('\n'));
+      expect(tsHtml).toContain('class="md-code md-code--lang-ts"');
+      expect(tsHtml).toContain('data-lang="typescript"');
+      const bashHtml = markdownToHtml(['```shell', 'ls -la', '```'].join('\n'));
+      expect(bashHtml).toContain('class="md-code md-code--lang-bash"');
+    });
+
+    it('falls back to the historical shape when no language is given', () => {
+      // Untagged fences are still plain `<pre><code>` so existing
+      // round-tripping consumers (the rich-text editor, prompt history)
+      // are not disturbed by the new lang capture path.
+      const html = markdownToHtml(['```', 'plain', '```'].join('\n'));
+      expect(html).toBe('<pre><code>plain</code></pre>');
+    });
+
+    it('combines language hint with numbered shape when both are active', () => {
+      const md = ['```ts', 'a', 'b', 'c', 'd', 'e', 'f', '```'].join('\n');
+      const html = markdownToHtml(md, { codeLineNumbers: true, codeLineNumberThreshold: 3 });
+      expect(html).toContain('md-code--numbered');
+      expect(html).toContain('md-code--lang-ts');
+      expect(html).toContain('data-lang="ts"');
+    });
+  });
 });

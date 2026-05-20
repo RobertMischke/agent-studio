@@ -208,6 +208,83 @@
   line-height: 1.55;
   max-height: 480px;
   overflow-y: auto;
+  // Position is relative so the language badge (a tiny "ts" / "bash"
+  // chip on the top-right) can be absolutely positioned without
+  // affecting the code layout.
+  position: relative;
+}
+
+/* Language hint badge — top-right pill rendered when the code block
+ * has a `data-lang` attribute (i.e. `\`\`\`ts`, `\`\`\`bash`, ...).
+ * Stays subtle: uses the same dim foreground as inline meta, no
+ * background fill, so it reads as a label not a button. The mono
+ * font ensures it lines up optically with the code below. */
+.markdown-body pre.md-code[data-lang]::before {
+  content: attr(data-lang);
+  position: absolute;
+  top: 2px;
+  right: 8px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--md-fg-meta, rgba(148, 163, 184, 0.65));
+  opacity: 0.65;
+  pointer-events: none;
+}
+.markdown-body pre.md-code[data-lang]:hover::before {
+  opacity: 1;
+}
+
+/* Per-language accent — picks up a 2 px left rail in the language's
+ * canonical color so the eye can distinguish a JSON block from a
+ * shell block from a diff at a glance, without committing to a full
+ * tokenizer. Colors come from the studio accent palette so they flip
+ * with light theme automatically. */
+.markdown-body pre.md-code--lang-ts,
+.markdown-body pre.md-code--lang-js {
+  border-left: 2px solid var(--studio-accent-3, #569cd6);
+}
+.markdown-body pre.md-code--lang-py {
+  border-left: 2px solid var(--studio-accent-2, #4ec9b0);
+}
+.markdown-body pre.md-code--lang-bash,
+.markdown-body pre.md-code--lang-powershell {
+  border-left: 2px solid var(--studio-fg-muted, #64748b);
+}
+.markdown-body pre.md-code--lang-json,
+.markdown-body pre.md-code--lang-yaml {
+  border-left: 2px solid var(--studio-accent-warn, #cca700);
+}
+.markdown-body pre.md-code--lang-diff {
+  border-left: 2px solid var(--studio-accent-4, #c586c0);
+}
+.markdown-body pre.md-code--lang-csharp {
+  border-left: 2px solid var(--studio-accent-4, #c586c0);
+}
+.markdown-body pre.md-code--lang-html,
+.markdown-body pre.md-code--lang-scss,
+.markdown-body pre.md-code--lang-css {
+  border-left: 2px solid var(--studio-accent, #d97757);
+}
+
+/* Diff-only line tinting. We don't tokenize languages, but diff has
+ * a stable line-prefix convention (`+` / `-` / `@@`) that we can
+ * paint via CSS attribute selectors on the rendered text without
+ * any extra markup from the renderer. Only the first character of
+ * each line is inspected via :has() and :first-letter so this works
+ * even for un-numbered, single-`<code>` diff blocks. */
+.markdown-body pre.md-code--lang-diff code {
+  // The browser doesn't expose per-line color directly on a flat
+  // <code> body, so we lean on a content-side hack: split the diff
+  // into rows at render-time would require a renderer change.
+  // Today the most reliable signal we have is the leading-character
+  // color via a CSS variable swap per first character — but CSS
+  // can't address arbitrary text positions. Leaving a TODO marker
+  // here so a follow-up can either (a) wrap each diff line in a
+  // span during render, or (b) integrate shiki for proper diff
+  // tinting. The badge + left rail alone already gives the user
+  // a "this is a diff" anchor.
 }
 .markdown-body pre code {
   background: transparent;

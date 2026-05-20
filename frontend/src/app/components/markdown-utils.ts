@@ -36,6 +36,13 @@ export function markdownToHtml(markdown: string, options: MarkdownImageOptions =
   let orderedItems: string[] = [];
   let inCode = false;
   let codeLines: string[] = [];
+  // Language hint captured from the opening fence, e.g. "ts" from
+  // ```ts. Used by renderCodeBlock to emit `data-lang` + a per-
+  // language class so the chat surface can colour-hint without a
+  // full tokenizer (highlight.js / shiki are too heavy to ship into
+  // the chat panel; the lang badge alone is the 80 % UX win for
+  // Claude/Codex code blocks).
+  let codeLang: string | null = null;
 
   const flushParagraph = () => {
     if (paragraph.length === 0) return;
@@ -60,13 +67,19 @@ export function markdownToHtml(markdown: string, options: MarkdownImageOptions =
 
     if (line.startsWith('```')) {
       if (inCode) {
-        html.push(renderCodeBlock(codeLines, options));
+        html.push(renderCodeBlock(codeLines, codeLang, options));
         codeLines = [];
+        codeLang = null;
         inCode = false;
       } else {
         flushParagraph();
         flushList();
         flushOrderedList();
+        // Capture the optional language tag right after the fence
+        // (`\`\`\`ts`, `\`\`\`bash`, etc). Strip any extra metadata
+        // some models append after a space (e.g. `\`\`\`ts title=foo`).
+        const langMatch = /^```\s*([A-Za-z0-9_+\-]+)/.exec(line);
+        codeLang = langMatch ? langMatch[1].toLowerCase() : null;
         inCode = true;
       }
       continue;
@@ -127,7 +140,7 @@ export function markdownToHtml(markdown: string, options: MarkdownImageOptions =
   }
 
   if (inCode) {
-    html.push(renderCodeBlock(codeLines, options));
+    html.push(renderCodeBlock(codeLines, codeLang, options));
   }
   flushParagraph();
   flushList();
@@ -283,10 +296,23 @@ function safeLinkUrl(raw: string): string {
   return trimmed;
 }
 
-function renderCodeBlock(codeLines: string[], options: MarkdownImageOptions): string {
+function renderCodeBlock(
+  codeLines: string[],
+  lang: string | null,
+  options: MarkdownImageOptions,
+): string {
   const threshold = options.codeLineNumberThreshold ?? 5;
+  const hasLang = !!lang;
+  const langAttrs = hasLang ? ` data-lang="${escapeAttribute(lang!)}"` : '';
+  // Only attach md-code* classes when a language is present, otherwise
+  // keep the historical `<pre><code>` shape (pinned by spec tests +
+  // any downstream consumer that grep'd on the literal markup).
   if (!options.codeLineNumbers || codeLines.length <= threshold) {
-    return `<pre><code>${escapeHtml(codeLines.join('\n'))}</code></pre>`;
+    if (!hasLang) {
+      return `<pre><code>${escapeHtml(codeLines.join('\n'))}</code></pre>`;
+    }
+    const langClass = ` md-code--lang-${escapeAttribute(normaliseLang(lang!))}`;
+    return `<pre class="md-code${langClass}"${langAttrs}><code>${escapeHtml(codeLines.join('\n'))}</code></pre>`;
   }
   // Numbered shape: one row per source line, gutter cells get a stable
   // class so the chat stylesheet can hide them from text selection.
@@ -299,7 +325,28 @@ function renderCodeBlock(codeLines: string[], options: MarkdownImageOptions): st
         + `</span>`;
     })
     .join('');
-  return `<pre class="md-code md-code--numbered" data-line-count="${codeLines.length}"><code>${rows}</code></pre>`;
+  const langClass = hasLang ? ` md-code--lang-${escapeAttribute(normaliseLang(lang!))}` : '';
+  return `<pre class="md-code md-code--numbered${langClass}" data-line-count="${codeLines.length}"${langAttrs}><code>${rows}</code></pre>`;
+}
+
+/**
+ * Map common Claude / Codex fence labels to a small canonical set so
+ * the CSS only needs one rule per family (e.g. `ts` + `tsx` + `typescript`
+ * all collapse to `ts`).
+ */
+function normaliseLang(lang: string): string {
+  switch (lang) {
+    case 'typescript': case 'tsx': return 'ts';
+    case 'javascript': case 'jsx': case 'mjs': case 'cjs': return 'js';
+    case 'python': return 'py';
+    case 'shell': case 'sh': case 'zsh': return 'bash';
+    case 'yml': return 'yaml';
+    case 'csharp': case 'cs': return 'csharp';
+    case 'powershell': case 'ps': case 'ps1': return 'powershell';
+    case 'patch': return 'diff';
+    case 'plaintext': case 'text': case 'txt': return 'text';
+    default: return lang.replace(/[^a-z0-9]/g, '');
+  }
 }
 
 function renderImage(alt: string, src: string, options: MarkdownImageOptions): string {
