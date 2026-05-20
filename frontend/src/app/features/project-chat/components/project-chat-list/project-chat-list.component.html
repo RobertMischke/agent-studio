@@ -29,9 +29,16 @@
   }
 
   @if (mode() === 'live' && phases().length > 0) {
+    <!-- compact=true: the phase list collapses to a single "N earlier
+         phases" toggle by default and only expands on user click. The
+         user fed back that the verbatim phase strip was filling the
+         panel with timestamp rows when they just wanted to see the
+         active conversation — compact restores chat as the primary
+         surface and demotes the phase index to a peripheral peek. -->
     <app-phase-summary-list
       [phases]="phases()"
       [expandedPhaseIds]="expandedPhaseIds()"
+      [compact]="true"
       (phaseToggled)="onPhaseToggled($event)" />
   }
 

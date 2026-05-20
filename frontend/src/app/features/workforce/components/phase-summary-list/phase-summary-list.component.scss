@@ -1,16 +1,39 @@
 :host { display: block; }
 
+/*
+ * Phase summary strip — peripheral "session index" rendered above the
+ * verbatim chat. User feedback drove three design goals:
+ *
+ *  1. Stay compact: in compact mode this is one-line tall until the
+ *     user opts in. Even when expanded, rows are dense (2 px gap,
+ *     11 px font, 22 px row height) so they read as an index, not as
+ *     content.
+ *  2. Light-theme readable: all foreground / surface colors flow
+ *     through var(--studio-*) tokens so the strip flips with the
+ *     studio shell theme. The previous fixed hex set looked muddy on
+ *     a white surface (low-contrast slate text on near-white).
+ *  3. Scroll in place: when many phases are expanded, the strip
+ *     bounds at 40 % of the chat panel height and scrolls internally
+ *     instead of pushing the live chat off-screen.
+ */
 .phase-summary {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 6px 10px 8px;
-  background: rgba(255, 255, 255, 0.015);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  gap: 1px;
+  padding: 4px 10px 6px;
+  background: var(--studio-bg-hover, rgba(255, 255, 255, 0.015));
+  border-bottom: 1px solid var(--studio-border, rgba(255, 255, 255, 0.06));
+  // Scroll cap: keep the verbatim chat visible even when many phases
+  // are expanded at once. Roughly 40 vh of viewport height is the
+  // sweet spot for "panel-mounted" usage; nested inside a 600 px-tall
+  // side sheet that translates to ~240 px of phase strip before
+  // internal scroll kicks in.
+  max-height: 40vh;
+  overflow-y: auto;
 }
 
 .phase-summary__empty {
-  color: #94a3b8;
+  color: var(--studio-fg-dim, #94a3b8);
   font-size: 11px;
   font-style: italic;
 }
@@ -20,48 +43,52 @@
 }
 
 .phase-summary__row--expanded {
-  border-left-color: rgba(196, 181, 253, 0.6);
-  background: rgba(196, 181, 253, 0.04);
+  border-left-color: var(--studio-accent, #d97757);
+  background: var(--studio-bg-selected, rgba(217, 119, 87, 0.06));
 }
 
 .phase-summary__toggle {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   width: 100%;
-  padding: 4px 6px;
+  padding: 2px 6px;
   background: transparent;
   border: 0;
-  color: #cbd5e1;
+  color: var(--studio-fg-dim, #cbd5e1);
   font: inherit;
-  font-size: 12px;
+  font-size: 11px;
   text-align: left;
   cursor: pointer;
   border-radius: 3px;
-  line-height: 1.4;
+  line-height: 1.35;
+  min-height: 22px;
 }
 
-.phase-summary__toggle:hover { background: rgba(255, 255, 255, 0.04); }
+.phase-summary__toggle:hover {
+  background: var(--studio-bg-hover, rgba(255, 255, 255, 0.04));
+  color: var(--studio-fg, #e2e8f0);
+}
 .phase-summary__toggle:focus-visible {
-  outline: 1px solid rgba(196, 181, 253, 0.6);
+  outline: 1px solid var(--studio-accent, #d97757);
   outline-offset: -1px;
 }
 
 .phase-summary__caret {
-  color: #94a3b8;
-  font-size: 10px;
-  min-width: 10px;
+  color: var(--studio-fg-muted, #94a3b8);
+  font-size: 9px;
+  min-width: 9px;
 }
 
 .phase-summary__participants {
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 2px;
   flex: 0 0 auto;
 }
 
 .phase-summary__line {
-  color: #e2e8f0;
+  color: var(--studio-fg, #e2e8f0);
   font-weight: 500;
   flex: 1 1 auto;
   overflow: hidden;
@@ -71,47 +98,65 @@
 }
 
 .phase-summary__count {
-  color: #94a3b8;
-  font-family: ui-monospace, SFMono-Regular, monospace;
+  color: var(--studio-fg-dim, #94a3b8);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
   font-size: 10px;
-  padding: 1px 6px;
-  background: rgba(255, 255, 255, 0.05);
+  padding: 0 5px;
+  background: var(--studio-bg-elevated, rgba(255, 255, 255, 0.05));
   border-radius: 999px;
+  line-height: 1.4;
 }
 
 .phase-summary__time {
-  color: #64748b;
+  color: var(--studio-fg-muted, #64748b);
   font-size: 10px;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
+// Compact-mode strip header — what the user sees by default. Mirrors
+// the row layout but is dimmer so it reads as a control, not as
+// content.
 .phase-summary--compact {
-  padding: 4px 10px;
+  padding: 2px 10px;
   gap: 0;
+  // When compact and not revealed there's only the single toggle
+  // button to size — no need for the scroll cap. Resetting to none
+  // also prevents an unwanted scrollbar flash during the expand/
+  // collapse transition.
+  max-height: none;
+  overflow: visible;
+}
+
+.phase-summary--compact[data-compact-revealed='true'] {
+  // Once revealed, restore the scroll cap so the full phase list
+  // does not push the verbatim chat off screen.
+  max-height: 40vh;
+  overflow-y: auto;
 }
 
 .phase-summary__compact-toggle {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   width: 100%;
-  padding: 4px 6px;
+  padding: 2px 6px;
   background: transparent;
   border: 0;
-  color: #94a3b8;
+  color: var(--studio-fg-muted, #94a3b8);
   font: inherit;
   font-size: 11px;
   text-align: left;
   cursor: pointer;
   border-radius: 3px;
+  min-height: 22px;
 }
 .phase-summary__compact-toggle:hover {
-  background: rgba(255, 255, 255, 0.04);
-  color: #cbd5e1;
+  background: var(--studio-bg-hover, rgba(255, 255, 255, 0.04));
+  color: var(--studio-fg, #cbd5e1);
 }
 .phase-summary__compact-toggle:focus-visible {
-  outline: 1px solid rgba(196, 181, 253, 0.6);
+  outline: 1px solid var(--studio-accent, #d97757);
   outline-offset: -1px;
 }
 .phase-summary__compact-label {
@@ -121,5 +166,5 @@
   margin-left: auto;
   font-size: 10px;
   font-variant-numeric: tabular-nums;
-  color: #64748b;
+  color: var(--studio-fg-muted, #64748b);
 }
