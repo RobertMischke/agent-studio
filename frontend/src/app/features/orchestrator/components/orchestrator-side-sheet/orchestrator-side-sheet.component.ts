@@ -23,6 +23,7 @@ import { ProjectChatListComponent } from '../../../project-chat/components/proje
 
 import { TooltipDirective } from '../../../../components/tooltip';
 import { SidesheetComponent } from '../../../../components/sidesheet/sidesheet.component';
+import { OrchestratorPanelStateService } from '../../state/orchestrator-panel-state.service';
 /**
  * Right-hand side sheet that hosts the orchestrator chat. Shell follows
  * the same flex-collapse pattern as `cli-usage-sheet` (host width animates
@@ -52,7 +53,12 @@ import { SidesheetComponent } from '../../../../components/sidesheet/sidesheet.c
   templateUrl: './orchestrator-side-sheet.component.html',
   styleUrl: './orchestrator-side-sheet.component.scss',
   host: {
-    '[class.is-open]': 'open()'
+    '[class.is-open]': 'open()',
+    // When open, drive the host width from the persisted user choice so
+    // the resize handle can grow / shrink the panel live. When closed the
+    // binding evaluates to null and the static `:host { width: 0 }` rule
+    // from the .scss wins, so the close transition still works.
+    '[style.width.px]': 'open() ? panelWidth() : null'
   }
 })
 export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
@@ -105,6 +111,10 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
   readonly openSettings = output<void>();
 
   readonly open = signal(false);
+
+  /** Persisted resize state for the panel — see OrchestratorPanelStateService. */
+  private readonly panelState = inject(OrchestratorPanelStateService);
+  readonly panelWidth = this.panelState.width;
   readonly activeProject = signal<string | null>(null);
   readonly turns = signal<OrchestratorChatTurn[]>([]);
   readonly loading = signal(false);
@@ -505,6 +515,33 @@ export class OrchestratorSideSheetComponent implements OnInit, OnDestroy {
    */
   onComboOptionMousedown(event: MouseEvent): void {
     event.preventDefault();
+  }
+
+  /**
+   * Drag the left-edge splitter to resize the panel. The orchestrator
+   * sits on the right of the viewport (flex-direction: row-reverse on
+   * .app-shell), so dragging the handle LEFT widens the panel: dx =
+   * startX - clientX, newWidth = startW + dx. Width is committed to
+   * OrchestratorPanelStateService which persists to localStorage and
+   * clamps within [360, min(1100, 96vw)].
+   */
+  startResize(event: MouseEvent): void {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startW = this.panelWidth();
+    const onMove = (e: MouseEvent) => {
+      this.panelState.setWidth(startW + (startX - e.clientX));
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+    document.body.style.cursor = 'ew-resize';
+    document.body.style.userSelect = 'none';
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
   }
 
   selectComboOption(proj: string, event: Event): void {

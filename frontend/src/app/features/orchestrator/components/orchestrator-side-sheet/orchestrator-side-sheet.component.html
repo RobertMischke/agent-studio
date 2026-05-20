@@ -1,3 +1,17 @@
+<!-- Resize splitter pinned to the panel's left edge. The orchestrator
+     sits on the right of the viewport, so dragging the handle left
+     widens the panel. The handle's width / hover affordance is set in
+     .scss; the cursor on body is toggled by startResize() so the
+     ew-resize cursor doesn't flicker off when the pointer briefly
+     leaves the 6 px hit-zone during a drag. -->
+@if (open()) {
+  <div class="orch-resize"
+       role="separator"
+       aria-orientation="vertical"
+       aria-label="Resize orchestrator panel"
+       data-testid="orch-side-sheet-resize"
+       (mousedown)="startResize($event)"></div>
+}
 <app-sidesheet title="Orchestrator"
                subtitle="Runbook · canonical session"
                testid="orch-side-sheet"

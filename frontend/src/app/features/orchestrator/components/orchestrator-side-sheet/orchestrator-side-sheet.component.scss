@@ -12,14 +12,49 @@
    the collapsed 0 px host and overlay the workspace. */
 :host {
   display: block;
+  // Width is closed (0) by default; the open-state width is bound from
+  // the component via [style.width.px]="open() ? panelWidth() : null"
+  // so the user-resizable + persisted width takes over once the user
+  // has dragged the splitter. The `:host(.is-open)` rule keeps a CSS
+  // fallback only if the inline binding is ever null while is-open is
+  // true (defensive — should not happen in practice).
   width: 0;
   transition: width 0.22s ease;
+  // `position: relative` so the .orch-resize splitter (position:
+  // absolute, left: 0) anchors to the host's box. `overflow: hidden`
+  // is preserved so the closed-state animation still clips inner
+  // content during the transition.
+  position: relative;
   overflow: hidden;
   flex: 0 0 auto;
 }
 
 :host(.is-open) {
+  // Defensive fallback only — see :host comment above. Real width
+  // is driven by [style.width.px]="panelWidth()" from the component.
   width: min(640px, 96vw);
+}
+
+// Left-edge resize handle. 6 px wide hit-zone is wider than the visual
+// indicator so dragging stays comfortable; the indicator only paints
+// on hover / active so the splitter doesn't clutter the default look.
+.orch-resize {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 6px;
+  cursor: ew-resize;
+  z-index: 5;
+  // Subtle hairline that lights up on hover — mirrors the sidebar's
+  // resize indicator in studio-shell.component.scss (`&__resize`).
+  background: transparent;
+  transition: background 0.12s ease;
+
+  &:hover,
+  &:active {
+    background: rgba(217, 119, 87, 0.30); // var(--studio-accent) at α30
+  }
 }
 
 .sidesheet {

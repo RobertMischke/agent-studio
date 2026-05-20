@@ -169,8 +169,77 @@ test.describe('Orchestrator side sheet position', () => {
 
     // Host stays in normal flow (not `position: fixed`, which was the
     // overlay regression). The body's `.app-shell` flex parent does the
-    // push; nothing should pull the host out of flow.
-    expect(geometry.orchHost!.position).toBe('static');
+    // push; nothing should pull the host out of flow. `static` or
+    // `relative` are both fine — `relative` is needed since the panel
+    // resize splitter anchors absolutely to the host's box. `fixed` /
+    // `absolute` would re-introduce the overlay bug.
+    expect(['static', 'relative']).toContain(geometry.orchHost!.position);
+  });
+
+  /**
+   * Resize splitter contract. The user can drag the panel's left edge
+   * to widen / narrow the orchestrator, and the chosen width survives a
+   * reload via localStorage (key `atp.studio.orchestratorWidth`).
+   */
+  test('resize splitter widens the panel and persists across reloads', async ({ page }) => {
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    // Clear any persisted width from earlier test runs so we start
+    // from a known baseline. Done after goto so the cleanup is one-shot
+    // and does NOT re-run on the page.reload() further down (which
+    // would defeat the whole "did the width persist?" assertion).
+    await page.evaluate(() => {
+      try { localStorage.removeItem('atp.studio.orchestratorWidth'); } catch { /* ignore */ }
+    });
+    await page.reload();
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(300);
+
+    const toggle = page.getByTestId('orch-side-sheet-toggle');
+    await expect(toggle).toBeVisible({ timeout: 10_000 });
+    await toggle.click();
+    const host = page.locator('app-orchestrator-side-sheet');
+    await host.waitFor({ state: 'visible' });
+    await page.waitForTimeout(400);
+
+    const widthBefore = (await host.boundingBox())!.width;
+    const handle = page.getByTestId('orch-side-sheet-resize');
+    await expect(handle).toBeVisible();
+
+    // Drag the handle 200 px to the LEFT (handle is on the panel's left
+    // edge; the orchestrator is on the viewport's right edge → dragging
+    // left widens the panel).
+    const handleBox = (await handle.boundingBox())!;
+    const startX = handleBox.x + handleBox.width / 2;
+    const startY = handleBox.y + handleBox.height / 2;
+    await page.mouse.move(startX, startY);
+    await page.mouse.down();
+    await page.mouse.move(startX - 200, startY, { steps: 10 });
+    await page.mouse.up();
+    await page.waitForTimeout(150);
+
+    const widthAfter = (await host.boundingBox())!.width;
+    // Drag delta should land within ~20 px of the requested 200 (clamp +
+    // sub-pixel rounding). Lower bound is the load-bearing assertion;
+    // upper bound just guards against runaway resize.
+    expect(widthAfter - widthBefore).toBeGreaterThan(150);
+    expect(widthAfter - widthBefore).toBeLessThan(250);
+
+    const persisted = await page.evaluate(() => localStorage.getItem('atp.studio.orchestratorWidth'));
+    expect(persisted).not.toBeNull();
+    expect(parseInt(persisted!, 10)).toBeGreaterThan(widthBefore + 150);
+
+    // Reload — width must come back from localStorage and the panel
+    // re-opens to the same width once toggled.
+    await page.reload();
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(300);
+    await page.getByTestId('orch-side-sheet-toggle').click();
+    await host.waitFor({ state: 'visible' });
+    await page.waitForTimeout(400);
+    const widthAfterReload = (await host.boundingBox())!.width;
+    expect(Math.abs(widthAfterReload - widthAfter)).toBeLessThan(4);
   });
 
   /**
