@@ -711,13 +711,21 @@
     position: absolute;
     top: 0;
     bottom: 0;
-    right: -3px;
+    // Handle sits flush against the sidebar's right edge inside its box
+    // (was `right: -3px` overhang, which the `.studio-body { overflow:
+    // hidden }` from the push-contract fix now clips, breaking the hit
+    // target). 6 px hit-zone, fully inside; the visual hairline only
+    // paints on hover so the splitter doesn't draw attention by default.
+    right: 0;
     width: 6px;
     cursor: ew-resize;
     z-index: 5;
+    background: transparent;
+    transition: background 0.12s ease;
 
-    &:hover {
-      background: rgba(217, 119, 87, 0.3);
+    &:hover,
+    &:active {
+      background: rgba(217, 119, 87, 0.30);
     }
   }
 }
