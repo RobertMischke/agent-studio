@@ -8,14 +8,14 @@
   gap: 8px;
   padding: 0 8px;
   // Mockup target (docs/mockups/vscode-layout/ui.html `.statusbar`):
-  // 22 px high, 11 px font, solid Catppuccin surface-1 background.
-  // Previous 36 px / 12 px ate more bottom chrome than the design
-  // intended.
+  // 22 px high, 11 px font. Surface picks up the studio activity-bar
+  // token so the strip flips with light theme; the previous hard-
+  // coded `#181825` rendered as solid black against a light shell.
   height: 22px;
-  background: #181825;
-  border-top: 1px solid rgba(255,255,255,0.06);
+  background: var(--studio-bg-activitybar, #181825);
+  border-top: 1px solid var(--studio-border, rgba(255, 255, 255, 0.06));
   font-size: 11px;
-  color: rgba(255,255,255,0.70);
+  color: var(--studio-fg-dim, rgba(255, 255, 255, 0.70));
   letter-spacing: 0;
 }
 .statusbar__group {
