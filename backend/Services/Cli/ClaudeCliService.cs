@@ -78,12 +78,15 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         // TransformReadLine() in this class normalises the frames into the
         // marker-line convention the frontend parser already understands.
 
-        // Always call the underlying claude.exe directly when available.
-        // Going through the npm-installed claude.CMD shim makes Windows wrap
-        // the spawn in cmd.exe which corrupts redirected-stdin pipe inheritance
-        // (only the system/init frame escapes; everything after is silent).
-        // See ResolveCmdShimToExe for the full root cause + npm-shim probe.
-        var fileName = ResolveCmdShimToExe(ResolveExecutable(GetCliPath()));
+        // Resolve the binary that will actually be executed. Default is to
+        // trust whatever the user's shell PATH points at (matches their
+        // tested `claude` invocation in PowerShell). The legacy npm-shim
+        // override is opt-in via `ClaudeCli:UseNpmShimProbe=true` for the
+        // narrow case where the original ADR-0014 stdin-pipe bug regresses;
+        // ADR-0014 follow-up moved the prompt to a positional argv (no
+        // more stdin pipe at all), so the .CMD shim is safe to invoke
+        // directly on the modern code path.
+        var fileName = ResolveClaudeBinary(GetCliPath());
 
         var psi = new ProcessStartInfo
         {
@@ -314,6 +317,65 @@ public sealed class ClaudeCliService : CliExecutionServiceBase
         var dir = Path.GetDirectoryName(cmdOrExePath) ?? string.Empty;
         var candidate = Path.Combine(dir, "node_modules", "@anthropic-ai", "claude-code", "bin", "claude.exe");
         return File.Exists(candidate) ? candidate : cmdOrExePath;
+    }
+
+    /// <summary>
+    /// Resolves the actual file to execute for the Claude CLI.
+    ///
+    /// <para>
+    /// <b>Default (shell-PATH wins):</b> trust the user's PATH the same way
+    /// their `claude` invocation in PowerShell / cmd does. ResolveExecutable
+    /// walks PATH + PATHEXT and returns the first hit (typically a native
+    /// `claude.exe` from the Anthropic standalone installer, or the
+    /// `claude.cmd` shim from an npm install). Both are safe to spawn
+    /// directly now that ADR-0014 routes the prompt as a positional argv
+    /// instead of through stdin — the original cmd.exe pipe-inheritance
+    /// bug no longer applies.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Legacy npm-shim probe</b> (opt-in via
+    /// <c>ClaudeCli:UseNpmShimProbe=true</c>): if PATH resolves to a `.cmd`,
+    /// look for a sibling `node_modules/@anthropic-ai/claude-code/bin/claude.exe`
+    /// and prefer it. Kept as an escape hatch in case argv quoting through
+    /// cmd.exe regresses on a specific Windows build; the user can flip the
+    /// switch in appsettings without redeploying.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Why this changed:</b> the previous implementation hard-coded the
+    /// npm-shim probe and silently picked the node_modules-bundled
+    /// `claude.exe` over the user's PATH binary. When the bundled exe was
+    /// missing, outdated, or pointed at a different Anthropic release than
+    /// the user's shell, project-level chat broke while shell `claude`
+    /// kept working — exactly the symptom the user reported.
+    /// </para>
+    /// </summary>
+    internal string ResolveClaudeBinary(string nameOrPath)
+    {
+        // 1. Shell PATH resolution (uses PATHEXT on Windows).
+        var resolved = ResolveExecutable(nameOrPath);
+
+        // 2. Opt-in legacy probe — only kicks in for .cmd / .bat hits.
+        var useShim = string.Equals(
+            _configuration["ClaudeCli:UseNpmShimProbe"], "true",
+            StringComparison.OrdinalIgnoreCase);
+        if (useShim)
+        {
+            var probed = ResolveCmdShimToExe(resolved);
+            if (!string.Equals(probed, resolved, StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogInformation(
+                    "[claude-bin] Legacy npm-shim probe enabled; using {Probed} instead of shell-resolved {Shell}",
+                    probed, resolved);
+                return probed;
+            }
+        }
+
+        _logger.LogInformation(
+            "[claude-bin] Using shell-resolved binary {Path} (input: {Input})",
+            resolved, nameOrPath);
+        return resolved;
     }
 
     /// <summary>
