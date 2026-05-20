@@ -436,6 +436,21 @@ export class ProjectChatListComponent implements OnInit, OnDestroy {
     next.set(event.phaseId, event.expanded);
     this.phaseOverrides.set(next);
     queueMicrotask(() => this.recomputeWindow());
+
+    // User feedback: "in place expand" — clicking a phase summary row
+    // must put the user's eye on the messages that just appeared, not
+    // leave them looking at the index. When expanding, scroll the
+    // verbatim chat to the phase's first turn so the unhide reads as
+    // an inline reveal at the click site (the phase summary stays
+    // pinned at the top while the chat below now shows the phase's
+    // messages with a flash highlight on the first one).
+    if (!event.expanded) return;
+    const phase = this.phases().find((p) => p.id === event.phaseId);
+    if (!phase || phase.messageIds.length === 0) return;
+    const firstTurn = phase.messageIds[0];
+    // Two ticks: one for the window recompute above, one for the DOM
+    // to settle around the unhid turns before scrollToTurn measures.
+    queueMicrotask(() => queueMicrotask(() => this.scrollToTurn(firstTurn)));
   }
 
   scrollToTurn(turnId: string): void {
