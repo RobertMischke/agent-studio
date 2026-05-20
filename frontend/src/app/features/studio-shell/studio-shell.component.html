@@ -155,8 +155,8 @@
        the detail view had been closed. -->
   <div class="studio-body"
        [style.grid-template-columns]="sidebarVisible()
-           ? 'var(--studio-activitybar-w) ' + sidebarWidth() + 'px 1fr'
-           : 'var(--studio-activitybar-w) 1fr'">
+           ? 'var(--studio-activitybar-w) minmax(0, ' + sidebarWidth() + 'px) minmax(0, 1fr)'
+           : 'var(--studio-activitybar-w) minmax(0, 1fr)'">
     <!-- Activity bar -->
     <app-studio-activity-bar
       [items]="activityBarItems"
@@ -166,8 +166,13 @@
 
     <!-- Sidebar host -->
     @if (sidebarVisible()) {
+      <!-- Width is owned by the grid track in .studio-body (minmax(0,
+           sidebarWidth)px). Setting [style.width.px] on the <aside> would
+           pin its layout width to sidebarWidth() even when the grid track
+           shrinks (e.g. the orchestrator side sheet opens and pushes the
+           studio-shell), so the sidebar would stick out past its track
+           and the editor content would clip via .app-shell overflow. -->
       <aside class="studio-sidebar"
-             [style.width.px]="sidebarWidth()"
              [attr.data-active-panel]="activePanel()"
              data-testid="studio-sidebar">
         <!-- Header per panel -->

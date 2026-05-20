@@ -127,6 +127,15 @@
 .studio {
   display: grid;
   grid-template-rows: var(--studio-titlebar-h) 1fr auto;
+  // Single-column track, but explicit minmax(0, 1fr) so the column does
+  // NOT grow to the intrinsic min-content of its children. Without
+  // this, the implicit `auto` single-column expanded to the
+  // studio-body's min-content (sum of activity bar + sidebar +
+  // editor min-content), which made the body 1396 px wide even when
+  // the .studio element itself was clipped to 640 px by its parent's
+  // flex track — the editor visually disappeared behind the
+  // orchestrator side sheet.
+  grid-template-columns: minmax(0, 1fr);
   height: 100vh;
   overflow: hidden;
   font-family: var(--font-ui);
@@ -535,6 +544,15 @@
 .studio-body {
   display: grid;
   min-height: 0;
+  // min-width: 0 + explicit width tell the grid container to honour its
+  // parent's flex/grid track instead of widening to its intrinsic
+  // min-content (sum of the activity bar + sidebar-track + editor
+  // min-content). Without these, when the orchestrator sheet pushes the
+  // studio-shell and the editor's tab/content has a wide intrinsic
+  // min-content, the body grew past the studio-shell box and the editor
+  // poked out behind the sheet.
+  min-width: 0;
+  width: 100%;
   overflow: hidden;
 }
 
@@ -648,8 +666,13 @@
   border-right: 1px solid var(--studio-border);
   display: flex;
   flex-direction: column;
-  min-width: 200px;
-  max-width: 600px;
+  // min-width: 0 + max-width unset so the grid track in .studio-body
+  // (minmax(0, sidebarWidth)px) can shrink the sidebar when the studio-
+  // shell itself gets pushed by the orchestrator side sheet. The user-
+  // chosen width still applies as the track's max via the grid template;
+  // the resize handle clamps the user input to [200, 560] in the panel
+  // state service, so the user-visible drag floor is still 200 px.
+  min-width: 0;
   position: relative;
   overflow: hidden;
 

@@ -172,4 +172,56 @@ test.describe('Orchestrator side sheet position', () => {
     // push; nothing should pull the host out of flow.
     expect(geometry.orchHost!.position).toBe('static');
   });
+
+  /**
+   * Compact-viewport push contract. At 1280 × 720 the orchestrator sheet
+   * (640 px) leaves ~640 px for the studio-shell, which is less than the
+   * sum of the activity bar (48) + the default user-chosen sidebar
+   * (240 px) + editor min-content. The earlier layout pinned the sidebar
+   * to its user width via inline `[style.width.px]` and used a non-
+   * shrinkable grid track, so the studio-shell intrinsic width grew past
+   * its container box and `.app-shell { overflow: hidden }` clipped the
+   * right edge of the editor — visually it looked like the orchestrator
+   * was painting over the editor.
+   *
+   * The fix: grid uses `minmax(0, sidebarWidth)px` for the sidebar track
+   * and `min-width: 0` on `.studio-sidebar`, so the sidebar shrinks under
+   * pressure while the user-chosen width remains the *cap*. This test
+   * pins it: the editor's right edge stays inside the studio-shell box
+   * when the sheet opens on a 1280 px viewport.
+   */
+  test('push contract holds on a 1280 px viewport (no editor clip)', async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 720 });
+    await page.goto('/');
+    await page.waitForLoadState('domcontentloaded');
+    await page.waitForTimeout(400);
+
+    const toggle = page.getByTestId('orch-side-sheet-toggle');
+    await expect(toggle).toBeVisible({ timeout: 10_000 });
+    await toggle.click();
+    await page.getByTestId('orch-side-sheet').waitFor({ state: 'visible' });
+    await page.waitForTimeout(450);
+
+    const geometry = await page.evaluate(() => {
+      function box(el: Element | null) {
+        if (!el) return null;
+        const r = (el as HTMLElement).getBoundingClientRect();
+        return { x: Math.round(r.x), width: Math.round(r.width), right: Math.round(r.x + r.width) };
+      }
+      return {
+        studio: box(document.querySelector('app-studio-shell')),
+        editor: box(document.querySelector('app-studio-shell .studio-editor')),
+        orchHost: box(document.querySelector('app-orchestrator-side-sheet')),
+        vw: window.innerWidth,
+      };
+    });
+
+    // The orchestrator sits on the right edge.
+    expect(geometry.orchHost!.right).toBeGreaterThanOrEqual(geometry.vw - 4);
+    // The studio-shell ends where the orchestrator begins — no overlap.
+    expect(geometry.studio!.right).toBeLessThanOrEqual(geometry.orchHost!.x + 1);
+    // The editor stays inside the studio-shell box (this is what fails
+    // when the sidebar refuses to shrink and pushes the editor right).
+    expect(geometry.editor!.right).toBeLessThanOrEqual(geometry.studio!.right + 1);
+  });
 });

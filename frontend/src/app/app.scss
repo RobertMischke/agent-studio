@@ -1994,8 +1994,20 @@
       overflow: hidden;
     }
     .app-shell > app-studio-shell {
+      // studio-shell uses ViewEncapsulation.None, so its :host selector
+      // doesn't bind — without an explicit display the element is inline
+      // (default for unknown tags) and Flex-Item blockification does not
+      // make min-width: 0 effective against the inner .studio grid's
+      // intrinsic min-content. That left the editor poking past the
+      // studio-shell's box when the orchestrator pushed it (the editor's
+      // right edge ended up at viewport-x, not at studio-shell.right).
+      display: block;
       flex: 1 1 auto;
       min-width: 0;
+      // Belt-and-braces: clip anything that still wants to overflow.
+      // The grid inside (.studio) already has overflow:hidden but a
+      // mis-sized grandchild can still spill horizontally.
+      overflow: hidden;
     }
     
     ::ng-deep body.resizing {
