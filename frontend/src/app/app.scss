@@ -167,16 +167,20 @@
       align-items: center;
       gap: 6px;
       padding: 6px 12px;
-      background: rgba(15, 15, 26, 0.60);
-      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+      // Tokenized so the strip flips with the studio shell theme. The
+      // previous `rgba(15, 15, 26, 0.60)` was the Catppuccin surface-0
+      // tint and rendered as solid near-black on the light editor
+      // surface — exactly the dark-on-light mismatch the user flagged.
+      background: var(--studio-bg-sidebar, rgba(15, 15, 26, 0.60));
+      border-bottom: 1px solid var(--studio-border, rgba(255, 255, 255, 0.06));
       font-size: 11px;
     }
     .active-filter-strip__pill {
       display: inline-flex;
       align-items: center;
       gap: 4px;
-      background: rgba(255, 255, 255, 0.04);
-      border: 1px solid rgba(255, 255, 255, 0.14);
+      background: var(--studio-bg-hover, rgba(255, 255, 255, 0.04));
+      border: 1px solid var(--studio-border, rgba(255, 255, 255, 0.14));
       color: var(--studio-fg);
       border-radius: 999px;
       padding: 2px 4px 2px 8px;
