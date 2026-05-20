@@ -242,6 +242,65 @@
 .chat__event--memory-refreshed {
   border-left-color: var(--studio-accent-3, #569cd6);
 }
+
+/* Tool-call variant: a tool invocation should read as a side-note in
+   the agent's stream, not as a peer message. Smaller, monospaced
+   target text, dimmer background, no rounded "card" feel. Expand
+   reveals the full args / result in the same shared event detail
+   block so the user can still drill in. */
+.chat__event--tool {
+  border: 0;
+  border-left: 2px solid var(--studio-fg-muted, #64748b);
+  background: transparent;
+  border-radius: 0;
+  font-size: 11px;
+  margin-left: 8px;
+}
+.chat__event--tool .chat__event-head {
+  padding: 1px 8px;
+  min-height: 20px;
+  grid-template-columns: 14px auto 1fr auto auto;
+  gap: 6px;
+  font-size: 11px;
+}
+.chat__event--tool .chat__event-icon {
+  font-size: 11px;
+  opacity: 0.7;
+}
+.chat__event--tool .chat__event-kind {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--studio-fg-muted, #64748b);
+  text-transform: lowercase;
+}
+.chat__event--tool .chat__event-summary {
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+  font-size: 10.5px;
+  color: var(--studio-fg-dim, #94a3b8);
+}
+.chat__event--tool .chat__event-time {
+  font-size: 9.5px;
+  opacity: 0.6;
+}
+.chat__event--tool .chat__event-caret {
+  font-size: 9px;
+  opacity: 0.6;
+}
+.chat__event--tool:hover .chat__event-icon,
+.chat__event--tool:hover .chat__event-kind,
+.chat__event--tool:hover .chat__event-summary,
+.chat__event--tool:hover .chat__event-time {
+  opacity: 1;
+}
+.chat__event--tool .chat__event-detail {
+  font-size: 11.5px;
+  padding: 6px 10px 8px;
+  // Tool detail is almost always code / JSON output — give it a
+  // mono baseline so the renderer's <pre> blocks integrate.
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+  color: var(--studio-fg-dim, #cbd5e1);
+}
 .chat__event-head {
   display: grid;
   grid-template-columns: 18px auto 1fr auto auto;
