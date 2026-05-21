@@ -186,3 +186,113 @@ export function buildSummary(
 function pluralize(word: string, n: number): string {
   return n === 1 ? word : `${word}s`;
 }
+
+/**
+ * Super-phase: an outer block grouping consecutive ChatPhases that
+ * belong to the same "working session". Boundary rule (deterministic):
+ * an idle gap of >= `idleBoundaryMs` between the end of one phase and
+ * the start of the next opens a new super-phase. The default 15-minute
+ * gap matches the operator's mental model of a coherent burst of work
+ * vs. coming back later. Always one super-phase per phase when the
+ * conversation is contiguous.
+ */
+export interface SuperPhase {
+  /** Stable id derived from the first contained phase. */
+  id: string;
+  /** ISO timestamp of the super-phase's first phase. */
+  startTs: string;
+  /** ISO timestamp of the super-phase's last phase. */
+  endTs: string;
+  /** Contained phases in chronological order (length >= 1). */
+  phases: readonly ChatPhase[];
+  /** Union of distinct participants across all contained phases, first-seen order. */
+  participants: readonly WorkforceRole[];
+  /** Sum of messageCount across contained phases. */
+  messageCount: number;
+  /** Deterministic one-liner (phases × messages × duration). */
+  summary: string;
+}
+
+export interface SuperPhaseGroupingOptions {
+  /** Min idle (ms) between two phases that opens a new super-phase. Default 15 min. */
+  idleBoundaryMs?: number;
+}
+
+const DEFAULT_IDLE_BOUNDARY_MS = 15 * 60 * 1000;
+
+/**
+ * Group ordered phases into super-phases. Input must be in chronological
+ * order (the natural output of {@link groupIntoPhases}).
+ */
+export function groupIntoSuperPhases(
+  phases: readonly ChatPhase[],
+  opts?: SuperPhaseGroupingOptions
+): SuperPhase[] {
+  if (phases.length === 0) return [];
+  const boundaryMs = opts?.idleBoundaryMs ?? DEFAULT_IDLE_BOUNDARY_MS;
+  const groups: ChatPhase[][] = [];
+  let bucket: ChatPhase[] = [phases[0]];
+  for (let i = 1; i < phases.length; i++) {
+    const prev = phases[i - 1];
+    const cur = phases[i];
+    const gap = parseTs(cur.startTs) - parseTs(prev.endTs);
+    if (gap >= boundaryMs) {
+      groups.push(bucket);
+      bucket = [cur];
+    } else {
+      bucket.push(cur);
+    }
+  }
+  groups.push(bucket);
+  return groups.map(buildSuperPhase);
+}
+
+function buildSuperPhase(phases: ChatPhase[]): SuperPhase {
+  const first = phases[0];
+  const last = phases[phases.length - 1];
+  const seen = new Set<WorkforceRoleId>();
+  const participants: WorkforceRole[] = [];
+  let messageCount = 0;
+  for (const phase of phases) {
+    messageCount += phase.messageCount;
+    for (const role of phase.participants) {
+      if (seen.has(role.id)) continue;
+      seen.add(role.id);
+      participants.push(role);
+    }
+  }
+  return {
+    id: `super-${first.id}`,
+    startTs: first.startTs,
+    endTs: last.endTs,
+    phases,
+    participants,
+    messageCount,
+    summary: buildSuperSummary(phases.length, messageCount, first.startTs, last.endTs),
+  };
+}
+
+function buildSuperSummary(
+  phaseCount: number,
+  messageCount: number,
+  startTs: string,
+  endTs: string
+): string {
+  const durMs = Math.max(0, parseTs(endTs) - parseTs(startTs));
+  const dur = formatDuration(durMs);
+  return `${phaseCount} ${pluralize('phase', phaseCount)} · ${messageCount} ${pluralize('message', messageCount)} · ${dur}`;
+}
+
+function parseTs(iso: string): number {
+  const t = Date.parse(iso);
+  return Number.isFinite(t) ? t : 0;
+}
+
+function formatDuration(ms: number): string {
+  if (ms < 60_000) return '< 1 min';
+  const totalMin = Math.round(ms / 60_000);
+  if (totalMin < 60) return `${totalMin} min`;
+  const h = Math.floor(totalMin / 60);
+  const m = totalMin % 60;
+  return m === 0 ? `${h} h` : `${h} h ${m} min`;
+}

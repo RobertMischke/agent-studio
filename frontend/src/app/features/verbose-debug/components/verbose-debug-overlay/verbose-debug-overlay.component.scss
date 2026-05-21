@@ -319,6 +319,48 @@
       }
     }
 
+    .vdbg__phases { display: flex; flex-direction: column; gap: 16px; }
+    .vdbg__phase-super {
+      border: 1px solid var(--vdbg-border);
+      border-radius: 8px;
+      background: var(--vdbg-band);
+      padding: 10px 12px;
+    }
+    .vdbg__phase-super-head {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 8px;
+    }
+    .vdbg__phase-super-name {
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-size: 11px;
+      color: var(--vdbg-accent);
+    }
+    .vdbg__phase-super-range,
+    .vdbg__phase-super-summary { color: var(--vdbg-muted); font-size: 12px; }
+    .vdbg__phase-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      font-variant-numeric: tabular-nums;
+    }
+    .vdbg__phase-table th,
+    .vdbg__phase-table td {
+      padding: 4px 8px;
+      border-bottom: 1px solid var(--vdbg-border);
+      text-align: left;
+      vertical-align: top;
+    }
+    .vdbg__phase-table th { color: var(--vdbg-muted); font-weight: 600; }
+    .vdbg__phase-idx { width: 24px; color: var(--vdbg-muted); }
+    .vdbg__phase-range { white-space: nowrap; color: var(--vdbg-muted); }
+    .vdbg__phase-count { text-align: right; width: 40px; }
+    .vdbg__phase-summary { color: var(--vdbg-text); }
+
     @media (max-width: 768px) {
       .vdbg { padding: 8px; }
       .vdbg__panel { border-radius: 10px; }

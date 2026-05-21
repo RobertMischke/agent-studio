@@ -17,16 +17,25 @@ import type { JobTokenSummary } from '../../../../features/tokens';
 import { projectConversation } from '../../../../components/chat/conversation-projection';
 import type {
   ConversationEvent,
+  MessageEvent,
   RawLineRange,
   ToolFamily,
   WorkbenchDebugEvent,
 } from '../../../../components/chat/conversation-event';
+import {
+  groupIntoPhases,
+  groupIntoSuperPhases,
+  type ChatPhase,
+  type PhaseInputMessage,
+  type SuperPhase,
+} from '../../../workforce';
 import { formatTokens as fmtTokens } from '../../../../services/format.util';
 
 import { TooltipDirective } from '../../../../components/tooltip';
 export type VerboseDebugTab =
   | 'overview'
   | 'actors'
+  | 'phases'
   | 'orchestrator'
   | 'tools'
   | 'warnings'
@@ -121,6 +130,7 @@ export class VerboseDebugOverlayComponent {
   readonly tabs: { id: VerboseDebugTab; label: string; icon: string }[] = [
     { id: 'overview', label: 'Overview', icon: '📊' },
     { id: 'actors', label: 'Actors', icon: '🎭' },
+    { id: 'phases', label: 'Phases', icon: '🧭' },
     { id: 'orchestrator', label: 'Orchestrator', icon: '🛰' },
     { id: 'tools', label: 'Tools', icon: '🛠' },
     { id: 'warnings', label: 'Warnings', icon: '⚠' },
@@ -194,6 +204,51 @@ export class VerboseDebugOverlayComponent {
     const ev = this.events().find((e): e is WorkbenchDebugEvent => e.kind === 'workbench.debug');
     return ev ?? null;
   });
+
+  // ------------------------------------------------------------------
+  // Phases / Super-phases (Phases tab)
+  // Derived from the same conversation event stream the chat uses, so
+  // the debug surface stays consistent with what the operator sees in
+  // the orchestrator side sheet. Filtering to message.* events keeps
+  // the grouping aligned with the chat's per-message phase rule.
+  // ------------------------------------------------------------------
+  readonly phases = computed<ChatPhase[]>(() => {
+    const msgs: PhaseInputMessage[] = this.events()
+      .filter((e): e is MessageEvent => e.kind.startsWith('message.'))
+      .map((e) => ({
+        id: e.id,
+        ts: e.timestamp,
+        author: messageKindToAuthor(e.kind),
+      }));
+    return groupIntoPhases(msgs);
+  });
+
+  readonly superPhases = computed<SuperPhase[]>(() => groupIntoSuperPhases(this.phases()));
+
+  readonly phaseIndexById = computed<ReadonlyMap<string, { supIndex: number; phaseIndexInSup: number }>>(() => {
+    const out = new Map<string, { supIndex: number; phaseIndexInSup: number }>();
+    this.superPhases().forEach((sup, sIdx) => {
+      sup.phases.forEach((p, pIdx) => {
+        out.set(p.id, { supIndex: sIdx + 1, phaseIndexInSup: pIdx + 1 });
+      });
+    });
+    return out;
+  });
+
+  phaseParticipantsLabel(phase: ChatPhase): string {
+    return phase.participants.map((r) => r.label).join(', ') || '—';
+  }
+
+  formatPhaseTime(iso: string): string {
+    if (!iso) return '';
+    try {
+      const d = new Date(iso);
+      if (Number.isNaN(d.getTime())) return iso;
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    } catch {
+      return iso;
+    }
+  }
 
   readonly orchestratorDecisions = computed(() => {
     return this.events().filter(
@@ -544,4 +599,15 @@ export class VerboseDebugOverlayComponent {
 function bandPercent(value: number, max: number): number {
   if (max <= 0 || value <= 0) return 0;
   return Math.max(4, Math.min(100, Math.round((value / max) * 100)));
+}
+
+function messageKindToAuthor(kind: string): string {
+  switch (kind) {
+    case 'message.user':            return 'user';
+    case 'message.taskAgent':       return 'agent';
+    case 'message.orchestrator':    return 'orchestrator';
+    case 'message.supervisor':      return 'supervisor';
+    case 'message.supportingAgent': return 'agent';
+    default:                        return 'agent';
+  }
 }

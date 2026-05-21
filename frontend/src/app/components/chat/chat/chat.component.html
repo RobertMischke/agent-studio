@@ -1,11 +1,4 @@
     <div class="chat" [class.chat--embedded]="variant() === 'embedded'">
-      @if (phases().length > 0) {
-        <app-phase-summary-list
-          [phases]="phases()"
-          [expandedPhaseIds]="expandedPhaseIds()"
-          [compact]="compactPhaseSummary()"
-          (phaseToggled)="onPhaseToggled($event)" />
-      }
       <div #body
            class="chat__body"
            [style.max-height]="bodyMaxHeight()"
@@ -27,102 +20,152 @@
                  [style.height.px]="topSpacerPx()"></div>
           }
           @for (item of windowedItems(); track item.id) {
-            @if (item.kind === 'message') {
-            <article class="chat__msg"
-                     [class.chat__msg--user]="item.message.role === 'user'"
-                     [class.chat__msg--agent]="item.message.role === 'agent'"
-                     [class.chat__msg--orchestrator]="item.message.role === 'orchestrator'"
-                     [class.chat__msg--system]="item.message.role === 'system'"
-                     [class.chat__msg--pending]="item.message.pending"
-                     [class.chat__msg--error]="!!item.message.error"
-                     [class.chat__msg--collapsible]="item.collapsible"
-                     [class.chat__msg--collapsed]="item.collapsed"
-                     [attr.data-testid]="'chat-msg-' + item.message.role"
-                     [attr.data-turn-id]="item.message.id"
-                     [attr.data-collapsed]="item.collapsed ? 'true' : 'false'">
-              <header class="chat__msg-head">
-                @if (item.message.role === 'user') {
-                  <span class="chat__msg-role">You</span>
-                } @else {
-                  <app-role-badge [author]="item.message.role" />
-                }
-                <span class="chat__msg-time">{{ formatTime(item.message.timestamp) }}</span>
-              </header>
-              <div class="chat__msg-body"
-                   appMarkdownLightbox
-                   [class.chat__msg-body--markdown]="item.message.role !== 'user'"
-                   [class.markdown-body]="item.message.role !== 'user'"
-                   [class.markdown-body--dense]="item.message.role !== 'user'"
-                   [class.chat__msg-body--collapsed]="item.collapsed"
-                   [attr.data-testid]="item.message.role !== 'user' ? 'chat-turn-md' : null"
-                   [innerHTML]="item.bodyHtml"></div>
-              @if (item.collapsible) {
-                <button type="button"
-                        class="chat__msg-toggle"
-                        [attr.data-testid]="'chat-msg-toggle-' + item.message.id"
-                        [attr.aria-expanded]="!item.collapsed"
-                        (click)="toggleCollapsed(item.message.id)">
-                  {{ item.collapsed ? '▾ Show more' : '▴ Show less' }}
-                </button>
+            @switch (item.kind) {
+              @case ('super-phase') {
+                <!-- Outer "session" divider: opens whenever there's a
+                     >=15 min idle gap between phases. Tooltip carries
+                     phase count, message count, duration, participants. -->
+                <div class="chat__super-divider"
+                     [appTooltip]="item.tooltip"
+                     [attr.data-testid]="'chat-super-divider-' + item.id"
+                     [attr.data-super-id]="item.id">
+                  <span class="chat__super-divider-line" aria-hidden="true"></span>
+                  <span class="chat__super-divider-label">
+                    <span class="chat__super-divider-name">Session {{ item.index }}</span>
+                    <span class="chat__super-divider-sep" aria-hidden="true">·</span>
+                    <span class="chat__super-divider-stats">
+                      {{ item.superPhase.phases.length }} phases · {{ item.superPhase.messageCount }} msgs
+                    </span>
+                    <span class="chat__super-divider-sep" aria-hidden="true">·</span>
+                    <time class="chat__super-divider-time">{{ formatTime(item.superPhase.startTs) }}</time>
+                  </span>
+                  <span class="chat__super-divider-line" aria-hidden="true"></span>
+                </div>
               }
-              @if (item.message.attachments?.length) {
-                <ul class="chat__msg-attachments"
-                    appMarkdownLightbox
-                    data-testid="chat-msg-attachments">
-                  @for (att of item.message.attachments; track att.url) {
-                    <li class="chat__msg-attachment" [class.chat__msg-attachment--pending]="att.pending">
-                      <img [src]="att.url"
-                           [alt]="att.alt"
-                           data-testid="chat-msg-attachment-image" />
-                      <span class="chat__msg-attachment-name">{{ att.alt }}</span>
-                    </li>
+              @case ('phase') {
+                <!-- Inline phase divider, one per user-anchored phase.
+                     Participants render as inline role badges; full meta
+                     lives in the tooltip and the verbose debug overlay. -->
+                <div class="chat__phase-divider"
+                     [appTooltip]="item.tooltip"
+                     [attr.data-testid]="'chat-phase-divider-' + item.id"
+                     [attr.data-phase-id]="item.id">
+                  <span class="chat__phase-divider-line" aria-hidden="true"></span>
+                  <span class="chat__phase-divider-label">
+                    <span class="chat__phase-divider-index">Phase {{ item.indexInSuper }}</span>
+                    @if (item.phase.participants.length > 0) {
+                      <span class="chat__phase-divider-roles">
+                        @for (role of item.phase.participants; track role.id) {
+                          @if (role.id !== 'user') {
+                            <app-role-badge [author]="role.id" />
+                          }
+                        }
+                      </span>
+                    }
+                    <span class="chat__phase-divider-stats">{{ item.phase.messageCount }} msg</span>
+                    <time class="chat__phase-divider-time">{{ formatTime(item.phase.startTs) }}</time>
+                  </span>
+                  <span class="chat__phase-divider-line" aria-hidden="true"></span>
+                </div>
+              }
+              @case ('message') {
+                <article class="chat__msg"
+                         [class.chat__msg--user]="item.message.role === 'user'"
+                         [class.chat__msg--agent]="item.message.role === 'agent'"
+                         [class.chat__msg--orchestrator]="item.message.role === 'orchestrator'"
+                         [class.chat__msg--system]="item.message.role === 'system'"
+                         [class.chat__msg--pending]="item.message.pending"
+                         [class.chat__msg--error]="!!item.message.error"
+                         [class.chat__msg--collapsible]="item.collapsible"
+                         [class.chat__msg--collapsed]="item.collapsed"
+                         [attr.data-testid]="'chat-msg-' + item.message.role"
+                         [attr.data-turn-id]="item.message.id"
+                         [attr.data-collapsed]="item.collapsed ? 'true' : 'false'">
+                  <header class="chat__msg-head">
+                    @if (item.message.role === 'user') {
+                      <span class="chat__msg-role">You</span>
+                    } @else {
+                      <app-role-badge [author]="item.message.role" />
+                    }
+                    <span class="chat__msg-time">{{ formatTime(item.message.timestamp) }}</span>
+                  </header>
+                  <div class="chat__msg-body"
+                       appMarkdownLightbox
+                       [class.chat__msg-body--markdown]="item.message.role !== 'user'"
+                       [class.markdown-body]="item.message.role !== 'user'"
+                       [class.markdown-body--dense]="item.message.role !== 'user'"
+                       [class.chat__msg-body--collapsed]="item.collapsed"
+                       [attr.data-testid]="item.message.role !== 'user' ? 'chat-turn-md' : null"
+                       [innerHTML]="item.bodyHtml"></div>
+                  @if (item.collapsible) {
+                    <button type="button"
+                            class="chat__msg-toggle"
+                            [attr.data-testid]="'chat-msg-toggle-' + item.message.id"
+                            [attr.aria-expanded]="!item.collapsed"
+                            (click)="toggleCollapsed(item.message.id)">
+                      {{ item.collapsed ? '▾ Show more' : '▴ Show less' }}
+                    </button>
                   }
-                </ul>
+                  @if (item.message.attachments?.length) {
+                    <ul class="chat__msg-attachments"
+                        appMarkdownLightbox
+                        data-testid="chat-msg-attachments">
+                      @for (att of item.message.attachments; track att.url) {
+                        <li class="chat__msg-attachment" [class.chat__msg-attachment--pending]="att.pending">
+                          <img [src]="att.url"
+                               [alt]="att.alt"
+                               data-testid="chat-msg-attachment-image" />
+                          <span class="chat__msg-attachment-name">{{ att.alt }}</span>
+                        </li>
+                      }
+                    </ul>
+                  }
+                  @if (item.message.error) {
+                    <div class="chat__msg-error">{{ item.message.error }}</div>
+                  }
+                </article>
               }
-              @if (item.message.error) {
-                <div class="chat__msg-error">{{ item.message.error }}</div>
+              @case ('event') {
+                <article class="chat__event"
+                         [class.chat__event--warn]="item.event.severity === 'warn'"
+                         [class.chat__event--error]="item.event.severity === 'error'"
+                         [class.chat__event--session-recovered]="item.event.kind === 'session-recovered'"
+                         [class.chat__event--memory-refreshed]="item.event.kind === 'memory-refreshed'"
+                         [class.chat__event--tool]="item.event.kind === 'tool-call'"
+                         [class.chat__event--expanded]="item.expanded"
+                         [attr.data-testid]="'chat-event-' + item.event.kind"
+                         [attr.data-event-id]="item.event.id"
+                         [attr.data-expanded]="item.expanded ? 'true' : 'false'">
+                  <button type="button"
+                          class="chat__event-head"
+                          [attr.data-testid]="'chat-event-toggle-' + item.event.id"
+                          [attr.aria-expanded]="item.expanded"
+                          [disabled]="!item.detailHtml"
+                          (click)="toggleEventExpanded(item.event.id)">
+                    <span class="chat__event-icon" aria-hidden="true">{{ eventIcon(item.event.kind) }}</span>
+                    <span class="chat__event-kind">{{ eventLabel(item.event.kind) }}</span>
+                    <span class="chat__event-summary">{{ item.event.summary }}</span>
+                    <span class="chat__event-time">{{ formatTime(item.event.timestamp) }}</span>
+                    @if (item.detailHtml) {
+                      <span class="chat__event-caret" aria-hidden="true">{{ item.expanded ? '▴' : '▾' }}</span>
+                    }
+                  </button>
+                  @if (item.event.actionLabel) {
+                    <button type="button"
+                            class="chat__event-action"
+                            [attr.data-testid]="'chat-event-action-' + item.event.id"
+                            (click)="onEventAction($event, item.event.id)">
+                      {{ item.event.actionLabel }} →
+                    </button>
+                  }
+                  @if (item.expanded && item.detailHtml) {
+                    <div class="chat__event-detail"
+                         appMarkdownLightbox
+                         data-testid="chat-event-detail"
+                         [innerHTML]="item.detailHtml"></div>
+                  }
+                </article>
               }
-            </article>
-            } @else {
-            <article class="chat__event"
-                     [class.chat__event--warn]="item.event.severity === 'warn'"
-                     [class.chat__event--error]="item.event.severity === 'error'"
-                     [class.chat__event--session-recovered]="item.event.kind === 'session-recovered'"
-                     [class.chat__event--memory-refreshed]="item.event.kind === 'memory-refreshed'"
-                     [class.chat__event--tool]="item.event.kind === 'tool-call'"
-                     [class.chat__event--expanded]="item.expanded"
-                     [attr.data-testid]="'chat-event-' + item.event.kind"
-                     [attr.data-event-id]="item.event.id"
-                     [attr.data-expanded]="item.expanded ? 'true' : 'false'">
-              <button type="button"
-                      class="chat__event-head"
-                      [attr.data-testid]="'chat-event-toggle-' + item.event.id"
-                      [attr.aria-expanded]="item.expanded"
-                      [disabled]="!item.detailHtml"
-                      (click)="toggleEventExpanded(item.event.id)">
-                <span class="chat__event-icon" aria-hidden="true">{{ eventIcon(item.event.kind) }}</span>
-                <span class="chat__event-kind">{{ eventLabel(item.event.kind) }}</span>
-                <span class="chat__event-summary">{{ item.event.summary }}</span>
-                <span class="chat__event-time">{{ formatTime(item.event.timestamp) }}</span>
-                @if (item.detailHtml) {
-                  <span class="chat__event-caret" aria-hidden="true">{{ item.expanded ? '▴' : '▾' }}</span>
-                }
-              </button>
-              @if (item.event.actionLabel) {
-                <button type="button"
-                        class="chat__event-action"
-                        [attr.data-testid]="'chat-event-action-' + item.event.id"
-                        (click)="onEventAction($event, item.event.id)">
-                  {{ item.event.actionLabel }} →
-                </button>
-              }
-              @if (item.expanded && item.detailHtml) {
-                <div class="chat__event-detail"
-                     appMarkdownLightbox
-                     data-testid="chat-event-detail"
-                     [innerHTML]="item.detailHtml"></div>
-              }
-            </article>
             }
           }
           @if (virtualised() && bottomSpacerPx() > 0) {

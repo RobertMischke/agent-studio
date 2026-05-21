@@ -62,6 +62,88 @@
   position: relative;
   color: var(--studio-fg, #e2e8f0);
 }
+// --------------------------------------------------------------------
+// Inline phase / super-phase dividers
+// Replaces the old master-strip phase-summary-list. Phases are now woven
+// into the chat stream as horizontal hairline dividers carrying minimal
+// inline metadata (index, participants, message count, time). Full
+// summary + participant names live in the native tooltip; deep meta is
+// in the verbose-debug overlay.
+// --------------------------------------------------------------------
+.chat__super-divider,
+.chat__phase-divider {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+  font-size: 11px;
+  color: var(--studio-fg-dim, #94a3b8);
+  user-select: none;
+}
+.chat__super-divider-line,
+.chat__phase-divider-line {
+  flex: 1 1 auto;
+  height: 1px;
+  background: var(--studio-border-strong, rgba(255, 255, 255, 0.12));
+}
+.chat__super-divider {
+  // Heavier — the session boundary should read like a chapter break.
+  margin: 14px 0 8px;
+  font-size: 12px;
+  color: var(--studio-fg, #cbd5e1);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+.chat__super-divider-line {
+  background: var(--studio-accent, #d97757);
+  opacity: 0.45;
+}
+.chat__super-divider-label,
+.chat__phase-divider-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  background: var(--studio-bg-sidebar, rgba(255, 255, 255, 0.03));
+  border: 1px solid var(--studio-border, rgba(255, 255, 255, 0.08));
+  white-space: nowrap;
+}
+.chat__super-divider-label {
+  background: color-mix(in srgb, var(--studio-accent, #d97757) 12%, transparent);
+  border-color: color-mix(in srgb, var(--studio-accent, #d97757) 40%, transparent);
+}
+.chat__super-divider-name {
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--studio-accent, #d97757);
+  font-weight: 700;
+}
+.chat__super-divider-sep,
+.chat__phase-divider-time {
+  color: var(--studio-fg-muted, #64748b);
+}
+.chat__phase-divider-index {
+  font-weight: 600;
+  color: var(--studio-fg, #cbd5e1);
+}
+.chat__phase-divider-roles {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.chat__phase-divider-stats,
+.chat__super-divider-stats {
+  color: var(--studio-fg-dim, #94a3b8);
+  font-variant-numeric: tabular-nums;
+}
+.chat__phase-divider-time,
+.chat__super-divider-time {
+  font-variant-numeric: tabular-nums;
+  font-size: 10px;
+}
+
 .chat__jump {
   position: sticky;
   top: 0;

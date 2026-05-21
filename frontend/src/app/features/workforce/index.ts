@@ -19,9 +19,12 @@ export {
 } from './models/workforce-role';
 export {
   groupIntoPhases,
+  groupIntoSuperPhases,
   buildSummary,
   type ChatPhase,
   type PhaseInputMessage,
+  type SuperPhase,
+  type SuperPhaseGroupingOptions,
 } from './models/chat-phase';
 export { RoleBadgeComponent } from './components/role-badge/role-badge.component';
 export {

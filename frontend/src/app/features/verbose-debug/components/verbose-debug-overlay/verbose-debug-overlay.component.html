@@ -120,6 +120,58 @@
               </article>
             }
 
+            @case ('phases') {
+              <article class="vdbg__card">
+                <h3>Phases</h3>
+                <p class="vdbg__hint">
+                  Conversation broken into <b>super-phases</b> (≥ 15 min idle gap opens a new session)
+                  and <b>phases</b> (each user message starts a new phase; the workforce's reaction
+                  belongs to that phase). Identical grouping rule as the inline dividers in the chat.
+                </p>
+                @if (superPhases().length === 0) {
+                  <p class="vdbg__empty">No message events yet — phases will appear once the conversation has turns.</p>
+                } @else {
+                  <div class="vdbg__phases" data-testid="verbose-debug-phases">
+                    @for (sup of superPhases(); track sup.id; let sIdx = $index) {
+                      <section class="vdbg__phase-super" [attr.data-testid]="'verbose-debug-super-' + sup.id">
+                        <header class="vdbg__phase-super-head">
+                          <span class="vdbg__phase-super-name">Session {{ sIdx + 1 }}</span>
+                          <span class="vdbg__phase-super-range">
+                            {{ formatPhaseTime(sup.startTs) }} – {{ formatPhaseTime(sup.endTs) }}
+                          </span>
+                          <span class="vdbg__phase-super-summary">{{ sup.summary }}</span>
+                        </header>
+                        <table class="vdbg__phase-table">
+                          <thead>
+                            <tr>
+                              <th>#</th>
+                              <th>Range</th>
+                              <th>Participants</th>
+                              <th>Msgs</th>
+                              <th>Summary</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            @for (phase of sup.phases; track phase.id; let pIdx = $index) {
+                              <tr [attr.data-testid]="'verbose-debug-phase-' + phase.id">
+                                <td class="vdbg__phase-idx">{{ pIdx + 1 }}</td>
+                                <td class="vdbg__phase-range">
+                                  {{ formatPhaseTime(phase.startTs) }}–{{ formatPhaseTime(phase.endTs) }}
+                                </td>
+                                <td class="vdbg__phase-participants">{{ phaseParticipantsLabel(phase) }}</td>
+                                <td class="vdbg__phase-count">{{ phase.messageCount }}</td>
+                                <td class="vdbg__phase-summary">{{ phase.summary }}</td>
+                              </tr>
+                            }
+                          </tbody>
+                        </table>
+                      </section>
+                    }
+                  </div>
+                }
+              </article>
+            }
+
             @case ('orchestrator') {
               <article class="vdbg__card">
                 <h3>Orchestrator actions</h3>

@@ -30,9 +30,10 @@ import {
 } from '../chat-types';
 import {
   RoleBadgeComponent,
-  PhaseSummaryListComponent,
   groupIntoPhases,
+  groupIntoSuperPhases,
   type ChatPhase,
+  type SuperPhase,
   type PhaseInputMessage,
 } from '../../../features/workforce';
 
@@ -59,7 +60,35 @@ interface RenderedEvent {
   expanded: boolean;
 }
 
-type RenderedItem = RenderedMessage | RenderedEvent;
+interface RenderedSuperPhaseDivider {
+  kind: 'super-phase';
+  id: string;
+  /** Anchored to the super-phase's first message timestamp. */
+  timestamp: string;
+  superPhase: SuperPhase;
+  /** 1-based index for the visible "Session N" label. */
+  index: number;
+  /** Tooltip pre-rendered once per pass. */
+  tooltip: string;
+}
+
+interface RenderedPhaseDivider {
+  kind: 'phase';
+  id: string;
+  /** Anchored to the phase's first message timestamp. */
+  timestamp: string;
+  phase: ChatPhase;
+  /** Phase index within its containing super-phase, 1-based. */
+  indexInSuper: number;
+  /** Tooltip pre-rendered once per pass. */
+  tooltip: string;
+}
+
+type RenderedItem =
+  | RenderedMessage
+  | RenderedEvent
+  | RenderedSuperPhaseDivider
+  | RenderedPhaseDivider;
 
 /**
  * Source-line threshold above which non-user turns auto-collapse with a
@@ -86,7 +115,7 @@ const COLLAPSE_LINE_THRESHOLD = 24;
 @Component({
   selector: 'app-chat',
   standalone: true,
-  imports: [FormsModule, RoleBadgeComponent, PhaseSummaryListComponent, MarkdownImageLightboxDirective, TooltipDirective],
+  imports: [FormsModule, RoleBadgeComponent, MarkdownImageLightboxDirective, TooltipDirective],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './chat.component.html',
   styleUrl: './chat.component.scss'
@@ -103,14 +132,6 @@ export class ChatComponent implements AfterViewInit, OnDestroy {
   readonly variant = input<'framed' | 'embedded'>('framed');
   readonly allowAttachments = input<boolean>(true);
   readonly maxAttachmentBytes = input<number>(10 * 1024 * 1024);
-  /**
-   * When true (default), the phase-summary above the chat collapses to
-   * a single "▸ N earlier phases" strip the user can click to expand.
-   * Stops the chat panel from looking like a flat phase-summary table
-   * when there is a lot of history. Pass `false` to keep every phase
-   * row visible at the top.
-   */
-  readonly compactPhaseSummary = input<boolean>(true);
 
   /**
    * Buttons rendered on the left of the composer's toolbar row above
@@ -167,8 +188,6 @@ export class ChatComponent implements AfterViewInit, OnDestroy {
   readonly expandedIds = signal<ReadonlySet<string>>(new Set());
   /** Per-event-id override: ids of events the user has expanded. */
   readonly expandedEventIds = signal<ReadonlySet<string>>(new Set());
-  /** Per-phase-id override: explicit expand/collapse from the operator. */
-  readonly phaseOverrides = signal<ReadonlyMap<string, boolean>>(new Map());
 
   draftText = '';
 
@@ -184,8 +203,8 @@ export class ChatComponent implements AfterViewInit, OnDestroy {
   /**
    * Chat phases derived from the merged message stream. The chat
    * component already orders by timestamp; we feed the same source
-   * directly into the grouping helper so the summary lines line up
-   * exactly with what the verbatim feed shows.
+   * directly into the grouping helper so the dividers line up exactly
+   * with what the verbatim feed shows.
    */
   readonly phases = computed<ChatPhase[]>(() => {
     const input: PhaseInputMessage[] = this.messages().map((m) => ({
@@ -196,31 +215,16 @@ export class ChatComponent implements AfterViewInit, OnDestroy {
     return groupIntoPhases(input);
   });
 
-  readonly expandedPhaseIds = computed<ReadonlySet<string>>(() => {
-    const phases = this.phases();
-    const overrides = this.phaseOverrides();
-    if (overrides.size === 0) {
-      if (phases.length === 0) return new Set();
-      return new Set([phases[phases.length - 1].id]);
-    }
-    const baseline = new Set<string>();
-    if (phases.length > 0) baseline.add(phases[phases.length - 1].id);
-    for (const [id, expanded] of overrides) {
-      if (expanded) baseline.add(id);
-      else baseline.delete(id);
-    }
-    return baseline;
-  });
-
-  readonly hiddenMessageIds = computed<ReadonlySet<string>>(() => {
-    const expanded = this.expandedPhaseIds();
-    const hidden = new Set<string>();
-    for (const phase of this.phases()) {
-      if (expanded.has(phase.id)) continue;
-      for (const id of phase.messageIds) hidden.add(id);
-    }
-    return hidden;
-  });
+  /**
+   * Super-phases — outer grouping. A new super-phase opens when there
+   * is an idle gap of ≥ 15 min between two phases (rule lives in
+   * {@link groupIntoSuperPhases}). All phases otherwise belong to the
+   * same super-phase, so a single active conversation just paints one
+   * "Session" header at the top.
+   */
+  readonly superPhases = computed<SuperPhase[]>(() =>
+    groupIntoSuperPhases(this.phases())
+  );
 
   /** First index of the rendered() slice that the template should draw
    *  when virtualisation is on. */
@@ -231,10 +235,7 @@ export class ChatComponent implements AfterViewInit, OnDestroy {
   readonly rendered = computed<RenderedItem[]>(() => {
     const expanded = this.expandedIds();
     const expandedEvents = this.expandedEventIds();
-    const hiddenIds = this.hiddenMessageIds();
-    const messageItems: RenderedItem[] = this.messages()
-      .filter((message) => !hiddenIds.has(message.id))
-      .map((message) => {
+    const messageItems: RenderedItem[] = this.messages().map((message) => {
       // User input stays plain text (newlines + escaping); every other role
       // ships Markdown, which is how agents and orchestrator log entries
       // express themselves on the wire.
@@ -272,8 +273,73 @@ export class ChatComponent implements AfterViewInit, OnDestroy {
         : null,
       expanded: expandedEvents.has(event.id)
     }));
-    return mergeByTimestamp(messageItems, eventItems);
+    const merged = mergeByTimestamp(messageItems, eventItems);
+
+    // Phases / super-phases are anchored by the FIRST message id of each
+    // group. We walk the merged stream once and insert dividers right
+    // before the matching message. This keeps the rendered() array in
+    // strict chronological order while letting the same merge already
+    // resolve all message-vs-event interleavings.
+    const phases = this.phases();
+    const superPhases = this.superPhases();
+    if (phases.length === 0) return merged;
+
+    const firstMsgIdToPhase = new Map<string, ChatPhase>();
+    for (const phase of phases) {
+      const first = phase.messageIds[0];
+      if (first) firstMsgIdToPhase.set(first, phase);
+    }
+    const phaseIdToSuperIndex = new Map<string, { sup: SuperPhase; supIndex: number; phaseIndexInSup: number }>();
+    superPhases.forEach((sup, sIdx) => {
+      sup.phases.forEach((p, pIdx) => {
+        phaseIdToSuperIndex.set(p.id, { sup, supIndex: sIdx + 1, phaseIndexInSup: pIdx + 1 });
+      });
+    });
+
+    const out: RenderedItem[] = [];
+    for (const item of merged) {
+      if (item.kind === 'message') {
+        const phase = firstMsgIdToPhase.get(item.id);
+        if (phase) {
+          const meta = phaseIdToSuperIndex.get(phase.id);
+          if (meta && meta.phaseIndexInSup === 1) {
+            // First phase in a super-phase → emit the super-phase divider
+            // immediately before the phase divider.
+            out.push({
+              kind: 'super-phase',
+              id: meta.sup.id,
+              timestamp: meta.sup.startTs,
+              superPhase: meta.sup,
+              index: meta.supIndex,
+              tooltip: this.buildSuperPhaseTooltip(meta.sup, meta.supIndex),
+            });
+          }
+          out.push({
+            kind: 'phase',
+            id: phase.id,
+            timestamp: phase.startTs,
+            phase,
+            indexInSuper: meta?.phaseIndexInSup ?? 1,
+            tooltip: this.buildPhaseTooltip(phase, meta?.phaseIndexInSup ?? 1),
+          });
+        }
+      }
+      out.push(item);
+    }
+    return out;
   });
+
+  private buildPhaseTooltip(phase: ChatPhase, indexInSuper: number): string {
+    const names = phase.participants.map((r) => r.label).join(', ') || '—';
+    const range = `${formatTimeOfDay(phase.startTs)}–${formatTimeOfDay(phase.endTs)}`;
+    return `Phase ${indexInSuper} · ${range}\nParticipants: ${names}\n${phase.summary}`;
+  }
+
+  private buildSuperPhaseTooltip(sup: SuperPhase, index: number): string {
+    const names = sup.participants.map((r) => r.label).join(', ') || '—';
+    const range = `${formatTimeOfDay(sup.startTs)}–${formatTimeOfDay(sup.endTs)}`;
+    return `Session ${index} · ${range}\n${sup.summary}\nParticipants: ${names}`;
+  }
 
   /**
    * Rendered() slice the template actually loops over when virtualised
@@ -483,12 +549,6 @@ export class ChatComponent implements AfterViewInit, OnDestroy {
     this.scheduleScrollToBottom();
   }
 
-  onPhaseToggled(event: { phaseId: string; expanded: boolean }): void {
-    const next = new Map(this.phaseOverrides());
-    next.set(event.phaseId, event.expanded);
-    this.phaseOverrides.set(next);
-  }
-
   toggleCollapsed(messageId: string): void {
     const next = new Set(this.expandedIds());
     if (next.has(messageId)) {
@@ -590,6 +650,17 @@ function makeId(): string {
     return crypto.randomUUID().replace(/-/g, '').slice(0, 12);
   }
   return Math.random().toString(36).slice(2, 14);
+}
+
+function formatTimeOfDay(iso: string): string {
+  if (!iso) return '';
+  try {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return iso;
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return iso;
+  }
 }
 
 function countSourceLines(text: string): number {
