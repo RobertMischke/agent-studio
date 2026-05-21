@@ -2,6 +2,7 @@
      [class]="'job-card--' + job().state"
      [class.job-card--running]="isRunning()"
      [class.job-card--compact]="compact()"
+     [class.job-card--just-created]="isJustCreated()"
      [style.--project-color]="identity().color"
      [style.--project-border]="identity().border"
      [style.--project-soft]="identity().soft"

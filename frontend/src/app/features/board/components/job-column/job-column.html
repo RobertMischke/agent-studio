@@ -141,6 +141,7 @@
                 <app-job-card
                   [job]="job"
                   [compact]="compact()"
+                  [highlightJobId]="highlightJobId()"
                   (click)="jobClick.emit(job)"
                   (deleteRequested)="jobDeleteRequest.emit($event)"
                   draggable="true"
@@ -164,6 +165,7 @@
             <app-job-card
               [job]="job"
               [compact]="compact()"
+              [highlightJobId]="highlightJobId()"
               (click)="jobClick.emit(job)"
               (deleteRequested)="jobDeleteRequest.emit($event)"
               draggable="true"

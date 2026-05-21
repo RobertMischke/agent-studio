@@ -32,7 +32,24 @@
     @media (prefers-reduced-motion: reduce) {
       .job-card { transition: none; }
       .job-card--running { animation: none; }
+      .job-card--just-created { animation: none; }
       :host(.drag-source) .job-card { will-change: auto; }
+    }
+    // F2: brief pulse + ring on a freshly-created card so the operator's
+    // eye lands on it even on a busy board. Cleared by the host signal
+    // after one animation cycle.
+    .job-card--just-created {
+      animation: job-card-just-created-pulse 2.4s ease-out 1;
+      position: relative;
+      z-index: 1;
+    }
+    @keyframes job-card-just-created-pulse {
+      0%   { box-shadow: 0 0 0 0   color-mix(in srgb, var(--studio-accent, #d97757) 70%, transparent),
+                         0 0 0 0   color-mix(in srgb, var(--studio-accent, #d97757) 40%, transparent); }
+      30%  { box-shadow: 0 0 0 4px color-mix(in srgb, var(--studio-accent, #d97757) 55%, transparent),
+                         0 0 22px 8px color-mix(in srgb, var(--studio-accent, #d97757) 30%, transparent); }
+      100% { box-shadow: 0 0 0 0   color-mix(in srgb, var(--studio-accent, #d97757) 0%, transparent),
+                         0 0 0 0   color-mix(in srgb, var(--studio-accent, #d97757) 0%, transparent); }
     }
     .job-card:hover {
       transform: translateY(-2px);

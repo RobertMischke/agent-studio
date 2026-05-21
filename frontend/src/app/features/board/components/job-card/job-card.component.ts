@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnDestroy, OnInit, computed, inject, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, OnDestroy, OnInit, computed, effect, inject, input, output, signal } from '@angular/core';
 import type { AutoLoopSnapshot, JobInfo, PendingIntent } from '../../../../models/job.model';
 import { GitSummaryService } from '../../../../services/git-summary.service';
 import { ClientService } from '../../../../services/client.service';
@@ -40,7 +40,31 @@ if (typeof window !== 'undefined') {
 export class JobCardComponent implements OnInit, OnDestroy {
   readonly job = input.required<JobInfo>();
   readonly compact = input<boolean>(false);
+  /**
+   * F2: when set and matches this card's job id, the card renders the
+   * "just created" pulse highlight and scrolls itself into view on the
+   * board. The host clears the signal after one animation cycle.
+   */
+  readonly highlightJobId = input<string | null>(null);
   readonly deleteRequested = output<JobInfo>();
+  private readonly hostRef = inject(ElementRef<HTMLElement>);
+
+  /** True when this card should render the just-created highlight. */
+  readonly isJustCreated = computed(() => this.highlightJobId() === this.job().id);
+
+  /**
+   * Scroll-into-view effect: when this card becomes the highlighted
+   * "just created" target, scroll it into the board viewport so the
+   * operator's eye lands on it even on a 200+ card board.
+   */
+  private readonly scrollEffect = effect(() => {
+    if (!this.isJustCreated()) return;
+    queueMicrotask(() => {
+      try {
+        this.hostRef.nativeElement.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+      } catch { /* SSR / detached DOM — ignore */ }
+    });
+  });
   private readonly gitSummary = inject(GitSummaryService);
   private readonly clients = inject(ClientService);
   private readonly tagRegistry = inject(TagRegistryStore);

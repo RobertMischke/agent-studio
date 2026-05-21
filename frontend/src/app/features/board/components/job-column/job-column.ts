@@ -35,6 +35,8 @@ export class JobColumnComponent implements OnInit, OnDestroy {
   readonly collapsed = input<boolean>(false);
   readonly compact = input<boolean>(false);
   readonly archiving = input<boolean>(false);
+  /** F2: id of a just-created card to highlight + scroll into view. */
+  readonly highlightJobId = input<string | null>(null);
   /**
    * Project for which the lane shows an auto-pickup toggle. `null` hides
    * the chip — used when the board is scoped to "All projects" (no

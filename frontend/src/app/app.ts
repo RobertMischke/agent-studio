@@ -664,11 +664,30 @@ export class App implements OnInit, OnDestroy {
     this.orchestratorSettingsOpen.set(false);
   }
 
+  /**
+   * F2: id of a job that was just created via the +Add dialog. Lane
+   * cards binding this signal render a brief highlight pulse + scroll
+   * themselves into view so a new task isn't lost on a 200+ card board.
+   * Cleared automatically after one animation cycle.
+   */
+  readonly justCreatedJobId = signal<string | null>(null);
+
   constructor() {
     // Cycle 10a: refresh the kanban after a successful create — the
     // CreateJobFormService doesn't call jobService.refresh itself
-    // because that orchestration concern lives here.
-    this.createJobForm.submitted$.subscribe(() => this.refresh());
+    // because that orchestration concern lives here. F2: also flag the
+    // new card so it pulses + scrolls into view, and surface a toast
+    // with the title that the operator just submitted.
+    this.createJobForm.submitted$.subscribe(({ jobId }) => {
+      this.refresh();
+      this.justCreatedJobId.set(jobId);
+      const job = this.jobService.jobs().find((j) => j.id === jobId);
+      const title = job?.title ?? jobId;
+      this.notifications.success(`Created "${title}"`, 'Task added');
+      setTimeout(() => {
+        if (this.justCreatedJobId() === jobId) this.justCreatedJobId.set(null);
+      }, 2500);
+    });
 
     // Cycle 10c: bridge TriageController to the JobDetailComponent's
     // "acting" highlight via a closure so the ViewChild can resolve
