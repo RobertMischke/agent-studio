@@ -67,6 +67,7 @@ import {
 } from './features/studio-shell';
 import { JobService } from './services/job.service';
 import { ClientService } from './services/client.service';
+import { NotificationService } from './services/notification.service';
 import type { JobInfo, WatchPathEntry, CliType } from './models/job.model';
 import { CLI_TYPES } from './models/job.model';
 import { ErrorDialogService } from './services/error-dialog.service';
@@ -155,6 +156,7 @@ export class App implements OnInit, OnDestroy {
   readonly errorDialog = inject(ErrorDialogService);
   readonly devTools = inject(DevToolsService);
   readonly clientService = inject(ClientService);
+  private readonly notifications = inject(NotificationService);
   readonly featureFlags = inject(FeatureFlagsService);
   private readonly _completionSound = inject(JobCompletionSoundService);
   readonly updateClient = inject(UpdateClientService);
@@ -1285,7 +1287,15 @@ export class App implements OnInit, OnDestroy {
     const newMode =
       mode === 'auto-continuous' || mode === 'auto-single' ? 'paused' : 'auto-continuous';
     this.jobService.setRunnerMode(name, newMode).subscribe({
-      next: () => this.jobService.refreshRunnerStatus(true),
+      next: () => {
+        this.jobService.refreshRunnerStatus(true);
+        // F6: a short toast on auto-pickup mode flips. The chip itself only
+        // changes a small dot/label — easy to miss when the click lands by
+        // accident. The toast gives the operator a clear "this just changed"
+        // moment.
+        const verb = newMode === 'paused' ? 'paused' : 'enabled';
+        this.notifications.info(`${name} · auto-pickup ${verb}`, 'Runner mode');
+      },
       error: (err) => {
         this.errorDialog.show(err, {
           title: 'Failed to change auto-pickup mode',
