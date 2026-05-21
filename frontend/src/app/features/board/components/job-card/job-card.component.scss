@@ -4,6 +4,15 @@
       border-radius: 10px;
       padding: 14px 16px;
       cursor: pointer;
+      // F3: native CSS virtualisation. The browser skips layout + paint
+      // for cards outside the scroll viewport, which is the cheap win
+      // for 200+ card lanes without changing the DOM (drag-and-drop,
+      // testids, animations all keep working unchanged). The intrinsic
+      // size hint lets the scrollbar math add up before a card is
+      // first painted; ~180 px matches the rendered height of a
+      // full-mode card and ~64 px is roughly compact-mode height.
+      content-visibility: auto;
+      contain-intrinsic-size: 180px;
       /* Compositor-only transitions. transform handles hover lift and
          post-drop settle (CDK rhythm: 180ms cubic-bezier(0,0,0.2,1));
          box-shadow handles depth on hover. background-color is
@@ -721,6 +730,10 @@
     .job-card--compact {
       padding: 6px 10px;
       border-radius: 8px;
+      // Compact cards have a known small rendered height — tighten the
+      // intrinsic-size hint so the scroll geometry matches what the
+      // user sees once cards near the viewport are painted.
+      contain-intrinsic-size: 56px;
     }
     .job-card--compact .job-card__header,
     .job-card--compact .job-card__badges,
