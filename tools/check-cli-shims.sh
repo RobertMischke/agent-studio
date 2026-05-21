@@ -139,15 +139,54 @@ if [[ -d "$ANTHROPIC_DIR" ]]; then
   done < <(compgen -G "$ANTHROPIC_DIR/.*-*" 2>/dev/null || true)
 fi
 
-# 5. Smoke test. The shim file is what the OS actually invokes via PATH; call
-#    it directly so we don't depend on PATH ordering in the calling shell.
+# 5. Smoke test. Prefer the npm shim if it's there and runs; otherwise
+#    accept any claude on PATH (e.g. Anthropic's native installer at
+#    ~/.local/bin/claude.exe, installed via install.sh / the Windows
+#    installer — completely independent of npm). Two install methods
+#    coexisting on the same machine is a supported reality; the boot
+#    check should only fail when neither produces a working `claude`.
 SHIM_CMD="$NPM_BIN/claude.cmd"
-if [[ ! -f "$SHIM_CMD" ]]; then
-  echo "[check-cli-shims] ERROR: $SHIM_CMD still missing after repair pass." >&2
-  exit 1
+shim_ok=0
+if [[ -f "$SHIM_CMD" ]] && "$SHIM_CMD" --version >/dev/null 2>&1; then
+  shim_ok=1
 fi
-if ! "$SHIM_CMD" --version >/dev/null 2>&1; then
-  echo "[check-cli-shims] ERROR: 'claude --version' failed after repair pass." >&2
+
+if [[ "$shim_ok" -eq 0 ]]; then
+  # Look for an alternative claude on PATH that is NOT the npm shim
+  # itself (skipping it avoids looping back to the broken file). Use
+  # `where` on Windows (lists all PATH hits); fall back to POSIX
+  # `command -v` elsewhere.
+  NPM_BIN_UNIX="$(cygpath -u "$NPM_BIN" 2>/dev/null || echo "$NPM_BIN")"
+  alt_claude=""
+  while IFS= read -r p; do
+    [[ -n "$p" ]] || continue
+    abs="$(cygpath -u "$p" 2>/dev/null || echo "$p")"
+    case "$abs" in
+      "$NPM_BIN_UNIX"/*|"$NPM_BIN"/*) continue ;;
+    esac
+    [[ -f "$abs" ]] || continue
+    alt_claude="$abs"
+    break
+  done < <(
+    if command -v where >/dev/null 2>&1; then
+      where claude.exe 2>/dev/null
+      where claude 2>/dev/null
+    else
+      command -v claude 2>/dev/null
+    fi
+  )
+
+  if [[ -n "$alt_claude" ]] && "$alt_claude" --version >/dev/null 2>&1; then
+    ver="$("$alt_claude" --version 2>/dev/null | tr -d '\r' | head -1)"
+    echo "[check-cli-shims] npm shim missing/broken at $SHIM_CMD; using PATH-resolved claude at $alt_claude ($ver)."
+    exit 0
+  fi
+
+  if [[ ! -f "$SHIM_CMD" ]]; then
+    echo "[check-cli-shims] ERROR: $SHIM_CMD still missing after repair pass and no working claude on PATH." >&2
+  else
+    echo "[check-cli-shims] ERROR: 'claude --version' failed via $SHIM_CMD and no working claude on PATH." >&2
+  fi
   exit 1
 fi
 
