@@ -48,6 +48,12 @@ interface RenderedMessage {
   collapsible: boolean;
   /** Resolved collapsed state: collapsible AND not user-expanded. */
   collapsed: boolean;
+  /**
+   * F7: true when this is an error message that belongs to an older
+   * super-phase (i.e. session). Stale errors get a dimmed look so the
+   * operator can tell "history" apart from "live failure".
+   */
+  staleError: boolean;
 }
 
 interface RenderedEvent {
@@ -58,6 +64,8 @@ interface RenderedEvent {
   /** Pre-rendered markdown for the expanded detail body. */
   detailHtml: SafeHtml | null;
   expanded: boolean;
+  /** F7: error/warn events older than the latest super-phase get dimmed. */
+  staleError: boolean;
 }
 
 interface RenderedSuperPhaseDivider {
@@ -235,6 +243,18 @@ export class ChatComponent implements AfterViewInit, OnDestroy {
   readonly rendered = computed<RenderedItem[]>(() => {
     const expanded = this.expandedIds();
     const expandedEvents = this.expandedEventIds();
+    // F7: cutoff = start ts of the latest super-phase. Errors before
+    // this point belong to a previous session and render dimmed so
+    // the operator can tell historical failures apart from a live one.
+    const superPhases = this.superPhases();
+    const staleCutoffMs = superPhases.length > 0
+      ? Date.parse(superPhases[superPhases.length - 1].startTs)
+      : Number.NEGATIVE_INFINITY;
+    const isStaleError = (ts: string, hasError: boolean): boolean => {
+      if (!hasError) return false;
+      const t = Date.parse(ts);
+      return Number.isFinite(t) && Number.isFinite(staleCutoffMs) && t < staleCutoffMs;
+    };
     const messageItems: RenderedItem[] = this.messages().map((message) => {
       // User input stays plain text (newlines + escaping); every other role
       // ships Markdown, which is how agents and orchestrator log entries
@@ -258,7 +278,8 @@ export class ChatComponent implements AfterViewInit, OnDestroy {
         message,
         bodyHtml,
         collapsible,
-        collapsed
+        collapsed,
+        staleError: isStaleError(message.timestamp, !!message.error),
       };
     });
     const eventItems: RenderedItem[] = this.events().map((event) => ({
@@ -271,7 +292,8 @@ export class ChatComponent implements AfterViewInit, OnDestroy {
             markdownToHtml(event.detail, { codeLineNumbers: true })
           )
         : null,
-      expanded: expandedEvents.has(event.id)
+      expanded: expandedEvents.has(event.id),
+      staleError: isStaleError(event.timestamp, event.severity === 'error' || event.severity === 'warn'),
     }));
     const merged = mergeByTimestamp(messageItems, eventItems);
 
@@ -279,9 +301,9 @@ export class ChatComponent implements AfterViewInit, OnDestroy {
     // group. We walk the merged stream once and insert dividers right
     // before the matching message. This keeps the rendered() array in
     // strict chronological order while letting the same merge already
-    // resolve all message-vs-event interleavings.
+    // resolve all message-vs-event interleavings. `superPhases` was
+    // already computed above for the F7 stale-error cutoff; reuse it.
     const phases = this.phases();
-    const superPhases = this.superPhases();
     if (phases.length === 0) return merged;
 
     const firstMsgIdToPhase = new Map<string, ChatPhase>();

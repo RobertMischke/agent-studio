@@ -144,6 +144,22 @@
   font-size: 10px;
 }
 
+// F7: dim error/warn bubbles that belong to a previous session
+// (super-phase). Keeps the historical context visible without making
+// it look like a live failure. Title attribute on the article (set
+// elsewhere if useful) can carry "from session N · resolved".
+.chat__msg--stale-error,
+.chat__event--stale-error {
+  opacity: 0.45;
+  filter: grayscale(0.35);
+  transition: opacity 0.15s ease, filter 0.15s ease;
+}
+.chat__msg--stale-error:hover,
+.chat__event--stale-error:hover {
+  opacity: 0.85;
+  filter: grayscale(0);
+}
+
 .chat__jump {
   position: sticky;
   top: 0;
