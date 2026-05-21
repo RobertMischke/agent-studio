@@ -29,6 +29,14 @@
       </span>
     }
     <span class="job-card__order">#{{ job().order }}</span>
+    @if (canPickNext()) {
+      <button type="button"
+              class="job-card__pick-next"
+              data-testid="job-card-pick-next"
+              [appTooltip]="'Pick next — bump to the front of the runner queue'"
+              aria-label="Pick next"
+              (click)="onPickNextClick($event)">⤴</button>
+    }
     <button type="button"
             class="job-card__delete"
             data-testid="job-card-delete"

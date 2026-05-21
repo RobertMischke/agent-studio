@@ -213,6 +213,34 @@
       color: #fda4af;
     }
 
+    // F5: "Pick next" affordance, only rendered for 2-ready cards.
+    // Same hover-reveal pattern as delete; brand-accent tint on hover.
+    .job-card__pick-next {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--studio-fg-muted);
+      width: 22px;
+      height: 22px;
+      padding: 0;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+      line-height: 1;
+      display: grid;
+      place-items: center;
+      opacity: 0;
+      transition: opacity 0.15s, background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .job-card:hover .job-card__pick-next,
+    .job-card__pick-next:focus-visible {
+      opacity: 1;
+    }
+    .job-card__pick-next:hover {
+      background: color-mix(in srgb, var(--studio-accent, #d97757) 18%, transparent);
+      border-color: color-mix(in srgb, var(--studio-accent, #d97757) 45%, transparent);
+      color: var(--studio-accent, #d97757);
+    }
+
     .job-card__title {
       margin: 0 0 8px;
       font-size: 15px;

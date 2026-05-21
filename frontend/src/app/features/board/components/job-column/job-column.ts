@@ -56,6 +56,8 @@ export class JobColumnComponent implements OnInit, OnDestroy {
   readonly jobDrop = output<{ jobId: string; watchPath: string; targetState: string; targetIndex: number }>();
   readonly jobReorder = output<{ state: string; jobs: JobOrderItem[] }>();
   readonly jobDeleteRequest = output<JobInfo>();
+  /** F5: bubbled "Pick next" click from a 2-ready card. */
+  readonly jobPickNextRequest = output<JobInfo>();
   readonly addTask = output<string>();
   readonly archiveAll = output<void>();
   readonly collapseToggle = output<void>();

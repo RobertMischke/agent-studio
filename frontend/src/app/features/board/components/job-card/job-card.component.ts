@@ -47,6 +47,12 @@ export class JobCardComponent implements OnInit, OnDestroy {
    */
   readonly highlightJobId = input<string | null>(null);
   readonly deleteRequested = output<JobInfo>();
+  /**
+   * F5: emitted when the user clicks the inline "Pick next" affordance
+   * on a 2-ready card. The host wires this to `moveJobToTop` so the
+   * runner picks it up on the next cycle.
+   */
+  readonly pickNextRequested = output<JobInfo>();
   private readonly hostRef = inject(ElementRef<HTMLElement>);
 
   /** True when this card should render the just-created highlight. */
@@ -133,6 +139,14 @@ export class JobCardComponent implements OnInit, OnDestroy {
   onDeleteClick(event: Event) {
     event.stopPropagation();
     this.deleteRequested.emit(this.job());
+  }
+
+  /** True for cards where "Pick next" makes sense (front-of-queue promotion). */
+  readonly canPickNext = computed(() => this.job().state === '2-ready');
+
+  onPickNextClick(event: Event) {
+    event.stopPropagation();
+    this.pickNextRequested.emit(this.job());
   }
 
   /**

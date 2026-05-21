@@ -168,6 +168,7 @@
               [highlightJobId]="highlightJobId()"
               (click)="jobClick.emit(job)"
               (deleteRequested)="jobDeleteRequest.emit($event)"
+              (pickNextRequested)="jobPickNextRequest.emit($event)"
               draggable="true"
               (dragstart)="onDragStart($event, job)" />
           }

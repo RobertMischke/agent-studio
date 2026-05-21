@@ -969,6 +969,32 @@ export class App implements OnInit, OnDestroy {
   onDeleteFromBoard(job: JobInfo) {
     this.boardMutations.deleteFromBoard(job);
   }
+
+  /**
+   * F5: bubble-up from <app-job-card>'s "Pick next" affordance.
+   * Promotes the card to position 1 in the runner queue. Re-uses the
+   * existing `moveJobToTop` round-trip — same endpoint the detail-view
+   * "Do Next" already drove. Toasts on success so the operator gets a
+   * clear "the runner now sees this first" moment.
+   */
+  onPickNext(job: JobInfo) {
+    this.jobService.moveJobToTop(job.id, job.watchPath).subscribe({
+      next: () => {
+        this.notifications.success(
+          `"${job.title || job.id}" is next up`,
+          'Pick next',
+        );
+        this.refresh();
+      },
+      error: (err) => {
+        this.errorDialog.show(err, {
+          title: 'Failed to bump task',
+          fallbackMessage: 'Failed to bump task to the front of the queue',
+          source: `Job ${job.id}`,
+        });
+      },
+    });
+  }
   onDeleteFromDetail(info: JobInfo) {
     this.boardMutations.deleteFromDetail(info);
   }
