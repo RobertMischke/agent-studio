@@ -1905,10 +1905,37 @@
 
   &__cta {
     display: flex;
-    gap: 8px;
-    padding-top: 4px;
+    gap: 12px;
+    padding-top: 12px;
     border-top: 1px solid var(--studio-border);
     margin-top: 4px;
+    align-items: center;
+  }
+
+  // Primary CTA: larger hit area, accent fill, glyph + label inline so
+  // "+ New task" reads as the headline action of the welcome card
+  // instead of dissolving into the body text. Promoted per F11
+  // (2026-05-21 probe).
+  &__primary-cta {
+    padding: 8px 18px;
+    font-size: 14px;
+    font-weight: 600;
+    gap: 8px;
+    background: var(--studio-accent);
+    color: var(--studio-on-accent);
+    border: 1px solid var(--studio-accent);
+    border-radius: 6px;
+    box-shadow: 0 1px 4px color-mix(in srgb, var(--studio-accent) 30%, transparent);
+
+    &:hover {
+      filter: brightness(1.08);
+      background: var(--studio-accent);
+    }
+
+    span:first-child {
+      font-size: 16px;
+      line-height: 1;
+    }
   }
 }
 

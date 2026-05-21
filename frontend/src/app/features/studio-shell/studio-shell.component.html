@@ -635,9 +635,12 @@
               } @else {
                 <div class="studio-welcome__cta">
                   <button type="button"
-                          class="studio-button studio-button--primary"
+                          class="studio-button studio-button--primary studio-welcome__primary-cta"
                           data-testid="studio-welcome-add-task"
-                          (click)="addTaskRequested.emit()">＋ New task</button>
+                          (click)="addTaskRequested.emit()">
+                    <span aria-hidden="true">＋</span>
+                    <span>New task</span>
+                  </button>
                   <button type="button"
                           class="studio-button studio-button--ghost"
                           (click)="chatToggle.emit()">Open project chat</button>
