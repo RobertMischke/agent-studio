@@ -7,6 +7,7 @@ import {
   OnInit,
   signal,
   untracked,
+  viewChild,
   ViewChild,
   ViewEncapsulation,
   OnDestroy,
@@ -177,6 +178,13 @@ export class App implements OnInit, OnDestroy {
 
   @ViewChild('jobDetail') private jobDetailRef?: JobDetailComponent;
   @ViewChild('orchSideSheet') private orchSideSheetRef?: OrchestratorSideSheetComponent;
+  /**
+   * Signal-form view child for the orchestrator side-sheet. Lets the
+   * `effectiveCompactCards` computed react when the rail opens/closes
+   * (F4) without a manual subscription bridge. The legacy @ViewChild
+   * above stays for the imperative `toggle()` call sites.
+   */
+  private readonly orchSideSheetSig = viewChild<OrchestratorSideSheetComponent>('orchSideSheet');
   /** Records the lane the user was triaging in. When the open job's state
    *  diverges from this (e.g. an external client moved it) we treat that as
    *  an auto-advance and toast accordingly. */
@@ -281,6 +289,19 @@ export class App implements OnInit, OnDestroy {
    * task by name. Persisted across reloads.
    */
   readonly compactCards = this.uiPrefs.compactCards;
+
+  /**
+   * F4: effective compact mode for board cards. The user's persisted
+   * `compactCards` preference still controls the default; when the
+   * orchestrator rail is open, we force-engage compact rendering so
+   * the lanes don't clip behind the 640 px panel. Closing the rail
+   * reverts to the persisted preference automatically.
+   */
+  readonly effectiveCompactCards = computed<boolean>(() => {
+    if (this.compactCards()) return true;
+    const ref = this.orchSideSheetSig();
+    return ref?.open() ?? false;
+  });
   readonly showE2ECleanup = signal(false);
   readonly devToolsMenuOpen = signal(false);
   /**
