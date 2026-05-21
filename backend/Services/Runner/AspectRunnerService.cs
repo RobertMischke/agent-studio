@@ -254,11 +254,26 @@ public sealed class AspectRunnerService
         sb.AppendLine(inputs.DiffSummary);
         sb.AppendLine("```");
         sb.AppendLine();
-        sb.AppendLine("Reply with a short paragraph or two (under 200 words) plus exactly one verdict sentinel on its own line:");
+        sb.AppendLine("Reply with a short paragraph or two (under 200 words) plus EXACTLY one verdict sentinel on its own line.");
         sb.AppendLine();
-        sb.AppendLine("[[ASPECT_VERDICT: status=<pass|concerns|block>; summary=<one short sentence>]]");
+        sb.AppendLine("Required sentinel format (literal characters — do NOT wrap in code fences, blockquotes, or quotes):");
         sb.AppendLine();
-        sb.AppendLine("Then end with [[TASK_DONE]] on its own line.");
+        sb.AppendLine("[[ASPECT_VERDICT: status=<pass|concerns|block>; summary=<one short sentence, no semicolons or brackets>]]");
+        sb.AppendLine();
+        sb.AppendLine("Example of a complete reply:");
+        sb.AppendLine();
+        sb.AppendLine("> The new file is self-contained, uses inline styles, and meets the");
+        sb.AppendLine("> stated scope. No tests requested.");
+        sb.AppendLine("> ");
+        sb.AppendLine("> [[ASPECT_VERDICT: status=pass; summary=Self-contained HTML, scope met, no extra dependencies.]]");
+        sb.AppendLine("> [[TASK_DONE]]");
+        sb.AppendLine();
+        sb.AppendLine("Status values:");
+        sb.AppendLine("  pass     — aspect is fine, no follow-up needed");
+        sb.AppendLine("  concerns — aspect has issues a human should look at; not blocking");
+        sb.AppendLine("  block    — aspect has a defect that must be fixed before sign-off");
+        sb.AppendLine();
+        sb.AppendLine("After the sentinel, end with [[TASK_DONE]] on its own line.");
         return sb.ToString();
     }
 
@@ -267,16 +282,20 @@ public sealed class AspectRunnerService
         var parsed = AspectVerdictParsing.ParseVerdict(response);
         if (parsed == null)
         {
-            // No silent durchwinken: an unparseable reply gets a
+            // No silent durchwinken: an unparseable reply still gets a
             // deterministic Concerns verdict so the user sees a chip and
-            // can drill in. Better to false-positive a concern than to
-            // accept a clean job with no opinion.
+            // can drill in. But tag it as `review:unparseable` (NOT
+            // `{namespace}:concerns`) so the operator can distinguish
+            // "model has a real concern" from "model didn't follow the
+            // verdict format" — these are very different signals when
+            // sorting / scanning the human-review lane. See F1 in the
+            // 2026-05-21 probe findings.
             return new AspectVerdict(
                 Aspect: def.Id,
                 Status: AspectStatus.Concerns,
                 Summary: "Aspect runner produced no parseable verdict.",
                 Body: BuildBody(response, "No `[[ASPECT_VERDICT]]` sentinel was found in the model reply."),
-                ConcernTagId: $"{def.ConcernNamespace}:concerns");
+                ConcernTagId: "review:unparseable");
         }
         var (status, summary) = parsed.Value;
         return new AspectVerdict(

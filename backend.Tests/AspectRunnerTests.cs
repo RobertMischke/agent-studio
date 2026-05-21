@@ -128,12 +128,14 @@ public class AspectRunnerTests : IDisposable
     }
 
     [Fact]
-    public async Task UnparseableReply_DefaultsToConcerns_NoSilentDurchwinken()
+    public async Task UnparseableReply_DefaultsToConcerns_WithUnparseableTag()
     {
         // The user's hard rule: a job that lands in 4-auto-review must
-        // not pass through with no opinion. An empty / unparseable
-        // model reply maps to Concerns so the user still sees a chip
-        // and can drill in.
+        // not pass through with no opinion. An unparseable model reply
+        // still produces a Concerns verdict so the user sees a chip.
+        // F1 (2026-05-21): the tag changed from `{namespace}:concerns`
+        // to `review:unparseable` so the operator can distinguish
+        // "model has a real concern" from "format violation".
         var runner = BuildRunner(_ => "I have no opinion.");
 
         var report = await runner.RunAsync(BuildInputs(),
@@ -142,10 +144,39 @@ public class AspectRunnerTests : IDisposable
 
         Assert.Equal(AspectStatus.Concerns, report.Overall);
         Assert.Single(report.ConcernTagIds);
-        Assert.Equal("quality:concerns", report.ConcernTagIds[0]);
+        Assert.Equal("review:unparseable", report.ConcernTagIds[0]);
 
         var content = File.ReadAllText(Path.Combine(_jobFolder, "aspect-code-quality.md"));
         Assert.Equal(AspectStatus.Concerns, AspectVerdictParsing.ReadStatusFromReport(content));
+    }
+
+    [Theory]
+    [InlineData("Looks fine.\n\nStatus: pass", AspectStatus.Pass)]
+    [InlineData("**Status:** concerns\n\nNeeds review.", AspectStatus.Concerns)]
+    [InlineData("Verdict says block.\nstatus = blocked\n", AspectStatus.Block)]
+    public void ParseVerdict_FallsBack_When_Sentinel_Missing_But_StatusLineFound(string reply, AspectStatus expected)
+    {
+        // F1 tolerant fallback: when the model drops the [[ASPECT_VERDICT]]
+        // sentinel but still says "Status: pass|concerns|block" on a
+        // line, the parser now recovers that signal instead of bouncing
+        // straight to the no-parseable-verdict fallback. Reduces false-
+        // positive "concerns" tags from format violations.
+        var parsed = AspectVerdictParsing.ParseVerdict(reply);
+        Assert.NotNull(parsed);
+        Assert.Equal(expected, parsed!.Value.Status);
+    }
+
+    [Theory]
+    [InlineData("```\n[[ASPECT_VERDICT: status=pass; summary=fenced reply]]\n```")]
+    [InlineData("```text\n[[ASPECT_VERDICT: status=pass; summary=fenced text]]\n```")]
+    public void ParseVerdict_Recognises_Sentinel_Inside_Code_Fence(string reply)
+    {
+        // F1: models sometimes wrap the sentinel in triple-backtick
+        // fences for visual emphasis. Strip the fence wrapper before
+        // matching so this looks like a real verdict, not unparseable.
+        var parsed = AspectVerdictParsing.ParseVerdict(reply);
+        Assert.NotNull(parsed);
+        Assert.Equal(AspectStatus.Pass, parsed!.Value.Status);
     }
 
     [Fact]
