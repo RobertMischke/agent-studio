@@ -19,6 +19,13 @@ import { join } from 'node:path';
 
 const ARTIFACT_DIR = String.raw`c:\Projects\agent-taskboard-devspace\artifacts\test-runs\20260521-0923-todo-app`;
 
+/**
+ * Probes target the dedicated "Playwright Test" project (configured in
+ * appsettings.Local.json on both dev and stable). Its sandbox repo at
+ * test-repos/playwright-test/ is safe to wipe between runs and never
+ * mixes with Runbook / Agent Software Studio.
+ */
+const PROBE_PROJECT = 'Playwright Test';
 const TASK_TITLE = 'Playwright probe: tiny TODO sandbox';
 const TASK_PROMPT = [
   'You are running inside an automated UI probe. Scope: create exactly ONE small file.',
@@ -86,11 +93,11 @@ test('full lifecycle: create → steer → complete (runbook project)', async ({
   let seq = 0;
   await snapshot(page, ++seq, 'app booted, default tab');
 
-  // ----- Pick Runbook project so the new task lands there -----
+  // ----- Pick the dedicated sandbox project -----
   await page.getByTestId('studio-project-picker-trigger').click();
-  await page.getByTestId('studio-project-picker-Runbook').click();
+  await page.getByTestId(`studio-project-picker-${PROBE_PROJECT}`).click();
   await page.waitForTimeout(500);
-  await snapshot(page, ++seq, 'picked Runbook project');
+  await snapshot(page, ++seq, `picked ${PROBE_PROJECT} project`);
 
   // ----- Open the create-task dialog -----
   // The studio-shell tab-actions surface the "+ Add task" button when
@@ -101,17 +108,19 @@ test('full lifecycle: create → steer → complete (runbook project)', async ({
 
   // ----- Fill the task -----
   await page.getByTestId('create-title').fill(TASK_TITLE);
-  // Watch-path select: pick Runbook explicitly (the project picker only
-  // scopes the board view, not the create dialog default).
+  // Watch-path select: pick the sandbox project explicitly (the
+  // project picker only scopes the board view, not the create dialog
+  // default).
   const projectSelect = page.getByTestId('create-project-select');
-  await projectSelect.selectOption({ label: 'Runbook' }).catch(() => projectSelect.selectOption('Runbook'));
+  await projectSelect.selectOption({ label: PROBE_PROJECT })
+    .catch(() => projectSelect.selectOption(PROBE_PROJECT));
   // Target lane: Ready (so the runner can pick it up immediately).
   await page.getByTestId('create-lane-2-ready').click().catch(() => { /* default lane is fine */ });
   await page.getByTestId('create-prompt').fill(TASK_PROMPT);
   await snapshot(page, ++seq, 'dialog filled');
 
-  // Submit.
-  await page.getByRole('button', { name: 'Create' }).click();
+  // Submit. F10 added a stable testid; prefer it over the role lookup.
+  await page.getByTestId('create-submit').click();
   await page.waitForTimeout(800);
   await snapshot(page, ++seq, 'task created, dialog closed');
 
