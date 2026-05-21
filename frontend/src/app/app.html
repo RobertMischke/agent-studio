@@ -240,6 +240,7 @@
                 @for (g of laneGroups(); track g.id) {
                   <section class="lane-group"
                            [attr.data-testid]="'lane-group-' + g.id"
+                           [attr.data-states]="g.lanes.length > 0 ? g.lanes.map(l => l.state).join(',') : null"
                            [class.lane-group--focused]="isContainerFocused(g.id)"
                            [class.lane-group--hidden-by-focus]="focusedContainer() !== null && !isContainerFocused(g.id)"
                            [style.flex-grow]="expandedLaneCount(g)">
@@ -685,6 +686,7 @@
             @for (g of laneGroups(); track g.id) {
               <section class="lane-group"
                        [attr.data-testid]="'lane-group-' + g.id"
+                       [attr.data-states]="g.lanes.length > 0 ? g.lanes.map(l => l.state).join(',') : null"
                        [class.lane-group--focused]="isContainerFocused(g.id)"
                        [class.lane-group--hidden-by-focus]="focusedContainer() !== null && !isContainerFocused(g.id)"
                        [style.flex-grow]="expandedLaneCount(g)">
