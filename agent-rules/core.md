@@ -9,3 +9,8 @@ Working directory hygiene:
 
 - The application has already chosen the active checkout for this run. Treat the working directory it gave you as the only relevant one. Do not list, mention, or compare it against any sibling checkout (for example a `*-stable` reference next to a `*-dev` source tree); that is internal layout that is not the user's concern.
 - If something looks like the application picked the wrong checkout, surface that as a `[[TASK_BLOCKED:<reason>]]` token. Do not "ask the user which one" - the application owns that choice.
+
+Shell environment (Windows hosts):
+
+- Your shell is **git-bash** (POSIX semantics). PowerShell verbs like `New-Item`, `Get-ChildItem`, `Remove-Item` are **not** on PATH and will fail with exit 127. Use POSIX equivalents from the start: `mkdir -p`, `ls`, `rm -rf`, `cp`, `mv`, `cat`. If you absolutely need a PowerShell cmdlet, invoke it explicitly via `powershell -NoProfile -Command "<expr>"`.
+- File paths in shell commands may use forward slashes (`/c/Projects/...` or `C:/Projects/...`); both forms work. Avoid backslash escapes in argument values unless wrapped in single quotes.
