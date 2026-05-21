@@ -564,8 +564,10 @@
   // column empty — the workspace painted blank, looked exactly like
   // the detail view had been closed.
   //
-  // Drop to two columns to match the actual DOM child count.
-  grid-template-columns: var(--studio-activitybar-w) 1fr !important;
+  // Drop to two columns to match the actual DOM child count. The
+  // trailing `auto` keeps the orchestrator rail's own column even
+  // when the sidebar is hidden so the rail still has its grid track.
+  grid-template-columns: var(--studio-activitybar-w) 1fr auto !important;
 }
 
 // Mirror layout when the user puts the activity bar on the right.

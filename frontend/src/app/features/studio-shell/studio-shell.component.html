@@ -153,10 +153,18 @@
        only two children render pushed the editor into a 0px middle
        slot and left the workspace painting empty — looked exactly like
        the detail view had been closed. -->
+  <!-- The trailing `auto` track hosts the orchestrator rail projected
+       below via [studioOrchestratorRail]. The orchestrator-side-sheet
+       :host animates its own width 0 → panelWidth, and the `auto` grid
+       track shrinks/grows with it so the editor reclaims the space when
+       the rail is closed. Moving the rail inside studio-body keeps the
+       titlebar (above) and statusbar (below) spanning the full shell
+       width while activity bar + orchestrator anchor the left/right
+       edges — VS-Code-style panel layout. -->
   <div class="studio-body"
        [style.grid-template-columns]="sidebarVisible()
-           ? 'var(--studio-activitybar-w) minmax(0, ' + sidebarWidth() + 'px) minmax(0, 1fr)'
-           : 'var(--studio-activitybar-w) minmax(0, 1fr)'">
+           ? 'var(--studio-activitybar-w) minmax(0, ' + sidebarWidth() + 'px) minmax(0, 1fr) auto'
+           : 'var(--studio-activitybar-w) minmax(0, 1fr) auto'">
     <!-- Activity bar -->
     <app-studio-activity-bar
       [items]="activityBarItems"
@@ -670,6 +678,13 @@
         }
       </div>
     </section>
+
+    <!-- Orchestrator rail. Projected from app.html so the parent keeps
+         ownership of its @Input bindings + #orchSideSheet template ref.
+         The host element animates its own width; the trailing `auto`
+         grid track on .studio-body collapses to ~0 when the rail is
+         closed so the editor reclaims the full width. -->
+    <ng-content select="[studioOrchestratorRail]"></ng-content>
   </div>
 
   <!-- ============ Status bar slot (existing <app-status-bar> projected here by app.html) ============ -->

@@ -37,19 +37,6 @@
         (clearAll)="onSidesheetClearAll()"
         (closed)="closeKanbanFilterSidesheet()" />
       <app-cli-usage-sheet #usageSheet class="app__sidesheet" />
-      <app-orchestrator-side-sheet
-        #orchSideSheet
-        class="app__sidesheet"
-        [projects]="projectNames()"
-        [preferredProject]="orchSideSheetPreferredProject()"
-        [watchPaths]="watchPaths()"
-        [activeJobId]="selectedJob()?.info?.id ?? null"
-        [activeJobTitle]="selectedJob()?.info?.title ?? null"
-        [activeWatchPath]="selectedJob()?.info?.watchPath ?? null"
-        (createTaskFromDraft)="onCreateTaskFromOrchestratorDraft($event)"
-        (openVerboseDebug)="onOpenVerboseDebugFromSheet($event)"
-        (openJobDetail)="onOpenJobDetailFromSheet($event)"
-        (openSettings)="openOrchestratorSettings()" />
       <app-studio-shell data-testid="studio-shell-root"
                         (chatToggle)="toggleOrchestratorChat()"
                         (addTaskRequested)="openCreate()"
@@ -69,6 +56,25 @@
           (toggleCliAdmin)="toggleCliAdmin()"
           (defaultCliChange)="onDefaultCliChange($event)"
           (defaultModelChange)="onDefaultModelChange($event)" />
+        <!-- Orchestrator rail lives inside studio-shell now (right-edge
+             column of studio-body) so the titlebar + statusbar + activity
+             bar all wrap around it. Previously sat as a sibling of
+             studio-shell in .app-shell and pushed the whole shell left
+             when opened, leaving status/nav bars cut off short of the
+             panel. -->
+        <app-orchestrator-side-sheet
+          studioOrchestratorRail
+          #orchSideSheet
+          [projects]="projectNames()"
+          [preferredProject]="orchSideSheetPreferredProject()"
+          [watchPaths]="watchPaths()"
+          [activeJobId]="selectedJob()?.info?.id ?? null"
+          [activeJobTitle]="selectedJob()?.info?.title ?? null"
+          [activeWatchPath]="selectedJob()?.info?.watchPath ?? null"
+          (createTaskFromDraft)="onCreateTaskFromOrchestratorDraft($event)"
+          (openVerboseDebug)="onOpenVerboseDebugFromSheet($event)"
+          (openJobDetail)="onOpenJobDetailFromSheet($event)"
+          (openSettings)="openOrchestratorSettings()" />
         <!-- Inline filter UI for the activity-bar Filter panel. Same
              component as the right-edge sheet, just rendered without
              the slide-in chrome. Hosted inside studio-shell's filter
