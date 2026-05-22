@@ -791,6 +791,54 @@
 .studio-tree-project {
   display: flex;
   flex-direction: column;
+  position: relative;
+
+  // Drag source: fade the row so the user can read the highlighted
+  // drop targets without the source pulling the eye.
+  &--dragging {
+    opacity: 0.45;
+  }
+
+  // Valid drop target: solid accent border + hairline tinted background
+  // so the user sees "yes, dropping here will land the project on this
+  // workspace". Uses position: relative on the wrapper so the inner
+  // tree-row's own active outline does not collide.
+  &--drop-target {
+    background: color-mix(in srgb, var(--studio-accent) 14%, transparent);
+    outline: 2px solid var(--studio-accent);
+    outline-offset: -2px;
+    border-radius: 4px;
+  }
+
+  // Non-drop targets while another project is being dragged stay legible
+  // but receive a subtle reduction so the valid target reads as the
+  // selected one. Skipped on the source row (which already fades via
+  // --dragging).
+  &--drop-invalid:not(&--dragging) {
+    opacity: 0.7;
+  }
+
+  // While the change-project fan-out is in flight, mark the source row
+  // with a slow pulse so the user knows the move is still running.
+  &--moving {
+    animation: studio-project-moving-pulse 1.1s ease-in-out infinite;
+  }
+}
+
+@keyframes studio-project-moving-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+.studio-explorer__move-error {
+  margin: 6px 8px 0;
+  padding: 6px 8px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--studio-accent-6) 16%, transparent);
+  color: var(--studio-fg-strong);
+  border: 1px solid color-mix(in srgb, var(--studio-accent-6) 50%, transparent);
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 .studio-tree-children {

@@ -12,7 +12,7 @@ import {
   untracked,
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import type { JobInfo } from '../../models/job.model';
+import type { JobInfo, WatchPathEntry } from '../../models/job.model';
 import { JobService } from '../../services/job.service';
 import { StudioIconComponent } from '../../components/studio-icon/studio-icon.component';
 import { EmptyStateComponent } from '../../components/empty-state/empty-state.component';
@@ -26,7 +26,7 @@ import { UiPreferencesService } from '../shell';
 import { BoardFiltersService } from '../board';
 import { UpdateClientService } from '../../services/update.service';
 import { ConfirmDialogService } from '../../services/confirm-dialog.service';
-import { WorkspaceManagerService } from '../shell';
+import { WorkspaceManagerService, ProjectDragDropService } from '../shell';
 import { StudioActivityBarComponent, StudioActivityBarItem, StudioActivityPanelKey } from './components/studio-activity-bar/studio-activity-bar.component';
 import { StudioTabStateService } from './services/studio-tab-state.service';
 import { StudioPanelStateService } from './services/studio-panel-state.service';
@@ -94,6 +94,16 @@ export class StudioShellComponent {
    * that don't pass it keep their job-derived behaviour.
    */
   readonly knownProjectNames = input<readonly string[]>([]);
+
+  /**
+   * Full watch-path entries from the backend config. Needed by the
+   * Explorer's project drag-and-drop so a drop on a target project
+   * row can be turned into a `change-project` call (which expects a
+   * `targetWatchPath` value, not the project name). Defaults to []
+   * so legacy hosts keep working — drag-and-drop simply becomes a
+   * no-op until the host wires the workspaces input.
+   */
+  readonly workspaces = input<readonly WatchPathEntry[]>([]);
   private readonly featureFlags = inject(FeatureFlagsService);
   private readonly tabState = inject(StudioTabStateService);
   private readonly panelState = inject(StudioPanelStateService);
@@ -278,6 +288,12 @@ export class StudioShellComponent {
     const t = this.theme();
     document.documentElement.dataset['studioTheme'] = t;
     localStorage.setItem('atp.studio.theme', t);
+  });
+
+  /** Keep the project drag service synced with the latest workspaces
+   *  input so its target-watch-path lookups never read stale entries. */
+  private readonly syncProjectDragWorkspacesFx = effect(() => {
+    this.projectDrag.setWorkspaces(this.workspaces());
   });
 
   /**
@@ -540,6 +556,77 @@ export class StudioShellComponent {
     void event;
     this.draggingTabKey.set(null);
     this.dragOverTabKey.set(null);
+  }
+
+  // ---- project drag-and-drop -----------------------------------------
+  // Drag a project entry onto another project row to reassign every
+  // job in the source project to the target's watch path. Project name
+  // and watch-path name are 1:1 (JobScannerService stamps `projectName`
+  // from `WatchPathEntry.Name`), so each project row is both the
+  // project entry AND its workspace header. State + the change-project
+  // fan-out live in `ProjectDragDropService` so the shell stays inside
+  // its size budget.
+
+  readonly projectDrag = inject(ProjectDragDropService);
+  readonly draggingProjectName = this.projectDrag.draggingProjectName;
+  readonly dragOverProjectName = this.projectDrag.dragOverProjectName;
+  readonly movingProjectName = this.projectDrag.movingProjectName;
+  readonly moveErrorMessage = this.projectDrag.moveErrorMessage;
+
+  canDropProjectOn(source: string | null, target: string): boolean {
+    return this.projectDrag.canDropProjectOn(source, target);
+  }
+
+  onProjectDragStart(event: DragEvent, projectName: string): void {
+    this.projectDrag.onDragStart(event, projectName);
+  }
+
+  onProjectDragOver(event: DragEvent, overName: string): void {
+    this.projectDrag.onDragOver(event, overName);
+  }
+
+  onProjectDragLeave(overName: string): void {
+    this.projectDrag.onDragLeave(overName);
+  }
+
+  onProjectDrop(event: DragEvent, overName: string): void {
+    this.projectDrag.onDrop(event, overName, this.allJobs());
+  }
+
+  onProjectDragEnd(): void {
+    this.projectDrag.onDragEnd();
+  }
+
+  /** Hover-title text for a project row. Mode A (idle): "drag me to
+   *  another workspace". Mode B (a project is being dragged AND this
+   *  row is a valid target): "drop here to move…". Mode C (drag in
+   *  progress but this row is not a valid target). */
+  projectRowTitle(rowName: string): string {
+    const source = this.draggingProjectName();
+    if (!source || source === rowName) {
+      return 'Drag to move this project to another workspace';
+    }
+    if (this.canDropProjectOn(source, rowName)) {
+      return `Drop here to move ${source} to workspace ${rowName}`;
+    }
+    return 'Not a valid drop target';
+  }
+
+  /** Flat list of every job across all lanes; consumed by
+   *  `ProjectDragDropService.onDrop` to find which jobs to move. */
+  private allJobs(): JobInfo[] {
+    const grouped = this.grouped();
+    const seen = new Set<string>();
+    const out: JobInfo[] = [];
+    for (const lane of Object.values(grouped)) {
+      for (const job of lane as JobInfo[]) {
+        const key = `${job.watchPath}::${job.id}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push(job);
+      }
+    }
+    return out;
   }
 
   /** Drop into the empty trailing region of the tab strip → append. */

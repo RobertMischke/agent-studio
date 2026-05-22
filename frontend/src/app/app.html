@@ -39,6 +39,7 @@
       <app-cli-usage-sheet #usageSheet class="app__sidesheet" />
       <app-studio-shell data-testid="studio-shell-root"
                         [knownProjectNames]="projectNames()"
+                        [workspaces]="watchPaths()"
                         (chatToggle)="toggleOrchestratorChat()"
                         (addTaskRequested)="openCreate()"
                         (openFilterSidesheet)="toggleKanbanFilterSidesheet()"

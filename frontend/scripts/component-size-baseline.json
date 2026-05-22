@@ -97,10 +97,10 @@
       "total": 695
     },
     "src/app/features/studio-shell/studio-shell.component.ts": {
-      "typeScript": 741,
-      "template": 716,
-      "styles": 1897,
-      "total": 3354
+      "typeScript": 834,
+      "template": 761,
+      "styles": 2016,
+      "total": 3611
     },
     "src/app/features/verbose-debug/components/verbose-debug-overlay/verbose-debug-overlay.component.ts": {
       "typeScript": 548,

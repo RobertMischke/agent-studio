@@ -232,7 +232,20 @@
                   testid="studio-explorer-workspace-head"
                   (click)="pickProject(null)" />
                 @for (p of projectRows(); track p.name) {
-                  <div class="studio-tree-project">
+                  <div class="studio-tree-project"
+                       draggable="true"
+                       [class.studio-tree-project--dragging]="draggingProjectName() === p.name"
+                       [class.studio-tree-project--drop-target]="dragOverProjectName() === p.name && canDropProjectOn(draggingProjectName(), p.name)"
+                       [class.studio-tree-project--drop-invalid]="!!draggingProjectName() && draggingProjectName() !== p.name && !canDropProjectOn(draggingProjectName(), p.name)"
+                       [class.studio-tree-project--moving]="movingProjectName() === p.name"
+                       [attr.data-project-name]="p.name"
+                       [attr.data-testid]="'studio-explorer-project-row-' + p.name"
+                       [title]="projectRowTitle(p.name)"
+                       (dragstart)="onProjectDragStart($event, p.name)"
+                       (dragover)="onProjectDragOver($event, p.name)"
+                       (dragleave)="onProjectDragLeave(p.name)"
+                       (drop)="onProjectDrop($event, p.name)"
+                       (dragend)="onProjectDragEnd()">
                     <app-tree-row level="root"
                                   [chevron]="isProjectExpanded(p.name) ? 'expanded' : 'collapsed'"
                                   [glyphChar]="p.initial"
@@ -279,6 +292,11 @@
                 }
                 @if (projectRows().length === 0) {
                   <app-empty-state>No projects loaded</app-empty-state>
+                }
+                @if (moveErrorMessage(); as msg) {
+                  <div class="studio-explorer__move-error"
+                       role="alert"
+                       data-testid="studio-explorer-move-error">{{ msg }}</div>
                 }
                 @if (tabs().length > 0) {
                   <app-section-header
