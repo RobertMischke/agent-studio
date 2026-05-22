@@ -473,56 +473,6 @@
       border-color: rgba(56,189,248,0.75);
     }
     .btn--compact-toggle__label { font-weight: 600; }
-    .header__filter-trigger {
-      display: inline-flex;
-      align-items: center;
-      gap: var(--header-btn-gap, 6px);
-      height: var(--header-btn-height, 28px);
-      padding: 0 var(--header-btn-padding-x, 10px);
-      background: rgba(255,255,255,0.04);
-      border: 1px solid rgba(255,255,255,0.10);
-      border-radius: var(--header-btn-radius, 6px);
-      color: var(--studio-fg-dim);
-      cursor: pointer;
-      font-size: 12px;
-      line-height: 1;
-      box-sizing: border-box;
-      transition: background 0.12s, color 0.12s, border-color 0.12s;
-    }
-    .header__filter-trigger:hover {
-      background: rgba(255,255,255,0.10);
-      color: var(--studio-fg-strong);
-    }
-    .header__filter-trigger--active {
-      background: rgba(59,130,246,0.20);
-      border-color: rgba(96,165,250,0.55);
-      color: #bfdbfe;
-    }
-    .header__filter-trigger--active:hover {
-      background: rgba(59,130,246,0.30);
-      border-color: rgba(147,197,253,0.75);
-    }
-    .header__filter-trigger__chip {
-      max-width: 160px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      font-style: italic;
-      color: inherit;
-    }
-    .header__filter-trigger__count {
-      min-width: 18px;
-      padding: 0 6px;
-      height: 18px;
-      border-radius: 999px;
-      background: rgba(99,102,241,0.55);
-      color: var(--studio-fg-strong);
-      font-size: 11px;
-      font-weight: 700;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-    }
     // F23: rows / panel / header / icon styling now live on <app-menu>. This
     // block keeps the trigger button styling that wraps the dropdown anchor.
     .devtools-menu { position: relative; display: inline-flex; }

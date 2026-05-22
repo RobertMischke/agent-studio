@@ -123,21 +123,4 @@ test.describe('Escape modal-stack arbitration', () => {
     await expect(page.getByTestId('back-to-board')).toBeVisible();
   });
 
-  test('Escape closes the kanban filter sidesheet without falling through to the board', async ({ page }) => {
-    await page.goto('/');
-
-    const trigger = page.getByTestId('kanban-filter-sidesheet-trigger');
-    if (!(await trigger.isVisible().catch(() => false))) {
-      test.info().annotations.push({ type: 'skip-reason', description: 'Filter sidesheet trigger not visible on this layout.' });
-      return;
-    }
-    await trigger.click();
-
-    // The sidesheet host carries `.is-open` while expanded.
-    const sheet = page.locator('app-kanban-filter-sidesheet.is-open');
-    await expect(sheet).toBeVisible({ timeout: 5_000 });
-
-    await page.keyboard.press('Escape');
-    await expect(sheet).toBeHidden({ timeout: 5_000 });
-  });
 });

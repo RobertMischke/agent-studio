@@ -189,7 +189,6 @@ export class StudioShellComponent {
    *  sheet open without the shell needing a reference to it. */
   readonly chatToggle = output<void>();
   readonly addTaskRequested = output<void>();
-  readonly openFilterSidesheet = output<void>();
   readonly openUsageSheet = output<void>();
   readonly openCliAdmin = output<void>();
   readonly openWorkspaceScreenshots = output<void>();

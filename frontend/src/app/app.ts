@@ -67,6 +67,7 @@ import {
   StudioDiffViewComponent,
   StudioActivityViewComponent,
   StudioTabStateService,
+  StudioPanelStateService,
 } from './features/studio-shell';
 import { JobService } from './services/job.service';
 import { ClientService } from './services/client.service';
@@ -167,6 +168,7 @@ export class App implements OnInit, OnDestroy {
   private readonly _completionSound = inject(JobCompletionSoundService);
   readonly updateClient = inject(UpdateClientService);
   readonly studioTabState = inject(StudioTabStateService);
+  private readonly studioPanelState = inject(StudioPanelStateService);
 
   /**
    * Cycle 9j: selection state (selected detail, triage toast, lane
@@ -333,31 +335,31 @@ export class App implements OnInit, OnDestroy {
   readonly filteredJobCount = this.boardFilters.filteredJobCount;
   readonly totalJobCount = this.boardFilters.totalJobCount;
 
-  /**
-   * VS Code-style filter sidesheet that hosts search + faceted filters +
-   * visibility toggles in one place. Closed by default — the board uses
-   * the full width unless the user actively opens it. Persisted across
-   * reloads under `atp.kanban.filterSidesheetOpen` so a user who keeps it
-   * open (a common power-user posture) doesn't have to reopen on every
-   * reload.
-   */
-  readonly kanbanFilterSidesheetOpen = signal<boolean>(
-    localStorage.getItem('atp.kanban.filterSidesheetOpen') === '1',
-  );
-
-  toggleKanbanFilterSidesheet(): void {
-    const next = !this.kanbanFilterSidesheetOpen();
-    this.kanbanFilterSidesheetOpen.set(next);
-    localStorage.setItem('atp.kanban.filterSidesheetOpen', next ? '1' : '0');
-  }
-
-  closeKanbanFilterSidesheet(): void {
-    this.kanbanFilterSidesheetOpen.set(false);
-    localStorage.setItem('atp.kanban.filterSidesheetOpen', '0');
-  }
-
   onSidesheetClearAll(): void {
     this.boardFilters.clearSearchAndFilters();
+  }
+
+  /**
+   * F25: opens the activity-bar Filters panel and focuses the search
+   * input inside the inline filter UI. Bound to the `/` keyboard
+   * shortcut, which previously toggled the right-edge filter sheet
+   * before the sheet was collapsed into a single source-of-truth
+   * activity-bar panel.
+   */
+  private openFiltersPanelAndFocusSearch(): void {
+    if (this.studioPanelState.active() !== 'filters' || !this.studioPanelState.visible()) {
+      this.studioPanelState.toggle('filters');
+      if (!this.studioPanelState.visible()) {
+        this.studioPanelState.setVisible(true);
+      }
+    }
+    queueMicrotask(() => {
+      const input = document.querySelector<HTMLInputElement>(
+        '[data-testid="kanban-filter-sidesheet-search"]',
+      );
+      input?.focus();
+      input?.select();
+    });
   }
 
   readonly projectNames = computed(() => {
@@ -971,6 +973,14 @@ export class App implements OnInit, OnDestroy {
         ev.preventDefault();
         return;
       }
+      // F25: `/` opens the activity-bar Filters panel and focuses its
+      // search input. Replaces the previous binding that toggled the
+      // right-edge filter sidesheet.
+      if (ev.key === '/' && this.featureFlags.vsCodeLayout()) {
+        this.openFiltersPanelAndFocusSearch();
+        ev.preventDefault();
+        return;
+      }
     };
     window.addEventListener('keydown', this.kanbanKeyListener);
   }
@@ -1094,26 +1104,6 @@ export class App implements OnInit, OnDestroy {
   clearSearch() {
     this.boardFilters.clearSearch();
   }
-
-  /**
-   * Whether the kanban board is the visible surface and the header search
-   * icon should render. Hidden whenever any of the existing "is something
-   * else open" signals are true: a task detail page, the project chat /
-   * orchestrator side sheet, the update center, or one of the project
-   * overlays. Mirrors the conditions the @if branches in the body already
-   * use, so we don't introduce a parallel "current view" signal.
-   *
-   * `orchSideSheet.open()` is composed at the call site in the template
-   * because the side sheet is a template ref, not an injected service.
-   */
-  readonly boardSearchVisible = computed(() => {
-    if (this.selectedJob()) return false;
-    if (this.projectShellName()) return false;
-    if (this.analysisReportFocus()) return false;
-    if (this.orchFeedProject()) return false;
-    if (this.updateClient.centerOpen()) return false;
-    return true;
-  });
 
   /**
    * Toggle the orchestrator feed overlay. Picks the project to show by

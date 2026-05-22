@@ -9,40 +9,17 @@
 
         The wrapper is a flex row so the persistent right-edge sheets
         (CLI usage, orchestrator chat) push the studio-shell when they
-        open rather than overlaying it. The slide-over kanban filter
-        sheet is still rendered here too; its :host stays width:0 when
-        closed so it does not steal flex space.
+        open rather than overlaying it. The filter UI is no longer a
+        right-edge sheet (F25); it lives only as the inline panel
+        projected into studio-shell's activity-bar "Filters" slot.
       -->
       <div class="app-shell" data-testid="app-shell">
-      <app-kanban-filter-sidesheet
-        #kanbanFilterSheet
-        class="app__sidesheet"
-        [open]="kanbanFilterSidesheetOpen()"
-        [query]="searchQuery()"
-        [typeOptions]="typeFilterOptions"
-        [activeType]="activeType()"
-        [tags]="tagRegistry()"
-        [activeTagIds]="activeTagFilter()"
-        [owners]="clientService.clients()"
-        [activeOwnerId]="activeClientFilter()"
-        [compactCards]="compactCards()"
-        [hitCount]="filteredJobCount()"
-        [totalCount]="totalJobCount()"
-        [hasAnyFilter]="hasActiveFiltersOrSearch()"
-        (queryChange)="setSearchQuery($event)"
-        (setType)="onSetType($event)"
-        (toggleTag)="toggleTagFilter($event)"
-        (setOwner)="setClientFilter($event)"
-        (toggleCompactCards)="toggleCompactCards()"
-        (clearAll)="onSidesheetClearAll()"
-        (closed)="closeKanbanFilterSidesheet()" />
       <app-cli-usage-sheet #usageSheet class="app__sidesheet" />
       <app-studio-shell data-testid="studio-shell-root"
                         [knownProjectNames]="projectNames()"
                         [workspaces]="watchPaths()"
                         (chatToggle)="toggleOrchestratorChat()"
                         (addTaskRequested)="openCreate()"
-                        (openFilterSidesheet)="toggleKanbanFilterSidesheet()"
                         (openUsageSheet)="usageSheet.toggle()"
                         (openCliAdmin)="toggleCliAdmin()"
                         (openWorkspaceScreenshots)="toggleWorkspaceScreenshots()"
@@ -108,19 +85,6 @@
              existing detail-pane toggles via the JobDetail's own header. -->
         <div studioTabActions class="studio-tab-actions">
           @if (studioTabState.activeTab()?.kind === 'board') {
-            <button type="button"
-                    class="studio-tab-action"
-                    [class.studio-tab-action--active]="kanbanFilterSidesheetOpen() || hasActiveFiltersOrSearch()"
-                    [attr.aria-pressed]="kanbanFilterSidesheetOpen()"
-                    data-testid="studio-board-filter-trigger"
-                    [appTooltip]="'Filters &amp; view (press /)'"
-                    (click)="toggleKanbanFilterSidesheet()">
-              <span aria-hidden="true">⨍</span>
-              <span>Filter</span>
-              @if (activeFilterCount() > 0) {
-                <span class="studio-tab-action__count">{{ activeFilterCount() }}</span>
-              }
-            </button>
             <button type="button"
                     class="studio-tab-action"
                     [class.studio-tab-action--active]="compactCards()"
@@ -448,26 +412,6 @@
             [activeTagIds]="activeTagFilter()"
             (setType)="onSetType($event)"
             (toggleTag)="toggleTagFilter($event)" />
-          @if (boardSearchVisible() && !orchSideSheet.open()) {
-            <button type="button"
-                    class="header__filter-trigger"
-                    data-testid="kanban-filter-sidesheet-trigger"
-                    [class.header__filter-trigger--active]="kanbanFilterSidesheetOpen() || hasActiveFiltersOrSearch()"
-                    [attr.aria-pressed]="kanbanFilterSidesheetOpen()"
-                    [attr.aria-label]="'Open filter and view panel'"
-                    [appTooltip]="'Filters &amp; view (press /)'"
-                    (click)="toggleKanbanFilterSidesheet()">
-              <span aria-hidden="true">🔍</span>
-              @if (searchQuery().trim().length > 0) {
-                <span class="header__filter-trigger__chip"
-                      data-testid="kanban-filter-sidesheet-trigger-chip">"{{ searchQuery() }}"</span>
-              }
-              @if (activeFilterCount() > 0) {
-                <span class="header__filter-trigger__count"
-                      data-testid="kanban-filter-sidesheet-trigger-count">{{ activeFilterCount() }}</span>
-              }
-            </button>
-          }
           <button class="btn btn--compact-toggle"
                   data-testid="compact-cards-toggle"
                   [class.btn--compact-toggle--active]="compactCards()"
@@ -702,28 +646,6 @@
         }
       </div>
 
-        <app-kanban-filter-sidesheet
-          #kanbanFilterSheet
-          class="app__sidesheet"
-          [open]="kanbanFilterSidesheetOpen()"
-          [query]="searchQuery()"
-          [typeOptions]="typeFilterOptions"
-          [activeType]="activeType()"
-          [tags]="tagRegistry()"
-          [activeTagIds]="activeTagFilter()"
-          [owners]="clientService.clients()"
-          [activeOwnerId]="activeClientFilter()"
-          [compactCards]="compactCards()"
-          [hitCount]="filteredJobCount()"
-          [totalCount]="totalJobCount()"
-          [hasAnyFilter]="hasActiveFiltersOrSearch()"
-          (queryChange)="setSearchQuery($event)"
-          (setType)="onSetType($event)"
-          (toggleTag)="toggleTagFilter($event)"
-          (setOwner)="setClientFilter($event)"
-          (toggleCompactCards)="toggleCompactCards()"
-          (clearAll)="onSidesheetClearAll()"
-          (closed)="closeKanbanFilterSidesheet()" />
         <app-cli-usage-sheet #usageSheet class="app__sidesheet" />
         <app-orchestrator-side-sheet
           #orchSideSheet
