@@ -372,11 +372,18 @@ export class StudioShellComponent {
     }
   }
 
-  /** Project rows displayed in the titlebar pills + sidebar Explorer. */
+  /** Project rows displayed in the titlebar pills + sidebar Explorer.
+   *  A2 (2026-05-21): the visible "open jobs" counter excludes the
+   *  archive lane. Archive grows monotonically with E2E fixtures /
+   *  completed runs and was inflating the count (e.g. "Agent Software
+   *  Studio: 447" → working set ~67 + ~380 archived). Operator now
+   *  sees the working-set count by default; the picker dropdown can
+   *  surface the full total separately when needed. */
   readonly projectRows = computed<ProjectSidebarRow[]>(() => {
     const grouped = this.grouped();
     const projects = new Map<string, number>();
-    for (const lane of Object.values(grouped)) {
+    for (const [laneKey, lane] of Object.entries(grouped)) {
+      if (laneKey === 'archive') continue; // A2: archive excluded from working-set count
       for (const job of lane as JobInfo[]) {
         const name = job.projectName ?? '';
         projects.set(name, (projects.get(name) ?? 0) + 1);

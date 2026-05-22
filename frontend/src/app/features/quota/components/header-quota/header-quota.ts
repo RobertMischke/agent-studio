@@ -85,6 +85,27 @@ export class HeaderQuotaComponent implements OnInit, OnDestroy {
     if (this.tickTimer != null) clearInterval(this.tickTimer);
   }
 
+  /**
+   * A3 (2026-05-21): the short window label in the status-bar ("MO",
+   * "WK", "5h", "D", "REST", "PREM") is meant to be compact. Add a
+   * tooltip that spells out what the abbreviation means so first-time
+   * operators don't have to guess.
+   */
+  windowTooltip(short: string, absolute: string | null): string {
+    const expand = (s: string): string => {
+      switch ((s ?? '').toLowerCase()) {
+        case 'mo':   return 'Monthly window';
+        case 'wk':   return 'Weekly window';
+        case '5h':   return '5-hour rolling window';
+        case 'd':    return 'Daily window';
+        case 'rest': return 'Reset window';
+        case 'prem': return 'Premium-request window';
+        default:     return s ? `${s} window` : 'Quota window';
+      }
+    };
+    return absolute ? `${expand(short)} — ${absolute}` : expand(short);
+  }
+
   fetch(): void {
     this.quotaApi.getQuotaReport().subscribe({
       next: (r) => this.report.set(r),

@@ -16,7 +16,8 @@
 
       <span class="hquota__value">{{ card.value }}</span>
       <span class="hquota__trend" [appTooltip]="card.trendLabel">{{ card.trend }}</span>
-      <span class="hquota__window">{{ card.windowLabel }}</span>
+      <span class="hquota__window"
+            [appTooltip]="windowTooltip(card.windowLabel, card.absolute)">{{ card.windowLabel }}</span>
       <span class="hquota__bar" aria-hidden="true">
         <span class="hquota__bar-fill" [style.width.%]="card.barPct"></span>
       </span>
