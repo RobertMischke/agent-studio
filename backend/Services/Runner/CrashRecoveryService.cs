@@ -207,10 +207,39 @@ public sealed class CrashRecoveryService
         // has not warmed up yet, and we need a single field.
         var (jobId, jobFolder) = FindMostRecentlyActiveProgressJob(entry);
 
+        // C1 (2026-05-22): if there is NO active 3-progress job to
+        // attribute the changes to, the uncommitted state is much more
+        // likely to be a human-driven editor session than a crashed
+        // agent run. The previous behaviour swept those edits into a
+        // crash-recovery commit on the next backend restart, which
+        // surprised the operator (and bit me twice during the
+        // F1-F11 work). Log a hint instead and let the human decide.
+        if (jobId == null)
+        {
+            var hint = new RecoveryDecision
+            {
+                At = DateTime.UtcNow,
+                Kind = RecoveryDecisionKinds.OrphanSkipped,
+                ProjectName = entry.Name,
+                JobId = null,
+                Reason = "uncommitted changes present but no 3-progress job to attribute to; skipped to avoid clobbering an active editor session"
+            };
+            decisions.Add(hint);
+            AppendRecoveryEntry(hint);
+            _logger.LogInformation(
+                "CrashRecoveryService: project {Project} has uncommitted changes but no active 3-progress job — leaving them for the operator. Set ATP_CRASH_RECOVERY_AGGRESSIVE=1 to re-enable the old auto-commit behaviour.",
+                entry.Name);
+            if (Environment.GetEnvironmentVariable("ATP_CRASH_RECOVERY_AGGRESSIVE") != "1")
+            {
+                return;
+            }
+        }
+
         var message = jobId == null
             ? $"chore(crash-recovery): rescue orphan changes for project {entry.Name}\n\n" +
               "Recovered uncommitted working-tree state after a backend crash. No active job\n" +
-              "found in 3-progress; review and re-attribute manually if needed."
+              "found in 3-progress; review and re-attribute manually if needed. (Aggressive\n" +
+              "mode — ATP_CRASH_RECOVERY_AGGRESSIVE=1.)"
             : $"chore(crash-recovery): rescue orphan changes for {jobId}\n\n" +
               $"Recovered uncommitted working-tree state after a backend crash. Last active\n" +
               $"3-progress job in project {entry.Name} (by lastProgressAt) was {jobId}.";
@@ -376,4 +405,11 @@ public static class RecoveryDecisionKinds
     public const string TransitionFailed = "transition-failed";
     public const string OrphanCommitted = "orphan-committed";
     public const string OrphanCommitFailed = "orphan-commit-failed";
+    /// <summary>
+    /// C1: orphan changes were detected but skipped because no 3-progress
+    /// job was active to attribute them to (= likely a human editor
+    /// session, not a crashed agent run). Set
+    /// ATP_CRASH_RECOVERY_AGGRESSIVE=1 to re-enable the old auto-commit.
+    /// </summary>
+    public const string OrphanSkipped = "orphan-skipped";
 }

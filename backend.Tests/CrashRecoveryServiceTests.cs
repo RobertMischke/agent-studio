@@ -142,6 +142,35 @@ public sealed class CrashRecoveryServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task RecoverAsync_OrphanChangesWithNoActiveJob_AreSkipped()
+    {
+        // C1 (2026-05-22): uncommitted changes WITHOUT an active 3-progress
+        // job are usually a human editor session, not a crashed agent run.
+        // The recovery sweep now logs an OrphanSkipped decision instead of
+        // committing those changes blindly. Re-enable the old behaviour
+        // via ATP_CRASH_RECOVERY_AGGRESSIVE=1.
+        File.WriteAllText(Path.Combine(_repoRoot, "README.md"), "edited by a human");
+        File.WriteAllText(Path.Combine(_repoRoot, "new-file.txt"), "from a Claude Code session");
+
+        var (recovery, _) = BuildRecovery();
+        var decisions = await recovery.RecoverAsync();
+
+        // Working tree must stay dirty — the operator's edits are preserved.
+        var status = RunGitCapture(_repoRoot, "status --porcelain=v1");
+        Assert.False(string.IsNullOrWhiteSpace(status),
+            "uncommitted edits must be preserved when there is no active job to attribute them to");
+
+        // The decision must be OrphanSkipped, not OrphanCommitted.
+        var skipped = Assert.Single(decisions, d => d.Kind == RecoveryDecisionKinds.OrphanSkipped);
+        Assert.Null(skipped.JobId);
+        Assert.Contains("no 3-progress job", skipped.Reason);
+        Assert.DoesNotContain(decisions, d => d.Kind == RecoveryDecisionKinds.OrphanCommitted);
+
+        var jsonl = File.ReadAllText(Path.Combine(_logDir, "recovery.jsonl"));
+        Assert.Contains("orphan-skipped", jsonl);
+    }
+
+    [Fact]
     public async Task RecoverAsync_NoMarkersAndCleanTree_IsANoOp()
     {
         WriteJob(JobStates.Progress, "untouched");
